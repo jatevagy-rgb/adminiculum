@@ -11,17 +11,28 @@ import {
   getCases,
   getCaseTasks,
   getClients,
+  getCommunicationById,
   getCommunicationTasks,
   getCommunications,
   linkCommunicationToCase,
   linkCommunicationToTask,
   type CaseListItem,
   type Client,
+  type CommunicationDetail,
   type CommunicationItem,
   type TaskItem,
   type TaskListItem,
 } from "@/lib/api";
 import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
+import {
+  buildCommunicationDetailView,
+  buildCommunicationListRow,
+  canOpenCase,
+  COMMUNICATION_STATE_LABEL,
+  communicationState,
+  filterCommunications,
+  type CommunicationListFilter,
+} from "@/lib/communicationWorkspace";
 
 const closedTaskStatuses = new Set(["DONE", "COMPLETED", "APPROVED", "FINALIZED", "CANCELLED", "ARCHIVED"]);
 
@@ -67,6 +78,9 @@ function CommunicationWorkspace() {
   const [offset, setOffset] = useState(0);
   const [linkedTasks, setLinkedTasks] = useState<TaskListItem[]>([]);
   const [linkedTasksLoading, setLinkedTasksLoading] = useState(false);
+  const [detail, setDetail] = useState<CommunicationDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState(false);
 
   const [search, setSearch] = useState("");
   const [contactFilter, setContactFilter] = useState("");
@@ -78,6 +92,7 @@ function CommunicationWorkspace() {
   const [audienceFilter, setAudienceFilter] = useState("all");
   const [relationFilter, setRelationFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("all");
+  const [stateFilter, setStateFilter] = useState<CommunicationListFilter>("all");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   const [assignTarget, setAssignTarget] = useState<CommunicationItem | null>(null);
@@ -198,9 +213,10 @@ function CommunicationWorkspace() {
       return (!globalQuery || global.includes(globalQuery))
         && (!contactQuery || contact.includes(contactQuery))
         && (!emailQuery || email.includes(emailQuery))
-        && (!subjectQuery || subject.includes(subjectQuery));
+        && (!subjectQuery || subject.includes(subjectQuery))
+        && (stateFilter === "all" || filterCommunications([buildCommunicationListRow(item, { clientName: relatedClient?.name, caseNumber: relatedCase?.caseNumber })], stateFilter).length > 0);
     });
-  }, [activeView, audienceFilter, caseById, caseFilter, clientById, clientFilter, communications, contactFilter, dateFilter, directionFilter, emailFilter, relationFilter, search, subjectFilter]);
+  }, [activeView, audienceFilter, caseById, caseFilter, clientById, clientFilter, communications, contactFilter, dateFilter, directionFilter, emailFilter, relationFilter, search, stateFilter, subjectFilter]);
 
   const selected = filtered.find((item) => item.id === selectedId) || filtered[0] || null;
   const selectedCommunicationId = selected?.id || null;
@@ -232,6 +248,32 @@ function CommunicationWorkspace() {
     };
   }, [selectedCommunicationId, selectedSourceTaskCount]);
 
+  useEffect(() => {
+    let mounted = true;
+    if (!selected?.id) {
+      setDetail(null);
+      setDetailLoading(false);
+      setDetailError(false);
+      return;
+    }
+    setDetailLoading(true);
+    setDetailError(false);
+    getCommunicationById(selected.id)
+      .then((payload) => {
+        if (mounted) setDetail(payload);
+      })
+      .catch((error) => {
+        console.error("Communication detail load failed:", error);
+        if (mounted) setDetailError(true);
+      })
+      .finally(() => {
+        if (mounted) setDetailLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, [selected?.id]);
+
   const selectView = (view: string) => {
     setActiveView(view);
     const url = view === "all" ? "/notifications" : `/notifications?view=${view}`;
@@ -249,6 +291,7 @@ function CommunicationWorkspace() {
     setAudienceFilter("all");
     setRelationFilter("all");
     setDateFilter("all");
+    setStateFilter("all");
     setShowAdvancedFilters(false);
   };
 
@@ -420,7 +463,7 @@ function CommunicationWorkspace() {
               <input value={subjectFilter} onChange={(event) => setSubjectFilter(event.target.value)} placeholder="Tárgy" className="adm-board-field px-3 py-2 text-[11px]" />
               <select value={audienceFilter} onChange={(event) => setAudienceFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Belső és külső</option><option value="external">Külső</option><option value="internal">Belső</option></select>
               <select value={relationFilter} onChange={(event) => setRelationFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden kapcsolat</option><option value="linked">Kapcsolt</option><option value="unlinked">Nincs besorolva</option><option value="tasks">Feladathoz kapcsolt</option><option value="withoutTasks">Feladat nélkül</option></select>
-              <select disabled className="adm-board-field px-3 py-2 text-[11px] opacity-70" aria-label="Kommunikációs státusz"><option>Státusz: nincs perzisztált adat</option></select>
+              <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as CommunicationListFilter)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden státusz</option><option value="requires-attention">{COMMUNICATION_STATE_LABEL.REQUIRES_ATTENTION}</option><option value="without-case">{COMMUNICATION_STATE_LABEL.NO_CASE}</option><option value="without-client">{COMMUNICATION_STATE_LABEL.NO_CLIENT}</option><option value="with-case">{COMMUNICATION_STATE_LABEL.LINKED}</option><option value="processed">{COMMUNICATION_STATE_LABEL.PROCESSED}</option></select>
             </div>
           ) : null}
         </section>
@@ -436,7 +479,7 @@ function CommunicationWorkspace() {
             <div className="hidden grid-cols-[1.05fr_1.45fr_0.9fr_0.75fr_0.6fr] border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)] md:grid">
               <span>Feladó / forrás</span><span>Tárgy / jelzés</span><span>Ügyfél / ügy</span><span>Státusz</span><span>Idő</span>
             </div>
-            {loading ? <EmptyState title="Kommunikáció betöltése…" /> : filtered.length === 0 ? <EmptyState title={activeView === "replies" ? "Nincs megbízható válaszállapot-adat." : "Nincs találat."} detail={activeView === "replies" ? "A válaszállapot csak későbbi, perzisztált modellből jeleníthető meg." : "Módosítsd a szűrőket."} /> : (
+            {loading ? <EmptyState title="Kommunikáció betöltése…" /> : loadError ? <EmptyState title="A kommunikáció jelenleg nem érhető el." detail="Próbáld meg később újra." /> : filtered.length === 0 ? <EmptyState title={activeView === "replies" ? "Nincs megbízható válaszállapot-adat." : "Nincs találat."} detail={activeView === "replies" ? "A válaszállapot csak későbbi, perzisztált modellből jeleníthető meg." : "Módosítsd a szűrőket."} /> : (
               <div className="divide-y divide-[var(--adm-border)]">
                 {filtered.map((item) => {
                   const signal = toCommunicationSignal(item);
@@ -448,7 +491,7 @@ function CommunicationWorkspace() {
                       <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || item.recipientName || "Nincs forrásadat"}</span><span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</span></span>
                       <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span><span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{item.summary || item.contentPreview || formatCommunicationType(item.type)}</span></span>
                       <span className="min-w-0 text-[10px] text-[var(--adm-text-muted)]"><span className="block truncate font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</span><span className="mt-1 block truncate">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</span></span>
-                      <span className="flex flex-wrap items-start gap-1"><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{classifyAudience(item) === "external" ? "Külső" : "Belső"}</StatusChip>{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</span>
+                      <span className="flex flex-wrap items-start gap-1"><StatusChip>{COMMUNICATION_STATE_LABEL[communicationState(item)]}</StatusChip><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{classifyAudience(item) === "external" ? "Külső" : "Belső"}</StatusChip>{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</span>
                       <time className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{formatDate(item.createdAt)}</time>
                     </button>
                   );
@@ -463,7 +506,7 @@ function CommunicationWorkspace() {
           </section>
 
           <aside className="adm-panel self-start bg-white">
-            {!selected ? <EmptyState title="Válassz kommunikációt." /> : <CommunicationDetail item={selected} relatedCase={selected.caseId ? caseById.get(selected.caseId) : undefined} relatedClient={selected.clientId ? clientById.get(selected.clientId) : undefined} linkedTasks={linkedTasks} linkedTasksLoading={linkedTasksLoading} onAssign={openAssign} onCreateCase={openCreateCase} onCreateTask={openTask} onLinkTask={(item) => void openLinkTask(item)} />}
+            {!selected ? <EmptyState title="Válassz kommunikációt." /> : <CommunicationDetail item={selected} relatedCase={selected.caseId ? caseById.get(selected.caseId) : undefined} relatedClient={selected.clientId ? clientById.get(selected.clientId) : undefined} linkedTasks={linkedTasks} linkedTasksLoading={linkedTasksLoading} detail={detail} detailLoading={detailLoading} detailError={detailError} onAssign={openAssign} onCreateCase={openCreateCase} onCreateTask={openTask} onLinkTask={(item) => void openLinkTask(item)} />}
           </aside>
         </div>
       </div>
@@ -493,18 +536,21 @@ function CommunicationWorkspace() {
   );
 }
 
-function CommunicationDetail({ item, relatedCase, relatedClient, linkedTasks, linkedTasksLoading, onAssign, onCreateCase, onCreateTask, onLinkTask }: { item: CommunicationItem; relatedCase?: CaseListItem; relatedClient?: Client; linkedTasks: TaskListItem[]; linkedTasksLoading: boolean; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void }) {
+function CommunicationDetail({ item, relatedCase, relatedClient, linkedTasks, linkedTasksLoading, detail, detailLoading, detailError, onAssign, onCreateCase, onCreateTask, onLinkTask }: { item: CommunicationItem; relatedCase?: CaseListItem; relatedClient?: Client; linkedTasks: TaskListItem[]; linkedTasksLoading: boolean; detail: CommunicationDetail | null; detailLoading: boolean; detailError: boolean; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void }) {
   const signal = toCommunicationSignal(item);
+  const detailView = detail ? buildCommunicationDetailView(detail, { client: relatedClient, caseRecord: relatedCase }) : null;
+  const caseOpenable = canOpenCase({ caseId: item.caseId });
   return (
       <div>
-      <div className="relative border-b border-[var(--adm-border)] px-4 py-3 pl-5"><ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" /><p className="adm-kicker text-[var(--adm-blue-700)]">Kiválasztott kommunikáció</p><h2 className="adm-heading mt-1 text-[19px]">{item.subject || "Nincs tárgy"}</h2></div>
+      <div className="relative border-b border-[var(--adm-border)] px-4 py-3 pl-5"><ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" /><p className="adm-kicker text-[var(--adm-blue-700)]">Kiválasztott kommunikáció</p><h2 className="adm-heading mt-1 text-[19px]">{detailView?.subject || item.subject || "Nincs tárgy"}</h2></div>
       <div className="space-y-4 p-4">
-        <div><p className="text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || "Nincs feladóadat"}</p><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</p></div>
-        {item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}
-        <div className="flex flex-wrap gap-1"><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{signal.audience === "external" ? "Külső" : "Belső"}</StatusChip><StatusChip>{formatCommunicationType(item.type)}</StatusChip>{item.attachmentCount > 0 ? <StatusChip>{item.attachmentCount} melléklet</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</div>
+        <div><p className="text-[12px] font-semibold text-[var(--adm-text)]">{detailView?.sender || item.senderName || item.senderEmail || "Nincs feladóadat"}</p><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</p></div>
+        {detailLoading ? <p className="text-[11px] text-[var(--adm-text-muted)]">Tartalom betöltése…</p> : detailError ? <p className="text-[11px] text-[var(--adm-text-muted)]">A tartalom jelenleg nem érhető el.</p> : detailView?.content ? <p className="whitespace-pre-wrap text-[11px] leading-5 text-[var(--adm-text)]">{detailView.content}</p> : item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}
+        <div className="flex flex-wrap gap-1"><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{signal.audience === "external" ? "Külső" : "Belső"}</StatusChip><StatusChip>{formatCommunicationType(item.type)}</StatusChip>{detailView ? <StatusChip>{detailView.attachments.length} melléklet</StatusChip> : item.attachmentCount > 0 ? <StatusChip>{item.attachmentCount} melléklet</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</div>
+        {detailView && detailView.attachments.length > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Mellékletek</p><ul className="mt-2 space-y-1">{detailView.attachments.map((attachment) => <li key={`${attachment.fileName}-${attachment.fileType ?? ""}`} className="text-[11px] text-[var(--adm-text)]"><span className="font-semibold">{attachment.fileName}</span>{attachment.description ? <span className="text-[var(--adm-text-muted)]"> · {attachment.description}</span> : null}</li>)}</ul></div> : null}
         <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.createdAt)}</dd></dl>
         {item.sourceTaskCount > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt feladat</p>{linkedTasksLoading ? <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Betöltés…</p> : linkedTasks.length ? <div className="mt-2 space-y-1">{linkedTasks.map((task) => <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block text-[11px] font-semibold text-[var(--adm-blue-700)] hover:underline">{task.title} · {task.status}</Link>)}</div> : <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A feladatkapcsolat részlete nem érhető el.</p>}</div> : null}
-        <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
+        <div className="flex flex-wrap gap-2">{caseOpenable ? <Link href={`/cases/${encodeURIComponent(item.caseId!)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
         <div className="border-t border-[var(--adm-border)] pt-4"><p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Következő lépés</p><div className="grid gap-2">{item.caseId ? <><button type="button" onClick={() => onCreateTask(item)} className="bg-[var(--adm-green-800)] px-3 py-2 text-[11px] font-semibold text-white">Új feladat létrehozása</button><button type="button" onClick={() => onLinkTask(item)} className="border border-[var(--adm-blue-700)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-blue-700)]">Meglévő feladathoz</button></> : <><button type="button" onClick={() => onAssign(item)} className="bg-[var(--adm-blue-700)] px-3 py-2 text-[11px] font-semibold text-white">Meglévő ügyhöz rendelés</button><button type="button" onClick={() => onCreateCase(item)} className="border border-[var(--adm-blue-700)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-blue-700)]">Új ügy indítása</button></>}</div></div>
       </div>
     </div>
