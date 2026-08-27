@@ -18,6 +18,8 @@
     "db:bootstrap:empty": "node scripts/db-bootstrap-empty.mjs",
     "db:migrations:verify-replay": "node scripts/verify-migration-replay.mjs",
     "test:migration:webjob": "node scripts/test-migration-webjob-runner.mjs",
+    "demo:kft:reset": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-kft-reset.mjs",
+    "test:demo-kft:db": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand tests/demoKftFixture.integration.test.ts",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "seed:pilot:users": "node scripts/seed-core-team-users.mjs",
@@ -48,7 +50,10 @@
     "test:phase7-slice-7a:db": "jest --runInBand tests/phase7Slice7AFindingMaterialization.integration.test.ts",
     "test:phase7d:db": "jest --runInBand tests/phase7DTypedFactFinding.integration.test.ts",
     "test:answer-state:db": "jest --runInBand tests/companyProfileAnswerState.integration.test.ts",
+    "test:case-attention:db": "jest --runInBand tests/caseAttention.integration.test.ts",
+    "test:client-safe-work-summary:db": "jest --runInBand tests/clientSafeWorkSummary.integration.test.ts",
     "test:work-package-schema:db": "jest --runInBand tests/workPackageSchema.integration.test.ts",
+    "test:work-package-case-creation:db": "jest --runInBand tests/workPackageCaseCreation.integration.test.ts",
     "test:work-package-admin:db": "jest --runInBand tests/workPackageAdmin.integration.test.ts",
     "test:phase7b:db": "jest --runInBand tests/phase7BComplianceProposal.integration.test.ts",
     "test:phase7cb:db": "jest --runInBand tests/phase7CBComplianceOverview.integration.test.ts",
@@ -64,7 +69,11 @@
     "test:task-lifecycle-schema:db": "jest --runInBand tests/taskLifecycleSchema.integration.test.ts",
     "test:task-review-decision:db": "jest --runInBand tests/taskReviewDecision.integration.test.ts",
     "test:task-submission:db": "jest --runInBand tests/taskSubmission.integration.test.ts",
-    "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs"
+    "db:provision:task-document": "node scripts/ci-provision-task-document-dbs.mjs",
+    "demo:presentation:reset": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-reset.mjs",
+    "demo:presentation:check": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-check.mjs",
+    "demo:presentation:mutate": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-presentation-mutate.mjs",
+    "test:demo-fixture:db": "jest --runInBand tests/demoKftFixture.integration.test.ts"
   },
   "dependencies": {
     "@azure/identity": "^4.13.1",

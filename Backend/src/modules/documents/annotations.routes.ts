@@ -2,7 +2,9 @@ import { NextFunction, Request, Response, Router } from 'express';
 import { DocumentAnnotationStatus } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { userCanManageCase, userCanReadCase } from '../cases/authorization';
+import { hrConfidentialReadAllowed } from './documentObjectAuthorization';
 import {
   createDocumentAnnotation,
   createDocumentAnnotationComment,
@@ -37,13 +39,25 @@ async function requireVersionAccess(
   try {
     const version = await prisma.documentVersion.findFirst({
       where: { id: versionId, documentId },
-      select: { document: { select: { caseId: true } } },
+      select: { document: { select: { caseId: true, securityClassification: true } } },
     });
     if (!version) {
       res.status(404).json({
         status: 404,
         code: 'DOCUMENT_VERSION_NOT_FOUND',
         message: 'Document version not found.',
+      });
+      return;
+    }
+
+    if (
+      String(version.document.securityClassification) === 'HR_CONFIDENTIAL' &&
+      !hrConfidentialReadAllowed(req.user?.role)
+    ) {
+      res.status(403).json({
+        status: 403,
+        code: 'DOCUMENT_ACCESS_FORBIDDEN',
+        message: 'You do not have access to this document.',
       });
       return;
     }
@@ -106,7 +120,7 @@ function sendError(res: Response, error: unknown): void {
   });
 }
 
-router.use(authenticate);
+router.use(authenticate, requireWorkforceUser);
 
 router.get('/', requireRead, async (req: Request, res: Response): Promise<void> => {
   try {

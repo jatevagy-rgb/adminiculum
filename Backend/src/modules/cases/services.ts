@@ -7,6 +7,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
 import { workflowService } from '../workflow';
 import { instantiateCaseWorkflow } from './caseWorkflowOrchestration';
+import { createCaseWorkPackageSnapshot } from './caseWorkPackage.service';
 
 // Prisma schema enum values
 const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
@@ -111,6 +112,8 @@ interface CreateCaseInput {
   deadline?: string | null;
   workflowTemplateKey?: string | null;
   workflowAssignees?: Record<string, string | null | undefined>;
+  caseTypeDefinitionId?: string | null;
+  selectedModuleKeys?: unknown;
 }
 
 type ActiveUserRecord = {
@@ -433,9 +436,9 @@ return {
   /**
    * Create new case
    */
-  async createCase(params: CreateCaseInput): Promise<{ id: string; caseNumber: string; status: string; createdAt: Date }> {
+  async createCase(params: CreateCaseInput, db = prisma): Promise<{ id: string; caseNumber: string; status: string; createdAt: Date; workPackage?: unknown }> {
     const year = new Date().getFullYear();
-    const count = await prisma.case.count();
+    const count = await db.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
     const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
 
     // Use default if invalid matterType
@@ -447,7 +450,7 @@ return {
     // This avoids creating orphan linkage behavior in create-case flows.
     let resolvedClientId = (params.clientId || '').trim() || undefined;
     if (resolvedClientId) {
-      const linkedClient = await prisma.client.findUnique({
+      const linkedClient = await db.client.findUnique({
         where: { id: resolvedClientId },
         select: { id: true, name: true }
       });
@@ -470,7 +473,7 @@ return {
       throw new Error('Authenticated user is required for case creation');
     }
 
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await db.user.findUnique({
       where: { id: params.createdById },
       select: { id: true, status: true, isActive: true },
     }) as ActiveUserRecord | null;
@@ -498,24 +501,67 @@ return {
       resolvedClientName = linkedClient?.name || 'Unknown Client';
     }
 
-    const newCase = await prisma.case.create({
-      data: {
-        caseNumber,
-        title,
-        clientName: resolvedClientName,
-        matterType: matterType as any,
-        caseType: 'OTHER' as any,
-        description: params.description,
-        clientRole: params.clientRole ?? null,
-        status: DEFAULT_STATUS as any,
-        priority: 'MEDIUM' as any,
-        deadline: params.deadline ? new Date(params.deadline) : undefined,
-        sharepointSite: 'Adminiculum - Legal Workflow',
-        sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
-        createdById: resolvedCreatedById,
-        clientId
-      } as any
+    const created = await db.$transaction(async (tx) => {
+      const newCase = await tx.case.create({
+        data: {
+          caseNumber,
+          title,
+          clientName: resolvedClientName,
+          matterType: matterType as any,
+          caseType: 'OTHER' as any,
+          caseTypeDefinitionId: params.caseTypeDefinitionId || null,
+          description: params.description,
+          clientRole: params.clientRole ?? null,
+          status: DEFAULT_STATUS as any,
+          priority: 'MEDIUM' as any,
+          deadline: params.deadline ? new Date(params.deadline) : undefined,
+          sharepointSite: 'Adminiculum - Legal Workflow',
+          sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
+          createdById: resolvedCreatedById,
+          clientId
+        } as any
+      });
+
+      const workPackage = await createCaseWorkPackageSnapshot(tx, newCase.id, resolvedCreatedById, {
+        caseTypeDefinitionId: params.caseTypeDefinitionId,
+        selectedModuleKeys: params.selectedModuleKeys,
+      }, matterType);
+      if (workPackage) {
+        await tx.case.update({ where: { id: newCase.id }, data: { caseTypeDefinitionId: workPackage.caseTypeDefinitionId } });
+      }
+
+      const workflow = await instantiateCaseWorkflow({
+        caseId: newCase.id,
+        templateId: workPackage?.template.defaultWorkflowTemplateId,
+        templateKey: params.workflowTemplateKey || 'SIMPLE',
+        actor: { userId: resolvedCreatedById },
+        assigneesByStepKey: params.workflowAssignees,
+        fallbackAssigneeId: newCase.assignedLawyerId || resolvedCreatedById,
+      }, tx as any);
+
+      await tx.timelineEvent.create({
+        data: {
+          caseId: newCase.id,
+          userId: resolvedCreatedById,
+          eventType: 'CASE_CREATED',
+          type: 'CASE_CREATED' as any,
+          payload: {
+            caseNumber,
+            clientName: resolvedClientName,
+            matterType,
+            caseTypeDefinitionId: params.caseTypeDefinitionId || null,
+            workPackageTemplateId: workPackage?.template.id || null,
+            workPackageTemplateVersion: workPackage?.template.version || null,
+            workflowTemplateId: workPackage?.template.defaultWorkflowTemplateId || workflow?.templateKey || null,
+            workflowTemplateKey: workflow?.templateKey || null,
+            workflowTemplateVersion: workflow?.templateVersion || null,
+          },
+        } as any,
+      });
+
+      return { newCase, workPackage };
     });
+    const newCase = created.newCase;
 
     // Create case folder in SharePoint
     // If folder creation fails, log but do NOT fail the case creation.
@@ -525,34 +571,22 @@ return {
       console.warn(`[CASES_SERVICE] SharePoint folder creation returned null for case ${caseNumber}. Case created in DB but SharePoint folder is missing.`);
     }
 
-    // Create TimelineEvent for case creation
-    await prisma.timelineEvent.create({
-      data: {
-        caseId: newCase.id,
-        userId: resolvedCreatedById,
-        eventType: 'CASE_CREATED',
-        type: 'CASE_CREATED' as any,
-        payload: {
-          caseNumber,
-          clientName: resolvedClientName,
-          matterType: matterType
-        }
-      } as any
-    });
-
-    await instantiateCaseWorkflow({
-      caseId: newCase.id,
-      templateKey: params.workflowTemplateKey || 'SIMPLE',
-      actor: { userId: resolvedCreatedById },
-      assigneesByStepKey: params.workflowAssignees,
-      fallbackAssigneeId: newCase.assignedLawyerId || resolvedCreatedById,
-    });
-
     return {
       id: newCase.id,
       caseNumber: newCase.caseNumber,
       status: newCase.status,
-      createdAt: newCase.createdAt
+      createdAt: newCase.createdAt,
+      workPackage: created.workPackage ? {
+        id: created.workPackage.snapshot.id,
+        workPackageTemplateId: created.workPackage.snapshot.workPackageTemplateId,
+        workPackageTemplateVersion: created.workPackage.snapshot.workPackageTemplateVersion,
+        snapshotWorkflowTemplateId: created.workPackage.snapshot.snapshotWorkflowTemplateId,
+        items: created.workPackage.snapshot.items.map((item) => ({
+          id: item.id, moduleType: item.moduleType, moduleKey: item.moduleKey,
+          label: item.label, config: item.config, order: item.order,
+          sourceTemplateItemId: item.sourceTemplateItemId,
+        })),
+      } : undefined
     };
   }
 
