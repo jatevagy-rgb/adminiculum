@@ -297,6 +297,7 @@ export async function createTask(data: {
   sourceCommunicationId?: string;
   attentionCategory?: AttentionCategory | null;
   estimatedMinutes?: number | null;
+  workPackageItemId?: string;
 }) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
 
@@ -317,6 +318,7 @@ export async function createTask(data: {
       sourceCommunicationId: data.sourceCommunicationId,
       attentionCategory: data.attentionCategory ?? null,
       estimatedMinutes: data.estimatedMinutes ?? null,
+      ...(data.workPackageItemId ? { workPackageItemId: data.workPackageItemId } : {}),
     } as any,
     include: {
       case: true,

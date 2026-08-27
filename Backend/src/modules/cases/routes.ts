@@ -39,6 +39,12 @@ import {
 } from './intakeService';
 import { getDashboardOperationalOverview } from './dashboardOperational';
 import { getCaseAttentionSummary, listCaseAttentionSummaries } from './attention.service';
+import {
+  getCaseWorkPackage,
+  mutateCaseWorkPackageItem,
+  createTaskFromCaseWorkPackageItem,
+  CaseWorkPackageOperationalError,
+} from './caseWorkPackageOperational.service';
 
 const router = Router();
 
@@ -615,6 +621,83 @@ router.get('/:caseId/client-house-style', authenticate, async (req: Request, res
       return;
     }
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// Work Package operational routes — registered BEFORE /:caseId catch-all.
+// ============================================================================
+
+function handleWorkPackageError(res: Response, error: unknown): void {
+  if (error instanceof CaseWorkPackageOperationalError) {
+    res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+    return;
+  }
+  console.error('Work package operational error:', error);
+  res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+}
+
+// GET /cases/:caseId/work-package — read work package + items + progress
+router.get('/:caseId/work-package', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const wp = await getCaseWorkPackage(caseId);
+    if (!wp) {
+      res.status(404).json({ status: 404, code: 'WORK_PACKAGE_NOT_FOUND', message: 'Case has no work package.' });
+      return;
+    }
+    res.json(wp);
+  } catch (error) {
+    handleWorkPackageError(res, error);
+  }
+});
+
+// PATCH /cases/:caseId/work-package/items/:itemId — mutate item status/responsible/note
+router.patch('/:caseId/work-package/items/:itemId', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId, itemId } = req.params as { caseId: string; itemId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required.' });
+      return;
+    }
+    const { status, responsibleId, note, expectedRevision } = req.body ?? {};
+    if (expectedRevision === undefined || typeof expectedRevision !== 'number') {
+      res.status(400).json({ status: 400, code: 'EXPECTED_REVISION_REQUIRED', message: 'expectedRevision (number) is required.' });
+      return;
+    }
+    const result = await mutateCaseWorkPackageItem(
+      caseId,
+      itemId,
+      { status, responsibleId, note, expectedRevision },
+      userId,
+    );
+    res.json(result);
+  } catch (error) {
+    handleWorkPackageError(res, error);
+  }
+});
+
+// POST /cases/:caseId/work-package/items/:itemId/tasks — create task from package item
+router.post('/:caseId/work-package/items/:itemId/tasks', authenticate, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId, itemId } = req.params as { caseId: string; itemId: string };
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required.' });
+      return;
+    }
+    const { title, description, assignedToId, dueDate } = req.body ?? {};
+    const parsedDueDate = dueDate ? new Date(dueDate) : undefined;
+    const result = await createTaskFromCaseWorkPackageItem(
+      caseId,
+      itemId,
+      { title, description, assignedToId, dueDate: parsedDueDate },
+      userId,
+    );
+    res.status(201).json(result);
+  } catch (error) {
+    handleWorkPackageError(res, error);
   }
 });
 
