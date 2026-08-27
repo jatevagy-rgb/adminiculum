@@ -576,7 +576,7 @@ class DocumentsService {
         });
 
         if (!uploadResult.success) {
-          throw new Error(uploadResult.error || 'Version upload failed');
+          throw new DocumentStorageUploadError(uploadResult.error || 'Version upload failed');
         }
 
         const sharePointItemId = normalizeSharePointItemId(uploadResult.item?.id);
@@ -685,6 +685,9 @@ class DocumentsService {
         'Error uploading new version:',
         error instanceof Error ? error.message : error
       );
+      if (error instanceof DocumentStorageUploadError) {
+        throw error;
+      }
       return null;
     }
   }

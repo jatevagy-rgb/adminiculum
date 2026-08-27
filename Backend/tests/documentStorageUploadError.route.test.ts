@@ -7,15 +7,7 @@ const mockPrisma = {
   caseCollaborator: { findFirst: jest.fn() },
 };
 
-class MockDocumentStorageUploadError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'DocumentStorageUploadError';
-  }
-}
-
-const createDocumentMock = jest.fn();
-const uploadNewVersionMock = jest.fn();
+const mockDriveUploadDocument = jest.fn();
 
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req: Request, res: Response, next: NextFunction) => {
@@ -39,23 +31,10 @@ jest.mock('../src/middleware/featureAvailability', () => ({
   requireDatabaseFoundation: jest.fn(() => (_req: Request, _res: Response, next: NextFunction) => next()),
 }));
 
-jest.mock('../src/modules/documents/services', () => ({
-  __esModule: true,
-  DocumentStorageUploadError: MockDocumentStorageUploadError,
-  default: {
-    searchDocuments: jest.fn(),
-    createDocument: createDocumentMock,
-    getCaseDocuments: jest.fn(),
-    getDocumentById: jest.fn(),
-    uploadNewVersion: uploadNewVersionMock,
-    submitForReview: jest.fn(),
-    approveDocument: jest.fn(),
-    rejectDocument: jest.fn(),
+jest.mock('../src/modules/sharepoint', () => ({
+  driveService: {
+    uploadDocument: mockDriveUploadDocument,
     deleteDocument: jest.fn(),
-    listDocumentVersions: jest.fn(),
-    getDocumentVersion: jest.fn(),
-    downloadDocumentVersion: jest.fn(),
-    updateDocumentReviewStatus: jest.fn(),
   },
 }));
 
@@ -93,6 +72,9 @@ jest.mock('../src/prisma/prisma.service', () => ({
 }));
 
 import documentsRoutes from '../src/modules/documents/routes';
+import documentsService, { DocumentStorageUploadError } from '../src/modules/documents/services';
+
+const mockCreateDocument = jest.spyOn(documentsService, 'createDocument');
 
 function createApp(): Express {
   const app = express();
@@ -159,6 +141,14 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
       id: 'doc-1',
       caseId: 'case-1',
       securityClassification: 'STANDARD',
+      case: { caseNumber: 'CASE-1' },
+      fileName: 'v1.pdf',
+      name: 'v1.pdf',
+      folder: 'DRAFTS',
+      mimeType: 'application/pdf',
+      version: '1',
+      currentVersion: 1,
+      currentVersionInt: 1,
     });
     mockPrisma.case.findUnique.mockResolvedValue({
       id: 'case-1',
@@ -166,13 +156,15 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
       createdById: 'user-1',
     });
     mockPrisma.caseCollaborator.findFirst.mockResolvedValue(null);
+    mockDriveUploadDocument.mockResolvedValue({
+      success: false,
+      error: 'Graph SharePoint token drive path failure',
+    });
   });
 
   describe('POST /documents (create new document)', () => {
     it('returns 502 DOCUMENT_STORAGE_UNAVAILABLE on storage failure', async () => {
-      createDocumentMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('Document storage upload failed')
-      );
+      mockCreateDocument.mockRejectedValueOnce(new DocumentStorageUploadError('Document storage upload failed'));
 
       const res = await requestJson(createApp(), 'POST', '/documents', {
         body: {
@@ -193,9 +185,7 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
     });
 
     it('does not leak provider details in the 502 response', async () => {
-      createDocumentMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('SharePoint Graph API returned 503')
-      );
+      mockCreateDocument.mockRejectedValueOnce(new DocumentStorageUploadError('SharePoint Graph API returned 503'));
 
       const res = await requestJson(createApp(), 'POST', '/documents', {
         body: {
@@ -212,9 +202,7 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
     });
 
     it('does not return 200/201 on storage failure', async () => {
-      createDocumentMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('Document storage upload failed')
-      );
+      mockCreateDocument.mockRejectedValueOnce(new DocumentStorageUploadError('Document storage upload failed'));
 
       const res = await requestJson(createApp(), 'POST', '/documents', {
         body: {
@@ -233,11 +221,7 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
   });
 
   describe('POST /documents/:id/versions (immutable version upload)', () => {
-    it('returns 502 DOCUMENT_STORAGE_UNAVAILABLE on storage failure', async () => {
-      uploadNewVersionMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('Document storage upload failed')
-      );
-
+    it('maps a real storage provider failure to a safe 502 response', async () => {
       const res = await requestJson(createApp(), 'POST', '/documents/doc-1/versions', {
         body: {
           fileName: 'v2.pdf',
@@ -254,54 +238,15 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
         code: 'DOCUMENT_STORAGE_UNAVAILABLE',
         message: 'A tárhelykapcsolat jelenleg nem érhető el.',
       });
-    });
-
-    it('does not leak provider details in the 502 response', async () => {
-      uploadNewVersionMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('Graph API timeout')
-      );
-
-      const res = await requestJson(createApp(), 'POST', '/documents/doc-1/versions', {
-        body: {
-          fileName: 'v2.pdf',
-          fileContent: VALID_FILE_CONTENT,
-          mimeType: 'application/pdf',
-          uploadSource: 'LAWYER_UPLOAD',
-          versionType: 'WORKING_COPY',
-        },
-      });
-
       const bodyStr = JSON.stringify(res.body);
-      expect(bodyStr).not.toMatch(/sharepoint|graph|token|drive|provider|stack|timeout/i);
-    });
-
-    it('does not return 200/201 on storage failure', async () => {
-      uploadNewVersionMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('Document storage upload failed')
-      );
-
-      const res = await requestJson(createApp(), 'POST', '/documents/doc-1/versions', {
-        body: {
-          fileName: 'v2.pdf',
-          fileContent: VALID_FILE_CONTENT,
-          mimeType: 'application/pdf',
-          uploadSource: 'LAWYER_UPLOAD',
-          versionType: 'WORKING_COPY',
-        },
-      });
-
-      expect(res.status).not.toBe(200);
-      expect(res.status).not.toBe(201);
+      expect(bodyStr).not.toMatch(/sharepoint|graph|token|drive|path|provider|stack|internal/i);
+      expect(mockDriveUploadDocument).toHaveBeenCalledTimes(1);
       expect(res.body).not.toHaveProperty('id');
     });
   });
 
   describe('POST /documents/:id/version (singular version upload)', () => {
-    it('returns 502 DOCUMENT_STORAGE_UNAVAILABLE on storage failure', async () => {
-      uploadNewVersionMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('Document storage upload failed')
-      );
-
+    it('maps a real storage provider failure to a safe 502 response', async () => {
       const res = await requestJson(createApp(), 'POST', '/documents/doc-1/version', {
         body: {
           fileContent: VALID_FILE_CONTENT,
@@ -315,38 +260,9 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
         code: 'DOCUMENT_STORAGE_UNAVAILABLE',
         message: 'A tárhelykapcsolat jelenleg nem érhető el.',
       });
-    });
-
-    it('does not leak provider details in the 502 response', async () => {
-      uploadNewVersionMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('SharePoint connection refused')
-      );
-
-      const res = await requestJson(createApp(), 'POST', '/documents/doc-1/version', {
-        body: {
-          fileContent: VALID_FILE_CONTENT,
-          comment: 'test',
-        },
-      });
-
       const bodyStr = JSON.stringify(res.body);
-      expect(bodyStr).not.toMatch(/sharepoint|graph|token|drive|provider|stack|refused/i);
-    });
-
-    it('does not return 200/201 on storage failure', async () => {
-      uploadNewVersionMock.mockRejectedValueOnce(
-        new MockDocumentStorageUploadError('Document storage upload failed')
-      );
-
-      const res = await requestJson(createApp(), 'POST', '/documents/doc-1/version', {
-        body: {
-          fileContent: VALID_FILE_CONTENT,
-          comment: 'test',
-        },
-      });
-
-      expect(res.status).not.toBe(200);
-      expect(res.status).not.toBe(201);
+      expect(bodyStr).not.toMatch(/sharepoint|graph|token|drive|path|provider|stack|internal/i);
+      expect(mockDriveUploadDocument).toHaveBeenCalledTimes(1);
       expect(res.body).not.toHaveProperty('id');
     });
   });
