@@ -480,7 +480,10 @@ function ClientDetailContent() {
             </div>
 
             <div className="adm-board-panel p-5">
-              <h2 className="text-sm font-semibold text-[var(--adm-text)] mb-4">Kapcsolt kommunikációk</h2>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-[var(--adm-text)]">Kapcsolt kommunikációk</h2>
+                {communications.length > 0 ? <Link href={`/clients/${encodeURIComponent(clientId)}/communications`} className="text-[11px] font-semibold text-[var(--adm-ochre-500)] hover:underline">Összes kommunikáció →</Link> : null}
+              </div>
               {communications.length === 0 ? (
                 <div className="adm-board-empty min-h-[130px] p-4 text-xs text-[var(--adm-text-soft)]">
                   <p>Nincs kapcsolt kommunikációs esemény.</p>
@@ -491,7 +494,7 @@ function ClientDetailContent() {
                   {communications.map((comm) => (
                     <Link
                       key={comm.id}
-                      href={comm.caseId ? `/cases/${comm.caseId}/communications` : `/clients/${clientId}`}
+                      href={comm.caseId ? `/cases/${comm.caseId}/communications` : `/clients/${clientId}/communications`}
                       className="adm-board-list-row block p-3"
                     >
                       <p className="text-xs font-semibold text-[var(--adm-text)] truncate">{comm.subject || "Kommunikációs bejegyzés"}</p>
