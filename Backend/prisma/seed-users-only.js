@@ -1,10 +1,19 @@
 /**
  * Simple User Seed Script for Azure Deployment
  * Only creates users - no other dependencies
+ *
+ * SEC-0A: no fixed/shared password. Refuses to run in production. Each seeded
+ * workforce user receives a random, unknown passwordHash; real authentication
+ * is Azure AD (email-resolved DB role).
  */
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
+
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  throw new Error('seed-users-only must NEVER run in production. Aborting.');
+}
 
 const prisma = new PrismaClient();
 
@@ -13,7 +22,6 @@ const USERS = [
     email: 'admin@adminiculum.com',
     name: 'Admin User',
     role: 'ADMIN',
-    password: 'password123',
     department: 'IT',
     title: 'System Administrator',
   },
@@ -21,7 +29,6 @@ const USERS = [
     email: 'lawyer@adminiculum.com',
     name: 'Dr. Magyar Ügyvéd',
     role: 'LAWYER',
-    password: 'password123',
     department: 'Litigation',
     title: 'Senior Attorney',
   },
@@ -29,7 +36,6 @@ const USERS = [
     email: 'partner@adminiculum.com',
     name: 'Dr. Kovács Partner',
     role: 'PARTNER',
-    password: 'password123',
     department: 'Corporate',
     title: 'Managing Partner',
   },
@@ -37,7 +43,6 @@ const USERS = [
     email: 'assistant@adminiculum.com',
     name: 'Kiss Anna',
     role: 'LEGAL_ASSISTANT',
-    password: 'password123',
     department: 'Administration',
     title: 'Legal Assistant',
   },
@@ -45,7 +50,6 @@ const USERS = [
     email: 'trainee@adminiculum.com',
     name: 'Nagy Péter',
     role: 'TRAINEE',
-    password: 'password123',
     department: 'Corporate',
     title: 'Junior Associate',
   },
@@ -55,8 +59,9 @@ async function main() {
   console.log('🌱 Seeding users...\n');
 
   for (const user of USERS) {
-    const hashedPassword = await bcrypt.hash(user.password, 10);
-    
+    // Non-login credential: random, unknown hash. No shared/predictable password.
+    const hashedPassword = await bcrypt.hash(randomUUID(), 10);
+
     try {
       const created = await prisma.user.upsert({
         where: { email: user.email },

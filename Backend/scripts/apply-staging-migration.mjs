@@ -1,6 +1,14 @@
 import { execSync } from 'child_process';
 import path from 'path';
 
+// OPS: this script runs a DESTRUCTIVE `prisma migrate reset --force`. It must
+// NEVER run in production; the canonical production migration path is the
+// migration WebJob. Fail closed on NODE_ENV=production.
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  console.error('ERROR: apply-staging-migration must NEVER run in production. Use the canonical migration WebJob.');
+  process.exit(1);
+}
+
 // IMPORTANT: Set DATABASE_URL env var before running.
 // Example: DATABASE_URL='postgresql://user:pass@host:5432/db?sslmode=require' node apply-staging-migration.mjs
 const DATABASE_URL = process.env.DATABASE_URL;

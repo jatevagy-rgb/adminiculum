@@ -119,35 +119,10 @@ router.post(
   }
 );
 
-export default router;
+// SEC-0A: the unauthenticated /auth/register route (self-service account
+// creation with a caller-chosen role, including ADMIN/PARTNER) has been
+// removed. Workforce identities are provisioned via Azure AD (email-resolved
+// DB role) and, for local provisioning, through the ADMIN/PARTNER-gated
+// POST /users path. There is no public registration surface.
 
-// ============================================================================
-// POST /auth/register (DEV/TEST ONLY - should be removed in production)
-// ============================================================================
-router.post(
-  '/register',
-  [
-    body('email').isEmail().normalizeEmail(),
-    body('password').isLength({ min: 6 }),
-    body('name').notEmpty(),
-    body('role').isIn(['ADMIN', 'PARTNER', 'LAWYER', 'TRAINEE', 'LEGAL_ASSISTANT']),
-    handleValidation
-  ],
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { email, password, name, role } = req.body;
-      
-      // DEV ONLY - In production this should be secured
-      const result = await authService.register(email, password, name, role);
-      
-      res.status(result.status).json(result.data);
-    } catch (error) {
-      console.error('Register error:', error);
-      res.status(500).json({
-        status: 500,
-        code: 'INTERNAL_ERROR',
-        message: 'Internal server error'
-      });
-    }
-  }
-);
+export default router;

@@ -10,6 +10,7 @@ import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { createCorsOptions } from './config/cors';
+import { sanitizeUrlForLog } from './config/logRedaction';
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -151,9 +152,27 @@ if (isProduction && productionAllowedOrigins.length === 0) {
   );
 }
 
+// OPS: production fail-closed. Mandatory runtime configuration whose absence
+// would weaken authentication or data access must be present, or the process
+// must not start. Non-production keeps developer-friendly warn-only behavior.
+if (isProduction) {
+  const requiredMissing: string[] = [];
+  if (!isPresent(process.env.DATABASE_URL)) requiredMissing.push('DATABASE_URL');
+  if (!isPresent(process.env.JWT_SECRET)) requiredMissing.push('JWT_SECRET');
+  if (requiredMissing.length > 0) {
+    console.error(
+      `[Startup Validation] FAIL-CLOSED missing required configuration: ${requiredMissing.join(', ')}`,
+    );
+    process.exit(1);
+  }
+}
+
 // Middleware
 app.use(helmet());
 app.use(cors(createCorsOptions({ isProduction, productionAllowedOrigins, frontendUrl })));
+// SEC-0A: never log query strings (potential token/identifier leakage). morgan
+// 'combined' already omits request bodies and Authorization/Cookie headers.
+morgan.token('url', (req) => sanitizeUrlForLog((req as any).originalUrl || (req as any).url || ''));
 app.use(morgan('combined'));
 // Increase payload limits for normal DOC/DOCX base64 uploads from frontend
 // (base64 payloads are larger than binary source files)

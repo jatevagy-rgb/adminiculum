@@ -7,14 +7,26 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
+// OPS: this ad-hoc migration runner must NEVER touch production. The canonical
+// production migration path is the migration WebJob, not this script.
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  throw new Error('run_migration must NEVER run in production. Use the canonical migration WebJob instead.');
+}
+
 async function runMigration() {
-  const client = new Client({
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DATABASE_NAME || 'adminiculum',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'Uborka444',
-  });
+  const password = process.env.DB_PASSWORD;
+  if (!process.env.DATABASE_URL && !password) {
+    throw new Error('DB_PASSWORD (or DATABASE_URL) is required; refusing to run with a hardcoded credential.');
+  }
+  const client = process.env.DATABASE_URL
+    ? new Client({ connectionString: process.env.DATABASE_URL })
+    : new Client({
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DATABASE_NAME || 'adminiculum',
+        user: process.env.DB_USER || 'postgres',
+        password,
+      });
 
   try {
     await client.connect();

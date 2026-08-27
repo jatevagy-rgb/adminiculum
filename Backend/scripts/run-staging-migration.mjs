@@ -21,6 +21,14 @@ import { SecretClient } from '@azure/keyvault-secrets';
 import pg from 'pg';
 const { Client } = pg;
 
+// OPS: this is the staging migration helper. Production migrations run through
+// the canonical migration WebJob, never this ad-hoc script. Fail closed on
+// NODE_ENV=production.
+if (String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+  console.error('ERROR: run-staging-migration must NEVER run in production. Use the canonical migration WebJob.');
+  process.exit(1);
+}
+
 async function runMigration() {
   console.log('=== Adminiculum Staging DB Migration Script ===\n');
 
