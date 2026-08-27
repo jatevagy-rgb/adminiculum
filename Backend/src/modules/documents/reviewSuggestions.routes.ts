@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
+import { requireDocumentObjectManageAccess, requireDocumentObjectReadAccess } from './documentObjectAuthorization';
 import {
   createDocumentReviewSuggestion,
   DocumentReviewSuggestionError,
@@ -40,7 +42,9 @@ const sendError = (res: Response, error: unknown) => {
   });
 };
 
-router.get('/', authenticate, requireReviewSuggestionFoundation, async (req: Request, res: Response): Promise<void> => {
+router.use(authenticate, requireWorkforceUser);
+
+router.get('/', requireReviewSuggestionFoundation, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const suggestions = await listDocumentReviewSuggestions(documentId, {
@@ -54,7 +58,7 @@ router.get('/', authenticate, requireReviewSuggestionFoundation, async (req: Req
   }
 });
 
-router.post('/', authenticate, requireReviewSuggestionFoundation, async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireReviewSuggestionFoundation, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId } = req.params as { documentId: string };
     const suggestion = await createDocumentReviewSuggestion(documentId, {
@@ -68,7 +72,7 @@ router.post('/', authenticate, requireReviewSuggestionFoundation, async (req: Re
   }
 });
 
-router.patch('/:suggestionId', authenticate, requireReviewSuggestionFoundation, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:suggestionId', requireReviewSuggestionFoundation, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { documentId, suggestionId } = req.params as { documentId: string; suggestionId: string };
     const suggestion = await updateDocumentReviewSuggestionStatus(documentId, suggestionId, req.body?.status);

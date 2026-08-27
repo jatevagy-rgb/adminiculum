@@ -46,6 +46,7 @@ import { getOrganizationalContracts } from '../modules/client-workspace/orgContr
 import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
 import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../modules/client-workspace/companyProfileAnswerService';
 import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
+import { getClientSafeWorkSummary } from '../modules/client-workspace/workSummaryService';
 import {
   createIntakeDraft,
   getOwnIntake,
@@ -513,6 +514,24 @@ router.get('/org/company', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await getOrganizationalCompany(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/work-summary', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const workspace = (req as Request & { clientPortalWorkspace?: ResolvedPortalWorkspace }).clientPortalWorkspace;
+    if (!workspace || workspace.id !== workspaceId) throw new Error('Resolved client workspace is missing.');
+    const parseBoundary = (value: unknown): Date | undefined => {
+      if (value == null || value === '') return undefined;
+      const parsed = new Date(String(value));
+      if (Number.isNaN(parsed.getTime())) throw Object.assign(new Error('Invalid UTC period boundary.'), { status: 400, code: 'WORK_SUMMARY_PERIOD_INVALID' });
+      return parsed;
+    };
+    res.json(await getClientSafeWorkSummary(identityId, workspace, { from: parseBoundary(req.query.from), to: parseBoundary(req.query.to) }));
   } catch (error) {
     fail(res, error);
   }

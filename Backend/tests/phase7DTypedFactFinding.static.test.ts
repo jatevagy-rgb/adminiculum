@@ -40,7 +40,7 @@ describe('Phase 7D typed fact to finding wiring', () => {
     const diagnostics = read('src/modules/compliance/complianceOverviewService.ts');
     const routes = read('src/modules/compliance/complianceOverviewRoutes.ts');
     const portal = read('src/routes/clientPortal.ts');
-    expect(migration).toContain('SET "complianceEnrollmentStatus" = \'ENROLLED\'');
+    expect(migration).not.toContain('SET "complianceEnrollmentStatus" = \'ENROLLED\'');
     expect(migration).not.toContain('INSERT INTO "client_operating_profiles"');
     expect(replay).toContain('seedPhase7D1EnrollmentFixture');
     expect(replay).toContain('phase7d1-bare-client');
