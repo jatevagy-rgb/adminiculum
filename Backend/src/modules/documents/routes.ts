@@ -553,6 +553,14 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
     res.status(201).json({ document: result, currentVersion: versions.find((version) => version.isCurrent) || null, versions });
   } catch (error) {
     console.error('Upload immutable version error:', error);
+    if (error instanceof DocumentStorageUploadError) {
+      res.status(502).json({
+        status: 502,
+        code: 'DOCUMENT_STORAGE_UNAVAILABLE',
+        message: 'A tárhelykapcsolat jelenleg nem érhető el.',
+      });
+      return;
+    }
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Document version upload failed.' });
   }
 });
@@ -794,6 +802,14 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
     res.json(result);
   } catch (error) {
     console.error('Upload version error:', error);
+    if (error instanceof DocumentStorageUploadError) {
+      res.status(502).json({
+        status: 502,
+        code: 'DOCUMENT_STORAGE_UNAVAILABLE',
+        message: 'A tárhelykapcsolat jelenleg nem érhető el.',
+      });
+      return;
+    }
     res.status(500).json({ 
       status: 500, 
       code: 'INTERNAL_ERROR', 
