@@ -148,6 +148,13 @@ export class DocumentDeleteError extends Error {
   }
 }
 
+export class DocumentStorageUploadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DocumentStorageUploadError';
+  }
+}
+
 class DocumentsService {
   /**
    * Create document with SharePoint upload + TimelineEvent + Case update
@@ -180,7 +187,7 @@ class DocumentsService {
       });
 
       if (!uploadResult.success || !uploadResult.item) {
-        throw new Error(uploadResult.error || 'SharePoint upload failed');
+        throw new DocumentStorageUploadError(uploadResult.error || 'Document storage upload failed');
       }
 
       // 4. Create CaseDocument record in database
@@ -575,7 +582,7 @@ class DocumentsService {
         });
 
         if (!uploadResult.success) {
-          throw new Error(uploadResult.error || 'Version upload failed');
+          throw new DocumentStorageUploadError(uploadResult.error || 'Version upload failed');
         }
 
         const sharePointItemId = normalizeSharePointItemId(uploadResult.item?.id);
@@ -684,6 +691,9 @@ class DocumentsService {
         'Error uploading new version:',
         error instanceof Error ? error.message : error
       );
+      if (error instanceof DocumentStorageUploadError) {
+        throw error;
+      }
       return null;
     }
   }
