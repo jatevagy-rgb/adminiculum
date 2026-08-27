@@ -17,18 +17,18 @@ describe('Organization internal UI (structural)', () => {
     assert.match(component(), /Szervezet/);
   });
 
-  it('renders org chart, people, person detail, owner relations and gaps', () => {
+  it('renders hierarchy, people, person detail and distinct access concepts', () => {
     const src = component();
-    for (const label of ['Szervezeti felépítés', 'Emberek', 'Saját szerződések', 'Saját kötelezettségek', 'Fejlesztési programok', 'Felelősségi hiányosságok', 'Vezető:', 'Helyettes:']) {
+    for (const label of ['Szervezeti hierarchia', 'Személyek keresése', 'Felelősségek', 'Portál-hozzáférés', 'Felelősségi hiányosságok', 'Vezető:', 'Helyettes:']) {
       assert.match(src, new RegExp(label));
     }
   });
 
   it('keeps empty, loading and error states', () => {
     const src = component();
-    assert.match(src, /Betöltés…/);
+    assert.match(src, /betöltése…/);
     assert.match(src, /nem tölthetők be/);
-    assert.match(src, /Nincs megjeleníthető elem/);
+    assert.match(src, /Nincs rögzített adat/);
   });
 
   it('localizes statuses instead of exposing raw enums/IDs', () => {
@@ -42,6 +42,20 @@ describe('Organization internal UI (structural)', () => {
     for (const token of ['/client-organization/clients/', '/groups', '/persons', '/gaps']) {
       assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
+  });
+
+  it('provides a real organization route and safe person edit contract', () => {
+    const page = read('src/app/clients/[clientId]/szervezet/page.tsx');
+    assert.match(page, /ClientOrganization/);
+    assert.match(component(), /updatePerson/);
+    assert.match(api(), /method: "PATCH"/);
+  });
+
+  it('keeps the route client-scoped and does not use portal access for workforce auth', () => {
+    const backend = read('../Backend/src/modules/client-organization/service.ts');
+    assert.match(backend, /assertClientReadAccess\(actor, clientId/);
+    assert.match(backend, /assertClientReadAccess\(actor, row\.clientId/);
+    assert.doesNotMatch(component(), /portalMembershipId.*authorize|authorize.*portalMembershipId/i);
   });
 
   it('is registered and type-safe (component exists)', () => {

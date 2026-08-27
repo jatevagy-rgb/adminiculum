@@ -18,6 +18,8 @@ const EXCLUDE = new Set([
   // Needs a DOM/fetch harness (window.location / fetchApi) the repo never configured.
   'clientPortalReadOnlyAlpha.test.ts',
   'taskLifecycleApi.test.ts',
+  // Playwright E2E test, run separately
+  'presentationDemoE2e.test.ts',
 ]);
 
 const files = readdirSync(dir)

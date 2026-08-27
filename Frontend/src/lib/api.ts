@@ -389,6 +389,9 @@ export interface CaseWorkspace {
   case: {
     id: string; caseNumber: string; title: string; status: string; priority: string;
     matterType: string | null;
+    clientRole: string | null;
+    matterId: string | null;
+    deadline: string | null;
     client: { id: string; name: string; colorKey: string | null } | null;
     assignedLawyer: { id: string; name: string } | null;
     description: string | null; nextStep: string | null;
@@ -4629,6 +4632,20 @@ export async function updateMatter(id: string, data: UpdateMatterData): Promise<
 
 export async function getMatterTimeSummary(id: string): Promise<MatterTimeSummary> {
   return fetchApi<MatterTimeSummary>(`/matters/${encodeURIComponent(id)}/time-summary`);
+}
+
+export interface ClientSafeWorkSummary {
+  period: { from: string; to: string };
+  totalMinutes: number;
+  matters: Array<{ matterId: string; title: string; minutes: number }>;
+}
+
+export async function getClientSafeWorkSummary(period?: { from?: string; to?: string }): Promise<ClientSafeWorkSummary> {
+  const params = new URLSearchParams();
+  if (period?.from) params.set('from', period.from);
+  if (period?.to) params.set('to', period.to);
+  const query = params.toString();
+  return fetchApi<ClientSafeWorkSummary>(`/client-portal/org/work-summary${query ? `?${query}` : ''}`, { cache: 'no-store' });
 }
 
 // ============================================================================

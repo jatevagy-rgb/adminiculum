@@ -970,7 +970,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      setUploadError('A dokumentum feltöltése sikertelen.');
+      setUploadError(err instanceof ApiError ? err.message : 'A dokumentum feltöltése sikertelen.');
     } finally {
       setIsUploading(false);
     }
