@@ -142,6 +142,16 @@ export async function createDocumentReviewSuggestion(
     throw new DocumentReviewSuggestionError(400, 'REPLACEMENT_TEXT_REQUIRED', 'replacementText is required for replacement suggestions');
   }
 
+  if (input.documentVersionId) {
+    const version = await prisma.documentVersion.findFirst({
+      where: { id: String(input.documentVersionId), documentId: document.id },
+      select: { id: true },
+    });
+    if (!version) {
+      throw new DocumentReviewSuggestionError(404, 'DOCUMENT_VERSION_NOT_FOUND', 'Document version not found');
+    }
+  }
+
   return prisma.documentReviewSuggestion.create({
     data: {
       caseId: document.caseId,

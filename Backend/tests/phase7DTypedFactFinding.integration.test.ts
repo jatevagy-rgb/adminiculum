@@ -4,6 +4,8 @@ import { createFact, createFinding, verifyFact } from '../src/modules/client-com
 import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactMutationService';
 import { createRequirement, createRequirementVersion, addRequirementCitation, createApplicabilityRuleVersion, approveRequirementVersion, approveApplicabilityRuleVersion } from '../src/modules/compliance/requirementRuleService';
 import { createRequirementApplicability } from '../src/modules/compliance/requirementApplicabilityService';
+import { listUnresolvedRuleScopes } from '../src/modules/compliance/complianceOverviewService';
+import { resolveEffectiveRequirementRuleVersion } from '../src/modules/compliance/effectiveRequirementRuleResolver';
 
 const databaseUrl = process.env.PHASE7D_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -304,6 +306,21 @@ describeWithDatabase('Phase 7D typed fact to finding automation (PostgreSQL)', (
     await createBooleanRule('finding-failure', `seven_d_boolean_${suffix}`);
     await expect(createTypedFactAndEvaluate({ clientId: clientA, factDefinitionId: boolDefinitionId, actorUserId: crypto.randomUUID(), input: { scopeType: 'COMPANY', booleanValue: true, observedAt: '2026-08-24T10:00:00Z' } }, db)).rejects.toThrow();
     expect(await db.clientFact.count({ where: { clientId: clientA, factDefinitionId: boolDefinitionId } })).toBe(beforeFinding);
+  });
+
+  it('puts legacy approved null-scope rules in mandatory review while evaluation remains fail closed', async () => {
+    const { requirement, version, rule } = await createBooleanRule('legacy-scope-review', `seven_d_enrollment_${suffix}`);
+    await db.applicabilityRuleVersion.update({ where: { id: rule.id }, data: { evaluationScopeType: null } });
+
+    await expect(db.$transaction((tx) => resolveEffectiveRequirementRuleVersion(requirement.id, new Date('2026-08-24T12:00:00Z'), tx)))
+      .rejects.toMatchObject({ code: 'RULE_SCOPE_UNRESOLVED' });
+    await expect(listUnresolvedRuleScopes(actor, db)).resolves.toContainEqual({
+      requirementVersionId: version.id,
+      ruleVersionId: rule.id,
+      reason: 'RULE_SCOPE_UNRESOLVED',
+    });
+    await expect(listUnresolvedRuleScopes({ userId: actorId, role: 'LAWYER' }, db))
+      .rejects.toMatchObject({ code: 'COMPLIANCE_DIAGNOSTICS_FORBIDDEN' });
   });
 
   it('rejects concurrent DISALLOW writes with one winner and keeps clients isolated', async () => {

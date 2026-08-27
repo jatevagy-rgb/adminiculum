@@ -96,19 +96,9 @@ const routeMap: Record<string, string> = {
 
 const navGroups: Array<{ id: string; label: string; items: string[] }> = [
   {
-    id: "operations",
-    label: "Napi munka",
-    items: ["dashboard", "tasks", "notifications", "communications", "reviews"],
-  },
-  {
-    id: "matters",
-    label: "Ügyek és dokumentumok",
-    items: ["cases", "clause-library", "clients", "documents-compare"],
-  },
-  {
-    id: "resources",
-    label: "Iroda",
-    items: ["time-entries", "calendar", "client-portal-admin", "settings"],
+    id: "primary",
+    label: "Fő navigáció",
+    items: ["dashboard", "cases", "clients", "tasks", "communications", "settings"],
   },
 ];
 
@@ -134,7 +124,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     dashboard: "Műszerfal",
     tasks: "Feladatok",
     notifications: "Kommunikáció",
-    communications: "Ügykommunikáció",
+    communications: "Bejövő kommunikáció",
     reviews: "Review sor",
     cases: "Ügyek",
     "clause-library": "Záradék könyvtár",
