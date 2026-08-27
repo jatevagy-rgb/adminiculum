@@ -22,6 +22,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
+import { validateWorkforceUpload } from '../upload-security/uploadValidationCore';
 import { requireDocumentObjectReadAccess, requireDocumentObjectManageAccess } from './documentObjectAuthorization';
 import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
@@ -237,6 +238,22 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
         status: 413,
         code: 'DOCUMENT_TOO_LARGE',
         message: 'A fájl mérete meghaladja a 25 MB-os korlátot.',
+      });
+      return;
+    }
+
+    // SEC-2: Content validation — magic bytes, unsafe content, archive inspection
+    const contentValidation = await validateWorkforceUpload({
+      buffer: fileContentBuffer,
+      declaredMimeType: req.body.mimeType,
+      originalFileName: fileName,
+      inspectArchiveContent: true,
+    });
+    if (!contentValidation.ok) {
+      res.status(400).json({
+        status: 400,
+        code: 'CONTENT_VALIDATION_FAILED',
+        message: `File content validation failed: ${contentValidation.codeSafe}`,
       });
       return;
     }
@@ -539,6 +556,22 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
       return;
     }
 
+    // SEC-2: Content validation — magic bytes, unsafe content, archive inspection
+    const contentValidation = await validateWorkforceUpload({
+      buffer: fileBuffer,
+      declaredMimeType: req.body?.mimeType,
+      originalFileName: fileName,
+      inspectArchiveContent: true,
+    });
+    if (!contentValidation.ok) {
+      res.status(400).json({
+        status: 400,
+        code: 'CONTENT_VALIDATION_FAILED',
+        message: `File content validation failed: ${contentValidation.codeSafe}`,
+      });
+      return;
+    }
+
     const result = await documentsService.uploadNewVersion(
       id,
       fileBuffer,
@@ -755,6 +788,7 @@ router.post('/:id/version', authenticate, requireDocumentObjectManageAccess, asy
   try {
     const userId = (req as any).user?.userId;
     const { fileContent, comment } = req.body;
+    const fileName = sanitizeUploadFileName(req.body?.fileName);
 
     if (!fileContent) {
       res.status(400).json({ 
@@ -783,6 +817,23 @@ router.post('/:id/version', authenticate, requireDocumentObjectManageAccess, asy
       });
       return;
     }
+
+    // SEC-2: Content validation — magic bytes, unsafe content, archive inspection
+    const contentValidation = await validateWorkforceUpload({
+      buffer: fileBuffer,
+      declaredMimeType: req.body?.mimeType,
+      originalFileName: fileName || 'document',
+      inspectArchiveContent: true,
+    });
+    if (!contentValidation.ok) {
+      res.status(400).json({
+        status: 400,
+        code: 'CONTENT_VALIDATION_FAILED',
+        message: `File content validation failed: ${contentValidation.codeSafe}`,
+      });
+      return;
+    }
+
     const result = await documentsService.uploadNewVersion(
       id,
       fileBuffer,
