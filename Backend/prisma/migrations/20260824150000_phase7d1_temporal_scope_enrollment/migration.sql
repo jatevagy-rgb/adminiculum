@@ -3,8 +3,9 @@ CREATE TYPE "ComplianceEnrollmentStatus" AS ENUM ('ENROLLED', 'NOT_ENROLLED', 'S
 ALTER TABLE "client_operating_profiles"
   ADD COLUMN "complianceEnrollmentStatus" "ComplianceEnrollmentStatus" NOT NULL DEFAULT 'NOT_ENROLLED';
 
-UPDATE "client_operating_profiles"
-SET "complianceEnrollmentStatus" = 'ENROLLED';
+-- Compliance evaluation is an explicit workforce decision. Existing profiles
+-- remain NOT_ENROLLED under the new default; this migration must not opt in a
+-- client merely because it already has an operating profile.
 
 ALTER TABLE "applicability_rule_versions"
   ADD COLUMN "evaluationScopeType" "FactScopeType";

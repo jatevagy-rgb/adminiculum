@@ -22,6 +22,7 @@ import { personStatusLabel } from "@/lib/clientOrganizationApi";
 import { ComplianceOverviewPanel, ComplianceProposalPanel } from "@/components/clients/compliance/ComplianceOverview";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import type { ComplianceFindingView } from "@/components/clients/compliance/ComplianceOverview";
+import { DemoContentBanner } from "@/components/client-portal/PortalPresentationPrimitives";
 
 const labelCls = "rounded bg-white border border-[var(--adm-border)] px-2 py-1 text-xs text-[var(--adm-text-muted)]";
 
@@ -75,6 +76,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
 
   return (
     <div className="space-y-5" data-testid="client-company-workspace">
+      <DemoContentBanner enabled={process.env.NEXT_PUBLIC_ADMINICULUM_DEMO_CONTENT_ENABLED === 'true'} />
       <header className="rounded-[var(--adm-radius-md)] border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-5">
         <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Vállalati működés</p>
         <h1 className="mt-1 font-serif text-2xl text-[var(--adm-text)]">{clientName}</h1>
