@@ -361,6 +361,7 @@ const CASE_B_DOC = 'doc-case-b';
 const VERSION_1 = 'version-1';
 const VERSION_B = 'version-case-b';
 const CONTRACT_GEN_1 = 'contract-gen-1';
+const CROSS_OBJECT_ID = 'same-id-cross-object-x';
 
 /** Standard document in Case A */
 function mockStandardDoc() {
@@ -395,6 +396,17 @@ function mockStandardDoc() {
         securityClassification: 'STANDARD',
         name: 'Case B Doc',
         spItemId: 'sp-item-b',
+        mimeType: 'application/pdf',
+      });
+    }
+    if (args.where.id === CROSS_OBJECT_ID) {
+      return Promise.resolve({
+        id: CROSS_OBJECT_ID,
+        caseId: CASE_A,
+        clientId: CLIENT_A,
+        securityClassification: 'STANDARD',
+        name: 'Case A Doc with Cross-Object ID',
+        spItemId: 'sp-item-cross',
         mimeType: 'application/pdf',
       });
     }
@@ -453,6 +465,18 @@ function mockContractGen() {
         title: 'Contract B',
         fileName: 'contract-b.pdf',
         filePath: '/tmp/test-contract-b.pdf',
+        revisionNumber: 1,
+        status: 'GENERATED',
+        parentRevisionId: null,
+      });
+    }
+    if (args.where.id === CROSS_OBJECT_ID) {
+      return Promise.resolve({
+        id: CROSS_OBJECT_ID,
+        caseId: CASE_B,
+        title: 'Case B Contract with Cross-Object ID',
+        fileName: 'contract-cross.pdf',
+        filePath: '/tmp/test-contract-cross.pdf',
         revisionNumber: 1,
         status: 'GENERATED',
         parentRevisionId: null,
@@ -1243,39 +1267,49 @@ describe('SEC-1: Clause library workforce and case authorization', () => {
     expect((res.body as any).code).toBe('CASE_ACCESS_FORBIDDEN');
   });
 
-  it('14. review-guidance inaccessible document denied', async () => {
+  it('14. review-guidance inaccessible contract generation denied', async () => {
     const res = await requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, {
-      documentId: CASE_B_DOC,
+      documentId: 'gen-case-b',
     });
     expect(res.status).toBe(403);
-    expect((res.body as any).code).toBe('DOCUMENT_ACCESS_FORBIDDEN');
+    expect((res.body as any).code).toBe('CONTRACT_ACCESS_FORBIDDEN');
   });
 
-  it('15. HR_CONFIDENTIAL review-guidance denied to ordinary lawyer even with ordinary Case access', async () => {
-    const res = await requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, {
-      documentId: HR_DOC,
+  it('15. same-ID cross-object regression: Document in Case A and ContractGeneration in Case B with same ID denies Case A lawyer', async () => {
+    const clauseLibraryService = require('../src/modules/clause-library/service').default;
+    (clauseLibraryService.getReviewGuidance as jest.Mock).mockClear();
+
+    // LAWYER_A has access to Case A Document, but NOT to Case B ContractGeneration with same ID
+    const deniedRes = await requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, {
+      documentId: CROSS_OBJECT_ID,
     });
-    expect(res.status).toBe(403);
-    expect((res.body as any).code).toBe('DOCUMENT_ACCESS_FORBIDDEN');
+    expect(deniedRes.status).toBe(403);
+    expect((deniedRes.body as any).code).toBe('CONTRACT_ACCESS_FORBIDDEN');
+    expect(clauseLibraryService.getReviewGuidance).not.toHaveBeenCalled();
+
+    // LAWYER_B has access to Case B ContractGeneration with same ID -> allowed
+    const lawyerBHeaders = { 'x-test-user-id': LAWYER_B, 'x-test-role': 'LAWYER' };
+    const allowedRes = await requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerBHeaders, {
+      documentId: CROSS_OBJECT_ID,
+    });
+    expect(allowedRes.status).toBe(200);
+    expect(clauseLibraryService.getReviewGuidance).toHaveBeenCalledWith(
+      expect.objectContaining({ documentId: CROSS_OBJECT_ID })
+    );
   });
 
   it('16. authorized workforce happy paths remain working', async () => {
-    const [reviewNotes, reviewSummary, assemblyGet, assemblyPut, guidanceStandard, guidanceAdminHr] = await Promise.all([
+    const [reviewNotes, reviewSummary, assemblyGet, assemblyPut, guidanceContractGen] = await Promise.all([
       requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-notes`, lawyerAHeaders),
       requestJson(app, 'GET', `/api/v1/contracts/${CONTRACT_GEN_1}/review-summary.txt`, lawyerAHeaders),
       requestJson(app, 'GET', `/api/v1/clause-library/assembly/${CASE_A}`, lawyerAHeaders),
       requestJson(app, 'PUT', `/api/v1/clause-library/assembly/${CASE_A}`, lawyerAHeaders, { intakeData: { ok: true } }),
-      requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, { documentId: STANDARD_DOC }),
-      requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', {
-        'x-test-user-id': ADMIN_USER,
-        'x-test-role': 'ADMIN',
-      }, { documentId: HR_DOC }),
+      requestJson(app, 'POST', '/api/v1/clause-library/review-guidance', lawyerAHeaders, { documentId: CONTRACT_GEN_1 }),
     ]);
     expect(reviewNotes.status).toBe(200);
     expect(reviewSummary.status).toBe(200);
     expect(assemblyGet.status).toBe(200);
     expect(assemblyPut.status).toBe(200);
-    expect(guidanceStandard.status).toBe(200);
-    expect(guidanceAdminHr.status).toBe(200);
+    expect(guidanceContractGen.status).toBe(200);
   });
 });

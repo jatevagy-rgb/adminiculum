@@ -197,64 +197,6 @@ export async function requireDocumentObjectReadAccess(
 }
 
 /**
- * Combined case-scoped + HR_CONFIDENTIAL read authorization for document ID in request body.
- * Used for POST /clause-library/review-guidance.
- */
-export async function requireDocumentObjectReadAccessFromBody(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
-  const documentId = String(req.body?.documentId || '').trim();
-  if (!documentId) {
-    res.status(400).json({ status: 400, code: 'DOCUMENT_ID_REQUIRED', message: 'Document ID is required' });
-    return;
-  }
-
-  try {
-    const document = await prisma.document.findUnique({
-      where: { id: documentId },
-      select: { caseId: true, securityClassification: true },
-    });
-
-    let caseId: string | null = document?.caseId ?? null;
-    let isHrConfidential = String(document?.securityClassification) === 'HR_CONFIDENTIAL';
-
-    if (!caseId) {
-      const generation = await prisma.contractGeneration.findUnique({
-        where: { id: documentId },
-        select: { caseId: true },
-      });
-      caseId = generation?.caseId ?? null;
-    }
-
-    if (!caseId) {
-      sendNotFound(res);
-      return;
-    }
-
-    if (isHrConfidential && !hrConfidentialReadAllowed((req.user as any)?.role)) {
-      sendForbidden(res);
-      return;
-    }
-
-    const access = await userCanReadCase(req, caseId);
-    if (access === null) {
-      sendNotFound(res);
-      return;
-    }
-    if (!access) {
-      sendForbidden(res);
-      return;
-    }
-
-    next();
-  } catch {
-    sendAuthorizationError(res);
-  }
-}
-
-/**
  * Combined case-scoped + HR_CONFIDENTIAL manage authorization.
  */
 export async function requireDocumentObjectManageAccess(

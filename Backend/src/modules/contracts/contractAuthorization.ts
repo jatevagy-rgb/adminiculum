@@ -122,6 +122,49 @@ export async function requireContractGenerationReadAccess(
   if (allowed) next();
 }
 
+/**
+ * Case-scoped read authorization for ContractGeneration supplied via req.body.documentId.
+ * Resolves ContractGeneration → caseId → userCanReadCase.
+ * Used for POST /clause-library/review-guidance.
+ */
+export async function requireContractGenerationReadAccessFromBody(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const generationId = String(req.body?.documentId || '').trim();
+  if (!generationId) {
+    res.status(400).json({
+      status: 400,
+      code: 'CONTRACT_ID_REQUIRED',
+      message: 'Contract generation ID is required',
+    });
+    return;
+  }
+
+  try {
+    const caseId = await resolveContractCaseId(generationId);
+    if (!caseId) {
+      sendNotFound(res);
+      return;
+    }
+
+    const access = await userCanReadCase(req, caseId);
+    if (access === null) {
+      sendNotFound(res);
+      return;
+    }
+    if (!access) {
+      sendForbidden(res);
+      return;
+    }
+
+    next();
+  } catch {
+    sendAuthorizationError(res);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Middleware: contract generation manage access
 // ---------------------------------------------------------------------------

@@ -28,7 +28,7 @@ import clauseLibraryService from './service';
 import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseReadAccess, requireCaseManageAccess } from '../cases/authorization';
-import { requireDocumentObjectReadAccessFromBody } from '../documents/documentObjectAuthorization';
+import { requireContractGenerationReadAccessFromBody } from '../contracts/contractAuthorization';
 import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
@@ -281,7 +281,7 @@ router.post('/assembly/recommend', requireEnabled, async (req: Request, res: Res
  * Get compact review guidance for generated contract document
  * Body: { documentId, contractType?, lawyerProfileId? }
  */
-router.post('/review-guidance', requireEnabled, requireDocumentObjectReadAccessFromBody, async (req: Request, res: Response) => {
+router.post('/review-guidance', requireEnabled, requireContractGenerationReadAccessFromBody, async (req: Request, res: Response) => {
   try {
     const { documentId, contractType, lawyerProfileId } = req.body;
 
