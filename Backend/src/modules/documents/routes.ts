@@ -19,9 +19,11 @@ import {
 } from './workContext.service';
 import reviewSuggestionsRoutes from './reviewSuggestions.routes';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
-import { userCanManageCase } from '../cases/authorization';
+import { requireDocumentObjectReadAccess, requireDocumentObjectManageAccess } from './documentObjectAuthorization';
+import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
 import {
@@ -33,6 +35,7 @@ import {
 } from './documentComments.service';
 
 const router = Router();
+router.use(authenticate, requireWorkforceUser);
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
 router.use('/:documentId/versions/:versionId/annotations', annotationRoutes);
 
@@ -41,22 +44,22 @@ router.use('/:documentId/versions/:versionId/annotations', annotationRoutes);
 // Logical document work metadata and the two-way document/task relationship.
 // Version review/publication state is untouched by these routes.
 // ============================================================================
-router.get('/:id/work-context', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/work-context', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
   try { res.json(await getDocumentWorkContext(req, String(req.params.id || ''))); }
   catch (error) { sendWorkContextError(res, error); }
 });
 
-router.patch('/:id/work-context', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id/work-context', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try { res.json(await updateDocumentWorkContext(req, String(req.params.id || ''), req.body)); }
   catch (error) { sendWorkContextError(res, error); }
 });
 
-router.post('/:id/task-links', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/task-links', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try { res.status(201).json(await linkDocumentTask(req, String(req.params.id || ''), req.body)); }
   catch (error) { sendWorkContextError(res, error); }
 });
 
-router.delete('/:id/task-links/:taskId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.delete('/:id/task-links/:taskId', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try { res.json(await unlinkDocumentTask(req, String(req.params.id || ''), String(req.params.taskId || ''))); }
   catch (error) { sendWorkContextError(res, error); }
 });
@@ -139,7 +142,12 @@ router.get('/search', authenticate, async (req: Request, res: Response): Promise
       return;
     }
 
-    const results = await documentsService.searchDocuments(q, limit, String((req as any).user?.role || ''));
+    const results = await documentsService.searchDocuments(
+      q,
+      limit,
+      String((req as any).user?.role || ''),
+      getCaseReadScope(req),
+    );
     res.json(results);
   } catch (error) {
     console.error('Search documents error:', error);
@@ -300,7 +308,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
  * GET /api/v1/documents/case/:caseId
  * Get all documents for a case
  */
-router.get('/case/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/case/:caseId', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const documents = await documentsService.getCaseDocuments(caseId, String((req as any).user?.role || ''));
@@ -378,7 +386,7 @@ function sendDocumentCommentError(res: Response, error: unknown): void {
  * GET /api/v1/documents/:id/comments
  * Document-level comments only. No selected text, anchors, editor JSON, or content persistence.
  */
-router.get('/:id/comments', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/comments', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await listDocumentComments(req, String(req.params.id || ''), req.query);
     res.json(result);
@@ -391,7 +399,7 @@ router.get('/:id/comments', authenticate, requireHrConfidentialReadAccess, async
  * POST /api/v1/documents/:id/comments
  * Create bounded plain-text document-level comment. Author is always derived from auth.
  */
-router.post('/:id/comments', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await createDocumentComment(req, String(req.params.id || ''), req.body);
     res.status(201).json(result);
@@ -400,7 +408,7 @@ router.post('/:id/comments', authenticate, async (req: Request, res: Response): 
   }
 });
 
-router.post('/:id/comments/:commentId/resolve', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments/:commentId/resolve', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await resolveDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
     res.json(result);
@@ -409,7 +417,7 @@ router.post('/:id/comments/:commentId/resolve', authenticate, async (req: Reques
   }
 });
 
-router.post('/:id/comments/:commentId/reopen', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments/:commentId/reopen', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await reopenDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
     res.json(result);
@@ -630,7 +638,7 @@ router.post('/:id/versions/:versionId/promote-current', authenticate, requireDoc
  * GET /api/v1/documents/:id
  * Get document by ID
  */
-router.get('/:id', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const document = await documentsService.getDocumentById(id);
@@ -659,7 +667,7 @@ router.get('/:id', authenticate, requireHrConfidentialReadAccess, async (req: Re
  * GET /api/v1/documents/:id/text
  * Extract readable text from the real SharePoint-backed document when available.
  */
-router.get('/:id/text', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const document = await prisma.document.findUnique({
@@ -743,7 +751,7 @@ router.get('/:id/text', authenticate, requireHrConfidentialReadAccess, async (re
  * POST /api/v1/documents/:id/version
  * Upload new version
  */
-router.post('/:id/version', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/version', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { fileContent, comment } = req.body;
@@ -806,7 +814,7 @@ router.post('/:id/version', authenticate, async (req: Request, res: Response): P
  * POST /api/v1/documents/:id/submit-review
  * Submit document for review
  */
-router.post('/:id/submit-review', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/submit-review', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params as { id: string };
@@ -836,7 +844,7 @@ router.post('/:id/submit-review', authenticate, async (req: Request, res: Respon
  * POST /api/v1/documents/:id/approve
  * Approve document
  */
-router.post('/:id/approve', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/approve', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { comment } = req.body;
@@ -867,7 +875,7 @@ router.post('/:id/approve', authenticate, async (req: Request, res: Response): P
  * POST /api/v1/documents/:id/reject
  * Reject document
  */
-router.post('/:id/reject', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/reject', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { reason } = req.body;
@@ -909,7 +917,7 @@ router.post('/:id/reject', authenticate, async (req: Request, res: Response): Pr
  * Save the workspace editor's draft text as a new "modified working copy" document.
  * Does NOT overwrite the original document.
  */
-router.post('/:id/save-workspace-version', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/save-workspace-version', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { text, title, note } = req.body as { text?: string; title?: string; note?: string };
@@ -988,7 +996,7 @@ router.post('/:id/save-workspace-version', authenticate, async (req: Request, re
  * GET /api/v1/documents/:id/download
  * Download document from SharePoint
  */
-router.get('/:id/download', authenticate, requireHrConfidentialReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
 

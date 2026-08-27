@@ -6,13 +6,22 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import contractsService from './services';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { ADASVETEL_VARIABLES, TemplateCategory } from './types';
 import multer from 'multer';
 import { isDatabaseFoundationEnabled, sendFeatureUnavailable } from '../../middleware/featureAvailability';
 import { getEditorTemplateCapabilities } from './templateCapabilities';
+import {
+  requireContractReadAccess,
+  requireContractManageAccess,
+  requireAdminRole,
+  requireCaseManageAccessFromBody,
+  requireCaseReadAccessFromParams,
+} from './contractAuthorization';
 
 const router = Router();
+router.use(authenticate, requireWorkforceUser);
 const isContractsEnabled = (): boolean =>
   isDatabaseFoundationEnabled('ENABLE_CONTRACT_GENERATION') &&
   isDatabaseFoundationEnabled('ENABLE_CONTRACT_GENERATION_STORAGE_MODEL');
@@ -117,7 +126,7 @@ router.get('/templates/adasvetel/variables', authenticate, async (req: Request, 
  * POST /api/v1/contracts/templates
  * Upload and register new template
  */
-router.post('/templates', authenticate, upload.single('template'), async (req: Request, res: Response): Promise<void> => {
+router.post('/templates', authenticate, requireAdminRole, upload.single('template'), async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const { name, description, category, variables } = req.body;
@@ -190,7 +199,7 @@ router.post('/templates', authenticate, upload.single('template'), async (req: R
  * POST /api/v1/contracts/generate
  * Generate contract document
  */
-router.post('/generate', authenticate, requireContractsEnabled, async (req: Request, res: Response): Promise<void> => {
+router.post('/generate', authenticate, requireContractsEnabled, requireCaseManageAccessFromBody, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     const userEmail = (req as any).user?.email;
@@ -347,7 +356,7 @@ router.post('/preview', authenticate, requireContractsEnabled, async (req: Reque
  * GET /api/v1/contracts/case/:caseId
  * Get generated contracts for a case
  */
-router.get('/case/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/case/:caseId', authenticate, requireContractsEnabled, requireCaseReadAccessFromParams, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const contracts = await contractsService.getCaseContracts(caseId);
@@ -366,7 +375,7 @@ router.get('/case/:caseId', authenticate, async (req: Request, res: Response): P
  * GET /api/v1/contracts/:id/compare
  * Compare target contract against source contract at block level
  */
-router.get('/:id/compare', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/compare', authenticate, requireContractsEnabled, requireContractReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const against = typeof req.query.against === 'string' ? req.query.against : undefined;
@@ -400,7 +409,7 @@ router.get('/:id/compare', authenticate, async (req: Request, res: Response): Pr
  * GET /api/v1/contracts/:id/edit-draft
  * Load ADASVETEL edit-mode draft blocks
  */
-router.get('/:id/edit-draft', authenticate, requireContractsEnabled, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/edit-draft', authenticate, requireContractsEnabled, requireContractReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const result = await contractsService.getEditDraft(id);
@@ -422,7 +431,7 @@ router.get('/:id/edit-draft', authenticate, requireContractsEnabled, async (req:
  * PUT /api/v1/contracts/:id/edit-draft
  * Save ADASVETEL edit-mode draft blocks
  */
-router.put('/:id/edit-draft', authenticate, requireContractsEnabled, async (req: Request, res: Response): Promise<void> => {
+router.put('/:id/edit-draft', authenticate, requireContractsEnabled, requireContractManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const { blocks } = req.body || {};
@@ -455,7 +464,7 @@ router.put('/:id/edit-draft', authenticate, requireContractsEnabled, async (req:
  * POST /api/v1/contracts/:id/edit-draft/generate
  * Generate non-destructive edited revision output from saved edit draft
  */
-router.post('/:id/edit-draft/generate', authenticate, requireContractsEnabled, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/edit-draft/generate', authenticate, requireContractsEnabled, requireContractManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const userId = (req as any).user?.userId;
@@ -490,7 +499,7 @@ router.post('/:id/edit-draft/generate', authenticate, requireContractsEnabled, a
  * GET /api/v1/contracts/:id/edit-suggestions
  * Load narrow clause suggestions for ADASVETEL edit mode
  */
-router.get('/:id/edit-suggestions', authenticate, requireContractsEnabled, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/edit-suggestions', authenticate, requireContractsEnabled, requireContractReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
@@ -513,7 +522,7 @@ router.get('/:id/edit-suggestions', authenticate, requireContractsEnabled, async
  * GET /api/v1/contracts/:id/download
  * Download generated contract
  */
-router.get('/:id/download', authenticate, requireContractsEnabled, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/download', authenticate, requireContractsEnabled, requireContractReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const generation = await prisma.contractGeneration.findUnique({
@@ -555,7 +564,7 @@ router.get('/:id/download', authenticate, requireContractsEnabled, async (req: R
  * POST /api/v1/contracts/:id/upload-sharepoint
  * Upload generated contract to SharePoint
  */
-router.post('/:id/upload-sharepoint', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/upload-sharepoint', authenticate, requireContractManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     
@@ -589,7 +598,7 @@ router.post('/:id/upload-sharepoint', authenticate, async (req: Request, res: Re
  * POST /api/v1/contracts/cleanup
  * Cleanup expired previews (admin only)
  */
-router.post('/cleanup', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/cleanup', authenticate, requireAdminRole, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = (req as any).user?.userId;
     
@@ -626,7 +635,7 @@ router.post('/cleanup', authenticate, async (req: Request, res: Response): Promi
  * POST /api/v1/contracts/:id/finalize
  * Finalize a contract generation (mark as final/locked)
  */
-router.post('/:id/finalize', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/finalize', authenticate, requireContractsEnabled, requireContractManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     
@@ -656,7 +665,7 @@ router.post('/:id/finalize', authenticate, async (req: Request, res: Response): 
  * POST /api/v1/contracts/:id/create-revision
  * Create a revision (new version) of an existing contract generation
  */
-router.post('/:id/create-revision', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/create-revision', authenticate, requireContractsEnabled, requireContractManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const userId = (req as any).user?.userId;
@@ -688,7 +697,7 @@ router.post('/:id/create-revision', authenticate, async (req: Request, res: Resp
  * GET /api/v1/contracts/case/:caseId/bundle-download
  * Download all generated contracts for a case as a ZIP bundle
  */
-router.get('/case/:caseId/bundle-download', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/case/:caseId/bundle-download', authenticate, requireContractsEnabled, requireCaseReadAccessFromParams, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     
@@ -721,7 +730,7 @@ router.get('/case/:caseId/bundle-download', authenticate, async (req: Request, r
  * POST /api/v1/contracts/:id/reject-approval
  * Reject / undo approval - move contract back to GENERATED state
  */
-router.post('/:id/reject-approval', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/reject-approval', authenticate, requireContractsEnabled, requireContractManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const userId = (req as any).user?.userId;
@@ -754,7 +763,7 @@ router.post('/:id/reject-approval', authenticate, async (req: Request, res: Resp
  * POST /api/v1/contracts/:id/back-to-review
  * Send contract back to review state
  */
-router.post('/:id/back-to-review', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/back-to-review', authenticate, requireContractsEnabled, requireContractManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
     const userId = (req as any).user?.userId;
@@ -787,7 +796,7 @@ router.post('/:id/back-to-review', authenticate, async (req: Request, res: Respo
  * GET /api/v1/contracts/:id/timeline
  * Get document-specific timeline events
  */
-router.get('/:id/timeline', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:id/timeline', authenticate, requireContractsEnabled, requireContractReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params as { id: string };
 
