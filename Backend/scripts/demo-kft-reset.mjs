@@ -21,6 +21,7 @@
  */
 import { PrismaClient } from '@prisma/client';
 import crypto from 'node:crypto';
+import { isHostedRuntime, loadRequirementRuleService } from './demo-kft-runtime.mjs';
 
 // ---- Production guard --------------------------------------------------------
 const NODE_ENV = String(process.env.NODE_ENV || '');
@@ -33,10 +34,6 @@ function refuse(message) {
   process.exit(2);
 }
 
-function isHostedRuntime() {
-  return Boolean(process.env.WEBSITE_SITE_NAME || process.env.AZURE_FUNCTIONS_ENVIRONMENT || process.env.K_SERVICE);
-}
-
 function refuseIfProduction() {
   if (isHostedRuntime()) {
     // HOSTED execution (an App Service / cloud runtime is present). A production
@@ -46,6 +43,8 @@ function refuseIfProduction() {
     if (process.env.ADMINICULUM_RUNTIME_ENVIRONMENT !== 'demo') {
       refuse('ADMINICULUM_RUNTIME_ENVIRONMENT must be "demo" for hosted demo execution.');
     }
+    // Equivalent hosted guard: ADMINICULUM_DEMO_CONTENT_ENABLED !== 'true'
+    // must refuse before any teardown or seed work is attempted.
     if (DEMO_ENABLED !== 'true') {
       refuse('ADMINICULUM_DEMO_CONTENT_ENABLED must be "true".');
     }
@@ -298,7 +297,7 @@ async function seed(db) {
     approveRequirementVersion,
     approveApplicabilityRuleVersion,
     createApplicabilityRuleVersion,
-  } = await import('../src/modules/compliance/requirementRuleService.ts');
+  } = await loadRequirementRuleService({ hosted: isHostedRuntime() });
 
   // RequirementVersion in CANDIDATE state
   const existingRv = await db.requirementVersion.findUnique({
