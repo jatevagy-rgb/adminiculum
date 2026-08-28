@@ -39,6 +39,8 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
 
   it("supports ANSWERED with typed numeric mutation (e.g. 47 -> 52) and UNKNOWN transitions", () => {
     const src = profileSrc();
+    const answered = src.slice(src.indexOf("const handleSaveAnswer"), src.indexOf("const handleMarkUnknown"));
+    const unknown = src.slice(src.indexOf("const handleMarkUnknown"), src.indexOf("if (loading)"));
     // Saving ANSWERED
     assert.match(src, /status:\s*"ANSWERED"/);
     assert.match(src, /numberValue/);
@@ -46,13 +48,23 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     // Saving UNKNOWN
     assert.match(src, /status:\s*"UNKNOWN"/);
     assert.match(src, /Nem ismertként jelölöm/);
-    // Refreshing discovery and notifying parent after save
-    assert.match(src, /loadDiscovery/);
-    assert.match(src, /await onProfileUpdated\?\.\(\)/);
+    // Both handlers refresh their local discovery before awaiting the parent refresh.
+    for (const handler of [answered, unknown]) {
+      assert.ok(handler.indexOf("await answerPortalCompanyProfileQuestion") < handler.indexOf("await loadDiscovery"));
+      assert.ok(handler.indexOf("await loadDiscovery") < handler.indexOf("await onProfileUpdated?.()"));
+    }
     assert.match(
       src,
       /A cégadatokat frissítettük\. A szervezeti áttekintést az új adatok alapján frissítettük\./,
     );
+  });
+
+  it("never exposes a technical question key as a visible label or test marker", () => {
+    const src = profileSrc();
+    assert.match(src, /return question\.label\?\.trim\(\) \|\| "Szervezeti adat"/);
+    assert.doesNotMatch(src, /return question\.label \|\| question\.questionKey/);
+    assert.match(src, /data-testid="company-profile-question"/);
+    assert.doesNotMatch(src, /data-testid=\{`company-profile-question-\$\{question\.questionKey\}\`\}/);
   });
 
   it("uses neutral, client-safe copy and preserves UNANSWERED as absence", () => {

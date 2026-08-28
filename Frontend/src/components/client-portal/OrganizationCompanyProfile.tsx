@@ -38,7 +38,7 @@ function questionDisplayLabel(question: PortalCompanyProfileQuestion) {
   if (question.questionKey === "employee_count") {
     return "Foglalkoztatottak létszáma";
   }
-  return question.label || question.questionKey;
+  return question.label?.trim() || "Szervezeti adat";
 }
 
 function formatQuestionValue(question: PortalCompanyProfileQuestion) {
@@ -239,7 +239,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
               <div
                 key={question.questionKey}
                 className="rounded-2xl border border-stone-200 bg-white p-4 transition"
-                data-testid={`company-profile-question-${question.questionKey}`}
+                data-testid="company-profile-question"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
