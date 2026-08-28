@@ -119,10 +119,10 @@ async function verifyAndActivate(client) {
     throw new Error('Demo Kft. workspace is not ORGANIZATION');
   }
 
-  const caseCount = await client.query('SELECT count(*)::int AS c FROM cases WHERE id = ANY($1::uuid[])', [
+  const caseCount = await client.query('SELECT count(*)::int AS c FROM cases WHERE id = ANY($1::text[])', [
     [IDS.caseEmploymentId, IDS.caseSupplierId, IDS.caseComplianceId],
   ]);
-  const timeTotal = await client.query('SELECT sum(minutes)::int AS m FROM time_entries WHERE "matterId" = ANY($1::uuid[])', [
+  const timeTotal = await client.query('SELECT sum(minutes)::int AS m FROM time_entries WHERE "matterId" = ANY($1::text[])', [
     [IDS.matterEmploymentId, IDS.matterSupplierId, IDS.matterComplianceId],
   ]);
   const factRow = await client.query(
