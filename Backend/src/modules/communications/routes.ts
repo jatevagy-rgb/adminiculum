@@ -26,6 +26,8 @@ import {
 } from './outlookImport.service';
 import { readOutlookSyncConfig } from './outlookGraphLive';
 import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
+import { InteractionError, type InternalActor } from '../client-interaction/base';
+import { listClientCommunicationSummary } from './clientSummary.service';
 
 const router = Router();
 
@@ -448,6 +450,41 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       res.status(prismaErr.status).json(prismaErr.body);
     } else {
       res.status(500).json({ error: 'Error listing communications' });
+    }
+  }
+});
+
+// ============================================================================
+// GET /api/v1/communications/client/:clientId/summary
+// Client-wide communication summary read model (Phase 5). Returns only a safe,
+// product-friendly bound set (direct client + case-linked) with authorization
+// verified before any row is returned. Never N+1, never leaks provider ids.
+// ============================================================================
+
+router.get('/client/:clientId/summary', authenticate, async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated workforce user is required.' });
+      return;
+    }
+    const actor: InternalActor = { userId: String(req.user.userId), role: String(req.user?.role || '') };
+    const clientId = String(req.params.clientId || '');
+    const limit = req.query.limit === undefined ? undefined : Number(req.query.limit);
+
+    const summary = await listClientCommunicationSummary(actor, clientId, { limit }, prisma);
+
+    res.json(summary);
+  } catch (error) {
+    if (error instanceof InteractionError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    logPrismaRouteError('GET /communications/client/:clientId/summary', error);
+    const prismaErr = buildPrismaErrorResponse(error);
+    if (prismaErr) {
+      res.status(prismaErr.status).json(prismaErr.body);
+    } else {
+      res.status(500).json({ status: 500, code: 'CLIENT_COMMUNICATION_SUMMARY_ERROR', message: 'The client communication summary could not be loaded.' });
     }
   }
 });
