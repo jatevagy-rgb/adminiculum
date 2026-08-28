@@ -44,6 +44,10 @@ describeWithDatabase('Client communication summary read model (PostgreSQL) — e
   const cDualCross = crypto.randomUUID();     // clientId A + caseId B1 (client B)
   // client B context
   const cDirectB = crypto.randomUUID();
+  // Timestamp-contract fixtures (receivedAt null + sentAt present, and ties).
+  const cSentOnlyB = crypto.randomUUID();
+  const cTieB1 = crypto.randomUUID();
+  const cTieB2 = crypto.randomUUID();
 
   const admin: InternalActor = { userId: adminId, role: 'ADMIN' };
   const lawyerA: InternalActor = { userId: lawyerAId, role: 'LAWYER' }; // reads case A1 only
@@ -77,6 +81,12 @@ describeWithDatabase('Client communication summary read model (PostgreSQL) — e
     await db.communication.create({ data: { id: cDualCross, type: 'EMAIL', subject: 'Dual cross', senderName: 'Cross sender', content: 'Dual cross content', clientId: clientA, caseId: caseB1, createdById: adminId, receivedAt: new Date('2026-03-06T09:00:00Z') } });
     // client B (for the non-manager scoping + cross-client test)
     await db.communication.create({ data: { id: cDirectB, type: 'EMAIL', subject: 'Direct B no case', senderName: 'B sender', content: 'Direct B content', clientId: clientB, createdById: lawyerBId, receivedAt: new Date('2026-03-07T09:00:00Z') } });
+    // Timestamp-contract fixtures on client B.
+    // receivedAt null, sentAt present -> effective timestamp must be sentAt.
+    await db.communication.create({ data: { id: cSentOnlyB, type: 'EMAIL', subject: 'Sent only B', senderName: 'B sender', content: 'Sent only', clientId: clientB, createdById: lawyerBId, receivedAt: null, sentAt: new Date('2026-03-08T09:00:00Z') } });
+    // Ties: same effective timestamp -> deterministic communication-id DESC tie-break.
+    await db.communication.create({ data: { id: cTieB1, type: 'EMAIL', subject: 'Tie B1', senderName: 'B sender', content: 'Tie 1', clientId: clientB, createdById: lawyerBId, receivedAt: new Date('2026-03-09T09:00:00Z') } });
+    await db.communication.create({ data: { id: cTieB2, type: 'EMAIL', subject: 'Tie B2', senderName: 'B sender', content: 'Tie 2', clientId: clientB, createdById: lawyerBId, receivedAt: new Date('2026-03-09T09:00:00Z') } });
 
     // Attachments (leak vectors) on the two included client A items.
     await db.communicationAttachment.create({ data: { id: crypto.randomUUID(), fileName: 'a1.pdf', communicationId: cDirectANoCase, uploadedById: adminId, url: 'https://sharepoint.example/a1', spItemId: 'SP-A1', providerAttachmentId: 'ATT-A1' } });
@@ -87,7 +97,7 @@ describeWithDatabase('Client communication summary read model (PostgreSQL) — e
 
   afterAll(async () => {
     await db.task.deleteMany({ where: { OR: [{ caseId: caseA1 }, { caseId: caseA2 }, { caseId: caseB1 }] } });
-    await db.communication.deleteMany({ where: { id: { in: [cDirectANoCase, cCaseA1, cDualA1, cCaseA2, cDualA2, cDualCross, cDirectB] } } });
+    await db.communication.deleteMany({ where: { id: { in: [cDirectANoCase, cCaseA1, cDualA1, cCaseA2, cDualA2, cDualCross, cDirectB, cSentOnlyB, cTieB1, cTieB2] } } });
     await db.case.deleteMany({ where: { id: { in: [caseA1, caseA2, caseB1] } } });
     await db.client.deleteMany({ where: { id: { in: [clientA, clientB] } } });
     await db.user.deleteMany({ where: { id: { in: [adminId, lawyerAId, lawyerBId] } } });
@@ -198,5 +208,27 @@ describeWithDatabase('Client communication summary read model (PostgreSQL) — e
     const result = await listClientCommunicationSummary(admin, clientA, { limit: 5 }, db);
     expect(result.client.id).toBe(clientA);
     expect(result.client.name).toMatch(/^Client A /);
+  });
+
+  it('orders by the effective-timestamp contract (receivedAt ?? sentAt ?? createdAt) and resolves ties deterministically', async () => {
+    const result = await listClientCommunicationSummary(admin, clientB, { limit: 50 }, db);
+    const items = result.communications;
+
+    // Reported timestamp === effective timestamp (receivedAt ?? sentAt ?? createdAt).
+    const sentOnly = items.find((i) => i.subject === 'Sent only B');
+    expect(sentOnly?.timestamp).toBe('2026-03-08T09:00:00.000Z'); // sentAt is used (receivedAt null)
+
+    // Result order is non-increasing by the reported timestamp.
+    const times = items.map((i) => new Date(i.timestamp as string).getTime());
+    for (let i = 1; i < times.length; i += 1) {
+      expect(times[i]).toBeLessThanOrEqual(times[i - 1]);
+    }
+
+    // Ties (equal effective timestamp) are broken deterministically by communication id DESC.
+    for (let i = 1; i < items.length; i += 1) {
+      if (times[i] === times[i - 1]) {
+        expect(items[i - 1].id.localeCompare(items[i].id)).toBeGreaterThan(0);
+      }
+    }
   });
 });

@@ -47,6 +47,10 @@ export const DEFAULT_CLIENT_SUMMARY_LIMIT = 5;
 export const MAX_CLIENT_SUMMARY_LIMIT = 20;
 const CONTENT_PREVIEW_LIMIT = 240;
 
+// Canonical effective-timestamp contract shared by the returned `timestamp` and
+// the deterministic result ordering (receivedAt, then sentAt, then createdAt).
+export const CLIENT_SUMMARY_TIMESTAMP_CONTRACT = 'receivedAt ?? sentAt ?? createdAt';
+
 export type ClientSummaryOptions = { limit?: number };
 
 function clampLimit(value: number | undefined): number {
@@ -80,15 +84,25 @@ function countByKey<T extends Record<string, unknown>>(rows: T[], key: keyof T):
  * Authorization is fail-closed and happens BEFORE any row is returned:
  *  - assertClientReadAccess verifies the actor may read this client; a
  *    cross-client request throws 403 / unknown client 404.
- *  - Case authorization is AUTHORITATIVE: a case-linked communication is included
- *    only when its exact case is in the actor's readable case set for this client.
- *    A clientId match never overrides case authorization (a direct client
- *    communication only counts when it is case-less). Managers (global case
- *    access) use the client's full case set.
+ *  - Case authorization is AUTHORITATIVE (fail-closed dual-link rule):
+ *      - direct client communication is included only when case-less
+ *        (clientId === target AND caseId === null);
+ *      - case-linked communication is included only when its EXACT case is in the
+ *        actor's readable target-client case set AND clientId is null or equals
+ *        the target client. A mismatched dual link (clientId !== target on a
+ *        target-case-linked row) is excluded, not silently reassigned. Managers
+ *        (global case access) use the client's full case set.
+ *  - Unauthorized rows are excluded BEFORE any case-label mapping or count is run.
  *
- * The datastore work is bounded (constant number of queries): one case lookup,
- * one communication lookup, one attachment-count lookup, one task-count lookup �?"
- * never an N+1 per-case loop.
+ * Timestamp/order contract: effectiveTimestamp = receivedAt ?? sentAt ?? createdAt.
+ * The returned `timestamp` AND the deterministic result order both use this same
+ * contract (ties broken by communication id DESC), so the list is genuinely ordered
+ * by the value it reports.
+ *
+ * Datastore work is bounded (constant number of queries): one case lookup, one
+ * communication lookup (candidate over-fetch), one attachment-count lookup, one
+ * task-count lookup — never an N+1 per-case loop. Counts run ONLY for the
+ * already-authorized returned ids.
  */
 export async function listClientCommunicationSummary(
   actor: InternalActor,
@@ -118,23 +132,32 @@ export async function listClientCommunicationSummary(
 
   const where: Prisma.CommunicationWhereInput = {
     OR: [
-      // Direct client communication must be case-less: a clientId match never
-      // overrides case authorization on a case-linked row.
+      // Direct client communication, case-less: a clientId match never overrides
+      // case authorization on a case-linked row.
       { clientId, caseId: null },
-      // Case-linked communication is readable only when its exact case is
-      // readable (never surfaced merely because its caseId is known).
-      { caseId: { in: readableCaseIds } },
+      // Case-linked communication is readable only when the exact case is readable
+      // AND the row is not dual-linked to a different client. A mismatched dual
+      // link (clientId !== target on a target-case-linked row) fails closed and is
+      // not silently assigned to either client summary.
+      { caseId: { in: readableCaseIds }, clientId: null },
+      { caseId: { in: readableCaseIds }, clientId },
     ],
   };
+
+  const limit = clampLimit(opts.limit);
+  // Bounded candidate over-fetch so the effective-timestamp sort below can prefer
+  // truly recent rows; capped at MAX_CLIENT_SUMMARY_LIMIT (never N+1).
+  const candidateTake = Math.min(limit * 3, MAX_CLIENT_SUMMARY_LIMIT);
 
   const rows = await prisma.communication.findMany({
     where,
     orderBy: [
       { receivedAt: { sort: 'desc', nulls: 'last' } },
+      { sentAt: { sort: 'desc', nulls: 'last' } },
       { createdAt: 'desc' },
       { id: 'desc' },
     ],
-    take: clampLimit(opts.limit),
+    take: candidateTake,
     select: {
       id: true,
       subject: true,
@@ -150,25 +173,40 @@ export async function listClientCommunicationSummary(
     },
   });
 
-  const rowIds = rows.map((row) => row.id);
+  // Canonical effective-timestamp contract: receivedAt ?? sentAt ?? createdAt.
+  // The RESULT order AND the returned `timestamp` both derive from this contract,
+  // so the presented list is truly ordered by the value it reports. Deterministic
+  // tie-break: communication id DESC.
+  rows.sort((a, b) => {
+    const ta = a.receivedAt || a.sentAt || a.createdAt;
+    const tb = b.receivedAt || b.sentAt || b.createdAt;
+    const diff = tb.getTime() - ta.getTime();
+    if (diff !== 0) return diff;
+    return b.id.localeCompare(a.id);
+  });
+  const selected = rows.slice(0, limit);
+
+  // Counts are computed ONLY for the already-authorized returned rows (never on a
+  // candidate set that could include unauthorized rows).
+  const selectedIds = selected.map((row) => row.id);
   let attachmentCounts = new Map<string, number>();
   let taskCounts = new Map<string, number>();
 
-  if (rowIds.length > 0) {
+  if (selectedIds.length > 0) {
     const attachments = await prisma.communicationAttachment.findMany({
-      where: { communicationId: { in: rowIds } },
+      where: { communicationId: { in: selectedIds } },
       select: { communicationId: true },
     });
     attachmentCounts = countByKey(attachments, 'communicationId');
 
     const tasks = await prisma.task.findMany({
-      where: { sourceCommunicationId: { in: rowIds } },
+      where: { sourceCommunicationId: { in: selectedIds } },
       select: { sourceCommunicationId: true },
     });
     taskCounts = countByKey(tasks, 'sourceCommunicationId');
   }
 
-  const communications: ClientCommunicationSummaryItem[] = rows.map((row) => {
+  const communications: ClientCommunicationSummaryItem[] = selected.map((row) => {
     const linkedCase = row.caseId ? readableClientCaseById.get(row.caseId) : null;
     const timestamp = row.receivedAt || row.sentAt || row.createdAt;
     return {
