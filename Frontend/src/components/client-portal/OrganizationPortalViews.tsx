@@ -524,6 +524,3 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
     </div>
   );
 }
-
-
-
