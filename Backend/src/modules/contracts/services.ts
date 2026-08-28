@@ -169,41 +169,10 @@ class ContractsService {
     return undefined;
   }
 
-  private serializeTemplateError(error: unknown): Record<string, unknown> {
-    const source = error as {
-      name?: string;
-      message?: string;
-      stack?: string;
-      properties?: {
-        id?: string;
-        explanation?: string;
-        errors?: Array<{
-          name?: string;
-          message?: string;
-          stack?: string;
-          properties?: Record<string, unknown>;
-          rootError?: { message?: string };
-        }>;
-      };
-    };
-
-    return {
-      name: source?.name,
-      message: source?.message,
-      stack: source?.stack,
-      properties: {
-        id: source?.properties?.id,
-        explanation: source?.properties?.explanation,
-        errors: (source?.properties?.errors || []).map((item) => ({
-          name: item?.name,
-          message: item?.message,
-          stack: item?.stack,
-          rootError: item?.rootError?.message ? { message: item.rootError.message } : undefined,
-          properties: item?.properties,
-        })),
-      },
-    };
-  }
+  // Safe-error hardening: the template-error serializer that carried a raw
+  // stack / message / provider detail was removed. Full diagnostics remain in
+  // the server-side console.error at each catch site; the returned result never
+  // carries a stack trace or raw provider payload.
 
   /**
    * Initialize template directory
@@ -472,7 +441,6 @@ class ContractsService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error during generation',
-        rawError: this.serializeTemplateError(error) as any,
       };
     }
   }
@@ -971,7 +939,6 @@ class ContractsService {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        rawError: this.serializeTemplateError(error) as any,
       };
     }
   }

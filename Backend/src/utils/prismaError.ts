@@ -78,30 +78,33 @@ export function buildPrismaErrorResponse(error: unknown): PrismaErrorResponse | 
         status: 400,
         body: {
           error: 'Data validation error',
-          details: err.meta?.message || 'Invalid data provided',
+          // Never surface the raw Prisma meta message (may carry internal paths).
+          details: 'Invalid data provided',
           code
         }
       };
     }
-    
-    // Default Prisma error handling
+
+    // Default Prisma error handling. Never surface the raw Prisma error text
+    // (may carry column/constraint/query internals).
     return {
       status: 400,
       body: {
         error: 'Database error',
-        details: err.message || 'An error occurred while processing your request',
+        details: 'An error occurred while processing your request',
         code
       }
     };
   }
-  
-  // Check for generic Prisma client error (name property)
+
+  // Check for generic Prisma client error (name property). Never surface the
+  // raw Prisma error text.
   if (err.name === 'PrismaClientKnownRequestError' || err.name === 'PrismaClientValidationError') {
     return {
       status: 400,
       body: {
         error: 'Prisma error',
-        details: err.message || 'Database operation failed',
+        details: 'Database operation failed',
         code: err.code
       }
     };

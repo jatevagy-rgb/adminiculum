@@ -36,16 +36,21 @@ type SharePointDiagnosticsResponse = {
 const router = Router();
 
 function sanitizeError(error: unknown, fallbackCode: string): DiagnosticsError {
+  // Never surface raw Graph/SharePoint provider text (may carry request ids,
+  // site/drive identifiers, or endpoint internals). Keep only a stable
+  // classification code in the response; retain full detail server-side so the
+  // diagnostics endpoint remains useful for operators.
+  console.error(`[sharepoint/diagnostics] ${fallbackCode}:`, error instanceof Error ? error.message : error);
   if (error instanceof GraphClientError) {
     return {
       code: error.code || fallbackCode,
-      message: error.message.slice(0, 300),
+      message: 'A SharePoint/Graph request failed.',
     };
   }
   if (error instanceof Error) {
     return {
       code: fallbackCode,
-      message: error.message.slice(0, 300),
+      message: 'An internal error occurred.',
     };
   }
   return {

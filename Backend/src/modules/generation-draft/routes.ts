@@ -54,7 +54,7 @@ router.get('/:caseId', authenticate, requireGenerationDraftEnabled, requireCaseR
     }
   } catch (error: any) {
     console.error('Error fetching draft:', error);
-    res.status(500).json({ error: 'Failed to fetch draft', details: error.message });
+    res.status(500).json({ error: 'Failed to fetch draft', code: 'GENERATION_DRAFT_INTERNAL_ERROR' });
   }
 });
 
@@ -87,7 +87,7 @@ router.put('/:caseId', authenticate, requireGenerationDraftEnabled, requireCaseM
     res.status(result.isNew ? 201 : 200).json(result);
   } catch (error: any) {
     console.error('Error saving draft:', error);
-    res.status(500).json({ error: 'Failed to save draft', details: error.message });
+    res.status(500).json({ error: 'Failed to save draft', code: 'GENERATION_DRAFT_INTERNAL_ERROR' });
   }
 });
 
@@ -113,7 +113,7 @@ router.delete('/:caseId', authenticate, requireGenerationDraftEnabled, requireCa
     }
   } catch (error: any) {
     console.error('Error deleting draft:', error);
-    res.status(500).json({ error: 'Failed to delete draft', details: error.message });
+    res.status(500).json({ error: 'Failed to delete draft', code: 'GENERATION_DRAFT_INTERNAL_ERROR' });
   }
 });
 
