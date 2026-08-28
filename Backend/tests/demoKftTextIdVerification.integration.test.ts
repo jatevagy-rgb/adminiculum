@@ -18,8 +18,8 @@ describeWithDatabase('Demo Kft verification queries', () => {
       ['demo-case-text-a', 'demo-case-text-b', 'demo-case-text-c'],
     );
     await client.query(
-      'INSERT INTO time_entries ("matterId", minutes) VALUES ($1, $2), ($1, $3), ($2, $4)',
-      ['demo-matter-text-a', 380, 310, 185],
+      'INSERT INTO time_entries ("matterId", minutes) VALUES ($1, $2), ($1, $3), ($4, $5)',
+      ['demo-matter-text-a', 380, 310, 'demo-matter-text-b', 185],
     );
   });
 
