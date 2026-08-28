@@ -8,6 +8,7 @@ const read = (relative: string) => readFileSync(path.join(root, relative), "utf8
 
 describe("Phase 5B organizational customer contract + company surface", () => {
   const views = () => read("src/components/client-portal/OrganizationPortalViews.tsx");
+  const company = () => read("src/components/client-portal/DemoCompanyPresentation.tsx");
   const api = () => read("src/lib/clientPortalApi.ts");
   const shell = () => read("src/components/client-portal/ClientPortalShell.tsx");
 
@@ -43,7 +44,7 @@ describe("Phase 5B organizational customer contract + company surface", () => {
   });
 
   it("Vállalat is functional (not a placeholder), simple and customer-readable", () => {
-    const src = views();
+    const src = views() + company();
     assert.match(src, /OrganizationCompany/);
     assert.match(src, /Szervezeti egységek/);
     assert.match(src, /Aktív területek/);
@@ -58,8 +59,8 @@ describe("Phase 5B organizational customer contract + company surface", () => {
   });
 
   it("empty states are human, never raw data markers", () => {
-    const src = views();
-    for (const empty of ["Jelenleg nincs közzétett szerződéses áttekintés", "nincs közzétehető vállalati áttekintés", "nincs olyan szervezeti terület, ahol közzétett ügye van"]) {
+    const src = views() + company();
+    for (const empty of ["Jelenleg nincs közzétett szerződéses áttekintés", "nincs közzétett vállalati áttekintés", "nincs olyan szervezeti terület, ahol közzétett ügye van"]) {
       assert.match(src, new RegExp(empty));
     }
     assert.doesNotMatch(src, /No data|0 records/);
@@ -84,7 +85,7 @@ describe("Phase 5B organizational customer contract + company surface", () => {
   });
 
   it("no internal technical IDs or legal-workflow terminology in the customer surfaces", () => {
-    const src = views();
+    const src = views() + company();
     assert.doesNotMatch(src, /grantId|membershipId|canonicalDocumentVersionId|sourceCaseId|raw enum|internalStatus/);
     assert.doesNotMatch(src, /AssessmentFinding|taskStatus|workInstruction/);
   });
