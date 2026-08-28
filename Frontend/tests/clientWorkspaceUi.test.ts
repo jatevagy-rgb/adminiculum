@@ -18,6 +18,27 @@ describe('Company workspace UI (structural)', () => {
     assert.match(page(), /ClientCompanyWorkspace/);
   });
 
+  it('keeps portal and cases inside the client workspace context', () => {
+    const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
+    assert.match(tabs, /\["portal", "Portál", "\/portal"\]/);
+    assert.match(tabs, /\["cases", "Ügyek", "\/cases"\]/);
+    assert.doesNotMatch(tabs, /client-portal-admin/);
+    assert.doesNotMatch(tabs, /\/cases\?clientId=/);
+    assert.equal(existsSync(path.join(root, 'src/app/clients/[clientId]/portal/page.tsx')), true);
+    assert.equal(existsSync(path.join(root, 'src/app/clients/[clientId]/cases/page.tsx')), true);
+  });
+
+  it('hides organization-only navigation from individual workspaces', () => {
+    const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
+    const overview = read('src/app/clients/[clientId]/page.tsx');
+    const portal = read('src/app/clients/[clientId]/portal/page.tsx');
+    assert.match(tabs, /filter\(\(\[key\]\) => key !== "organization"\)/);
+    assert.match(overview, /portalWorkspace\?\.mode === "ORGANIZATION"/);
+    assert.match(portal, /workspace\?\.mode === "ORGANIZATION"/);
+    assert.doesNotMatch(overview, /client\.name\.includes|clientName\.includes/);
+    assert.doesNotMatch(portal, /client\.name\.includes|clientName\.includes/);
+  });
+
   it('presents the six coherent sections instead of raw technical subsystems', () => {
     const src = component();
     for (const label of ['Áttekintés', 'Cégkép', 'Felmérések', 'Szerződések és kötelezettségek', 'Szervezet és felelősségek', 'Fejlődési terv']) {

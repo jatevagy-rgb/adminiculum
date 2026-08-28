@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -365,7 +365,6 @@ function OrganizationCompany({ company, onProfileUpdated }: { company: PortalOrg
     </div>
   );
 }
-
 function NewIntake({ units, onCreated }: { units: PortalOrganizationUnit[]; onCreated: () => void }) {
   const [subject, setSubject] = useState("");
   const [groupId, setGroupId] = useState("");
@@ -525,3 +524,6 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
     </div>
   );
 }
+
+
+

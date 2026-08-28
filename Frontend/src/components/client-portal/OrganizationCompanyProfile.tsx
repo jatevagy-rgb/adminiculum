@@ -162,11 +162,11 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
       await answerPortalCompanyProfileQuestion(question.questionKey, {
         status: "UNKNOWN",
       });
-      setSuccessMessage("Nem ismertként jelölve.");
       setEditingKey(null);
       setEditValue("");
       await loadDiscovery();
-      onProfileUpdated?.();
+      await onProfileUpdated?.();
+      setSuccessMessage("Nem ismertként jelölve.");
     } catch (err) {
       setActionError(clientSafeError(err));
     } finally {

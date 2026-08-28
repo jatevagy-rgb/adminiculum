@@ -1,0 +1,246 @@
+name: Presentation Demo PostgreSQL Acceptance
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - release/editor-ops-workflow-1
+    paths:
+      - 'Backend/scripts/demo-presentation-*.mjs'
+      - 'Backend/tests/helpers/presentationDemoFixture.ts'
+      - 'Backend/tests/presentationDemoFixture.integration.test.ts'
+      - '.github/workflows/presentation-demo-postgresql-acceptance.yml'
+
+jobs:
+  presentation-demo-acceptance:
+    name: Presentation Demo DB Acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adminiculum_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: Backend
+        run: npm ci
+
+      - name: Provision schema (canonical empty migration replay)
+        working-directory: Backend
+        env:
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+        run: npm run db:migrations:verify-replay
+
+      - name: Verify production hard deny
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: production
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          set +e
+          OUTPUT=$(npm run demo:presentation:reset 2>&1)
+          EXIT_CODE=$?
+          set -e
+          
+          if [ $EXIT_CODE -ne 2 ]; then
+            echo "Failed: Expected exit code 2, got $EXIT_CODE"
+            echo "Output: $OUTPUT"
+            exit 1
+          fi
+          
+          if echo "$OUTPUT" | grep -q "ADMINICULUM_DEMO_PRODUCTION_DENY"; then
+            echo "Production guard successfully blocked reset."
+          else
+            echo "Failed: Did not find ADMINICULUM_DEMO_PRODUCTION_DENY marker"
+            echo "Output was: $OUTPUT"
+            exit 1
+          fi
+
+      - name: Insert Unrelated Control Data
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          node -e '
+            const { PrismaClient } = require("@prisma/client");
+            (async () => {
+              const prisma = new PrismaClient();
+              await prisma.client.create({ data: { id: "UNRELATED_ID", name: "Unrelated Client" } });
+              await prisma.$disconnect();
+            })().catch(err => { console.error(err); process.exit(1); });
+          '
+
+      - name: Demo Reset 1
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: npm run demo:presentation:reset
+
+      - name: Demo Check Baseline 47
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          npm run demo:presentation:check > check1.log
+          cat check1.log
+          grep -q "ADMINICULUM_DEMO_CHECK=PASS" check1.log || (echo "Failed check1 pass" && exit 1)
+          grep -q "DEMO_PORTAL_WORKSPACE=ACTIVE" check1.log || (echo "Failed check1 workspace" && exit 1)
+          grep -q "DEMO_REQUIREMENT_STATUS=APPROVED" check1.log || (echo "Failed check1 requirement" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=47" check1.log || (echo "Failed check1 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=0" check1.log || (echo "Failed check1 finding" && exit 1)
+
+      - name: Demo Mutate 47 → 52
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: npm run demo:presentation:mutate
+
+      - name: Demo Check Mutated 52
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          npm run demo:presentation:check > check2.log
+          cat check2.log
+          grep -q "ADMINICULUM_DEMO_CHECK=PASS" check2.log || (echo "Failed check2 pass" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=52" check2.log || (echo "Failed check2 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=1" check2.log || (echo "Failed check2 finding" && exit 1)
+
+      - name: Verify Real Engine Finding
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          node -e '
+            const { PrismaClient } = require("@prisma/client");
+            const crypto = require("node:crypto");
+            const FIXTURE_KEY = "DEMO_KFT_2026";
+            function stableId(name) {
+              return crypto.createHash("sha256").update(`${FIXTURE_KEY}:${name}`).digest("hex").slice(0, 32);
+            }
+            (async () => {
+              const prisma = new PrismaClient();
+              const clientId = stableId("demoClient");
+              const requirementVersionId = stableId("requirementVersion");
+              const finding = await prisma.assessmentFinding.findFirst({
+                where: {
+                  clientId,
+                  requirementApplicability: {
+                    requirementVersionId,
+                  },
+                },
+                include: {
+                  requirementApplicability: true,
+                },
+              });
+              await prisma.$disconnect();
+              if (!finding) {
+                console.error("Finding missing after mutation!");
+                process.exit(1);
+              }
+              console.log("Real engine finding verified:", finding.id, finding.title);
+            })().catch(err => { console.error(err); process.exit(1); });
+          '
+
+      - name: Demo Reset 2
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: npm run demo:presentation:reset
+
+      - name: Demo Check Reset Baseline 47
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          npm run demo:presentation:check > check3.log
+          cat check3.log
+          grep -q "ADMINICULUM_DEMO_CHECK=PASS" check3.log || (echo "Failed check3 pass" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=47" check3.log || (echo "Failed check3 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=0" check3.log || (echo "Failed check3 finding" && exit 1)
+
+      - name: Demo Reset 3 — Idempotency
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: npm run demo:presentation:reset
+
+      - name: Demo Check Double Reset 47
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          npm run demo:presentation:check > check4.log
+          cat check4.log
+          grep -q "ADMINICULUM_DEMO_CHECK=PASS" check4.log || (echo "Failed check4 pass" && exit 1)
+          grep -q "DEMO_EMPLOYEE_COUNT=47" check4.log || (echo "Failed check4 count" && exit 1)
+          grep -q "DEMO_ENGINE_FINDING_COUNT=0" check4.log || (echo "Failed check4 finding" && exit 1)
+
+      - name: Verify Unrelated Data Survival
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: |
+          node -e '
+            const { PrismaClient } = require("@prisma/client");
+            (async () => {
+              const prisma = new PrismaClient();
+              const client = await prisma.client.findUnique({ where: { id: "UNRELATED_ID" } });
+              await prisma.$disconnect();
+              if (!client) { console.error("Unrelated row deleted!"); process.exit(1); }
+              console.log("Unrelated row survived.");
+            })().catch(err => { console.error(err); process.exit(1); });
+          '
+
+      - name: Focused Presentation Integration Tests
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_ci?schema=public
+          NODE_ENV: development
+          ADMINICULUM_DEMO_CONTENT_ENABLED: 'true'
+        run: npm run test:demo-fixture:db
+
+
+

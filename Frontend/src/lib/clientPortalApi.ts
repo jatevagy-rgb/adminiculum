@@ -1,4 +1,4 @@
-import { fetchApi } from './api';
+﻿import { fetchApi } from './api';
 
 export type PortalMatter = {
   id: string;
@@ -487,7 +487,6 @@ export async function getPortalOrganizationContracts() {
 export async function getPortalOrganizationCompany() {
   return fetchApi<PortalOrgCompany>('/client-portal/org/company', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
-
 export type PortalCompanyProfileQuestion = {
   questionKey: string;
   label: string;
