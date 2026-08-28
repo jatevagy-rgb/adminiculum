@@ -1305,6 +1305,8 @@ export interface CreateCaseData {
   deadline?: string;
   workflowTemplateKey?: string;
   workflowAssignees?: Record<string, string | null | undefined>;
+  caseTypeDefinitionId?: string;
+  selectedModuleKeys?: string[];
 }
 
 export interface CreateCaseResponse {
@@ -1312,10 +1314,17 @@ export interface CreateCaseResponse {
   caseNumber: string;
   status: string;
   createdAt: string;
+  workPackage?: {
+    id: string;
+    workPackageTemplateId: string | null;
+    workPackageTemplateVersion: number | null;
+    snapshotWorkflowTemplateId: string | null;
+    items: Array<{ id: string; moduleType: string; moduleKey: string; label: string; config: Record<string, unknown>; order: number; sourceTemplateItemId: string | null }>;
+  };
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  const { clientName, clientId, matterType, description, clientRole, deadline, workflowTemplateKey, workflowAssignees } = data;
+  const { clientName, clientId, matterType, description, clientRole, deadline, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys } = data;
   const payload: Record<string, unknown> = { clientName, matterType };
   if (clientId) payload.clientId = clientId;
   if (description) payload.description = description;
@@ -1323,6 +1332,8 @@ export async function createCase(data: CreateCaseData): Promise<CreateCaseRespon
   if (deadline) payload.deadline = deadline;
   if (workflowTemplateKey) payload.workflowTemplateKey = workflowTemplateKey;
   if (workflowAssignees && Object.keys(workflowAssignees).length > 0) payload.workflowAssignees = workflowAssignees;
+  if (caseTypeDefinitionId) payload.caseTypeDefinitionId = caseTypeDefinitionId;
+  if (selectedModuleKeys && selectedModuleKeys.length > 0) payload.selectedModuleKeys = selectedModuleKeys;
   return fetchApi<CreateCaseResponse>('/cases', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -5581,3 +5592,8 @@ export async function listWorkPackageTemplates(caseTypeId: string) { return fetc
 export async function createWorkPackageTemplate(body: Record<string, unknown>) { return fetchApi<WorkPackageTemplate>('/work-package-admin/templates', { method: 'POST', body: JSON.stringify(body) }); }
 export async function updateWorkPackageTemplate(id: string, body: Record<string, unknown>) { return fetchApi<WorkPackageTemplate>(`/work-package-admin/templates/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); }
 export async function activateWorkPackageTemplate(id: string) { return fetchApi<WorkPackageTemplate>(`/work-package-admin/templates/${id}/activate`, { method: 'POST' }); }
+
+export type CaseCreationOptionItem = { id: string; moduleType: string; moduleLabel: string; moduleKey: string; label: string; description: string | null; order: number; isOptional: boolean; config: Record<string, unknown> };
+export type CaseCreationOptionTemplate = { id: string; caseTypeDefinitionId: string; name: string; description: string | null; status: string; version: number; items: CaseCreationOptionItem[] };
+export type CaseCreationOption = { caseTypeDefinition: { id: string; slug: string; name: string; description: string | null; icon: string | null }; template: CaseCreationOptionTemplate | null };
+export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[] }>('/work-package-admin/case-types/creation-options'); }

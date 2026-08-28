@@ -2,8 +2,7 @@
 
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CaseIntakeDialog } from "@/components/cases/intake/CaseIntakeDialog";
-import type { CaseIntakeResult } from "@/lib/api";
+import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import {
   ApiError,
   addCaseCollaborator,
@@ -431,15 +430,10 @@ export function CasesList() {
         )}
       </div>
 
-      <CaseIntakeDialog
+      <CompactNewCaseDialog
         open={showNewCaseModal}
         onClose={() => setShowNewCaseModal(false)}
         initialClientId={requestedClientId || undefined}
-        onCreated={(result: CaseIntakeResult) => {
-          setShowNewCaseModal(false);
-          // One transactional create; go straight to the new matter cockpit.
-          router.push(`/cases/${result.case.id}`);
-        }}
       />
     </section>
   );
