@@ -80,12 +80,14 @@ function countByKey<T extends Record<string, unknown>>(rows: T[], key: keyof T):
  * Authorization is fail-closed and happens BEFORE any row is returned:
  *  - assertClientReadAccess verifies the actor may read this client; a
  *    cross-client request throws 403 / unknown client 404.
- *  - For non-manager roles the case-linked scope is further intersected with the
- *    actor's readable case ids so a case the actor cannot read is never surfaced
- *    merely because its caseId is known.
+ *  - Case authorization is AUTHORITATIVE: a case-linked communication is included
+ *    only when its exact case is in the actor's readable case set for this client.
+ *    A clientId match never overrides case authorization (a direct client
+ *    communication only counts when it is case-less). Managers (global case
+ *    access) use the client's full case set.
  *
  * The datastore work is bounded (constant number of queries): one case lookup,
- * one communication lookup, one attachment-count lookup, one task-count lookup —
+ * one communication lookup, one attachment-count lookup, one task-count lookup �?"
  * never an N+1 per-case loop.
  */
 export async function listClientCommunicationSummary(
@@ -103,19 +105,25 @@ export async function listClientCommunicationSummary(
     where: { clientId },
     select: { id: true, caseNumber: true, title: true },
   });
-  const clientCaseById = new Map(clientCases.map((c) => [c.id, c]));
 
-  // Managers (ADMIN/PARTNER) read every case of the client; other internal roles
-  // are restricted to cases they can actually read (intersect with their scope).
+  // Case authorization is AUTHORITATIVE. Only cases this actor may read contribute
+  // to the context set; a client-level link never overrides case authorization.
+  // Managers (ADMIN/PARTNER -> global case access) use the client's full case set.
   const scope = await internalCaseScope(actor, prisma);
-  const readableCaseIds = scope === null
-    ? clientCases.map((c) => c.id)
-    : clientCases.filter((c) => scope.includes(c.id)).map((c) => c.id);
+  const readableClientCases = scope === null
+    ? clientCases
+    : clientCases.filter((c) => scope.includes(c.id));
+  const readableCaseIds = readableClientCases.map((c) => c.id);
+  const readableClientCaseById = new Map(readableClientCases.map((c) => [c.id, c]));
 
   const where: Prisma.CommunicationWhereInput = {
     OR: [
-      { clientId },                       // directly linked to the client
-      { caseId: { in: readableCaseIds } }, // linked to a readable case of the client
+      // Direct client communication must be case-less: a clientId match never
+      // overrides case authorization on a case-linked row.
+      { clientId, caseId: null },
+      // Case-linked communication is readable only when its exact case is
+      // readable (never surfaced merely because its caseId is known).
+      { caseId: { in: readableCaseIds } },
     ],
   };
 
@@ -161,7 +169,7 @@ export async function listClientCommunicationSummary(
   }
 
   const communications: ClientCommunicationSummaryItem[] = rows.map((row) => {
-    const linkedCase = row.caseId ? clientCaseById.get(row.caseId) : null;
+    const linkedCase = row.caseId ? readableClientCaseById.get(row.caseId) : null;
     const timestamp = row.receivedAt || row.sentAt || row.createdAt;
     return {
       id: row.id,
@@ -169,7 +177,7 @@ export async function listClientCommunicationSummary(
       subject: row.subject,
       timestamp: timestamp ? timestamp.toISOString() : null,
       preview: toContentPreview(row.content),
-      // Never leak a case id/number/title outside the client-owned case set.
+      // Only ever expose a case label the actor is authorized to read.
       caseId: linkedCase ? row.caseId : null,
       caseNumber: linkedCase?.caseNumber ?? null,
       caseTitle: linkedCase?.title ?? null,

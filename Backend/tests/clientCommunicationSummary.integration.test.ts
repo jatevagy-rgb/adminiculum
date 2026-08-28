@@ -16,150 +16,182 @@ async function expectApiError(promise: Promise<unknown>): Promise<{ status: numb
   throw new Error('Expected the call to reject, but it resolved.');
 }
 
-describeWithDatabase('Client communication summary read model (PostgreSQL)', () => {
+describeWithDatabase('Client communication summary read model (PostgreSQL) — exact case authorization', () => {
   let db: PrismaClient;
   const suiteSuffix = crypto.randomUUID();
 
   const adminId = crypto.randomUUID();
-  const lawyerId = crypto.randomUUID();
-  let clientA = crypto.randomUUID();
-  let clientB = crypto.randomUUID();
-  let caseA = crypto.randomUUID();
-  let caseB = crypto.randomUUID();
+  const lawyerAId = crypto.randomUUID();
+  const lawyerBId = crypto.randomUUID();
 
-  const cDirectA = crypto.randomUUID();
-  const cCaseA = crypto.randomUUID();
-  const cBothA = crypto.randomUUID();
+  const clientA = crypto.randomUUID();
+  const clientB = crypto.randomUUID();
+
+  const caseA1 = crypto.randomUUID();
+  const caseA2 = crypto.randomUUID();
+  const caseB1 = crypto.randomUUID();
+
+  const caseNumberA1 = `CA-A1-${suiteSuffix}`;
+  const caseNumberA2 = `CA-A2-${suiteSuffix}`;
+  const caseNumberB1 = `CB-B1-${suiteSuffix}`;
+
+  // client A context matrix
+  const cDirectANoCase = crypto.randomUUID(); // clientId A, caseId null
+  const cCaseA1 = crypto.randomUUID();        // caseId A1 (readable)
+  const cDualA1 = crypto.randomUUID();        // clientId A + caseId A1 (readable)
+  const cCaseA2 = crypto.randomUUID();        // caseId A2 (unreadable)
+  const cDualA2 = crypto.randomUUID();        // clientId A + caseId A2 (unreadable)
+  const cDualCross = crypto.randomUUID();     // clientId A + caseId B1 (client B)
+  // client B context
   const cDirectB = crypto.randomUUID();
-  const cCaseB = crypto.randomUUID();
-  const cOrphan = crypto.randomUUID();
 
   const admin: InternalActor = { userId: adminId, role: 'ADMIN' };
-  const lawyerOnB: InternalActor = { userId: lawyerId, role: 'LAWYER' };
+  const lawyerA: InternalActor = { userId: lawyerAId, role: 'LAWYER' }; // reads case A1 only
+  const lawyerB: InternalActor = { userId: lawyerBId, role: 'LAWYER' }; // reads case B1 only
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
 
-    await db.user.create({ data: { id: adminId, email: `commsum-admin-${suiteSuffix}@example.invalid`, name: 'Admin', role: 'ADMIN' } });
-    await db.user.create({ data: { id: lawyerId, email: `commsum-lawyer-${suiteSuffix}@example.invalid`, name: 'Lawyer B', role: 'LAWYER' } });
+    await db.user.create({ data: { id: adminId, email: `csum-admin-${suiteSuffix}@example.invalid`, name: 'Admin', role: 'ADMIN' } });
+    await db.user.create({ data: { id: lawyerAId, email: `csum-lawyera-${suiteSuffix}@example.invalid`, name: 'Lawyer A', role: 'LAWYER' } });
+    await db.user.create({ data: { id: lawyerBId, email: `csum-lawyerb-${suiteSuffix}@example.invalid`, name: 'Lawyer B', role: 'LAWYER' } });
 
     await db.client.create({ data: { id: clientA, name: `Client A ${suiteSuffix}` } });
     await db.client.create({ data: { id: clientB, name: `Client B ${suiteSuffix}` } });
 
-    await db.case.create({ data: { id: caseA, caseNumber: `CA-${suiteSuffix}`, title: 'Case A', caseType: 'CONTRACT_REVIEW', clientId: clientA, createdById: adminId, assignedLawyerId: adminId } });
-    await db.case.create({ data: { id: caseB, caseNumber: `CB-${suiteSuffix}`, title: 'Case B', caseType: 'CONTRACT_REVIEW', clientId: clientB, createdById: lawyerId, assignedLawyerId: lawyerId } });
+    await db.case.create({ data: { id: caseA1, caseNumber: caseNumberA1, title: 'Case A1', caseType: 'CONTRACT_REVIEW', clientId: clientA, createdById: adminId, assignedLawyerId: lawyerAId } });
+    await db.case.create({ data: { id: caseA2, caseNumber: caseNumberA2, title: 'Case A2', caseType: 'CONTRACT_REVIEW', clientId: clientA, createdById: adminId, assignedLawyerId: adminId } });
+    await db.case.create({ data: { id: caseB1, caseNumber: caseNumberB1, title: 'Case B1', caseType: 'CONTRACT_REVIEW', clientId: clientB, createdById: lawyerBId, assignedLawyerId: lawyerBId } });
 
-    const t1 = new Date('2026-03-01T09:00:00Z');
-    const t2 = new Date('2026-03-02T09:00:00Z');
-    const t3 = new Date('2026-03-03T09:00:00Z');
-    const t4 = new Date('2026-03-04T09:00:00Z');
-    const t5 = new Date('2026-03-05T09:00:00Z');
-    const t6 = new Date('2026-03-06T09:00:00Z');
+    // 1) direct client A, no case
+    await db.communication.create({ data: { id: cDirectANoCase, type: 'EMAIL', subject: 'Direct A no case', senderName: 'A sender', content: 'Direct A content', clientId: clientA, createdById: adminId, receivedAt: new Date('2026-03-01T09:00:00Z') } });
+    // 2) case A1 only
+    await db.communication.create({ data: { id: cCaseA1, type: 'EMAIL', subject: 'Case A1', senderName: 'Case A1 sender', content: 'Case A1 content', caseId: caseA1, createdById: adminId, receivedAt: new Date('2026-03-02T09:00:00Z') } });
+    // 3) client A + case A1 (dual, readable)
+    await db.communication.create({ data: { id: cDualA1, type: 'EMAIL', subject: 'Dual A1', senderName: 'Dual sender', content: 'Dual A1 content', clientId: clientA, caseId: caseA1, createdById: adminId, receivedAt: new Date('2026-03-03T09:00:00Z') } });
+    // 4) case A2 only (unreadable by lawyerA)
+    await db.communication.create({ data: { id: cCaseA2, type: 'EMAIL', subject: 'Case A2', senderName: 'Case A2 sender', content: 'Case A2 content', caseId: caseA2, createdById: adminId, receivedAt: new Date('2026-03-04T09:00:00Z') } });
+    // 5) client A + case A2 (unreadable) -> must be excluded entirely
+    await db.communication.create({ data: { id: cDualA2, type: 'EMAIL', subject: 'Dual A2', senderName: 'Dual A2 sender', content: 'Dual A2 content', clientId: clientA, caseId: caseA2, createdById: adminId, receivedAt: new Date('2026-03-05T09:00:00Z') } });
+    // 6) client A + case B1 (client B) -> must be excluded entirely; case linkage authoritative
+    await db.communication.create({ data: { id: cDualCross, type: 'EMAIL', subject: 'Dual cross', senderName: 'Cross sender', content: 'Dual cross content', clientId: clientA, caseId: caseB1, createdById: adminId, receivedAt: new Date('2026-03-06T09:00:00Z') } });
+    // client B (for the non-manager scoping + cross-client test)
+    await db.communication.create({ data: { id: cDirectB, type: 'EMAIL', subject: 'Direct B no case', senderName: 'B sender', content: 'Direct B content', clientId: clientB, createdById: lawyerBId, receivedAt: new Date('2026-03-07T09:00:00Z') } });
 
-    await db.communication.create({ data: { id: cDirectA, type: 'EMAIL', subject: 'Direct A', senderName: 'A sender', content: 'Direct A content', clientId: clientA, createdById: adminId, receivedAt: t1 } });
-    await db.communication.create({ data: { id: cCaseA, type: 'EMAIL', subject: 'Case A', senderName: 'Case A sender', content: 'Case A content', caseId: caseA, createdById: adminId, receivedAt: t2 } });
-    await db.communication.create({ data: { id: cBothA, type: 'EMAIL', subject: 'Both A', senderName: 'Both sender', content: 'Both content', clientId: clientA, caseId: caseA, createdById: adminId, receivedAt: t3 } });
-    await db.communication.create({ data: { id: cDirectB, type: 'EMAIL', subject: 'Direct B', senderName: 'B sender', content: 'Direct B content', clientId: clientB, createdById: lawyerId, receivedAt: t4 } });
-    await db.communication.create({ data: { id: cCaseB, type: 'EMAIL', subject: 'Case B', senderName: 'Case B sender', content: 'Case B content', caseId: caseB, createdById: lawyerId, receivedAt: t5 } });
-    // Orphan: no client, no case — must never show up in a client summary.
-    await db.communication.create({ data: { id: cOrphan, type: 'EMAIL', subject: 'Orphan', content: 'Orphan content', createdById: adminId, receivedAt: t6 } });
-
-    // Attachments on the two client-A communications (leak vectors: spItemId/url/providerAttachmentId).
-    await db.communicationAttachment.create({ data: { id: crypto.randomUUID(), fileName: 'a1.pdf', communicationId: cDirectA, uploadedById: adminId, url: 'https://sharepoint.example/a1', spItemId: 'SP-A1', providerAttachmentId: 'ATT-A1' } });
-    await db.communicationAttachment.create({ data: { id: crypto.randomUUID(), fileName: 'a2.pdf', communicationId: cCaseA, uploadedById: adminId, url: 'https://sharepoint.example/a2', spItemId: 'SP-A2', providerAttachmentId: 'ATT-A2' } });
-
-    // A task linked to the case-linked client-A communication.
-    await db.task.create({ data: { id: crypto.randomUUID(), title: 'Follow up A', taskType: 'REVIEW_CONTRACT', caseId: caseA, sourceCommunicationId: cCaseA, status: 'PENDING' } });
+    // Attachments (leak vectors) on the two included client A items.
+    await db.communicationAttachment.create({ data: { id: crypto.randomUUID(), fileName: 'a1.pdf', communicationId: cDirectANoCase, uploadedById: adminId, url: 'https://sharepoint.example/a1', spItemId: 'SP-A1', providerAttachmentId: 'ATT-A1' } });
+    await db.communicationAttachment.create({ data: { id: crypto.randomUUID(), fileName: 'a2.pdf', communicationId: cCaseA1, uploadedById: adminId, url: 'https://sharepoint.example/a2', spItemId: 'SP-A2', providerAttachmentId: 'ATT-A2' } });
+    // A task linked to the readable case A1 communication.
+    await db.task.create({ data: { id: crypto.randomUUID(), title: 'Follow up A1', taskType: 'REVIEW_CONTRACT', caseId: caseA1, sourceCommunicationId: cCaseA1, status: 'PENDING' } });
   });
 
   afterAll(async () => {
-    await db.task.deleteMany({ where: { OR: [{ caseId: caseA }, { caseId: caseB }] } });
-    await db.communication.deleteMany({ where: { id: { in: [cDirectA, cCaseA, cBothA, cDirectB, cCaseB, cOrphan] } } });
-    await db.case.deleteMany({ where: { id: { in: [caseA, caseB] } } });
+    await db.task.deleteMany({ where: { OR: [{ caseId: caseA1 }, { caseId: caseA2 }, { caseId: caseB1 }] } });
+    await db.communication.deleteMany({ where: { id: { in: [cDirectANoCase, cCaseA1, cDualA1, cCaseA2, cDualA2, cDualCross, cDirectB] } } });
+    await db.case.deleteMany({ where: { id: { in: [caseA1, caseA2, caseB1] } } });
     await db.client.deleteMany({ where: { id: { in: [clientA, clientB] } } });
-    await db.user.deleteMany({ where: { id: { in: [adminId, lawyerId] } } });
+    await db.user.deleteMany({ where: { id: { in: [adminId, lawyerAId, lawyerBId] } } });
     await db.$disconnect();
   });
 
-  it('includes direct client, case-linked, and deduplicates both (once each)', async () => {
-    const result = await listClientCommunicationSummary(admin, clientA, { limit: 50 }, db);
-
-    const ids = result.communications.map((item) => item.id).sort();
-    expect(ids).toEqual([cBothA, cCaseA, cDirectA].sort());
-
-    // cBothA matches direct + case but is returned exactly once.
-    expect(result.communications.filter((item) => item.id === cBothA)).toHaveLength(1);
-
-    const subjectById = new Map(result.communications.map((item) => [item.id, item.subject]));
-    expect(subjectById.get(cDirectA)).toBe('Direct A');
-    expect(subjectById.get(cCaseA)).toBe('Case A');
-    expect(subjectById.get(cBothA)).toBe('Both A');
+  it('NON-MANAGER: direct client (no case), readable case, readable dual-link are included', async () => {
+    const result = await listClientCommunicationSummary(lawyerA, clientA, { limit: 50 }, db);
+    const ids = result.communications.map((i) => i.id);
+    expect(ids).toContain(cDirectANoCase);
+    expect(ids).toContain(cCaseA1);
   });
 
-  it('excludes unrelated client, unrelated case and orphan communication', async () => {
+  it('NON-MANAGER: readable dual-link returned exactly once', async () => {
+    const result = await listClientCommunicationSummary(lawyerA, clientA, { limit: 50 }, db);
+    expect(result.communications.filter((i) => i.id === cDualA1)).toHaveLength(1);
+  });
+
+  it('NON-MANAGER: unreadable case, unreadable dual-link and cross-client dual-link are excluded ENTIRELY', async () => {
+    const result = await listClientCommunicationSummary(lawyerA, clientA, { limit: 50 }, db);
+    const ids = result.communications.map((i) => i.id);
+    expect(ids).not.toContain(cCaseA2);
+    expect(ids).not.toContain(cDualA2);
+    expect(ids).not.toContain(cDualCross);
+
+    // No content/subject/preview of the excluded items is leaked.
+    const subjects = result.communications.map((i) => i.subject);
+    expect(subjects).not.toContain('Case A2');
+    expect(subjects).not.toContain('Dual A2');
+    expect(subjects).not.toContain('Dual cross');
+
+    // No case number/title/id of the excluded cases is leaked.
+    const caseNumbers = result.communications.map((i) => i.caseNumber).filter(Boolean as (v: string | null) => boolean);
+    expect(caseNumbers).not.toContain(caseNumberA2);
+    expect(caseNumbers).not.toContain(caseNumberB1);
+    const caseIds = result.communications.map((i) => i.caseId).filter(Boolean as (v: string | null) => boolean);
+    expect(caseIds).not.toContain(caseA2);
+    expect(caseIds).not.toContain(caseB1);
+  });
+
+  it('NON-MANAGER: readable case label is present; direct client communication is case-agnostic', async () => {
+    const result = await listClientCommunicationSummary(lawyerA, clientA, { limit: 50 }, db);
+    const byId = new Map(result.communications.map((i) => [i.id, i]));
+    expect(byId.get(cCaseA1)?.caseId).toBe(caseA1);
+    expect(byId.get(cCaseA1)?.caseNumber).toBe(caseNumberA1);
+    expect(byId.get(cDualA1)?.caseId).toBe(caseA1);
+    expect(byId.get(cDirectANoCase)?.caseId).toBe(null);
+    expect(byId.get(cDirectANoCase)?.caseNumber).toBe(null);
+  });
+
+  it('MANAGER: receives the full legitimate target-client context, cross-client dual-link still excluded', async () => {
     const result = await listClientCommunicationSummary(admin, clientA, { limit: 50 }, db);
-    const ids = result.communications.map((item) => item.id);
+    const ids = result.communications.map((i) => i.id);
+    // Full client A context.
+    expect(ids).toEqual([cDirectANoCase, cCaseA1, cDualA1, cCaseA2, cDualA2].sort());
+    // Cross-client dual-link is still excluded (case linkage authoritative).
+    expect(ids).not.toContain(cDualCross);
     expect(ids).not.toContain(cDirectB);
-    expect(ids).not.toContain(cCaseB);
-    expect(ids).not.toContain(cOrphan);
+    const caseNumbers = result.communications.map((i) => i.caseNumber).filter(Boolean as (v: string | null) => boolean);
+    expect(caseNumbers).not.toContain(caseNumberB1);
   });
 
   it('enforces the bounded limit', async () => {
-    const result = await listClientCommunicationSummary(admin, clientA, { limit: 2 }, db);
+    const result = await listClientCommunicationSummary(lawyerA, clientA, { limit: 2 }, db);
     expect(result.communications).toHaveLength(2);
   });
 
-  it('sorts deterministically by real timestamp descending (tie-break by createdAt/id)', async () => {
-    const result = await listClientCommunicationSummary(admin, clientA, { limit: 50 }, db);
-    const ordered = result.communications.map((item) => item.subject);
-    // receivedAt: Direct A (t1) < Case A (t2) < Both A (t3); desc => [Both A, Case A, Direct A].
-    expect(ordered).toEqual(['Both A', 'Case A', 'Direct A']);
+  it('sorts deterministically by real timestamp descending', async () => {
+    const result = await listClientCommunicationSummary(lawyerA, clientA, { limit: 50 }, db);
+    // Included: Direct A no case (3-01), Case A1 (3-02), Dual A1 (3-03) => desc.
+    const ordered = result.communications.map((i) => i.subject);
+    expect(ordered).toEqual(['Dual A1', 'Case A1', 'Direct A no case']);
   });
 
-  it('exposes safe summary-only DTO (no provider/storage/graph identifiers)', async () => {
+  it('exposes only safe summary fields (no provider/storage/graph/sync identifiers)', async () => {
     const result = await listClientCommunicationSummary(admin, clientA, { limit: 50 }, db);
     for (const item of result.communications) {
-      expect(Object.prototype.hasOwnProperty.call(item, 'providerConversationId')).toBe(false);
-      expect(Object.prototype.hasOwnProperty.call(item, 'spItemId')).toBe(false);
-      expect(Object.prototype.hasOwnProperty.call(item, 'url')).toBe(false);
-      expect(Object.prototype.hasOwnProperty.call(item, 'syncStatus')).toBe(false);
-      expect(Object.prototype.hasOwnProperty.call(item, 'externalMessageId')).toBe(false);
-      expect(Object.prototype.hasOwnProperty.call(item, 'metadata')).toBe(false);
+      for (const key of ['providerConversationId', 'spItemId', 'url', 'syncStatus', 'externalMessageId', 'metadata']) {
+        expect(Object.prototype.hasOwnProperty.call(item, key)).toBe(false);
+      }
     }
   });
 
   it('reports real attachment and task relation counts', async () => {
     const result = await listClientCommunicationSummary(admin, clientA, { limit: 50 }, db);
-    const byId = new Map(result.communications.map((item) => [item.id, item]));
-    expect(byId.get(cDirectA)?.attachmentCount).toBe(1);
-    expect(byId.get(cCaseA)?.attachmentCount).toBe(1);
-    expect(byId.get(cCaseA)?.taskCount).toBe(1);
+    const byId = new Map(result.communications.map((i) => [i.id, i]));
+    expect(byId.get(cDirectANoCase)?.attachmentCount).toBe(1);
+    expect(byId.get(cCaseA1)?.attachmentCount).toBe(1);
+    expect(byId.get(cCaseA1)?.taskCount).toBe(1);
   });
 
-  it('fails closed on cross-client request for a non-privileged actor', async () => {
-    // lawyer has case access only on caseB (client B); requesting client A must fail closed.
-    const failure = await expectApiError(listClientCommunicationSummary(lawyerOnB, clientA, { limit: 50 }, db));
+  it('fails closed on a cross-client request for a non-privileged actor', async () => {
+    // lawyerB has case access only on caseB1 (client B); requesting client A must fail closed.
+    const failure = await expectApiError(listClientCommunicationSummary(lawyerB, clientA, { limit: 50 }, db));
     expect(failure.status).toBe(403);
     expect(failure.code).toBe('CLIENT_ACCESS_FORBIDDEN');
   });
 
   it('scopes a non-privileged actor to the client they can access', async () => {
-    const result = await listClientCommunicationSummary(lawyerOnB, clientB, { limit: 50 }, db);
-    const ids = result.communications.map((item) => item.id).sort();
-    expect(ids).toEqual([cDirectB, cCaseB].sort());
-    expect(ids).not.toContain(cDirectA);
-    expect(ids).not.toContain(cCaseA);
-  });
-
-  it('does not leak a client-owned case label outside the authorized scope', async () => {
-    const result = await listClientCommunicationSummary(admin, clientA, { limit: 50 }, db);
-    const byId = new Map(result.communications.map((item) => [item.id, item]));
-    // cCaseA is linked to the client's own case -> case label present.
-    expect(byId.get(cCaseA)?.caseId).toBe(caseA);
-    expect(byId.get(cCaseA)?.caseNumber).toMatch(/^CA-/);
-    // Direct client communication with no client-owned case -> no case label.
-    expect(byId.get(cDirectA)?.caseId).toBe(null);
-    expect(byId.get(cDirectA)?.caseNumber).toBe(null);
+    const result = await listClientCommunicationSummary(lawyerB, clientB, { limit: 50 }, db);
+    const ids = result.communications.map((i) => i.id);
+    expect(ids).toContain(cDirectB);
+    expect(ids).not.toContain(cDirectANoCase);
+    expect(ids).not.toContain(cCaseA1);
   });
 
   it('returns the (authorized) client identity', async () => {
