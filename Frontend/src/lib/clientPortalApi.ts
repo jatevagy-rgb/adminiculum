@@ -487,18 +487,49 @@ export async function getPortalOrganizationContracts() {
 export async function getPortalOrganizationCompany() {
   return fetchApi<PortalOrgCompany>('/client-portal/org/company', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
+export type PortalCompanyProfileQuestion = {
+  questionKey: string;
+  label: string;
+  status: "ANSWERED" | "UNKNOWN" | "UNANSWERED";
+  value: number | string | boolean | null;
+};
+
 export type PortalCompanyProfileDiscovery = {
   client: { name: string | null };
-  questions: Array<{
-    questionKey: string;
-    label: string;
-    status: string;
-    value: unknown;
-  }>;
+  questions: PortalCompanyProfileQuestion[];
 };
+
+export type PortalCompanyProfileAnswerPayload = {
+  status: "ANSWERED" | "UNKNOWN";
+  numberValue?: number;
+  stringValue?: string;
+  booleanValue?: boolean;
+};
+
+export type PortalCompanyProfileAnswerResult = {
+  questionKey: string;
+  status: string;
+  answered: boolean;
+};
+
 export async function getPortalCompanyProfileDiscovery() {
-  return fetchApi<PortalCompanyProfileDiscovery>('/client-portal/org/company-profile', { authContext: 'customer' });
+  return fetchApi<PortalCompanyProfileDiscovery>('/client-portal/org/company-profile', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
 }
-export async function answerPortalCompanyProfileQuestion(questionKey: string, payload: { status: string; numberValue?: number }) {
-  return fetchApi<any>(`/client-portal/org/company-profile/questions/${questionKey}`, { authContext: 'customer', method: 'PUT', body: JSON.stringify(payload) });
+
+export async function answerPortalCompanyProfileQuestion(
+  questionKey: string,
+  payload: PortalCompanyProfileAnswerPayload,
+) {
+  return fetchApi<PortalCompanyProfileAnswerResult>(
+    `/client-portal/org/company-profile/questions/${encodeURIComponent(questionKey)}`,
+    {
+      authContext: 'customer',
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+  );
 }
