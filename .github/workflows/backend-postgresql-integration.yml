@@ -402,6 +402,7 @@ jobs:
         working-directory: Backend
         env:
           WORK_PACKAGE_OPERATIONAL_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: |
           if npm run test:work-package-operational:db; then rc=0; else rc=$?; fi
           sed -i "s/^work-package-operational=PENDING$/work-package-operational=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"

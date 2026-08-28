@@ -21,6 +21,7 @@ describeWithDatabase('WP-5 work package operational runtime (PostgreSQL)', () =>
   const itemId = crypto.randomUUID();
   const disabledItemId = crypto.randomUUID();
   let taskWorkPackageItemId: string;
+  let otherCaseId: string;
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
@@ -55,14 +56,22 @@ describeWithDatabase('WP-5 work package operational runtime (PostgreSQL)', () =>
   });
 
   afterAll(async () => {
+    // Clean cross-case fixture first (if the substitution test ran)
+    if (otherCaseId) {
+      await db.task.deleteMany({ where: { caseId: otherCaseId } });
+      await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: otherCaseId } } });
+      await db.caseWorkPackage.deleteMany({ where: { caseId: otherCaseId } });
+      await db.case.delete({ where: { id: otherCaseId } }).catch(() => {});
+    }
+    // Clean primary fixture
     if (taskWorkPackageItemId) {
       await db.task.deleteMany({ where: { workPackageItemId: taskWorkPackageItemId } });
     }
     await db.task.deleteMany({ where: { caseId } });
     await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId } } });
     await db.caseWorkPackage.deleteMany({ where: { caseId } });
-    await db.case.delete({ where: { id: caseId } });
-    await db.client.delete({ where: { id: clientId } });
+    await db.case.delete({ where: { id: caseId } }).catch(() => {});
+    await db.client.delete({ where: { id: clientId } }).catch(() => {});
     await db.user.deleteMany({ where: { id: { in: [userId, otherUserId] } } });
     await db.$disconnect();
   });
@@ -291,7 +300,7 @@ describeWithDatabase('WP-5 work package operational runtime (PostgreSQL)', () =>
 
   describe('authorization substitution', () => {
     it('cross-case substitution fails closed', async () => {
-      const otherCaseId = crypto.randomUUID();
+      otherCaseId = crypto.randomUUID();
       await db.case.create({
         data: { id: otherCaseId, caseNumber: `WP5X-${suffix.slice(0, 8)}`, title: 'Other case', caseType: 'OTHER', clientId, createdById: otherUserId } as never,
       });
@@ -309,15 +318,12 @@ describeWithDatabase('WP-5 work package operational runtime (PostgreSQL)', () =>
       });
 
       // Attempt to mutate item from other case using our caseId
+      // Use current primary-case revision so the revision check passes,
+      // isolating the cross-case item lookup failure.
+      const currentWp = await db.caseWorkPackage.findUnique({ where: { caseId }, select: { revision: true } });
       await expect(
-        mutateCaseWorkPackageItem(caseId, otherItemId, { status: 'COMPLETED', expectedRevision: 0 }, userId),
+        mutateCaseWorkPackageItem(caseId, otherItemId, { status: 'COMPLETED', expectedRevision: currentWp!.revision }, userId),
       ).rejects.toMatchObject({ code: 'ITEM_NOT_FOUND' });
-
-      // Cleanup
-      await db.task.deleteMany({ where: { caseId: otherCaseId } });
-      await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: otherCaseId } } });
-      await db.caseWorkPackage.deleteMany({ where: { caseId: otherCaseId } });
-      await db.case.delete({ where: { id: otherCaseId } });
     });
   });
 });
