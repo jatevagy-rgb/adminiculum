@@ -65,11 +65,10 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
       setSelectedModuleKeys(new Set());
       return;
     }
-    const required = new Set<string>();
-    for (const item of selectedOption.template.items) {
-      if (!item.isOptional) required.add(item.moduleKey);
-    }
-    setSelectedModuleKeys(required);
+    // Select ALL template items: required items are locked, optional are toggleable.
+    // This matches the backend default behavior (no explicit selection = all items).
+    const allKeys = new Set(selectedOption.template.items.map((item) => item.moduleKey));
+    setSelectedModuleKeys(allKeys);
   }, [selectedOption]);
 
   const canSubmit = clientId && title.trim() && caseTypeDefinitionId && !submitting;
@@ -97,13 +96,21 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
         matterType: selectedOption?.caseTypeDefinition.slug || "OTHER",
         caseTypeDefinitionId,
         selectedModuleKeys: Array.from(selectedModuleKeys),
-        description: title.trim(),
+        title: title.trim(),
         deadline: deadline || undefined,
       });
       onClose();
       router.push(`/cases/${result.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Létrehozás sikertelen.");
+      // Safe error presentation: no stack/provider/Prisma text
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("CASE_TYPE_NOT_FOUND")) setError("A kiválasztott ügytípus nem található.");
+      else if (msg.includes("CASE_TYPE_INACTIVE")) setError("A kiválasztott ügytípus inaktív.");
+      else if (msg.includes("ACTIVE_WORK_PACKAGE_NOT_FOUND")) setError("Nem található aktív munkacsomag sablon az ügytípushoz.");
+      else if (msg.includes("REQUIRED_MODULE_NOT_SELECTED")) setError("Kötelező modul nem hagyható ki.");
+      else if (msg.includes("MODULE_NOT_IN_TEMPLATE")) setError("Érvénytelen modul kiválasztás.");
+      else if (msg.includes("Client not found")) setError("A megadott ügyfél nem található.");
+      else setError("Létrehozás sikertelen. Próbáld újra.");
     } finally {
       setSubmitting(false);
     }

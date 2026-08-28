@@ -106,6 +106,7 @@ interface CreateCaseInput {
   clientName: string;
   clientId?: string;
   matterType: string;
+  title?: string;
   description?: string;
   clientRole?: string | null;
   createdById?: string;
@@ -466,8 +467,9 @@ return {
       throw new Error('Client name or clientId is required');
     }
 
-    // Generate title from resolved clientName + matterType
-    const title = `${resolvedClientName} - ${matterType}`;
+    // Generate title: explicit title takes priority, fallback to legacy clientName - matterType
+    const explicitTitle = params.title?.trim();
+    const title = explicitTitle || `${resolvedClientName} - ${matterType}`;
 
     if (!params.createdById) {
       throw new Error('Authenticated user is required for case creation');

@@ -1299,6 +1299,7 @@ export interface CreateCaseData {
   clientName: string;
   clientId?: string;
   matterType: string;
+  title?: string;
   priority?: string;
   description?: string;
   clientRole?: string;
@@ -1324,16 +1325,18 @@ export interface CreateCaseResponse {
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  const { clientName, clientId, matterType, description, clientRole, deadline, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys } = data;
+  const { clientName, clientId, matterType, title, description, clientRole, deadline, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys } = data;
   const payload: Record<string, unknown> = { clientName, matterType };
   if (clientId) payload.clientId = clientId;
+  if (title) payload.title = title;
   if (description) payload.description = description;
   if (clientRole) payload.clientRole = clientRole;
   if (deadline) payload.deadline = deadline;
   if (workflowTemplateKey) payload.workflowTemplateKey = workflowTemplateKey;
   if (workflowAssignees && Object.keys(workflowAssignees).length > 0) payload.workflowAssignees = workflowAssignees;
   if (caseTypeDefinitionId) payload.caseTypeDefinitionId = caseTypeDefinitionId;
-  if (selectedModuleKeys && selectedModuleKeys.length > 0) payload.selectedModuleKeys = selectedModuleKeys;
+  // Always send selectedModuleKeys when explicitly provided — [] must survive HTTP
+  if (selectedModuleKeys !== undefined) payload.selectedModuleKeys = selectedModuleKeys;
   return fetchApi<CreateCaseResponse>('/cases', {
     method: 'POST',
     body: JSON.stringify(payload),

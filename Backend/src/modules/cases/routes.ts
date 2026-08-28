@@ -736,6 +736,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     let clientName = req.body?.clientName || req.body?.['clientName'];
     let clientId = req.body?.clientId || req.body?.['clientId'];
     let matterType = req.body?.matterType || req.body?.['matterType'];
+    let title = req.body?.title || req.body?.['title'];
     let description = req.body?.description || req.body?.['description'];
     let clientRole = req.body?.clientRole || req.body?.['clientRole'];
     let deadline = req.body?.deadline || req.body?.['deadline'];
@@ -753,6 +754,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       clientName,
       clientId,
       matterType: matterType || 'OTHER',
+      title,
       description,
       clientRole,
       deadline: deadline || undefined,
@@ -766,6 +768,15 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     res.status(201).json(result);
   } catch (error) {
     console.error('Create case error:', error);
+
+    // Typed CaseWorkPackageError → safe domain response
+    if (error instanceof Error && error.name === 'CaseWorkPackageError') {
+      const pkgErr = error as any;
+      const status = pkgErr.status || 400;
+      res.status(status).json({ status, code: pkgErr.code || 'WORK_PACKAGE_ERROR', message: pkgErr.message || 'Work package operation failed.' });
+      return;
+    }
+
     const message = error instanceof Error ? error.message : 'Internal server error';
     if (message === 'Client not found') {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message });
