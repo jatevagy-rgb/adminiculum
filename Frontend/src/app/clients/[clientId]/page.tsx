@@ -482,7 +482,7 @@ function ClientDetailContent() {
             <div className="adm-board-panel p-5">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-[var(--adm-text)]">Kapcsolt kommunikációk</h2>
-                {communications.length > 0 ? <Link href={`/clients/${encodeURIComponent(clientId)}/communications`} className="text-[11px] font-semibold text-[var(--adm-ochre-500)] hover:underline">Összes kommunikáció →</Link> : null}
+                <Link href={`/clients/${encodeURIComponent(clientId)}/communications`} className="text-[11px] font-semibold text-[var(--adm-ochre-500)] hover:underline">Kommunikáció megnyitása →</Link>
               </div>
               {communications.length === 0 ? (
                 <div className="adm-board-empty min-h-[130px] p-4 text-xs text-[var(--adm-text-soft)]">
