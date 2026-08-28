@@ -35,12 +35,24 @@ type SharePointDiagnosticsResponse = {
 
 const router = Router();
 
-function sanitizeError(error: unknown, fallbackCode: string): DiagnosticsError {
-  // Never surface raw Graph/SharePoint provider text (may carry request ids,
-  // site/drive identifiers, or endpoint internals). Keep only a stable
-  // classification code in the response; retain full detail server-side so the
-  // diagnostics endpoint remains useful for operators.
-  console.error(`[sharepoint/diagnostics] ${fallbackCode}:`, error instanceof Error ? error.message : error);
+export type SharePointErrorType = 'GraphClientError' | 'Error' | 'Unknown';
+
+export function classifySharePointError(error: unknown): SharePointErrorType {
+  if (error instanceof GraphClientError) return 'GraphClientError';
+  if (error instanceof Error) return 'Error';
+  return 'Unknown';
+}
+
+export function sanitizeError(error: unknown, fallbackCode: string): DiagnosticsError {
+  // Never surface raw Graph/SharePoint provider text — in the HTTP response OR
+  // in server logs. A GraphClientError additionally carries `message` and an
+  // `endpoint` URL, so the raw error object must never be logged either. Until
+  // a redaction-safe logger is canonical, log ONLY stable, safe metadata: a
+  // fixed event, the stable fallbackCode, and the error class category. No
+  // provider free-text, no raw error object, no error.message, no URL/ids/token.
+  const type = classifySharePointError(error);
+  console.error('[sharepoint/diagnostics] request failed', { code: fallbackCode, type });
+
   if (error instanceof GraphClientError) {
     return {
       code: error.code || fallbackCode,

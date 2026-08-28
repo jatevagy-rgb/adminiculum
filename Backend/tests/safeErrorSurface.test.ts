@@ -11,6 +11,8 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import { buildPrismaErrorResponse } from '../src/utils/prismaError';
+import { sanitizeError, classifySharePointError } from '../src/modules/sharepoint/routes';
+import { GraphClientError } from '../src/modules/sharepoint/graphClient';
 
 // Distinctive sentinels that must never appear in a client response.
 const SENTINEL_MSG = 'LEAKSENTINEL_raw_db_text';
@@ -169,6 +171,69 @@ describe('buildPrismaErrorResponse — no raw DB text', () => {
   });
 });
 
+describe('SharePoint diagnostics — no raw provider text in HTTP OR logs', () => {
+  const SP_MSG = 'GRAPHRAW_provider_detail_secret';
+  const SP_URL = 'https://contoso.sharepoint.com/sites/SECRET/drives/DRIVEID123';
+  let spy: jest.SpyInstance;
+
+  beforeEach(() => {
+    spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    spy.mockRestore();
+  });
+
+  it('classifies error type from a stable, safe category', () => {
+    expect(classifySharePointError(new GraphClientError({ message: 'm', operation: 'op', endpoint: 'e' }))).toBe('GraphClientError');
+    expect(classifySharePointError(new Error('x'))).toBe('Error');
+    expect(classifySharePointError('nope')).toBe('Unknown');
+  });
+
+  it('GraphClientError: HTTP generic + log carries only code/type (no message, endpoint, or URL)', () => {
+    const err = new GraphClientError({
+      message: SP_MSG,
+      operation: 'resolveSite',
+      endpoint: SP_URL,
+      code: 'accessDenied',
+      status: 403,
+    });
+    const out = sanitizeError(err, 'SITE_RESOLUTION_FAILED');
+    // HTTP payload is generic.
+    expect(out.message).toBe('A SharePoint/Graph request failed.');
+    expect(out.code).toBe('accessDenied');
+    expect(JSON.stringify(out)).not.toContain(SP_MSG);
+    expect(JSON.stringify(out)).not.toContain(SP_URL);
+    // Log payload is stable metadata only.
+    expect(spy).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(spy.mock.calls[0]);
+    expect(logged).not.toContain(SP_MSG);
+    expect(logged).not.toContain(SP_URL);
+    expect(logged).toContain('SITE_RESOLUTION_FAILED');
+    expect(logged).toContain('GraphClientError');
+  });
+
+  it('generic Error: HTTP generic + log never carries error.message', () => {
+    const out = sanitizeError(new Error(SP_MSG), 'TOKEN_REQUEST_FAILED');
+    expect(out.message).toBe('An internal error occurred.');
+    const logged = JSON.stringify(spy.mock.calls);
+    expect(logged).not.toContain(SP_MSG);
+    expect(logged).toContain('TOKEN_REQUEST_FAILED');
+    expect(logged).toContain('Error');
+  });
+
+  it('never passes the raw error object into the log', () => {
+    const err = new GraphClientError({ message: SP_MSG, operation: 'op', endpoint: SP_URL });
+    sanitizeError(err, 'DRIVE_RESOLUTION_FAILED');
+    // The second console.error argument (if any) must be a plain metadata object,
+    // never the Error instance itself.
+    for (const call of spy.mock.calls) {
+      for (const arg of call) {
+        expect(arg instanceof Error).toBe(false);
+      }
+    }
+  });
+});
+
 describe('Source guards — leak patterns removed', () => {
   const read = (rel: string) => fs.readFileSync(path.join(__dirname, rel), 'utf8');
 
@@ -199,5 +264,13 @@ describe('Source guards — leak patterns removed', () => {
   it('sharepoint diagnostics no longer returns raw provider text', () => {
     const s = read('../src/modules/sharepoint/routes.ts');
     expect(s).not.toContain('error.message.slice');
+  });
+
+  it('sharepoint diagnostics logging carries no raw error message/object', () => {
+    const s = read('../src/modules/sharepoint/routes.ts');
+    // The old raw-logging pattern must be gone…
+    expect(s).not.toContain('error instanceof Error ? error.message : error');
+    // …and the safe metadata-only log line must be present.
+    expect(s).toContain("console.error('[sharepoint/diagnostics] request failed', { code: fallbackCode, type })");
   });
 });
