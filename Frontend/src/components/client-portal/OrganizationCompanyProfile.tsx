@@ -71,20 +71,25 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
   const [editValue, setEditValue] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const refreshDiscovery = useCallback(async () => {
+    const result = await getPortalCompanyProfileDiscovery();
+    setDiscovery(result);
+  }, []);
 
   const loadDiscovery = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await getPortalCompanyProfileDiscovery();
-      setDiscovery(result);
+      await refreshDiscovery();
     } catch (err) {
       setError(clientSafeError(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshDiscovery]);
 
   useEffect(() => {
     void loadDiscovery();
@@ -102,6 +107,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
   const handleStartEdit = (question: PortalCompanyProfileQuestion) => {
     setEditingKey(question.questionKey);
     setActionError(null);
+    setRefreshWarning(null);
     setSuccessMessage(null);
     if (question.status === "ANSWERED" && question.value !== null && question.value !== undefined) {
       setEditValue(String(question.value));
@@ -114,10 +120,12 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
     setEditingKey(null);
     setEditValue("");
     setActionError(null);
+    setRefreshWarning(null);
   };
 
   const handleSaveAnswer = async (question: PortalCompanyProfileQuestion) => {
     setActionError(null);
+    setRefreshWarning(null);
     setSuccessMessage(null);
 
     let parsedNumber: number | undefined;
@@ -135,20 +143,26 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
     }
 
     setSaving(true);
+    let mutationCompleted = false;
     try {
       await answerPortalCompanyProfileQuestion(question.questionKey, {
         status: "ANSWERED",
         ...(parsedNumber !== undefined ? { numberValue: parsedNumber } : {}),
       });
+      mutationCompleted = true;
       setEditingKey(null);
       setEditValue("");
-      await loadDiscovery();
+      await refreshDiscovery();
       await onProfileUpdated?.();
       setSuccessMessage(
         "A cégadatokat frissítettük. A szervezeti áttekintést az új adatok alapján frissítettük.",
       );
     } catch (err) {
-      setActionError(clientSafeError(err));
+      if (mutationCompleted) {
+        setRefreshWarning("Az adat mentése megtörtént, de a frissített áttekintés betöltése nem sikerült. Kérjük, frissítse az oldalt.");
+      } else {
+        setActionError(clientSafeError(err));
+      }
     } finally {
       setSaving(false);
     }
@@ -156,19 +170,26 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
 
   const handleMarkUnknown = async (question: PortalCompanyProfileQuestion) => {
     setActionError(null);
+    setRefreshWarning(null);
     setSuccessMessage(null);
     setSaving(true);
+    let mutationCompleted = false;
     try {
       await answerPortalCompanyProfileQuestion(question.questionKey, {
         status: "UNKNOWN",
       });
+      mutationCompleted = true;
       setEditingKey(null);
       setEditValue("");
-      await loadDiscovery();
+      await refreshDiscovery();
       await onProfileUpdated?.();
       setSuccessMessage("Nem ismertként jelölve.");
     } catch (err) {
-      setActionError(clientSafeError(err));
+      if (mutationCompleted) {
+        setRefreshWarning("Az adat mentése megtörtént, de a frissített áttekintés betöltése nem sikerült. Kérjük, frissítse az oldalt.");
+      } else {
+        setActionError(clientSafeError(err));
+      }
     } finally {
       setSaving(false);
     }
@@ -215,6 +236,15 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
           role="status"
         >
           {successMessage}
+        </div>
+      ) : null}
+
+      {refreshWarning ? (
+        <div
+          className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+          role="status"
+        >
+          {refreshWarning}
         </div>
       ) : null}
 

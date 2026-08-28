@@ -48,15 +48,33 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     // Saving UNKNOWN
     assert.match(src, /status:\s*"UNKNOWN"/);
     assert.match(src, /Nem ismertként jelölöm/);
-    // Both handlers refresh their local discovery before awaiting the parent refresh.
+    assert.match(src, /const refreshDiscovery = useCallback\(async \(\) => \{/);
+    assert.match(src, /await refreshDiscovery\(\);/);
+    assert.match(src, /void loadDiscovery\(\);/);
+    assert.match(src, /mutationCompleted/);
+    assert.match(src, /Az adat mentése megtörtént, de a frissített áttekintés betöltése nem sikerült/);
+    // Both handlers use the throwing refresh primitive before awaiting the parent refresh.
     for (const handler of [answered, unknown]) {
-      assert.ok(handler.indexOf("await answerPortalCompanyProfileQuestion") < handler.indexOf("await loadDiscovery"));
-      assert.ok(handler.indexOf("await loadDiscovery") < handler.indexOf("await onProfileUpdated?.()"));
+      assert.ok(handler.indexOf("await answerPortalCompanyProfileQuestion") < handler.indexOf("await refreshDiscovery"));
+      assert.ok(handler.indexOf("await refreshDiscovery") < handler.indexOf("await onProfileUpdated?.()"));
+      assert.doesNotMatch(handler, /await loadDiscovery\(\)/);
     }
     assert.match(
       src,
       /A cégadatokat frissítettük\. A szervezeti áttekintést az új adatok alapján frissítettük\./,
     );
+  });
+
+  it("keeps mutation failures distinct from persisted-but-stale refresh failures", () => {
+    const src = profileSrc();
+    const answered = src.slice(src.indexOf("const handleSaveAnswer"), src.indexOf("const handleMarkUnknown"));
+    const unknown = src.slice(src.indexOf("const handleMarkUnknown"), src.indexOf("if (loading)"));
+    for (const handler of [answered, unknown]) {
+      assert.match(handler, /if \(mutationCompleted\)/);
+      assert.match(handler, /setRefreshWarning\(/);
+      assert.match(handler, /setActionError\(clientSafeError\(err\)\)/);
+    }
+    assert.match(src, /<div[\s\S]*role="status"[\s\S]*\{refreshWarning\}/);
   });
 
   it("never exposes a technical question key as a visible label or test marker", () => {
