@@ -20,10 +20,9 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(shell(), /selectedWorkspace\?\.mode === 'CASE_RELAY'/);
     assert.match(shell(), /OrganizationPortalViews/);
     assert.match(shell(), /OrgHomeView/);
-    // Phase 5 organizational IA (7 top-level items).
-    assert.match(shell(), /'Szerződések', '\/portal\/szerzodesek'/);
-    assert.match(shell(), /'Vállalat', '\/portal\/vallalat'/);
-    assert.match(shell(), /'Kapcsolat', '\/portal\/uzenetek'/);
+    for (const label of ["'Főoldal', '\/portal'", "'Ügyeink', '\/portal\/ugyeim'", "'Teendőim', '\/portal\/teendoim'", "'Dokumentumok', '\/portal\/dokumentumok'", "'Üzenetek', '\/portal\/uzenetek'"]) {
+      assert.match(shell(), new RegExp(label));
+    }
     assert.equal(existsSync(path.join(root, "src/app/portal/szervezeti-attekintes/page.tsx")), true);
     assert.equal(existsSync(path.join(root, "src/app/portal/szerzodesek/page.tsx")), true);
     assert.equal(existsSync(path.join(root, "src/app/portal/vallalat/page.tsx")), true);

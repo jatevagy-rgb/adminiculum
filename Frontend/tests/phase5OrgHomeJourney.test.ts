@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { formatPortalWorkDuration } from "../src/lib/clientPortalApi";
 
 const root = process.cwd();
 const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
@@ -12,11 +13,11 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
   const orgViews = () => read("src/components/client-portal/OrganizationPortalViews.tsx");
   const api = () => read("src/lib/clientPortalApi.ts");
 
-  it("organizational nav has the exact Phase 5 IA labels in order", () => {
+  it("organizational nav has the compact executive IA labels in order", () => {
     const src = shell();
     const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
     const orgBlock = src.slice(orgIdx, src.indexOf("if (workspace.mode === 'CASE_RELAY')"));
-    const order = ["Főoldal", "Ügyek", "Szerződések", "Teendők", "Vállalat", "Dokumentumok", "Kapcsolat"];
+    const order = ["Főoldal", "Ügyeink", "Teendőim", "Dokumentumok", "Üzenetek"];
     let last = -1;
     for (const label of order) {
       const idx = orgBlock.indexOf(`'${label}'`);
@@ -30,20 +31,47 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
 
   it("Főoldal renders Eddig / Most / Következőként journey", () => {
     const src = orgHome();
-    for (const token of ["Eddig", "Most", "Következőként", "A munkája menete", "Üdvözöljük", "Tőled várjuk", "Ami most Öntől kell", "Kapcsolat"]) {
+    for (const token of ["Eddig", "Most", "Következő", "Ami most Öntől kell", "Szervezeti ügyfélfelület", "Aktív jogi munka", "Legutóbbi tevékenység", "Vállalat és megfelelőség"]) {
       assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
     assert.match(src, /matter\.currentPosition/);
     assert.match(src, /matter\.nextStep/);
     assert.match(src, /milestones/);
-    assert.match(src, /progressPercentage/);
+    assert.doesNotMatch(src, /timeSummary|progressPercentage/);
     // neutral next-step empty state
-    assert.match(src, /Jelenleg nincs Öntől szükséges teendő/);
+    assert.match(src, /Jelenleg nincs Önnek szóló teendő/);
+  });
+
+  it("renders the client-safe recorded-work summary from the canonical API", () => {
+    const src = orgHome();
+    const apiSrc = api();
+    assert.match(apiSrc, /PortalWorkSummary/);
+    assert.match(apiSrc, /\/client-portal\/org\/work-summary/);
+    assert.match(src, /getPortalWorkSummary/);
+    assert.match(src, /formatPortalWorkDuration\(summary\.totalMinutes\)/);
+    assert.match(src, /Rögzített munka/);
+    assert.match(src, /Ehhez az időszakhoz még nincs rögzített munka/);
+    assert.match(src, /getPortalWorkSummary\(\)\.catch\(\(\) => null\)/);
+    assert.doesNotMatch(src, /workSummary\s*=\s*0|totalMinutes\s*:\s*0/);
+    assert.doesNotMatch(src, /progressPercentage|billing|számláz|óradíj|belső leírás/);
+    assert.doesNotMatch(apiSrc, /billingRate|billingTotal|internalDescription|descriptionInternal/);
+  });
+
+  it("keeps recorded-work formatting dynamic and truthful", () => {
+    const apiSrc = api();
+    assert.match(apiSrc, /Math\.floor\(totalMinutes\)/);
+    assert.match(apiSrc, /minutes % 60/);
+    assert.equal(formatPortalWorkDuration(875), "14 óra 35 perc");
+    assert.equal(formatPortalWorkDuration(60), "1 óra");
+    assert.equal(formatPortalWorkDuration(61), "1 óra 1 perc");
+    assert.equal(formatPortalWorkDuration(119), "1 óra 59 perc");
+    assert.equal(formatPortalWorkDuration(0), "0 perc");
+    assert.doesNotMatch(srcWithOrgHomeAndApi(), /875|14 óra 35 perc|Demo Kft/);
   });
 
   it("home empty states are human, never raw data markers", () => {
     const src = orgHome();
-    for (const empty of ["Jelenleg nincs közzétett aktív ügye", "Ehhez a munkához még nem tettünk közzé dokumentumot", "Még nincs folyamatban kérdés vagy üzenetváltás"]) {
+    for (const empty of ["Jelenleg nincs közzétett aktív ügy", "Még nincs közzétett frissítés", "Még nincs folyamatban kérdés vagy üzenetváltás"]) {
       assert.match(src, new RegExp(empty.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     }
     assert.doesNotMatch(src, /No data|0 records/);
@@ -63,13 +91,10 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.doesNotMatch(apiSrc, /prisma|storageProvider|scanProvider|quarantineStorageReference|spItemId/);
   });
 
-  it("Szerződések and Vállalat are functional customer surfaces, not placeholders", () => {
+  it("organization company context remains a functional customer surface", () => {
     const views = orgViews();
-    assert.match(views, /view === "contracts"/);
     assert.match(views, /view === "company"/);
-    assert.match(views, /OrganizationContracts/);
     assert.match(views, /OrganizationCompany/);
-    assert.match(views, /getPortalOrganizationContracts/);
     assert.match(views, /getPortalOrganizationCompany/);
     assert.doesNotMatch(views, /hamarosan ezen a felületen lesz elérhető/);
     assert.doesNotMatch(views, /ContractRecord|company-workspace|getWorkspaceOverview/);
@@ -110,3 +135,7 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.doesNotMatch(views, /Outlook sync/);
   });
 });
+
+function srcWithOrgHomeAndApi() {
+  return read("src/components/client-portal/OrgHomeView.tsx") + read("src/lib/clientPortalApi.ts");
+}
