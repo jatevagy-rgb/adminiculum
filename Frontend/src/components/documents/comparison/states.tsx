@@ -53,7 +53,9 @@ export function ComparisonUnsupportedState({ reasonCode, onDownload }: { reasonC
     <div data-testid="cmp-unsupported" className={box}>
       <h3 className="font-serif text-[17px] font-semibold text-[var(--adm-text)]">Nem összehasonlítható</h3>
       <p className="mx-auto mt-1 max-w-md text-[12.5px] text-[var(--adm-text-muted)]">
-        Ehhez a formátumhoz nincs hiteles kinyert szöveg (jelenleg csak TXT hasonlítható össze). A dokumentum letölthető és a verziók elérhetők.
+        {reasonCode === "NO_EXTRACTABLE_TEXT"
+          ? "A dokumentum nem tartalmaz géppel kinyerhető szöveget (pl. beolvasott kép PDF)."
+          : "Ehhez a formátumhoz vagy változathoz nem érhető el hiteles kinyert szöveg. A dokumentum letölthető és a verziók elérhetők."}
         {reasonCode ? ` (${reasonCode})` : ""}
       </p>
       {onDownload ? <div className="mt-4"><AdminButton variant="neutral" size="sm" onClick={onDownload}>Letöltés</AdminButton></div> : null}

@@ -1,8 +1,26 @@
 // ============================================================================
-// TEXT EXTRACTOR - Extract text content from documents for anonymization
+// TEXT EXTRACTOR - Extract text content from documents for anonymization & comparison
 // ============================================================================
 
 import mammoth from 'mammoth';
+
+// Ensure Node.js <= 20 compatibility for pdf-parse v2 CJS
+if (typeof (Uint8Array as any).fromBase64 !== 'function') {
+  (Uint8Array as any).fromBase64 = (base64: string): Uint8Array => {
+    return new Uint8Array(Buffer.from(base64, 'base64'));
+  };
+}
+if (typeof (Uint8Array.prototype as any).toBase64 !== 'function') {
+  (Uint8Array.prototype as any).toBase64 = function (): string {
+    return Buffer.from(this).toString('base64');
+  };
+}
+
+/** Maximum allowed input buffer size in bytes for text extraction (2MB). */
+export const MAX_EXTRACT_BYTES = 2_000_000;
+
+/** Maximum allowed extracted text length in characters (400,000 chars). */
+export const MAX_EXTRACTED_TEXT_CHARS = 400_000;
 
 type PdfParseModule = {
   PDFParse?: unknown;
@@ -60,6 +78,7 @@ export interface ExtractionResult {
   error?: string;
   format?: SupportedFormat;
   pageCount?: number;
+  reasonCode?: string;
 }
 
 /**
@@ -83,6 +102,8 @@ export function detectFormat(mimeType: string, fileName?: string): SupportedForm
       case 'pdf':
         return 'pdf';
       case 'txt':
+      case 'md':
+      case 'csv':
         return 'txt';
       case 'html':
       case 'htm':
@@ -101,19 +122,48 @@ export function detectFormat(mimeType: string, fileName?: string): SupportedForm
 async function extractFromDocx(buffer: Buffer): Promise<ExtractionResult> {
   try {
     const result = await mammoth.extractRawText({ buffer });
+    const text = result?.value ?? '';
+    if (!text.trim()) {
+      return {
+        success: false,
+        text: '',
+        error: 'A dokumentum nem tartalmaz kinyerhető szöveget.',
+        format: 'docx',
+        reasonCode: 'NO_EXTRACTABLE_TEXT',
+      };
+    }
+    if (text.length > MAX_EXTRACTED_TEXT_CHARS) {
+      return {
+        success: false,
+        error: 'A kinyert szöveg mérete meghaladja a megengedett korlátot.',
+        format: 'docx',
+        reasonCode: 'CONTENT_TOO_LARGE',
+      };
+    }
     return {
       success: true,
-      text: result.value,
-      format: 'docx'
+      text,
+      format: 'docx',
     };
   } catch (error) {
-    console.error('DOCX extraction error:', error);
     return {
       success: false,
-      error: `DOCX extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      format: 'docx'
+      error: 'A dokumentum szövegének kinyerése sikertelen volt.',
+      format: 'docx',
+      reasonCode: 'EXTRACTION_FAILED',
     };
   }
+}
+
+function getPdfParseCandidates(mod: any): { ctor: PdfParseV2Ctor | null; legacy: LegacyPdfParseFn | null } {
+  if (!mod) return { ctor: null, legacy: null };
+  const ctor =
+    (typeof mod?.PDFParse === 'function' ? mod.PDFParse : null) ??
+    (typeof mod?.default?.PDFParse === 'function' ? mod.default.PDFParse : null);
+  const legacy =
+    (typeof mod === 'function' ? mod : null) ??
+    (typeof mod?.default === 'function' ? mod.default : null);
+  return { ctor, legacy };
 }
 
 /**
@@ -121,41 +171,70 @@ async function extractFromDocx(buffer: Buffer): Promise<ExtractionResult> {
  */
 async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
   try {
-    const pdfParseModule = (await import('pdf-parse')) as PdfParseModule;
-    const PdfParseCtor = resolvePdfParseV2Ctor(pdfParseModule);
+    let pdfParseModule: any;
+    try {
+      pdfParseModule = require('pdf-parse');
+    } catch {
+      pdfParseModule = await import('pdf-parse');
+    }
+
+    const { ctor: PdfParseCtor, legacy: legacyPdfParse } = getPdfParseCandidates(pdfParseModule);
+    let rawText = '';
+    let pageCount: number | undefined;
+
     if (PdfParseCtor) {
       const parser = new PdfParseCtor({ data: new Uint8Array(buffer) });
       try {
         const result = await parser.getText();
-        return {
-          success: true,
-          text: result.text || '',
-          format: 'pdf',
-          pageCount: result.total || result.pages?.length
-        };
+        rawText = result?.text || '';
+        pageCount = result?.total || result?.pages?.length;
       } finally {
         await parser.destroy?.();
       }
+    } else if (legacyPdfParse) {
+      const result = await legacyPdfParse(buffer);
+      rawText = result?.text || '';
+      pageCount = result?.numpages;
+    } else {
+      throw new Error('pdf-parse parser export not found');
     }
 
-    const legacyPdfParse = resolveLegacyPdfParse(pdfParseModule);
-    if (legacyPdfParse) {
-      const result = await legacyPdfParse(buffer);
+    // Strip synthetic page marker lines (e.g. "-- 1 of 5 --") to check for meaningful text
+    const cleanText = rawText.replace(/--\s*\d+\s+of\s+\d+\s*--/g, '').trim();
+
+    if (!cleanText) {
       return {
-        success: true,
-        text: result.text,
+        success: false,
+        text: '',
+        error: 'A PDF nem tartalmaz géppel kinyerhető szöveget.',
         format: 'pdf',
-        pageCount: result.numpages
+        reasonCode: 'NO_EXTRACTABLE_TEXT',
+        pageCount,
       };
     }
 
-    throw new Error('pdf-parse parser export not found');
+    if (cleanText.length > MAX_EXTRACTED_TEXT_CHARS) {
+      return {
+        success: false,
+        error: 'A kinyert szöveg mérete meghaladja a megengedett korlátot.',
+        format: 'pdf',
+        reasonCode: 'CONTENT_TOO_LARGE',
+        pageCount,
+      };
+    }
+
+    return {
+      success: true,
+      text: cleanText,
+      format: 'pdf',
+      pageCount,
+    };
   } catch (error) {
-    console.error('PDF extraction error:', error);
     return {
       success: false,
-      error: `PDF extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      format: 'pdf'
+      error: 'A PDF szövegének kinyerése sikertelen volt.',
+      format: 'pdf',
+      reasonCode: 'EXTRACTION_FAILED',
     };
   }
 }
@@ -167,26 +246,52 @@ async function extractFromTxt(buffer: Buffer): Promise<ExtractionResult> {
   try {
     // Try UTF-8 first, then fall back to latin1
     let text = buffer.toString('utf-8');
-    
+
     // Check for null bytes which indicate binary content
     if (text.includes('\0')) {
       return {
         success: false,
-        error: 'File appears to be binary, not plain text',
-        format: 'txt'
+        error: 'A fájl bináris tartalmat tartalmaz, nem sima szöveg.',
+        format: 'txt',
+        reasonCode: 'FORMAT_NOT_TEXT_EXTRACTABLE',
+      };
+    }
+
+    // Strip UTF-8 BOM if present
+    if (text.charCodeAt(0) === 0xfeff) {
+      text = text.slice(1);
+    }
+
+    if (!text.trim()) {
+      return {
+        success: false,
+        text: '',
+        error: 'A szöveges dokumentum nem tartalmaz kinyerhető szöveget.',
+        format: 'txt',
+        reasonCode: 'NO_EXTRACTABLE_TEXT',
+      };
+    }
+
+    if (text.length > MAX_EXTRACTED_TEXT_CHARS) {
+      return {
+        success: false,
+        error: 'A kinyert szöveg mérete meghaladja a megengedett korlátot.',
+        format: 'txt',
+        reasonCode: 'CONTENT_TOO_LARGE',
       };
     }
 
     return {
       success: true,
       text,
-      format: 'txt'
+      format: 'txt',
     };
   } catch (error) {
     return {
       success: false,
-      error: `TXT extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      format: 'txt'
+      error: 'A szöveges dokumentum kinyerése sikertelen volt.',
+      format: 'txt',
+      reasonCode: 'EXTRACTION_FAILED',
     };
   }
 }
@@ -200,12 +305,21 @@ export async function extractText(
   mimeType: string,
   fileName?: string
 ): Promise<ExtractionResult> {
+  if (buffer.byteLength > MAX_EXTRACT_BYTES) {
+    return {
+      success: false,
+      error: 'A dokumentum mérete meghaladja a megengedett korlátot.',
+      reasonCode: 'CONTENT_TOO_LARGE',
+    };
+  }
+
   const format = detectFormat(mimeType, fileName);
 
   if (!format) {
     return {
       success: false,
-      error: `Unsupported file format: ${mimeType}. Supported formats: DOCX, PDF, TXT`
+      error: `Nem támogatott fájlformátum: ${mimeType}. Támogatott formátumok: DOCX, PDF, TXT.`,
+      reasonCode: 'FORMAT_NOT_TEXT_EXTRACTABLE',
     };
   }
 
@@ -228,7 +342,8 @@ export async function extractText(
     default:
       return {
         success: false,
-        error: `No extractor available for format: ${format}`
+        error: `Nem támogatott formátum: ${format}`,
+        reasonCode: 'FORMAT_NOT_TEXT_EXTRACTABLE',
       };
   }
 }
@@ -236,5 +351,7 @@ export async function extractText(
 export default {
   extractText,
   detectFormat,
-  SUPPORTED_MIME_TYPES
+  SUPPORTED_MIME_TYPES,
+  MAX_EXTRACT_BYTES,
+  MAX_EXTRACTED_TEXT_CHARS,
 };

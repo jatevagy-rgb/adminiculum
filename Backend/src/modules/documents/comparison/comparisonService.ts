@@ -109,6 +109,7 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
     const result = engine({
       baseText: baseText.text, targetText: targetText.text,
       baseSupported: baseText.supported, targetSupported: targetText.supported,
+      baseReasonCode: baseText.reasonCode, targetReasonCode: targetText.reasonCode,
     });
     const status = ENGINE_TO_STATUS[result.status];
 
@@ -158,9 +159,15 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
 
 function safeFailureMessage(code: string): string {
   switch (code) {
-    case 'INPUT_TOO_LARGE': return 'The documents are too large to compare.';
+    case 'INPUT_TOO_LARGE':
+    case 'CONTENT_TOO_LARGE': return 'The documents are too large to compare.';
     case 'TOO_MANY_PARAGRAPHS': return 'The documents have too many paragraphs to compare.';
     case 'COMPARISON_TOO_COMPLEX': return 'The comparison is too complex to run.';
+    case 'NO_EXTRACTABLE_TEXT': return 'A dokumentum nem tartalmaz géppel kinyerhető szöveget.';
+    case 'FORMAT_NOT_TEXT_EXTRACTABLE':
+    case 'FORMAT_UNSUPPORTED': return 'A dokumentum formátuma nem támogatja a szövegkinyerést.';
+    case 'EXTRACTION_FAILED': return 'A dokumentum szövegének kinyerése sikertelen volt.';
+    case 'CONTENT_UNAVAILABLE': return 'A dokumentum verzió tartalma nem érhető el.';
     case 'EXTRACTION_UNAVAILABLE': return 'No authoritative text is available for one of the versions.';
     default: return 'The comparison could not be completed.';
   }

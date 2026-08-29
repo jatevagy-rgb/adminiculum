@@ -1,7 +1,9 @@
 import { PrismaClient } from '@prisma/client';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
 
 import { createOrGetComparison } from '../src/modules/documents/comparison/comparisonService';
 import { listSegments, linkSegmentTask, updateSegment } from '../src/modules/documents/comparison/comparisonReadService';
+import { resolveVersionText } from '../src/modules/documents/comparison/versionText';
 
 const databaseUrl = process.env.COMPARISON_TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -204,5 +206,96 @@ describeWithDatabase('Comparison PostgreSQL persistence lifecycle', () => {
     await db.documentComparison.delete({ where: { id: comparison.id } });
 
     expect(await db.documentChangeSegment.count({ where: { comparisonId: comparison.id } })).toBe(0);
+  });
+
+  it('persists a comparison generated from DOCX versions with real text extraction in Postgres', async () => {
+    const docxDocId = 'c4000000-0000-4000-8000-000000000002';
+    const v1Id = 'c5000000-0000-4000-8000-000000000003';
+    const v2Id = 'c5000000-0000-4000-8000-000000000004';
+
+    await db.document.create({
+      data: {
+        id: docxDocId,
+        name: 'Synthetic DOCX comparison document',
+        fileName: 'contract.docx',
+        category: 'CONTRACT',
+        documentType: 'CONTRACT',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        caseId: ids.case,
+        clientId: ids.client,
+        currentVersion: 2,
+        currentVersionInt: 2,
+        version: '2',
+      },
+    });
+
+    await db.documentVersion.createMany({
+      data: [
+        {
+          id: v1Id,
+          documentId: docxDocId,
+          version: 1,
+          name: 'contract-v1.docx',
+          originalFileName: 'contract-v1.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: 1000,
+          storageReference: 'docx-v1',
+          spItemId: 'docx-v1',
+          isCurrent: false,
+          uploadSource: 'LAWYER_UPLOAD',
+          versionType: 'ORIGINAL',
+          uploadedById: ids.user,
+        },
+        {
+          id: v2Id,
+          documentId: docxDocId,
+          version: 2,
+          name: 'contract-v2.docx',
+          originalFileName: 'contract-v2.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: 1000,
+          storageReference: 'docx-v2',
+          spItemId: 'docx-v2',
+          isCurrent: true,
+          uploadSource: 'LAWYER_UPLOAD',
+          versionType: 'WORKING_COPY',
+          uploadedById: ids.user,
+          previousVersionId: v1Id,
+        },
+      ],
+    });
+
+    const doc1 = new Document({
+      sections: [{ children: [new Paragraph({ children: [new TextRun('Bekezdés 1: Szerződéses feltételek.')] }), new Paragraph({ children: [new TextRun('Bekezdés 2: Díj 100 EUR.')] })] }],
+    });
+    const doc2 = new Document({
+      sections: [{ children: [new Paragraph({ children: [new TextRun('Bekezdés 1: Szerződéses feltételek.')] }), new Paragraph({ children: [new TextRun('Bekezdés 2: Díj 250 EUR.')] })] }],
+    });
+
+    const docxBuf1 = await Packer.toBuffer(doc1);
+    const docxBuf2 = await Packer.toBuffer(doc2);
+
+    const comparison = await createOrGetComparison({
+      actorId: ids.user,
+      documentId: docxDocId,
+      baseVersionId: v1Id,
+      targetVersionId: v2Id,
+    }, {
+      prisma: db,
+      resolveText: async (v) => resolveVersionText(v, async (_docId, versionId) => (versionId === v1Id ? docxBuf1 : docxBuf2)),
+    });
+
+    expect(comparison.status).toBe('READY');
+    expect(comparison.replaceCount).toBe(1);
+    expect(comparison.totalSegmentCount).toBe(1);
+
+    const stored = await db.documentComparison.findUniqueOrThrow({
+      where: { id: comparison.id },
+      include: { segments: true },
+    });
+    expect(stored.segments).toHaveLength(1);
+    expect(stored.segments[0].changeType).toBe('REPLACE');
+    expect(stored.segments[0].baseExcerpt).toContain('100 EUR');
+    expect(stored.segments[0].targetExcerpt).toContain('250 EUR');
   });
 });
