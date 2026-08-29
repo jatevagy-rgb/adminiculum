@@ -7,6 +7,7 @@ import { Router, Request, Response } from 'express';
 import casesService from './services';
 import { workflowService } from '../workflow';
 import { authenticate } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseCollaboratorManageAccess, requireCaseManageAccess, requireCaseReadAccess } from './authorization';
 import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
@@ -39,6 +40,12 @@ import {
 } from './intakeService';
 import { getDashboardOperationalOverview } from './dashboardOperational';
 import { getCaseAttentionSummary, listCaseAttentionSummaries } from './attention.service';
+import {
+  CaseWorkPackageOperationalError,
+  createTaskFromCaseWorkPackageItem,
+  getCaseWorkPackage,
+  mutateCaseWorkPackageItem,
+} from './caseWorkPackageOperational.service';
 
 const router = Router();
 
@@ -619,6 +626,47 @@ router.get('/:caseId/client-house-style', authenticate, async (req: Request, res
 });
 
 // ============================================================================
+// Work Package operational runtime. These must remain before /:caseId.
+function sendWorkPackageOperationalError(res: Response, error: unknown): void {
+  if (error instanceof CaseWorkPackageOperationalError) {
+    res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+    return;
+  }
+  console.error('Case work package operation failed.');
+  res.status(500).json({ status: 500, code: 'WORK_PACKAGE_INTERNAL_ERROR', message: 'Work package operation failed.' });
+}
+
+router.get('/:caseId/work-package', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const workPackage = await getCaseWorkPackage(req.params.caseId);
+    if (!workPackage) {
+      res.status(404).json({ status: 404, code: 'WORK_PACKAGE_NOT_FOUND', message: 'Case has no work package.' });
+      return;
+    }
+    res.json(workPackage);
+  } catch (error) {
+    sendWorkPackageOperationalError(res, error);
+  }
+});
+
+router.patch('/:caseId/work-package/items/:itemId', authenticate, requireWorkforceUser, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await mutateCaseWorkPackageItem(req.params.caseId, req.params.itemId, req.body);
+    res.json(result);
+  } catch (error) {
+    sendWorkPackageOperationalError(res, error);
+  }
+});
+
+router.post('/:caseId/work-package/items/:itemId/tasks', authenticate, requireWorkforceUser, requireCaseManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const result = await createTaskFromCaseWorkPackageItem(req.params.caseId, req.params.itemId, req.body, req.user?.userId);
+    res.status(result.created ? 201 : 200).json(result);
+  } catch (error) {
+    sendWorkPackageOperationalError(res, error);
+  }
+});
+
 // GET /cases/:caseId
 // ============================================================================
 router.get('/:caseId', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {

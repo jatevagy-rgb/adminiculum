@@ -2,7 +2,7 @@
 // TASK SERVICE - Case-alapú feladatkezelés
 // ============================================================================
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import prisma from '../../config/database';
 import taskSubmissionService from './taskSubmission.service';
 import { canUserActOnTask } from './taskAuthorization';
@@ -297,10 +297,12 @@ export async function createTask(data: {
   sourceCommunicationId?: string;
   attentionCategory?: AttentionCategory | null;
   estimatedMinutes?: number | null;
-}) {
+  workPackageItemId?: string;
+  matterId?: string | null;
+}, db: PrismaClient | Prisma.TransactionClient = prisma) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
 
-  const task = await prisma.task.create({
+  const task = await db.task.create({
     data: {
       caseId: data.caseId,
       title: data.title,
@@ -317,6 +319,8 @@ export async function createTask(data: {
       sourceCommunicationId: data.sourceCommunicationId,
       attentionCategory: data.attentionCategory ?? null,
       estimatedMinutes: data.estimatedMinutes ?? null,
+      workPackageItemId: data.workPackageItemId ?? null,
+      matterId: data.matterId ?? null,
     } as any,
     include: {
       case: true,
@@ -335,13 +339,17 @@ export async function createTask(data: {
         taskTitle: task.title,
         assignedTo: data.assignedTo
       }
-    });
+    }, db);
   } catch (timelineError) {
     console.warn('[TASK_CREATE] Timeline event creation failed (task remains created):', timelineError);
   }
 
-  const createdTask = await getTask(task.id);
-  return createdTask || task;
+  // Preserve the canonical projection for ordinary callers. A transaction-bound
+  // caller cannot safely re-query through the global Prisma client before commit.
+  if (db === prisma) {
+    return (await getTask(task.id)) || task;
+  }
+  return task;
 }
 
 /**
@@ -1257,7 +1265,7 @@ async function createTimelineEvent(data: {
   userId?: string;
   type: TimelineType;
   payload?: Record<string, unknown>;
-}) {
+}, db: PrismaClient | Prisma.TransactionClient = prisma) {
   const eventTypeMap: Record<string, string> = {
     CASE_CREATED: 'CASE_CREATED',
     CASE_STATUS_CHANGED: 'CASE_STATUS_CHANGED',
@@ -1286,7 +1294,7 @@ async function createTimelineEvent(data: {
 
   const mappedEventType = eventTypeMap[String(data.type)] || 'CUSTOM';
 
-  return prisma.timelineEvent.create({
+  return db.timelineEvent.create({
     data: {
       caseId: data.caseId,
       userId: data.userId,
