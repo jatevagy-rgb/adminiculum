@@ -9,10 +9,14 @@ import {
   linkCommunicationToCase,
   ignoreCommunication,
   unignoreCommunication,
+  createCaseFromCommunication,
   getCases,
   getClients,
+  getUsers,
+  getOutlookStatus,
   type CommunicationItem,
   type OutlookSyncSummary,
+  type OutlookStatus,
 } from "@/lib/api";
 
 const triageLabels: Record<CommunicationItem["triage"], string> = {
@@ -30,6 +34,15 @@ const triageColors: Record<CommunicationItem["triage"], string> = {
 };
 
 type CaseOption = { id: string; caseNumber: string; title: string; clientId: string | null };
+type UserOption = { id: string; name: string; email: string };
+
+type CreateCaseForm = {
+  title: string;
+  matterType: string;
+  clientId: string;
+  assignedLawyerId: string;
+  deadline: string;
+};
 
 export default function CommunicationsOverview() {
   const router = useRouter();
@@ -41,11 +54,24 @@ export default function CommunicationsOverview() {
   const [syncSummary, setSyncSummary] = useState<OutlookSyncSummary | null>(null);
   const [syncMessage, setSyncMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
+  const [outlookStatus, setOutlookStatus] = useState<OutlookStatus | null>(null);
+
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
+  const [users, setUsers] = useState<UserOption[]>([]);
   const [assignCase, setAssignCase] = useState<Record<string, string>>({});
   const [assignClient, setAssignClient] = useState<Record<string, string>>({});
   const [assigningId, setAssigningId] = useState<string | null>(null);
+
+  const [createCaseFor, setCreateCaseFor] = useState<string | null>(null);
+  const [createCaseForm, setCreateCaseForm] = useState<CreateCaseForm>({
+    title: "",
+    matterType: "OTHER",
+    clientId: "",
+    assignedLawyerId: "",
+    deadline: "",
+  });
+  const [creatingCase, setCreatingCase] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,12 +107,28 @@ export default function CommunicationsOverview() {
     } catch {
       setClients([]);
     }
+    try {
+      const userResp = await getUsers();
+      setUsers(userResp.map((u: any) => ({ id: u.id, name: u.name, email: u.email })));
+    } catch {
+      setUsers([]);
+    }
+  }, []);
+
+  const loadOutlookStatus = useCallback(async () => {
+    try {
+      const status = await getOutlookStatus();
+      setOutlookStatus(status);
+    } catch {
+      setOutlookStatus({ available: false, reason: "UNAVAILABLE", message: "Átmenetileg nem érhető el." });
+    }
   }, []);
 
   useEffect(() => {
     void load();
     void loadLookups();
-  }, [load, loadLookups]);
+    void loadOutlookStatus();
+  }, [load, loadLookups, loadOutlookStatus]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -97,6 +139,7 @@ export default function CommunicationsOverview() {
       setSyncSummary(result.summary);
       setSyncMessage({ type: "success", text: "Az Outlook szinkron kész." });
       await load();
+      void loadOutlookStatus();
     } catch (err: any) {
       const msg = err?.message || "Az Outlook szinkron nem sikerült. Próbáld újra később.";
       setSyncMessage({ type: "error", text: msg });
@@ -155,6 +198,42 @@ export default function CommunicationsOverview() {
     }
   };
 
+  const handleCreateCase = async (communicationId: string) => {
+    if (!createCaseForm.title.trim() || !createCaseForm.clientId) return;
+    setCreatingCase(true);
+    setSyncMessage(null);
+    try {
+      const result = await createCaseFromCommunication(communicationId, {
+        title: createCaseForm.title.trim(),
+        matterType: createCaseForm.matterType,
+        clientId: createCaseForm.clientId,
+        assignedLawyerId: createCaseForm.assignedLawyerId || undefined,
+        deadline: createCaseForm.deadline || undefined,
+      });
+      setCreateCaseFor(null);
+      setCreateCaseForm({ title: "", matterType: "OTHER", clientId: "", assignedLawyerId: "", deadline: "" });
+      setSyncMessage({ type: "success", text: `Ügy létrehozva: ${result.case.caseNumber}` });
+      await load();
+      router.push(`/cases/${result.case.id}`);
+    } catch (err: any) {
+      const msg = err?.message || "Nem sikerült az ügy létrehozása.";
+      setSyncMessage({ type: "error", text: msg });
+    } finally {
+      setCreatingCase(false);
+    }
+  };
+
+  const openCreateCaseForm = (comm: CommunicationItem) => {
+    setCreateCaseFor(comm.id);
+    setCreateCaseForm({
+      title: comm.subject || "",
+      matterType: "OTHER",
+      clientId: comm.client?.id || "",
+      assignedLawyerId: "",
+      deadline: "",
+    });
+  };
+
   const formatDate = (value: string | null) => {
     if (!value) return "—";
     const d = new Date(value);
@@ -175,13 +254,21 @@ export default function CommunicationsOverview() {
               {needsAssignment > 0 ? ` · ${needsAssignment} feldolgozásra vár` : ""}
             </p>
           </div>
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="px-4 py-2 text-xs uppercase tracking-[0.12em] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncing ? "Szinkronizálás..." : "Outlook kommunikáció frissítése"}
-          </button>
+          <div className="flex items-center gap-3">
+            {outlookStatus && (
+              <span className={`text-[11px] px-2 py-1 rounded ${outlookStatus.available ? "bg-[#F0FDF4] text-[#059669]" : "bg-[#F9FAFB] text-[#7B776D]"}`}>
+                {outlookStatus.available ? "Outlook szinkronizálható" : outlookStatus.message}
+                {outlookStatus.lastSyncAt ? ` · Utolsó: ${formatDate(outlookStatus.lastSyncAt)}` : ""}
+              </span>
+            )}
+            <button
+              onClick={handleSync}
+              disabled={syncing || !outlookStatus?.available}
+              className="px-4 py-2 text-xs uppercase tracking-[0.12em] bg-[#1F4A33] text-[#FBF6E7] hover:bg-[#173824] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {syncing ? "Szinkronizálás folyamatban…" : "Szinkronizálás most"}
+            </button>
+          </div>
         </div>
 
         {syncMessage && (
@@ -222,7 +309,7 @@ export default function CommunicationsOverview() {
         ) : communications.length === 0 ? (
           <div className="rounded border border-[#DDD7CA] bg-white p-8 text-center">
             <p className="text-sm text-[#514D45]">Még nincs kommunikáció.</p>
-            <p className="mt-1 text-xs text-[#7B776D]">A „Outlook kommunikáció frissítése” gombbal importálhatod a bejövő levelezést.</p>
+            <p className="mt-1 text-xs text-[#7B776D]">A „Szinkronizálás most" gombbal importálhatod a bejövő levelezést.</p>
           </div>
         ) : (
           <div className="overflow-x-auto rounded border border-[#DDD7CA] bg-white">
@@ -281,7 +368,68 @@ export default function CommunicationsOverview() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      {comm.triage === "NEEDS_ASSIGNMENT" ? (
+                      {createCaseFor === comm.id ? (
+                        <div className="space-y-2 min-w-[260px]">
+                          <input
+                            type="text"
+                            value={createCaseForm.title}
+                            onChange={(e) => setCreateCaseForm((f) => ({ ...f, title: e.target.value }))}
+                            placeholder="Ügy tárgya"
+                            className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
+                          />
+                          <select
+                            value={createCaseForm.clientId}
+                            onChange={(e) => setCreateCaseForm((f) => ({ ...f, clientId: e.target.value }))}
+                            className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
+                          >
+                            <option value="">Ügyfél…</option>
+                            {clients.map((cl) => (
+                              <option key={cl.id} value={cl.id}>{cl.name}</option>
+                            ))}
+                          </select>
+                          <select
+                            value={createCaseForm.matterType}
+                            onChange={(e) => setCreateCaseForm((f) => ({ ...f, matterType: e.target.value }))}
+                            className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
+                          >
+                            <option value="OTHER">Egyéb</option>
+                            <option value="CONTRACT">Szerződés</option>
+                            <option value="LITIGATION">Peres</option>
+                            <option value="ADVISORY">Tanácsadás</option>
+                          </select>
+                          <select
+                            value={createCaseForm.assignedLawyerId}
+                            onChange={(e) => setCreateCaseForm((f) => ({ ...f, assignedLawyerId: e.target.value }))}
+                            className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
+                          >
+                            <option value="">Felelős ügyvéd…</option>
+                            {users.map((u) => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="date"
+                            value={createCaseForm.deadline}
+                            onChange={(e) => setCreateCaseForm((f) => ({ ...f, deadline: e.target.value }))}
+                            className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleCreateCase(comm.id)}
+                              disabled={!createCaseForm.title.trim() || !createCaseForm.clientId || creatingCase}
+                              className="px-2 py-1 text-[10px] uppercase bg-[#1F4A33] text-[#FBF6E7] disabled:opacity-40"
+                            >
+                              {creatingCase ? "Létrehozás…" : "Ügy létrehozása"}
+                            </button>
+                            <button
+                              onClick={() => setCreateCaseFor(null)}
+                              className="px-2 py-1 text-[10px] uppercase border border-[#DDD7CA] text-[#1F2821]"
+                            >
+                              Mégse
+                            </button>
+                          </div>
+                        </div>
+                      ) : comm.triage === "NEEDS_ASSIGNMENT" ? (
                         <div className="space-y-2">
                           <div className="flex gap-2">
                             <select
@@ -313,9 +461,7 @@ export default function CommunicationsOverview() {
                               >
                                 <option value="">Ügyfél…</option>
                                 {clients.map((cl) => (
-                                  <option key={cl.id} value={cl.id}>
-                                    {cl.name}
-                                  </option>
+                                  <option key={cl.id} value={cl.id}>{cl.name}</option>
                                 ))}
                               </select>
                               <button
@@ -327,6 +473,12 @@ export default function CommunicationsOverview() {
                               </button>
                             </div>
                           )}
+                          <button
+                            onClick={() => openCreateCaseForm(comm)}
+                            className="text-[10px] text-[#1F4A33] underline hover:text-[#C9A227]"
+                          >
+                            Új ügy létrehozása ebből
+                          </button>
                           <button
                             onClick={() => handleIgnore(comm.id)}
                             className="text-[10px] text-[#7B776D] underline hover:text-[#514D45]"

@@ -3750,6 +3750,17 @@ export async function runOutlookSync(): Promise<OutlookSyncResult> {
   });
 }
 
+export type OutlookStatus = {
+  available: boolean;
+  reason?: string;
+  message: string;
+  lastSyncAt?: string | null;
+};
+
+export async function getOutlookStatus(): Promise<OutlookStatus> {
+  return fetchApi<OutlookStatus>('/communications/outlook/status');
+}
+
 export async function linkCommunicationToClient(
   communicationId: string,
   clientId: string
@@ -3806,6 +3817,7 @@ export async function createCaseFromCommunication(
     priority?: string;
     deadline?: string;
     description?: string;
+    assignedLawyerId?: string;
     task?: {
       title: string;
       description?: string;

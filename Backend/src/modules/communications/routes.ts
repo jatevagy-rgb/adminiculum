@@ -24,7 +24,7 @@ import {
   runOutlookImportDryRun,
   syncOutlookMailbox,
 } from './outlookImport.service';
-import { readOutlookSyncConfig } from './outlookGraphLive';
+import { readOutlookSyncConfig, isOutlookSyncConfigured } from './outlookGraphLive';
 import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
 
 const router = Router();
@@ -750,6 +750,7 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
   const clientIdInput = typeof body.clientId === 'string' ? body.clientId.trim() : '';
   const clientNameInput = typeof body.clientName === 'string' ? body.clientName.trim() : '';
   const description = typeof body.description === 'string' && body.description.trim() ? body.description : undefined;
+  const assignedLawyerIdInput = typeof body.assignedLawyerId === 'string' ? body.assignedLawyerId.trim() : '';
   const taskInput = body.task && typeof body.task === 'object' ? (body.task as Record<string, any>) : null;
 
   // Cheap, write-free validation first.
@@ -810,6 +811,18 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
       const priority = VALID_CASE_PRIORITIES.includes(priorityRaw) ? priorityRaw : 'MEDIUM';
       const resolvedClientName = clientNameInput || client.name;
 
+      let resolvedAssignedLawyerId: string | null = null;
+      if (assignedLawyerIdInput) {
+        const assignedUser = await tx.user.findUnique({
+          where: { id: assignedLawyerIdInput },
+          select: { id: true, status: true, isActive: true },
+        });
+        if (!assignedUser || assignedUser.status !== 'ACTIVE' || assignedUser.isActive === false) {
+          throw new CreateCaseFromCommunicationError(400, 'INVALID_ASSIGNED_LAWYER', 'A megadott felelős ügyvéd nem található vagy inaktív.');
+        }
+        resolvedAssignedLawyerId = assignedUser.id;
+      }
+
       const year = new Date().getFullYear();
       const count = await tx.case.count();
       const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
@@ -825,6 +838,7 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
           status: DEFAULT_CASE_STATUS as any,
           priority: priority as any,
           deadline: deadline || undefined,
+          assignedLawyerId: resolvedAssignedLawyerId || undefined,
           sharepointSite: 'Adminiculum - Legal Workflow',
           sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
           createdById: user.id,
@@ -1221,6 +1235,44 @@ router.get('/:id/attachments', authenticate, requireCommunicationsFoundation, as
   } catch (error) {
     console.error('Error fetching attachments:', error);
     res.status(500).json({ error: 'Error fetching attachments' });
+  }
+});
+
+// ============================================================================
+// GET /api/v1/communications/outlook/status
+// ----------------------------------------------------------------------------
+// Returns Outlook connection availability in customer-safe terms.
+// No tenant IDs, client IDs, tokens, or mailbox internals exposed.
+// ============================================================================
+
+router.get('/outlook/status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const importEnabled = isDatabaseFoundationEnabled('ENABLE_OUTLOOK_IMPORT');
+    const configured = isOutlookSyncConfigured();
+
+    if (!importEnabled) {
+      res.json({ available: false, reason: 'DISABLED', message: 'Outlook nincs összekapcsolva.' });
+      return;
+    }
+    if (!configured) {
+      res.json({ available: false, reason: 'NOT_CONFIGURED', message: 'Outlook nincs összekapcsolva.' });
+      return;
+    }
+
+    const lastSync = await prisma.communication.findFirst({
+      where: { source: 'OUTLOOK' as any },
+      orderBy: { importedAt: 'desc' },
+      select: { importedAt: true },
+    });
+
+    res.json({
+      available: true,
+      message: 'Outlook szinkronizálható.',
+      lastSyncAt: lastSync?.importedAt?.toISOString() || null,
+    });
+  } catch (error) {
+    console.error('Outlook status error:', error);
+    res.json({ available: false, reason: 'UNAVAILABLE', message: 'Átmenetileg nem érhető el.' });
   }
 });
 

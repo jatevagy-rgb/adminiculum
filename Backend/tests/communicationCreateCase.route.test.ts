@@ -27,7 +27,8 @@ jest.mock('../src/prisma/prisma.service', () => {
     communication: { findUnique: jest.fn(), update: jest.fn() },
     client: { findUnique: jest.fn() },
     user: { findUnique: jest.fn() },
-    case: { count: jest.fn(), create: jest.fn() },
+    case: { count: jest.fn(), create: jest.fn(), findUnique: jest.fn() },
+    caseCollaborator: { findFirst: jest.fn() },
     task: { create: jest.fn() },
     timelineEvent: { create: jest.fn() },
   };
@@ -103,7 +104,8 @@ const validBody = {
 
 describe('POST /communications/:id/create-case (atomic intake)', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    (prisma as any).$transaction = jest.fn((cb: any) => cb(prisma));
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
   });
 
@@ -152,11 +154,10 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
 
   it('4. returns 409 when the communication is already linked and creates no case', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: 'case-existing',
-      clientId: 'client-1',
-    });
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: 'case-existing', createdById: 'user-1' }) // param middleware
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: 'case-existing', clientId: 'client-1' }); // route handler
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-existing', assignedLawyerId: null, createdById: 'user-1' });
 
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
       body: validBody,
@@ -170,6 +171,10 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
 
   it('5. returns 400 when the title is missing (before any DB work)', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' }) // param middleware
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1' }); // route handler
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
 
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
       body: { matterType: 'LEASE' },
@@ -178,16 +183,16 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
     expect((prisma as any).$transaction).not.toHaveBeenCalled();
-    expect((prisma as any).communication.findUnique).not.toHaveBeenCalled();
+    // communication.findUnique IS called by the param middleware for authorization
+    // but the route handler's own findUnique inside $transaction is NOT called
   });
 
   it('5b. returns 400 when no client can be resolved (no clientId on body or communication)', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: null,
-    });
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' }) // param middleware
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: null }); // route handler
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
 
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
       body: validBody,
@@ -200,13 +205,10 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
 
   it('6. happy path: creates the case and links the communication to it', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: 'client-1',
-      subject: 'Bérleti szerződés',
-      summary: 'Ügyfél kérdés.',
-    });
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' }) // param middleware
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Bérleti szerződés', summary: 'Ügyfél kérdés.' }); // route handler
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
     (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
     (prisma as any).case.count.mockResolvedValue(7);
@@ -241,13 +243,10 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
 
   it('7. happy path with optional task: task carries caseId and sourceCommunicationId', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: 'client-1',
-      subject: 'Bérleti szerződés',
-      summary: 'Ügyfél kérdés.',
-    });
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Bérleti szerződés', summary: 'Ügyfél kérdés.' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
     (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
     (prisma as any).case.count.mockResolvedValue(0);
@@ -279,13 +278,10 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
 
   it('8. rollback: a task-create failure rejects the whole transaction and returns no case', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: 'client-1',
-      subject: 'Bérleti szerződés',
-      summary: 'Ügyfél kérdés.',
-    });
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Bérleti szerződés', summary: 'Ügyfél kérdés.' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
     (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
     (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
     (prisma as any).case.count.mockResolvedValue(0);
@@ -307,12 +303,105 @@ describe('POST /communications/:id/create-case (atomic intake)', () => {
     expect(response.status).not.toBe(201);
     expect(response.body?.success).not.toBe(true);
     expect(response.body?.case).toBeUndefined();
-    // All writes were bound to a single $transaction, so the real Prisma engine
-    // rolls back the case + link + timeline together. (With a fully mocked
-    // client the physical rollback cannot be executed here; this asserts the
-    // strongest feasible proof: every write was issued inside one transaction
-    // boundary and the transaction rejected.)
     expect((prisma as any).$transaction).toHaveBeenCalledTimes(1);
     expect((prisma as any).task.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('9. assignedLawyerId: invalid user returns 400 INVALID_ASSIGNED_LAWYER', async () => {
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Test', summary: null });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
+    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
+    // First call: auth user validation. Second call: assigned lawyer lookup (not found)
+    (prisma as any).user.findUnique
+      .mockResolvedValueOnce({ id: 'user-1', status: 'ACTIVE', isActive: true })
+      .mockResolvedValueOnce(null);
+
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
+      body: { ...validBody, assignedLawyerId: 'nonexistent-user' },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'INVALID_ASSIGNED_LAWYER' });
+    expect((prisma as any).case.create).not.toHaveBeenCalled();
+  });
+
+  it('10. assignedLawyerId: inactive user returns 400 INVALID_ASSIGNED_LAWYER', async () => {
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Test', summary: null });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
+    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
+    // First call: auth user validation. Second call: assigned lawyer lookup (inactive)
+    (prisma as any).user.findUnique
+      .mockResolvedValueOnce({ id: 'user-1', status: 'ACTIVE', isActive: true })
+      .mockResolvedValueOnce({ id: 'inactive-user', status: 'INACTIVE', isActive: false });
+
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
+      body: { ...validBody, assignedLawyerId: 'inactive-user' },
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ code: 'INVALID_ASSIGNED_LAWYER' });
+    expect((prisma as any).case.create).not.toHaveBeenCalled();
+  });
+
+  it('11. assignedLawyerId: valid user passes assignedLawyerId to case.create', async () => {
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Test', summary: null });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
+    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
+    // Two calls to user.findUnique: first for auth user, second for assigned lawyer
+    (prisma as any).user.findUnique
+      .mockResolvedValueOnce({ id: 'user-1', status: 'ACTIVE', isActive: true })
+      .mockResolvedValueOnce({ id: 'lawyer-5', status: 'ACTIVE', isActive: true });
+    (prisma as any).case.count.mockResolvedValue(0);
+    (prisma as any).case.create.mockResolvedValue({
+      id: 'case-new',
+      caseNumber: 'CASE-2026-001',
+      title: validBody.title,
+    });
+    (prisma as any).communication.update.mockResolvedValue({ id: 'comm-1', caseId: 'case-new' });
+    (prisma as any).timelineEvent.create.mockResolvedValue({ id: 'tl-1' });
+
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
+      body: { ...validBody, assignedLawyerId: 'lawyer-5' },
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    const createArg = (prisma as any).case.create.mock.calls[0][0];
+    expect(createArg.data.assignedLawyerId).toBe('lawyer-5');
+  });
+
+  it('12. no assignedLawyerId: case.create receives undefined for assignedLawyerId', async () => {
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Test', summary: null });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-x', assignedLawyerId: null, createdById: 'user-1' });
+    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
+    (prisma as any).case.count.mockResolvedValue(0);
+    (prisma as any).case.create.mockResolvedValue({
+      id: 'case-new',
+      caseNumber: 'CASE-2026-001',
+      title: validBody.title,
+    });
+    (prisma as any).communication.update.mockResolvedValue({ id: 'comm-1', caseId: 'case-new' });
+    (prisma as any).timelineEvent.create.mockResolvedValue({ id: 'tl-1' });
+
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
+      body: validBody,
+    });
+
+    expect(response.status).toBe(201);
+    const createArg = (prisma as any).case.create.mock.calls[0][0];
+    expect(createArg.data.assignedLawyerId).toBeUndefined();
   });
 });
