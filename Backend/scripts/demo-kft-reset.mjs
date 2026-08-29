@@ -187,9 +187,9 @@ async function teardown(db) {
   await db.case.deleteMany({ where: { id: { in: [IDS.caseEmploymentId, IDS.caseSupplierId, IDS.caseComplianceId] } } });
   await db.matter.deleteMany({ where: { id: { in: [IDS.matterEmploymentId, IDS.matterSupplierId, IDS.matterComplianceId] } } });
 
-  await db.clientPortalGrant.deleteMany({ where: { clientPortalIdentityId: IDS.identityId } });
-  await db.clientPortalWorkspaceMembership.deleteMany({ where: { id: IDS.membershipId } });
-  await db.clientPortalIdentity.deleteMany({ where: { id: IDS.identityId } });
+  await db.clientPortalGrant.deleteMany({ where: { workspaceId: IDS.workspaceId } });
+  await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: IDS.workspaceId } });
+  await db.clientPortalIdentity.deleteMany({ where: { id: IDS.identityId, normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid' } });
 
   await db.organizationPerson.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientOrganizationGroup.deleteMany({ where: { clientId: IDS.clientId } });
@@ -669,39 +669,101 @@ async function seed(db) {
   });
 
   // 16. Portal identity + membership + grants (Péterfi János, executive/approver).
-  await db.clientPortalIdentity.upsert({
-    where: { id: IDS.identityId },
-    update: {},
-    create: {
-      id: IDS.identityId,
-      provider: 'ENTRA_EXTERNAL_ID',
-      issuer: 'https://login.microsoftonline.com/demo-kft',
-      subject: 'sub-peterfi',
-      normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid',
-      displayName: 'Péterfi János',
-      accountType: 'ORGANIZATION_MEMBER',
+  const targetEmail = (process.env.DEMO_PORTAL_IDENTITY_EMAIL || process.env.DEMO_PORTAL_USER_EMAIL || process.env.DEMO_USER_EMAIL || '').trim().toLowerCase();
+  const targetIssuer = (process.env.DEMO_PORTAL_IDENTITY_ISSUER || process.env.CLIENT_IDENTITY_ISSUER || process.env.CLIENT_PORTAL_IDENTITY_ISSUER || 'https://login.microsoftonline.com/demo-kft').trim();
+  const targetSubject = (process.env.DEMO_PORTAL_IDENTITY_SUBJECT || process.env.DEMO_PORTAL_USER_SUBJECT || '').trim();
+
+  let effectiveIdentityId = IDS.identityId;
+
+  if (targetEmail) {
+    let matchedIdentity = await db.clientPortalIdentity.findUnique({ where: { normalizedEmail: targetEmail } });
+    if (!matchedIdentity && targetSubject) {
+      matchedIdentity = await db.clientPortalIdentity.findUnique({ where: { issuer_subject: { issuer: targetIssuer, subject: targetSubject } } });
+    }
+    if (matchedIdentity) {
+      effectiveIdentityId = matchedIdentity.id;
+      await db.clientPortalIdentity.update({
+        where: { id: matchedIdentity.id },
+        data: {
+          issuer: targetIssuer,
+          subject: targetSubject || matchedIdentity.subject,
+          status: 'ACTIVE',
+          accountType: 'ORGANIZATION_MEMBER',
+          emailVerifiedAt: matchedIdentity.emailVerifiedAt || now,
+        },
+      });
+    } else {
+      const createdIdentity = await db.clientPortalIdentity.create({
+        data: {
+          id: targetSubject ? stableId(`identity:${targetSubject}`) : stableId(`identity:${targetEmail}`),
+          provider: 'ENTRA_EXTERNAL_ID',
+          issuer: targetIssuer,
+          subject: targetSubject || stableId(`sub:${targetEmail}`),
+          normalizedEmail: targetEmail,
+          displayName: 'Péterfi János',
+          accountType: 'ORGANIZATION_MEMBER',
+          status: 'ACTIVE',
+          emailVerifiedAt: now,
+        },
+      });
+      effectiveIdentityId = createdIdentity.id;
+    }
+  } else {
+    await db.clientPortalIdentity.upsert({
+      where: { id: IDS.identityId },
+      update: {},
+      create: {
+        id: IDS.identityId,
+        provider: 'ENTRA_EXTERNAL_ID',
+        issuer: targetIssuer,
+        subject: 'sub-peterfi',
+        normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid',
+        displayName: 'Péterfi János',
+        accountType: 'ORGANIZATION_MEMBER',
+        status: 'ACTIVE',
+        emailVerifiedAt: now,
+      },
+    });
+  }
+
+  await db.clientPortalWorkspaceMembership.upsert({
+    where: {
+      clientPortalIdentityId_workspaceId: {
+        clientPortalIdentityId: effectiveIdentityId,
+        workspaceId: IDS.workspaceId,
+      },
+    },
+    update: {
       status: 'ACTIVE',
-      emailVerifiedAt: now,
+      role: 'APPROVER',
+      approvedAt: now,
+    },
+    create: {
+      clientPortalIdentityId: effectiveIdentityId,
+      workspaceId: IDS.workspaceId,
+      status: 'ACTIVE',
+      role: 'APPROVER',
+      approvedAt: now,
     },
   });
-  await db.clientPortalWorkspaceMembership.upsert({
-    where: { id: IDS.membershipId },
-    update: {},
-    create: { id: IDS.membershipId, clientPortalIdentityId: IDS.identityId, workspaceId: IDS.workspaceId, status: 'ACTIVE', role: 'APPROVER', approvedAt: now },
-  });
-  // Broad legitimate client-safe access through explicit grants.
+
   const grantRows = [
-    { id: stableId('grantEmployment'), caseId: IDS.caseEmploymentId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
-    { id: stableId('grantSupplier'), caseId: IDS.caseSupplierId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
-    { id: stableId('grantCompliance'), caseId: IDS.caseComplianceId, permissions: ['MATTER_READ', 'UPDATE_READ'] },
+    { id: stableId(`grantEmployment:${effectiveIdentityId}`), caseId: IDS.caseEmploymentId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
+    { id: stableId(`grantSupplier:${effectiveIdentityId}`), caseId: IDS.caseSupplierId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
+    { id: stableId(`grantCompliance:${effectiveIdentityId}`), caseId: IDS.caseComplianceId, permissions: ['MATTER_READ', 'UPDATE_READ'] },
   ];
   for (const g of grantRows) {
     await db.clientPortalGrant.upsert({
       where: { id: g.id },
-      update: {},
+      update: {
+        status: 'ACTIVE',
+        permissions: g.permissions,
+        validFrom: now,
+        validUntil: null,
+      },
       create: {
         id: g.id,
-        clientPortalIdentityId: IDS.identityId,
+        clientPortalIdentityId: effectiveIdentityId,
         workspaceId: IDS.workspaceId,
         clientId: IDS.clientId,
         caseId: g.caseId,

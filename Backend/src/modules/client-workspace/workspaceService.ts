@@ -182,10 +182,8 @@ export async function getPortalIdentityContext(session: ClientPortalSession, req
   const workspaces = await listAuthorizedPortalWorkspaces(session, db);
   const emptyState = workspaces.length === 0 ? await inactiveAccessState(session.clientPortalIdentityId, db) : null;
   const requested = String(requestedReference || '').trim();
-  const selected = requested
-    ? workspaces.find((workspace) => workspace.publicReference === requested)
-    : workspaces.length === 1 ? workspaces[0] : undefined;
-  if (requested && !selected) throw new ClientWorkspaceError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'The requested workspace is not available.');
+  const matched = requested ? workspaces.find((workspace) => workspace.publicReference === requested) : undefined;
+  const selected = matched || (workspaces.length === 1 ? workspaces[0] : undefined);
   return {
     identity: { displayName: session.displayName, email: session.normalizedEmail, accountType: session.accountType },
     state: emptyState || (selected ? 'READY' : 'SELECTION_REQUIRED'),
@@ -319,10 +317,8 @@ async function resolveOnboardingState(session: ClientPortalSession, db: Prisma =
 
 function selectionView(workspaces: Awaited<ReturnType<typeof activeWorkspaceRows>>, requestedReference?: string | null) {
   const requested = String(requestedReference || '').trim();
-  const selected = requested
-    ? workspaces.find((workspace) => workspace.publicReference === requested)
-    : workspaces.length === 1 ? workspaces[0] : undefined;
-  if (requested && !selected) throw new ClientWorkspaceError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'The requested workspace is not available.');
+  const matched = requested ? workspaces.find((workspace) => workspace.publicReference === requested) : undefined;
+  const selected = matched || (workspaces.length === 1 ? workspaces[0] : null);
   const strip = ({ id: _id, clientId: _clientId, membershipId: _membershipId, ...rest }: (typeof workspaces)[number]) => rest;
   return {
     state: (selected ? 'READY' : 'SELECTION_REQUIRED') as 'READY' | 'SELECTION_REQUIRED',
@@ -355,10 +351,13 @@ export async function resolvePortalWorkspace(session: ClientPortalSession, reque
   const workspaces = await listAuthorizedPortalWorkspaces(session, db);
   const requested = String(requestedReference || '').trim();
   if (!workspaces.length) throw new ClientWorkspaceError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
-  if (!requested && workspaces.length > 1) throw new ClientWorkspaceError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
-  const selected = requested ? workspaces.find((workspace) => workspace.publicReference === requested) : workspaces[0];
-  if (!selected) throw new ClientWorkspaceError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'The requested workspace is not available.');
-  return selected;
+  if (requested) {
+    const selected = workspaces.find((workspace) => workspace.publicReference === requested);
+    if (!selected) throw new ClientWorkspaceError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'The requested workspace is not available.');
+    return selected;
+  }
+  if (workspaces.length === 1) return workspaces[0];
+  throw new ClientWorkspaceError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
 }
 
 export async function listAdminWorkspaces(actor: InternalActor, clientId?: string, db: Prisma = defaultPrisma) {

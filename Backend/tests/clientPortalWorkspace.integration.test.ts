@@ -77,6 +77,17 @@ d('CP0 workspace authorization (PostgreSQL)', () => {
     const multiple = await getPortalIdentityContext(session, null, db);
     expect(multiple.state).toBe('SELECTION_REQUIRED');
     expect(multiple.workspaces.map((workspace) => workspace.mode).sort()).toEqual(['CASE_RELAY', 'INDIVIDUAL']);
+
+    // Stale workspace reference on multiple workspaces is discarded -> SELECTION_REQUIRED
+    const multipleWithStale = await getPortalIdentityContext(session, 'stale-localstorage-ref', db);
+    expect(multipleWithStale.state).toBe('SELECTION_REQUIRED');
+    expect(multipleWithStale.selectedWorkspace).toBeNull();
+
+    // Valid explicit selection on multiple workspaces -> READY
+    const multipleWithExplicit = await getPortalIdentityContext(session, individual.publicReference, db);
+    expect(multipleWithExplicit.state).toBe('READY');
+    expect(multipleWithExplicit.selectedWorkspace?.publicReference).toBe(individual.publicReference);
+
     await expect(resolvePortalWorkspace(session, 'forged-workspace', db)).rejects.toMatchObject({ code: 'CLIENT_WORKSPACE_FORBIDDEN' });
 
     const selected = await resolvePortalWorkspace(session, individual.publicReference, db);
