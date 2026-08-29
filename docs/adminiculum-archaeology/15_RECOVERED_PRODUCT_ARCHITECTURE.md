@@ -44,7 +44,7 @@ EMAIL ARRIVES
 2. **Merge the `peterfi` communication stack** (client-wide read model + case-first context + composition contract) → email→client→case is comprehensible end-to-end.
 3. **Reconnect case→workpackage → workflow → tasks** on the modern intake path → a new matter gets a real workable scope + DAG tasks.
 4. **Add case-level reviewer + responsible** at creation (the only true greenfield in the spine).
-5. **Re-surface document version-history + wire DOCX/PDF text-diff** (backends exist) → document value is no longer trapped.
+5. **Wire DOCX/PDF text-diff** (extractor exists) → document value is no longer trapped. (Immutable `DocumentVersion` history already works — no re-surfacing needed.)
 6. **Add internal-intake → portal grant** (schema/permission) → matters become client-visible.
 
 ## Explicitly NOT in scope (greenfield, deferred)

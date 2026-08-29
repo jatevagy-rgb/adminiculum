@@ -4,7 +4,7 @@
 
 ## Headline finding
 
-**There is no single `WorkflowInstance`/`WorkflowEngine` persistence model.** The modern engine stamps a DAG onto real `Task` rows via nullable string columns (`Task.workflowInstanceId/workflowTemplateKey/workflowTemplateVersion/workflowStepKey/workflowDependsOnKeys[]/workflowActivatedAt`). **Seven distinct workflow-like mechanisms coexist** in canonical. No `workflowInstance`/`workItem`/`Workflow` Prisma model exists; `Task.workflowInstanceId` (`schema.prisma:1576`) is a plain `randomUUID` string, not an FK.
+**There is no single `WorkflowInstance`/`WorkflowEngine` persistence model.** The modern engine stamps a DAG onto real `Task` rows via nullable string columns (`Task.workflowInstanceId/workflowTemplateKey/workflowTemplateVersion/workflowStepKey/workflowDependsOnKeys[]/workflowActivatedAt`). **Nine distinct workflow-like mechanisms coexist** in canonical (E1 V1 status, E2 V2 state machine, E3 DAG/orchestration, E4 work-package, E5a lifecycle, E5b intake, E6 task lifecycle, E7a document review, E7b work-items). No `workflowInstance`/`workItem`/`Workflow` Prisma model exists; `Task.workflowInstanceId` (`schema.prisma:1576`) is a plain `randomUUID` string, not an FK.
 
 ## Engine 1 — Case Workflow Engine **V1** (status-transition + SharePoint-move)
 

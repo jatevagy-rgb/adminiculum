@@ -36,7 +36,7 @@ Gated by `ENABLE_OUTLOOK_IMPORT === 'true'` (default OFF) **and** `COMMUNICATION
 | Element | What existed | Classification |
 |---|---|---|
 | Persistence | `Communication` + `CommunicationAttachment` + enums `CommunicationType/CommunicationDirection/CommunicationSource{MANUAL,OUTLOOK}/CommunicationSyncStatus{IMPORTED,PENDING,FAILED}`; provider columns `externalMessageId(unique), providerConversationId, mailboxAddress, direction, receivedAt, sentAt, source, syncStatus, importedAt, metadata(Json), recipients(Json)` | **REAL_FOUNDATION** |
-| Thread model | only `providerConversationId` (Graph conversationId) — "provider-derived, not a persisted thread model"; `applySafeConversationLinkage` | **REAL_FOUNDATION** (no persisted thread) |
+| Thread model | only `providerConversationId` (Graph conversationId) — "provider-derived, not a persisted thread model"; `applySafeConversationLinkage`. **Scope: Outlook Communication only.** Customer-portal `ClientQuestionThread` + `ClientQuestionThreadReadState` exist separately as a distinct model family | **REAL_FOUNDATION** (no persisted comm thread) |
 | Unread/read | **none** for communications; frontend honest empty states ("Státusz: nincs perzisztált adat", "válaszállapot csak későbbi modellből") | **NEVER_REAL / HONEST_EMPTY_STATE** |
 | Attachments | metadata-only by design (`ATTACHMENT_METADATA_FIELDS=['id','name','contentType','size']`, `397b770`); no binaries/MIME | **REAL_FOUNDATION** |
 | Case linking | `POST /:id/link-case`, `POST /:id/create-case` (atomic `$transaction`, `ab5b96d`), `/:id/extract-task`, `/:id/extract-deadline`, `/:id/link-task`, `/:id/add-attachment` | **REAL_FOUNDATION** |
@@ -79,7 +79,7 @@ Gated by `ENABLE_OUTLOOK_IMPORT === 'true'` (default OFF) **and** `COMMUNICATION
 ## Bottom-line verdict
 
 - **Production Outlook IS genuinely connected end-to-end** on the sync path (real app-only Graph auth + inbound read + persist + safe thread→case linkage), gated OFF-by-default. This is **REAL_FOUNDATION**, not a facade.
-- **It is NOT a complete mail system**: inbound-only (no send/drafts); bounded poll (no delta/subscription/webhook); no unread/read/reply state (honestly shown as empty states); no conversation entity (thread = provider `conversationId` + linkage inference); app-only auth (no user OAuth/MSAL in the sync path); feature-gated OFF → every Outlook endpoint (incl. the UI button) returns 501 unless enabled.
+- **It is NOT a complete mail system** (all scoped to **Outlook Communication**): inbound-only (no send/drafts); bounded poll (no delta/subscription/webhook); no **Outlook-communication** unread/read/reply state (honestly shown as empty states); no conversation entity (thread = provider `conversationId` + linkage inference); app-only auth (no user OAuth/MSAL in the sync path); feature-gated OFF → every Outlook endpoint (incl. the UI button) returns 501 unless enabled. (Customer-portal `ClientQuestionThread`/read-state is a separate model family and is NOT claimed here.)
 - **The dry-run + `/outlook/import` endpoints normalize only** — they never open a Graph connection.
 - **No in-repo live/E2E Graph test exists** — all Graph contact is via fakes.
 

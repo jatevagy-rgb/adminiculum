@@ -6,9 +6,9 @@
 |---|---|---|---|
 | Outlook communication refresh (UI "frissítés") | Real sync button (`CommunicationsOverview.tsx`) → `runOutlookSync()` → live Graph reader | Feature-gated OFF by default (`ENABLE_OUTLOOK_IMPORT='true'`) + requires `OUTLOOK_GRAPH_*` env; otherwise 501 | **UI_WITHOUT_LIVE_INTEGRATION (by default)** |
 | Outlook import / dry-run endpoints | `POST /outlook/import-dry-run`, `POST /outlook/import` | Normalize a provider-shaped/mock payload only — never opens a Graph connection | **ROUTE_WITHOUT_ACTUAL_PROVIDER** |
-| Communication unread / reply / thread | none surfaced (honest empty states) | No schema, no model — intentionally honest | **HONEST_EMPTY_STATE (not fake)** |
+| Communication unread / reply / thread (Outlook Communication only) | none surfaced (honest empty states) | No schema, no model — intentionally honest. Customer-portal `ClientQuestionThread`/read-state is a separate model family | **HONEST_EMPTY_STATE (not fake)** |
 | Case → portal visibility | internal intake create cases | no grant/publication for internal matters → never portal-visible | **BACKEND_WITHOUT_PRODUCT_UX (path)**, PARTIAL |
-| Version-history UI | DocumentVersion backend + `versions` prop | presentation not surfaced from the case page | **BACKEND_WITHOUT_NAVIGATION** |
+| Version-history (immutable DocumentVersion) | case document UI loads/upload/downloads/promotes/render history | **NOT fake / NOT incomplete** — the immutable version lifecycle is genuinely usable. Only the legacy editor working-copy/autosave save path was removed by design | **REAL (retained)** |
 | Document text-diff (compare) | structured compare + metadata compare | DOCX/PDF gated as non-text; only metadata/structured TXT-ish compare exists; AGENTS.md even claims "metadata-only" | **MOCK_ONLY / INCOMPLETE** |
 | Billing foundation | TimeEntry + Matter | no invoice/export engine — placeholder only | **PLACEHOLDER_ONLY** |
 | Case-level reviewer | DocumentReview reviewer | never assigned at case creation | **MISSING** |
@@ -23,4 +23,4 @@
 
 ## How to read this
 
-These are NOT "broken features to rip out". They are honest gap markers: the product openly shows empty states where no real persistence exists (good), and several backend capabilities are real but simply not (yet) surfaced or connected end-to-end. The highest-leverage "fake→real" conversions are: (1) DOCX/PDF **text-diff** via existing extractor, (2) **case→workpackage** on modern paths, (3) **version-history** presentation, (4) **case→portal** for internal intake, and (5) enabling + credentialing the real **Outlook sync**.
+These are NOT "broken features to rip out". They are honest gap markers: the product openly shows empty states where no real persistence exists (good), and several backend capabilities are real but simply not (yet) surfaced or connected end-to-end. The highest-leverage "fake→real" conversions are: (1) DOCX/PDF **text-diff** via existing extractor, (2) **case→workpackage** on modern paths, (3) **case→portal** for internal intake, and (4) enabling + credentialing the real **Outlook sync**. (Immutable `DocumentVersion` history is NOT fake — it already works at canonical.)

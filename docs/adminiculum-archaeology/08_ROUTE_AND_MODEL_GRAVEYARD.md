@@ -55,7 +55,7 @@ Present & mounted: `auth`, `users`, `cases` (CRUD + lifecycle + intake + work-it
 | `ClientSubmission` / `ClientQuestionThread` / `ClientOperatingProfile` | **MIGRATED** | origins `6fc5582`/`b225752`/`1ae6b9b` |
 | `OrganizationPerson` | **RENAMED** (org-units → person-centric) | origin `0b2a7d6` |
 | `WorkItem` / `WorkPackage` / `WorkflowTask` / `Deadline` (unqualified) | **NEVER-NAMED / DUPLICATED** — never existed as model names; functionality lives as `Task`, `WorkflowTemplate`, `CaseWorkPackage*`, `CaseIntakeDeadline` | schema search |
-| `Communication` thread/unread entities | **SEMANTICS_LOST / SHOULD_NOT_RETURN for now** (no thread/unread model; honest empty states; needs schema for a real thread model — `THREAD_PERSISTENCE_FOLLOWUP=YES`) | schema @ canonical |
+| `Communication` thread/unread entities (Outlook only) | **SEMANTICS_LOST / SHOULD_NOT_RETURN for now** (no comm thread/unread model; honest empty states; needs schema for a real comm thread model — `THREAD_PERSISTENCE_FOLLOWUP=YES`). Customer-portal `ClientQuestionThread` + read-state are a SEPARATE model family (not Outlook Communication) | schema @ canonical |
 | `WorkflowInstance` / `workItem` / `Workflow` (single engine) | **DOES NOT EXIST** — DAG stamped on `Task` columns | schema @ canonical |
 | `DocumentVersion`-editor working-copy semantics | **REMOVED BY DESIGN** (guards strip autosave/track-changes/workspaceText) — do NOT return a browser clone | `documentEditorProStaticGuards.test.ts` |
 | Mock portal uploads/documents (synthetic) | **SHOULD_NOT_RETURN** — `mockPortalData`, violates product-truthfulness; superseded by CP identity model | `codex/ops-pages-ux-cleanup-1`, `claude/next-development` (never merged) |
@@ -65,4 +65,4 @@ Present & mounted: `auth`, `users`, `cases` (CRUD + lifecycle + intake + work-it
 - **Correctly removed:** the mock portal generation (synthetic data), the non-portal UX panel duplicates (`Ügyállapot`/`Adatforrások` decorative boxes in legacy `CaseDetail`), the browser-Word-clone save semantics.
 - **Renamed/migrated, not lost:** clientUserId→identity, account type, organization-persons, matters→`/cases`.
 - **Duplicated, not removed:** `app/documents/compare` vs `ComparisonWorkspace`; two communication inboxes (`/communications` + `/notifications`).
-- **Recovery candidates (no backend change):** DOCX/PDF text-diff (extractor exists), version-history presentation, review-lifecycle wiring from the documents page.
+- **Recovery candidates (no backend change):** DOCX/PDF text-diff (extractor exists), review-lifecycle wiring from the documents page. (Immutable `DocumentVersion` history — load/upload/download/promote/render — **already survives** on the case document UI; only the legacy editor working-copy/autosave semantics were intentionally removed.)

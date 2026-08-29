@@ -67,7 +67,7 @@
 | MR | Current canonical | Historical best | Draft branch | Lost semantics | Reusable foundation | Missing connection | True greenfield | Action |
 |----|------------------|-----------------|--------------|----------------|----------------------|--------------------|------------------|--------|
 | MR-045 Document workspace | full | — | — | — | documents/*, ledger | — | no | KEEP |
-| MR-046 Document versions | backend-only | — | — | version-history UI removed | DocumentVersion endpoints | surface history in docs page | no | FINISH |
+| MR-046 Document versions | immutable version lifecycle works (load/upload/download/promote/render history) | — | — | legacy editor working-copy/autosave semantics removed (intentional) | DocumentVersion endpoints + case document UI | — | no | KEEP |
 | MR-047 Text extraction | backend-only | — | — | — | textExtractor (mammoth/pdf-parse) | wire into compare | no | RECONNECT |
 | MR-048 Structured comparison | full | — | — | — | diffEngine + ComparisonWorkspace | — | no | KEEP |
 | MR-049 Text-diff (DOCX/PDF) | gated off | extractor exists | — | — | textExtractor | resolver gate → extractor | no (recover) | RECONNECT |

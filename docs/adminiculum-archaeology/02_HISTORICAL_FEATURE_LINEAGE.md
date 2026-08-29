@@ -2,7 +2,7 @@
 
 Assigns to every MR capability ALL applicable historical-state labels. Labels defined by the audit brief. Confidence noted where a label is STRONGLY_INDICATED vs PROVEN. Evidence lives in the domain files (`03`–`08`) and register (`01`).
 
-**Label legend:** `CC=WORKING` CURRENT_CANONICAL_WORKING · `CC_UNREACH` CURRENT_CANONICAL_BUT_UNREACHABLE · `CC_BE` CURRENT_CANONICAL_BACKEND_ONLY · `CC_UI` CURRENT_CANONICAL_UI_ONLY · `CC_PARTIAL` CURRENT_CANONICAL_PARTIAL · `OLD_WORK` OLD_VERSION_WORKING · `OLD_MORE` OLD_VERSION_MORE_COMPLETE_THAN_CURRENT · `OLD_PARTIAL` OLD_VERSION_PARTIAL · `OLD_CORRECT` OLD_VERSION_SUPERSEDED_CORRECTLY · `OLD_LOST` OLD_VERSION_SUPERSEDED_WITH_LOST_SEMANTICS · `DRAFT_MORE` DRAFT_BRANCH_MORE_COMPLETE · `DRAFT_PARTIAL` DRAFT_BRANCH_PARTIAL · `DRAFT_STALE` DRAFT_BRANCH_STALE_ARCHITECTURE · `DRAFT_REPLAY` DRAFT_BRANCH_SEMANTIC_REPLAY_CANDIDATE · `REMOVED_BE` REMOVED_FROM_UI_BUT_BACKEND_EXISTS · `REMOVED_UI` REMOVED_FROM_BACKEND_BUT_UI_REMAINS · `RENAMED` RENAMED_NOT_REMOVED · `DUP` DUPLICATED_IMPLEMENTATION · `PARALLEL` PARALLEL_ENGINE · `DEAD_END` DEAD_END_IMPLEMENTATION · `PLANNED` PLANNED_ONLY · `GREENFIELD` TRUE_GREENFIELD · `UNKNOWN`.
+**Label legend:** `CC=KEEP_CANDIDATES` CURRENT_CANONICAL_KEEP_CANDIDATES (recommended primary action KEEP; **does NOT** imply end-to-end production-wired — see `17` count reconciliation) · `CC_UNREACH` CURRENT_CANONICAL_BUT_UNREACHABLE · `CC_BE` CURRENT_CANONICAL_BACKEND_ONLY · `CC_UI` CURRENT_CANONICAL_UI_ONLY · `CC_PARTIAL` CURRENT_CANONICAL_PARTIAL · `OLD_WORK` OLD_VERSION_WORKING · `OLD_MORE` OLD_VERSION_MORE_COMPLETE_THAN_CURRENT · `OLD_PARTIAL` OLD_VERSION_PARTIAL · `OLD_CORRECT` OLD_VERSION_SUPERSEDED_CORRECTLY · `OLD_LOST` OLD_VERSION_SUPERSEDED_WITH_LOST_SEMANTICS · `DRAFT_MORE` DRAFT_BRANCH_MORE_COMPLETE · `DRAFT_PARTIAL` DRAFT_BRANCH_PARTIAL · `DRAFT_STALE` DRAFT_BRANCH_STALE_ARCHITECTURE · `DRAFT_REPLAY` DRAFT_BRANCH_SEMANTIC_REPLAY_CANDIDATE · `REMOVED_BE` REMOVED_FROM_UI_BUT_BACKEND_EXISTS · `REMOVED_UI` REMOVED_FROM_BACKEND_BUT_UI_REMAINS · `RENAMED` RENAMED_NOT_REMOVED · `DUP` DUPLICATED_IMPLEMENTATION · `PARALLEL` PARALLEL_ENGINE · `DEAD_END` DEAD_END_IMPLEMENTATION · `PLANNED` PLANNED_ONLY · `GREENFIELD` TRUE_GREENFIELD · `UNKNOWN`.
 
 ## Case domain
 
@@ -55,7 +55,7 @@ Assigns to every MR capability ALL applicable historical-state labels. Labels de
 | MR-035 | CC_WORKING |
 | MR-036 | CC_WORKING |
 | MR-037 | CC_WORKING (metadata-only, deliberate) |
-| MR-038 | CC_BE (provider-derived thread key, no persisted thread); OLD_MORE/PLANNED for a real thread model (no schema) |
+| MR-038 | CC_BE (provider-derived thread key on **Outlook Communication**; no persisted comm thread); OLD_MORE/PLANNED for a real comm thread model (needs schema). Note: customer-portal `ClientQuestionThread` + read-state exist separately, NOT part of Outlook Communication |
 | MR-039 | PLANNED / NEVER_REAL (honest empty states) |
 | MR-040 | GREENFIELD (no outgoing mail anywhere) |
 | MR-041 | CC_WORKING |
@@ -68,7 +68,7 @@ Assigns to every MR capability ALL applicable historical-state labels. Labels de
 | MR | Lineage labels |
 |----|----------------|
 | MR-045 | CC_WORKING |
-| MR-046 | CC_BE (backend list/get/promote complete); REMOVED_BE (version-history UI stripped by guards); RECOVERY of presentation only |
+| MR-046 | CC_KEEP (immutable `DocumentVersion` lifecycle survives: load/upload/download/promote-current/render history on the case document UI); OLD_LOST (legacy editor working-copy autosave/track-changes semantics removed — intentional, Word-primary rule) |
 | MR-047 | CC_BE (extraction engine present, used by anonymize only) |
 | MR-048 | CC_WORKING (structured diff + ComparisonWorkspace); DUP (legacy `app/documents/compare` still routed+referenced) |
 | MR-049 | CC_PARTIAL/REMOVED_BE (DOCX/PDF gated as non-text despite extractor present) — largest recoverable gap |

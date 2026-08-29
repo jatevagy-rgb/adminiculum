@@ -60,7 +60,7 @@ A stable audit id (`MR-###`) is assigned to EVERY roadmap capability. The same i
 | MR-035 | Communication → case association | `POST /communications/:id/link-case`, `/:id/create-case` (atomic, `ab5b96d`); frontend assign/create-case | PROVEN |
 | MR-036 | Communication → client association | `POST /communications/:id/link-client` (`linkCommunicationToClient`); client/case-mismatch guard | PROVEN |
 | MR-037 | Communication attachments (metadata) | `CommunicationAttachment` metadata-only (`ATTACHMENT_METADATA_FIELDS`, `397b770`); no binaries | PROVEN |
-| MR-038 | Thread model | Only `providerConversationId` (Graph conversationId), "provider-derived, not a persisted thread model"; `applySafeConversationLinkage` | PROVEN |
+| MR-038 | Thread model (Outlook Communication) | Only `providerConversationId` (Graph conversationId), "provider-derived, not a persisted thread model"; `applySafeConversationLinkage`. Customer-portal `ClientQuestionThread` + read-state exist separately (not Outlook Communication) | PROVEN |
 | MR-039 | Unread / read / reply state | **None** for communications (honest empty states: "nincs perzisztált adat"; "válaszállapot csak későbbi modellből") | PROVEN |
 | MR-040 | Outgoing mail | **None** — no Graph `sendMail`/draft/send; `OUTBOUND` only a derived flag on manual/imported rows | PROVEN |
 | MR-041 | Communication → task extraction | `POST /:id/extract-task` (`extractTaskFromCommunication`), `:id/link-task`; UI button | PROVEN |
@@ -73,7 +73,7 @@ A stable audit id (`MR-###`) is assigned to EVERY roadmap capability. The same i
 | MR | Capability | Canonical state (evidence) | Confidence |
 |----|-----------|---------------------------|-----------|
 | MR-045 | Document Workspace (ledger/upload/download) | `app/cases/[caseId]/documents/page.tsx` (3-category ledger), `modules/documents/*`, `uploadCaseDocument`/`downloadDocument` | PROVEN |
-| MR-046 | Document versions | `DocumentVersion` model + list/get/promote-current/download (routes 475/490/612/630/658); version-history UI disconnected (see `06_…`) | PROVEN |
+| MR-046 | Document versions | `DocumentVersion` model + list/get/promote-current/download + load versions + render history (routes 475/490/612/630/658); **immutable version lifecycle survives** — only legacy editor working-copy/autosave semantics removed (see `06`) | PROVEN |
 | MR-047 | Document text extraction (DOCX/PDF) | `textExtractor.ts` (mammoth + pdf-parse) used by anonymization; NOT wired into compare | PROVEN |
 | MR-048 | Document comparison (structured) | `diffEngine` (`adaa1af`) + `comparison.routes.ts` typed segments (ChangeType/SegmentCategory/ReviewState) + `ComparisonWorkspace.tsx` | PROVEN |
 | MR-049 | Text-diff (DOCX/PDF) | Comparison resolver gates DOCX/PDF as `FORMAT_NOT_TEXT_EXTRACTABLE` (`versionText.ts:30-36`) **despite** `textExtractor.ts` — the largest disconnected/recoverable gap | PROVEN |

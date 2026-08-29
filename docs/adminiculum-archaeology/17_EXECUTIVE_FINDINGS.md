@@ -4,20 +4,20 @@
 
 ## The one-sentence finding
 
-**Adminiculum already contains ~63% of the communicated master roadmap as working or semi-working code; the real deficit is broken CONNECTIONS (case→work-package on modern paths, case→portal for internal intake, DOCX/PDF text-diff, version-history UI) plus a small set of true greenfield (persisted thread/unread/reply, outgoing mail, case-level reviewer, billing).**
+**Adminiculum already contains a large majority of the communicated master roadmap as working or semi-working code; the real deficit is broken CONNECTIONS (case→work-package on modern paths, case→portal for internal intake, DOCX/PDF text-diff) plus a small set of true greenfield (persisted thread/unread/reply, outgoing mail, case-level reviewer, billing). Immutable `DocumentVersion` history already works — it is not a deficit.**
 
 ## Headline metrics
 
 - **CURRENT_CANONICAL=** `50945ecd309c4c609fc48d07218fe42917ab8e82`
 - **MASTER_ROADMAP_ITEMS_TOTAL=** `90` (MR-001…MR-090)
-- **CURRENT_CANONICAL_WORKING=** `57` (KEEP — live & reachable)
-- **CURRENT_CANONICAL_PARTIAL=** `18` (FINISH — foundation exists, incomplete/disconnected)
-- **CURRENT_BACKEND_ONLY=** `~7` (MR-012, 013, 046, 047, 070, 085, 038)
+- **CURRENT_CANONICAL_KEEP_CANDIDATES=** `58` (primary action KEEP; **does NOT** imply end-to-end production-wired — see count reconciliation below)
+- **CURRENT_CANONICAL_PARTIAL=** `17` (FINISH — foundation exists, incomplete/disconnected)
+- **CURRENT_BACKEND_ONLY=** `~6` (MR-012, 013, 047, 070, 085, 038)
 - **CURRENT_UI_ONLY=** `1` (MR-058 prompt catalog is component-only) — plus several backend-only fall in above
 - **HISTORICALLY_WORKING_CAPABILITIES_FOUND=** `14` (see `12`)
-- **OLD_VERSION_MORE_COMPLETE_THAN_CURRENT=** `4` (demoted-grant-ease, case→workpackage, version-history, doc text-diff — the last three are recoverable)
+- **OLD_VERSION_MORE_COMPLETE_THAN_CURRENT=** `3` (demoted-grant-ease [intentional], case→workpackage [recoverable], doc text-diff [recoverable]) — version-history removed from this list (it survives)
 - **LOST_SEMANTICS_FOUND=** `8` (see `12` / `05`)
-- **REMOVED_BUT_RECOVERABLE=** `4` (workpackage-on-modern-paths, DOCX text-diff, version-history UI, SP-folder-move? — the first three proven)
+- **REMOVED_BUT_RECOVERABLE=** `3` (workpackage-on-modern-paths, DOCX text-diff, SP-folder-move? — the first two proven)
 - **DRAFT_REPLAY_CANDIDATES=** `5` (`peterfi/communication-workspace-canonical`, `case-first-communication-context`, `case-overview-communication-snapshot`, `client-overview-communication-snapshot`, `client-communication-summary-read-model`)
 - **TRUE_GREENFIELD_ITEMS=** `5` (MR-012 case reviewer, MR-038 thread, MR-039 unread/reply, MR-040 outgoing mail, MR-075 billing)
 
@@ -37,18 +37,18 @@
 ## Historical completeness indexes
 
 - **CASE_INTAKE_HISTORICAL_COMPLETENESS=** PROVEN — ≥4 creation paths + transactional intake; but workpackage/reviewer/portal are NOT wired on modern paths (`05`)
-- **DOCUMENT_HISTORICAL_COMPLETENESS=** HIGH — review lifecycle + structured compare + anonymize/rehydrate + publication all survive; DOCX/PDF text-diff + version-history UI disconnected (`06`)
+- **DOCUMENT_HISTORICAL_COMPLETENESS=** HIGH — review lifecycle + structured compare + anonymize/rehydrate + publication + immutable `DocumentVersion` history all survive; DOCX/PDF text-diff disconnected (`06`)
 - **PORTAL_HISTORICAL_COMPLETENESS=** HIGH — onboarding + membership + workspace/grant + CASE_RELAY/ORG all PROVEN working; only the grant→browse ease regressed (`07`)
 
 ## Connections
 
 - **BROKEN_CONNECTIONS_TOTAL=** `6` (case→workpackage modern paths, case→portal internal intake, doc→text-diff, comm-attr→document, intake-deadline→agenda, comm→responsible)
 - **HISTORICALLY_WORKING_CONNECTIONS_TOTAL=** `~14` (spine mostly intact — see `10`)
-- **RECOVERABLE_CONNECTIONS_TOTAL=** `5` (workpackage, text-diff, version-history, comm→responsible, intake→agenda) plus `1` requiring schema (internal-intake→portal)
+- **RECOVERABLE_CONNECTIONS_TOTAL=** `4` (workpackage, text-diff, comm→responsible, intake→agenda) plus `1` requiring schema (internal-intake→portal)
 
 ## Reuse
 
-- **ROADMAP_ITEMS_WITH_EXISTING_REUSABLE_FOUNDATION=** `60` (KEEP 57 + RECONNECT 3) — i.e., ~2/3 of the roadmap is not greenfield
+- **ROADMAP_ITEMS_WITH_EXISTING_REUSABLE_FOUNDATION=** `85` (90 − 5 BUILD_NEW) — i.e., only ~5 items truly start from zero
 - **ROADMAP_ITEMS_TRULY_STARTING_FROM_ZERO=** `5` (BUILD_NEW)
 
 ## TOP-10 "we already built this"
@@ -57,16 +57,16 @@
 
 ## TOP-10 "we lost or disconnected"
 
-1. Case→work-package on modern creation paths · 2. DOCX/PDF text-diff (extractor exists, gated off) · 3. Version-history presentation · 4. Case→portal for internally-intaken matters · 5. Communication create-case responsible lawyer · 6. Intake typed deadlines → agenda · 7. V1 case-status→SharePoint-folder move (superseded) · 8. Grant→browse portal ease (intentional) · 9. Global attention inbox surface · 10. Standalone clause-library/handoff/settings pages
+1. Case→work-package on modern creation paths · 2. DOCX/PDF text-diff (extractor exists, gated off) · 3. Editor working-copy/autosave save semantics (removed by design — NOT a recoverable loss; immutable `DocumentVersion` history survives) · 4. Case→portal for internally-intaken matters · 5. Communication create-case responsible lawyer · 6. Intake typed deadlines → agenda · 7. V1 case-status→SharePoint-folder move (superseded) · 8. Grant→browse portal ease (intentional) · 9. Global attention inbox surface · 10. Standalone clause-library/handoff/settings pages
 
 ## TOP-10 connections to restore first
 
-1. case→workpackage (intake/comm/portal) · 2. document→text-diff (DOCX/PDF) · 3. case→portal grant (internal intake) · 4. version-history UI · 5. comm-create-case→responsible · 6. intake-deadline→agenda · 7. enable+credential real Outlook sync · 8. merge `peterfi` communication read-model/context · 9. converge two inboxes / two compares · 10. wire global attention center
+1. case→workpackage (intake/comm/portal) · 2. document→text-diff (DOCX/PDF) · 3. case→portal grant (internal intake) · 4. comm-create-case→responsible · 5. intake-deadline→agenda · 6. enable+credential real Outlook sync · 7. merge `peterfi` communication read-model/context · 8. converge two inboxes / two compares · 9. wire global attention center · 10. (later) persisted Outlook thread/unread via schema
 
 ## Findings (severity)
 
 - **P0 (highest-leverage recoverable):** (1) case→workpackage broken on the modern default intake path — new matters cannot instantiate a real workable scope; (2) DOCX/PDF text-diff disabled despite the extraction engine present — the primary Word corpus is excluded from the product's own compare, and AGENTS.md "compare is metadata-only" is now FALSE; (3) internal intake / communication-created matters never become portal-visible; (4) communication create-case sets no responsible lawyer.
-- **P1:** duplicated surfaces (two communication inboxes, two compare surfaces); V1 workflow engine + stale routes comment; intake `caseIntakeDeadline` not mirrored to `Case.deadline`; version-history UI removed; Outlook sync gate OFF by default (a real feature that appears missing); several backends with no UI (search, classify, change report).
+- **P1:** duplicated surfaces (two communication inboxes, two compare surfaces); V1 workflow engine + stale routes comment; intake `caseIntakeDeadline` not mirrored to `Case.deadline`; Outlook sync gate OFF by default (a real feature that appears missing); several backends with no UI (search, classify, change report). (Editor working-copy/autosave removal is correct-by-design, NOT a P1 regression.)
 - **P2:** standalone surfaces absent (clause-library, handoff, settings, review-queue, prompt board); a stale-architecture branch family (`next-development`, `ops-pages-ux-cleanup-1`, `runtime-shape-20260308`) carrying a synthetic-data mock portal that must NOT be merged.
 
 ## PRODUCT_ARCHAEOLOGY_CONFIDENCE
@@ -83,7 +83,7 @@
 
 ## Executive bottom line
 
-The highest-value work is **not** building new features. It is (a) **merging the `peterfi` communication read-model/context stack** (fail-closed, no N+1) which this workspace already built, (b) **reconnecting case→workpackage→portal** on the modern creation paths, and (c) **flipping on DOCX/PDF text-diff + version-history** from existing backends. True greenfield is confined to thread/unread/reply, outgoing mail, case-level reviewer, and billing.
+The highest-value work is **not** building new features. It is (a) **merging the `peterfi` communication read-model/context stack** (fail-closed, no N+1) which this workspace already built, (b) **reconnecting case→workpackage→portal** on the modern creation paths, and (c) **flipping on DOCX/PDF text-diff** from an existing extractor. True greenfield is confined to thread/unread/reply, outgoing mail, case-level reviewer, and billing.
 
 ---
 
@@ -97,8 +97,8 @@ Each MR carries exactly **one** primary action (see `09`). These are mutually ex
 
 | ACTION | count | MR ids (examples) |
 |---|---|---|
-| KEEP | 57 | 001,004,005,006,007,009,014-016,018-024,026-030,031,035,036,041,042,045,048,050-056,059-065,067-069,071-073,076,079,082-084,086-088,090 |
-| FINISH | 18 | 002,008,017,025,032,037,046,057,058,066,070,074,077,078,080,081,085,089 |
+| KEEP | 58 | 001,004,005,006,007,009,014-016,018-024,026-031,035,036,041,042,045,046,048,050-056,059-065,067-069,071-073,076,079,082-084,086-088,090 |
+| FINISH | 17 | 002,008,017,025,032,037,057,058,066,070,074,077,078,080,081,085,089 |
 | RECONNECT | 5 | 003,010,013,047,049 |
 | MERGE_EXISTING_COMPONENTS | 3 | 011,043,044 |
 | REPLACE_BAD_CURRENT_UI | 1 | 034 |
@@ -110,9 +110,9 @@ Each MR carries exactly **one** primary action (see `09`). These are mutually ex
 
 These describe FACETS and can overlap each other and Lens A. They are **not** a partition and must not be summed with Lens A:
 
-- `CURRENT_CANONICAL_WORKING` (57 in the executive) == the KEEP bucket. It is a convenient shorthand but is NOT a proof that all 57 are fully end-to-end working — e.g. MR-013 (case→portal), MR-025 (CASE_RELAY), MR-038 (thread) carry additional PARTIAL/BACKEND_ONLY labels in `02`. So **WORKING is a sub-approximation of KEEP, not a disjoint fact.**
-- `CURRENT_CANONICAL_PARTIAL` (18) == the FINISH bucket: foundations exist, surface-incomplete. Disjoint from KEEP, but **overlaps** the BACKEND_ONLY / UI_ONLY descriptors below.
-- `CURRENT_BACKEND_ONLY` (~7: MR-012, 013, 046, 047, 070, 075-adjacent, 085) is a **subset** of FINISH/KEEP — those MRs are also counted in Lens A. Adding ~7 to 57+18 **double-counts** them (the 57+18+~7+1 ≈ 83/84 appearance is a red herring).
+- `CURRENT_CANONICAL_KEEP_CANDIDATES` (58 in the executive) == the KEEP bucket. **It is a recommendation label, NOT proof that all 58 are end-to-end production-wired** — e.g. MR-013 (case→portal), MR-025 (CASE_RELAY), MR-038 (thread) carry additional PARTIAL/BACKEND_ONLY labels in `02`. So **KEEP is a keep-candidate classification, not a disjoint "all working" fact.**
+- `CURRENT_CANONICAL_PARTIAL` (17) == the FINISH bucket: foundations exist, surface-incomplete. Disjoint from KEEP, but **overlaps** the BACKEND_ONLY / UI_ONLY descriptors below.
+- `CURRENT_BACKEND_ONLY` (~6: MR-012, 013, 047, 070, 085, 038) is a **subset** of FINISH/KEEP — those MRs are also counted in Lens A. Adding ~6 to 58+17 **double-counts** them (the 58+17+~6+1 appearance is a red herring).
 - `CURRENT_UI_ONLY` (1: MR-058 prompt catalog) is also in the 90 (FINISH).
 - `PLANNED_ONLY` = 0 (the roadmap items we classified were all implemented at least partially; nothing is code-only-planned).
 - `TRUE_GREENFIELD / BUILD_NEW` (5) == the BUILD_NEW bucket; **disjoint** from the rest.
@@ -138,13 +138,14 @@ The audit deliberately keeps uncertainty rather than converting it. Boundaries, 
 - **Outlook real Graph inbound — PROVEN** (`outlookGraphLive.ts`: app-only `client_credentials` token → `GET /users/{mailbox}/messages`; `syncOutlookMailbox` calls `reader.fetchRecentInbound`). **Gated-off production state — PROVEN** (`ENABLE_OUTLOOK_IMPORT='true'` + `OUTLOOK_GRAPH_*` env; otherwise 501). The normalize-only `/outlook/import` + `/import-dry-run` are **PRIVATELY separate** (never contact Graph). No live/E2E Graph test → **OUTLOOK runtime reachability UNPROVEN (fake-fetch only)**.
 - **Case → work packet disconnected on modern paths — PROVEN** (`createCaseWorkPackageSnapshot` only in legacy `createCase`).
 - **DOCX/PDF text-diff disconnection — PROVEN** (`versionText.ts` gates DOCX/PDF as `FORMAT_NOT_TEXT_EXTRACTABLE` while `textExtractor.ts` has mammoth/pdf-parse). AGENTS.md "compare is metadata-only" is **now FALSE** at canonical (full diffEngine + typed segments exist).
-- **Version-history UI loss — PROVEN removal by design** (editor guards strip autosave/track-changes); **backend `DocumentVersion` intact PROVEN**; recovery is presentation-only.
+- **Version-history — NOT a loss.** Immutable `DocumentVersion` lifecycle (load/upload/download/promote-current/render history) **survives PROVEN** on the case document UI. Only the legacy editor working-copy **autosave/track-changes save path** was removed by design (editor guards strip `workspaceText`/`saveWorkspaceDocumentVersion`) — intentional, correct, Word-primary rule.
 - **Case → portal grant/intake gap — PROVEN** (only CP1 conversion yields grant+publication); the permission/schema to close it is **UNPROVEN/BUILD_NEW (MR-013)**.
 - **Communication create-case responsible gap — PROVEN** (`assignedLawyerId` never set on that path).
 - **Intake deadline → agenda gap — STRONGLY_INDICATED, NOT exhaustively traced** (`CaseIntakeDeadline` typed deadlines not mirrored to `Case.deadline`; `agenda/service.ts` reads `Case.deadline`).
 - **Historical membership/onboarding UX — PROVEN end-to-end** (JIT identity → PortalOnboarding → membership request → admin approval → re-login → case grant; all ancestors of canonical). The ease regression (grant→browse) is **intentional/security-hardening, not feature loss**.
-- **Workflow-engine count/classification — PROVEN** for file/route/model/mount; frontend reachability of a few routes (workflow-graph, work-items) is **UNPROVEN** (no consumer read).
-- **Draft communication stack** (`peterfi/…`) — **PROVEN ahead-of-canonical, not merged**; runtime behavior **UNPROVEN** (no node).
-- **Old vs current document generations — PROVEN** SHA lineage (GEN-1→GEN-2→GEN-3→CURRENT); the recoverable text-diff/version-history are **PROVEN** backend-side.
+- **Workflow-engine count/classification — PROVEN** for file/route/model/mount; the count is **9** engines; frontend reachability of a few routes (workflow-graph, work-items) is **UNPROVEN** (no consumer read).
+- **Draft communication stack** (`peterfi/…`) — **PROVEN ahead-of-canonical, not merged**; runtime behavior **UNPROVEN** (no node). Client-wide communication summary is **BRANCH-ONLY** (see `04`), not canonical.
+- **Outlook foundation vs runtime — PROVEN/UNPROVEN split.** Foundation (Graph reader, schema, sync service, route) = **PROVEN**; **live runtime = UNPROVEN/gated** (no live/E2E Graph test; `ENABLE_OUTLOOK_IMPORT` OFF + credentials required, so the UI button 501s by default).
+- **Old vs current document generations — PROVEN** SHA lineage (GEN-1→GEN-2→GEN-3→CURRENT); the recoverable item is **text-diff** (`PROVEN` backend-side); version-history is already present, not a recovery item.
 
 These boundaries are retained verbatim in `02`–`16`; nothing was smoothed toward a more positive reading.

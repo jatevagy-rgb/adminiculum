@@ -15,7 +15,7 @@
 | Workflow → Task | **WORKING_CANONICAL** | `instantiateCaseWorkflow` creates BLOCKED/TODO Tasks |
 | Task → Submission → Review | **WORKING_CANONICAL** | `TaskSubmission`/`TaskReviewDecision` + workspaces |
 | Task → Document (work-context) | **WORKING_CANONICAL** | `workContext.service.ts` two-way links |
-| Document → Versions | **WORKING_CANONICAL (backend)** ; version-history UI disconnected | `DocumentVersion` endpoints; see `06` |
+| Document → Versions | **WORKING_CANONICAL** (immutable `DocumentVersion` flow: load/upload/download/promote/render history on the case document UI) | `DocumentVersion` endpoints + case documents page; see `06` |
 | Document → Comparison (structured) | **WORKING_CANONICAL** | `diffEngine` + `ComparisonWorkspace` |
 | Document → Text-diff (DOCX/PDF) | **BROKEN** | `versionText.ts` gates DOCX/PDF as non-text despite `textExtractor.ts` (see `06`) |
 | Document → Prompt/Anonymization → Rehydration | **WORKING_CANONICAL** | `AnonymizeModal`/`RehydrateModal` |
