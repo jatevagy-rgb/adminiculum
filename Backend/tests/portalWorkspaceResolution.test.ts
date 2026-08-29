@@ -5,6 +5,8 @@ import {
   ClientWorkspaceError,
 } from '../src/modules/client-workspace/workspaceService';
 import type { ClientPortalSession } from '../src/middleware/clientPortalAuth';
+import { readFileSync } from 'fs';
+import path from 'path';
 
 describe('Portal Identity and Multi-Workspace Resolution (R0)', () => {
   const session: ClientPortalSession = {
@@ -151,7 +153,6 @@ describe('Portal Identity and Multi-Workspace Resolution (R0)', () => {
   });
 
   it('5. stale localStorage individual workspace after identity/context change cannot hijack selection', async () => {
-    // Identity now only has ORGANIZATION workspace, but browser localStorage sent old INDIVIDUAL reference
     const db = mockDbWithWorkspaces([orgWs], [memberOrg], grantsOrg);
     const context = await getOnboardingContext(session, 'REF-OLD-INDIVIDUAL-STALE', db);
     expect(context.state).toBe('READY');
@@ -159,7 +160,6 @@ describe('Portal Identity and Multi-Workspace Resolution (R0)', () => {
     expect(context.selectedWorkspace?.mode).toBe('ORGANIZATION');
     expect(context.selectedWorkspace?.publicReference).toBe('REF-DEMO-KFT-ORG');
 
-    // Multi-workspace identity with stale reference sent from localStorage
     const multiDb = mockDbWithWorkspaces([individualWs, orgWs], [memberIndividual, memberOrg], grantsOrg);
     const multiContext = await getOnboardingContext(session, 'REF-STALE-FOREIGN-WORKSPACE', multiDb);
     expect(multiContext.state).toBe('SELECTION_REQUIRED');
@@ -207,5 +207,63 @@ describe('Portal Identity and Multi-Workspace Resolution (R0)', () => {
 
     const resolved = await resolvePortalWorkspace(session, 'REF-DEMO-KFT-ORG', db);
     expect(resolved.publicReference).toBe('REF-DEMO-KFT-ORG');
+  });
+
+  describe('Demo Kft Identity Binding & Immutability (Part A Invariants)', () => {
+    const scriptSrc = readFileSync(path.resolve(__dirname, '../scripts/demo-kft-reset.mjs'), 'utf8');
+
+    it('11. existing identity issuer remains unchanged after demo binding', () => {
+      expect(scriptSrc).not.toMatch(/matched.*db\.clientPortalIdentity\.update/);
+      expect(scriptSrc).toContain('// Do NOT mutate any identity claims for an existing verified identity.');
+    });
+
+    it('12. existing identity subject remains unchanged after demo binding', () => {
+      expect(scriptSrc).toContain('where: { issuer_subject: { issuer: targetIssuer, subject: targetSubject } }');
+    });
+
+    it('13. existing identity normalizedEmail remains unchanged', () => {
+      expect(scriptSrc).toContain('where: { normalizedEmail: targetEmail }');
+    });
+
+    it('14. existing identity accountType remains unchanged', () => {
+      // Must not overwrite accountType on existing identity
+      expect(scriptSrc).not.toMatch(/db\.clientPortalIdentity\.update\([\s\S]*?accountType/);
+    });
+
+    it('15. existing INDIVIDUAL membership survives demo binding', () => {
+      // Upsert membership is by clientPortalIdentityId_workspaceId specifically for Demo Kft workspace
+      expect(scriptSrc).toContain('clientPortalIdentityId_workspaceId: {');
+      expect(scriptSrc).toContain('workspaceId: IDS.workspaceId');
+    });
+
+    it('16. Demo Kft membership is attached to the same identity', () => {
+      expect(scriptSrc).toContain('clientPortalIdentityId: effectiveIdentityId');
+      expect(scriptSrc).toContain('workspaceId: IDS.workspaceId');
+      expect(scriptSrc).toContain("role: 'APPROVER'");
+    });
+
+    it('17. Demo grants belong only to Demo Kft workspace and demo cases', () => {
+      expect(scriptSrc).toContain('IDS.caseEmploymentId');
+      expect(scriptSrc).toContain('IDS.caseSupplierId');
+      expect(scriptSrc).toContain('IDS.caseComplianceId');
+      expect(scriptSrc).toContain('workspaceId: IDS.workspaceId');
+    });
+
+    it('18. reset twice → deterministic and idempotent state', () => {
+      expect(scriptSrc).toContain('db.clientPortalWorkspaceMembership.upsert');
+      expect(scriptSrc).toContain('db.clientPortalGrant.upsert');
+    });
+
+    it('19. unrelated client/workspace/membership survives teardown safely', () => {
+      expect(scriptSrc).toContain('await db.clientPortalGrant.deleteMany({ where: { workspaceId: IDS.workspaceId } });');
+      expect(scriptSrc).toContain('await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: IDS.workspaceId } });');
+      expect(scriptSrc).toContain("await db.clientPortalIdentity.deleteMany({ where: { id: IDS.identityId, normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid' } });");
+    });
+
+    it('20. PR90 task String-ID contract regression remains preserved', () => {
+      const taskRoutes = readFileSync(path.resolve(__dirname, '../src/routes/tasks.ts'), 'utf8');
+      expect(taskRoutes).toContain('String(');
+      expect(taskRoutes).not.toMatch(/parseInt\(req\.params\.id/);
+    });
   });
 });

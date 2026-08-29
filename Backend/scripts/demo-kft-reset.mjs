@@ -669,36 +669,57 @@ async function seed(db) {
   });
 
   // 16. Portal identity + membership + grants (Péterfi János, executive/approver).
-  const targetEmail = (process.env.DEMO_PORTAL_IDENTITY_EMAIL || process.env.DEMO_PORTAL_USER_EMAIL || process.env.DEMO_USER_EMAIL || '').trim().toLowerCase();
-  const targetIssuer = (process.env.DEMO_PORTAL_IDENTITY_ISSUER || process.env.CLIENT_IDENTITY_ISSUER || process.env.CLIENT_PORTAL_IDENTITY_ISSUER || 'https://login.microsoftonline.com/demo-kft').trim();
-  const targetSubject = (process.env.DEMO_PORTAL_IDENTITY_SUBJECT || process.env.DEMO_PORTAL_USER_SUBJECT || '').trim();
+  const targetEmail = (
+    process.env.DEMO_KFT_PORTAL_IDENTITY_EMAIL ||
+    process.env.DEMO_PORTAL_IDENTITY_EMAIL ||
+    process.env.DEMO_PORTAL_USER_EMAIL ||
+    process.env.DEMO_USER_EMAIL ||
+    ''
+  ).trim().toLowerCase();
+  const targetIssuer = (
+    process.env.DEMO_PORTAL_IDENTITY_ISSUER ||
+    process.env.CLIENT_IDENTITY_ISSUER ||
+    process.env.CLIENT_PORTAL_IDENTITY_ISSUER ||
+    ''
+  ).trim();
+  const targetSubject = (
+    process.env.DEMO_PORTAL_IDENTITY_SUBJECT ||
+    process.env.DEMO_PORTAL_USER_SUBJECT ||
+    process.env.DEMO_KFT_PORTAL_IDENTITY_SUBJECT ||
+    ''
+  ).trim();
 
   let effectiveIdentityId = IDS.identityId;
 
-  if (targetEmail) {
-    let matchedIdentity = await db.clientPortalIdentity.findUnique({ where: { normalizedEmail: targetEmail } });
-    if (!matchedIdentity && targetSubject) {
-      matchedIdentity = await db.clientPortalIdentity.findUnique({ where: { issuer_subject: { issuer: targetIssuer, subject: targetSubject } } });
+  // Exact verified issuer + subject matching preferred if configured
+  if (targetIssuer && targetSubject) {
+    const matched = await db.clientPortalIdentity.findUnique({
+      where: { issuer_subject: { issuer: targetIssuer, subject: targetSubject } },
+    });
+    if (matched) {
+      effectiveIdentityId = matched.id;
+      // Do NOT mutate any identity claims for an existing verified identity.
     }
-    if (matchedIdentity) {
-      effectiveIdentityId = matchedIdentity.id;
-      await db.clientPortalIdentity.update({
-        where: { id: matchedIdentity.id },
-        data: {
-          issuer: targetIssuer,
-          subject: targetSubject || matchedIdentity.subject,
-          status: 'ACTIVE',
-          accountType: 'ORGANIZATION_MEMBER',
-          emailVerifiedAt: matchedIdentity.emailVerifiedAt || now,
-        },
-      });
+  }
+
+  // Verified normalized email matching fallback
+  if (effectiveIdentityId === IDS.identityId && targetEmail) {
+    const matched = await db.clientPortalIdentity.findUnique({
+      where: { normalizedEmail: targetEmail },
+    });
+    if (matched) {
+      effectiveIdentityId = matched.id;
+      // Do NOT mutate any identity claims for an existing verified identity.
     } else {
+      // Create new identity only if not existing
+      const defaultIssuer = targetIssuer || 'https://login.microsoftonline.com/demo-kft';
+      const defaultSubject = targetSubject || stableId(`sub:${targetEmail}`);
       const createdIdentity = await db.clientPortalIdentity.create({
         data: {
-          id: targetSubject ? stableId(`identity:${targetSubject}`) : stableId(`identity:${targetEmail}`),
+          id: stableId(`identity:${targetEmail}`),
           provider: 'ENTRA_EXTERNAL_ID',
-          issuer: targetIssuer,
-          subject: targetSubject || stableId(`sub:${targetEmail}`),
+          issuer: defaultIssuer,
+          subject: defaultSubject,
           normalizedEmail: targetEmail,
           displayName: 'Péterfi János',
           accountType: 'ORGANIZATION_MEMBER',
@@ -708,14 +729,18 @@ async function seed(db) {
       });
       effectiveIdentityId = createdIdentity.id;
     }
-  } else {
+  }
+
+  // Fallback to default fixture identity when no target is configured
+  if (effectiveIdentityId === IDS.identityId && !targetEmail && (!targetIssuer || !targetSubject)) {
+    const defaultIssuer = targetIssuer || 'https://login.microsoftonline.com/demo-kft';
     await db.clientPortalIdentity.upsert({
       where: { id: IDS.identityId },
       update: {},
       create: {
         id: IDS.identityId,
         provider: 'ENTRA_EXTERNAL_ID',
-        issuer: targetIssuer,
+        issuer: defaultIssuer,
         subject: 'sub-peterfi',
         normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid',
         displayName: 'Péterfi János',
