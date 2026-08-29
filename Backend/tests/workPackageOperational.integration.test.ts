@@ -39,7 +39,7 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
       { id: ids.outsider, email: `wp-runtime-outsider-${suffix}@example.invalid`, name: 'Runtime outsider', role: 'LAWYER' },
     ] });
     await db.client.create({ data: { id: ids.client, name: `Runtime client ${suffix}` } });
-    await db.matter.create({ data: { id: ids.matter, title: 'Runtime matter', clientId: ids.client, status: 'OPEN' } as never });
+    await db.matter.create({ data: { id: ids.matter, title: 'Runtime matter', matterType: 'CONTRACT', clientId: ids.client, status: 'OPEN' } });
     await db.case.create({ data: { id: ids.case, caseNumber: `WP-RUNTIME-${suffix.slice(0, 8)}`, title: 'Runtime case', caseType: 'OTHER', clientId: ids.client, matterId: ids.matter, createdById: ids.admin, assignedLawyerId: ids.admin } as never });
     await db.case.create({ data: { id: ids.otherCase, caseNumber: `WP-RUNTIME-OTHER-${suffix.slice(0, 8)}`, title: 'Other runtime case', caseType: 'OTHER', clientId: ids.client, createdById: ids.outsider } as never });
     await db.caseCollaborator.create({ data: { caseId: ids.case, userId: ids.collaborator, role: 'CONTRIBUTOR' } as never });
