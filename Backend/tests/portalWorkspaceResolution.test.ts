@@ -261,9 +261,13 @@ describe('Portal Identity and Multi-Workspace Resolution (R0)', () => {
     });
 
     it('20. PR90 task String-ID contract regression remains preserved', () => {
-      const taskRoutes = readFileSync(path.resolve(__dirname, '../src/routes/tasks.ts'), 'utf8');
-      expect(taskRoutes).toContain('String(');
-      expect(taskRoutes).not.toMatch(/parseInt\(req\.params\.id/);
+      const canonicalIdSrc = readFileSync(path.resolve(__dirname, '../src/modules/tasks/canonicalStringId.ts'), 'utf8');
+      const submissionRoutes = readFileSync(path.resolve(__dirname, '../src/modules/tasks/taskSubmission.routes.ts'), 'utf8');
+      const reviewRoutes = readFileSync(path.resolve(__dirname, '../src/modules/tasks/taskReviewDecision.routes.ts'), 'utf8');
+      expect(canonicalIdSrc).toContain('export function parseCanonicalStringId');
+      expect(canonicalIdSrc).toContain('typeof value !== \'string\'');
+      expect(submissionRoutes).toContain("requireCanonicalStringParams('taskId')");
+      expect(reviewRoutes).toContain("requireCanonicalStringParams('taskId', 'submissionId')");
     });
   });
 });
