@@ -286,6 +286,9 @@ app.use('/api/v1', legalAnalysesRoutes);
 import documentsRoutes from './modules/documents/routes';
 app.use('/api/v1/documents', documentsRoutes);
 
+import uploadSecurityRoutes from './modules/upload-security/routes';
+app.use('/api/v1/upload-security', uploadSecurityRoutes);
+
 import { documentScopedComparisonRouter, comparisonRouter } from './modules/documents/comparison/comparison.routes';
 app.use('/api/v1/documents', documentScopedComparisonRouter);
 app.use('/api/v1/document-comparisons', comparisonRouter);

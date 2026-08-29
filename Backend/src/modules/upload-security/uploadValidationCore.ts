@@ -452,6 +452,80 @@ export async function validateWorkforceUpload(
 }
 
 // ---------------------------------------------------------------------------
+// Safe user-facing rejection mapping
+// ---------------------------------------------------------------------------
+
+export interface SafeUploadRejection {
+  status: number;
+  code: string;
+  message: string;
+}
+
+const ARCHIVE_REJECTION_CODES = new Set([
+  'MACRO_ENABLED_DOCUMENT',
+  'PATH_TRAVERSAL_IN_ARCHIVE',
+  'ABSOLUTE_PATH_IN_ARCHIVE',
+  'TOO_MANY_ARCHIVE_ENTRIES',
+  'ARCHIVE_TOO_LARGE_DECOMPRESSED',
+  'ARCHIVE_DECOMPRESSION_FAILED',
+  'ARCHIVE_PARSE_FAILED',
+]);
+
+/**
+ * Map a failed WorkforceUploadResult to a SAFE, user-facing rejection.
+ *
+ * SAFE COPY: the internal codeSafe (SCAN_SCAN_FAILED, SCANNER_NOT_CONFIGURED,
+ * SCAN_INFECTED, HTTP_SCAN_*, provider classifications, etc.) is NEVER echoed
+ * to the user — only bounded Hungarian copy, differentiated per outcome
+ * (infected vs "cannot scan now, try later" vs validation).
+ *
+ * STABLE CONTRACT: every content-validation failure is a fail-closed 4xx
+ * rejection with status 400 and code CONTENT_VALIDATION_FAILED. Differentiation
+ * for the user lives in the message, not in a status/code the client branches
+ * on — this preserves the SEC-2 upload contract while removing the leak.
+ */
+export function mapWorkforceUploadRejection(result: WorkforceUploadResult): SafeUploadRejection {
+  const message = safeRejectionMessage(result);
+  return { status: 400, code: 'CONTENT_VALIDATION_FAILED', message };
+}
+
+function safeRejectionMessage(result: WorkforceUploadResult): string {
+  // Scanner verdicts first (result.scanOutcome is set only when the scan ran).
+  switch (result.scanOutcome) {
+    case 'INFECTED':
+      return 'A feltöltött fájl nem felelt meg a biztonsági ellenőrzésen, ezért nem tölthető fel.';
+    case 'UNSUPPORTED':
+      return 'A fájltípus biztonsági ellenőrzése nem támogatott.';
+    case 'SCAN_FAILED':
+      return 'A fájl biztonsági ellenőrzése most nem végezhető el. Próbálja meg később.';
+    default:
+      break;
+  }
+
+  switch (result.codeSafe) {
+    case 'EMPTY_FILE':
+      return 'A feltöltött fájl üres.';
+    case 'FILE_TOO_LARGE':
+      return 'A fájl mérete meghaladja a megengedett méretet.';
+    case 'UNSAFE_CONTENT':
+      return 'A fájl nem engedélyezett tartalmat tartalmaz.';
+    case 'UNSUPPORTED_TYPE':
+      return 'A fájltípus nem támogatott.';
+    case 'EXTENSION_MISMATCH':
+      return 'A fájl kiterjesztése nem egyezik a tartalmával.';
+    default:
+      break;
+  }
+
+  if (ARCHIVE_REJECTION_CODES.has(result.codeSafe)) {
+    return 'A dokumentum (DOCX) nem felel meg a biztonsági követelményeknek.';
+  }
+
+  // Anything unclassified: generic safe rejection, no internal code echoed.
+  return 'A fájl ellenőrzése sikertelen.';
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

@@ -22,7 +22,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
-import { validateWorkforceUpload } from '../upload-security/uploadValidationCore';
+import { validateWorkforceUpload, mapWorkforceUploadRejection } from '../upload-security/uploadValidationCore';
 import { requireDocumentObjectReadAccess, requireDocumentObjectManageAccess } from './documentObjectAuthorization';
 import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
@@ -250,10 +250,11 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       inspectArchiveContent: true,
     });
     if (!contentValidation.ok) {
-      res.status(400).json({
-        status: 400,
-        code: 'CONTENT_VALIDATION_FAILED',
-        message: `File content validation failed: ${contentValidation.codeSafe}`,
+      const rejection = mapWorkforceUploadRejection(contentValidation);
+      res.status(rejection.status).json({
+        status: rejection.status,
+        code: rejection.code,
+        message: rejection.message,
       });
       return;
     }
@@ -564,10 +565,11 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
       inspectArchiveContent: true,
     });
     if (!contentValidation.ok) {
-      res.status(400).json({
-        status: 400,
-        code: 'CONTENT_VALIDATION_FAILED',
-        message: `File content validation failed: ${contentValidation.codeSafe}`,
+      const rejection = mapWorkforceUploadRejection(contentValidation);
+      res.status(rejection.status).json({
+        status: rejection.status,
+        code: rejection.code,
+        message: rejection.message,
       });
       return;
     }
@@ -834,10 +836,11 @@ router.post('/:id/version', authenticate, requireDocumentObjectManageAccess, asy
       inspectArchiveContent: true,
     });
     if (!contentValidation.ok) {
-      res.status(400).json({
-        status: 400,
-        code: 'CONTENT_VALIDATION_FAILED',
-        message: `File content validation failed: ${contentValidation.codeSafe}`,
+      const rejection = mapWorkforceUploadRejection(contentValidation);
+      res.status(rejection.status).json({
+        status: rejection.status,
+        code: rejection.code,
+        message: rejection.message,
       });
       return;
     }
