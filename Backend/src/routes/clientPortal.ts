@@ -214,7 +214,7 @@ async function portalWorkspace(req: Request) {
   }));
   const documentItems = [
     ...(documents.items as Array<Record<string, unknown>>).map((item) => ({ ...item, kind: 'SHARED_DOCUMENT', actionUrl: `/portal/documents/${encodeURIComponent(String(item.id))}` })),
-    ...requests.filter((request) => DOCUMENT_REQUEST_TYPES.has(request.type)).map((request) => ({
+    ...requests.filter((request) => DOCUMENT_REQUEST_TYPES.has(request.type)).map(({ rawStatus, ...request }) => ({
       id: request.id,
       matterId: request.matterId,
       matterTitle: request.matterTitle,
