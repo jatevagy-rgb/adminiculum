@@ -28,21 +28,11 @@ export function createCorsOptions({
         return callback(null, true);
       }
 
-      if (!isProduction) {
-        if (origin.match(/^http:\/\/localhost:\d+$/) || origin.match(/^https:\/\/localhost:\d+$/)) {
-          return callback(null, true);
-        }
-        if (frontendUrl && origin === frontendUrl) {
-          return callback(null, true);
-        }
-        return callback(null, true);
-      }
+      if (isProduction) return callback(null, productionAllowedOrigins.includes(origin));
 
-      if (productionAllowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      return callback(null, false);
+      const isLocalhost = /^https?:\/\/localhost:\d+$/.test(origin);
+      const isFrontend = Boolean(frontendUrl) && origin === frontendUrl;
+      return callback(null, isLocalhost || isFrontend || productionAllowedOrigins.includes(origin));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

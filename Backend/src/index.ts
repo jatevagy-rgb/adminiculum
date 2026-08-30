@@ -10,6 +10,7 @@ import path from 'path';
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { createCorsOptions } from './config/cors';
+import { sanitizeUrlForLog } from './config/logRedaction';
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -151,9 +152,18 @@ if (isProduction && productionAllowedOrigins.length === 0) {
   );
 }
 
+if (isProduction) {
+  const requiredMissing = ['DATABASE_URL', 'JWT_SECRET'].filter((key) => !isPresent(process.env[key]));
+  if (requiredMissing.length > 0) {
+    console.error(`[Startup Validation] FAIL-CLOSED missing required configuration: ${requiredMissing.join(', ')}`);
+    process.exit(1);
+  }
+}
+
 // Middleware
 app.use(helmet());
 app.use(cors(createCorsOptions({ isProduction, productionAllowedOrigins, frontendUrl })));
+morgan.token('url', (req) => sanitizeUrlForLog((req as Request & { originalUrl?: string }).originalUrl || req.url));
 app.use(morgan('combined'));
 // Increase payload limits for normal DOC/DOCX base64 uploads from frontend
 // (base64 payloads are larger than binary source files)

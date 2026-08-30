@@ -6,7 +6,7 @@
 
 import { Router, Request, Response } from 'express';
 import usersService from './services';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, requireRole } from '../../middleware/auth';
 
 const router = Router();
 
@@ -46,7 +46,7 @@ router.get('/:userId', authenticate, async (req: Request, res: Response): Promis
 // ============================================================================
 // POST /users
 // ============================================================================
-router.post('/', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.post('/', authenticate, requireRole('ADMIN', 'PARTNER'), async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, role, title, phone, hourlyRate } = req.body;
 

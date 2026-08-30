@@ -5,14 +5,20 @@
 
 import bcrypt from 'bcryptjs';
 import { PrismaClient, Role } from '@prisma/client';
+import crypto from 'node:crypto';
 
 const prisma = new PrismaClient();
+
+if ([process.env.NODE_ENV, process.env.ADMINICULUM_RUNTIME_ENVIRONMENT]
+  .some((value) => String(value || '').toLowerCase() === 'production')) {
+  throw new Error('demo seed must never run in production.');
+}
 
 async function main() {
   console.log('🌱 Seeding database...');
 
   // Create demo lawyer
-  const lawyerPassword = await bcrypt.hash('teszt1234', 10);
+  const lawyerPassword = await bcrypt.hash(crypto.randomUUID(), 10);
   
   const lawyer = await prisma.user.upsert({
     where: { email: 'kovacs@adminiculum.hu' },
@@ -29,7 +35,7 @@ async function main() {
   console.log('✅ Created lawyer:', lawyer.email);
 
   // Create demo trainee
-  const traineePassword = await bcrypt.hash('teszt1234', 10);
+  const traineePassword = await bcrypt.hash(crypto.randomUUID(), 10);
   
   const trainee = await prisma.user.upsert({
     where: { email: 'nagy@adminiculum.hu' },
@@ -46,7 +52,7 @@ async function main() {
   console.log('✅ Created trainee:', trainee.email);
 
   // Create demo assistant
-  const assistantPassword = await bcrypt.hash('teszt1234', 10);
+  const assistantPassword = await bcrypt.hash(crypto.randomUUID(), 10);
   
   const assistant = await prisma.user.upsert({
     where: { email: 'szabo@adminiculum.hu' },
@@ -63,10 +69,7 @@ async function main() {
   console.log('✅ Created assistant:', assistant.email);
 
   console.log('🎉 Seeding completed successfully!');
-  console.log('\n📝 Login credentials (password: teszt1234):');
-  console.log('   - kovacs@adminiculum.hu (Lawyer)');
-  console.log('   - nagy@adminiculum.hu (Trainee)');
-  console.log('   - szabo@adminiculum.hu (Assistant)');
+  console.log('\n📝 Demo users seeded without login credentials.');
 }
 
 main()

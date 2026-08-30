@@ -5,6 +5,12 @@
 
 const { Client } = require('pg');
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
+
+if ([process.env.NODE_ENV, process.env.ADMINICULUM_RUNTIME_ENVIRONMENT]
+  .some((value) => String(value || '').toLowerCase() === 'production')) {
+  throw new Error('seed_users must never run in production.');
+}
 
 async function seedUsers() {
   const client = new Client({
@@ -12,14 +18,13 @@ async function seedUsers() {
     port: process.env.DB_PORT || 5432,
     database: process.env.DATABASE_NAME || 'adminiculum',
     user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'Uborka444',
+    password: process.env.DB_PASSWORD,
   });
 
   try {
     await client.connect();
     console.log('Connected to database');
 
-    const hashedPassword = await bcrypt.hash('password123', 10);
     const now = new Date().toISOString();
 
     // Use only valid roles from UserRole enum
@@ -28,31 +33,26 @@ async function seedUsers() {
         email: 'admin@adminiculum.com',
         name: 'Admin User',
         role: 'ADMIN',
-        password: hashedPassword
       },
       {
         email: 'lawyer@adminiculum.com',
         name: 'Dr. Magyar Ügyvéd',
         role: 'LAWYER',
-        password: hashedPassword
       },
       {
         email: 'partner@adminiculum.com',
         name: 'Partner Ügyvéd',
         role: 'PARTNER',
-        password: hashedPassword
       },
       {
         email: 'trainee@adminiculum.com',
         name: 'Ügyvédjelölt',
         role: 'TRAINEE',
-        password: hashedPassword
       },
       {
         email: 'assistant@adminiculum.com',
         name: 'Jogi Asszisztens',
         role: 'LEGAL_ASSISTANT',
-        password: hashedPassword
       }
     ];
 
@@ -68,7 +68,7 @@ async function seedUsers() {
             "status" = EXCLUDED."status",
             "isActive" = EXCLUDED."isActive",
             "updatedAt" = EXCLUDED."updatedAt"
-        `, [user.email, user.password, user.name, user.role, now]);
+        `, [user.email, await bcrypt.hash(randomUUID(), 10), user.name, user.role, now]);
         
         console.log(`✓ Created/Updated user: ${user.email}`);
       } catch (err) {
@@ -84,7 +84,7 @@ async function seedUsers() {
     });
 
     console.log('\n✅ Test users seeded successfully!');
-    console.log('\n📝 Test credentials (password: password123):');
+    console.log('\n📝 Seeded users (no shared password; use the configured identity provider):');
     users.forEach(u => {
       console.log(`   - ${u.email} (${u.role})`);
     });
