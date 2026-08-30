@@ -513,7 +513,7 @@ return {
     }
 
     if (!resolvedClientName) {
-      const linkedClient = await prisma.client.findUnique({
+      const linkedClient = await db.client.findUnique({
         where: { id: clientId },
         select: { id: true, name: true }
       });
@@ -522,7 +522,7 @@ return {
 
     const explicitCaseTypeId = params.caseTypeDefinitionId?.trim() || null;
     if (explicitCaseTypeId) {
-      const existingCaseType = await prisma.caseTypeDefinition.findUnique({
+      const existingCaseType = await db.caseTypeDefinition.findUnique({
         where: { id: explicitCaseTypeId },
         select: { id: true, isActive: true },
       });
