@@ -295,13 +295,37 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
   });
 
   it('Scenario A-C: PR98-created case has immediately visible package matching exact snapshot and requiredness', async () => {
+    const freshType = crypto.randomUUID();
+    const freshTemplate = crypto.randomUUID();
+    const freshReqItem = crypto.randomUUID();
+    const freshOptItem = crypto.randomUUID();
+
+    await db.caseTypeDefinition.create({
+      data: { id: freshType, slug: `wp-pr98-${crypto.randomUUID()}`, name: 'PR98 Type', createdById: ids.admin },
+    });
+    await db.workPackageTemplate.create({
+      data: {
+        id: freshTemplate,
+        caseTypeDefinitionId: freshType,
+        name: 'PR98 Template',
+        status: 'ACTIVE',
+        createdById: ids.admin,
+        items: {
+          create: [
+            { id: freshReqItem, moduleType: 'DOCUMENT_WORK', moduleKey: 'pr98-req-doc', label: 'PR98 Required Doc', isOptional: false },
+            { id: freshOptItem, moduleType: 'RESEARCH', moduleKey: 'pr98-opt-res', label: 'PR98 Optional Research', isOptional: true },
+          ],
+        },
+      },
+    });
+
     const createdCase = await casesService.createCase({
       clientId: ids.client,
       clientName: `Runtime client ${suffix}`,
       matterType: 'OTHER',
       title: 'PR98 Productized Case',
-      caseTypeDefinitionId: ids.caseType,
-      selectedModuleKeys: ['required-review'],
+      caseTypeDefinitionId: freshType,
+      selectedModuleKeys: ['pr98-req-doc'],
       assignedLawyerId: ids.lawyer,
       createdById: ids.admin,
     }, db);
@@ -310,7 +334,7 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
       const projection = await getCaseWorkPackage(createdCase.id);
       expect(projection).not.toBeNull();
       expect(projection!.items).toHaveLength(1);
-      expect(projection!.items[0].moduleKey).toBe('required-review');
+      expect(projection!.items[0].moduleKey).toBe('pr98-req-doc');
       expect(projection!.items[0].required).toBe(true);
       expect(projection!.items[0].status).toBe('ACTIVE');
       expect(projection!.progress).toMatchObject({
@@ -327,6 +351,9 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
       await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: createdCase.id } } });
       await db.caseWorkPackage.deleteMany({ where: { caseId: createdCase.id } });
       await db.case.delete({ where: { id: createdCase.id } });
+      await db.workPackageTemplateItem.deleteMany({ where: { workPackageTemplateId: freshTemplate } });
+      await db.workPackageTemplate.delete({ where: { id: freshTemplate } });
+      await db.caseTypeDefinition.delete({ where: { id: freshType } });
     }
   });
 
@@ -358,13 +385,36 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
   });
 
   it('Scenario G: cross-case item mutation is denied and fails closed', async () => {
-    const current = await getCaseWorkPackage(ids.case);
-    await expect(
-      mutateCaseWorkPackageItem(ids.otherCase, ids.requiredItem, {
-        expectedRevision: current!.revision,
-        note: 'Cross-case attempt',
-      }),
-    ).rejects.toMatchObject({ code: 'WORK_PACKAGE_ITEM_NOT_FOUND', status: 404 });
+    const otherPkgId = crypto.randomUUID();
+    const otherItemId = crypto.randomUUID();
+    await db.caseWorkPackage.create({
+      data: {
+        id: otherPkgId,
+        caseId: ids.otherCase,
+        createdById: ids.outsider,
+        items: {
+          create: {
+            id: otherItemId,
+            moduleType: 'RESEARCH',
+            moduleKey: 'other-res',
+            label: 'Other Res',
+            createdById: ids.outsider,
+          },
+        },
+      },
+    });
+
+    try {
+      await expect(
+        mutateCaseWorkPackageItem(ids.otherCase, ids.requiredItem, {
+          expectedRevision: 0,
+          note: 'Cross-case attempt',
+        }),
+      ).rejects.toMatchObject({ code: 'WORK_PACKAGE_ITEM_NOT_FOUND', status: 404 });
+    } finally {
+      await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackageId: otherPkgId } });
+      await db.caseWorkPackage.delete({ where: { id: otherPkgId } });
+    }
   });
 });
 
