@@ -13,15 +13,20 @@
  */
 import {
   extractText,
-  detectFormat,
-  MAX_EXTRACT_BYTES,
-  MAX_EXTRACTED_TEXT_CHARS,
 } from '../textExtractor';
 
 /** Bump when extraction changes in a way that alters canonical text. */
 export const EXTRACTION_REVISION = 2;
 
-export { MAX_EXTRACT_BYTES, MAX_EXTRACTED_TEXT_CHARS };
+/** Maximum allowed input buffer size in bytes for structured comparison (2 MB). */
+export const COMPARISON_INPUT_MAX = 2_000_000;
+
+/** Maximum allowed extracted text length in characters for structured comparison (400,000 chars). */
+export const COMPARISON_EXTRACTED_TEXT_MAX = 400_000;
+
+/** Backwards-compatible aliases */
+export const MAX_EXTRACT_BYTES = COMPARISON_INPUT_MAX;
+export const MAX_EXTRACTED_TEXT_CHARS = COMPARISON_EXTRACTED_TEXT_MAX;
 
 export interface VersionTextResult {
   supported: boolean;
@@ -31,14 +36,27 @@ export interface VersionTextResult {
   extractionRevision: number;
 }
 
-/** True for formats whose stored bytes or structure support authoritative plain text extraction. */
+/** True for formats whose stored bytes or structure support authoritative plain text extraction for comparison. */
 export function isTextExtractable(mimeType: string | null | undefined, fileName: string | null | undefined): boolean {
-  if (detectFormat(mimeType || '', fileName || undefined)) return true;
-  const mt = (mimeType || '').toLowerCase();
-  if (mt.startsWith('text/')) return true;
-  if (mt === 'application/json' || mt === 'application/xml') return true;
+  const mt = (mimeType || '').toLowerCase().trim();
   const ext = (fileName || '').toLowerCase().split('.').pop() || '';
-  return ext === 'txt' || ext === 'md' || ext === 'csv' || ext === 'docx' || ext === 'doc' || ext === 'pdf' || ext === 'html' || ext === 'htm' || ext === 'rtf';
+
+  // Explicitly reject unsupported legacy .doc, html, and rtf for comparison
+  if (mt === 'application/msword' || ext === 'doc') return false;
+  if (mt === 'text/html' || ext === 'html' || ext === 'htm') return false;
+  if (mt === 'application/rtf' || mt === 'text/rtf' || ext === 'rtf') return false;
+
+  // Allow DOCX
+  if (mt === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === 'docx') return true;
+
+  // Allow PDF
+  if (mt === 'application/pdf' || ext === 'pdf') return true;
+
+  // Allow plain text formats: txt, md, csv
+  if (mt === 'text/plain' || mt === 'text/csv' || mt === 'text/markdown') return true;
+  if (ext === 'txt' || ext === 'md' || ext === 'csv') return true;
+
+  return false;
 }
 
 /** Decode a text buffer as UTF-8, stripping a BOM. No normalization here — the engine owns that. */
@@ -75,7 +93,7 @@ export async function resolveVersionText(
   if (!isTextExtractable(version.mimeType, version.originalFileName)) {
     return unsupported('FORMAT_NOT_TEXT_EXTRACTABLE');
   }
-  if (version.size != null && version.size > MAX_EXTRACT_BYTES) {
+  if (version.size != null && version.size > COMPARISON_INPUT_MAX) {
     return unsupported('CONTENT_TOO_LARGE');
   }
   let buf: Buffer | null;
@@ -85,13 +103,14 @@ export async function resolveVersionText(
     return unsupported('EXTRACTION_FAILED');
   }
   if (!buf) return unsupported('CONTENT_UNAVAILABLE');
-  if (buf.byteLength > MAX_EXTRACT_BYTES) return unsupported('CONTENT_TOO_LARGE');
+  if (buf.byteLength > COMPARISON_INPUT_MAX) return unsupported('CONTENT_TOO_LARGE');
 
   try {
     const extraction = await extractText(
       buf,
       version.mimeType || 'application/octet-stream',
-      version.originalFileName || undefined
+      version.originalFileName || undefined,
+      { maxBytes: COMPARISON_INPUT_MAX, maxChars: COMPARISON_EXTRACTED_TEXT_MAX }
     );
 
     if (!extraction.success) {
@@ -102,7 +121,7 @@ export async function resolveVersionText(
       return unsupported('NO_EXTRACTABLE_TEXT');
     }
 
-    if (extraction.text.length > MAX_EXTRACTED_TEXT_CHARS) {
+    if (extraction.text.length > COMPARISON_EXTRACTED_TEXT_MAX) {
       return unsupported('CONTENT_TOO_LARGE');
     }
 

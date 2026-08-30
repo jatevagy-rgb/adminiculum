@@ -105,7 +105,7 @@ describe('generation and persistence', () => {
 describe('idempotency and lifecycle safety', () => {
   it('reuses an existing READY comparison without regenerating', async () => {
     const prisma = makePrisma();
-    prisma._store.comparison = { id: 'cmp-existing', status: 'READY', totalSegmentCount: 3 };
+    prisma._store.comparison = { id: 'cmp-existing', status: 'READY', totalSegmentCount: 3, algorithmRevision: 1, extractionRevision: 2 };
     const row = await createOrGetComparison(base, { prisma, resolveText: TXT('x') });
     expect(row.id).toBe('cmp-existing');
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('idempotency and lifecycle safety', () => {
 
   it('does not duplicate an in-flight PROCESSING comparison', async () => {
     const prisma = makePrisma();
-    prisma._store.comparison = { id: 'cmp-inflight', status: 'PROCESSING' };
+    prisma._store.comparison = { id: 'cmp-inflight', status: 'PROCESSING', algorithmRevision: 1, extractionRevision: 2 };
     const row = await createOrGetComparison(base, { prisma, resolveText: TXT('x') });
     expect(row.id).toBe('cmp-inflight');
     expect(prisma.documentComparison.create).not.toHaveBeenCalled();

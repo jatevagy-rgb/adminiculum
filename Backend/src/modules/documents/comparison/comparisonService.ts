@@ -69,26 +69,44 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
   };
 
   // Idempotent reuse: a prior READY/IDENTICAL/UNSUPPORTED (or in-flight
-  // PENDING/PROCESSING) comparison for the same pair+revision is returned as-is.
+  // PENDING/PROCESSING) comparison for the same pair+revision is returned as-is
+  // ONLY if both algorithmRevision and extractionRevision match current revisions.
   const existing = await prisma.documentComparison.findUnique({ where: uniqueWhere });
-  if (existing && REUSABLE.has(existing.status)) {
+  if (
+    existing &&
+    REUSABLE.has(existing.status) &&
+    existing.algorithmRevision === COMPARISON_ALGORITHM_REVISION &&
+    existing.extractionRevision === EXTRACTION_REVISION
+  ) {
     return existing;
   }
 
-  // Create (or take over a prior FAILED/SUPERSEDED) as PENDING. A concurrent
-  // creator racing on the unique key is caught and its row reused.
+  // Create (or take over a prior FAILED/SUPERSEDED or stale-revision row) as PENDING.
+  // A concurrent creator racing on the unique key is caught and its row reused.
   let comparison;
   try {
     comparison = existing
       ? await prisma.documentComparison.update({
           where: { id: existing.id },
-          data: { status: 'PENDING', failureCode: null, failureMessageSafe: null, startedAt: null, completedAt: null },
+          data: {
+            status: 'PENDING',
+            algorithmRevision: COMPARISON_ALGORITHM_REVISION,
+            extractionRevision: EXTRACTION_REVISION,
+            failureCode: null,
+            failureMessageSafe: null,
+            startedAt: null,
+            completedAt: null,
+          },
         })
       : await prisma.documentComparison.create({
           data: {
-            documentId, baseVersionId, targetVersionId,
-            algorithmRevision: COMPARISON_ALGORITHM_REVISION, extractionRevision: EXTRACTION_REVISION,
-            createdById: actorId, status: 'PENDING',
+            documentId,
+            baseVersionId,
+            targetVersionId,
+            algorithmRevision: COMPARISON_ALGORITHM_REVISION,
+            extractionRevision: EXTRACTION_REVISION,
+            createdById: actorId,
+            status: 'PENDING',
           },
         });
   } catch (e: any) {
@@ -134,6 +152,8 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
         where: { id: comparison.id },
         data: {
           status: status as any,
+          algorithmRevision: COMPARISON_ALGORITHM_REVISION,
+          extractionRevision: EXTRACTION_REVISION,
           completedAt: new Date(),
           failureCode: result.failureCode,
           failureMessageSafe: result.failureCode ? safeFailureMessage(result.failureCode) : null,

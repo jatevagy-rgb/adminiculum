@@ -4,23 +4,15 @@
 
 import mammoth from 'mammoth';
 
-// Ensure Node.js <= 20 compatibility for pdf-parse v2 CJS
-if (typeof (Uint8Array as any).fromBase64 !== 'function') {
-  (Uint8Array as any).fromBase64 = (base64: string): Uint8Array => {
-    return new Uint8Array(Buffer.from(base64, 'base64'));
-  };
-}
-if (typeof (Uint8Array.prototype as any).toBase64 !== 'function') {
-  (Uint8Array.prototype as any).toBase64 = function (): string {
-    return Buffer.from(this).toString('base64');
-  };
-}
+/** Maximum allowed input buffer size in bytes for shared text extraction (25 MB). */
+export const SHARED_EXTRACTOR_MAX = 25_000_000;
 
-/** Maximum allowed input buffer size in bytes for text extraction (2MB). */
-export const MAX_EXTRACT_BYTES = 2_000_000;
+/** Maximum allowed extracted text length in characters for shared text extraction (5,000,000 chars). */
+export const SHARED_EXTRACTED_TEXT_MAX = 5_000_000;
 
-/** Maximum allowed extracted text length in characters (400,000 chars). */
-export const MAX_EXTRACTED_TEXT_CHARS = 400_000;
+/** Backwards-compatible aliases */
+export const MAX_EXTRACT_BYTES = SHARED_EXTRACTOR_MAX;
+export const MAX_EXTRACTED_TEXT_CHARS = SHARED_EXTRACTED_TEXT_MAX;
 
 type PdfParseModule = {
   PDFParse?: unknown;
@@ -36,23 +28,22 @@ type PdfParseV2Instance = {
   getText: () => Promise<{
     text?: string;
     total?: number;
-    pages?: Array<unknown>;
+    pages?: Array<{ text?: string; num?: number; pageNumber?: number }>;
   }>;
   destroy?: () => Promise<void> | void;
 };
 
 type PdfParseV2Ctor = new (options: { data: Uint8Array }) => PdfParseV2Instance;
 
-function resolvePdfParseV2Ctor(pdfParseModule: PdfParseModule): PdfParseV2Ctor | null {
-  const candidate = (pdfParseModule as unknown as { PDFParse?: unknown })?.PDFParse;
-  return typeof candidate === 'function' ? (candidate as PdfParseV2Ctor) : null;
-}
-
-function resolveLegacyPdfParse(pdfParseModule: PdfParseModule): LegacyPdfParseFn | null {
-  const candidate =
-    (pdfParseModule as unknown as { default?: unknown })?.default ??
-    (pdfParseModule as unknown);
-  return typeof candidate === 'function' ? (candidate as LegacyPdfParseFn) : null;
+function resolvePdfParse(mod: any): { ctor: PdfParseV2Ctor | null; legacy: LegacyPdfParseFn | null } {
+  if (!mod) return { ctor: null, legacy: null };
+  const ctor =
+    (typeof mod?.PDFParse === 'function' ? mod.PDFParse : null) ??
+    (typeof mod?.default?.PDFParse === 'function' ? mod.default.PDFParse : null);
+  const legacy =
+    (typeof mod === 'function' ? mod : null) ??
+    (typeof mod?.default === 'function' ? mod.default : null);
+  return { ctor, legacy };
 }
 
 /**
@@ -68,6 +59,14 @@ export const SUPPORTED_MIME_TYPES = {
 } as const;
 
 export type SupportedFormat = typeof SUPPORTED_MIME_TYPES[keyof typeof SUPPORTED_MIME_TYPES];
+
+/**
+ * Options for text extraction
+ */
+export interface ExtractTextOptions {
+  maxBytes?: number;
+  maxChars?: number;
+}
 
 /**
  * Result of text extraction
@@ -119,7 +118,7 @@ export function detectFormat(mimeType: string, fileName?: string): SupportedForm
 /**
  * Extract text from a DOCX file buffer using mammoth
  */
-async function extractFromDocx(buffer: Buffer): Promise<ExtractionResult> {
+async function extractFromDocx(buffer: Buffer, maxChars: number = SHARED_EXTRACTED_TEXT_MAX): Promise<ExtractionResult> {
   try {
     const result = await mammoth.extractRawText({ buffer });
     const text = result?.value ?? '';
@@ -132,7 +131,7 @@ async function extractFromDocx(buffer: Buffer): Promise<ExtractionResult> {
         reasonCode: 'NO_EXTRACTABLE_TEXT',
       };
     }
-    if (text.length > MAX_EXTRACTED_TEXT_CHARS) {
+    if (text.length > maxChars) {
       return {
         success: false,
         error: 'A kinyert szöveg mérete meghaladja a megengedett korlátot.',
@@ -155,30 +154,33 @@ async function extractFromDocx(buffer: Buffer): Promise<ExtractionResult> {
   }
 }
 
-function getPdfParseCandidates(mod: any): { ctor: PdfParseV2Ctor | null; legacy: LegacyPdfParseFn | null } {
-  if (!mod) return { ctor: null, legacy: null };
-  const ctor =
-    (typeof mod?.PDFParse === 'function' ? mod.PDFParse : null) ??
-    (typeof mod?.default?.PDFParse === 'function' ? mod.default.PDFParse : null);
-  const legacy =
-    (typeof mod === 'function' ? mod : null) ??
-    (typeof mod?.default === 'function' ? mod.default : null);
-  return { ctor, legacy };
+/**
+ * Ensure the pdfjs worker is initialized on the main thread for deterministic Node 20 / Jest execution.
+ * Avoids dynamic import() failures in VM environments without mutating global prototypes.
+ */
+function ensurePdfWorker(): void {
+  const g = globalThis as any;
+  if (g.pdfjsWorker?.WorkerMessageHandler) return;
+  try {
+    const fs = require('fs');
+    const workerPath = require.resolve('pdfjs-dist/legacy/build/pdf.worker.mjs');
+    let code = fs.readFileSync(workerPath, 'utf8');
+    code = code.replace(/import\.meta\.url/g, '""');
+    code = code.replace(/export\s*\{\s*WorkerMessageHandler\s*\};?/g, '');
+    new Function(code)();
+  } catch {
+    // Fall back to default runtime loader if worker bundling differs
+  }
 }
 
 /**
  * Extract text from a PDF file buffer using pdf-parse
  */
-async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
+async function extractFromPdf(buffer: Buffer, maxChars: number = SHARED_EXTRACTED_TEXT_MAX): Promise<ExtractionResult> {
   try {
-    let pdfParseModule: any;
-    try {
-      pdfParseModule = require('pdf-parse');
-    } catch {
-      pdfParseModule = await import('pdf-parse');
-    }
-
-    const { ctor: PdfParseCtor, legacy: legacyPdfParse } = getPdfParseCandidates(pdfParseModule);
+    ensurePdfWorker();
+    const pdfParseModule = require('pdf-parse');
+    const { ctor: PdfParseCtor, legacy: legacyPdfParse } = resolvePdfParse(pdfParseModule);
     let rawText = '';
     let pageCount: number | undefined;
 
@@ -186,23 +188,24 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
       const parser = new PdfParseCtor({ data: new Uint8Array(buffer) });
       try {
         const result = await parser.getText();
-        rawText = result?.text || '';
         pageCount = result?.total || result?.pages?.length;
+        if (Array.isArray(result?.pages) && result.pages.length > 0) {
+          rawText = result.pages.map((p: any) => (p?.text != null ? String(p.text) : '')).join('\n').trim();
+        } else {
+          rawText = (result?.text || '').trim();
+        }
       } finally {
         await parser.destroy?.();
       }
     } else if (legacyPdfParse) {
       const result = await legacyPdfParse(buffer);
-      rawText = result?.text || '';
+      rawText = (result?.text || '').trim();
       pageCount = result?.numpages;
     } else {
       throw new Error('pdf-parse parser export not found');
     }
 
-    // Strip synthetic page marker lines (e.g. "-- 1 of 5 --") to check for meaningful text
-    const cleanText = rawText.replace(/--\s*\d+\s+of\s+\d+\s*--/g, '').trim();
-
-    if (!cleanText) {
+    if (!rawText.trim()) {
       return {
         success: false,
         text: '',
@@ -213,7 +216,7 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
       };
     }
 
-    if (cleanText.length > MAX_EXTRACTED_TEXT_CHARS) {
+    if (rawText.length > maxChars) {
       return {
         success: false,
         error: 'A kinyert szöveg mérete meghaladja a megengedett korlátot.',
@@ -225,7 +228,7 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
 
     return {
       success: true,
-      text: cleanText,
+      text: rawText,
       format: 'pdf',
       pageCount,
     };
@@ -242,7 +245,7 @@ async function extractFromPdf(buffer: Buffer): Promise<ExtractionResult> {
 /**
  * Extract text from a plain text file buffer
  */
-async function extractFromTxt(buffer: Buffer): Promise<ExtractionResult> {
+async function extractFromTxt(buffer: Buffer, maxChars: number = SHARED_EXTRACTED_TEXT_MAX): Promise<ExtractionResult> {
   try {
     // Try UTF-8 first, then fall back to latin1
     let text = buffer.toString('utf-8');
@@ -272,7 +275,7 @@ async function extractFromTxt(buffer: Buffer): Promise<ExtractionResult> {
       };
     }
 
-    if (text.length > MAX_EXTRACTED_TEXT_CHARS) {
+    if (text.length > maxChars) {
       return {
         success: false,
         error: 'A kinyert szöveg mérete meghaladja a megengedett korlátot.',
@@ -303,9 +306,13 @@ async function extractFromTxt(buffer: Buffer): Promise<ExtractionResult> {
 export async function extractText(
   buffer: Buffer,
   mimeType: string,
-  fileName?: string
+  fileName?: string,
+  options?: ExtractTextOptions
 ): Promise<ExtractionResult> {
-  if (buffer.byteLength > MAX_EXTRACT_BYTES) {
+  const maxBytes = options?.maxBytes ?? SHARED_EXTRACTOR_MAX;
+  const maxChars = options?.maxChars ?? SHARED_EXTRACTED_TEXT_MAX;
+
+  if (buffer.byteLength > maxBytes) {
     return {
       success: false,
       error: 'A dokumentum mérete meghaladja a megengedett korlátot.',
@@ -325,20 +332,20 @@ export async function extractText(
 
   switch (format) {
     case 'docx':
-      return extractFromDocx(buffer);
+      return extractFromDocx(buffer, maxChars);
     case 'doc':
       // mammoth doesn't support old .doc format well, try anyway
-      return extractFromDocx(buffer);
+      return extractFromDocx(buffer, maxChars);
     case 'pdf':
-      return extractFromPdf(buffer);
+      return extractFromPdf(buffer, maxChars);
     case 'txt':
-      return extractFromTxt(buffer);
+      return extractFromTxt(buffer, maxChars);
     case 'html':
       // Strip HTML tags for plain text
-      return extractFromTxt(buffer);
+      return extractFromTxt(buffer, maxChars);
     case 'rtf':
       // RTF extraction not implemented, return raw text
-      return extractFromTxt(buffer);
+      return extractFromTxt(buffer, maxChars);
     default:
       return {
         success: false,
@@ -352,6 +359,8 @@ export default {
   extractText,
   detectFormat,
   SUPPORTED_MIME_TYPES,
+  SHARED_EXTRACTOR_MAX,
+  SHARED_EXTRACTED_TEXT_MAX,
   MAX_EXTRACT_BYTES,
   MAX_EXTRACTED_TEXT_CHARS,
 };

@@ -298,4 +298,110 @@ describeWithDatabase('Comparison PostgreSQL persistence lifecycle', () => {
     expect(stored.segments[0].baseExcerpt).toContain('100 EUR');
     expect(stored.segments[0].targetExcerpt).toContain('250 EUR');
   });
+
+  it('recomputes stale extractionRevision 1 comparison row to revision 2 in PostgreSQL', async () => {
+    const staleDocId = 'c4000000-0000-4000-8000-000000000099';
+    const v1Id = 'c5000000-0000-4000-8000-000000000091';
+    const v2Id = 'c5000000-0000-4000-8000-000000000092';
+
+    await db.document.create({
+      data: {
+        id: staleDocId,
+        name: 'Stale revision doc',
+        fileName: 'contract-stale.docx',
+        category: 'CONTRACT',
+        documentType: 'CONTRACT',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        caseId: ids.case,
+        clientId: ids.client,
+        currentVersion: 2,
+        currentVersionInt: 2,
+        version: '2',
+      },
+    });
+
+    await db.documentVersion.createMany({
+      data: [
+        {
+          id: v1Id,
+          documentId: staleDocId,
+          version: 1,
+          name: 'stale-v1.docx',
+          originalFileName: 'stale-v1.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: 500,
+          storageReference: 'stale-v1',
+          spItemId: 'stale-v1',
+          isCurrent: false,
+          uploadSource: 'LAWYER_UPLOAD',
+          versionType: 'ORIGINAL',
+          uploadedById: ids.user,
+        },
+        {
+          id: v2Id,
+          documentId: staleDocId,
+          version: 2,
+          name: 'stale-v2.docx',
+          originalFileName: 'stale-v2.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: 600,
+          storageReference: 'stale-v2',
+          spItemId: 'stale-v2',
+          isCurrent: true,
+          uploadSource: 'LAWYER_UPLOAD',
+          versionType: 'WORKING_COPY',
+          uploadedById: ids.user,
+          previousVersionId: v1Id,
+        },
+      ],
+    });
+
+    // Seed old revision-1 comparison with UNSUPPORTED state
+    const staleComparison = await db.documentComparison.create({
+      data: {
+        documentId: staleDocId,
+        baseVersionId: v1Id,
+        targetVersionId: v2Id,
+        algorithmRevision: 1,
+        extractionRevision: 1, // OLD REVISION 1
+        createdById: ids.user,
+        status: 'UNSUPPORTED',
+        failureCode: 'FORMAT_NOT_TEXT_EXTRACTABLE',
+        failureMessageSafe: 'Format not supported in rev1',
+      },
+    });
+    expect(staleComparison.extractionRevision).toBe(1);
+    expect(staleComparison.status).toBe('UNSUPPORTED');
+
+    const docxBuf = await Packer.toBuffer(
+      new Document({ sections: [{ children: [new Paragraph({ children: [new TextRun('Szerződés szöveg rev2.')] })] }] })
+    );
+
+    // Invoke createOrGetComparison with current revision-2 service
+    const recomputed = await createOrGetComparison(
+      {
+        actorId: ids.user,
+        documentId: staleDocId,
+        baseVersionId: v1Id,
+        targetVersionId: v2Id,
+      },
+      {
+        prisma: db,
+        resolveText: async (v) => resolveVersionText(v, async () => docxBuf),
+      }
+    );
+
+    // Prove that old UNSUPPORTED result was NOT returned as-is
+    expect(recomputed.status).toBe('IDENTICAL');
+    expect(recomputed.extractionRevision).toBe(2);
+    expect(recomputed.failureCode).toBeNull();
+
+    // Verify database row was updated in-place with extractionRevision: 2
+    const stored = await db.documentComparison.findUniqueOrThrow({
+      where: { id: staleComparison.id },
+    });
+    expect(stored.extractionRevision).toBe(2);
+    expect(stored.status).toBe('IDENTICAL');
+    expect(stored.failureCode).toBeNull();
+  });
 });
