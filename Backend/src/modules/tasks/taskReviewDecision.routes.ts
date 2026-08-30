@@ -1,25 +1,12 @@
-import { NextFunction, Request, Response, Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import taskReviewDecisionService, { TaskReviewDecisionServiceError } from './taskReviewDecision.service';
+import { requireCanonicalStringParams } from './canonicalStringId';
 
 const router = Router();
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function actorId(req: Request): string {
   return req.user?.userId || '';
-}
-
-function requireUuidParams(...names: string[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    for (const name of names) {
-      const value = String(req.params[name] || '').trim();
-      if (!UUID_PATTERN.test(value)) {
-        res.status(400).json({ status: 400, code: 'INVALID_ID', message: `${name} must be a valid UUID.` });
-        return;
-      }
-    }
-    next();
-  };
 }
 
 function assertFields(body: Record<string, unknown>, allowed: string[]): void {
@@ -39,7 +26,7 @@ function sendError(res: Response, error: unknown): void {
   res.status(500).json({ status: 500, code: 'TASK_REVIEW_DECISION_INTERNAL_ERROR', message: 'Task review decision request failed.' });
 }
 
-router.get('/:taskId/submissions/:submissionId/review', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.get('/:taskId/submissions/:submissionId/review', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     const detail = await taskReviewDecisionService.getReviewDetail(
       req.params.taskId as string,
@@ -53,7 +40,7 @@ router.get('/:taskId/submissions/:submissionId/review', authenticate, requireUui
   }
 });
 
-router.post('/:taskId/submissions/:submissionId/return', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.post('/:taskId/submissions/:submissionId/return', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     const body = req.body || {};
     assertFields(body, ['note', 'requestedCorrections', 'requiresFullReview', 'correctionDeadline']);
@@ -70,7 +57,7 @@ router.post('/:taskId/submissions/:submissionId/return', authenticate, requireUu
   }
 });
 
-router.post('/:taskId/submissions/:submissionId/revise', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.post('/:taskId/submissions/:submissionId/revise', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     assertFields(req.body || {}, []);
     const result = await taskReviewDecisionService.reviseSubmission(
@@ -85,7 +72,7 @@ router.post('/:taskId/submissions/:submissionId/revise', authenticate, requireUu
   }
 });
 
-router.post('/:taskId/submissions/:submissionId/approve', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.post('/:taskId/submissions/:submissionId/approve', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     const body = req.body || {};
     assertFields(body, ['note']);
@@ -102,7 +89,7 @@ router.post('/:taskId/submissions/:submissionId/approve', authenticate, requireU
   }
 });
 
-router.post('/:taskId/submissions/:submissionId/external-completion', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.post('/:taskId/submissions/:submissionId/external-completion', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     const body = req.body || {};
     assertFields(body, ['completedAt', 'actionType']);

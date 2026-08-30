@@ -109,10 +109,19 @@ describe('task review decision routes', () => {
   });
 
   it('rejects malformed identifiers before service access', async () => {
-    const response = await requestJson(createApp(), 'GET', `/tasks/not-a-uuid/submissions/${ids.submission}/review`);
+    const response = await requestJson(createApp(), 'GET', `/tasks/${encodeURIComponent('bad\u0000id')}/submissions/${ids.submission}/review`);
     expect(response.status).toBe(400);
     expect(response.body.code).toBe('INVALID_ID');
     expect(serviceMock.getReviewDetail).not.toHaveBeenCalled();
+  });
+
+  it('allows canonical non-UUID task and submission IDs through review decisions', async () => {
+    const taskId = '0123456789abcdef0123456789abcdef';
+    const submissionId = 'fedcba9876543210fedcba9876543210';
+    const response = await requestJson(createApp(), 'GET', `/tasks/${taskId}/submissions/${submissionId}/review`);
+
+    expect(response.status).toBe(200);
+    expect(serviceMock.getReviewDetail).toHaveBeenCalledWith(taskId, submissionId, 'actor-1');
   });
 
   it('returns review detail with an optimistic ETag', async () => {
