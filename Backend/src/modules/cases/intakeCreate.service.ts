@@ -330,10 +330,12 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
         clientName: client.name,
         matterType,
         clientRole,
-        createdById: actorId,
-        assignedLawyerId: assignedLawyerId || null,
+        // NOTE: `Case.deadline` is a legacy compatibility projection.
+        // It mirrors the earliest typed `CaseIntakeDeadline` (if any) to preserve
+        // historic API contracts that expect a single case‑level deadline.
+        // The source of truth is now `CaseIntakeDeadline`; updates to intake
+        // deadlines automatically recompute this field via the logic below.
         deadline: primaryDeadline || undefined,
-        ...startingContext,
       } as never,
       select: {
         id: true, caseNumber: true, title: true, status: true, priority: true,
