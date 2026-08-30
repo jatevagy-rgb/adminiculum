@@ -15,6 +15,7 @@ import { getCaseActivity } from './activity';
 import { getCaseWorkspace } from './workspace';
 import { createCaseComment, listCaseComments, resolveCaseComment, reopenCaseComment, sendCaseCommentError } from './caseComments.service';
 import { createCaseIntake, CaseIntakeError } from './intakeCreate.service';
+import { CaseWorkPackageError } from './caseWorkPackage.service';
 import {
   listWorkflowTemplatesForSelection,
   listWorkflowTemplatesAdmin,
@@ -698,16 +699,19 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     }
     
     // Handle both JSON and form-urlencoded data
+    let title = req.body?.title || req.body?.['title'];
     let clientName = req.body?.clientName || req.body?.['clientName'];
     let clientId = req.body?.clientId || req.body?.['clientId'];
     let matterType = req.body?.matterType || req.body?.['matterType'];
     let description = req.body?.description || req.body?.['description'];
     let clientRole = req.body?.clientRole || req.body?.['clientRole'];
     let deadline = req.body?.deadline || req.body?.['deadline'];
+    let assignedLawyerId = req.body?.assignedLawyerId || req.body?.['assignedLawyerId'];
+    let responsibleLawyerId = req.body?.responsibleLawyerId || req.body?.['responsibleLawyerId'];
     let workflowTemplateKey = req.body?.workflowTemplateKey || req.body?.['workflowTemplateKey'];
     let workflowAssignees = req.body?.workflowAssignees || req.body?.['workflowAssignees'];
     let caseTypeDefinitionId = req.body?.caseTypeDefinitionId || req.body?.['caseTypeDefinitionId'];
-    let selectedModuleKeys = req.body?.selectedModuleKeys || req.body?.['selectedModuleKeys'];
+    let selectedModuleKeys = req.body?.selectedModuleKeys ?? req.body?.['selectedModuleKeys'];
 
     if (!clientName && !clientId) {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName or clientId' });
@@ -715,12 +719,15 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     }
 
     const result = await casesService.createCase({
+      title: title ? String(title) : undefined,
       clientName,
       clientId,
       matterType: matterType || 'OTHER',
       description,
       clientRole,
       deadline: deadline || undefined,
+      assignedLawyerId: assignedLawyerId || responsibleLawyerId || undefined,
+      responsibleLawyerId: responsibleLawyerId || assignedLawyerId || undefined,
       workflowTemplateKey: workflowTemplateKey || undefined,
       workflowAssignees: workflowAssignees && typeof workflowAssignees === 'object' ? workflowAssignees : undefined,
       caseTypeDefinitionId: caseTypeDefinitionId || undefined,
@@ -731,6 +738,10 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     res.status(201).json(result);
   } catch (error) {
     console.error('Create case error:', error);
+    if (error instanceof CaseWorkPackageError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
     const message = error instanceof Error ? error.message : 'Internal server error';
     if (message === 'Client not found') {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message });

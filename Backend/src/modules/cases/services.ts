@@ -7,7 +7,8 @@ import { prisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
 import { workflowService } from '../workflow';
 import { instantiateCaseWorkflow } from './caseWorkflowOrchestration';
-import { createCaseWorkPackageSnapshot } from './caseWorkPackage.service';
+import { createCaseWorkPackageSnapshot, CaseWorkPackageError } from './caseWorkPackage.service';
+import { isWorkforceRole } from '../../middleware/workforceAuthorization';
 
 // Prisma schema enum values
 const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
@@ -103,12 +104,15 @@ interface CaseSummaryDTO {
 }
 
 interface CreateCaseInput {
+  title?: string;
   clientName: string;
   clientId?: string;
   matterType: string;
   description?: string;
   clientRole?: string | null;
   createdById?: string;
+  assignedLawyerId?: string | null;
+  responsibleLawyerId?: string | null;
   deadline?: string | null;
   workflowTemplateKey?: string | null;
   workflowAssignees?: Record<string, string | null | undefined>;
@@ -466,8 +470,23 @@ return {
       throw new Error('Client name or clientId is required');
     }
 
-    // Generate title from resolved clientName + matterType
-    const title = `${resolvedClientName} - ${matterType}`;
+    // Prefer explicit title when provided; fallback to clientName - matterType
+    const explicitTitle = (params.title || '').trim();
+    const title = explicitTitle || `${resolvedClientName} - ${matterType}`;
+
+    // Validate responsible lawyer if provided
+    const rawAssignedId = (params.assignedLawyerId || params.responsibleLawyerId || '').trim() || null;
+    let assignedLawyerId: string | null = null;
+    if (rawAssignedId) {
+      const assignedUser = await db.user.findUnique({
+        where: { id: rawAssignedId },
+        select: { id: true, status: true, isActive: true, role: true },
+      });
+      if (!assignedUser || assignedUser.status !== 'ACTIVE' || assignedUser.isActive === false || !isWorkforceRole(assignedUser.role)) {
+        throw new CaseWorkPackageError('INVALID_RESPONSIBLE_LAWYER', 'The selected responsible lawyer is not an eligible active workforce member.', 400);
+      }
+      assignedLawyerId = assignedUser.id;
+    }
 
     if (!params.createdById) {
       throw new Error('Authenticated user is required for case creation');
@@ -515,6 +534,7 @@ return {
           status: DEFAULT_STATUS as any,
           priority: 'MEDIUM' as any,
           deadline: params.deadline ? new Date(params.deadline) : undefined,
+          assignedLawyerId: assignedLawyerId || undefined,
           sharepointSite: 'Adminiculum - Legal Workflow',
           sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
           createdById: resolvedCreatedById,
@@ -536,7 +556,7 @@ return {
         templateKey: params.workflowTemplateKey || 'SIMPLE',
         actor: { userId: resolvedCreatedById },
         assigneesByStepKey: params.workflowAssignees,
-        fallbackAssigneeId: newCase.assignedLawyerId || resolvedCreatedById,
+        fallbackAssigneeId: assignedLawyerId || resolvedCreatedById,
       }, tx as any);
 
       await tx.timelineEvent.create({
@@ -555,6 +575,7 @@ return {
             workflowTemplateId: workPackage?.template.defaultWorkflowTemplateId || workflow?.templateKey || null,
             workflowTemplateKey: workflow?.templateKey || null,
             workflowTemplateVersion: workflow?.templateVersion || null,
+            assignedLawyerId,
           },
         } as any,
       });
