@@ -316,10 +316,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     const year = now.getFullYear();
     const countThisYear = await tx.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
     const caseNumber = `CASE-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
-
-    const primaryDeadline = deadlines.length > 0
-      ? deadlines.reduce((earliest, curr) => curr.dueAt < earliest.dueAt ? curr : earliest).dueAt
-      : (input.deadline ? new Date(String(input.deadline)) : null);
+    const caseDeadline = input.deadline ? new Date(String(input.deadline)) : null;
 
     const caseRow = await tx.case.create({
       data: {
@@ -338,11 +335,8 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
         intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
         intakeNextStep: startingContext.intakeNextStep ?? null,
         // NOTE: `Case.deadline` is an independent field.
-        // It is set only at case creation based on the earliest provided
-        // `CaseIntakeDeadline` (if any). Subsequent changes to `CaseIntakeDeadline`
-        // rows do NOT recompute this field. The source of truth for deadlines is
-        // the `CaseIntakeDeadline` records.
-        deadline: primaryDeadline || undefined,
+        // It is set only from explicit input.deadline at case creation.
+        deadline: caseDeadline || undefined,
       } as never,
       select: {
         id: true, caseNumber: true, title: true, status: true, priority: true,

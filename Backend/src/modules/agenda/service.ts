@@ -285,24 +285,28 @@ export async function getWorkflowAgenda(params: {
   };
 
   if (scope === 'MY_WORK') {
-    taskWhere.assignedToId = params.userId;
-    caseWhere.OR = [
-      { assignedLawyerId: params.userId },
-      { createdById: params.userId },
-    ];
-    intakeWhere.OR = [
-      { responsibleId: params.userId },
-      { case: { assignedLawyerId: params.userId } },
-    ];
-  } else if (scope === 'CASE') {
-    taskWhere.caseId = params.caseId;
-    caseWhere.id = params.caseId;
-    intakeWhere.caseId = params.caseId;
-  } else {
-    taskWhere.caseId = { in: accessibleCaseIds };
-    caseWhere.id = { in: accessibleCaseIds };
-    intakeWhere.caseId = { in: accessibleCaseIds };
-  }
+  taskWhere.assignedToId = params.userId;
+  // intersect with accessible cases
+  taskWhere.caseId = { in: accessibleCaseIds };
+  caseWhere.OR = [
+    { assignedLawyerId: params.userId },
+    { createdById: params.userId },
+  ];
+  caseWhere.id = { in: accessibleCaseIds };
+  intakeWhere.OR = [
+    { responsibleId: params.userId },
+    { case: { assignedLawyerId: params.userId } },
+  ];
+  intakeWhere.caseId = { in: accessibleCaseIds };
+} else if (scope === 'CASE') {
+  taskWhere.caseId = params.caseId;
+  caseWhere.id = params.caseId;
+  intakeWhere.caseId = params.caseId;
+} else {
+  taskWhere.caseId = { in: accessibleCaseIds };
+  caseWhere.id = { in: accessibleCaseIds };
+  intakeWhere.caseId = { in: accessibleCaseIds };
+}
 
   const [tasks, caseRows, intakeRows] = await Promise.all([
     db.task.findMany({
@@ -475,7 +479,7 @@ export async function getWorkflowAgenda(params: {
     .map((caseRecord) => {
       const dueAt = toSafeIsoDate(caseRecord.deadline);
       if (!dueAt) return null;
-      if (intakeKeys.has(`${caseRecord.id}::${dueAt}`)) return null;
+
       const deadlineStatus = deriveCaseDeadlineStatus(caseRecord.status, caseRecord.completedAt);
       return {
         id: `CASE_DEADLINE:${caseRecord.id}`,
