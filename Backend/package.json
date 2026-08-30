@@ -56,6 +56,7 @@
     "test:work-package-schema:db": "jest --runInBand tests/workPackageSchema.integration.test.ts",
     "test:work-package-case-creation:db": "jest --runInBand tests/workPackageCaseCreation.integration.test.ts",
     "test:work-package-operational:db": "jest --runInBand tests/workPackageOperational.integration.test.ts",
+    "backfill:work-package-requiredness": "tsx scripts/backfill-case-work-package-requiredness.ts --dry-run",
     "test:work-package-admin:db": "jest --runInBand tests/workPackageAdmin.integration.test.ts",
     "test:phase7b:db": "jest --runInBand tests/phase7BComplianceProposal.integration.test.ts",
     "test:phase7cb:db": "jest --runInBand tests/phase7CBComplianceOverview.integration.test.ts",

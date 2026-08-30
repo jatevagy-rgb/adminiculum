@@ -10,6 +10,7 @@ import {
   CASE_WORK_PACKAGE_SNAPSHOT_KEY,
   createCaseWorkPackageSnapshot,
 } from '../src/modules/cases/caseWorkPackage.service';
+import { backfillCaseWorkPackageRequiredness } from '../src/modules/cases/caseWorkPackageRequirednessBackfill.service';
 
 const databaseUrl = process.env.WORK_PACKAGE_OPERATIONAL_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -248,5 +249,43 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
     await db.task.delete({ where: { id: stringTaskId } });
     await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackageId: otherPackage } });
     await db.caseWorkPackage.delete({ where: { id: otherPackage } });
+  });
+
+  it('backfills only exact immutable-template legacy provenance and leaves unresolved rows untouched', async () => {
+    const alreadySnapshotted = crypto.randomUUID();
+    const unresolved = crypto.randomUUID();
+    await db.caseWorkPackageItem.update({ where: { id: ids.requiredItem }, data: { config: { documentRole: 'legacy-required' } } });
+    await db.caseWorkPackageItem.update({ where: { id: ids.optionalItem }, data: { config: { topic: 'legacy-optional' } } });
+    await db.caseWorkPackageItem.update({ where: { id: ids.disabledItem }, data: { config: { topic: 'legacy-disabled' } } });
+    await db.caseWorkPackageItem.createMany({ data: [
+      { id: alreadySnapshotted, caseWorkPackageId: ids.package, moduleType: 'CUSTOM', moduleKey: 'already-snapshotted', label: 'Already snapshotted', createdById: ids.admin, config: { [CASE_WORK_PACKAGE_SNAPSHOT_KEY]: { required: false }, label: 'preserved' } },
+      { id: unresolved, caseWorkPackageId: ids.package, moduleType: 'RESEARCH', moduleKey: 'legacy-unresolved', label: 'Legacy unresolved', createdById: ids.admin, config: { topic: 'unresolved' } },
+    ] });
+
+    const scope = { caseWorkPackageIds: [ids.package] };
+    const dryRun = await backfillCaseWorkPackageRequiredness(db, { dryRun: true, batchSize: 2, ...scope });
+    expect(dryRun.eligible).toBe(3);
+    expect(dryRun.repaired).toBe(0);
+    expect(dryRun.unresolvedByReason.SOURCE_TEMPLATE_ITEM_MISSING).toBe(1);
+
+    const repaired = await backfillCaseWorkPackageRequiredness(db, { dryRun: false, batchSize: 2, ...scope });
+    expect(repaired.repaired).toBe(3);
+    expect(repaired.unresolvedByReason.SOURCE_TEMPLATE_ITEM_MISSING).toBe(1);
+    expect(((await db.caseWorkPackageItem.findUniqueOrThrow({ where: { id: ids.requiredItem } })).config as any)).toMatchObject({ documentRole: 'legacy-required', [CASE_WORK_PACKAGE_SNAPSHOT_KEY]: { required: true } });
+    expect(((await db.caseWorkPackageItem.findUniqueOrThrow({ where: { id: ids.optionalItem } })).config as any)).toMatchObject({ topic: 'legacy-optional', [CASE_WORK_PACKAGE_SNAPSHOT_KEY]: { required: false } });
+    expect(((await db.caseWorkPackageItem.findUniqueOrThrow({ where: { id: alreadySnapshotted } })).config as any)).toEqual({ [CASE_WORK_PACKAGE_SNAPSHOT_KEY]: { required: false }, label: 'preserved' });
+    expect(((await db.caseWorkPackageItem.findUniqueOrThrow({ where: { id: unresolved } })).config as any)).toEqual({ topic: 'unresolved' });
+    expect((await backfillCaseWorkPackageRequiredness(db, { dryRun: false, ...scope })).repaired).toBe(0);
+
+    await db.workPackageTemplateItem.update({ where: { id: ids.requiredTemplateItem }, data: { isOptional: true } });
+    await db.workPackageTemplateItem.update({ where: { id: ids.optionalTemplateItem }, data: { isOptional: false } });
+    let projection = (await getCaseWorkPackage(ids.case))!;
+    expect(projection.items.find((item) => item.id === ids.requiredItem)?.required).toBe(true);
+    expect(projection.items.find((item) => item.id === ids.optionalItem)?.required).toBe(false);
+    await db.workPackageTemplateItem.deleteMany({ where: { id: { in: [ids.requiredTemplateItem, ids.optionalTemplateItem] } } });
+    projection = (await getCaseWorkPackage(ids.case))!;
+    expect(projection.items.find((item) => item.id === ids.requiredItem)?.required).toBe(true);
+    expect(projection.items.find((item) => item.id === ids.optionalItem)?.required).toBe(false);
+    await db.caseWorkPackageItem.deleteMany({ where: { id: { in: [alreadySnapshotted, unresolved] } } });
   });
 });
