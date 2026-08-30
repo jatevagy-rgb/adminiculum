@@ -520,6 +520,20 @@ return {
       resolvedClientName = linkedClient?.name || 'Unknown Client';
     }
 
+    const explicitCaseTypeId = params.caseTypeDefinitionId?.trim() || null;
+    if (explicitCaseTypeId) {
+      const existingCaseType = await prisma.caseTypeDefinition.findUnique({
+        where: { id: explicitCaseTypeId },
+        select: { id: true, isActive: true },
+      });
+      if (!existingCaseType) {
+        throw new CaseWorkPackageError('CASE_TYPE_NOT_FOUND', 'The selected case type does not exist.', 404);
+      }
+      if (!existingCaseType.isActive) {
+        throw new CaseWorkPackageError('CASE_TYPE_INACTIVE', 'The selected case type is inactive.', 409);
+      }
+    }
+
     const created = await db.$transaction(async (tx) => {
       const newCase = await tx.case.create({
         data: {
