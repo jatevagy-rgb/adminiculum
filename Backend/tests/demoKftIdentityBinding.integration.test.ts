@@ -418,7 +418,7 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
         id: unrelatedMatterId,
         clientId: unrelatedClientId,
         title: 'Unrelated Foreign Matter',
-        status: 'ACTIVE',
+        status: 'OPEN',
       },
     });
 
@@ -429,7 +429,7 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
         clientId: unrelatedClientId,
         matterId: unrelatedMatterId,
         title: 'Unrelated Foreign Case',
-        status: 'ACTIVE',
+        status: 'DRAFT',
       },
     });
 
@@ -444,6 +444,7 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
         role: 'VIEWER',
         status: 'ACTIVE',
         permissions: ['MATTER_READ', 'DOCUMENT_READ'],
+        invitedById: adminId,
         validFrom: new Date(),
       },
     });
