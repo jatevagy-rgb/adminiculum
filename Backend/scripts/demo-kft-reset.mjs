@@ -668,145 +668,119 @@ async function seed(db) {
     },
   });
 
-  // 16. Portal identity + membership + grants (Péterfi János, executive/approver).
+  // 16. Portal identity binding + membership + grants (Péterfi János, executive/approver).
+  // Primary authoritative configuration keys
   const targetEmail = (
     process.env.DEMO_KFT_PORTAL_IDENTITY_EMAIL ||
     process.env.DEMO_PORTAL_IDENTITY_EMAIL ||
     process.env.DEMO_PORTAL_USER_EMAIL ||
-    process.env.DEMO_USER_EMAIL ||
     ''
   ).trim().toLowerCase();
+
   const targetIssuer = (
+    process.env.DEMO_KFT_PORTAL_IDENTITY_ISSUER ||
     process.env.DEMO_PORTAL_IDENTITY_ISSUER ||
-    process.env.CLIENT_IDENTITY_ISSUER ||
-    process.env.CLIENT_PORTAL_IDENTITY_ISSUER ||
     ''
   ).trim();
+
   const targetSubject = (
-    process.env.DEMO_PORTAL_IDENTITY_SUBJECT ||
-    process.env.DEMO_PORTAL_USER_SUBJECT ||
     process.env.DEMO_KFT_PORTAL_IDENTITY_SUBJECT ||
+    process.env.DEMO_PORTAL_IDENTITY_SUBJECT ||
     ''
   ).trim();
 
-  let effectiveIdentityId = IDS.identityId;
+  let boundIdentity = null;
 
-  // Exact verified issuer + subject matching preferred if configured
+  // Matching Preference A: Exact configured issuer + subject IF both values are explicitly provided
   if (targetIssuer && targetSubject) {
     const matched = await db.clientPortalIdentity.findUnique({
       where: { issuer_subject: { issuer: targetIssuer, subject: targetSubject } },
     });
-    if (matched) {
-      effectiveIdentityId = matched.id;
+    if (matched && matched.status === 'ACTIVE') {
+      boundIdentity = matched;
       // Do NOT mutate any identity claims for an existing verified identity.
     }
   }
 
-  // Verified normalized email matching fallback
-  if (effectiveIdentityId === IDS.identityId && targetEmail) {
+  // Matching Preference B: Verified normalized email matching fallback
+  if (!boundIdentity && targetEmail) {
     const matched = await db.clientPortalIdentity.findUnique({
       where: { normalizedEmail: targetEmail },
     });
-    if (matched) {
-      effectiveIdentityId = matched.id;
+    // Requirement: MUST require emailVerifiedAt to be present AND status === 'ACTIVE'
+    if (matched && matched.emailVerifiedAt != null && matched.status === 'ACTIVE') {
+      boundIdentity = matched;
       // Do NOT mutate any identity claims for an existing verified identity.
-    } else {
-      // Create new identity only if not existing
-      const defaultIssuer = targetIssuer || 'https://login.microsoftonline.com/demo-kft';
-      const defaultSubject = targetSubject || stableId(`sub:${targetEmail}`);
-      const createdIdentity = await db.clientPortalIdentity.create({
-        data: {
-          id: stableId(`identity:${targetEmail}`),
-          provider: 'ENTRA_EXTERNAL_ID',
-          issuer: defaultIssuer,
-          subject: defaultSubject,
-          normalizedEmail: targetEmail,
-          displayName: 'Péterfi János',
-          accountType: 'ORGANIZATION_MEMBER',
-          status: 'ACTIVE',
-          emailVerifiedAt: now,
-        },
-      });
-      effectiveIdentityId = createdIdentity.id;
     }
   }
 
-  // Fallback to default fixture identity when no target is configured
-  if (effectiveIdentityId === IDS.identityId && !targetEmail && (!targetIssuer || !targetSubject)) {
-    const defaultIssuer = targetIssuer || 'https://login.microsoftonline.com/demo-kft';
-    await db.clientPortalIdentity.upsert({
-      where: { id: IDS.identityId },
-      update: {},
-      create: {
-        id: IDS.identityId,
-        provider: 'ENTRA_EXTERNAL_ID',
-        issuer: defaultIssuer,
-        subject: 'sub-peterfi',
-        normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid',
-        displayName: 'Péterfi János',
-        accountType: 'ORGANIZATION_MEMBER',
-        status: 'ACTIVE',
-        emailVerifiedAt: now,
+  // Authentication owns identity creation. If no existing verified identity matched, DO NOT create one!
+  if (boundIdentity) {
+    await db.clientPortalWorkspaceMembership.upsert({
+      where: {
+        clientPortalIdentityId_workspaceId: {
+          clientPortalIdentityId: boundIdentity.id,
+          workspaceId: IDS.workspaceId,
+        },
       },
-    });
-  }
-
-  await db.clientPortalWorkspaceMembership.upsert({
-    where: {
-      clientPortalIdentityId_workspaceId: {
-        clientPortalIdentityId: effectiveIdentityId,
-        workspaceId: IDS.workspaceId,
-      },
-    },
-    update: {
-      status: 'ACTIVE',
-      role: 'APPROVER',
-      approvedAt: now,
-    },
-    create: {
-      clientPortalIdentityId: effectiveIdentityId,
-      workspaceId: IDS.workspaceId,
-      status: 'ACTIVE',
-      role: 'APPROVER',
-      approvedAt: now,
-    },
-  });
-
-  const grantRows = [
-    { id: stableId(`grantEmployment:${effectiveIdentityId}`), caseId: IDS.caseEmploymentId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
-    { id: stableId(`grantSupplier:${effectiveIdentityId}`), caseId: IDS.caseSupplierId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
-    { id: stableId(`grantCompliance:${effectiveIdentityId}`), caseId: IDS.caseComplianceId, permissions: ['MATTER_READ', 'UPDATE_READ'] },
-  ];
-  for (const g of grantRows) {
-    await db.clientPortalGrant.upsert({
-      where: { id: g.id },
       update: {
         status: 'ACTIVE',
-        permissions: g.permissions,
-        validFrom: now,
-        validUntil: null,
+        role: 'APPROVER',
+        approvedAt: now,
       },
       create: {
-        id: g.id,
-        clientPortalIdentityId: effectiveIdentityId,
+        clientPortalIdentityId: boundIdentity.id,
         workspaceId: IDS.workspaceId,
-        clientId: IDS.clientId,
-        caseId: g.caseId,
         status: 'ACTIVE',
-        role: 'VIEWER',
-        permissions: g.permissions,
-        validFrom: now,
-        invitedById: IDS.adminUserId,
-        activatedAt: now,
+        role: 'APPROVER',
+        approvedAt: now,
       },
     });
-  }
 
-  console.log('\n✅ DEMO KFT fixture ready!');
-  console.log('   Client:    Demo Kft. (id=[' + IDS.clientId + '])');
-  console.log('   Exec:      Péterfi János · Ügyvezető (membership + grants)');
-  console.log('   Cases:     Employment / Supplier / Compliance');
-  console.log('   Baseline:  employee_count = 47');
+    const grantRows = [
+      { id: stableId(`grantEmployment:${boundIdentity.id}`), caseId: IDS.caseEmploymentId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
+      { id: stableId(`grantSupplier:${boundIdentity.id}`), caseId: IDS.caseSupplierId, permissions: ['MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'ACTION_REQUEST_READ', 'UPDATE_READ'] },
+      { id: stableId(`grantCompliance:${boundIdentity.id}`), caseId: IDS.caseComplianceId, permissions: ['MATTER_READ', 'UPDATE_READ'] },
+    ];
+    for (const g of grantRows) {
+      await db.clientPortalGrant.upsert({
+        where: { id: g.id },
+        update: {
+          status: 'ACTIVE',
+          permissions: g.permissions,
+          validFrom: now,
+          validUntil: null,
+        },
+        create: {
+          id: g.id,
+          clientPortalIdentityId: boundIdentity.id,
+          workspaceId: IDS.workspaceId,
+          clientId: IDS.clientId,
+          caseId: g.caseId,
+          status: 'ACTIVE',
+          role: 'VIEWER',
+          permissions: g.permissions,
+          validFrom: now,
+          invitedById: IDS.adminUserId,
+          activatedAt: now,
+        },
+      });
+    }
+
+    console.log('\n✅ DEMO KFT fixture ready!');
+    console.log('   Client:    Demo Kft. (id=[' + IDS.clientId + '])');
+    console.log('   Exec:      Péterfi János · Ügyvezető (membership + grants bound to id=[' + boundIdentity.id + '])');
+    console.log('   Cases:     Employment / Supplier / Compliance');
+    console.log('   Baseline:  employee_count = 47');
+    console.log('   DEMO_PORTAL_IDENTITY_BINDING=BOUND');
+  } else {
+    console.log('\n✅ DEMO KFT fixture ready (pending real authenticated identity)!');
+    console.log('   Client:    Demo Kft. (id=[' + IDS.clientId + '])');
+    console.log('   Exec:      Péterfi János · Ügyvezető (business structure created, identity binding pending JIT login)');
+    console.log('   Cases:     Employment / Supplier / Compliance');
+    console.log('   Baseline:  employee_count = 47');
+    console.log('   DEMO_PORTAL_IDENTITY_BINDING=PENDING_IDENTITY');
+  }
 }
 
 const db = new PrismaClient();

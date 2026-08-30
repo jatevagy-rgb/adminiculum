@@ -209,58 +209,58 @@ describe('Portal Identity and Multi-Workspace Resolution (R0)', () => {
     expect(resolved.publicReference).toBe('REF-DEMO-KFT-ORG');
   });
 
-  describe('Demo Kft Identity Binding & Immutability (Part A Invariants)', () => {
+  describe('Demo Kft Static Code Guards (Source Syntax Checks - Not Runtime DB Proof)', () => {
     const scriptSrc = readFileSync(path.resolve(__dirname, '../scripts/demo-kft-reset.mjs'), 'utf8');
 
-    it('11. existing identity issuer remains unchanged after demo binding', () => {
+    it('11. STATIC GUARD: reset script never updates or mutates existing identity claims', () => {
       expect(scriptSrc).not.toMatch(/matched.*db\.clientPortalIdentity\.update/);
       expect(scriptSrc).toContain('// Do NOT mutate any identity claims for an existing verified identity.');
     });
 
-    it('12. existing identity subject remains unchanged after demo binding', () => {
+    it('12. STATIC GUARD: exact issuer/subject matching query structure is present', () => {
       expect(scriptSrc).toContain('where: { issuer_subject: { issuer: targetIssuer, subject: targetSubject } }');
     });
 
-    it('13. existing identity normalizedEmail remains unchanged', () => {
+    it('13. STATIC GUARD: verified normalizedEmail matching requires emailVerifiedAt and status ACTIVE', () => {
       expect(scriptSrc).toContain('where: { normalizedEmail: targetEmail }');
+      expect(scriptSrc).toContain('matched.emailVerifiedAt != null && matched.status === \'ACTIVE\'');
     });
 
-    it('14. existing identity accountType remains unchanged', () => {
-      // Must not overwrite accountType on existing identity
-      expect(scriptSrc).not.toMatch(/db\.clientPortalIdentity\.update\([\s\S]*?accountType/);
+    it('14. STATIC GUARD: reset script never creates synthetic ClientPortalIdentity when no identity exists', () => {
+      // Must not create fake identity on fallback
+      expect(scriptSrc).not.toContain("provider: 'ENTRA_EXTERNAL_ID'");
+      expect(scriptSrc).toContain('DEMO_PORTAL_IDENTITY_BINDING=PENDING_IDENTITY');
     });
 
-    it('15. existing INDIVIDUAL membership survives demo binding', () => {
-      // Upsert membership is by clientPortalIdentityId_workspaceId specifically for Demo Kft workspace
+    it('15. STATIC GUARD: existing INDIVIDUAL membership survives because membership upsert is scoped to Demo workspace', () => {
       expect(scriptSrc).toContain('clientPortalIdentityId_workspaceId: {');
       expect(scriptSrc).toContain('workspaceId: IDS.workspaceId');
     });
 
-    it('16. Demo Kft membership is attached to the same identity', () => {
-      expect(scriptSrc).toContain('clientPortalIdentityId: effectiveIdentityId');
+    it('16. STATIC GUARD: Demo Kft membership is attached to bound identity', () => {
+      expect(scriptSrc).toContain('clientPortalIdentityId: boundIdentity.id');
       expect(scriptSrc).toContain('workspaceId: IDS.workspaceId');
       expect(scriptSrc).toContain("role: 'APPROVER'");
     });
 
-    it('17. Demo grants belong only to Demo Kft workspace and demo cases', () => {
+    it('17. STATIC GUARD: Demo grants belong only to Demo Kft workspace and demo cases', () => {
       expect(scriptSrc).toContain('IDS.caseEmploymentId');
       expect(scriptSrc).toContain('IDS.caseSupplierId');
       expect(scriptSrc).toContain('IDS.caseComplianceId');
       expect(scriptSrc).toContain('workspaceId: IDS.workspaceId');
     });
 
-    it('18. reset twice → deterministic and idempotent state', () => {
+    it('18. STATIC GUARD: reset twice uses upserts for idempotent execution', () => {
       expect(scriptSrc).toContain('db.clientPortalWorkspaceMembership.upsert');
       expect(scriptSrc).toContain('db.clientPortalGrant.upsert');
     });
 
-    it('19. unrelated client/workspace/membership survives teardown safely', () => {
+    it('19. STATIC GUARD: teardown deletes only Demo Kft workspace grants and memberships', () => {
       expect(scriptSrc).toContain('await db.clientPortalGrant.deleteMany({ where: { workspaceId: IDS.workspaceId } });');
       expect(scriptSrc).toContain('await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: IDS.workspaceId } });');
-      expect(scriptSrc).toContain("await db.clientPortalIdentity.deleteMany({ where: { id: IDS.identityId, normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid' } });");
     });
 
-    it('20. PR90 task String-ID contract regression remains preserved', () => {
+    it('20. STATIC GUARD: PR90 task String-ID contract regression remains preserved', () => {
       const canonicalIdSrc = readFileSync(path.resolve(__dirname, '../src/modules/tasks/canonicalStringId.ts'), 'utf8');
       const submissionRoutes = readFileSync(path.resolve(__dirname, '../src/modules/tasks/taskSubmission.routes.ts'), 'utf8');
       const reviewRoutes = readFileSync(path.resolve(__dirname, '../src/modules/tasks/taskReviewDecision.routes.ts'), 'utf8');
