@@ -15,6 +15,8 @@
  * Development/test may use a deterministic mock scanner via setWorkforceScanner().
  */
 
+import { httpScannerFromEnv } from './httpMalwareScanner';
+
 export type WorkforceScanOutcome = 'CLEAN' | 'INFECTED' | 'UNSUPPORTED' | 'SCAN_FAILED';
 
 export interface WorkforceScanInput {
@@ -47,12 +49,18 @@ class UnconfiguredWorkforceScanner implements WorkforceMalwareScanner {
 let cached: WorkforceMalwareScanner | null = null;
 
 /**
- * Resolve the active workforce scanner. Currently only the safe unconfigured
- * scanner exists. Add provider selection here (e.g. from WORKFORCE_MALWARE_SCANNER,
- * WORKFORCE_MALWARE_SCANNER_URL env vars) when a real scanner is provisioned.
+ * Resolve the active workforce scanner.
+ *
+ * Provider selection (fail-closed): when WORKFORCE_MALWARE_SCANNER=http and a
+ * WORKFORCE_MALWARE_SCANNER_URL is configured, the production HTTP adapter is
+ * used. Otherwise the unconfigured scanner is used, which can NEVER return
+ * CLEAN — so with no provider provisioned, uploads stay blocked. The result is
+ * cached; use setWorkforceScanner(null) to force re-resolution (tests) or after
+ * a config change.
  */
-export function getWorkforceScanner(_env: NodeJS.ProcessEnv = process.env): WorkforceMalwareScanner {
-  if (!cached) cached = new UnconfiguredWorkforceScanner();
+export function getWorkforceScanner(env: NodeJS.ProcessEnv = process.env): WorkforceMalwareScanner {
+  if (cached) return cached;
+  cached = httpScannerFromEnv(env) ?? new UnconfiguredWorkforceScanner();
   return cached;
 }
 
@@ -61,8 +69,25 @@ export function setWorkforceScanner(scanner: WorkforceMalwareScanner | null): vo
   cached = scanner;
 }
 
-export function workforceScannerConfigured(_env: NodeJS.ProcessEnv = process.env): boolean {
-  return getWorkforceScanner().provider !== 'NONE';
+export function workforceScannerConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return getWorkforceScanner(env).provider !== 'NONE';
+}
+
+export interface WorkforceScannerReadiness {
+  /** True only when a real (non-NONE) scanner provider is resolved. */
+  configured: boolean;
+  /** Stable provider label only — never a URL, key, or provider internals. */
+  provider: string;
+}
+
+/**
+ * Safe internal readiness signal for operations. Distinguishes
+ * SCANNER_CONFIGURED vs SCANNER_UNAVAILABLE without exposing any credential,
+ * endpoint, or provider internals.
+ */
+export function workforceScannerReadiness(env: NodeJS.ProcessEnv = process.env): WorkforceScannerReadiness {
+  const scanner = getWorkforceScanner(env);
+  return { configured: scanner.provider !== 'NONE', provider: scanner.provider };
 }
 
 /**

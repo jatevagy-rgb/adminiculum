@@ -895,7 +895,9 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
     );
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
-    expect(res.body.message).toContain('UNSAFE_CONTENT');
+    // SAFE COPY: the user-facing message must not echo the internal validation code.
+    expect(res.body.message).not.toContain('UNSAFE_CONTENT');
+    expect(typeof res.body.message).toBe('string');
     expect(mockUploadNewVersion).not.toHaveBeenCalled();
   });
 
@@ -919,7 +921,9 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
     );
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
-    expect(res.body.message).toContain('SCAN_FAILED');
+    // SAFE COPY: never expose SCAN_FAILED / SCANNER_* internals to the user.
+    expect(res.body.message).not.toContain('SCAN_FAILED');
+    expect(res.body.message).not.toContain('SCANNER_');
     expect(mockUploadNewVersion).not.toHaveBeenCalled();
   });
 
@@ -935,7 +939,9 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
     );
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
-    expect(res.body.message).toContain('INFECTED');
+    // SAFE COPY: never expose the scan verdict / provider codeSafe to the user.
+    expect(res.body.message).not.toContain('INFECTED');
+    expect(res.body.message).not.toContain('MALWARE_DETECTED');
     expect(mockUploadNewVersion).not.toHaveBeenCalled();
   });
 
@@ -951,7 +957,9 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
     );
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
-    expect(res.body.message).toContain('SCAN_FAILED');
+    // SAFE COPY: never expose SCAN_FAILED / SCANNER_* internals to the user.
+    expect(res.body.message).not.toContain('SCAN_FAILED');
+    expect(res.body.message).not.toContain('SCANNER_');
     expect(mockUploadNewVersion).not.toHaveBeenCalled();
   });
 
