@@ -1,0 +1,15 @@
+surface,current_route,current_component,historical_best_sha,current_nav,current_backend,status,evidence
+Dashboard,/,Dashboard,fb8c9bb,YES,YES,CONNECTED_END_TO_END,current tree/history
+Cases,/cases,CasesList,2729450,YES,YES,PARTIALLY_CONNECTED,current tree+PR98
+Case overview,/cases/[caseId],CaseDetail,fb8c9bb,YES,YES,CONNECTED_END_TO_END,current tree
+Documents,/cases/[caseId]/documents,Document workspace,511c9fb,YES,YES,CONNECTED_END_TO_END,current tree
+Compare,/documents/compare,comparison page,4f03b86,YES,YES,PARTIALLY_CONNECTED,current tree+PR94
+Review,/reviews,review routes,d1d8fd6,YES,YES,CONNECTED_END_TO_END,current tree
+Communications,/communications,CommunicationsOverview,874933a,YES,YES,PARTIALLY_CONNECTED,current+PR95
+Individual portal,/portal,portal pages,d72e6ca,MODE_SCOPED,YES,LIVE_UNPROVEN,current tree
+Organization portal,/portal/szervezeti-attekintes,organization portal,338eaac,MODE_SCOPED,YES,PARTIALLY_CONNECTED,current tree
+Compliance,/clients/[clientId]/vallalati-mukodes,company/org views,f9d7960,MODE_SCOPED,YES,ISLAND,current tree
+Tasks,/tasks,tasks page,4cbe4ee,YES,YES,PARTIALLY_CONNECTED,current tree
+Time,/time-entries,time entries,d49d410,YES,YES,PARTIALLY_CONNECTED,current tree
+Clause library,/clause-library,clause page,e611e55,YES,YES,PARTIALLY_CONNECTED,current tree
+Handoff,/cases/[caseId]/handoff,handoff page,778105e,CASE_CONTEXT,YES,NAVIGATION_ORPHANED,current tree

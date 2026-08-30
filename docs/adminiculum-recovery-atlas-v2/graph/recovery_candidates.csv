@@ -1,0 +1,18 @@
+rank,key,candidate,source,action,security,effort,impact,status
+1,WORK_PACKAGE_RUNTIME,Modern case snapshot/runtime,PR96+PR98,MERGE_SEMANTICS,SAFE_SEMANTIC_REPLAY,medium,very-high,ACTIVE_RECOVERY
+2,DOCUMENT_COMPARISON,DOCX/PDF typed diff,PR94/509412d,REPLAY,NEEDS_SECURITY_REWRITE,medium,high,ACTIVE_RECOVERY
+3,COMMUNICATION_INBOX,Contextual read model,peterfi branches,RECONNECT,NEEDS_SECURITY_REWRITE,medium,high,HISTORICAL_ONLY
+4,CASE_CREATE,Communication responsible lawyer,PR95,RECONNECT,NEEDS_SECURITY_REWRITE,low,high,PARTIAL
+5,PORTAL_MEMBERSHIP,Internal intake grant policy,portal history,MERGE_SEMANTICS,NEEDS_SECURITY_REWRITE,high,high,UNPROVEN
+6,AGENDA,Typed deadline mapping,current intake+agenda,RECONNECT,SAFE_SEMANTIC_REPLAY,low,medium,UNPROVEN
+7,TIME_ENTRY,Task/time contextual link,current time/task modules,RECONNECT,SAFE_SEMANTIC_REPLAY,medium,medium,UNPROVEN
+8,HANDOFF_PACKAGE,Surface existing handoff,778105e,RECONNECT,NEEDS_SECURITY_REWRITE,low,medium,BACKEND_ONLY
+9,LEGAL_ANALYSIS,Surface document analysis panel,2570a49,RECONNECT,NEEDS_SECURITY_REWRITE,low,medium,BACKEND_ONLY
+10,SEARCH,Surface search/classification,current services,RECONNECT,NEEDS_SECURITY_REWRITE,medium,medium,BACKEND_ONLY
+11,OUTLOOK_SYNC,Live Graph acceptance,PR95,PROVE_RUNTIME,NEEDS_EXTERNAL_CONFIG,high,high,LIVE_UNPROVEN
+12,SCANNER,Live Azure delivery,PR97,PROVE_RUNTIME,NEEDS_EXTERNAL_CONFIG,high,high,LIVE_UNPROVEN
+13,CASE_REVIEW,Case-level reviewer,roadmap references,BUILD_NEW,SAFE_SEMANTIC_REPLAY,high,medium,GREENFIELD
+14,THREAD_STATE,Outlook persisted thread/unread/reply,roadmap+schema history,BUILD_NEW,NEEDS_SCHEMA,high,high,GREENFIELD
+15,OUTGOING_MAIL,Outgoing provider delivery,roadmap,BUILD_NEW,NEEDS_EXTERNAL_CONFIG,high,medium,GREENFIELD
+16,BILLING,Billing/export,roadmap,DO_NOT_INVENT,UNPROVEN,high,low,DEFER
+17,MOCK_PORTAL,Synthetic mock portal generation,stale branches,DO_NOT_RECOVER,DO_NOT_RECOVER,low,negative,OBSOLETE

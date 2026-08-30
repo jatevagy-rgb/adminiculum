@@ -1,0 +1,80 @@
+id,type,label,evidence
+CAP_CASE_CREATE,CAPABILITY,CASE_CREATE,c0ec1df:Backend/src/modules/cases
+CAP_CASE_OVERVIEW,CAPABILITY,CASE_OVERVIEW,ad065f5+current
+CAP_WORK_PACKAGE,CAPABILITY,WORK_PACKAGE_RUNTIME,PR96+PR98
+CAP_DOCUMENTS,CAPABILITY,DOCUMENT_VERSION,ce55a80+current
+CAP_COMPARE,CAPABILITY,DOCUMENT_COMPARISON,4f03b86+509412d
+CAP_REVIEW,CAPABILITY,DOCUMENT_REVIEW,d1d8fd6+current
+CAP_PORTAL,CAPABILITY,PORTAL_MEMBERSHIP,9809c4c+35ca0e6
+CAP_ORG,CAPABILITY,ORGANIZATION_PORTAL,PR72+current
+CAP_COMM,CAPABILITY,COMMUNICATION_INBOX,874933a+current
+CAP_OUTLOOK,CAPABILITY,OUTLOOK_SYNC,b88fb84+dbf229e
+CAP_COMPLIANCE,CAPABILITY,COMPLIANCE,Phase6/7+current
+CAP_TIME,CAPABILITY,TIME_ENTRY,d49d410+current
+CAP_ANON,CAPABILITY,ANONYMIZATION,SEC-0B1+current
+SURF_CASES,PRODUCT_SURFACE,Cases,c0ec1df:Frontend/src/app/cases
+SURF_DOCS,PRODUCT_SURFACE,Documents,c0ec1df:Frontend/src/app/cases/[caseId]/documents
+SURF_PORTAL,PRODUCT_SURFACE,Portal,c0ec1df:Frontend/src/app/portal
+SURF_COMM,PRODUCT_SURFACE,Communications,c0ec1df:Frontend/src/app/communications
+SURF_ORG,PRODUCT_SURFACE,Organization,c0ec1df:Frontend/src/app/portal/szervezeti-attekintes
+ROUTE_CASES,UI_ROUTE,/cases,current
+ROUTE_CASE,UI_ROUTE,/cases/[caseId],current
+ROUTE_DOCS,UI_ROUTE,/cases/[caseId]/documents,current
+ROUTE_COMPARE,UI_ROUTE,/documents/compare,current
+ROUTE_PORTAL,UI_ROUTE,/portal,current
+ROUTE_COMM,UI_ROUTE,/communications,current
+ROUTE_TIME,UI_ROUTE,/time-entries,current
+ROUTE_TASKS,UI_ROUTE,/tasks,current
+ROUTE_REVIEWS,UI_ROUTE,/reviews,current
+UI_CASES,UI_COMPONENT,CasesList,current
+UI_CASE,UI_COMPONENT,CaseDetail,current
+UI_DOCS,UI_COMPONENT,DocumentWorkspace,current
+UI_COMM,UI_COMPONENT,CommunicationsOverview,current
+UI_COMPACT_CASE,UI_COMPONENT,CompactNewCaseDialog,PR98
+API_CASE,API_CLIENT_METHOD,createCase,current+PR98
+API_DOC,API_CLIENT_METHOD,documentUpload,current
+API_COMPARE,API_CLIENT_METHOD,comparisonApi,current+PR94
+API_COMM,API_CLIENT_METHOD,communicationsApi,current+PR95
+API_OUTLOOK,API_CLIENT_METHOD,outlookSync,PR95
+HTTP_CASE,HTTP_ROUTE,cases routes,current
+HTTP_DOC,HTTP_ROUTE,documents routes,current
+HTTP_COMPARE,HTTP_ROUTE,comparison routes,current
+HTTP_COMM,HTTP_ROUTE,communications routes,current
+HTTP_OUTLOOK,HTTP_ROUTE,outlook status/sync,PR95
+SVC_CASE,SERVICE,case services,current
+SVC_WP,SERVICE,caseWorkPackage service,PR96
+SVC_DOC,SERVICE,document services,current
+SVC_DIFF,SERVICE,diff/extractor,PR94
+SVC_COMM,SERVICE,communication services,current
+SVC_COMP,SERVICE,compliance evaluator,current
+MODEL_CASE,MODEL,Case,current schema
+MODEL_WP,MODEL,WorkPackage*,ddb7459+current
+MODEL_DOC,MODEL,Document/Version,current schema
+MODEL_COMM,MODEL,Communication,current schema
+MODEL_PORTAL,MODEL,Portal/Grant/Identity,9809c4c+current
+MODEL_COMP,MODEL,Compliance entities,Phase6/7
+MODEL_TIME,DATABASE_ENTITY,TimeEntry,current schema
+WF_CI,WORKFLOW,backend-postgresql-integration,PR96/PR98
+WF_SCANNER,WORKFLOW,malware-scanner-ci,PR97
+PR91,PR,PR91,5e4d884
+PR92,PR,PR92,prior review evidence
+PR94,PR,PR94,recovery/document-docx-pdf-text-diff
+PR95,PR,PR95,recovery/outlook-v1-inbound-workbench
+PR96,PR,PR96,codex/work-package-runtime-current-canonical
+PR97,PR,PR97,infra/production-malware-scanner-service
+PR98,PR,PR98,recovery/case-work-package-productization-current
+BR_CANON,BRANCH,release/editor-ops-workflow-1,c0ec1df
+BR_PR91,BRANCH,audit/adminiculum-total-product-archaeology,5e4d884
+BR_PR94,BRANCH,recovery/document-docx-pdf-text-diff,origin ref
+BR_PR96,BRANCH,codex/work-package-runtime-current-canonical,origin ref
+BR_PR98,BRANCH,recovery/case-work-package-productization-current,origin ref
+COMMIT_CANON,COMMIT,c0ec1dfa2f13be267cab76e91d263ea0e0df8a28,release ref
+COMMIT_WP,COMMIT,278e9fa,PR98 head lineage
+COMMIT_DIFF,COMMIT,509412d,PR94 lineage
+COMMIT_OUTLOOK,COMMIT,dbf229e,PR95 lineage
+TEST_PG,TEST,PostgreSQL integration suites,workflow evidence
+TEST_UI,TEST,frontend contract tests,history/current
+TEST_SCANNER,TEST,production scanner E2E,PR97 review evidence
+LIVE_AZURE,LIVE_SURFACE,Azure/SharePoint runtime,UNPROVEN
+LIVE_OUTLOOK,LIVE_SURFACE,Graph Outlook runtime,UNPROVEN
+LIVE_SCANNER,LIVE_SURFACE,external scanner deployment,UNPROVEN

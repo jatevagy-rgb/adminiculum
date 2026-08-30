@@ -1,0 +1,16 @@
+flowchart TD
+  NAV[Primary navigation] --> CASES[/cases]
+  CASES --> CASE[Case overview]
+  CASE --> DOCS[Documents]
+  CASE --> COMM[Communications]
+  CASE --> TASKS[Tasks]
+  CASE --> TIME[Time]
+  DOCS --> VER[Document versions]
+  VER --> REVIEW[Review]
+  REVIEW --> PUB[Client publication]
+  COMM --> INTAKE[Case intake]
+  INTAKE --> WP[Work Package]
+  WP --> TASKS
+  ORG[Organization] --> PORTAL[Portal]
+  PORTAL --> PUB
+  COMP[Compliance] --> CASE

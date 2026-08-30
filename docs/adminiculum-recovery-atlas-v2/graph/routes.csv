@@ -1,0 +1,13 @@
+route,layer,capability,auth,evidence,status
+/cases,UI,CASE_CREATE,workforce/current cases routes,current,CONNECTED_END_TO_END
+/cases/[caseId],UI,CASE_OVERVIEW,case authorization,current,CONNECTED_END_TO_END
+/cases/[caseId]/documents,UI,DOCUMENT_UPLOAD,document object auth+upload scanner,current,CONNECTED_END_TO_END
+/documents/compare,UI,DOCUMENT_COMPARISON,comparison authorization,current,PARTIALLY_CONNECTED
+/communications,UI,COMMUNICATION_INBOX,workforce communication guard,current,CONNECTED_END_TO_END
+/portal,UI,INDIVIDUAL_PORTAL,portal auth/grants,current,LIVE_UNPROVEN
+/portal/szervezeti-attekintes,UI,ORGANIZATION_PORTAL,organization scope,current,PARTIALLY_CONNECTED
+/reviews,UI,DOCUMENT_REVIEW,review/object auth,current,CONNECTED_END_TO_END
+/tasks,UI,TASK_REVIEW,task authorization,current,PARTIALLY_CONNECTED
+/time-entries,UI,TIME_ENTRY,workforce auth,current,PARTIALLY_CONNECTED
+/cases/[caseId]/handoff,UI,HANDOFF_PACKAGE,case/object auth,current,NAVIGATION_ORPHANED
+/clause-library,UI,CLAUSE_LIBRARY,workforce auth,current,PARTIALLY_CONNECTED

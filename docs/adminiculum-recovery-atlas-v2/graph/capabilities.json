@@ -1,0 +1,25 @@
+{
+  "schema_version": "2",
+  "evidence_policy": ["PROVEN", "STRONGLY_INDICATED", "UNPROVEN", "CONTRADICTED"],
+  "canonical": {
+    "branch": "release/editor-ops-workflow-1",
+    "sha": "c0ec1dfa2f13be267cab76e91d263ea0e0df8a28"
+  },
+  "capabilities": [
+    {"key":"CASE_CREATE","states":["CANONICAL_CURRENT","ACTIVE_RECOVERY","PARTIALLY_CONNECTED"],"evidence":["Backend/src/modules/cases","PR98"]},
+    {"key":"CASE_OVERVIEW","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["Frontend/src/app/cases/[caseId]","ad065f5"]},
+    {"key":"WORK_PACKAGE_RUNTIME","states":["ACTIVE_RECOVERY","STACKED_RECOVERY","RECOVERABLE"],"evidence":["PR96","PR98"]},
+    {"key":"DOCUMENT_VERSION","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["ce55a80","Backend/src/modules/documents"]},
+    {"key":"DOCUMENT_COMPARISON","states":["CANONICAL_CURRENT","ACTIVE_RECOVERY","PARTIALLY_CONNECTED"],"evidence":["/documents/compare metadata","509412d recovery"]},
+    {"key":"DOCUMENT_REVIEW","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["d1d8fd6","Backend/src/modules/documents/review"]},
+    {"key":"PORTAL_MEMBERSHIP","states":["CANONICAL_CURRENT","SECURITY_SENSITIVE"],"evidence":["9809c4c","35ca0e6"]},
+    {"key":"ORGANIZATION_PORTAL","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["PR72","current portal routes"]},
+    {"key":"COMMUNICATION_INBOX","states":["CANONICAL_CURRENT","DUPLICATE","RECOVERABLE"],"evidence":["874933a","peterfi branches"]},
+    {"key":"OUTLOOK_SYNC","states":["CANONICAL_CURRENT","LIVE_UNPROVEN"],"evidence":["b88fb84","dbf229e","PR95"]},
+    {"key":"COMPLIANCE","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["Phase6/7","Backend/src/modules/compliance"]},
+    {"key":"TIME_ENTRY","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["d49d410","Frontend/src/app/time-entries"]},
+    {"key":"ANONYMIZATION","states":["CANONICAL_CURRENT","SECURITY_SENSITIVE"],"evidence":["SEC-0B1","Backend/src/modules/anonymize"]},
+    {"key":"SEARCH","states":["BACKEND_ONLY","UNREACHABLE_UI"],"evidence":["current API/backend references"]},
+    {"key":"BILLING","states":["HISTORICAL_ONLY","RECOVERABLE"],"evidence":["roadmap references; no implementation proof"]}
+  ]
+}

@@ -1,0 +1,9 @@
+flowchart TD
+  U[Upload] --> S[Scanner and validation]
+  S --> D[Document]
+  D --> V[Immutable version]
+  V --> C[Comparison]
+  V --> A[Annotation]
+  V --> R[Review]
+  R --> P[Customer-safe publication]
+  D --> X[Anonymize / rehydrate]
