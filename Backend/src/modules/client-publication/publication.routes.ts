@@ -1,5 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
+import { requireCaseManageAccess } from '../cases/authorization';
+import { listCasePortalPublicationTargets, publishInternalCaseToPortal, InternalCasePortalPublicationError } from './internalCasePortalPublication.service';
 import {
   approveDocumentPublication,
   approveMatterPublication,
@@ -42,6 +44,11 @@ function fail(res: Response, error: unknown): void {
     res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
     return;
   }
+  if (error instanceof InternalCasePortalPublicationError || (error && typeof error === 'object' && typeof (error as { status?: unknown }).status === 'number' && typeof (error as { code?: unknown }).code === 'string')) {
+    const shaped = error as { status: number; code: string; message?: string };
+    res.status(shaped.status).json({ status: shaped.status, code: shaped.code, message: shaped.message || 'Client publication request failed.' });
+    return;
+  }
   res.status(500).json({ status: 500, code: 'CLIENT_PUBLICATION_INTERNAL_ERROR', message: 'Client publication request failed.' });
 }
 
@@ -53,6 +60,16 @@ clientPublicationRouter.use(authenticate);
 
 clientPublicationRouter.get('/cases/:caseId/overview', async (req, res) => {
   try { res.json(await getPublicationOverview(actor(req), String(req.params.caseId), req.query.documentId ? String(req.query.documentId) : null)); }
+  catch (error) { fail(res, error); }
+});
+
+clientPublicationRouter.get('/cases/:caseId/portal-publication-targets', requireCaseManageAccess, async (req, res) => {
+  try { res.json(await listCasePortalPublicationTargets(actor(req), String(req.params.caseId))); }
+  catch (error) { fail(res, error); }
+});
+
+clientPublicationRouter.post('/cases/:caseId/portal-publication', requireCaseManageAccess, async (req, res) => {
+  try { res.status(201).json(await publishInternalCaseToPortal(actor(req), String(req.params.caseId), payload(req))); }
   catch (error) { fail(res, error); }
 });
 
