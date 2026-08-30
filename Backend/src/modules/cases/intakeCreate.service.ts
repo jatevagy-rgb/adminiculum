@@ -44,6 +44,7 @@ export interface CaseIntakeInput {
   clientRole?: unknown;
   internalReference?: unknown;
   assignedLawyerId?: unknown;
+  deadline?: unknown;
   startingContext?: unknown;
   participants?: unknown;
   externalParticipants?: unknown;
@@ -316,6 +317,10 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     const countThisYear = await tx.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
     const caseNumber = `CASE-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
 
+    const primaryDeadline = deadlines.length > 0
+      ? deadlines.reduce((earliest, curr) => curr.dueAt < earliest.dueAt ? curr : earliest).dueAt
+      : (input.deadline ? new Date(String(input.deadline)) : null);
+
     const caseRow = await tx.case.create({
       data: {
         caseNumber,
@@ -327,6 +332,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
         clientRole,
         createdById: actorId,
         assignedLawyerId: assignedLawyerId || null,
+        deadline: primaryDeadline || undefined,
         ...startingContext,
       } as never,
       select: {

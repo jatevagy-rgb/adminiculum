@@ -19,6 +19,7 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
 
     const agenda = await getWorkflowAgenda({
       userId,
+      userRole: (req as any).user?.role,
       scope: req.query.scope,
       status: req.query.status,
       caseId: req.query.caseId ? String(req.query.caseId) : undefined,

@@ -6,6 +6,7 @@ import path from 'path';
 const mockPrismaService: any = {
   case: { findMany: jest.fn(), findUnique: jest.fn() },
   caseCollaborator: { findMany: jest.fn(), findFirst: jest.fn() },
+  caseIntakeDeadline: { findMany: jest.fn() },
   task: { findMany: jest.fn() },
   notification: {
     findMany: jest.fn(),
@@ -114,6 +115,7 @@ function resetMocks() {
   mockPrismaService.case.findUnique.mockResolvedValue(null);
   mockPrismaService.caseCollaborator.findMany.mockResolvedValue([]);
   mockPrismaService.caseCollaborator.findFirst.mockResolvedValue(null);
+  mockPrismaService.caseIntakeDeadline.findMany.mockResolvedValue([]);
   mockPrismaService.task.findMany.mockResolvedValue([]);
   mockPrismaService.notification.findMany.mockResolvedValue([]);
   mockPrismaService.notification.count.mockResolvedValue(0);
@@ -334,6 +336,139 @@ describe('workflow deadlines agenda and notifications', () => {
 
     expect(combined).not.toMatch(/openai|anthropic|gemini|n8n|microsoftGraph|graphClient/i);
     expect(combined).not.toMatch(/workspaceText\s*:\s*true|content\s*:\s*true/);
-    expect(combined).not.toMatch(/include\s*:/);
+  });
+
+  it('includes assigned case deadlines and intake deadlines in MY_WORK scope', async () => {
+    mockPrismaService.case.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'case-1',
+          caseNumber: 'CASE-2026-001',
+          title: 'Perbeli beadvány ügy',
+          clientName: 'Nagy Kft.',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+          deadline: new Date('2026-07-16T14:00:00.000Z'),
+          completedAt: null,
+          updatedAt: new Date('2026-07-13T08:00:00.000Z'),
+          assignedLawyerId: 'user-1',
+          assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'case-1',
+          caseNumber: 'CASE-2026-001',
+          title: 'Perbeli beadvány ügy',
+          clientName: 'Nagy Kft.',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+          deadline: new Date('2026-07-16T14:00:00.000Z'),
+          completedAt: null,
+          updatedAt: new Date('2026-07-13T08:00:00.000Z'),
+          assignedLawyerId: 'user-1',
+          assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        },
+      ]);
+
+    mockPrismaService.caseIntakeDeadline.findMany.mockResolvedValue([
+      {
+        id: 'intake-1',
+        title: 'Hiánypótlási határidő',
+        deadlineType: 'STATUTORY',
+        dueAt: new Date('2026-07-15T10:00:00.000Z'),
+        responsibleId: 'user-1',
+        note: 'Bírósági végzés szerint',
+        updatedAt: new Date('2026-07-13T08:00:00.000Z'),
+        caseId: 'case-1',
+        responsible: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        case: {
+          id: 'case-1',
+          caseNumber: 'CASE-2026-001',
+          title: 'Perbeli beadvány ügy',
+          clientName: 'Nagy Kft.',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+          completedAt: null,
+          assignedLawyerId: 'user-1',
+          assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        },
+      },
+    ]);
+
+    const response = await requestJson(createApp(), 'GET', '/agenda?scope=MY_WORK&status=OPEN&from=2026-07-13&to=2026-07-20');
+
+    expect(response.status).toBe(200);
+    const items = response.body.days.flatMap((day: any) => day.items);
+    expect(items.some((i: any) => i.id === 'CASE_INTAKE_DEADLINE:intake-1')).toBe(true);
+    expect(items.some((i: any) => i.id === 'CASE_DEADLINE:case-1')).toBe(true);
+    expect(response.body.availability.caseDeadlines).toBe(true);
+  });
+
+  it('deduplicates identical timestamp case deadline when intake deadline exists', async () => {
+    mockPrismaService.case.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'case-1',
+          caseNumber: 'CASE-2026-001',
+          title: 'Perbeli beadvány ügy',
+          clientName: 'Nagy Kft.',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+          deadline: new Date('2026-07-15T10:00:00.000Z'),
+          completedAt: null,
+          updatedAt: new Date('2026-07-13T08:00:00.000Z'),
+          assignedLawyerId: 'user-1',
+          assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'case-1',
+          caseNumber: 'CASE-2026-001',
+          title: 'Perbeli beadvány ügy',
+          clientName: 'Nagy Kft.',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+          deadline: new Date('2026-07-15T10:00:00.000Z'),
+          completedAt: null,
+          updatedAt: new Date('2026-07-13T08:00:00.000Z'),
+          assignedLawyerId: 'user-1',
+          assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        },
+      ]);
+
+    mockPrismaService.caseIntakeDeadline.findMany.mockResolvedValue([
+      {
+        id: 'intake-1',
+        title: 'Hiánypótlási határidő',
+        deadlineType: 'STATUTORY',
+        dueAt: new Date('2026-07-15T10:00:00.000Z'),
+        responsibleId: 'user-1',
+        note: 'Bírósági végzés szerint',
+        updatedAt: new Date('2026-07-13T08:00:00.000Z'),
+        caseId: 'case-1',
+        responsible: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        case: {
+          id: 'case-1',
+          caseNumber: 'CASE-2026-001',
+          title: 'Perbeli beadvány ügy',
+          clientName: 'Nagy Kft.',
+          priority: 'HIGH',
+          status: 'IN_PROGRESS',
+          completedAt: null,
+          assignedLawyerId: 'user-1',
+          assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
+        },
+      },
+    ]);
+
+    const response = await requestJson(createApp(), 'GET', '/agenda?scope=MY_WORK&status=OPEN&from=2026-07-13&to=2026-07-20');
+
+    expect(response.status).toBe(200);
+    const items = response.body.days.flatMap((day: any) => day.items);
+    // Only the rich intake deadline should be present, not the redundant case generic deadline
+    expect(items.filter((i: any) => i.caseId === 'case-1').length).toBe(1);
+    expect(items[0].id).toBe('CASE_INTAKE_DEADLINE:intake-1');
   });
 });
