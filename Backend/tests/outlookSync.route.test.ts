@@ -139,7 +139,7 @@ describe('POST /communications/outlook/sync', () => {
     process.env.ENABLE_OUTLOOK_IMPORT = 'true';
     const res = await requestJson(createApp(), 'POST', SYNC_PATH, { role: 'CLIENT', body: {} });
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe('COMMUNICATION_WORKFORCE_ONLY');
+    expect(res.body.code).toBe('WORKFORCE_ACCESS_REQUIRED');
     expect(syncOutlookMailbox).not.toHaveBeenCalled();
   });
 

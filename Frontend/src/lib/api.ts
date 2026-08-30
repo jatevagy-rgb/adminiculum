@@ -3812,8 +3812,6 @@ export async function createCaseFromCommunication(
   data: {
     title: string;
     matterType: string;
-    clientId?: string;
-    clientName?: string;
     priority?: string;
     deadline?: string;
     description?: string;

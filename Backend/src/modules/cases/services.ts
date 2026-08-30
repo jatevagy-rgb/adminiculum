@@ -105,10 +105,13 @@ interface CaseSummaryDTO {
 interface CreateCaseInput {
   clientName: string;
   clientId?: string;
+  title?: string;
   matterType: string;
   description?: string;
   clientRole?: string | null;
   createdById?: string;
+  assignedLawyerId?: string | null;
+  priority?: string | null;
   deadline?: string | null;
   workflowTemplateKey?: string | null;
   workflowAssignees?: Record<string, string | null | undefined>;
@@ -436,7 +439,11 @@ return {
   /**
    * Create new case
    */
-  async createCase(params: CreateCaseInput, db = prisma): Promise<{ id: string; caseNumber: string; status: string; createdAt: Date; workPackage?: unknown }> {
+  async createCase(
+    params: CreateCaseInput,
+    db: any = prisma,
+    options: { withinTransaction?: boolean; provisionCaseFolders?: boolean } = {},
+  ): Promise<{ id: string; caseNumber: string; title: string; status: string; createdAt: Date; workPackage?: unknown }> {
     const year = new Date().getFullYear();
     const count = await db.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
     const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
@@ -466,8 +473,7 @@ return {
       throw new Error('Client name or clientId is required');
     }
 
-    // Generate title from resolved clientName + matterType
-    const title = `${resolvedClientName} - ${matterType}`;
+    const title = params.title?.trim() || `${resolvedClientName} - ${matterType}`;
 
     if (!params.createdById) {
       throw new Error('Authenticated user is required for case creation');
@@ -494,14 +500,14 @@ return {
     }
 
     if (!resolvedClientName) {
-      const linkedClient = await prisma.client.findUnique({
+      const linkedClient = await db.client.findUnique({
         where: { id: clientId },
         select: { id: true, name: true }
       });
       resolvedClientName = linkedClient?.name || 'Unknown Client';
     }
 
-    const created = await db.$transaction(async (tx) => {
+    const createInTransaction = async (tx: any) => {
       const newCase = await tx.case.create({
         data: {
           caseNumber,
@@ -513,8 +519,9 @@ return {
           description: params.description,
           clientRole: params.clientRole ?? null,
           status: DEFAULT_STATUS as any,
-          priority: 'MEDIUM' as any,
+          priority: (params.priority || 'MEDIUM') as any,
           deadline: params.deadline ? new Date(params.deadline) : undefined,
+          assignedLawyerId: params.assignedLawyerId || undefined,
           sharepointSite: 'Adminiculum - Legal Workflow',
           sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
           createdById: resolvedCreatedById,
@@ -560,20 +567,26 @@ return {
       });
 
       return { newCase, workPackage };
-    });
+    };
+    const created = options.withinTransaction
+      ? await createInTransaction(db)
+      : await db.$transaction(createInTransaction);
     const newCase = created.newCase;
 
     // Create case folder in SharePoint
     // If folder creation fails, log but do NOT fail the case creation.
     // The case DB record is the source of truth; SharePoint is a convenience layer.
-    const folderResult = await driveService.createCaseFolders(caseNumber, resolvedClientName);
-    if (!folderResult) {
-      console.warn(`[CASES_SERVICE] SharePoint folder creation returned null for case ${caseNumber}. Case created in DB but SharePoint folder is missing.`);
+    if (options.provisionCaseFolders !== false) {
+      const folderResult = await driveService.createCaseFolders(caseNumber, resolvedClientName);
+      if (!folderResult) {
+        console.warn(`[CASES_SERVICE] SharePoint folder creation returned null for case ${caseNumber}. Case created in DB but SharePoint folder is missing.`);
+      }
     }
 
     return {
       id: newCase.id,
       caseNumber: newCase.caseNumber,
+      title: newCase.title,
       status: newCase.status,
       createdAt: newCase.createdAt,
       workPackage: created.workPackage ? {

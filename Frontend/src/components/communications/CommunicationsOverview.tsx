@@ -39,7 +39,6 @@ type UserOption = { id: string; name: string; email: string };
 type CreateCaseForm = {
   title: string;
   matterType: string;
-  clientId: string;
   assignedLawyerId: string;
   deadline: string;
 };
@@ -67,7 +66,6 @@ export default function CommunicationsOverview() {
   const [createCaseForm, setCreateCaseForm] = useState<CreateCaseForm>({
     title: "",
     matterType: "OTHER",
-    clientId: "",
     assignedLawyerId: "",
     deadline: "",
   });
@@ -136,6 +134,10 @@ export default function CommunicationsOverview() {
     setSyncSummary(null);
     try {
       const result = await runOutlookSync();
+      if (!result.success) {
+        setSyncMessage({ type: "error", text: "Az Outlook szinkron nem sikerült. Próbáld újra később." });
+        return;
+      }
       setSyncSummary(result.summary);
       setSyncMessage({ type: "success", text: "Az Outlook szinkron kész." });
       await load();
@@ -199,19 +201,18 @@ export default function CommunicationsOverview() {
   };
 
   const handleCreateCase = async (communicationId: string) => {
-    if (!createCaseForm.title.trim() || !createCaseForm.clientId) return;
+    if (!createCaseForm.title.trim()) return;
     setCreatingCase(true);
     setSyncMessage(null);
     try {
       const result = await createCaseFromCommunication(communicationId, {
         title: createCaseForm.title.trim(),
         matterType: createCaseForm.matterType,
-        clientId: createCaseForm.clientId,
         assignedLawyerId: createCaseForm.assignedLawyerId || undefined,
         deadline: createCaseForm.deadline || undefined,
       });
       setCreateCaseFor(null);
-      setCreateCaseForm({ title: "", matterType: "OTHER", clientId: "", assignedLawyerId: "", deadline: "" });
+      setCreateCaseForm({ title: "", matterType: "OTHER", assignedLawyerId: "", deadline: "" });
       setSyncMessage({ type: "success", text: `Ügy létrehozva: ${result.case.caseNumber}` });
       await load();
       router.push(`/cases/${result.case.id}`);
@@ -228,7 +229,6 @@ export default function CommunicationsOverview() {
     setCreateCaseForm({
       title: comm.subject || "",
       matterType: "OTHER",
-      clientId: comm.client?.id || "",
       assignedLawyerId: "",
       deadline: "",
     });
@@ -378,16 +378,6 @@ export default function CommunicationsOverview() {
                             className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
                           />
                           <select
-                            value={createCaseForm.clientId}
-                            onChange={(e) => setCreateCaseForm((f) => ({ ...f, clientId: e.target.value }))}
-                            className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
-                          >
-                            <option value="">Ügyfél…</option>
-                            {clients.map((cl) => (
-                              <option key={cl.id} value={cl.id}>{cl.name}</option>
-                            ))}
-                          </select>
-                          <select
                             value={createCaseForm.matterType}
                             onChange={(e) => setCreateCaseForm((f) => ({ ...f, matterType: e.target.value }))}
                             className="w-full border border-[#DDD7CA] bg-white px-2 py-1 text-[11px] text-[#1F2821]"
@@ -416,7 +406,7 @@ export default function CommunicationsOverview() {
                           <div className="flex gap-2">
                             <button
                               onClick={() => handleCreateCase(comm.id)}
-                              disabled={!createCaseForm.title.trim() || !createCaseForm.clientId || creatingCase}
+                              disabled={!createCaseForm.title.trim() || creatingCase}
                               className="px-2 py-1 text-[10px] uppercase bg-[#1F4A33] text-[#FBF6E7] disabled:opacity-40"
                             >
                               {creatingCase ? "Létrehozás…" : "Ügy létrehozása"}
