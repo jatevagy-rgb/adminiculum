@@ -2,6 +2,8 @@ import { CaseWorkPackageItemStatus, Prisma } from '@prisma/client';
 import prisma from '../../config/database';
 import { parseCanonicalStringId } from '../tasks/canonicalStringId';
 import { canAssign, createTask } from '../tasks/services';
+import { isWorkforceRole } from '../../middleware/workforceAuthorization';
+import { CASE_WORK_PACKAGE_SNAPSHOT_KEY } from './caseWorkPackage.service';
 
 const MAX_NOTE_LENGTH = 2_000;
 const MAX_TITLE_LENGTH = 300;
@@ -36,6 +38,22 @@ type TaskInput = {
   assignedToId?: unknown;
   dueDate?: unknown;
 };
+
+function snapshotRequiredness(config: unknown): boolean | null {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
+  const metadata = (config as Record<string, unknown>)[CASE_WORK_PACKAGE_SNAPSHOT_KEY];
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  return typeof (metadata as Record<string, unknown>).required === 'boolean'
+    ? (metadata as Record<string, boolean>).required
+    : null;
+}
+
+function requiredness(item: { config: unknown; sourceTemplateItem: { isOptional: boolean } | null }): boolean {
+  const snapshot = snapshotRequiredness(item.config);
+  // Pre-repair rows have no immutable metadata. Preserve their established
+  // semantics rather than rewriting history; all new snapshots use the value above.
+  return snapshot ?? (item.sourceTemplateItem ? !item.sourceTemplateItem.isOptional : true);
+}
 
 function text(value: unknown, field: string, max: number, required = false): string | null {
   if (value === undefined || value === null) {
@@ -115,7 +133,7 @@ function parseTaskInput(input: TaskInput) {
 async function caseWorkforceEligible(tx: Db, caseRow: { id: string; assignedLawyerId: string | null; createdById: string }, userId: string): Promise<boolean> {
   const user = await tx.user.findUnique({ where: { id: userId }, select: { id: true, role: true, status: true, isActive: true } });
   if (!user || user.status !== 'ACTIVE' || user.isActive === false) return false;
-  if (String(user.role) === 'CLIENT') return false;
+  if (!isWorkforceRole(user.role)) return false;
   if (PRIVILEGED_ROLES.has(String(user.role))) return true;
   if (caseRow.assignedLawyerId === userId || caseRow.createdById === userId) return true;
   return Boolean(await tx.caseCollaborator.findFirst({ where: { caseId: caseRow.id, userId }, select: { id: true } }));
@@ -164,7 +182,7 @@ export async function getCaseWorkPackage(caseIdInput: unknown) {
   });
   if (!workPackage) return null;
   const items = workPackage.items.map((item) => {
-    const required = item.sourceTemplateItem ? !item.sourceTemplateItem.isOptional : true;
+    const required = requiredness(item);
     return {
       id: item.id,
       moduleKey: item.moduleKey,
@@ -205,7 +223,7 @@ export async function mutateCaseWorkPackageItem(caseIdInput: unknown, itemIdInpu
   try {
     return await prisma.$transaction(async (tx) => {
     const { workPackage, item } = await loadScopedItem(tx, caseId, itemId);
-    const required = item.sourceTemplateItem ? !item.sourceTemplateItem.isOptional : true;
+    const required = requiredness(item);
     if (mutation.status !== undefined) {
       if (item.status === 'COMPLETED' && mutation.status !== 'COMPLETED') {
         throw new CaseWorkPackageOperationalError('COMPLETED_ITEM_IMMUTABLE', 'Completed work package items cannot be reopened.');
@@ -271,7 +289,7 @@ export async function createTaskFromCaseWorkPackageItem(caseIdInput: unknown, it
         if (taskInput.assignedToId) {
           const eligible = await caseWorkforceEligible(tx, workPackage.case, taskInput.assignedToId);
           if (!eligible) throw new CaseWorkPackageOperationalError('ASSIGNEE_NOT_CASE_ELIGIBLE', 'Assigned user is not eligible for this case.', 403);
-          if (!(await canAssign(actorId, taskInput.assignedToId))) {
+          if (!(await canAssign(actorId, taskInput.assignedToId, tx))) {
             throw new CaseWorkPackageOperationalError('TASK_ASSIGNMENT_FORBIDDEN', 'You are not allowed to assign this task to that user.', 403);
           }
         }

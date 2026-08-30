@@ -2,6 +2,20 @@ import { Prisma } from '@prisma/client';
 
 type Db = Prisma.TransactionClient;
 
+// Template item config is a flat, allowlisted object. This reserved nested key is
+// therefore outside the template-config contract and belongs only to a case snapshot.
+export const CASE_WORK_PACKAGE_SNAPSHOT_KEY = '$caseWorkPackageSnapshot';
+
+export function withCaseWorkPackageRequirednessSnapshot(config: unknown, required: boolean): Prisma.InputJsonValue {
+  const base = config && typeof config === 'object' && !Array.isArray(config)
+    ? { ...(config as Record<string, Prisma.InputJsonValue>) }
+    : {};
+  return {
+    ...base,
+    [CASE_WORK_PACKAGE_SNAPSHOT_KEY]: { required },
+  } as Prisma.InputJsonValue;
+}
+
 export class CaseWorkPackageError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 400) {
     super(message);
@@ -74,7 +88,7 @@ export async function createCaseWorkPackageSnapshot(
           moduleType: item.moduleType,
           moduleKey: item.moduleKey,
           label: item.label,
-          config: item.config,
+          config: withCaseWorkPackageRequirednessSnapshot(item.config, !item.isOptional),
           order: item.order,
           sourceTemplateItemId: item.id,
           createdById: actorId,

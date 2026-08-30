@@ -6,6 +6,10 @@ import {
   getCaseWorkPackage,
   mutateCaseWorkPackageItem,
 } from '../src/modules/cases/caseWorkPackageOperational.service';
+import {
+  CASE_WORK_PACKAGE_SNAPSHOT_KEY,
+  createCaseWorkPackageSnapshot,
+} from '../src/modules/cases/caseWorkPackage.service';
 
 const databaseUrl = process.env.WORK_PACKAGE_OPERATIONAL_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -15,6 +19,13 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
   const ids = {
     admin: crypto.randomUUID(),
     collaborator: crypto.randomUUID(),
+    lawyer: crypto.randomUUID(),
+    trainee: crypto.randomUUID(),
+    assistant: crypto.randomUUID(),
+    partner: crypto.randomUUID(),
+    external: crypto.randomUUID(),
+    inactive: crypto.randomUUID(),
+    clientUser: crypto.randomUUID(),
     outsider: crypto.randomUUID(),
     client: crypto.randomUUID(),
     matter: crypto.randomUUID(),
@@ -36,6 +47,13 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
     await db.user.createMany({ data: [
       { id: ids.admin, email: `wp-runtime-admin-${suffix}@example.invalid`, name: 'Runtime admin', role: 'ADMIN' },
       { id: ids.collaborator, email: `wp-runtime-collab-${suffix}@example.invalid`, name: 'Runtime collaborator', role: 'COLLAB_LAWYER' },
+      { id: ids.lawyer, email: `wp-runtime-lawyer-${suffix}@example.invalid`, name: 'Runtime lawyer', role: 'LAWYER' },
+      { id: ids.trainee, email: `wp-runtime-trainee-${suffix}@example.invalid`, name: 'Runtime trainee', role: 'TRAINEE' },
+      { id: ids.assistant, email: `wp-runtime-assistant-${suffix}@example.invalid`, name: 'Runtime assistant', role: 'LEGAL_ASSISTANT' },
+      { id: ids.partner, email: `wp-runtime-partner-${suffix}@example.invalid`, name: 'Runtime partner', role: 'PARTNER' },
+      { id: ids.external, email: `wp-runtime-external-${suffix}@example.invalid`, name: 'Runtime external', role: 'EXTERNAL_REVIEWER' },
+      { id: ids.inactive, email: `wp-runtime-inactive-${suffix}@example.invalid`, name: 'Runtime inactive', role: 'LAWYER', isActive: false },
+      { id: ids.clientUser, email: `wp-runtime-client-${suffix}@example.invalid`, name: 'Runtime client user', role: 'CLIENT' },
       { id: ids.outsider, email: `wp-runtime-outsider-${suffix}@example.invalid`, name: 'Runtime outsider', role: 'LAWYER' },
     ] });
     await db.client.create({ data: { id: ids.client, name: `Runtime client ${suffix}` } });
@@ -43,6 +61,11 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
     await db.case.create({ data: { id: ids.case, caseNumber: `WP-RUNTIME-${suffix.slice(0, 8)}`, title: 'Runtime case', caseType: 'OTHER', clientId: ids.client, matterId: ids.matter, createdById: ids.admin, assignedLawyerId: ids.admin } as never });
     await db.case.create({ data: { id: ids.otherCase, caseNumber: `WP-RUNTIME-OTHER-${suffix.slice(0, 8)}`, title: 'Other runtime case', caseType: 'OTHER', clientId: ids.client, createdById: ids.outsider } as never });
     await db.caseCollaborator.create({ data: { caseId: ids.case, userId: ids.collaborator, role: 'CONTRIBUTOR' } as never });
+    await db.caseCollaborator.createMany({ data: [
+      { caseId: ids.case, userId: ids.trainee, role: 'CONTRIBUTOR' },
+      { caseId: ids.case, userId: ids.assistant, role: 'CONTRIBUTOR' },
+      { caseId: ids.case, userId: ids.lawyer, role: 'CONTRIBUTOR' },
+    ] as never });
     await db.caseTypeDefinition.create({ data: { id: ids.caseType, slug: `wp-runtime-${suffix}`, name: 'Runtime type', createdById: ids.admin } });
     await db.workPackageTemplate.create({
       data: {
@@ -85,7 +108,7 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
     await db.case.deleteMany({ where: { id: { in: [ids.case, ids.otherCase] } } });
     await db.matter.deleteMany({ where: { id: ids.matter } });
     await db.client.deleteMany({ where: { id: ids.client } });
-    await db.user.deleteMany({ where: { id: { in: [ids.admin, ids.collaborator, ids.outsider] } } });
+    await db.user.deleteMany({ where: { id: { in: [ids.admin, ids.collaborator, ids.lawyer, ids.trainee, ids.assistant, ids.partner, ids.external, ids.inactive, ids.clientUser, ids.outsider] } } });
     await db.$disconnect();
   });
 
@@ -129,6 +152,76 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
     const completed = await mutateCaseWorkPackageItem(ids.case, ids.optionalItem, { expectedRevision: assigned.revision, status: 'COMPLETED' });
     expect(completed.item.status).toBe('COMPLETED');
     await expect(mutateCaseWorkPackageItem(ids.case, ids.optionalItem, { expectedRevision: completed.revision, status: 'ACTIVE' })).rejects.toMatchObject({ code: 'COMPLETED_ITEM_IMMUTABLE' });
+  });
+
+  it('requires active canonical-workforce roles and exact case eligibility for responsibility', async () => {
+    for (const userId of [ids.clientUser, ids.external, ids.inactive, ids.outsider]) {
+      const current = await getCaseWorkPackage(ids.case);
+      await expect(mutateCaseWorkPackageItem(ids.case, ids.optionalItem, { expectedRevision: current!.revision, responsibleUserId: userId }))
+        .rejects.toMatchObject({ code: 'RESPONSIBLE_NOT_CASE_ELIGIBLE', status: 403 });
+    }
+    for (const userId of [ids.admin, ids.partner, ids.lawyer, ids.collaborator, ids.trainee, ids.assistant]) {
+      const current = await getCaseWorkPackage(ids.case);
+      const assigned = await mutateCaseWorkPackageItem(ids.case, ids.optionalItem, { expectedRevision: current!.revision, responsibleUserId: userId });
+      expect(assigned.item.responsibleId).toBe(userId);
+    }
+  });
+
+  it('keeps requiredness immutable across template edits and source deletion', async () => {
+    const scenarioIds = { caseType: crypto.randomUUID(), template: crypto.randomUUID(), case: crypto.randomUUID(), item: crypto.randomUUID() };
+    const createScenario = async (isOptional: boolean) => {
+      await db.caseTypeDefinition.create({ data: { id: scenarioIds.caseType, slug: `wp-snapshot-${crypto.randomUUID()}`, name: 'Snapshot type', createdById: ids.admin } });
+      await db.workPackageTemplate.create({ data: {
+        id: scenarioIds.template, caseTypeDefinitionId: scenarioIds.caseType, name: 'Snapshot template', status: 'ACTIVE', createdById: ids.admin,
+        items: { create: { id: scenarioIds.item, moduleType: 'RESEARCH', moduleKey: 'snapshot-research', label: 'Snapshot research', isOptional, config: { topic: 'immutable' } } },
+      } });
+      await db.case.create({ data: { id: scenarioIds.case, caseNumber: `WP-SNAPSHOT-${crypto.randomUUID().slice(0, 8)}`, title: 'Snapshot case', caseType: 'OTHER', clientId: ids.client, createdById: ids.admin } as never });
+      return db.$transaction((tx) => createCaseWorkPackageSnapshot(tx, scenarioIds.case, ids.admin, { caseTypeDefinitionId: scenarioIds.caseType }, 'OTHER'));
+    };
+    const dispose = async () => {
+      await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: scenarioIds.case } } });
+      await db.caseWorkPackage.deleteMany({ where: { caseId: scenarioIds.case } });
+      await db.workPackageTemplateItem.deleteMany({ where: { workPackageTemplateId: scenarioIds.template } });
+      await db.workPackageTemplate.deleteMany({ where: { id: scenarioIds.template } });
+      await db.caseTypeDefinition.deleteMany({ where: { id: scenarioIds.caseType } });
+      await db.case.deleteMany({ where: { id: scenarioIds.case } });
+    };
+
+    const requiredSnapshot = await createScenario(false);
+    const requiredItem = requiredSnapshot!.snapshot.items[0];
+    expect((requiredItem.config as any).topic).toBe('immutable');
+    expect((requiredItem.config as any)[CASE_WORK_PACKAGE_SNAPSHOT_KEY]).toEqual({ required: true });
+    await db.workPackageTemplateItem.update({ where: { id: scenarioIds.item }, data: { isOptional: true } });
+    expect((await getCaseWorkPackage(scenarioIds.case))!.items[0].required).toBe(true);
+    await db.workPackageTemplateItem.delete({ where: { id: scenarioIds.item } });
+    expect((await getCaseWorkPackage(scenarioIds.case))!.items[0].required).toBe(true);
+    await dispose();
+
+    Object.assign(scenarioIds, { caseType: crypto.randomUUID(), template: crypto.randomUUID(), case: crypto.randomUUID(), item: crypto.randomUUID() });
+    const optionalSnapshot = await createScenario(true);
+    const optionalItem = optionalSnapshot!.snapshot.items[0];
+    expect((optionalItem.config as any)[CASE_WORK_PACKAGE_SNAPSHOT_KEY]).toEqual({ required: false });
+    await db.workPackageTemplateItem.update({ where: { id: scenarioIds.item }, data: { isOptional: false } });
+    let projection = (await getCaseWorkPackage(scenarioIds.case))!;
+    expect(projection.items[0].required).toBe(false);
+    expect(projection.progress).toMatchObject({ required: 0, requiredCompleted: 0, totalActive: 1 });
+    await mutateCaseWorkPackageItem(scenarioIds.case, optionalItem.id, { expectedRevision: projection.revision, status: 'DISABLED' });
+    projection = (await getCaseWorkPackage(scenarioIds.case))!;
+    expect(projection.progress).toMatchObject({ total: 1, totalActive: 0, completed: 0, remaining: 0, required: 0, requiredCompleted: 0 });
+    await db.workPackageTemplateItem.delete({ where: { id: scenarioIds.item } });
+    projection = (await getCaseWorkPackage(scenarioIds.case))!;
+    expect(projection.items[0].required).toBe(false);
+    await dispose();
+  });
+
+  it('treats explicitly snapshotted case-added items as required without a template relation', async () => {
+    const caseAdded = crypto.randomUUID();
+    await db.caseWorkPackageItem.create({ data: {
+      id: caseAdded, caseWorkPackageId: ids.package, moduleType: 'CUSTOM', moduleKey: 'case-added-required', label: 'Case added', createdById: ids.admin,
+      config: { [CASE_WORK_PACKAGE_SNAPSHOT_KEY]: { required: true } },
+    } });
+    expect((await getCaseWorkPackage(ids.case))!.items.find((item) => item.id === caseAdded)?.required).toBe(true);
+    await db.caseWorkPackageItem.delete({ where: { id: caseAdded } });
   });
 
   it('creates one provenance task through the canonical task service and preserves matter/timeline links', async () => {

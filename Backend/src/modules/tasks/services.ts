@@ -1079,15 +1079,19 @@ export async function autoGenerateTask(params: {
 /**
  * Check if user can assign to another user
  */
-export async function canAssign(assignerId: string, assigneeId: string): Promise<boolean> {
-  const assigner = await prisma.user.findUnique({
+export async function canAssign(
+  assignerId: string,
+  assigneeId: string,
+  db: PrismaClient | Prisma.TransactionClient = prisma,
+): Promise<boolean> {
+  const assigner = await db.user.findUnique({
     where: { id: assignerId },
     select: { role: true }
   });
 
   if (!assigner) return false;
 
-  const assignee = await prisma.user.findUnique({
+  const assignee = await db.user.findUnique({
     where: { id: assigneeId },
     select: { role: true }
   });
