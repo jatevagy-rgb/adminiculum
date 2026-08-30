@@ -9,6 +9,9 @@
  *   E. Inactive / suspended / revoked identity -> NO reactivation, NO binding
  *   F. Namespace safety -> unrelated clients/workspaces/identities/memberships/grants survive reset
  *   G. Idempotency -> consecutive resets produce identical single membership + 3 grants
+ *   H. Explicit issuer/subject mismatch -> cannot fall back to email
+ *   I. Exact issuer/subject pair -> priority over matching-email identity
+ *   J. Partial issuer/subject configuration -> invalid config / no email fallback
  */
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
@@ -409,6 +412,42 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
       },
     });
 
+    const unrelatedMatterId = crypto.randomUUID();
+    await db.matter.create({
+      data: {
+        id: unrelatedMatterId,
+        clientId: unrelatedClientId,
+        title: 'Unrelated Foreign Matter',
+        status: 'ACTIVE',
+      },
+    });
+
+    const unrelatedCaseId = crypto.randomUUID();
+    await db.case.create({
+      data: {
+        id: unrelatedCaseId,
+        clientId: unrelatedClientId,
+        matterId: unrelatedMatterId,
+        title: 'Unrelated Foreign Case',
+        status: 'ACTIVE',
+      },
+    });
+
+    const unrelatedGrantId = crypto.randomUUID();
+    await db.clientPortalGrant.create({
+      data: {
+        id: unrelatedGrantId,
+        clientPortalIdentityId: unrelatedIdentityId,
+        workspaceId: unrelatedWsId,
+        clientId: unrelatedClientId,
+        caseId: unrelatedCaseId,
+        role: 'VIEWER',
+        status: 'ACTIVE',
+        permissions: ['MATTER_READ', 'DOCUMENT_READ'],
+        validFrom: new Date(),
+      },
+    });
+
     // Run reset twice
     runResetScript();
     runResetScript();
@@ -425,6 +464,11 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
 
     const memSurvives = await db.clientPortalWorkspaceMembership.findUnique({ where: { id: unrelatedMemId } });
     expect(memSurvives).not.toBeNull();
+
+    const grantSurvives = await db.clientPortalGrant.findUnique({ where: { id: unrelatedGrantId } });
+    expect(grantSurvives).not.toBeNull();
+    expect(grantSurvives?.status).toBe('ACTIVE');
+    expect(grantSurvives?.permissions).toEqual(['MATTER_READ', 'DOCUMENT_READ']);
   });
 
   // -------------------------------------------------------------------------
@@ -464,5 +508,198 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
       where: { clientPortalIdentityId: identityId, workspaceId: DEMO_IDS.workspaceId },
     });
     expect(grants).toHaveLength(3);
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario H: Explicit issuer/subject mismatch cannot email-fallback
+  // -------------------------------------------------------------------------
+  it('H. EXPLICIT ISSUER/SUBJECT MISMATCH: cannot fall back to email when issuer/subject pair is provided', async () => {
+    const identityId = crypto.randomUUID();
+    const targetEmail = `target.mismatch.${identityId.slice(0, 8)}@demo.invalid`.toLowerCase();
+    const verifiedDate = new Date('2026-02-01T10:00:00.000Z');
+
+    const realIdentity = await db.clientPortalIdentity.create({
+      data: {
+        id: identityId,
+        provider: 'ENTRA_EXTERNAL_ID',
+        issuer: 'https://login.microsoftonline.com/real-tenant-h/v2.0',
+        subject: `sub-real-h-${identityId}`,
+        normalizedEmail: targetEmail,
+        displayName: 'Real Tenant Lawyer H',
+        accountType: 'INDIVIDUAL',
+        status: 'ACTIVE',
+        emailVerifiedAt: verifiedDate,
+      },
+    });
+
+    const output = runResetScript({
+      DEMO_KFT_PORTAL_IDENTITY_ISSUER: 'https://login.microsoftonline.com/different-issuer-h/v2.0',
+      DEMO_KFT_PORTAL_IDENTITY_SUBJECT: `sub-different-h-${identityId}`,
+      DEMO_KFT_PORTAL_IDENTITY_EMAIL: targetEmail,
+    });
+
+    expect(output).toContain('DEMO_PORTAL_IDENTITY_BINDING=PENDING_IDENTITY');
+
+    // Prove matching email did NOT bypass explicit issuer/subject mismatch
+    const membership = await db.clientPortalWorkspaceMembership.findUnique({
+      where: {
+        clientPortalIdentityId_workspaceId: {
+          clientPortalIdentityId: identityId,
+          workspaceId: DEMO_IDS.workspaceId,
+        },
+      },
+    });
+    expect(membership).toBeNull();
+
+    const grants = await db.clientPortalGrant.findMany({
+      where: { clientPortalIdentityId: identityId, workspaceId: DEMO_IDS.workspaceId },
+    });
+    expect(grants).toHaveLength(0);
+
+    const after = await db.clientPortalIdentity.findUniqueOrThrow({ where: { id: identityId } });
+    expect(after.issuer).toBe(realIdentity.issuer);
+    expect(after.subject).toBe(realIdentity.subject);
+    expect(after.normalizedEmail).toBe(realIdentity.normalizedEmail);
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario I: Exact issuer/subject beats matching-email identity
+  // -------------------------------------------------------------------------
+  it('I. EXACT ISSUER/SUBJECT WINS: binds identity matching configured pair rather than different identity with matching email', async () => {
+    const idA = crypto.randomUUID();
+    const idB = crypto.randomUUID();
+    const configuredIssuer = 'https://login.microsoftonline.com/tenant-i/v2.0';
+    const configuredSubject = `sub-exact-i-${idA}`;
+    const configuredEmail = `demo.target.i.${idB.slice(0, 8)}@demo.invalid`.toLowerCase();
+    const emailA = `email.a.i.${idA.slice(0, 8)}@demo.invalid`.toLowerCase();
+
+    // Identity A has the exact configured issuer + subject pair, but different email
+    const identityA = await db.clientPortalIdentity.create({
+      data: {
+        id: idA,
+        provider: 'ENTRA_EXTERNAL_ID',
+        issuer: configuredIssuer,
+        subject: configuredSubject,
+        normalizedEmail: emailA,
+        displayName: 'Identity A (Exact Pair Match)',
+        accountType: 'INDIVIDUAL',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    // Identity B has different issuer + subject, but matching email
+    const identityB = await db.clientPortalIdentity.create({
+      data: {
+        id: idB,
+        provider: 'ENTRA_EXTERNAL_ID',
+        issuer: 'https://login.microsoftonline.com/other-tenant-i/v2.0',
+        subject: `sub-other-i-${idB}`,
+        normalizedEmail: configuredEmail,
+        displayName: 'Identity B (Email Match Only)',
+        accountType: 'INDIVIDUAL',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    const output = runResetScript({
+      DEMO_KFT_PORTAL_IDENTITY_ISSUER: configuredIssuer,
+      DEMO_KFT_PORTAL_IDENTITY_SUBJECT: configuredSubject,
+      DEMO_KFT_PORTAL_IDENTITY_EMAIL: configuredEmail,
+    });
+
+    expect(output).toContain('DEMO_PORTAL_IDENTITY_BINDING=BOUND');
+
+    // Identity A MUST be bound
+    const memA = await db.clientPortalWorkspaceMembership.findUnique({
+      where: {
+        clientPortalIdentityId_workspaceId: {
+          clientPortalIdentityId: identityA.id,
+          workspaceId: DEMO_IDS.workspaceId,
+        },
+      },
+    });
+    expect(memA).not.toBeNull();
+    expect(memA?.status).toBe('ACTIVE');
+
+    const grantsA = await db.clientPortalGrant.findMany({
+      where: { clientPortalIdentityId: identityA.id, workspaceId: DEMO_IDS.workspaceId },
+    });
+    expect(grantsA).toHaveLength(3);
+
+    // Identity B MUST NOT have memberships or grants on Demo workspace
+    const memB = await db.clientPortalWorkspaceMembership.findUnique({
+      where: {
+        clientPortalIdentityId_workspaceId: {
+          clientPortalIdentityId: identityB.id,
+          workspaceId: DEMO_IDS.workspaceId,
+        },
+      },
+    });
+    expect(memB).toBeNull();
+
+    const grantsB = await db.clientPortalGrant.findMany({
+      where: { clientPortalIdentityId: identityB.id, workspaceId: DEMO_IDS.workspaceId },
+    });
+    expect(grantsB).toHaveLength(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Scenario J: Partial issuer/subject config cannot email-fallback
+  // -------------------------------------------------------------------------
+  it('J. PARTIAL PAIR CONFIGURATION: fails binding safely and refuses email fallback when only one of issuer/subject is set', async () => {
+    const identityId = crypto.randomUUID();
+    const email = `partial.user.${identityId.slice(0, 8)}@demo.invalid`.toLowerCase();
+
+    await db.clientPortalIdentity.create({
+      data: {
+        id: identityId,
+        provider: 'ENTRA_EXTERNAL_ID',
+        issuer: 'https://login.microsoftonline.com/tenant-j/v2.0',
+        subject: `sub-j-${identityId}`,
+        normalizedEmail: email,
+        displayName: 'Partial Config User',
+        accountType: 'INDIVIDUAL',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    // Sub-case J1: Issuer configured, Subject missing
+    const outputJ1 = runResetScript({
+      DEMO_KFT_PORTAL_IDENTITY_ISSUER: 'https://login.microsoftonline.com/tenant-j/v2.0',
+      DEMO_KFT_PORTAL_IDENTITY_SUBJECT: '',
+      DEMO_KFT_PORTAL_IDENTITY_EMAIL: email,
+    });
+    expect(outputJ1).toContain('DEMO_PORTAL_IDENTITY_BINDING=INVALID_IDENTITY_CONFIG');
+
+    let mem = await db.clientPortalWorkspaceMembership.findUnique({
+      where: {
+        clientPortalIdentityId_workspaceId: {
+          clientPortalIdentityId: identityId,
+          workspaceId: DEMO_IDS.workspaceId,
+        },
+      },
+    });
+    expect(mem).toBeNull();
+
+    // Sub-case J2: Subject configured, Issuer missing
+    const outputJ2 = runResetScript({
+      DEMO_KFT_PORTAL_IDENTITY_ISSUER: '',
+      DEMO_KFT_PORTAL_IDENTITY_SUBJECT: `sub-j-${identityId}`,
+      DEMO_KFT_PORTAL_IDENTITY_EMAIL: email,
+    });
+    expect(outputJ2).toContain('DEMO_PORTAL_IDENTITY_BINDING=INVALID_IDENTITY_CONFIG');
+
+    mem = await db.clientPortalWorkspaceMembership.findUnique({
+      where: {
+        clientPortalIdentityId_workspaceId: {
+          clientPortalIdentityId: identityId,
+          workspaceId: DEMO_IDS.workspaceId,
+        },
+      },
+    });
+    expect(mem).toBeNull();
   });
 });

@@ -20,6 +20,7 @@
     "test:migration:webjob": "node scripts/test-migration-webjob-runner.mjs",
     "demo:kft:reset": "node -r dotenv/config ./node_modules/tsx/dist/cli.mjs scripts/demo-kft-reset.mjs",
     "test:demo-kft:db": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand tests/demoKftFixture.integration.test.ts",
+    "test:demo-kft-identity:db": "jest --runInBand tests/demoKftIdentityBinding.integration.test.ts",
     "prisma:studio": "prisma studio",
     "prisma:seed": "tsx prisma/seed.ts",
     "seed:pilot:users": "node scripts/seed-core-team-users.mjs",

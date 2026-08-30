@@ -1,5 +1,4 @@
 import { Client } from 'pg';
-import './demoKftIdentityBinding.integration.test';
 
 const databaseUrl = process.env.DEMO_KFT_TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;

@@ -189,7 +189,6 @@ async function teardown(db) {
 
   await db.clientPortalGrant.deleteMany({ where: { workspaceId: IDS.workspaceId } });
   await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: IDS.workspaceId } });
-  await db.clientPortalIdentity.deleteMany({ where: { id: IDS.identityId, normalizedEmail: 'demo-kft-uzletvezeto@fixture.invalid' } });
 
   await db.organizationPerson.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientOrganizationGroup.deleteMany({ where: { clientId: IDS.clientId } });
@@ -690,28 +689,44 @@ async function seed(db) {
   ).trim();
 
   let boundIdentity = null;
+  let bindingDiagnostic = 'PENDING_IDENTITY';
 
-  // Matching Preference A: Exact configured issuer + subject IF both values are explicitly provided
-  if (targetIssuer && targetSubject) {
+  const hasIssuer = Boolean(targetIssuer);
+  const hasSubject = Boolean(targetSubject);
+
+  if (hasIssuer && hasSubject) {
+    // CASE A: Both issuer AND subject configured — exact pair matching ONLY (no email fallback)
     const matched = await db.clientPortalIdentity.findUnique({
       where: { issuer_subject: { issuer: targetIssuer, subject: targetSubject } },
     });
     if (matched && matched.status === 'ACTIVE') {
       boundIdentity = matched;
+      bindingDiagnostic = 'BOUND';
       // Do NOT mutate any identity claims for an existing verified identity.
+    } else {
+      bindingDiagnostic = 'PENDING_IDENTITY';
     }
-  }
-
-  // Matching Preference B: Verified normalized email matching fallback
-  if (!boundIdentity && targetEmail) {
-    const matched = await db.clientPortalIdentity.findUnique({
-      where: { normalizedEmail: targetEmail },
-    });
-    // Requirement: MUST require emailVerifiedAt to be present AND status === 'ACTIVE'
-    if (matched && matched.emailVerifiedAt != null && matched.status === 'ACTIVE') {
-      boundIdentity = matched;
-      // Do NOT mutate any identity claims for an existing verified identity.
+  } else if (!hasIssuer && !hasSubject) {
+    // CASE B: Neither issuer nor subject configured — verified email fallback allowed
+    if (targetEmail) {
+      const matched = await db.clientPortalIdentity.findUnique({
+        where: { normalizedEmail: targetEmail },
+      });
+      // Requirement: MUST require emailVerifiedAt to be present AND status === 'ACTIVE'
+      if (matched && matched.emailVerifiedAt != null && matched.status === 'ACTIVE') {
+        boundIdentity = matched;
+        bindingDiagnostic = 'BOUND';
+        // Do NOT mutate any identity claims for an existing verified identity.
+      } else {
+        bindingDiagnostic = 'PENDING_IDENTITY';
+      }
+    } else {
+      bindingDiagnostic = 'PENDING_IDENTITY';
     }
+  } else {
+    // CASE C: Only ONE of issuer / subject configured — invalid/incomplete configuration (no email fallback)
+    console.warn('⚠️ Invalid identity configuration: exactly one of issuer/subject is configured. Both are required for exact pair matching.');
+    bindingDiagnostic = 'INVALID_IDENTITY_CONFIG';
   }
 
   // Authentication owns identity creation. If no existing verified identity matched, DO NOT create one!
@@ -779,7 +794,11 @@ async function seed(db) {
     console.log('   Exec:      Péterfi János · Ügyvezető (business structure created, identity binding pending JIT login)');
     console.log('   Cases:     Employment / Supplier / Compliance');
     console.log('   Baseline:  employee_count = 47');
-    console.log('   DEMO_PORTAL_IDENTITY_BINDING=PENDING_IDENTITY');
+    if (bindingDiagnostic === 'INVALID_IDENTITY_CONFIG') {
+      console.log('   DEMO_PORTAL_IDENTITY_BINDING=INVALID_IDENTITY_CONFIG');
+    } else {
+      console.log('   DEMO_PORTAL_IDENTITY_BINDING=PENDING_IDENTITY');
+    }
   }
 }
 
