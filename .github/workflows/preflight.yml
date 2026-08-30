@@ -109,6 +109,47 @@ jobs:
         continue-on-error: true
         run: npx jest --runInBand
 
+  # Dedicated REQUIRED gate for the DOCX/PDF text-comparison regression. Unlike
+  # the aggregate non-PG job above (continue-on-error), a failure here fails
+  # Preflight. Runs the focused Node 20 comparison suite that proves: PDF
+  # identical / changed, mixed DOCX/PDF, image-only PDF, malformed PDF, literal
+  # page-marker content, shared-extractor >2 MB compatibility, and comparison
+  # >2 MB rejection.
+  comparison-regression-gate:
+    name: Backend DOCX/PDF comparison regression gate (Node 20)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Backend
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci_dummy_jwt_secret_at_least_32_chars
+      JWT_REFRESH_SECRET: ci_dummy_refresh_secret_at_least_32_chars
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      # No continue-on-error: a regression MUST fail Preflight. --verbose proves
+      # each required case (PDF identical/changed, mixed, image-only, malformed,
+      # page-marker, >2 MB shared vs comparison) actually executed.
+      - name: DOCX/PDF comparison regression (REQUIRED)
+        run: npx jest --runInBand --verbose tests/documentDocxPdfDiff.test.ts
+
   frontend-preflight:
     name: Frontend preflight
     needs: changes
