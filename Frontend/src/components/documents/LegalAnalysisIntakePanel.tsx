@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createDocumentLegalAnalysis,
+  getLegalAnalysis,
   listDocumentLegalAnalyses,
   updateLegalAnalysis,
   type LegalAnalysisRecord,
@@ -96,9 +97,10 @@ export function LegalAnalysisIntakePanel({
       try {
         const analyses = await listDocumentLegalAnalyses(documentId, { caseId, documentSourceType });
         if (cancelled) return;
-        const latest = [...analyses].sort(
+        const latestSummary = [...analyses].sort(
           (a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime(),
         )[0] || null;
+        const latest = latestSummary ? await getLegalAnalysis(latestSummary.id) : null;
         setSavedAnalysis(latest);
         const snapshot = getSavedSnapshot(latest);
         setTitle(snapshot.title);
@@ -210,7 +212,7 @@ export function LegalAnalysisIntakePanel({
   };
 
   return (
-    <aside className="border border-[#DDD7CA] bg-white p-4">
+    <aside data-testid="legal-analysis-intake" className="border border-[#DDD7CA] bg-white p-4">
       <div className="mb-4">
         <p className="text-[10px] uppercase tracking-[0.2em] text-[#7B776D]">AI válasz intake</p>
         <h3 className="mt-1 text-sm font-semibold text-[#1F2821]">Jogi elemzés beillesztése</h3>

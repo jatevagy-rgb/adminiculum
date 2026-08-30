@@ -59,6 +59,7 @@ import { DocumentWorkspaceTabs } from "@/components/documents/workContext/Docume
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
 import { ClientPublicationPanel } from "@/components/documents/publication/ClientPublicationPanel";
+import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import { useUiPack } from "@/lib/uiPack";
 
 // Document Family / Lineage Types
@@ -1630,6 +1631,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </div>
 
                         </div>
+
+                        {selectedUploadedDocument && canonicalCaseId && selectedVersion ? (
+                          <div className="mt-4">
+                            <LegalAnalysisIntakePanel
+                              caseId={canonicalCaseId}
+                              documentId={selectedUploadedDocument.id}
+                              documentSourceType="DOCUMENT"
+                              documentTitle={activeTitle || undefined}
+                            />
+                          </div>
+                        ) : null}
 
                         {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
                           <div id="document-versions" className="scroll-mt-24 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
