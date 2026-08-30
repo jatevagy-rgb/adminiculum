@@ -418,7 +418,7 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
         id: unrelatedMatterId,
         clientId: unrelatedClientId,
         title: 'Unrelated Foreign Matter',
-        status: 'OPEN',
+        matterType: 'CONTRACT',
       },
     });
 
@@ -426,10 +426,13 @@ describeWithDatabase('Demo Kft Identity Binding & Immutability (Real PostgreSQL)
     await db.case.create({
       data: {
         id: unrelatedCaseId,
+        caseNumber: `CASE-UNR-${unrelatedCaseId.slice(0, 6)}`,
+        title: 'Unrelated Foreign Case',
+        caseType: 'CONTRACT_REVIEW',
         clientId: unrelatedClientId,
         matterId: unrelatedMatterId,
-        title: 'Unrelated Foreign Case',
-        status: 'DRAFT',
+        createdById: adminId,
+        assignedLawyerId: adminId,
       },
     });
 
