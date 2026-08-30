@@ -309,7 +309,7 @@ export default function CommunicationsOverview() {
         ) : communications.length === 0 ? (
           <div className="rounded border border-[#DDD7CA] bg-white p-8 text-center">
             <p className="text-sm text-[#514D45]">Még nincs kommunikáció.</p>
-            <p className="mt-1 text-xs text-[#7B776D]">A „Szinkronizálás most" gombbal importálhatod a bejövő levelezést.</p>
+            <p className="mt-1 text-xs text-[#7B776D]">{'A „Szinkronizálás most" gombbal importálhatod a bejövő levelezést.'}</p>
           </div>
         ) : (
           <div className="overflow-x-auto rounded border border-[#DDD7CA] bg-white">

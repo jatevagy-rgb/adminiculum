@@ -24,7 +24,7 @@ describe('Communications live-integration UI (structural)', () => {
 
   it('offers the bounded Outlook refresh action in Hungarian without technical Graph terms', () => {
     const src = overview();
-    assert.match(src, /Outlook kommunikáció frissítése/);
+    assert.match(src, /Szinkronizálás most/);
     assert.match(src, /Importálva/);
     assert.match(src, /Már ismert/);
     assert.match(src, /Feldolgozásra vár/);
