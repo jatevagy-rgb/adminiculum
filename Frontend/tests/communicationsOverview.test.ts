@@ -50,7 +50,10 @@ describe('Communications live-integration UI (structural)', () => {
 
   it('only reports Outlook sync success after the canonical success result and keeps case-client authority server-side', () => {
     const src = overview();
+    const apiSrc = api();
     assert.match(src, /if \(!result\.success\)/);
+    assert.doesNotMatch(apiSrc, /OutlookSyncResult[\s\S]{0,240}mailboxAddress/);
+    assert.doesNotMatch(src, /mailboxAddress/);
     assert.match(src, /createCaseFromCommunication\(communicationId, \{/);
     assert.doesNotMatch(src, /clientId:\s*createCaseForm\.clientId/);
     assert.doesNotMatch(notifications(), /clientId,\s*priority: casePriority/);

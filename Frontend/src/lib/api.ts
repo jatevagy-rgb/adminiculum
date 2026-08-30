@@ -3728,7 +3728,6 @@ export type OutlookSyncSummary = {
 export type OutlookSyncResult = {
   success: boolean;
   configured: boolean;
-  mailboxAddress: string | null;
   summary: OutlookSyncSummary;
   threadLinked: number;
   items: Array<{
