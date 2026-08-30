@@ -3663,6 +3663,25 @@ export interface CommunicationsListResponse {
   };
 }
 
+export type ClientCommunicationSummaryItem = {
+  id: string;
+  sender: string | null;
+  subject: string;
+  timestamp: string | null;
+  preview: string | null;
+  clientId: string | null;
+  caseId: string | null;
+  caseNumber: string | null;
+  caseTitle: string | null;
+  attachmentCount: number;
+  taskCount: number;
+};
+
+export type ClientCommunicationSummary = {
+  client: { id: string; name: string };
+  communications: ClientCommunicationSummaryItem[];
+};
+
 export async function getCommunications(params?: {
   caseId?: string;
   clientId?: string;
@@ -3680,6 +3699,12 @@ export async function getCommunications(params?: {
   if (params?.offset) queryParams.set('offset', String(params.offset));
   
   return fetchApi<CommunicationsListResponse>(`/communications?${queryParams.toString()}`);
+}
+
+export async function getClientCommunicationSummary(clientId: string, limit = 15): Promise<ClientCommunicationSummary> {
+  return fetchApi<ClientCommunicationSummary>(
+    `/communications/client/${encodeURIComponent(clientId)}/summary?limit=${limit}`,
+  );
 }
 
 export async function getCommunicationById(id: string): Promise<CommunicationDetail | null> {

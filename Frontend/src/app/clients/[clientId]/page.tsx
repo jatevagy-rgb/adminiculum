@@ -10,14 +10,14 @@ import {
   updateClient,
   getCaseDocuments,
   uploadCaseDocument,
-  getCommunications,
+  getClientCommunicationSummary,
   getUsers,
   addCaseCollaborator,
   type Client,
   type CaseListItem,
   type CreateCaseData,
   type DocumentItem,
-  type CommunicationItem,
+  type ClientCommunicationSummaryItem,
   type User,
 } from "@/lib/api";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
@@ -102,7 +102,7 @@ function ClientDetailContent() {
   const [client, setClient] = useState<Client | null>(null);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [documents, setDocuments] = useState<DossierDocument[]>([]);
-  const [communications, setCommunications] = useState<CommunicationItem[]>([]);
+  const [communications, setCommunications] = useState<ClientCommunicationSummaryItem[]>([]);
   const [portalWorkspace, setPortalWorkspace] = useState<AdminWorkspaceDTO | null>(null);
   const [savingPortal, setSavingPortal] = useState(false);
 
@@ -146,7 +146,10 @@ function ClientDetailContent() {
     try {
       const [clientData, directClientComms, portalWorkspaces] = await Promise.all([
         getClient(clientId),
-        getCommunications({ clientId, limit: 15 }).catch(() => ({ communications: [], pagination: { total: 0, limit: 0, offset: 0 } })),
+        getClientCommunicationSummary(clientId, 15).catch(() => ({
+          communications: [],
+          client: { id: clientId, name: "" },
+        })),
         listAdminWorkspaces(clientId).catch(() => ({ items: [] })),
       ]);
 
@@ -164,35 +167,17 @@ function ClientDetailContent() {
 
       setCaseFormData((prev) => ({ ...prev, clientName: clientData.name, clientId: clientData.id }));
 
-      const [documentsByCase, commsByCase] = await Promise.all([
-        Promise.all(
-          relatedCases.map(async (item) => {
-            const docs = await getCaseDocuments(item.id).catch(() => [] as DocumentItem[]);
-            return docs.map((doc) => ({ ...doc, caseId: item.id, caseNumber: item.caseNumber }));
-          })
-        ),
-        Promise.all(
-          relatedCases.map(async (item) => {
-            const comms = await getCommunications({ caseId: item.id, limit: 8 }).catch(() => ({ communications: [] as CommunicationItem[], pagination: { total: 0, limit: 0, offset: 0 } }));
-            return comms.communications;
-          })
-        ),
-      ]);
+      const documentsByCase = await Promise.all(
+        relatedCases.map(async (item) => {
+          const docs = await getCaseDocuments(item.id).catch(() => [] as DocumentItem[]);
+          return docs.map((doc) => ({ ...doc, caseId: item.id, caseNumber: item.caseNumber }));
+        }),
+      );
 
       const mergedDocuments = documentsByCase.flat().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setDocuments(mergedDocuments.slice(0, 12));
 
-      const commMap = new Map<string, CommunicationItem>();
-      for (const comm of directClientComms.communications) {
-        commMap.set(comm.id, comm);
-      }
-      for (const comm of commsByCase.flat()) {
-        commMap.set(comm.id, comm);
-      }
-      const mergedCommunications = Array.from(commMap.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      setCommunications(mergedCommunications.slice(0, 12));
+      setCommunications(directClientComms.communications.slice(0, 12));
     } catch (err) {
       console.error("Failed to load client dossier:", err);
       setError("Nem sikerült betölteni az ügyfél dossziét.");
@@ -495,7 +480,9 @@ function ClientDetailContent() {
                       className="adm-board-list-row block p-3"
                     >
                       <p className="text-xs font-semibold text-[var(--adm-text)] truncate">{comm.subject || "Kommunikációs bejegyzés"}</p>
-                      <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">{comm.type} · {comm.senderName || comm.senderEmail || "Ismeretlen feladó"} · {formatDate(comm.createdAt)}</p>
+                      <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">
+                        {comm.sender || "Ismeretlen feladó"} · {comm.caseNumber || "Ügy nélkül"} · {formatDate(comm.timestamp || undefined)}
+                      </p>
                     </Link>
                   ))}
                 </div>

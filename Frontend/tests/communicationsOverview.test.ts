@@ -13,6 +13,7 @@ describe('Communications live-integration UI (structural)', () => {
   const api = () => read('src/lib/api.ts');
   const casePage = () => read('src/app/cases/[caseId]/communications/CommunicationsPageContent.tsx');
   const sidebar = () => read('src/components/Sidebar.tsx');
+  const clientPage = () => read('src/app/clients/[clientId]/page.tsx');
 
   it('registers a global communications overview page and nav entry', () => {
     assert.equal(existsSync(path.join(root, 'src/app/communications/page.tsx')), true);
@@ -73,5 +74,14 @@ describe('Communications live-integration UI (structural)', () => {
   it('does not expose the customer portal thread model as a mail replacement', () => {
     // The overview must not claim to be the customer messaging surface.
     assert.doesNotMatch(overview(), /ClientQuestionThread|ClientQuestionMessage/);
+  });
+
+  it('uses the contextual client projection without inventing unread or thread state', () => {
+    const src = clientPage();
+    assert.match(src, /getClientCommunicationSummary\(clientId, 15\)/);
+    assert.match(src, /comm\.caseNumber/);
+    assert.match(src, /comm\.timestamp/);
+    assert.doesNotMatch(src, /unread|isRead|threadState|conversationStatus/i);
+    assert.doesNotMatch(src, /providerConversationId|mailboxAddress|tenantId|access_token|Bearer/i);
   });
 });
