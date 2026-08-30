@@ -6,21 +6,24 @@ import {
 
 describe('client communication summary read model', () => {
   it('uses the effective timestamp contract and bounded relation lookups', async () => {
-    const communicationFindMany = jest.fn().mockResolvedValue([
-      {
-        id: 'comm-1',
-        subject: 'Subject',
-        senderName: 'Sender',
-        senderEmail: null,
-        recipientName: null,
-        content: 'Preview',
-        clientId: 'client-1',
-        caseId: null,
-        createdAt: new Date('2026-01-01T09:00:00Z'),
-        receivedAt: null,
-        sentAt: new Date('2026-01-02T09:00:00Z'),
-      },
-    ]);
+    const communicationFindMany = jest.fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 'comm-1',
+          subject: 'Subject',
+          senderName: 'Sender',
+          senderEmail: null,
+          recipientName: null,
+          content: 'Preview',
+          clientId: 'client-1',
+          caseId: null,
+          createdAt: new Date('2026-01-01T09:00:00Z'),
+          receivedAt: null,
+          sentAt: new Date('2026-01-02T09:00:00Z'),
+        },
+      ])
+      .mockResolvedValueOnce([]);
     const caseFindMany = jest.fn().mockResolvedValue([]);
     const attachmentFindMany = jest.fn().mockResolvedValue([]);
     const taskFindMany = jest.fn().mockResolvedValue([]);
@@ -42,7 +45,7 @@ describe('client communication summary read model', () => {
     expect(item).not.toHaveProperty('providerConversationId');
     expect(item).not.toHaveProperty('mailboxAddress');
     expect(caseFindMany).toHaveBeenCalledTimes(1);
-    expect(communicationFindMany).toHaveBeenCalledTimes(1);
+    expect(communicationFindMany).toHaveBeenCalledTimes(3);
     expect(attachmentFindMany).toHaveBeenCalledTimes(1);
     expect(taskFindMany).toHaveBeenCalledTimes(1);
   });

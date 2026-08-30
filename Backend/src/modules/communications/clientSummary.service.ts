@@ -82,29 +82,41 @@ export async function listClientCommunicationSummary(
     ],
   };
   const limit = clampLimit(opts.limit);
-  const rows = await prisma.communication.findMany({
-    where,
-    orderBy: [
-      { receivedAt: { sort: 'desc', nulls: 'last' } },
-      { sentAt: { sort: 'desc', nulls: 'last' } },
-      { createdAt: 'desc' },
-      { id: 'desc' },
-    ],
-    take: Math.min(limit * 3, MAX_CLIENT_SUMMARY_LIMIT),
-    select: {
-      id: true,
-      subject: true,
-      senderName: true,
-      senderEmail: true,
-      recipientName: true,
-      content: true,
-      caseId: true,
-      clientId: true,
-      createdAt: true,
-      receivedAt: true,
-      sentAt: true,
-    },
-  });
+  const select = {
+    id: true,
+    subject: true,
+    senderName: true,
+    senderEmail: true,
+    recipientName: true,
+    content: true,
+    caseId: true,
+    clientId: true,
+    createdAt: true,
+    receivedAt: true,
+    sentAt: true,
+  } as const;
+  const bucketLimit = Math.min(limit, MAX_CLIENT_SUMMARY_LIMIT);
+  const [receivedRows, sentRows, createdRows] = await Promise.all([
+    prisma.communication.findMany({
+      where: { AND: [where, { receivedAt: { not: null } }] },
+      orderBy: [{ receivedAt: 'desc' }, { id: 'desc' }],
+      take: bucketLimit,
+      select,
+    }),
+    prisma.communication.findMany({
+      where: { AND: [where, { receivedAt: null, sentAt: { not: null } }] },
+      orderBy: [{ sentAt: 'desc' }, { id: 'desc' }],
+      take: bucketLimit,
+      select,
+    }),
+    prisma.communication.findMany({
+      where: { AND: [where, { receivedAt: null, sentAt: null }] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: bucketLimit,
+      select,
+    }),
+  ]);
+  const rows = [...receivedRows, ...sentRows, ...createdRows];
 
   rows.sort((a, b) => {
     const left = a.receivedAt || a.sentAt || a.createdAt;
