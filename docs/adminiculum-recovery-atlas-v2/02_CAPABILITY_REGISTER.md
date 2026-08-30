@@ -1,5 +1,15 @@
 # Capability register
 
+## Deep-pass semantic splits
+
+The document/review family is intentionally not one capability:
+`DOCUMENT_UPLOAD`, `DOCUMENT_VERSION`, `DOCUMENT_DIFF`, `DOCUMENT_REVIEW`,
+`ANNOTATION`, `DECISION`, `APPROVAL`, `PUBLICATION`, and
+`CLIENT_EXPLANATION` have different owners, persistence, authorization, and
+connectivity breakpoints. The same rule is applied to portal
+identity/workspace/grant, communication import/association/case creation, and
+Work Package template/snapshot/runtime/task creation.
+
 | Key | Capability | Canonical evidence | Historical/recovery evidence | Status |
 |---|---|---|---|---|
 | CASE_CREATE | Case creation/intake | `Backend/src/modules/cases/intakeCreate.service.ts`, `cases/routes.ts` | `2729450`, PR98 branch | CANONICAL_CURRENT; ACTIVE_RECOVERY; PARTIALLY_CONNECTED |

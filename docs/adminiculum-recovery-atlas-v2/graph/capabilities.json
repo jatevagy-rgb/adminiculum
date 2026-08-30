@@ -20,6 +20,26 @@
     {"key":"TIME_ENTRY","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["d49d410","Frontend/src/app/time-entries"]},
     {"key":"ANONYMIZATION","states":["CANONICAL_CURRENT","SECURITY_SENSITIVE"],"evidence":["SEC-0B1","Backend/src/modules/anonymize"]},
     {"key":"SEARCH","states":["BACKEND_ONLY","UNREACHABLE_UI"],"evidence":["current API/backend references"]},
-    {"key":"BILLING","states":["HISTORICAL_ONLY","RECOVERABLE"],"evidence":["roadmap references; no implementation proof"]}
+    {"key":"BILLING","states":["HISTORICAL_ONLY","RECOVERABLE"],"evidence":["roadmap references; no implementation proof"]},
+    {"key":"DOCUMENT_UPLOAD","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["Frontend/src/app/cases/[caseId]/documents","document upload routes"]},
+    {"key":"DOCUMENT_DIFF","states":["CANONICAL_CURRENT","ACTIVE_RECOVERY","PARTIALLY_CONNECTED"],"evidence":["/documents/compare metadata","PR94 extraction recovery"]},
+    {"key":"ANNOTATION","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["annotations service and review workspace"]},
+    {"key":"DECISION","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["DocumentReview/TaskReview decision services"]},
+    {"key":"APPROVAL","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["review approval and contract transitions"]},
+    {"key":"PUBLICATION","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["client-publication module and milestone panel"]},
+    {"key":"CLIENT_EXPLANATION","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["client publication/explanation panels"]},
+    {"key":"PORTAL_IDENTITY","states":["CANONICAL_CURRENT","ACTIVE_RECOVERY","SECURITY_SENSITIVE"],"evidence":["clientPortalAuth and PR92"]},
+    {"key":"PORTAL_WORKSPACE","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["workspace selector and portal shells"]},
+    {"key":"PORTAL_GRANT","states":["CANONICAL_CURRENT","FULLY_CONNECTED"],"evidence":["resolveActiveCustomerGrant"]},
+    {"key":"COMMUNICATION_IMPORT","states":["CANONICAL_CURRENT","LIVE_UNPROVEN"],"evidence":["outlookGraphLive and import routes"]},
+    {"key":"COMMUNICATION_ASSOCIATION","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["link-client/link-case routes"]},
+    {"key":"COMMUNICATION_CASE_CREATION","states":["ACTIVE_RECOVERY","PARTIALLY_CONNECTED"],"evidence":["PR95 exact head 146539d"]},
+    {"key":"WORK_PACKAGE_TEMPLATE","states":["CANONICAL_CURRENT","BACKEND_ONLY"],"evidence":["WorkPackageTemplate model/admin"]},
+    {"key":"WORK_PACKAGE_SNAPSHOT","states":["CANONICAL_CURRENT","ACTIVE_RECOVERY"],"evidence":["createCaseWorkPackageSnapshot and PR98"]},
+    {"key":"WORK_PACKAGE_RUNTIME","states":["ACTIVE_RECOVERY","STACKED_RECOVERY"],"evidence":["PR96 exact head f417ada"]},
+    {"key":"WORK_PACKAGE_TASK_CREATION","states":["ACTIVE_RECOVERY","PARTIALLY_CONNECTED"],"evidence":["PR96/PR98 transaction paths"]},
+    {"key":"TASK_TIME_LINK","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["TaskSubmissionTimeEntry and time entry routes"]},
+    {"key":"COMPLIANCE_CASE_BINDING","states":["CANONICAL_CURRENT","PARTIALLY_CONNECTED"],"evidence":["bindProposalToCase; no proposal-created case"]},
+    {"key":"HANDOFF_PACKAGE","states":["CANONICAL_CURRENT","NAVIGATION_ORPHANED"],"evidence":["handoff package service/panel"]}
   ]
 }
