@@ -3,12 +3,19 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['<rootDir>/tests/**/*.test.ts'],
   clearMocks: true,
+  globals: {
+    'ts-jest': {
+      useESM: true
+    }
+  },
+  extensionsToTreatAsEsm: ['.ts'],
   // Frontend-source interop tests (documentEditorDocxInterop, documentEditorReviewQuality)
   // import Frontend/src/lib/editor modules that `require('jszip')`. The backend job
   // installs only Backend dependencies, so jest and ts-jest must resolve jszip from
   // the backend's own node_modules instead of the (absent) Frontend node_modules.
   moduleNameMapper: {
     '^jszip$': '<rootDir>/node_modules/jszip',
+    '^chalk$': '<rootDir>/node_modules/chalk'
   },
   transform: {
     '^.+\\.tsx?$': [
@@ -19,10 +26,11 @@ module.exports = {
           baseUrl: './src',
           paths: {
             '@/*': ['./*'],
-            jszip: ['../node_modules/jszip'],
-          },
-        },
-      },
-    ],
+            jszip: ['../node_modules/jszip']
+          }
+        }
+      }
+    ]
   },
+  modulePathIgnorePatterns: ['<rootDir>/.next/', '<rootDir>/Frontend/.next/']
 };

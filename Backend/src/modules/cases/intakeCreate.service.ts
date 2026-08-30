@@ -330,11 +330,18 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
         clientName: client.name,
         matterType,
         clientRole,
-        // NOTE: `Case.deadline` is a legacy compatibility projection.
-        // It mirrors the earliest typed `CaseIntakeDeadline` (if any) to preserve
-        // historic API contracts that expect a single case‑level deadline.
-        // The source of truth is now `CaseIntakeDeadline`; updates to intake
-        // deadlines automatically recompute this field via the logic below.
+        createdById: actorId,
+        assignedLawyerId: assignedLawyerId || null,
+        intakeOriginReason: startingContext.intakeOriginReason ?? null,
+        intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
+        intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
+        intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
+        intakeNextStep: startingContext.intakeNextStep ?? null,
+        // NOTE: `Case.deadline` is an independent field.
+        // It is set only at case creation based on the earliest provided
+        // `CaseIntakeDeadline` (if any). Subsequent changes to `CaseIntakeDeadline`
+        // rows do NOT recompute this field. The source of truth for deadlines is
+        // the `CaseIntakeDeadline` records.
         deadline: primaryDeadline || undefined,
       } as never,
       select: {
