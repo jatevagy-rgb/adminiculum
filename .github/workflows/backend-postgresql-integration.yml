@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary demo-kft-text-id-verification work-package-schema work-package-admin work-package-case-creation phase7b phase7cb org-client-safe phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
+          for s in comparison review publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary demo-kft-text-id-verification work-package-schema work-package-admin work-package-case-creation time-attribution phase7b phase7cb org-client-safe phase5b document-version task-lifecycle-schema task-review-decision task-submission; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -407,6 +407,15 @@ jobs:
           sed -i "s/^work-package-case-creation=PENDING$/work-package-case-creation=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Task and Work Package time attribution PG
+        working-directory: Backend
+        env:
+          TIME_ATTRIBUTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          if npx jest --runInBand tests/timeEntryTaskAttribution.integration.test.ts; then rc=0; else rc=$?; fi
+          sed -i "s/^time-attribution=PENDING$/time-attribution=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Phase 7B compliance proposal workflow PG
         working-directory: Backend
         env:
@@ -536,6 +545,7 @@ jobs:
             [work-package-schema]="WP-1 work package schema foundation"
             [work-package-admin]="WP-2 work package administration"
             [work-package-case-creation]="WP-3 case creation work package integration"
+            [time-attribution]="Task and Work Package time attribution"
             [phase7b]="Phase 7B compliance proposal workflow"
             [phase7cb]="Phase 7C-B compliance overview"
             [org-client-safe]="Org client safe compliance read model"

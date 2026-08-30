@@ -8,6 +8,10 @@
 
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
+import { requireWorkforceUser } from '../middleware/workforceAuthorization';
+import { parseCanonicalStringId } from '../modules/tasks/canonicalStringId';
+import { canUserActOnTask } from '../modules/tasks/taskAuthorization';
+import { resolveTaskTimeAttribution, TaskTimeAttributionError } from '../modules/time-attribution/service';
 import { prisma } from '../prisma/prisma.service';
 
 const router = Router();
@@ -261,7 +265,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
 // POST /api/v1/time-entries - Create new time entry
 // ============================================================================
 
-router.post('/', authenticate, async (req: Request, res: Response) => {
+router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const {
       matterId,
@@ -270,7 +274,8 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       minutes,
       workDate,
       departmentId,
-      caseId
+      caseId,
+      taskId,
     } = req.body;
     const resolvedUserId = getAuthenticatedUserId(req);
     if (!resolvedUserId) {
@@ -279,15 +284,51 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
     if (req.body?.userId && req.body.userId !== resolvedUserId) {
       return res.status(400).json({ status: 400, code: 'TIME_ENTRY_USER_ID_NOT_ACCEPTED', message: 'Time entries use the authenticated user only.' });
     }
-    if (req.body?.taskId || req.body?.documentId || req.body?.communicationId) {
-      return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CONTEXT_NOT_SUPPORTED', message: 'Task, document and communication time links need a future persisted model.' });
+    if (req.body?.documentId || req.body?.communicationId) {
+      return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CONTEXT_NOT_SUPPORTED', message: 'Document and communication time links are not supported.' });
     }
 
-    // Validate required fields
-    if (!matterId || !workType || !description || !minutes) {
+    if (!workType || !description || !minutes) {
       return res.status(400).json({
-        error: 'Missing required fields: matterId, workType, description, minutes'
+        error: 'Missing required fields: workType, description, minutes'
       });
+    }
+
+    let resolvedMatterId = typeof matterId === 'string' ? matterId : null;
+    let resolvedCaseId = typeof caseId === 'string' ? caseId : null;
+    let resolvedTaskId: string | null = null;
+    let taskScopeAuthorized = false;
+    if (taskId !== undefined && taskId !== null) {
+      const canonicalTaskId = parseCanonicalStringId(taskId);
+      if (!canonicalTaskId) {
+        return res.status(400).json({ status: 400, code: 'INVALID_TASK_ID', message: 'taskId must be a valid identifier.' });
+      }
+      const taskScope = await resolveTaskTimeAttribution(canonicalTaskId);
+      if (!taskScope) {
+        return res.status(404).json({ status: 404, code: 'TASK_NOT_FOUND', message: 'Task not found.' });
+      }
+      const taskAccess = await canUserActOnTask({
+        caseId: taskScope.caseId,
+        assignedToId: taskScope.assignedToId,
+        assignedById: taskScope.assignedById,
+      }, resolvedUserId);
+      if (!taskAccess.allowed) {
+        return res.status(404).json({ status: 404, code: 'TASK_NOT_FOUND', message: 'Task not found.' });
+      }
+      if (resolvedCaseId && resolvedCaseId !== taskScope.caseId) {
+        return res.status(400).json({ status: 400, code: 'TIME_ENTRY_TASK_CASE_MISMATCH', message: 'caseId does not match the task scope.' });
+      }
+      if (resolvedMatterId && resolvedMatterId !== taskScope.matterId) {
+        return res.status(400).json({ status: 400, code: 'TIME_ENTRY_TASK_MATTER_MISMATCH', message: 'matterId does not match the task scope.' });
+      }
+      resolvedMatterId = taskScope.matterId;
+      resolvedCaseId = taskScope.caseId;
+      resolvedTaskId = taskScope.taskId;
+      taskScopeAuthorized = true;
+    }
+
+    if (!resolvedMatterId) {
+      return res.status(400).json({ error: 'Missing required field: matterId (or taskId)' });
     }
 
     // Map Hungarian workType labels to Prisma enum values
@@ -303,36 +344,39 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
     const mappedWorkType = workTypeMap[workType] || workType;
 
     // Validate matterId exists
-    const matterExists = await prisma.matter.findUnique({ where: { id: matterId }, select: { id: true } });
+    const matterExists = await prisma.matter.findUnique({ where: { id: resolvedMatterId }, select: { id: true } });
     if (!matterExists) {
-      return res.status(400).json({ error: `Matter with id '${matterId}' not found` });
+      return res.status(400).json({ error: `Matter with id '${resolvedMatterId}' not found` });
     }
-    if (caseId) {
+    if (resolvedCaseId) {
       const caseRecord = await prisma.case.findUnique({
-        where: { id: String(caseId) },
+        where: { id: resolvedCaseId },
         select: { id: true, matterId: true, assignedLawyerId: true, createdById: true },
       });
-      if (!caseRecord || caseRecord.matterId !== matterId) {
+      if (!caseRecord || caseRecord.matterId !== resolvedMatterId) {
         return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CASE_MATTER_MISMATCH', message: 'caseId must belong to the selected matter.' });
       }
-      const collaborator = await prisma.caseCollaborator.findFirst({
-        where: { caseId: String(caseId), userId: resolvedUserId },
-        select: { id: true },
-      });
-      const canRecord =
-        isPrivileged(req) ||
-        caseRecord.assignedLawyerId === resolvedUserId ||
-        caseRecord.createdById === resolvedUserId ||
-        Boolean(collaborator);
-      if (!canRecord) {
-        return res.status(403).json({ status: 403, code: 'TIME_ENTRY_CASE_FORBIDDEN', message: 'You cannot record time on this case.' });
+      if (!taskScopeAuthorized) {
+        const collaborator = await prisma.caseCollaborator.findFirst({
+          where: { caseId: resolvedCaseId, userId: resolvedUserId },
+          select: { id: true },
+        });
+        const canRecord =
+          isPrivileged(req) ||
+          caseRecord.assignedLawyerId === resolvedUserId ||
+          caseRecord.createdById === resolvedUserId ||
+          Boolean(collaborator);
+        if (!canRecord) {
+          return res.status(403).json({ status: 403, code: 'TIME_ENTRY_CASE_FORBIDDEN', message: 'You cannot record time on this case.' });
+        }
       }
     }
 
     // Create time entry
     const entry = await prisma.timeEntry.create({
       data: {
-        matterId,
+        matterId: resolvedMatterId,
+        taskId: resolvedTaskId,
         workType: mappedWorkType,
         description,
         minutes: parseInt(minutes),
@@ -356,7 +400,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 
     // Update matter total minutes
     await prisma.matter.update({
-      where: { id: matterId },
+      where: { id: resolvedMatterId },
       data: {
         totalMinutes: {
           increment: parseInt(minutes)
@@ -365,18 +409,19 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
     });
 
     // If caseId provided, create timeline event
-    if (caseId) {
+    if (resolvedCaseId) {
       await prisma.timelineEvent.create({
         data: {
           eventType: 'TIME_LOGGED',
           description: `${minutes} perc rögzítve: ${description}`,
-          caseId,
+          caseId: resolvedCaseId,
           userId: resolvedUserId,
           timeEntryId: entry.id,
           metadata: {
             minutes: parseInt(minutes),
             workType: mappedWorkType,
-            matterId
+            matterId: resolvedMatterId,
+            taskId: resolvedTaskId,
           }
         }
       });
@@ -384,6 +429,9 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 
     res.status(201).json(entry);
   } catch (error) {
+    if (error instanceof TaskTimeAttributionError) {
+      return res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+    }
     console.error('Error creating time entry:', error);
     res.status(500).json({ error: 'Failed to create time entry' });
   }
