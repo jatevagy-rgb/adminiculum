@@ -801,7 +801,7 @@ router.patch('/:caseId/status', authenticate, async (req: Request, res: Response
     });
   } catch (error) {
     console.error('Update case status error:', error);
-    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: error instanceof Error ? error.message : 'Internal server error' });
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Case status update failed.' });
   }
 });
 

@@ -67,7 +67,6 @@ export interface ContractGenerationResult {
     fileName: string;
   };
   error?: string;
-  rawError?: unknown;
 }
 
 export interface ContractListItem {

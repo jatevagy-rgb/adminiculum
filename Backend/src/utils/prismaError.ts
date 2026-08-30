@@ -78,7 +78,7 @@ export function buildPrismaErrorResponse(error: unknown): PrismaErrorResponse | 
         status: 400,
         body: {
           error: 'Data validation error',
-          details: err.meta?.message || 'Invalid data provided',
+          details: 'Invalid data provided',
           code
         }
       };
@@ -89,7 +89,7 @@ export function buildPrismaErrorResponse(error: unknown): PrismaErrorResponse | 
       status: 400,
       body: {
         error: 'Database error',
-        details: err.message || 'An error occurred while processing your request',
+        details: 'An error occurred while processing your request',
         code
       }
     };
@@ -101,7 +101,7 @@ export function buildPrismaErrorResponse(error: unknown): PrismaErrorResponse | 
       status: 400,
       body: {
         error: 'Prisma error',
-        details: err.message || 'Database operation failed',
+        details: 'Database operation failed',
         code: err.code
       }
     };

@@ -90,7 +90,7 @@ router.get('/clauses', authenticate, requireEnabled, async (req: Request, res: R
     res.json(clauses);
   } catch (error: any) {
     console.error('Error listing clauses:', error);
-    res.status(500).json({ error: 'Failed to list clauses', details: error.message });
+    res.status(500).json({ error: 'Failed to list clauses', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -108,7 +108,7 @@ router.get('/clauses/:id', authenticate, requireEnabled, async (req: Request, re
     res.json(clause);
   } catch (error: any) {
     console.error('Error getting clause:', error);
-    res.status(500).json({ error: 'Failed to get clause', details: error.message });
+    res.status(500).json({ error: 'Failed to get clause', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -132,7 +132,7 @@ router.post('/clauses', authenticate, requireEnabled, async (req: Request, res: 
     res.status(201).json(clause);
   } catch (error: any) {
     console.error('Error creating clause:', error);
-    res.status(500).json({ error: 'Failed to create clause', details: error.message });
+    res.status(500).json({ error: 'Failed to create clause', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -153,7 +153,7 @@ router.put('/clauses/:id', authenticate, requireEnabled, async (req: Request, re
     res.json(clause);
   } catch (error: any) {
     console.error('Error updating clause:', error);
-    res.status(500).json({ error: 'Failed to update clause', details: error.message });
+    res.status(500).json({ error: 'Failed to update clause', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -171,7 +171,7 @@ router.delete('/clauses/:id', authenticate, requireEnabled, async (req: Request,
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error deleting clause:', error);
-    res.status(500).json({ error: 'Failed to delete clause', details: error.message });
+    res.status(500).json({ error: 'Failed to delete clause', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -189,7 +189,7 @@ router.get('/lawyer-profiles', authenticate, requireEnabled, async (req: Request
     res.json(profiles);
   } catch (error: any) {
     console.error('Error listing lawyer profiles:', error);
-    res.status(500).json({ error: 'Failed to list lawyer profiles', details: error.message });
+    res.status(500).json({ error: 'Failed to list lawyer profiles', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -207,7 +207,7 @@ router.get('/lawyer-profiles/:id', authenticate, requireEnabled, async (req: Req
     res.json(profile);
   } catch (error: any) {
     console.error('Error getting lawyer profile:', error);
-    res.status(500).json({ error: 'Failed to get lawyer profile', details: error.message });
+    res.status(500).json({ error: 'Failed to get lawyer profile', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -228,7 +228,7 @@ router.put('/lawyer-profiles/:id', authenticate, requireEnabled, async (req: Req
     res.json(profile);
   } catch (error: any) {
     console.error('Error upserting lawyer profile:', error);
-    res.status(500).json({ error: 'Failed to upsert lawyer profile', details: error.message });
+    res.status(500).json({ error: 'Failed to upsert lawyer profile', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -250,7 +250,7 @@ router.get('/assembly/:caseId', requireEnabled, requireCaseReadAccess, async (re
     res.json(assembly);
   } catch (error: any) {
     console.error('Error getting assembly:', error);
-    res.status(500).json({ error: 'Failed to get assembly', details: error.message });
+    res.status(500).json({ error: 'Failed to get assembly', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -272,7 +272,7 @@ router.post('/assembly/recommend', requireEnabled, async (req: Request, res: Res
     res.json(recommendations);
   } catch (error: any) {
     console.error('Error recommending clauses:', error);
-    res.status(500).json({ error: 'Failed to recommend clauses', details: error.message });
+    res.status(500).json({ error: 'Failed to recommend clauses', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -299,7 +299,7 @@ router.post('/review-guidance', requireEnabled, requireContractGenerationReadAcc
     res.json(guidance);
   } catch (error: any) {
     console.error('Error building review guidance:', error);
-    res.status(500).json({ error: 'Failed to build review guidance', details: error.message });
+    res.status(500).json({ error: 'Failed to build review guidance', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -333,7 +333,7 @@ router.put('/assembly/:caseId', requireEnabled, requireCaseManageAccess, async (
     res.json(assembly);
   } catch (error: any) {
     console.error('Error upserting assembly:', error);
-    res.status(500).json({ error: 'Failed to upsert assembly', details: error.message });
+    res.status(500).json({ error: 'Failed to upsert assembly', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -356,7 +356,7 @@ router.patch('/assembly/:caseId/status', requireEnabled, requireCaseManageAccess
     res.json(assembly);
   } catch (error: any) {
     console.error('Error updating assembly status:', error);
-    res.status(500).json({ error: 'Failed to update assembly status', details: error.message });
+    res.status(500).json({ error: 'Failed to update assembly status', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
@@ -374,7 +374,7 @@ router.delete('/assembly/:caseId', requireEnabled, requireCaseManageAccess, asyn
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error deleting assembly:', error);
-    res.status(500).json({ error: 'Failed to delete assembly', details: error.message });
+    res.status(500).json({ error: 'Failed to delete assembly', code: 'CLAUSE_LIBRARY_INTERNAL_ERROR' });
   }
 });
 
