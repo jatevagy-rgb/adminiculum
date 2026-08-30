@@ -123,9 +123,51 @@ describe('task submission routes', () => {
   });
 
   it('rejects malformed identifiers before service access', async () => {
-    const response = await requestJson(createApp(), 'GET', '/tasks/not-a-uuid/workflow');
+    const response = await requestJson(createApp(), 'GET', `/tasks/${encodeURIComponent('bad\u0000id')}/workflow`);
     expect(response.status).toBe(400);
     expect(response.body.code).toBe('INVALID_ID');
+    expect(serviceMock.getTaskSubmissionWorkflow).not.toHaveBeenCalled();
+  });
+
+  it('passes canonical non-UUID String IDs through every submission endpoint', async () => {
+    const canonical = {
+      task: '0123456789abcdef0123456789abcdef',
+      submission: 'fedcba9876543210fedcba9876543210',
+      document: 'abcdef0123456789abcdef0123456789',
+      time: '1234567890abcdef1234567890abcdef',
+    };
+    const app = createApp();
+
+    expect((await requestJson(app, 'GET', `/tasks/${canonical.task}/workflow`)).status).toBe(200);
+    expect((await requestJson(app, 'GET', `/tasks/${canonical.task}/eligible-reviewers`)).status).toBe(200);
+    expect((await requestJson(app, 'POST', `/tasks/${canonical.task}/submissions`, {})).status).toBe(201);
+    expect((await requestJson(app, 'PATCH', `/tasks/${canonical.task}/submissions/${canonical.submission}`, {})).status).toBe(200);
+    expect((await requestJson(app, 'GET', `/tasks/${canonical.task}/submissions/${canonical.submission}/readiness`)).status).toBe(200);
+    expect((await requestJson(app, 'POST', `/tasks/${canonical.task}/submissions/${canonical.submission}/documents`, { documentId: canonical.document })).status).toBe(201);
+    expect((await requestJson(app, 'DELETE', `/tasks/${canonical.task}/submissions/${canonical.submission}/documents/${canonical.document}`)).status).toBe(200);
+    expect((await requestJson(app, 'POST', `/tasks/${canonical.task}/submissions/${canonical.submission}/time-entries`, { timeEntryId: canonical.time })).status).toBe(201);
+    expect((await requestJson(app, 'DELETE', `/tasks/${canonical.task}/submissions/${canonical.submission}/time-entries/${canonical.time}`)).status).toBe(200);
+    expect((await requestJson(app, 'POST', `/tasks/${canonical.task}/submissions/${canonical.submission}/submit`, {})).status).toBe(200);
+
+    expect(serviceMock.getTaskSubmissionWorkflow).toHaveBeenCalledWith(canonical.task, 'actor-1');
+    expect(serviceMock.attachSubmissionDocument).toHaveBeenCalledWith(canonical.task, canonical.submission, 'actor-1', {
+      documentId: canonical.document,
+      role: '',
+    });
+    expect(serviceMock.attachSubmissionTimeEntry).toHaveBeenCalledWith(canonical.task, canonical.submission, 'actor-1', {
+      timeEntryId: canonical.time,
+    });
+  });
+
+  it('rejects empty and pathological String IDs before service access', async () => {
+    const emptyBody = await requestJson(createApp(), 'POST', `/tasks/${ids.task}/submissions/${ids.submission}/documents`, { documentId: '   ' });
+    const oversized = await requestJson(createApp(), 'GET', `/tasks/${'x'.repeat(201)}/workflow`);
+
+    expect(emptyBody.status).toBe(400);
+    expect(emptyBody.body.code).toBe('INVALID_ID');
+    expect(oversized.status).toBe(400);
+    expect(oversized.body.code).toBe('INVALID_ID');
+    expect(serviceMock.attachSubmissionDocument).not.toHaveBeenCalled();
     expect(serviceMock.getTaskSubmissionWorkflow).not.toHaveBeenCalled();
   });
 
@@ -162,7 +204,7 @@ describe('task submission routes', () => {
   it('links and unlinks document metadata without accepting malformed ids', async () => {
     const linked = await requestJson(createApp(), 'POST', `/tasks/${ids.task}/submissions/${ids.submission}/documents`, { documentId: ids.document, role: 'PRIMARY_OUTPUT' });
     const unlinked = await requestJson(createApp(), 'DELETE', `/tasks/${ids.task}/submissions/${ids.submission}/documents/${ids.document}`);
-    const rejected = await requestJson(createApp(), 'POST', `/tasks/${ids.task}/submissions/${ids.submission}/documents`, { documentId: 'bad', role: 'PRIMARY_OUTPUT' });
+    const rejected = await requestJson(createApp(), 'POST', `/tasks/${ids.task}/submissions/${ids.submission}/documents`, { documentId: 'bad\u0000id', role: 'PRIMARY_OUTPUT' });
     expect(linked.status).toBe(201);
     expect(unlinked.status).toBe(200);
     expect(rejected.status).toBe(400);

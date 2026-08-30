@@ -1,26 +1,13 @@
-import { NextFunction, Request, Response, Router } from 'express';
+import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import taskSubmissionService, { TaskSubmissionServiceError } from './taskSubmission.service';
 import taskReviewDecisionRoutes from './taskReviewDecision.routes';
+import { parseCanonicalStringId, requireCanonicalStringParams } from './canonicalStringId';
 
 const router = Router();
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function getActorId(req: Request): string {
   return req.user?.userId || '';
-}
-
-function requireUuidParams(...names: string[]) {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    for (const name of names) {
-      const value = String(req.params[name] || '').trim();
-      if (!UUID_PATTERN.test(value)) {
-        res.status(400).json({ status: 400, code: 'INVALID_ID', message: `${name} must be a valid UUID.` });
-        return;
-      }
-    }
-    next();
-  };
 }
 
 function sendError(res: Response, error: unknown): void {
@@ -32,7 +19,7 @@ function sendError(res: Response, error: unknown): void {
   res.status(500).json({ status: 500, code: 'TASK_SUBMISSION_INTERNAL_ERROR', message: 'Task submission request failed.' });
 }
 
-router.get('/:taskId/workflow', authenticate, requireUuidParams('taskId'), async (req, res) => {
+router.get('/:taskId/workflow', authenticate, requireCanonicalStringParams('taskId'), async (req, res) => {
   try {
     res.json(await taskSubmissionService.getTaskSubmissionWorkflow(req.params.taskId as string, getActorId(req)));
   } catch (error) {
@@ -40,7 +27,7 @@ router.get('/:taskId/workflow', authenticate, requireUuidParams('taskId'), async
   }
 });
 
-router.get('/:taskId/eligible-reviewers', authenticate, requireUuidParams('taskId'), async (req, res) => {
+router.get('/:taskId/eligible-reviewers', authenticate, requireCanonicalStringParams('taskId'), async (req, res) => {
   try {
     res.json(await taskSubmissionService.listEligibleReviewers(req.params.taskId as string, getActorId(req)));
   } catch (error) {
@@ -48,7 +35,7 @@ router.get('/:taskId/eligible-reviewers', authenticate, requireUuidParams('taskI
   }
 });
 
-router.post('/:taskId/submissions', authenticate, requireUuidParams('taskId'), async (req, res) => {
+router.post('/:taskId/submissions', authenticate, requireCanonicalStringParams('taskId'), async (req, res) => {
   try {
     const result = await taskSubmissionService.createTaskSubmissionDraft(
       req.params.taskId as string,
@@ -61,7 +48,7 @@ router.post('/:taskId/submissions', authenticate, requireUuidParams('taskId'), a
   }
 });
 
-router.patch('/:taskId/submissions/:submissionId', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.patch('/:taskId/submissions/:submissionId', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     res.json(await taskSubmissionService.updateTaskSubmissionDraft(
       req.params.taskId as string,
@@ -74,7 +61,7 @@ router.patch('/:taskId/submissions/:submissionId', authenticate, requireUuidPara
   }
 });
 
-router.get('/:taskId/submissions/:submissionId/readiness', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.get('/:taskId/submissions/:submissionId/readiness', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     res.json(await taskSubmissionService.validateSubmissionReadiness(
       req.params.taskId as string,
@@ -86,11 +73,11 @@ router.get('/:taskId/submissions/:submissionId/readiness', authenticate, require
   }
 });
 
-router.post('/:taskId/submissions/:submissionId/documents', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.post('/:taskId/submissions/:submissionId/documents', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
-    const documentId = String(req.body?.documentId || '').trim();
-    if (!UUID_PATTERN.test(documentId)) {
-      return res.status(400).json({ status: 400, code: 'INVALID_ID', message: 'documentId must be a valid UUID.' });
+    const documentId = parseCanonicalStringId(req.body?.documentId);
+    if (documentId === null) {
+      return res.status(400).json({ status: 400, code: 'INVALID_ID', message: 'documentId must be a valid identifier.' });
     }
     const result = await taskSubmissionService.attachSubmissionDocument(
       req.params.taskId as string,
@@ -104,7 +91,7 @@ router.post('/:taskId/submissions/:submissionId/documents', authenticate, requir
   }
 });
 
-router.delete('/:taskId/submissions/:submissionId/documents/:documentId', authenticate, requireUuidParams('taskId', 'submissionId', 'documentId'), async (req, res) => {
+router.delete('/:taskId/submissions/:submissionId/documents/:documentId', authenticate, requireCanonicalStringParams('taskId', 'submissionId', 'documentId'), async (req, res) => {
   try {
     res.json(await taskSubmissionService.detachSubmissionDocument(
       req.params.taskId as string,
@@ -117,11 +104,11 @@ router.delete('/:taskId/submissions/:submissionId/documents/:documentId', authen
   }
 });
 
-router.post('/:taskId/submissions/:submissionId/time-entries', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.post('/:taskId/submissions/:submissionId/time-entries', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
-    const timeEntryId = String(req.body?.timeEntryId || '').trim();
-    if (!UUID_PATTERN.test(timeEntryId)) {
-      return res.status(400).json({ status: 400, code: 'INVALID_ID', message: 'timeEntryId must be a valid UUID.' });
+    const timeEntryId = parseCanonicalStringId(req.body?.timeEntryId);
+    if (timeEntryId === null) {
+      return res.status(400).json({ status: 400, code: 'INVALID_ID', message: 'timeEntryId must be a valid identifier.' });
     }
     const result = await taskSubmissionService.attachSubmissionTimeEntry(
       req.params.taskId as string,
@@ -135,7 +122,7 @@ router.post('/:taskId/submissions/:submissionId/time-entries', authenticate, req
   }
 });
 
-router.delete('/:taskId/submissions/:submissionId/time-entries/:timeEntryId', authenticate, requireUuidParams('taskId', 'submissionId', 'timeEntryId'), async (req, res) => {
+router.delete('/:taskId/submissions/:submissionId/time-entries/:timeEntryId', authenticate, requireCanonicalStringParams('taskId', 'submissionId', 'timeEntryId'), async (req, res) => {
   try {
     res.json(await taskSubmissionService.detachSubmissionTimeEntry(
       req.params.taskId as string,
@@ -148,7 +135,7 @@ router.delete('/:taskId/submissions/:submissionId/time-entries/:timeEntryId', au
   }
 });
 
-router.post('/:taskId/submissions/:submissionId/submit', authenticate, requireUuidParams('taskId', 'submissionId'), async (req, res) => {
+router.post('/:taskId/submissions/:submissionId/submit', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
     const result = await taskSubmissionService.submitTaskSubmission(
       req.params.taskId as string,
