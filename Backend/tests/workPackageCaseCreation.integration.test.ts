@@ -77,7 +77,7 @@ describeWithDatabase('WP-3 Case Creation Work Package Integration & Productizati
           create: [
             { id: requiredItemId, moduleType: 'DOCUMENT_WORK', moduleKey: 'required-review', label: 'Required review', isOptional: false, order: 1, config: { documentRole: 'contract' } },
             { id: optionalItemId, moduleType: 'RESEARCH', moduleKey: 'optional-research', label: 'Optional research', isOptional: true, order: 2, config: { topic: 'background' } },
-            { id: extraOptionalItemId, moduleType: 'COMPLIANCE_CHECK', moduleKey: 'optional-compliance', label: 'Optional compliance', isOptional: true, order: 3, config: { scope: 'standard' } },
+            { id: extraOptionalItemId, moduleType: 'COMPLIANCE', moduleKey: 'optional-compliance', label: 'Optional compliance', isOptional: true, order: 3, config: { scope: 'standard' } },
           ],
         },
       },
