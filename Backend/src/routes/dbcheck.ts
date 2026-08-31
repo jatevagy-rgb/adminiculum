@@ -63,12 +63,12 @@ export const checkAndSyncDatabase = async (req: Request, res: Response): Promise
       tables: tables.map(t => t.table_name)
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Database check error:', error);
     res.status(500).json({
       success: false,
-      message: error.message,
-      stack: error.stack
+      code: 'DATABASE_CHECK_INTERNAL_ERROR',
+      message: 'Database check failed.'
     });
   } finally {
     await prisma.$disconnect();

@@ -62,12 +62,12 @@ export const runMigration = async (req: Request, res: Response): Promise<void> =
       tables: tables.map(t => t.table_name)
     });
     
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Migration error:', error);
     res.status(500).json({
       success: false,
-      message: error.message,
-      stack: error.stack
+      code: 'MIGRATION_INTERNAL_ERROR',
+      message: 'Migration failed.'
     });
   } finally {
     await prisma.$disconnect();

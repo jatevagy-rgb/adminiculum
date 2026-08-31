@@ -74,11 +74,11 @@ export const debugWhoami = async (req: Request, res: Response): Promise<void> =>
       }
     });
     
-  } catch (error: any) {
-    console.error('[DEBUG] Error decoding token:', error.message);
+  } catch (error: unknown) {
+    console.error('[DEBUG] Error decoding token:', error);
     res.status(401).json({ 
       error: 'Token decode error',
-      message: error.message 
+      message: 'Token could not be decoded.'
     });
   }
 };

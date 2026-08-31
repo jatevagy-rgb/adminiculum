@@ -218,7 +218,7 @@ router.post('/templates', authenticate, requireAdminRole, upload.single('templat
     res.status(500).json({
       status: 500,
       code: 'INTERNAL_ERROR',
-      message: error instanceof Error ? error.message : 'Internal server error'
+      message: 'Template creation failed.'
     });
   }
 });
