@@ -5619,4 +5619,3 @@ export type CaseCreationOption = {
   } | null;
 };
 export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[] }>('/work-package-admin/case-types/creation-options'); }
-

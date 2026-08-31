@@ -705,6 +705,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     let matterType = req.body?.matterType || req.body?.['matterType'];
     let description = req.body?.description || req.body?.['description'];
     let clientRole = req.body?.clientRole || req.body?.['clientRole'];
+    let priority = req.body?.priority || req.body?.['priority'];
     let deadline = req.body?.deadline || req.body?.['deadline'];
     let assignedLawyerId = req.body?.assignedLawyerId || req.body?.['assignedLawyerId'];
     let responsibleLawyerId = req.body?.responsibleLawyerId || req.body?.['responsibleLawyerId'];
@@ -725,6 +726,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       matterType: matterType || 'OTHER',
       description,
       clientRole,
+      priority: priority || undefined,
       deadline: deadline || undefined,
       assignedLawyerId: assignedLawyerId || responsibleLawyerId || undefined,
       responsibleLawyerId: responsibleLawyerId || assignedLawyerId || undefined,

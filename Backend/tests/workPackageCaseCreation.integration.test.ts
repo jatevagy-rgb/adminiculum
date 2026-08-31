@@ -7,6 +7,7 @@ jest.mock('../src/modules/sharepoint', () => ({
 
 import casesService from '../src/modules/cases/services';
 import { CaseWorkPackageError, CASE_WORK_PACKAGE_SNAPSHOT_KEY } from '../src/modules/cases/caseWorkPackage.service';
+import { driveService } from '../src/modules/sharepoint';
 
 const databaseUrl = process.env.WORK_PACKAGE_CASE_CREATION_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -303,6 +304,45 @@ describeWithDatabase('WP-3 Case Creation Work Package Integration & Productizati
     expect(await db.case.count()).toBe(casesBefore);
     expect(await db.caseWorkPackage.count()).toBe(wpBefore);
     expect(await db.caseWorkPackageItem.count()).toBe(wpItemsBefore);
+  });
+
+  // H1. Preserve the accepted PR95 caller contract while composing WP creation.
+  it('Scenario H1: preserves priority, caller-owned transactions, and folder opt-out', async () => {
+    const createFolders = driveService.createCaseFolders as jest.Mock;
+    createFolders.mockClear();
+
+    const result = await casesService.createCase({
+      clientId,
+      clientName: `WP-3 Client ${suffix}`,
+      matterType: 'OTHER',
+      priority: 'HIGH',
+      caseTypeDefinitionId,
+      createdById: adminId,
+    }, db, { provisionCaseFolders: false });
+    createdCaseIds.push(result.id);
+
+    const persisted = await db.case.findUniqueOrThrow({ where: { id: result.id } });
+    expect(persisted.priority).toBe('HIGH');
+    expect(createFolders).not.toHaveBeenCalled();
+
+    let rolledBackCaseId: string | undefined;
+    await expect(
+      db.$transaction(async (tx) => {
+        const nestedResult = await casesService.createCase({
+          clientId,
+          clientName: `WP-3 Transactional ${suffix}`,
+          matterType: 'OTHER',
+          priority: 'LOW',
+          caseTypeDefinitionId,
+          createdById: adminId,
+        }, tx, { withinTransaction: true, provisionCaseFolders: false });
+        rolledBackCaseId = nestedResult.id;
+        throw new Error('rollback caller-owned transaction');
+      }),
+    ).rejects.toThrow('rollback caller-owned transaction');
+
+    expect(rolledBackCaseId).toBeDefined();
+    expect(await db.case.findUnique({ where: { id: rolledBackCaseId } })).toBeNull();
   });
 
   // I. Wrong/cross-client/inactive case type fails closed
