@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma/prisma.service';
-import type { CaseStatus } from '@prisma/client';
+import type { CaseStatus, Prisma } from '@prisma/client';
+import { buildCaseReadScope } from '../cases/authorization';
 import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   compactSafeText,
@@ -125,81 +126,6 @@ function validateRange(from: Date, to: Date): void {
   }
 }
 
-async function getAccessibleCases(userId: string, userRole?: string, db = prisma) {
-  const isPrivileged = userRole === 'ADMIN' || userRole === 'PARTNER';
-  if (isPrivileged) {
-    return db.case.findMany({
-      select: {
-        id: true,
-        caseNumber: true,
-        title: true,
-        clientName: true,
-        priority: true,
-        status: true,
-        deadline: true,
-        completedAt: true,
-        updatedAt: true,
-        assignedLawyerId: true,
-        assignedLawyer: { select: { id: true, name: true, email: true } },
-      },
-      take: 200,
-    });
-  }
-
-  const [ownedCases, collaborations] = await Promise.all([
-    db.case.findMany({
-      where: {
-        OR: [
-          { assignedLawyerId: userId },
-          { createdById: userId },
-        ],
-      },
-      select: {
-        id: true,
-        caseNumber: true,
-        title: true,
-        clientName: true,
-        priority: true,
-        status: true,
-        deadline: true,
-        completedAt: true,
-        updatedAt: true,
-        assignedLawyerId: true,
-        assignedLawyer: { select: { id: true, name: true, email: true } },
-      },
-      take: 200,
-    }),
-    db.caseCollaborator.findMany({
-      where: { userId },
-      select: {
-        case: {
-          select: {
-            id: true,
-            caseNumber: true,
-            title: true,
-            clientName: true,
-            priority: true,
-            status: true,
-            deadline: true,
-            completedAt: true,
-            updatedAt: true,
-            assignedLawyerId: true,
-            assignedLawyer: { select: { id: true, name: true, email: true } },
-          },
-        },
-      },
-      take: 200,
-    }),
-  ]);
-
-  const byId = new Map<string, (typeof ownedCases)[number]>();
-  for (const item of ownedCases) byId.set(item.id, item);
-  for (const item of collaborations) {
-    if (item.case?.id) byId.set(item.case.id, item.case);
-  }
-  return [...byId.values()];
-}
-
 function displayUser(user?: { id: string; name?: string | null; email?: string | null } | null) {
   if (!user?.id) return null;
   return { id: user.id, displayName: user.name || user.email || user.id };
@@ -260,53 +186,56 @@ export async function getWorkflowAgenda(params: {
   if (scope === 'CASE' && !params.caseId) {
     throw new AgendaRequestError(400, 'CASE_SCOPE_REQUIRES_CASE_ID', 'caseId is required for CASE scope.');
   }
-  const accessibleCases = await getAccessibleCases(params.userId, params.userRole, db);
-  const accessibleCaseIds = accessibleCases.map((item) => item.id);
+  const caseReadScope = buildCaseReadScope(params.userId, params.userRole);
+  const withCaseReadScope = (where: Prisma.CaseWhereInput): Prisma.CaseWhereInput => (
+    caseReadScope ? { AND: [caseReadScope, where] } : where
+  );
 
-  if (scope === 'CASE' && params.caseId && !accessibleCaseIds.includes(params.caseId)) {
-    throw new AgendaRequestError(404, 'CASE_NOT_FOUND', 'Case not found.');
+  if (scope === 'CASE' && params.caseId) {
+    const caseRecord = await db.case.findFirst({
+      where: withCaseReadScope({ id: params.caseId }),
+      select: { id: true },
+    });
+    if (!caseRecord) {
+      throw new AgendaRequestError(404, 'CASE_NOT_FOUND', 'Case not found.');
+    }
   }
 
   const taskWhere: any = {
     dueDate: { gte: from, lte: to },
     ...taskStatusFilter(status),
+    ...(caseReadScope ? { case: caseReadScope } : {}),
   };
 
-  const caseWhere: any = {
+  let caseWhere: Prisma.CaseWhereInput = withCaseReadScope({
     deadline: { gte: from, lte: to },
     ...caseStatusFilter(status),
-  };
+  });
 
   const intakeWhere: any = {
     dueAt: { gte: from, lte: to },
-    case: {
+    case: withCaseReadScope({
       ...caseStatusFilter(status),
-    },
+    }),
   };
 
   if (scope === 'MY_WORK') {
-  taskWhere.assignedToId = params.userId;
-  // intersect with accessible cases
-  taskWhere.caseId = { in: accessibleCaseIds };
-  caseWhere.OR = [
-    { assignedLawyerId: params.userId },
-    { createdById: params.userId },
-  ];
-  caseWhere.id = { in: accessibleCaseIds };
-  intakeWhere.OR = [
-    { responsibleId: params.userId },
-    { case: { assignedLawyerId: params.userId } },
-  ];
-  intakeWhere.caseId = { in: accessibleCaseIds };
-} else if (scope === 'CASE') {
-  taskWhere.caseId = params.caseId;
-  caseWhere.id = params.caseId;
-  intakeWhere.caseId = params.caseId;
-} else {
-  taskWhere.caseId = { in: accessibleCaseIds };
-  caseWhere.id = { in: accessibleCaseIds };
-  intakeWhere.caseId = { in: accessibleCaseIds };
-}
+    taskWhere.assignedToId = params.userId;
+    caseWhere = {
+      AND: [
+        caseWhere,
+        { OR: [{ assignedLawyerId: params.userId }, { createdById: params.userId }] },
+      ],
+    };
+    intakeWhere.OR = [
+      { responsibleId: params.userId },
+      { case: { assignedLawyerId: params.userId } },
+    ];
+  } else if (scope === 'CASE') {
+    taskWhere.caseId = params.caseId;
+    caseWhere = { AND: [caseWhere, { id: params.caseId }] };
+    intakeWhere.caseId = params.caseId;
+  }
 
   const [tasks, caseRows, intakeRows] = await Promise.all([
     db.task.findMany({

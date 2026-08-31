@@ -475,6 +475,173 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     expect(agendaPage1.pagination.hasMore).toBe(true);
   });
 
+  test('uses unbounded canonical case scope for privileged, owned, collaborator, and paginated agenda access', async () => {
+    const bulkPrefix = `AGENDA-AUTH-${uuidv4()}`;
+    const ownedCaseIds = Array.from({ length: 205 }, () => uuidv4());
+    const unrelatedCaseIds = Array.from({ length: 205 }, () => uuidv4());
+    const collaboratorCaseIds = Array.from({ length: 205 }, () => uuidv4());
+    const ownedCaseIdsToRemove = [...ownedCaseIds];
+    const ownedInUnrelatedRangeId = uuidv4();
+    const ownedTaskId = uuidv4();
+    const ownedDeadlineBase = new Date('2026-07-25T00:00:00.000Z');
+    const unrelatedDeadline = new Date('2026-07-27T00:00:00.000Z');
+    const collaboratorDeadline = new Date('2026-07-28T00:00:00.000Z');
+
+    try {
+      await db.case.createMany({
+        data: [
+          ...ownedCaseIds.map((id, index) => ({
+            id,
+            caseNumber: `${bulkPrefix}-OWNED-${index}`,
+            title: `Owned case ${index}`,
+            caseType: 'CONTRACT_REVIEW' as const,
+            clientId: ids.client,
+            createdById: ids.lawyerA,
+            assignedLawyerId: ids.lawyerA,
+            deadline: new Date(ownedDeadlineBase.getTime() + index * 60_000),
+            status: 'DRAFT' as const,
+            priority: 'MEDIUM' as const,
+            updatedAt: new Date(),
+          })),
+          {
+            id: ownedInUnrelatedRangeId,
+            caseNumber: `${bulkPrefix}-OWNED-SAFE`,
+            title: 'Owned case in unrelated range',
+            caseType: 'CONTRACT_REVIEW' as const,
+            clientId: ids.client,
+            createdById: ids.lawyerA,
+            assignedLawyerId: ids.lawyerA,
+            deadline: unrelatedDeadline,
+            status: 'DRAFT' as const,
+            priority: 'MEDIUM' as const,
+            updatedAt: new Date(),
+          },
+          ...unrelatedCaseIds.map((id, index) => ({
+            id,
+            caseNumber: `${bulkPrefix}-UNRELATED-${index}`,
+            title: `Unrelated case ${index}`,
+            caseType: 'CONTRACT_REVIEW' as const,
+            clientId: ids.client,
+            createdById: ids.lawyerB,
+            assignedLawyerId: ids.lawyerB,
+            deadline: unrelatedDeadline,
+            status: 'DRAFT' as const,
+            priority: 'MEDIUM' as const,
+            updatedAt: new Date(),
+          })),
+          ...collaboratorCaseIds.map((id, index) => ({
+            id,
+            caseNumber: `${bulkPrefix}-COLLAB-${index}`,
+            title: `Collaborator case ${index}`,
+            caseType: 'CONTRACT_REVIEW' as const,
+            clientId: ids.client,
+            createdById: ids.lawyerB,
+            assignedLawyerId: ids.lawyerB,
+            deadline: collaboratorDeadline,
+            status: 'DRAFT' as const,
+            priority: 'MEDIUM' as const,
+            updatedAt: new Date(),
+          })),
+        ],
+      });
+      ownedCaseIdsToRemove.push(ownedInUnrelatedRangeId, ...unrelatedCaseIds, ...collaboratorCaseIds);
+      await db.caseCollaborator.createMany({
+        data: collaboratorCaseIds.map((caseId) => ({ caseId, userId: ids.lawyerA, role: 'COLLABORATOR' })),
+      });
+      await db.task.create({
+        data: {
+          id: ownedTaskId,
+          caseId: ownedCaseIds[ownedCaseIds.length - 1],
+          title: 'Work item beyond the former authorization cap',
+          dueDate: new Date('2026-07-26T10:00:00.000Z'),
+          assignedToId: ids.lawyerA,
+          status: 'PENDING',
+          taskType: 'DEADLINE',
+          priority: 'MEDIUM',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      const adminAgenda = await getWorkflowAgenda({
+        userId: ids.admin,
+        userRole: 'ADMIN',
+        scope: 'CASE',
+        caseId: unrelatedCaseIds[unrelatedCaseIds.length - 1],
+        status: 'OPEN',
+        from: '2026-07-27',
+        to: '2026-07-27',
+        db,
+      });
+      expect(extractDeadlines(adminAgenda).map((item: any) => item.id)).toContain(
+        `CASE_DEADLINE:${unrelatedCaseIds[unrelatedCaseIds.length - 1]}`
+      );
+
+      const ownedAgenda = await getWorkflowAgenda({
+        userId: ids.lawyerA,
+        userRole: 'LAWYER',
+        scope: 'CASE',
+        caseId: ownedCaseIds[ownedCaseIds.length - 1],
+        status: 'OPEN',
+        from: '2026-07-25',
+        to: '2026-07-26',
+        db,
+      });
+      expect(extractDeadlines(ownedAgenda).map((item: any) => item.id)).toContain(
+        `CASE_DEADLINE:${ownedCaseIds[ownedCaseIds.length - 1]}`
+      );
+      expect(extractTasks(ownedAgenda).map((item: any) => item.id)).toContain(`TASK:${ownedTaskId}`);
+
+      const collaboratorAgenda = await getWorkflowAgenda({
+        userId: ids.lawyerA,
+        userRole: 'LAWYER',
+        scope: 'CASE',
+        caseId: collaboratorCaseIds[collaboratorCaseIds.length - 1],
+        status: 'OPEN',
+        from: '2026-07-28',
+        to: '2026-07-28',
+        db,
+      });
+      expect(extractDeadlines(collaboratorAgenda).map((item: any) => item.id)).toContain(
+        `CASE_DEADLINE:${collaboratorCaseIds[collaboratorCaseIds.length - 1]}`
+      );
+
+      const noLeakAgenda = await getWorkflowAgenda({
+        userId: ids.lawyerA,
+        userRole: 'LAWYER',
+        scope: 'MY_CASES',
+        status: 'OPEN',
+        from: '2026-07-27',
+        to: '2026-07-27',
+        db,
+      });
+      const noLeakIds = extractDeadlines(noLeakAgenda).map((item: any) => item.id);
+      expect(noLeakIds).toContain(`CASE_DEADLINE:${ownedInUnrelatedRangeId}`);
+      expect(noLeakIds).not.toContain(`CASE_DEADLINE:${unrelatedCaseIds[0]}`);
+      expect(noLeakIds).not.toContain(`CASE_DEADLINE:${unrelatedCaseIds[unrelatedCaseIds.length - 1]}`);
+
+      const page = await getWorkflowAgenda({
+        userId: ids.lawyerA,
+        userRole: 'LAWYER',
+        scope: 'MY_WORK',
+        status: 'OPEN',
+        from: '2026-07-25',
+        to: '2026-07-25',
+        limit: 2,
+        offset: 200,
+        db,
+      });
+      expect(page.days.flatMap((day) => day.items).map((item) => item.id)).toEqual([
+        `CASE_DEADLINE:${ownedCaseIds[200]}`,
+        `CASE_DEADLINE:${ownedCaseIds[201]}`,
+      ]);
+      expect(page.pagination.hasMore).toBe(true);
+    } finally {
+      await db.task.deleteMany({ where: { id: ownedTaskId } });
+      await db.case.deleteMany({ where: { id: { in: ownedCaseIdsToRemove } } });
+    }
+  });
+
   test('Invalid scope throws error', async () => {
 
     await expect(getWorkflowAgenda({
