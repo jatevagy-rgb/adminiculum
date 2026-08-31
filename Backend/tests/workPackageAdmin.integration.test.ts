@@ -61,6 +61,7 @@ describeWithDatabase('WP-2 work package administration (PostgreSQL)', () => {
   it('creates a draft, validates workflow binding and module configs, and has no runtime work side effects', async () => {
     expect(() => validateModuleConfig('DEADLINE', { daysFromStart: '3' })).toThrow(WorkPackageAdminError);
     expect(() => validateModuleConfig('RESEARCH', { unsupported: true })).toThrow(WorkPackageAdminError);
+    expect(() => validateModuleConfig('RESEARCH', { $caseWorkPackageSnapshot: true })).toThrow(expect.objectContaining({ code: 'RESERVED_MODULE_CONFIG_KEY' }));
     const before = await Promise.all([
       db.caseWorkPackage.count(), db.task.count(), db.document.count(),
     ]);

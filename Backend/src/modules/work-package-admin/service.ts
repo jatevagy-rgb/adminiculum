@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+import { CASE_WORK_PACKAGE_SNAPSHOT_KEY } from '../cases/caseWorkPackage.service';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = { userId: string; role?: string | null };
@@ -78,6 +79,9 @@ export function validateModuleConfig(type: ModuleType, value: unknown): Record<s
   if (value == null) return {};
   if (typeof value !== 'object' || Array.isArray(value)) throw new WorkPackageAdminError(400, 'INVALID_MODULE_CONFIG', 'Module config must be an object.');
   const config = value as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(config, CASE_WORK_PACKAGE_SNAPSHOT_KEY)) {
+    throw new WorkPackageAdminError(400, 'RESERVED_MODULE_CONFIG_KEY', 'Module config contains a reserved system key.');
+  }
   const allowed = CONFIG_KEYS[type];
   for (const [key, raw] of Object.entries(config)) {
     const expected = allowed[key];

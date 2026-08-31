@@ -22,6 +22,7 @@ const WORKFORCE_ROLES = new Set<string>([
 ]);
 
 /** Shared canonical role boundary for workforce-only operations. */
+/** Canonical workforce-role classification for route and service boundaries. */
 export function isWorkforceRole(role: unknown): boolean {
   return WORKFORCE_ROLES.has(String(role || ''));
 }
