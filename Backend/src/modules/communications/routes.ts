@@ -28,6 +28,7 @@ import {
 import { readOutlookSyncConfig, isOutlookSyncConfigured } from './outlookGraphLive';
 import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
 import casesService from '../cases/services';
+import { userCanManageCase as canonicalUserCanManageCase } from '../cases/authorization';
 import { InteractionError, type InternalActor } from '../client-interaction/base';
 import { listClientCommunicationSummary } from './clientSummary.service';
 
@@ -965,74 +966,24 @@ router.post('/:id/extract-task', authenticate, requireCommunicationsFoundation, 
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params;
-    const { 
-      title, description, type, priority, dueDate, assignedTo, caseId 
-    } = req.body;
-
-    // Get communication
-    const communication = await prisma.communication.findUnique({
-      where: { id: String(id) }
+    const body = req.body && typeof req.body === 'object' ? { ...(req.body as Record<string, unknown>) } : {};
+    // This compatibility route now delegates to the canonical source-linked
+    // task service. Caller-supplied case, description, priority, and assignee
+    // values are not allowed to bypass the communication's server-owned case.
+    const result = await createTaskFromCommunicationSource(String(id), userId, {
+      title: body.title,
+      kind: 'FOLLOW_UP',
+      dueAt: body.dueDate,
+      assigneeId: body.assignedTo,
     });
-
-    if (!communication) {
-      res.status(404).json({ error: 'Communication not found' });
-      return;
-    }
-
-    const targetCaseId = caseId || communication.caseId;
-    if (!targetCaseId) {
-      res.status(400).json({ error: 'Communication must be linked to a case first' });
-      return;
-    }
-
-    // Create task
-    const task = await prisma.task.create({
-      data: {
-        title: title || `Task from: ${communication.subject}`,
-        description: description || communication.summary || communication.content?.substring(0, 500),
-        taskType: type || 'OTHER',
-        type: type || 'OTHER',
-        status: 'TODO',
-        priority: priority || 'MEDIUM',
-        caseId: targetCaseId,
-        assignedToId: assignedTo,
-        assignedById: userId,
-        dueDate: dueDate ? new Date(dueDate) : undefined,
-        sourceCommunicationId: String(id)
-      } as any
-    });
-
-    // Link task to communication
-    await prisma.communication.update({
-      where: { id: String(id) },
-      data: {
-        relatedTasks: {
-          connect: { id: task.id }
-        }
-      }
-    });
-
-    // Create timeline event
-    await createTimelineEvent({
-      caseId: targetCaseId,
-      userId,
-      eventType: 'TASK_CREATED',
-      payload: {
-        taskId: task.id,
-        title: task.title,
-        source: 'communication',
-        communicationId: communication.id
-      }
-    });
-
-    res.status(201).json({ 
-      success: true, 
-      task,
-      message: 'Task created from communication'
-    });
+    res.status(201).json(result);
   } catch (error) {
-    console.error('Error creating task from communication:', error);
-    res.status(500).json({ error: 'Error creating task from communication' });
+    if (error instanceof SourceLinkedTaskError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
+    logPrismaRouteError('POST /communications/:id/extract-task', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Task creation from communication failed.' });
   }
 });
 
@@ -1056,9 +1007,18 @@ router.post('/:id/extract-deadline', authenticate, requireCommunicationsFoundati
       return;
     }
 
-    const targetCaseId = caseId || communication.caseId;
+    if (caseId && caseId !== communication.caseId) {
+      res.status(409).json({ status: 409, code: 'COMMUNICATION_CASE_MISMATCH', message: 'A communication deadline must remain on its linked case.' });
+      return;
+    }
+    const targetCaseId = communication.caseId;
     if (!targetCaseId) {
       res.status(400).json({ error: 'Communication must be linked to a case first' });
+      return;
+    }
+
+    if (!userId || !(await canonicalUserCanManageCase(req, String(targetCaseId)))) {
+      res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
       return;
     }
 
