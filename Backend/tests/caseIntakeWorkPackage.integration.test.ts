@@ -6,7 +6,7 @@ jest.mock('../src/modules/sharepoint', () => ({
 }));
 
 import { createCaseIntake } from '../src/modules/cases/intakeCreate.service';
-import { CaseWorkPackageError, CASE_WORK_PACKAGE_SNAPSHOT_KEY } from '../src/modules/cases/caseWorkPackage.service';
+import { CASE_WORK_PACKAGE_SNAPSHOT_KEY } from '../src/modules/cases/caseWorkPackage.service';
 
 const databaseUrl = process.env.WORK_PACKAGE_INTAKE_TEST_DATABASE_URL
   || process.env.WORK_PACKAGE_CASE_CREATION_TEST_DATABASE_URL
@@ -123,7 +123,7 @@ describeWithDatabase('Case intake Work Package unification (PostgreSQL)', () => 
 
     const beforeCases = await db.case.count({ where: { clientId } });
     const beforePackages = await db.caseWorkPackage.count();
-    await expect(intake({ selectedModuleKeys: ['optional-research'] })).rejects.toBeInstanceOf(CaseWorkPackageError);
+    await expect(intake({ selectedModuleKeys: ['optional-research'] })).rejects.toMatchObject({ code: 'REQUIRED_MODULE_NOT_SELECTED' });
     expect(await db.case.count({ where: { clientId } })).toBe(beforeCases);
     expect(await db.caseWorkPackage.count()).toBe(beforePackages);
   });
