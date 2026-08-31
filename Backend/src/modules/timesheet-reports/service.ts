@@ -3,13 +3,13 @@ import { prisma } from '../../prisma/prisma.service';
 import {
   AlignmentType,
   BorderStyle,
-  Document,
+  Document as DocxDocument,
   HeadingLevel,
   Packer,
   Paragraph,
-  Table,
-  TableCell,
-  TableRow,
+  Table as DocxTable,
+  TableCell as DocxTableCell,
+  TableRow as DocxTableRow,
   TextRun,
   WidthType,
 } from 'docx';
@@ -1247,14 +1247,14 @@ class TimesheetReportService {
       color?: string;
       fontSize?: number;
     }
-  ): TableCell {
+  ): DocxTableCell {
     const alignment = options?.align === 'right'
       ? AlignmentType.RIGHT
       : options?.align === 'center'
       ? AlignmentType.CENTER
       : AlignmentType.LEFT;
 
-    return new TableCell({
+    return new DocxTableCell({
       children: [
         new Paragraph({
           alignment,
@@ -1283,14 +1283,14 @@ class TimesheetReportService {
     });
   }
 
-  private buildDocxMetadataTable(report: GeneratedTimesheetReportPayload, isHu: boolean): Table {
-    const rows: TableRow[] = [
+  private buildDocxMetadataTable(report: GeneratedTimesheetReportPayload, isHu: boolean): DocxTable {
+    const rows: DocxTableRow[] = [
       [isHu ? 'Időszak' : 'Reporting period', report.header.reportPeriod],
       [isHu ? 'Ügyfél' : 'Client', report.header.clientName],
       [isHu ? 'Matter' : 'Matter', report.header.matterName || (isHu ? '—' : 'N/A')],
       [isHu ? 'Ügy hivatkozás' : 'Case reference', report.header.caseReference || (isHu ? '—' : 'N/A')],
     ].map(([label, value]) =>
-      new TableRow({
+      new DocxTableRow({
         children: [
           this.buildDocxCell(label, {
             bold: true,
@@ -1308,7 +1308,7 @@ class TimesheetReportService {
     });
   }
 
-  private buildDocxRowsTable(report: GeneratedTimesheetReportPayload): Table {
+  private buildDocxRowsTable(report: GeneratedTimesheetReportPayload): DocxTable {
     const isHu = report.template.family === 'HU_DETAILED_MONTHLY';
     const headerCells = isHu
       ? ['Ssz', 'Dátum', 'Leírás', 'Jogász', 'Óra']
@@ -1345,7 +1345,7 @@ class TimesheetReportService {
     });
   }
 
-  private buildDocxTotalsTable(report: GeneratedTimesheetReportPayload, isHu: boolean): Table {
+  private buildDocxTotalsTable(report: GeneratedTimesheetReportPayload, isHu: boolean): DocxTable {
     const rows: Array<[string, string, boolean?]> = [
       [isHu ? 'Sorok száma' : 'Items', String(report.totals.rowCount)],
       [
