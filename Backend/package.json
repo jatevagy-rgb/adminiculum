@@ -55,6 +55,7 @@
     "test:answer-state:db": "jest --runInBand tests/companyProfileAnswerState.integration.test.ts",
     "test:case-attention:db": "jest --runInBand tests/caseAttention.integration.test.ts",
     "test:client-safe-work-summary:db": "jest --runInBand tests/clientSafeWorkSummary.integration.test.ts",
+    "test:client-communication-summary:db": "jest --runInBand tests/clientCommunicationSummary.integration.test.ts",
     "test:work-package-schema:db": "jest --runInBand tests/workPackageSchema.integration.test.ts",
     "test:work-package-case-creation:db": "jest --runInBand tests/workPackageCaseCreation.integration.test.ts",
     "test:work-package-admin:db": "jest --runInBand tests/workPackageAdmin.integration.test.ts",

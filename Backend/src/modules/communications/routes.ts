@@ -28,6 +28,8 @@ import {
 import { readOutlookSyncConfig, isOutlookSyncConfigured } from './outlookGraphLive';
 import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
 import casesService from '../cases/services';
+import { InteractionError, type InternalActor } from '../client-interaction/base';
+import { listClientCommunicationSummary } from './clientSummary.service';
 
 const router = Router();
 
@@ -443,6 +445,31 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     } else {
       res.status(500).json({ error: 'Error listing communications' });
     }
+  }
+});
+
+router.get('/client/:clientId/summary', requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  try {
+    if (!req.user?.userId) {
+      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated workforce user is required.' });
+      return;
+    }
+    const actor: InternalActor = { userId: String(req.user.userId), role: String(req.user.role || '') };
+    const summary = await listClientCommunicationSummary(actor, String(req.params.clientId || ''), {
+      limit: req.query.limit === undefined ? undefined : Number(req.query.limit),
+    }, prisma);
+    res.json(summary);
+  } catch (error) {
+    if (error instanceof InteractionError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    logPrismaRouteError('GET /communications/client/:clientId/summary', error);
+    res.status(500).json({
+      status: 500,
+      code: 'CLIENT_COMMUNICATION_SUMMARY_ERROR',
+      message: 'The client communication summary could not be loaded.',
+    });
   }
 });
 
