@@ -70,6 +70,8 @@ export interface IntakeState {
   matterType: string;
   clientRole: string;
   assignedLawyerId: string;
+  caseTypeDefinitionId: string;
+  selectedModuleKeys: string[];
   startingContext: {
     originReason: string;
     currentSituation: string;
@@ -105,6 +107,7 @@ const newKey = () => Math.random().toString(36).slice(2, 10);
 
 export const emptyIntakeState = (): IntakeState => ({
   clientId: "", title: "", matterType: "", clientRole: "", assignedLawyerId: "",
+  caseTypeDefinitionId: "", selectedModuleKeys: [],
   startingContext: { originReason: "", currentSituation: "", clientExpectation: "", urgentAction: "", nextStep: "" },
   hasDeadline: false,
   deadline: {
@@ -276,6 +279,10 @@ export function useCaseIntakeForm(
       matterType: state.matterType || "OTHER",
       clientRole: state.clientRole || null,
       assignedLawyerId: state.assignedLawyerId || null,
+      ...(state.caseTypeDefinitionId ? {
+        caseTypeDefinitionId: state.caseTypeDefinitionId,
+        selectedModuleKeys: state.selectedModuleKeys,
+      } : {}),
       startingContext: {
         originReason: ctx.originReason.trim() || null,
         currentSituation: ctx.currentSituation.trim() || null,

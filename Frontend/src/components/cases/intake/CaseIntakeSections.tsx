@@ -9,7 +9,7 @@
  * old per-field explanatory paragraphs are gone.
  */
 import { useEffect, useMemo, useState } from "react";
-import { type Client, type User, type WorkflowTemplateSummary } from "@/lib/api";
+import { type CaseCreationOption, type Client, type User, type WorkflowTemplateSummary } from "@/lib/api";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intakeStyles";
 import {
@@ -39,9 +39,9 @@ export function Section({ title, accent = "petrol", children }: { title: string;
 
 /** Client, name, type, responsible lawyer, role. */
 export function CaseBasicsSection({
-  state, errors, clients, users, onPatch, clientsLoading, clientsError,
+  state, errors, clients, users, creationOptions, onPatch, clientsLoading, clientsError,
 }: {
-  state: IntakeState; errors: IntakeErrors; clients: Client[]; users: User[];
+  state: IntakeState; errors: IntakeErrors; clients: Client[]; users: User[]; creationOptions: CaseCreationOption[];
   onPatch: <K extends keyof IntakeState>(k: K, v: IntakeState[K]) => void;
   clientsLoading?: boolean; clientsError?: string | null;
 }) {
@@ -77,14 +77,50 @@ export function CaseBasicsSection({
       </div>
       <div>
         <label className={label} htmlFor="ci-type">Ügytípus</label>
-        <select id="ci-type" className={field} value={state.matterType} onChange={(e) => onPatch("matterType", e.target.value)}>
+        <select
+          id="ci-type"
+          className={field}
+          value={state.caseTypeDefinitionId}
+          onChange={(e) => {
+            const option = creationOptions.find((item) => item.caseTypeDefinition.id === e.target.value);
+            onPatch("caseTypeDefinitionId", e.target.value);
+            onPatch("matterType", option?.caseTypeDefinition.slug || "OTHER");
+            onPatch("selectedModuleKeys", option?.template?.items.map((item) => item.moduleKey) || []);
+          }}
+        >
           <option value="">Válassz típust…</option>
-          {["CONTRACT_REVIEW", "CONTRACT_DRAFTING", "LITIGATION", "CORPORATE", "IP", "OTHER"].map((t) => (
-            <option key={t} value={t}>{t}</option>
+          {creationOptions.map((option) => (
+            <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name}</option>
           ))}
         </select>
         <FieldError message={errors.matterType} />
       </div>
+      {state.caseTypeDefinitionId ? (
+        <div className="sm:col-span-2">
+          <p className={label}>Induló munkacsomag</p>
+          <div className="mt-1 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {(creationOptions.find((item) => item.caseTypeDefinition.id === state.caseTypeDefinitionId)?.template?.items || [])
+              .slice()
+              .sort((a, b) => a.order - b.order || a.moduleKey.localeCompare(b.moduleKey))
+              .map((item) => {
+                const selected = state.selectedModuleKeys.includes(item.moduleKey);
+                return (
+                  <label key={item.moduleKey} className="flex items-center gap-2 text-[12px] text-[#2C3A31]">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      disabled={!item.isOptional}
+                      onChange={() => onPatch("selectedModuleKeys", selected
+                        ? state.selectedModuleKeys.filter((key) => key !== item.moduleKey)
+                        : [...state.selectedModuleKeys, item.moduleKey])}
+                    />
+                    <span>{item.label}{!item.isOptional ? " (kötelező)" : ""}</span>
+                  </label>
+                );
+              })}
+          </div>
+        </div>
+      ) : null}
       <div>
         <label className={label} htmlFor="ci-lawyer">Felelős ügyvéd</label>
         <select id="ci-lawyer" className={field} value={state.assignedLawyerId} onChange={(e) => onPatch("assignedLawyerId", e.target.value)}>

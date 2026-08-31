@@ -12,6 +12,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
 import { instantiateCaseWorkflow, WORKFLOW_TEMPLATES } from './caseWorkflowOrchestration';
+import casesService from './services';
+import { CaseWorkPackageError } from './caseWorkPackage.service';
 
 export class CaseIntakeError extends Error {
   constructor(public readonly code: string, message: string, public readonly status = 400) {
@@ -57,6 +59,8 @@ export interface CaseIntakeInput {
   // auto-activation), instead of / in addition to flat initial tasks.
   workflowTemplateKey?: unknown;
   workflowAssignees?: unknown;
+  caseTypeDefinitionId?: unknown;
+  selectedModuleKeys?: unknown;
 }
 
 // Maps step keys -> assignee user id. Unknown shapes collapse to an empty map
@@ -235,6 +239,13 @@ export interface CaseIntakeResult {
   }>;
   communicationLinks: Array<{ id: string; subject: string; isPrimary: boolean }>;
   tasks: Array<{ id: string; title: string; status: string; priority: string; dueDate: string | null; assignedToId: string | null }>;
+  workPackage?: {
+    id: string;
+    workPackageTemplateId: string;
+    workPackageTemplateVersion: number;
+    snapshotWorkflowTemplateId: string | null;
+    items: Array<{ id: string; moduleType: string; moduleKey: string; label: string; order: number }>;
+  };
 }
 
 /**
@@ -262,6 +273,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
 
   const workflowTemplateKey = str(input.workflowTemplateKey, 64, 'workflowTemplateKey');
   const workflowAssignees = normalizeWorkflowAssignees(input.workflowAssignees);
+  const caseTypeDefinitionId = str(input.caseTypeDefinitionId, 64, 'caseTypeDefinitionId');
   if (workflowTemplateKey && !WORKFLOW_TEMPLATES[workflowTemplateKey]) {
     throw new CaseIntakeError('WORKFLOW_TEMPLATE_NOT_FOUND', 'Ismeretlen munkafolyamat-sablon.', 400);
   }
@@ -318,35 +330,93 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     const caseNumber = `CASE-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
     const caseDeadline = input.deadline ? new Date(String(input.deadline)) : null;
 
-    const caseRow = await tx.case.create({
-      data: {
-        caseNumber,
-        title,
-        caseType: matterType as never,
-        clientId,
-        clientName: client.name,
-        matterType,
-        clientRole,
-        createdById: actorId,
-        assignedLawyerId: assignedLawyerId || null,
-        intakeOriginReason: startingContext.intakeOriginReason ?? null,
-        intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
-        intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
-        intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
-        intakeNextStep: startingContext.intakeNextStep ?? null,
-        // NOTE: `Case.deadline` is an independent field.
-        // It is set only from explicit input.deadline at case creation.
-        deadline: caseDeadline || undefined,
-      } as never,
-      select: {
-        id: true, caseNumber: true, title: true, status: true, priority: true,
-        matterType: true, clientRole: true, createdAt: true,
-        intakeOriginReason: true, intakeCurrentSituation: true,
-        intakeClientExpectation: true, intakeUrgentAction: true, intakeNextStep: true,
-        client: { select: { id: true, name: true } },
-        assignedLawyer: { select: { id: true, name: true } },
-      },
-    });
+    let caseRow: any;
+    let workPackage: any = null;
+    if (caseTypeDefinitionId) {
+      let canonical;
+      try {
+        canonical = await casesService.createCase(
+          {
+            title,
+            clientName: client.name,
+            clientId,
+            matterType,
+            clientRole,
+            deadline: input.deadline ? String(input.deadline) : null,
+            assignedLawyerId,
+            createdById: actorId,
+            workflowTemplateKey,
+            workflowAssignees,
+            caseTypeDefinitionId,
+            selectedModuleKeys: input.selectedModuleKeys,
+          },
+          tx,
+          { withinTransaction: true, provisionCaseFolders: false },
+        );
+      } catch (error) {
+        if (error instanceof CaseWorkPackageError) {
+          throw new CaseIntakeError(error.code, error.message, error.status);
+        }
+        throw error;
+      }
+      workPackage = canonical.workPackage || null;
+      caseRow = await tx.case.findUnique({
+        where: { id: canonical.id },
+        select: {
+          id: true, caseNumber: true, title: true, status: true, priority: true,
+          matterType: true, clientRole: true, createdAt: true,
+          intakeOriginReason: true, intakeCurrentSituation: true,
+          intakeClientExpectation: true, intakeUrgentAction: true, intakeNextStep: true,
+          client: { select: { id: true, name: true } },
+          assignedLawyer: { select: { id: true, name: true } },
+        },
+      });
+      await tx.case.update({
+        where: { id: canonical.id },
+        data: {
+          intakeOriginReason: startingContext.intakeOriginReason ?? null,
+          intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
+          intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
+          intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
+          intakeNextStep: startingContext.intakeNextStep ?? null,
+        },
+      });
+      caseRow.intakeOriginReason = startingContext.intakeOriginReason ?? null;
+      caseRow.intakeCurrentSituation = startingContext.intakeCurrentSituation ?? null;
+      caseRow.intakeClientExpectation = startingContext.intakeClientExpectation ?? null;
+      caseRow.intakeUrgentAction = startingContext.intakeUrgentAction ?? null;
+      caseRow.intakeNextStep = startingContext.intakeNextStep ?? null;
+    } else {
+      caseRow = await tx.case.create({
+        data: {
+          caseNumber,
+          title,
+          caseType: matterType as never,
+          clientId,
+          clientName: client.name,
+          matterType,
+          clientRole,
+          createdById: actorId,
+          assignedLawyerId: assignedLawyerId || null,
+          intakeOriginReason: startingContext.intakeOriginReason ?? null,
+          intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
+          intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
+          intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
+          intakeNextStep: startingContext.intakeNextStep ?? null,
+          // NOTE: `Case.deadline` is an independent field.
+          // It is set only from explicit input.deadline at case creation.
+          deadline: caseDeadline || undefined,
+        } as never,
+        select: {
+          id: true, caseNumber: true, title: true, status: true, priority: true,
+          matterType: true, clientRole: true, createdAt: true,
+          intakeOriginReason: true, intakeCurrentSituation: true,
+          intakeClientExpectation: true, intakeUrgentAction: true, intakeNextStep: true,
+          client: { select: { id: true, name: true } },
+          assignedLawyer: { select: { id: true, name: true } },
+        },
+      });
+    }
 
     const participantRows = [];
     for (const p of participants) {
@@ -427,7 +497,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
       // Timeline is advisory; never fail an otherwise valid intake because of it.
     }
 
-    return { caseRow, participantRows, externalRows, deadlineRows, taskRows, linkRows };
+    return { caseRow, participantRows, externalRows, deadlineRows, taskRows, linkRows, workPackage };
   });
 
   // Optional workflow instantiation using the EXISTING DAG engine. Runs after the
@@ -436,7 +506,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
   // completed; milestone-candidate steps become eligible for Case-level milestone
   // publication.
   let responseTaskRows = created.taskRows;
-  if (workflowTemplateKey) {
+  if (workflowTemplateKey && !caseTypeDefinitionId) {
     await instantiateCaseWorkflow({
       caseId: created.caseRow.id,
       templateKey: workflowTemplateKey,
@@ -444,6 +514,12 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
       assigneesByStepKey: workflowAssignees,
       fallbackAssigneeId: assignedLawyerId || actorId,
     });
+    responseTaskRows = await prisma.task.findMany({
+      where: { caseId: created.caseRow.id },
+      select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedToId: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  } else if (caseTypeDefinitionId) {
     responseTaskRows = await prisma.task.findMany({
       where: { caseId: created.caseRow.id },
       select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedToId: true },
@@ -482,6 +558,21 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
       dueDate: t.dueDate ? new Date(t.dueDate).toISOString() : null,
       assignedToId: t.assignedToId ?? null,
     })),
+    ...(created.workPackage ? {
+      workPackage: {
+        id: created.workPackage.id,
+        workPackageTemplateId: created.workPackage.workPackageTemplateId,
+        workPackageTemplateVersion: created.workPackage.workPackageTemplateVersion,
+        snapshotWorkflowTemplateId: created.workPackage.snapshotWorkflowTemplateId,
+        items: created.workPackage.items.map((item: any) => ({
+          id: item.id,
+          moduleType: item.moduleType,
+          moduleKey: item.moduleKey,
+          label: item.label,
+          order: item.order,
+        })),
+      },
+    } : {}),
   };
 }
 
