@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getClientList, getUsers, getWorkflowTemplates, uploadCaseDocument, type Client, type User, type CaseIntakeResult, type WorkflowTemplateSummary } from "@/lib/api";
+import { getCaseCreationOptions, getClientList, getUsers, getWorkflowTemplates, uploadCaseDocument, type CaseCreationOption, type Client, type User, type CaseIntakeResult, type WorkflowTemplateSummary } from "@/lib/api";
 import { useCaseIntakeForm } from "./useCaseIntakeForm";
 import {
   Section, CaseBasicsSection, CaseStartingContextSection, CaseDeadlineSection,
@@ -50,6 +50,7 @@ export function CaseIntakeDialog({
   const [clientsLoading, setClientsLoading] = useState(true);
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [creationOptions, setCreationOptions] = useState<CaseCreationOption[]>([]);
   const [workflowTemplates, setWorkflowTemplates] = useState<WorkflowTemplateSummary[]>([]);
   const [workflowTemplatesLoading, setWorkflowTemplatesLoading] = useState(true);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -139,6 +140,7 @@ export function CaseIntakeDialog({
       })
       .finally(() => { if (active) setClientsLoading(false); });
     getUsers().then((u) => { if (active) setUsers(u); }).catch(() => { if (active) setUsers([]); });
+    getCaseCreationOptions().then((res) => { if (active) setCreationOptions(res.items || []); }).catch(() => { if (active) setCreationOptions([]); });
     setWorkflowTemplatesLoading(true);
     getWorkflowTemplates()
       .then((res) => { if (active) setWorkflowTemplates(res.items || []); })
@@ -211,7 +213,7 @@ export function CaseIntakeDialog({
               <div className="space-y-3">
                 <Section title="Ügy alapadatai" accent="petrol">
                   <CaseBasicsSection
-                    state={state} errors={errors} clients={clients} users={users} onPatch={patch}
+                    state={state} errors={errors} clients={clients} users={users} creationOptions={creationOptions} onPatch={patch}
                     clientsLoading={clientsLoading} clientsError={clientsError}
                   />
                 </Section>

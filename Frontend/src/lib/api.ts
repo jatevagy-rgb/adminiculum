@@ -5486,6 +5486,8 @@ export interface CaseIntakePayload {
   initialTasks?: Array<{ title: string; description?: string | null; assignedToId?: string | null; dueDate?: string | null; priority?: string }>;
   workflowTemplateKey?: string;
   workflowAssignees?: Record<string, string>;
+  caseTypeDefinitionId?: string;
+  selectedModuleKeys?: string[];
 }
 
 export interface WorkflowTemplateStepSummary {
@@ -5572,6 +5574,13 @@ export interface CaseIntakeResult {
   deadlines: Array<{ id: string; title: string; deadlineType: string; dueAt: string; inputMode: string; relativeValue: number | null; relativeUnit: string | null; reminderMinutesBefore: number | null; responsibleId: string | null }>;
   communicationLinks: Array<{ id: string; subject: string; isPrimary: boolean }>;
   tasks: Array<{ id: string; title: string; status: string; priority: string; dueDate: string | null; assignedToId: string | null }>;
+  workPackage?: {
+    id: string;
+    workPackageTemplateId: string;
+    workPackageTemplateVersion: number;
+    snapshotWorkflowTemplateId: string | null;
+    items: Array<{ id: string; moduleType: string; moduleKey: string; label: string; order: number }>;
+  };
 }
 
 export async function createCaseIntake(payload: CaseIntakePayload): Promise<CaseIntakeResult> {
