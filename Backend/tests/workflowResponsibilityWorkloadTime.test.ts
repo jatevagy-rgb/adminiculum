@@ -62,12 +62,14 @@ describe('workflow responsibility/workload/time safety contract', () => {
     expect(service).not.toContain('performanceScore');
   });
 
-  it('prevents hidden time ownership changes and unsupported task/document time links', () => {
+  it('prevents hidden time ownership changes while resolving task time through persisted scope', () => {
     const timeEntries = readRepoFile('Backend/src/routes/timeEntries.ts');
 
     expect(timeEntries).toContain('TIME_ENTRY_USER_ID_NOT_ACCEPTED');
     expect(timeEntries).toContain('TIME_ENTRY_CONTEXT_NOT_SUPPORTED');
-    expect(timeEntries).toContain('Task, document and communication time links need a future persisted model');
+    expect(timeEntries).toContain('resolveTaskTimeAttribution');
+    expect(timeEntries).toContain('TIME_ENTRY_TASK_CASE_MISMATCH');
+    expect(timeEntries).not.toContain('Task, document and communication time links need a future persisted model');
     expect(timeEntries).not.toContain('fallbackUser');
   });
 
