@@ -95,6 +95,7 @@ export function deriveTaskDeadlineStatus(status?: string | null): WorkflowDeadli
 export function deriveCaseDeadlineStatus(status?: string | null, completedAt?: Date | string | null): WorkflowDeadlineStatus {
   const normalized = String(status || '').toUpperCase();
   if (normalized === 'ARCHIVED' || normalized === 'CANCELLED') return 'CANCELLED';
+  if (normalized === 'FINAL') return 'COMPLETED';
   if (completedAt || ['COMPLETED', 'DONE', 'APPROVED'].includes(normalized)) return 'COMPLETED';
   return 'OPEN';
 }

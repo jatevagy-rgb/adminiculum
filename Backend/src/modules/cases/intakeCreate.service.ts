@@ -44,6 +44,7 @@ export interface CaseIntakeInput {
   clientRole?: unknown;
   internalReference?: unknown;
   assignedLawyerId?: unknown;
+  deadline?: unknown;
   startingContext?: unknown;
   participants?: unknown;
   externalParticipants?: unknown;
@@ -315,6 +316,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
     const year = now.getFullYear();
     const countThisYear = await tx.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
     const caseNumber = `CASE-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
+    const caseDeadline = input.deadline ? new Date(String(input.deadline)) : null;
 
     const caseRow = await tx.case.create({
       data: {
@@ -327,7 +329,14 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
         clientRole,
         createdById: actorId,
         assignedLawyerId: assignedLawyerId || null,
-        ...startingContext,
+        intakeOriginReason: startingContext.intakeOriginReason ?? null,
+        intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
+        intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
+        intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
+        intakeNextStep: startingContext.intakeNextStep ?? null,
+        // NOTE: `Case.deadline` is an independent field.
+        // It is set only from explicit input.deadline at case creation.
+        deadline: caseDeadline || undefined,
       } as never,
       select: {
         id: true, caseNumber: true, title: true, status: true, priority: true,

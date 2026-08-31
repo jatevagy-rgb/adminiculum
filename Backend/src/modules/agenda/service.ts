@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma/prisma.service';
 import type { CaseStatus } from '@prisma/client';
+import { buildCaseReadScope } from '../cases/authorization';
 import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   compactSafeText,
@@ -125,61 +126,6 @@ function validateRange(from: Date, to: Date): void {
   }
 }
 
-async function getAccessibleCases(userId: string) {
-  const [ownedCases, collaborations] = await Promise.all([
-    prisma.case.findMany({
-      where: {
-        OR: [
-          { assignedLawyerId: userId },
-          { createdById: userId },
-        ],
-      },
-      select: {
-        id: true,
-        caseNumber: true,
-        title: true,
-        clientName: true,
-        priority: true,
-        status: true,
-        deadline: true,
-        completedAt: true,
-        updatedAt: true,
-        assignedLawyerId: true,
-        assignedLawyer: { select: { id: true, name: true, email: true } },
-      },
-      take: 200,
-    }),
-    prisma.caseCollaborator.findMany({
-      where: { userId },
-      select: {
-        case: {
-          select: {
-            id: true,
-            caseNumber: true,
-            title: true,
-            clientName: true,
-            priority: true,
-            status: true,
-            deadline: true,
-            completedAt: true,
-            updatedAt: true,
-            assignedLawyerId: true,
-            assignedLawyer: { select: { id: true, name: true, email: true } },
-          },
-        },
-      },
-      take: 200,
-    }),
-  ]);
-
-  const byId = new Map<string, (typeof ownedCases)[number]>();
-  for (const item of ownedCases) byId.set(item.id, item);
-  for (const item of collaborations) {
-    if (item.case?.id) byId.set(item.case.id, item.case);
-  }
-  return [...byId.values()];
-}
-
 function displayUser(user?: { id: string; name?: string | null; email?: string | null } | null) {
   if (!user?.id) return null;
   return { id: user.id, displayName: user.name || user.email || user.id };
@@ -209,6 +155,7 @@ export function makeDefaultAgendaRange(now = new Date()): { from: Date; to: Date
 
 export async function getWorkflowAgenda(params: {
   userId: string;
+  userRole?: string;
   scope?: unknown;
   status?: unknown;
   caseId?: string;
@@ -217,7 +164,9 @@ export async function getWorkflowAgenda(params: {
   limit?: unknown;
   offset?: unknown;
   now?: Date;
+  db?: typeof prisma;
 }): Promise<WorkflowAgendaDto> {
+  const db = params.db || prisma;
   const now = params.now || new Date();
   const defaults = makeDefaultAgendaRange(now);
   const from = parseDateOnly(params.from, defaults.from);
@@ -237,29 +186,61 @@ export async function getWorkflowAgenda(params: {
   if (scope === 'CASE' && !params.caseId) {
     throw new AgendaRequestError(400, 'CASE_SCOPE_REQUIRES_CASE_ID', 'caseId is required for CASE scope.');
   }
-  const accessibleCases = scope === 'MY_WORK' ? [] : await getAccessibleCases(params.userId);
-  const accessibleCaseIds = scope === 'MY_WORK'
-    ? []
-    : accessibleCases.map((item) => item.id);
-
-  if (scope === 'CASE' && params.caseId && !accessibleCaseIds.includes(params.caseId)) {
-    throw new AgendaRequestError(404, 'CASE_NOT_FOUND', 'Case not found.');
+  const caseReadScope = buildCaseReadScope(params.userId, params.userRole);
+  if (scope === 'CASE' && params.caseId) {
+    const readableCase = await db.case.findFirst({
+      where: {
+        AND: [
+          { id: params.caseId },
+          ...(caseReadScope ? [caseReadScope] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    if (!readableCase) throw new AgendaRequestError(404, 'CASE_NOT_FOUND', 'Case not found.');
   }
 
   const taskWhere: any = {
     dueDate: { gte: from, lte: to },
     ...taskStatusFilter(status),
+    ...(caseReadScope ? { case: caseReadScope } : {}),
   };
-  if (scope === 'MY_WORK') {
-    taskWhere.assignedToId = params.userId;
-  } else if (scope === 'CASE') {
-    taskWhere.caseId = params.caseId;
-  } else {
-    taskWhere.caseId = { in: accessibleCaseIds };
+
+  const caseWhere: any = {
+    deadline: { gte: from, lte: to },
+    ...caseStatusFilter(status),
+  };
+  if (caseReadScope) {
+    taskWhere.case = caseReadScope;
+    caseWhere.AND = [caseReadScope];
   }
 
-  const [tasks, caseRows] = await Promise.all([
-    prisma.task.findMany({
+  const intakeWhere: any = {
+    dueAt: { gte: from, lte: to },
+    case: {
+      ...caseStatusFilter(status),
+      ...(caseReadScope ? { AND: [caseReadScope] } : {}),
+    },
+  };
+
+  if (scope === 'MY_WORK') {
+    taskWhere.assignedToId = params.userId;
+    caseWhere.OR = [
+      { assignedLawyerId: params.userId },
+      { createdById: params.userId },
+    ];
+    intakeWhere.OR = [
+      { responsibleId: params.userId },
+      { case: { assignedLawyerId: params.userId } },
+    ];
+  } else if (scope === 'CASE') {
+    taskWhere.caseId = params.caseId;
+    caseWhere.id = params.caseId;
+    intakeWhere.caseId = params.caseId;
+  }
+
+  const [tasks, caseRows, intakeRows] = await Promise.all([
+    db.task.findMany({
       where: taskWhere,
       select: {
         id: true,
@@ -286,14 +267,37 @@ export async function getWorkflowAgenda(params: {
       orderBy: [{ dueDate: 'asc' }, { id: 'asc' }],
       take: MAX_LIMIT + offset + 1,
     }),
-    scope === 'MY_WORK'
-      ? Promise.resolve([])
-      : prisma.case.findMany({
-          where: {
-            id: scope === 'CASE' ? params.caseId : { in: accessibleCaseIds },
-            deadline: { gte: from, lte: to },
-            ...caseStatusFilter(status),
-          },
+    db.case.findMany({
+      where: caseWhere,
+      select: {
+        id: true,
+        caseNumber: true,
+        title: true,
+        clientName: true,
+        priority: true,
+        status: true,
+        deadline: true,
+        completedAt: true,
+        updatedAt: true,
+        assignedLawyerId: true,
+        assignedLawyer: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: [{ deadline: 'asc' }, { id: 'asc' }],
+      take: MAX_LIMIT + offset + 1,
+    }),
+    db.caseIntakeDeadline.findMany({
+      where: intakeWhere,
+      select: {
+        id: true,
+        title: true,
+        deadlineType: true,
+        dueAt: true,
+        responsibleId: true,
+        note: true,
+        updatedAt: true,
+        caseId: true,
+        responsible: { select: { id: true, name: true, email: true } },
+        case: {
           select: {
             id: true,
             caseNumber: true,
@@ -301,15 +305,15 @@ export async function getWorkflowAgenda(params: {
             clientName: true,
             priority: true,
             status: true,
-            deadline: true,
             completedAt: true,
-            updatedAt: true,
             assignedLawyerId: true,
             assignedLawyer: { select: { id: true, name: true, email: true } },
           },
-          orderBy: [{ deadline: 'asc' }, { id: 'asc' }],
-          take: MAX_LIMIT + offset + 1,
-        }),
+        },
+      },
+      orderBy: [{ dueAt: 'asc' }, { id: 'asc' }],
+      take: MAX_LIMIT + offset + 1,
+    }),
   ]);
 
   const taskItems: WorkflowDeadlineDto[] = tasks
@@ -354,10 +358,59 @@ export async function getWorkflowAgenda(params: {
     })
     .filter(Boolean) as WorkflowDeadlineDto[];
 
+  const intakeItems: WorkflowDeadlineDto[] = intakeRows
+    .map((row) => {
+      const dueAt = toSafeIsoDate(row.dueAt);
+      if (!dueAt) return null;
+      const deadlineStatus = deriveCaseDeadlineStatus(row.case?.status, row.case?.completedAt);
+      return {
+        id: `CASE_INTAKE_DEADLINE:${row.id}`,
+        sourceType: 'CASE_DEADLINE' as const,
+        sourceId: row.id,
+        caseId: row.caseId,
+        title: row.title || row.case?.title || row.case?.caseNumber || 'Ügyhatáridő',
+        safeDescription: compactSafeText([
+          row.case?.caseNumber,
+          row.case?.clientName,
+          row.deadlineType ? `Típus: ${row.deadlineType}` : null,
+          row.note,
+        ].filter(Boolean).join(' · ')),
+        startsAt: null,
+        dueAt,
+        allDay: false,
+        status: deadlineStatus,
+        urgency: deriveDeadlineUrgency(dueAt, now),
+        importance: mapImportance(row.case?.priority),
+        legalSignificance: null,
+        responsibility: {
+          assignee: displayUser(row.responsible),
+          responsibleLawyer: displayUser(row.case?.assignedLawyer),
+        },
+        source: {
+          type: 'CASE' as const,
+          id: row.caseId,
+          displayName: row.case?.caseNumber || 'Ügy',
+          href: `/cases/${encodeURIComponent(row.caseId)}`,
+        },
+        capabilities: deriveDeadlineCapabilities({
+          sourceType: 'CASE_DEADLINE',
+          status: deadlineStatus,
+          isAssignedToCurrentUser: row.responsibleId === params.userId,
+          isCaseManager: row.case?.assignedLawyerId === params.userId,
+        }),
+        href: `/cases/${encodeURIComponent(row.caseId)}`,
+        updatedAt: toSafeIsoDate(row.updatedAt),
+      };
+    })
+    .filter(Boolean) as WorkflowDeadlineDto[];
+
+  const intakeKeys = new Set(intakeItems.map((item) => `${item.caseId}::${item.dueAt}`));
+
   const caseItems: WorkflowDeadlineDto[] = caseRows
     .map((caseRecord) => {
       const dueAt = toSafeIsoDate(caseRecord.deadline);
       if (!dueAt) return null;
+
       const deadlineStatus = deriveCaseDeadlineStatus(caseRecord.status, caseRecord.completedAt);
       return {
         id: `CASE_DEADLINE:${caseRecord.id}`,
@@ -394,7 +447,7 @@ export async function getWorkflowAgenda(params: {
     })
     .filter(Boolean) as WorkflowDeadlineDto[];
 
-  const filtered = [...taskItems, ...caseItems]
+  const filtered = [...taskItems, ...intakeItems, ...caseItems]
     .filter((item) => status === 'ALL' || (status === 'OPEN' ? !CLOSED_STATUSES.has(item.status) : CLOSED_STATUSES.has(item.status)))
     .sort((left, right) => compareDeadlines(left, right, params.userId));
   const page = filtered.slice(offset, offset + limit);
@@ -429,7 +482,7 @@ export async function getWorkflowAgenda(params: {
     },
     availability: {
       taskDueDates: true,
-      caseDeadlines: scope !== 'MY_WORK',
+      caseDeadlines: true,
       hearings: false,
       reminders: false,
       teamScope: false,
@@ -438,15 +491,22 @@ export async function getWorkflowAgenda(params: {
   };
 }
 
-export async function getCaseDeadlines(caseId: string, userId: string, query: { status?: unknown; limit?: unknown; offset?: unknown; now?: Date } = {}) {
+export async function getCaseDeadlines(
+  caseId: string,
+  userId: string,
+  query: { status?: unknown; limit?: unknown; offset?: unknown; now?: Date; userRole?: string } = {},
+  db = prisma
+) {
   const agenda = await getWorkflowAgenda({
     userId,
+    userRole: query.userRole,
     scope: 'CASE',
     caseId,
     status: query.status || 'ALL',
     limit: query.limit || 50,
     offset: query.offset,
     now: query.now,
+    db,
   });
   return {
     caseId,
