@@ -224,17 +224,41 @@ export async function createAndPublishInitialMatterPublicationInTransaction(
   input: Row,
   tx: Prisma.TransactionClient,
 ): Promise<Row> {
+  const grantId = String(input.grantId || '');
+  const grant = await one(tx, 'SELECT "participantRole"::text FROM client_portal_grants WHERE id=$1', grantId);
+  if (!grant || grant.participantRole !== 'REQUESTER') {
+    throw new ClientPublicationError(409, 'ACTIVE_REQUESTER_GRANT_REQUIRED', 'An active requester grant is required before publication.');
+  }
+  return createAndPublishMatterPublicationForGrantInTransaction(actor, input, tx);
+}
+
+/**
+ * Creates the immutable client-safe Case snapshot for one already-authorized
+ * workspace participant. The caller establishes the participant grant first;
+ * membership alone is never treated as Case visibility.
+ */
+export async function createAndPublishMatterPublicationForGrantInTransaction(
+  actor: Actor,
+  input: Row,
+  tx: Prisma.TransactionClient,
+): Promise<Row> {
   requireFoundation(); requireInternal(actor);
   const workspaceId = String(input.workspaceId || '');
   const caseId = String(input.caseId || '');
   const grantId = String(input.grantId || '');
+  const publicationSource = input.publicationSource === 'internal-case' ? 'internal-case' : 'portal-intake';
   const caseRow = await getCase(tx, caseId);
   const workspace = await one(tx, 'SELECT id, "clientId", mode::text, status::text FROM client_portal_workspaces WHERE id=$1', workspaceId);
   if (!workspace || workspace.status !== 'ACTIVE' || workspace.mode !== 'ORGANIZATION') throw new ClientPublicationError(409, 'WORKSPACE_NOT_ACTIVE', 'An active organizational workspace is required.');
   if (workspace.clientId !== caseRow.clientId) throw new ClientPublicationError(400, 'CASE_CLIENT_MISMATCH', 'Case is outside the workspace Client.');
-  const grant = await one(tx, 'SELECT id, "clientPortalIdentityId", "workspaceId", "caseId", "clientId", "participantRole"::text, status::text, permissions::text[] FROM client_portal_grants WHERE id=$1', grantId);
-  if (!grant || grant.status !== 'ACTIVE' || grant.workspaceId !== workspaceId || grant.caseId !== caseId || grant.clientId !== caseRow.clientId || grant.participantRole !== 'REQUESTER') {
-    throw new ClientPublicationError(409, 'ACTIVE_REQUESTER_GRANT_REQUIRED', 'An active requester grant is required before publication.');
+  const grant = await one(tx, 'SELECT id, "clientPortalIdentityId", "workspaceId", "caseId", "clientId", "participantRole"::text, status::text, permissions::text[], "validFrom", "validUntil" FROM client_portal_grants WHERE id=$1', grantId);
+  const grantPermissions = Array.isArray(grant?.permissions) ? grant.permissions.map(String) : [];
+  if (!grant || grant.status !== 'ACTIVE' || grant.workspaceId !== workspaceId || grant.caseId !== caseId || grant.clientId !== caseRow.clientId || !grant.clientPortalIdentityId || !grantPermissions.includes('MATTER_READ') || (grant.validFrom && new Date(grant.validFrom) > new Date()) || (grant.validUntil && new Date(grant.validUntil) <= new Date())) {
+    throw new ClientPublicationError(409, 'ACTIVE_CASE_GRANT_REQUIRED', 'An active Case grant with matter access is required before publication.');
+  }
+  const membership = await one(tx, 'SELECT id FROM client_portal_workspace_memberships WHERE "clientPortalIdentityId"=$1 AND "workspaceId"=$2 AND status=$3::"ClientPortalWorkspaceMembershipStatus" AND ("expiresAt" IS NULL OR "expiresAt">now())', grant.clientPortalIdentityId, workspaceId, 'ACTIVE');
+  if (!membership) {
+    throw new ClientPublicationError(409, 'WORKSPACE_MEMBERSHIP_NOT_ACTIVE', 'The selected portal member no longer has active workspace access.');
   }
   const existing = await one(tx, 'SELECT *, status::text FROM client_matter_publications WHERE "caseId"=$1 AND "workspaceId"=$2 AND status=$3::"ClientPublicationStatus" FOR UPDATE', caseId, workspaceId, 'PUBLISHED');
   if (existing) return toClientMatterPublicationDTO(existing, await latestMatterRevision(tx, existing.id));
@@ -265,8 +289,8 @@ export async function createAndPublishInitialMatterPublicationInTransaction(
     actor.userId,
   );
   await exec(tx, 'UPDATE client_matter_publications SET "currentRevisionId"=$2, revision=revision+1, "updatedAt"=now() WHERE id=$1', publication!.id, revision!.id);
-  await audit(tx, { action: 'DRAFT_CREATED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: publication!.id, metadataSafe: { source: 'portal-intake' } });
-  await audit(tx, { action: 'PUBLISHED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: publication!.id, fromStatus: 'DRAFT', toStatus: 'PUBLISHED', metadataSafe: { source: 'portal-intake' } });
+  await audit(tx, { action: 'DRAFT_CREATED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: publication!.id, metadataSafe: { source: publicationSource } });
+  await audit(tx, { action: 'PUBLISHED', actorId: actor.userId, caseId, clientId: caseRow.clientId, matterPublicationId: publication!.id, fromStatus: 'DRAFT', toStatus: 'PUBLISHED', metadataSafe: { source: publicationSource } });
   const updated = await one(tx, 'SELECT *, status::text FROM client_matter_publications WHERE id=$1', publication!.id);
   return toClientMatterPublicationDTO(updated!, revision);
 }

@@ -49,6 +49,14 @@ export interface ClientMatterPublicationDTO {
   } | null;
 }
 
+export interface CasePortalPublicationTarget {
+  workspaceId: string;
+  workspaceMembershipId: string;
+  workspaceName: string;
+  memberName: string;
+  memberRole: string;
+}
+
 export interface ClientDocumentPublicationDTO {
   id: string;
   caseId: string;
@@ -120,6 +128,24 @@ export async function transitionClientPortalGrant(grantId: string, action: "acti
 
 export async function createMatterPublicationDraft(payload: { caseId: string; clientSafeTitle: string; clientSafeStatus: string; clientSafeNextStep?: string; clientSafeCurrentPosition?: string; clientSafeWaitingOn?: string; publicTargetDate?: string | null; responsibleLawyerDisplay?: string }) {
   return fetchApi<ClientMatterPublicationDTO>("/client-publications/matters", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function getCasePortalPublicationTargets(caseId: string): Promise<{ items: CasePortalPublicationTarget[] }> {
+  return fetchApi(`/client-publications/cases/${encodeURIComponent(caseId)}/portal-publication-targets`, { cache: "no-store" });
+}
+
+export async function publishInternalCaseToPortal(caseId: string, payload: {
+  workspaceId: string;
+  workspaceMembershipId: string;
+  clientSafeTitle: string;
+  clientSafeStatus: string;
+  clientSafeCurrentPosition?: string;
+  clientSafeWaitingOn?: string;
+  clientSafeNextStep?: string;
+  publicTargetDate?: string | null;
+  responsibleLawyerDisplay?: string;
+}) {
+  return fetchApi(`/client-publications/cases/${encodeURIComponent(caseId)}/portal-publication`, { method: "POST", body: JSON.stringify(payload) });
 }
 
 export async function createDocumentPublicationDraft(payload: { documentId: string; documentVersionId: string; clientFacingTitle: string; clientFacingExplanation?: string }) {

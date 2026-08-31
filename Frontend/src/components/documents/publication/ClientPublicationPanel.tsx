@@ -13,12 +13,15 @@ import {
   createClientSafeUpdateDraft,
   createDocumentPublicationDraft,
   createMatterPublicationDraft,
+  getCasePortalPublicationTargets,
   getClientPublicationOverview,
+  publishInternalCaseToPortal,
   transitionClientPortalGrant,
   transitionClientSafeUpdate,
   transitionDocumentPublication,
   transitionMatterPublication,
   type ClientPublicationOverviewDTO,
+  type CasePortalPublicationTarget,
   type PublicationStatus,
 } from "@/lib/clientPublicationApi";
 import { workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
@@ -96,12 +99,16 @@ export function ClientPublicationPanel({
   const [questions, setQuestions] = useState<InternalInteractionRow[]>([]);
   const [submissions, setSubmissions] = useState<InternalInteractionRow[]>([]);
   const [notifications, setNotifications] = useState<InternalInteractionRow[]>([]);
+  const [portalTargets, setPortalTargets] = useState<CasePortalPublicationTarget[]>([]);
+  const [selectedPortalTarget, setSelectedPortalTarget] = useState("");
+  const [portalPublicationConfirmation, setPortalPublicationConfirmation] = useState<string | null>(null);
 
   const selectedVersion = useMemo(() => versions.find((version) => version.id === selectedVersionId) || null, [selectedVersionId, versions]);
   const latestVersion = useMemo(() => versions.reduce<VersionOption | null>((latest, version) => (!latest || version.versionNumber > latest.versionNumber ? version : latest), null), [versions]);
   const documentPublication = overview?.documentPublications[0] || null;
   const matterPublication = overview?.matterPublications[0] || null;
   const activeGrant = overview?.grants.find((grant) => grant.status === "ACTIVE") || null;
+  const selectedTarget = portalTargets.find((target) => target.workspaceMembershipId === selectedPortalTarget) || null;
   // clientId may arrive as a prop (document workspace) or be derived from the
   // Case publication overview (Case-level surface with no document context).
   const effectiveClientId = clientId ?? overview?.clientId ?? null;
@@ -109,16 +116,19 @@ export function ClientPublicationPanel({
 
   const load = useCallback(async () => {
     if (!caseId) return;
-    const [nextOverview, questionPage, submissionPage, notificationPage] = await Promise.all([
+    const [nextOverview, questionPage, submissionPage, notificationPage, targetPage] = await Promise.all([
       getClientPublicationOverview(caseId, documentId),
       workforceInteractionApi.listQuestions({ caseId, limit: 25 }),
       workforceInteractionApi.listSubmissions({ caseId, limit: 25 }),
       workforceInteractionApi.listNotifications({ caseId, status: "FAILED_RETRYABLE", limit: 25 }),
+      getCasePortalPublicationTargets(caseId).catch(() => ({ items: [] as CasePortalPublicationTarget[] })),
     ]);
     setOverview(nextOverview);
     setQuestions(questionPage.items);
     setSubmissions(submissionPage.items);
     setNotifications(notificationPage.items);
+    setPortalTargets(targetPage.items);
+    setSelectedPortalTarget((current) => current && targetPage.items.some((target) => target.workspaceMembershipId === current) ? current : targetPage.items[0]?.workspaceMembershipId || "");
   }, [caseId, documentId]);
 
   useEffect(() => { void load().catch(() => undefined); }, [load]);
@@ -200,6 +210,31 @@ export function ClientPublicationPanel({
                 <div><dt className="font-semibold">Felelős</dt><dd>{matterPublication?.snapshot?.responsibleLawyerDisplay || responsibleLawyer}</dd></div>
               </dl>
             </div>
+            {!matterPublication ? (
+              <div data-testid="internal-case-portal-publication" className="mt-3 rounded-[12px] border border-[rgba(22,32,26,0.12)] p-3">
+                <p className="text-xs font-semibold text-[var(--adm-text)]">Megosztás a szervezeti ügyfélportálon</p>
+                <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A kiválasztott aktív portáltag kap ehhez az ügyhöz külön hozzáférést. Az ügy más munkaterületen nem jelenik meg.</p>
+                <select aria-label="Ügyfélportál cél" value={selectedPortalTarget} onChange={(event) => setSelectedPortalTarget(event.target.value)} className="mt-3 min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm">
+                  <option value="">Válassz ügyfélportál-célt</option>
+                  {portalTargets.map((target) => <option key={target.workspaceMembershipId} value={target.workspaceMembershipId}>{target.workspaceName} · {target.memberName}</option>)}
+                </select>
+                <AdminButton className="mt-2 min-w-0 whitespace-normal text-left" variant="primary" disabled={busy || !selectedTarget} onClick={() => run(async () => {
+                  await publishInternalCaseToPortal(caseId, {
+                    workspaceId: selectedTarget!.workspaceId,
+                    workspaceMembershipId: selectedTarget!.workspaceMembershipId,
+                    clientSafeTitle: matterTitle,
+                    clientSafeStatus: matterStatus,
+                    clientSafeCurrentPosition: matterStatus,
+                    clientSafeWaitingOn: matterWaitingOn,
+                    clientSafeNextStep: matterNextStep,
+                    publicTargetDate: matterTargetDate || null,
+                    responsibleLawyerDisplay: responsibleLawyer,
+                  });
+                  setPortalPublicationConfirmation("Az ügyfélbiztos ügyállapot közzététele megtörtént.");
+                })}>Megosztás az ügyfélportálon</AdminButton>
+                {portalPublicationConfirmation ? <p className="mt-2 text-xs font-semibold text-emerald-700">{portalPublicationConfirmation}</p> : null}
+              </div>
+            ) : null}
             <ActionRow disabled={busy || !activeGrant} createLabel="Ügyállapot-tervezet létrehozása" onCreate={() => run(() => createMatterPublicationDraft({ caseId, clientSafeTitle: matterTitle, clientSafeStatus: matterStatus, clientSafeCurrentPosition: matterStatus, clientSafeWaitingOn: matterWaitingOn, clientSafeNextStep: matterNextStep, publicTargetDate: matterTargetDate || null, responsibleLawyerDisplay: responsibleLawyer }))} current={matterPublication} nextAction={nextMatterAction} onTransition={(action) => matterPublication ? run(() => transitionMatterPublication(matterPublication.id, action, matterPublication.revision)) : undefined} />
           </div>
 

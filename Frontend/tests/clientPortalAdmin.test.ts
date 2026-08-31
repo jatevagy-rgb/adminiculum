@@ -205,6 +205,20 @@ describe('internal portal-admin UI', () => {
     assert.match(source, /A tervezet rejtve marad/);
   });
 
+  it('adds explicit internal-Case publication through a friendly workspace member selector', () => {
+    const apiSource = publicationApi();
+    const panel = publicationPanel();
+    assert.match(apiSource, /getCasePortalPublicationTargets/);
+    assert.match(apiSource, /publishInternalCaseToPortal/);
+    assert.match(apiSource, /portal-publication-targets/);
+    assert.match(panel, /internal-case-portal-publication/);
+    assert.match(panel, /Megosztás az ügyfélportálon/);
+    assert.match(panel, /target\.workspaceName.*target\.memberName/);
+    assert.match(panel, /workspaceMembershipId: selectedTarget!\.workspaceMembershipId/);
+    assert.doesNotMatch(panel, /\$\{target\.workspaceId\}/);
+    assert.doesNotMatch(panel, /Automatikus közzététel/);
+  });
+
   it('exposes workforce-only operational grant observability', () => {
     const api = publicationApi();
     const panel = publicationPanel();
