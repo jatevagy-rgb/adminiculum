@@ -69,26 +69,44 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
   };
 
   // Idempotent reuse: a prior READY/IDENTICAL/UNSUPPORTED (or in-flight
-  // PENDING/PROCESSING) comparison for the same pair+revision is returned as-is.
+  // PENDING/PROCESSING) comparison for the same pair+revision is returned as-is
+  // ONLY if both algorithmRevision and extractionRevision match current revisions.
   const existing = await prisma.documentComparison.findUnique({ where: uniqueWhere });
-  if (existing && REUSABLE.has(existing.status)) {
+  if (
+    existing &&
+    REUSABLE.has(existing.status) &&
+    existing.algorithmRevision === COMPARISON_ALGORITHM_REVISION &&
+    existing.extractionRevision === EXTRACTION_REVISION
+  ) {
     return existing;
   }
 
-  // Create (or take over a prior FAILED/SUPERSEDED) as PENDING. A concurrent
-  // creator racing on the unique key is caught and its row reused.
+  // Create (or take over a prior FAILED/SUPERSEDED or stale-revision row) as PENDING.
+  // A concurrent creator racing on the unique key is caught and its row reused.
   let comparison;
   try {
     comparison = existing
       ? await prisma.documentComparison.update({
           where: { id: existing.id },
-          data: { status: 'PENDING', failureCode: null, failureMessageSafe: null, startedAt: null, completedAt: null },
+          data: {
+            status: 'PENDING',
+            algorithmRevision: COMPARISON_ALGORITHM_REVISION,
+            extractionRevision: EXTRACTION_REVISION,
+            failureCode: null,
+            failureMessageSafe: null,
+            startedAt: null,
+            completedAt: null,
+          },
         })
       : await prisma.documentComparison.create({
           data: {
-            documentId, baseVersionId, targetVersionId,
-            algorithmRevision: COMPARISON_ALGORITHM_REVISION, extractionRevision: EXTRACTION_REVISION,
-            createdById: actorId, status: 'PENDING',
+            documentId,
+            baseVersionId,
+            targetVersionId,
+            algorithmRevision: COMPARISON_ALGORITHM_REVISION,
+            extractionRevision: EXTRACTION_REVISION,
+            createdById: actorId,
+            status: 'PENDING',
           },
         });
   } catch (e: any) {
@@ -109,6 +127,7 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
     const result = engine({
       baseText: baseText.text, targetText: targetText.text,
       baseSupported: baseText.supported, targetSupported: targetText.supported,
+      baseReasonCode: baseText.reasonCode, targetReasonCode: targetText.reasonCode,
     });
     const status = ENGINE_TO_STATUS[result.status];
 
@@ -133,6 +152,8 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
         where: { id: comparison.id },
         data: {
           status: status as any,
+          algorithmRevision: COMPARISON_ALGORITHM_REVISION,
+          extractionRevision: EXTRACTION_REVISION,
           completedAt: new Date(),
           failureCode: result.failureCode,
           failureMessageSafe: result.failureCode ? safeFailureMessage(result.failureCode) : null,
@@ -158,9 +179,15 @@ export async function createOrGetComparison(input: CreateComparisonInput, deps: 
 
 function safeFailureMessage(code: string): string {
   switch (code) {
-    case 'INPUT_TOO_LARGE': return 'The documents are too large to compare.';
+    case 'INPUT_TOO_LARGE':
+    case 'CONTENT_TOO_LARGE': return 'The documents are too large to compare.';
     case 'TOO_MANY_PARAGRAPHS': return 'The documents have too many paragraphs to compare.';
     case 'COMPARISON_TOO_COMPLEX': return 'The comparison is too complex to run.';
+    case 'NO_EXTRACTABLE_TEXT': return 'A dokumentum nem tartalmaz géppel kinyerhető szöveget.';
+    case 'FORMAT_NOT_TEXT_EXTRACTABLE':
+    case 'FORMAT_UNSUPPORTED': return 'A dokumentum formátuma nem támogatja a szövegkinyerést.';
+    case 'EXTRACTION_FAILED': return 'A dokumentum szövegének kinyerése sikertelen volt.';
+    case 'CONTENT_UNAVAILABLE': return 'A dokumentum verzió tartalma nem érhető el.';
     case 'EXTRACTION_UNAVAILABLE': return 'No authoritative text is available for one of the versions.';
     default: return 'The comparison could not be completed.';
   }

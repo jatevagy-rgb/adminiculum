@@ -66,6 +66,8 @@ export interface ComparisonInput {
   /** Whether each side has authoritative text (PDF/DOCX without extraction → false). */
   baseSupported?: boolean;
   targetSupported?: boolean;
+  baseReasonCode?: string | null;
+  targetReasonCode?: string | null;
 }
 
 const EXCERPT_MAX = 600;
@@ -159,7 +161,8 @@ export function compareVersions(input: ComparisonInput): ComparisonResult {
   // Unsupported extraction: never fabricate a diff.
   if (input.baseSupported === false || input.targetSupported === false ||
       input.baseText == null || input.targetText == null) {
-    return done('UNSUPPORTED', [], 'EXTRACTION_UNAVAILABLE');
+    const failureCode = input.baseReasonCode || input.targetReasonCode || 'EXTRACTION_UNAVAILABLE';
+    return done('UNSUPPORTED', [], failureCode);
   }
 
   if (input.baseText.length > MAX_INPUT_CHARS || input.targetText.length > MAX_INPUT_CHARS) {

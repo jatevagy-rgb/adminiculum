@@ -35,7 +35,7 @@ function makePrisma(overrides: any = {}) {
 }
 
 const TXT = (t: string) => async () => ({ supported: true, text: t, reasonCode: null, extractionRevision: 1 });
-const UNSUP = async () => ({ supported: false, text: null, reasonCode: 'FORMAT_NOT_TEXT_EXTRACTABLE', extractionRevision: 1 });
+const UNSUP = async () => ({ supported: false, text: null, reasonCode: 'EXTRACTION_UNAVAILABLE', extractionRevision: 1 });
 
 const base = { actorId: 'u1', documentId: 'doc-1', baseVersionId: 'vB', targetVersionId: 'vT' };
 
@@ -105,7 +105,7 @@ describe('generation and persistence', () => {
 describe('idempotency and lifecycle safety', () => {
   it('reuses an existing READY comparison without regenerating', async () => {
     const prisma = makePrisma();
-    prisma._store.comparison = { id: 'cmp-existing', status: 'READY', totalSegmentCount: 3 };
+    prisma._store.comparison = { id: 'cmp-existing', status: 'READY', totalSegmentCount: 3, algorithmRevision: 1, extractionRevision: 2 };
     const row = await createOrGetComparison(base, { prisma, resolveText: TXT('x') });
     expect(row.id).toBe('cmp-existing');
     expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -114,7 +114,7 @@ describe('idempotency and lifecycle safety', () => {
 
   it('does not duplicate an in-flight PROCESSING comparison', async () => {
     const prisma = makePrisma();
-    prisma._store.comparison = { id: 'cmp-inflight', status: 'PROCESSING' };
+    prisma._store.comparison = { id: 'cmp-inflight', status: 'PROCESSING', algorithmRevision: 1, extractionRevision: 2 };
     const row = await createOrGetComparison(base, { prisma, resolveText: TXT('x') });
     expect(row.id).toBe('cmp-inflight');
     expect(prisma.documentComparison.create).not.toHaveBeenCalled();
@@ -142,15 +142,15 @@ describe('idempotency and lifecycle safety', () => {
 });
 
 describe('version-text provider', () => {
-  it('extracts TXT and refuses non-text formats without fabricating text', async () => {
+  it('extracts TXT and refuses unsupported formats without fabricating text', async () => {
     const dl = async () => Buffer.from('Szerződés\r\nszöveg', 'utf8');
     const ok = await resolveVersionText({ id: 'v', documentId: 'd', mimeType: 'text/plain', originalFileName: 'a.txt', size: 20 }, dl);
     expect(ok.supported).toBe(true);
     expect(ok.text).toContain('Szerződés');
 
-    const pdf = await resolveVersionText({ id: 'v', documentId: 'd', mimeType: 'application/pdf', originalFileName: 'a.pdf', size: 20 }, dl);
-    expect(pdf.supported).toBe(false);
-    expect(pdf.text).toBeNull();
-    expect(pdf.reasonCode).toBe('FORMAT_NOT_TEXT_EXTRACTABLE');
+    const png = await resolveVersionText({ id: 'v', documentId: 'd', mimeType: 'image/png', originalFileName: 'a.png', size: 20 }, dl);
+    expect(png.supported).toBe(false);
+    expect(png.text).toBeNull();
+    expect(png.reasonCode).toBe('FORMAT_NOT_TEXT_EXTRACTABLE');
   });
 });
