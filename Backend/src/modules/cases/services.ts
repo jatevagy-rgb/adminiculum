@@ -7,7 +7,8 @@ import { prisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
 import { workflowService } from '../workflow';
 import { instantiateCaseWorkflow } from './caseWorkflowOrchestration';
-import { createCaseWorkPackageSnapshot } from './caseWorkPackage.service';
+import { createCaseWorkPackageSnapshot, CaseWorkPackageError } from './caseWorkPackage.service';
+import { isWorkforceRole } from '../../middleware/workforceAuthorization';
 
 // Prisma schema enum values
 const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
@@ -103,20 +104,26 @@ interface CaseSummaryDTO {
 }
 
 interface CreateCaseInput {
+  title?: string;
   clientName: string;
   clientId?: string;
-  title?: string;
   matterType: string;
   description?: string;
   clientRole?: string | null;
   createdById?: string;
   assignedLawyerId?: string | null;
+  responsibleLawyerId?: string | null;
   priority?: string | null;
   deadline?: string | null;
   workflowTemplateKey?: string | null;
   workflowAssignees?: Record<string, string | null | undefined>;
   caseTypeDefinitionId?: string | null;
   selectedModuleKeys?: unknown;
+}
+
+interface CreateCaseOptions {
+  withinTransaction?: boolean;
+  provisionCaseFolders?: boolean;
 }
 
 type ActiveUserRecord = {
@@ -442,7 +449,7 @@ return {
   async createCase(
     params: CreateCaseInput,
     db: any = prisma,
-    options: { withinTransaction?: boolean; provisionCaseFolders?: boolean } = {},
+    options: CreateCaseOptions = {},
   ): Promise<{ id: string; caseNumber: string; title: string; status: string; createdAt: Date; workPackage?: unknown }> {
     const year = new Date().getFullYear();
     const count = await db.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
@@ -473,7 +480,23 @@ return {
       throw new Error('Client name or clientId is required');
     }
 
-    const title = params.title?.trim() || `${resolvedClientName} - ${matterType}`;
+    // Prefer explicit title when provided; fallback to clientName - matterType
+    const explicitTitle = (params.title || '').trim();
+    const title = explicitTitle || `${resolvedClientName} - ${matterType}`;
+
+    // Validate responsible lawyer if provided
+    const rawAssignedId = (params.assignedLawyerId || params.responsibleLawyerId || '').trim() || null;
+    let assignedLawyerId: string | null = null;
+    if (rawAssignedId) {
+      const assignedUser = await db.user.findUnique({
+        where: { id: rawAssignedId },
+        select: { id: true, status: true, isActive: true, role: true },
+      });
+      if (!assignedUser || assignedUser.status !== 'ACTIVE' || assignedUser.isActive === false || !isWorkforceRole(assignedUser.role)) {
+        throw new CaseWorkPackageError('INVALID_RESPONSIBLE_LAWYER', 'The selected responsible lawyer is not an eligible active workforce member.', 400);
+      }
+      assignedLawyerId = assignedUser.id;
+    }
 
     if (!params.createdById) {
       throw new Error('Authenticated user is required for case creation');
@@ -507,6 +530,20 @@ return {
       resolvedClientName = linkedClient?.name || 'Unknown Client';
     }
 
+    const explicitCaseTypeId = params.caseTypeDefinitionId?.trim() || null;
+    if (explicitCaseTypeId) {
+      const existingCaseType = await db.caseTypeDefinition.findUnique({
+        where: { id: explicitCaseTypeId },
+        select: { id: true, isActive: true },
+      });
+      if (!existingCaseType) {
+        throw new CaseWorkPackageError('CASE_TYPE_NOT_FOUND', 'The selected case type does not exist.', 404);
+      }
+      if (!existingCaseType.isActive) {
+        throw new CaseWorkPackageError('CASE_TYPE_INACTIVE', 'The selected case type is inactive.', 409);
+      }
+    }
+
     const createInTransaction = async (tx: any) => {
       const newCase = await tx.case.create({
         data: {
@@ -521,7 +558,8 @@ return {
           status: DEFAULT_STATUS as any,
           priority: (params.priority || 'MEDIUM') as any,
           deadline: params.deadline ? new Date(params.deadline) : undefined,
-          assignedLawyerId: params.assignedLawyerId || undefined,
+          // Use validated assignedLawyerId if available, otherwise fallback to direct param (unlikely)
+          assignedLawyerId: assignedLawyerId || undefined,
           sharepointSite: 'Adminiculum - Legal Workflow',
           sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
           createdById: resolvedCreatedById,
@@ -543,7 +581,7 @@ return {
         templateKey: params.workflowTemplateKey || 'SIMPLE',
         actor: { userId: resolvedCreatedById },
         assigneesByStepKey: params.workflowAssignees,
-        fallbackAssigneeId: newCase.assignedLawyerId || resolvedCreatedById,
+        fallbackAssigneeId: assignedLawyerId || resolvedCreatedById,
       }, tx as any);
 
       await tx.timelineEvent.create({
@@ -562,6 +600,7 @@ return {
             workflowTemplateId: workPackage?.template.defaultWorkflowTemplateId || workflow?.templateKey || null,
             workflowTemplateKey: workflow?.templateKey || null,
             workflowTemplateVersion: workflow?.templateVersion || null,
+            assignedLawyerId,
           },
         } as any,
       });
