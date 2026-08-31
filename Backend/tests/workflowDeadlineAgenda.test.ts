@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 
 const mockPrismaService: any = {
-  case: { findMany: jest.fn(), findUnique: jest.fn() },
+  case: { findMany: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn() },
   caseCollaborator: { findMany: jest.fn(), findFirst: jest.fn() },
   caseIntakeDeadline: { findMany: jest.fn() },
   task: { findMany: jest.fn() },
@@ -112,6 +112,11 @@ function createApp(): Express {
 function resetMocks() {
   jest.clearAllMocks();
   mockPrismaService.case.findMany.mockResolvedValue([]);
+  mockPrismaService.case.findFirst.mockImplementation(({ where }: { where?: any }) => {
+    const conditions = where?.AND || [];
+    const idCondition = conditions.find((condition: any) => condition.id);
+    return idCondition?.id === 'case-other' ? null : { id: idCondition?.id || 'case-1' };
+  });
   mockPrismaService.case.findUnique.mockResolvedValue(null);
   mockPrismaService.caseCollaborator.findMany.mockResolvedValue([]);
   mockPrismaService.caseCollaborator.findFirst.mockResolvedValue(null);
@@ -222,8 +227,7 @@ describe('workflow deadlines agenda and notifications', () => {
           assignedLawyerId: 'user-1',
           assignedLawyer: { id: 'user-1', name: 'Ügyvéd', email: 'lawyer@example.test' },
         },
-      ])
-      .mockResolvedValueOnce([]);
+      ]);
 
     const response = await requestJson(createApp(), 'GET', '/agenda?scope=CASE&caseId=case-1&status=OPEN');
 

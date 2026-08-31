@@ -1,7 +1,8 @@
 import { prisma } from '../../prisma/prisma.service';
-import type { CaseStatus, Prisma } from '@prisma/client';
+import type { CaseStatus } from '@prisma/client';
 import { buildCaseReadScope } from '../cases/authorization';
 import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
+import { buildCaseReadScope } from '../cases/authorization';
 import {
   compactSafeText,
   compareDeadlines,
@@ -187,18 +188,17 @@ export async function getWorkflowAgenda(params: {
     throw new AgendaRequestError(400, 'CASE_SCOPE_REQUIRES_CASE_ID', 'caseId is required for CASE scope.');
   }
   const caseReadScope = buildCaseReadScope(params.userId, params.userRole);
-  const withCaseReadScope = (where: Prisma.CaseWhereInput): Prisma.CaseWhereInput => (
-    caseReadScope ? { AND: [caseReadScope, where] } : where
-  );
-
   if (scope === 'CASE' && params.caseId) {
-    const caseRecord = await db.case.findFirst({
-      where: withCaseReadScope({ id: params.caseId }),
+    const readableCase = await db.case.findFirst({
+      where: {
+        AND: [
+          { id: params.caseId },
+          ...(caseReadScope ? [caseReadScope] : []),
+        ],
+      },
       select: { id: true },
     });
-    if (!caseRecord) {
-      throw new AgendaRequestError(404, 'CASE_NOT_FOUND', 'Case not found.');
-    }
+    if (!readableCase) throw new AgendaRequestError(404, 'CASE_NOT_FOUND', 'Case not found.');
   }
 
   const taskWhere: any = {
@@ -207,33 +207,36 @@ export async function getWorkflowAgenda(params: {
     ...(caseReadScope ? { case: caseReadScope } : {}),
   };
 
-  let caseWhere: Prisma.CaseWhereInput = withCaseReadScope({
+  const caseWhere: any = {
     deadline: { gte: from, lte: to },
     ...caseStatusFilter(status),
-  });
+  };
+  if (caseReadScope) {
+    taskWhere.case = caseReadScope;
+    caseWhere.AND = [caseReadScope];
+  }
 
   const intakeWhere: any = {
     dueAt: { gte: from, lte: to },
-    case: withCaseReadScope({
+    case: {
       ...caseStatusFilter(status),
-    }),
+      ...(caseReadScope ? { AND: [caseReadScope] } : {}),
+    },
   };
 
   if (scope === 'MY_WORK') {
     taskWhere.assignedToId = params.userId;
-    caseWhere = {
-      AND: [
-        caseWhere,
-        { OR: [{ assignedLawyerId: params.userId }, { createdById: params.userId }] },
-      ],
-    };
+    caseWhere.OR = [
+      { assignedLawyerId: params.userId },
+      { createdById: params.userId },
+    ];
     intakeWhere.OR = [
       { responsibleId: params.userId },
       { case: { assignedLawyerId: params.userId } },
     ];
   } else if (scope === 'CASE') {
     taskWhere.caseId = params.caseId;
-    caseWhere = { AND: [caseWhere, { id: params.caseId }] };
+    caseWhere.id = params.caseId;
     intakeWhere.caseId = params.caseId;
   }
 

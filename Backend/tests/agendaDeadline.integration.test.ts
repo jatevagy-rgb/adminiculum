@@ -184,8 +184,8 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     });
 
       // Lifecycle cases
-      await db.case.createMany({
-        data: [
+    await db.case.createMany({
+      data: [
           {
             id: ids.caseFinal,
             caseNumber: 'CASE-FINAL',
@@ -241,6 +241,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
           },
         ],
       });
+
   });
 
   afterAll(async () => {
