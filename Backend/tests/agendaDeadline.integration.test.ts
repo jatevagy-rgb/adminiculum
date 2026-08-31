@@ -13,6 +13,10 @@ function extractTasks(body) {
   return body.days.flatMap((d) => d.items).filter((it) => it.id?.startsWith('TASK'));
 }
 
+function deterministicUuid(index: number): string {
+  return `20000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
+}
+
 const databaseUrl = process.env.AGENDA_DEADLINE_TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 
@@ -478,12 +482,12 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
 
   test('uses unbounded canonical case scope for privileged, owned, collaborator, and paginated agenda access', async () => {
     const bulkPrefix = `AGENDA-AUTH-${uuidv4()}`;
-    const ownedCaseIds = Array.from({ length: 205 }, () => uuidv4());
-    const unrelatedCaseIds = Array.from({ length: 205 }, () => uuidv4());
-    const collaboratorCaseIds = Array.from({ length: 205 }, () => uuidv4());
+    const ownedCaseIds = Array.from({ length: 205 }, (_, index) => deterministicUuid(4000 + index));
+    const unrelatedCaseIds = Array.from({ length: 205 }, (_, index) => deterministicUuid(5000 + index));
+    const collaboratorCaseIds = Array.from({ length: 205 }, (_, index) => deterministicUuid(6000 + index));
     const ownedCaseIdsToRemove = [...ownedCaseIds];
-    const ownedInUnrelatedRangeId = uuidv4();
-    const ownedTaskId = uuidv4();
+    const ownedInUnrelatedRangeId = deterministicUuid(7000);
+    const ownedTaskId = deterministicUuid(8000);
     const ownedDeadlineBase = new Date('2026-07-25T00:00:00.000Z');
     const unrelatedDeadline = new Date('2026-07-27T00:00:00.000Z');
     const collaboratorDeadline = new Date('2026-07-28T00:00:00.000Z');
