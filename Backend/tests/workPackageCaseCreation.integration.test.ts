@@ -431,6 +431,5 @@ describeWithDatabase('WP-3 Case Creation Work Package Integration & Productizati
         createdById: adminId,
       }, db),
     ).rejects.toMatchObject({ code: 'INVALID_RESPONSIBLE_LAWYER' });
->>>>>>> pr98_temp
   });
 });
