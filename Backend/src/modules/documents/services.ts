@@ -905,6 +905,20 @@ class DocumentsService {
         data: { status: 'APPROVED' as any }
       });
 
+      // Sync active DocumentReview state machine
+      const activeReview = await prisma.documentReview.findFirst({
+        where: {
+          documentId,
+          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
+        },
+      });
+      if (activeReview) {
+        await prisma.documentReview.update({
+          where: { id: activeReview.id },
+          data: { status: 'APPROVED' as any, completedAt: new Date() },
+        });
+      }
+
       return true;
     } catch (error) {
       console.error('Error approving document:', error);
@@ -955,6 +969,20 @@ class DocumentsService {
         where: { id: document.caseId },
         data: { status: 'DRAFT' as any }
       });
+
+      // Sync active DocumentReview state machine
+      const activeReview = await prisma.documentReview.findFirst({
+        where: {
+          documentId,
+          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
+        },
+      });
+      if (activeReview) {
+        await prisma.documentReview.update({
+          where: { id: activeReview.id },
+          data: { status: 'CHANGES_REQUESTED' as any },
+        });
+      }
 
       return true;
     } catch (error) {
