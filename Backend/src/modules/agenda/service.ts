@@ -2,7 +2,6 @@ import { prisma } from '../../prisma/prisma.service';
 import type { CaseStatus } from '@prisma/client';
 import { buildCaseReadScope } from '../cases/authorization';
 import { CLOSED_TASK_STATUSES } from '../tasks/taskStatus';
-import { buildCaseReadScope } from '../cases/authorization';
 import {
   compactSafeText,
   compareDeadlines,
