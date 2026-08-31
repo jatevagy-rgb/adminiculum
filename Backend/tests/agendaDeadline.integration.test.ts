@@ -247,7 +247,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     await db?.$disconnect();
   });
 
-  const agendaRange = { from: '2026-07-01', to: '2026-08-15' };
+  const agendaRange = { from: '2026-07-01', to: '2026-08-14' };
 
 // Deterministic ordering test for CASE scope
   test('CASE scope deterministic ordering of deadlines', async () => {
