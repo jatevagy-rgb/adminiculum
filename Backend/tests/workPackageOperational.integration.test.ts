@@ -1,5 +1,10 @@
+jest.mock('../src/modules/sharepoint', () => ({
+  driveService: { createCaseFolders: jest.fn().mockResolvedValue(null) },
+}));
+
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
+import casesService from '../src/modules/cases/services';
 import {
   CaseWorkPackageOperationalError,
   createTaskFromCaseWorkPackageItem,
@@ -310,4 +315,128 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
     expect(projection.items.find((item) => item.id === ids.optionalItem)?.required).toBe(false);
     await db.caseWorkPackageItem.deleteMany({ where: { id: { in: [alreadySnapshotted, unresolved] } } });
   });
+
+  it('Scenario A-C: PR98-created case has immediately visible package matching exact snapshot and requiredness', async () => {
+    const freshType = crypto.randomUUID();
+    const freshTemplate = crypto.randomUUID();
+    const freshReqItem = crypto.randomUUID();
+    const freshOptItem = crypto.randomUUID();
+
+    await db.caseTypeDefinition.create({
+      data: { id: freshType, slug: `wp-pr98-${crypto.randomUUID()}`, name: 'PR98 Type', createdById: ids.admin },
+    });
+    await db.workPackageTemplate.create({
+      data: {
+        id: freshTemplate,
+        caseTypeDefinitionId: freshType,
+        name: 'PR98 Template',
+        status: 'ACTIVE',
+        createdById: ids.admin,
+        items: {
+          create: [
+            { id: freshReqItem, moduleType: 'DOCUMENT_WORK', moduleKey: 'pr98-req-doc', label: 'PR98 Required Doc', isOptional: false },
+            { id: freshOptItem, moduleType: 'RESEARCH', moduleKey: 'pr98-opt-res', label: 'PR98 Optional Research', isOptional: true },
+          ],
+        },
+      },
+    });
+
+    const createdCase = await casesService.createCase({
+      clientId: ids.client,
+      clientName: `Runtime client ${suffix}`,
+      matterType: 'OTHER',
+      title: 'PR98 Productized Case',
+      caseTypeDefinitionId: freshType,
+      selectedModuleKeys: ['pr98-req-doc'],
+      assignedLawyerId: ids.lawyer,
+      createdById: ids.admin,
+    }, db);
+
+    try {
+      const projection = await getCaseWorkPackage(createdCase.id);
+      expect(projection).not.toBeNull();
+      expect(projection!.items).toHaveLength(1);
+      expect(projection!.items[0].moduleKey).toBe('pr98-req-doc');
+      expect(projection!.items[0].required).toBe(true);
+      expect(projection!.items[0].status).toBe('ACTIVE');
+      expect(projection!.progress).toMatchObject({
+        total: 1,
+        totalActive: 1,
+        completed: 0,
+        remaining: 1,
+        required: 1,
+        requiredCompleted: 0,
+      });
+    } finally {
+      await db.task.deleteMany({ where: { caseId: createdCase.id } });
+      await db.timelineEvent.deleteMany({ where: { caseId: createdCase.id } });
+      await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: createdCase.id } } });
+      await db.caseWorkPackage.deleteMany({ where: { caseId: createdCase.id } });
+      await db.case.delete({ where: { id: createdCase.id } });
+      await db.workPackageTemplateItem.deleteMany({ where: { workPackageTemplateId: freshTemplate } });
+      await db.workPackageTemplate.delete({ where: { id: freshTemplate } });
+      await db.caseTypeDefinition.delete({ where: { id: freshType } });
+    }
+  });
+
+  it('Scenario F: legacy case without work package returns null without data mutation', async () => {
+    const legacyCaseId = crypto.randomUUID();
+    await db.case.create({
+      data: {
+        id: legacyCaseId,
+        caseNumber: `WP-LEGACY-${suffix.slice(0, 8)}`,
+        title: 'Legacy Case Without Work Package',
+        caseType: 'OTHER',
+        clientId: ids.client,
+        createdById: ids.admin,
+      } as never,
+    });
+
+    try {
+      const casesBefore = await db.case.count();
+      const packagesBefore = await db.caseWorkPackage.count();
+
+      const result = await getCaseWorkPackage(legacyCaseId);
+      expect(result).toBeNull();
+
+      expect(await db.case.count()).toBe(casesBefore);
+      expect(await db.caseWorkPackage.count()).toBe(packagesBefore);
+    } finally {
+      await db.case.delete({ where: { id: legacyCaseId } });
+    }
+  });
+
+  it('Scenario G: cross-case item mutation is denied and fails closed', async () => {
+    const otherPkgId = crypto.randomUUID();
+    const otherItemId = crypto.randomUUID();
+    await db.caseWorkPackage.create({
+      data: {
+        id: otherPkgId,
+        caseId: ids.otherCase,
+        createdById: ids.outsider,
+        items: {
+          create: {
+            id: otherItemId,
+            moduleType: 'RESEARCH',
+            moduleKey: 'other-res',
+            label: 'Other Res',
+            createdById: ids.outsider,
+          },
+        },
+      },
+    });
+
+    try {
+      await expect(
+        mutateCaseWorkPackageItem(ids.otherCase, ids.requiredItem, {
+          expectedRevision: 0,
+          note: 'Cross-case attempt',
+        }),
+      ).rejects.toMatchObject({ code: 'WORK_PACKAGE_ITEM_NOT_FOUND', status: 404 });
+    } finally {
+      await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackageId: otherPkgId } });
+      await db.caseWorkPackage.delete({ where: { id: otherPkgId } });
+    }
+  });
 });
+

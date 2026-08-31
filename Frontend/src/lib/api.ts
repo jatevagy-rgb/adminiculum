@@ -5653,3 +5653,110 @@ export type CaseCreationOption = {
   } | null;
 };
 export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[] }>('/work-package-admin/case-types/creation-options'); }
+
+export interface CaseWorkPackageOperationalItem {
+  id: string;
+  moduleKey: string;
+  title: string;
+  description: string | null;
+  required: boolean;
+  status: 'ACTIVE' | 'COMPLETED' | 'DISABLED';
+  responsible: { id: string; name: string; role: string } | null;
+  note: string | null;
+  order: number;
+  tasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    assignedToId: string | null;
+    dueDate: string | null;
+  }>;
+  provenanceState: 'TEMPLATE_SNAPSHOT' | 'SOURCE_RETIRED' | 'CASE_ADDED';
+}
+
+export interface CaseWorkPackageOperational {
+  id: string;
+  revision: number;
+  source: { name: string; version: number } | null;
+  createdAt: string;
+  progress: {
+    total: number;
+    totalActive: number;
+    completed: number;
+    remaining: number;
+    required: number;
+    requiredCompleted: number;
+  };
+  items: CaseWorkPackageOperationalItem[];
+}
+
+export interface MutateCaseWorkPackageItemBody {
+  expectedRevision: number;
+  status?: 'ACTIVE' | 'COMPLETED' | 'DISABLED';
+  responsibleUserId?: string | null;
+  note?: string | null;
+}
+
+export interface CreateCaseWorkPackageTaskBody {
+  title: string;
+  description?: string;
+  assignedToId?: string | null;
+  dueDate?: string | null;
+}
+
+export interface CreateCaseWorkPackageTaskResponse {
+  created: boolean;
+  task: {
+    id: string;
+    title: string;
+    caseId: string;
+    matterId: string | null;
+    status: string;
+    assignedToId: string | null;
+    workPackageItemId: string;
+    dueDate: string | null;
+  };
+  source: {
+    itemId: string;
+    moduleKey: string;
+  };
+}
+
+export async function getCaseWorkPackage(caseId: string): Promise<CaseWorkPackageOperational | null> {
+  try {
+    return await fetchApi<CaseWorkPackageOperational>(`/cases/${encodeURIComponent(caseId)}/work-package`, { cache: 'no-store' });
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function updateCaseWorkPackageItem(
+  caseId: string,
+  itemId: string,
+  body: MutateCaseWorkPackageItemBody,
+): Promise<{ item: CaseWorkPackageOperationalItem; revision: number }> {
+  return fetchApi<{ item: CaseWorkPackageOperationalItem; revision: number }>(
+    `/cases/${encodeURIComponent(caseId)}/work-package/items/${encodeURIComponent(itemId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function createCaseWorkPackageTask(
+  caseId: string,
+  itemId: string,
+  body: CreateCaseWorkPackageTaskBody,
+): Promise<CreateCaseWorkPackageTaskResponse> {
+  return fetchApi<CreateCaseWorkPackageTaskResponse>(
+    `/cases/${encodeURIComponent(caseId)}/work-package/items/${encodeURIComponent(itemId)}/tasks`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  );
+}
