@@ -448,7 +448,7 @@ return {
    */
   async createCase(
     params: CreateCaseInput,
-    db = prisma,
+    db: any = prisma,
     options: CreateCaseOptions = {},
   ): Promise<{ id: string; caseNumber: string; title: string; status: string; createdAt: Date; workPackage?: unknown }> {
     const year = new Date().getFullYear();
