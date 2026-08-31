@@ -242,9 +242,6 @@ app.use('/api/v1/work-package-admin', workPackageAdminRoutes);
 import anonymizeRoutes from './modules/anonymize/routes';
 app.use('/api/v1', anonymizeRoutes);
 
-import mattersRoutes from './routes/matters';
-app.use('/api/v1/matters', mattersRoutes);
-
 import timeEntriesRoutes from './routes/timeEntries';
 app.use('/api/v1/time-entries', timeEntriesRoutes);
 

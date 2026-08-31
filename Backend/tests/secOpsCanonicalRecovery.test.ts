@@ -119,4 +119,10 @@ describe('source guards', () => {
     expect(source).toContain('FAIL-CLOSED');
     expect(source).toContain('process.exit(1)');
   });
+
+  it('unmounts legacy matters router from application API surface', () => {
+    const source = read('../src/index.ts');
+    expect(source).not.toContain("import mattersRoutes from './routes/matters'");
+    expect(source).not.toContain("app.use('/api/v1/matters'");
+  });
 });
