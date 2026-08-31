@@ -370,9 +370,9 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     });
     const adminDeadlines = extractDeadlines(adminAgenda);
     expect(adminDeadlines.map((item: any) => item.id)).toEqual([
+      `CASE_DEADLINE:${ids.caseA}`,
       `CASE_INTAKE_DEADLINE:${ids.intake1}`,
       `CASE_INTAKE_DEADLINE:${ids.intake2}`,
-      `CASE_DEADLINE:${ids.caseA}`,
     ]);
 
     const partnerAgenda = await getWorkflowAgenda({
