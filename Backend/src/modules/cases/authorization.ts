@@ -4,11 +4,9 @@ import { prisma } from '../../prisma/prisma.service';
 
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
 
-/** Database predicate that exactly mirrors non-privileged userCanReadCase scope. */
-export function getCaseReadScope(req: Request): Prisma.CaseWhereInput | null {
-  const userId = req.user?.userId;
+export function buildCaseReadScope(userId: string | undefined, role?: string): Prisma.CaseWhereInput | null {
   if (!userId) return { id: { in: [] } };
-  if (PRIVILEGED_ROLES.has(String(req.user?.role || ''))) return null;
+  if (PRIVILEGED_ROLES.has(String(role || ''))) return null;
   return {
     OR: [
       { assignedLawyerId: userId },
@@ -16,6 +14,11 @@ export function getCaseReadScope(req: Request): Prisma.CaseWhereInput | null {
       { collaborators: { some: { userId } } },
     ],
   };
+}
+
+/** Database predicate that exactly mirrors non-privileged userCanReadCase scope. */
+export function getCaseReadScope(req: Request): Prisma.CaseWhereInput | null {
+  return buildCaseReadScope(req.user?.userId, req.user?.role);
 }
 
 function sendForbidden(res: Response): void {

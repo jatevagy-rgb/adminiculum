@@ -13,6 +13,10 @@ function extractTasks(body) {
   return body.days.flatMap((d) => d.items).filter((it) => it.id?.startsWith('TASK'));
 }
 
+function deterministicUuid(index: number): string {
+  return `20000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
+}
+
 const databaseUrl = process.env.AGENDA_DEADLINE_TEST_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 
@@ -38,6 +42,10 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     caseArchived: uuidv4(),
     caseCompletedAt: uuidv4(),
   };
+  const over200PrivilegedCaseId = deterministicUuid(1);
+  const over200OwnedCaseIds = Array.from({ length: 205 }, (_, index) => deterministicUuid(1000 + index));
+  const over200UnrelatedCaseIds = Array.from({ length: 205 }, (_, index) => deterministicUuid(2000 + index));
+  const collaboratorCaseId = deterministicUuid(3000);
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
@@ -184,8 +192,8 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     });
 
       // Lifecycle cases
-      await db.case.createMany({
-        data: [
+    await db.case.createMany({
+      data: [
           {
             id: ids.caseFinal,
             caseNumber: 'CASE-FINAL',
@@ -241,6 +249,63 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
           },
         ],
       });
+
+    const highVolumeDeadline = new Date('2026-07-25T10:00:00.000Z');
+    await db.case.createMany({
+      data: [
+        {
+          id: over200PrivilegedCaseId,
+          caseNumber: 'CASE-OVER-200-PRIVILEGED',
+          title: 'Privileged case beyond prior cap',
+          caseType: 'CONTRACT_REVIEW',
+          clientId: ids.client,
+          createdById: ids.lawyerB,
+          assignedLawyerId: ids.lawyerB,
+          deadline: highVolumeDeadline,
+          status: 'DRAFT',
+          priority: 'MEDIUM',
+        },
+        ...over200OwnedCaseIds.map((id, index) => ({
+          id,
+          caseNumber: `CASE-OVER-200-OWNED-${index}`,
+          title: `Owned case ${index}`,
+          caseType: 'CONTRACT_REVIEW' as const,
+          clientId: ids.client,
+          createdById: ids.lawyerA,
+          assignedLawyerId: ids.lawyerA,
+          deadline: highVolumeDeadline,
+          status: 'DRAFT' as const,
+          priority: 'MEDIUM' as const,
+        })),
+        ...over200UnrelatedCaseIds.map((id, index) => ({
+          id,
+          caseNumber: `CASE-OVER-200-UNRELATED-${index}`,
+          title: `Unrelated case ${index}`,
+          caseType: 'CONTRACT_REVIEW' as const,
+          clientId: ids.client,
+          createdById: ids.lawyerB,
+          assignedLawyerId: ids.lawyerB,
+          deadline: highVolumeDeadline,
+          status: 'DRAFT' as const,
+          priority: 'MEDIUM' as const,
+        })),
+        {
+          id: collaboratorCaseId,
+          caseNumber: 'CASE-OVER-200-COLLABORATOR',
+          title: 'Collaborator case beyond prior cap',
+          caseType: 'CONTRACT_REVIEW',
+          clientId: ids.client,
+          createdById: ids.lawyerB,
+          assignedLawyerId: ids.lawyerB,
+          deadline: highVolumeDeadline,
+          status: 'DRAFT',
+          priority: 'MEDIUM',
+        },
+      ],
+    });
+    await db.caseCollaborator.create({
+      data: { caseId: collaboratorCaseId, userId: ids.lawyerA },
+    });
   });
 
   afterAll(async () => {
@@ -473,6 +538,70 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     expect(page2Ids).toEqual(allIds.slice(2, 4));
     expect(new Set([...page1Ids, ...page2Ids]).size).toBe(4);
     expect(agendaPage1.pagination.hasMore).toBe(true);
+  });
+
+  test('Case authorization remains complete beyond 200 rows', async () => {
+    const adminAgenda = await getWorkflowAgenda({
+      userId: ids.admin,
+      userRole: 'ADMIN',
+      scope: 'CASE',
+      caseId: over200PrivilegedCaseId,
+      status: 'OPEN',
+      ...agendaRange,
+      db,
+    });
+    expect(extractDeadlines(adminAgenda).map((item: any) => item.id)).toContain(
+      `CASE_DEADLINE:${over200PrivilegedCaseId}`
+    );
+
+    const ownedBeyondCapAgenda = await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'CASE',
+      caseId: over200OwnedCaseIds[204],
+      status: 'OPEN',
+      ...agendaRange,
+      db,
+    });
+    expect(extractDeadlines(ownedBeyondCapAgenda).map((item: any) => item.id)).toContain(
+      `CASE_DEADLINE:${over200OwnedCaseIds[204]}`
+    );
+
+    const lawyerAgenda = await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'MY_CASES',
+      status: 'OPEN',
+      limit: 2,
+      offset: 200,
+      ...agendaRange,
+      db,
+    });
+    const lawyerIds = extractDeadlines(lawyerAgenda).map((item: any) => item.id);
+    const authorizedCaseIds = new Set([
+      ...over200OwnedCaseIds.map((id) => `CASE_DEADLINE:${id}`),
+      `CASE_DEADLINE:${collaboratorCaseId}`,
+      `CASE_DEADLINE:${ids.caseA}`,
+    ]);
+    expect(lawyerIds.length).toBeGreaterThan(0);
+    expect(lawyerIds.every((id) => authorizedCaseIds.has(id))).toBe(true);
+
+    const collaboratorAgenda = await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'CASE',
+      caseId: collaboratorCaseId,
+      status: 'OPEN',
+      ...agendaRange,
+      db,
+    });
+    expect(extractDeadlines(collaboratorAgenda).map((item: any) => item.id)).toContain(
+      `CASE_DEADLINE:${collaboratorCaseId}`
+    );
+
+    const unrelatedIds = new Set(over200UnrelatedCaseIds.map((id) => `CASE_DEADLINE:${id}`));
+    expect(lawyerIds.some((id) => unrelatedIds.has(id))).toBe(false);
+    expect(lawyerAgenda.pagination.hasMore).toBe(true);
   });
 
   test('Invalid scope throws error', async () => {
