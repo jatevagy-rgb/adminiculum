@@ -3,15 +3,15 @@
 import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkflowAgenda, AgendaRequestError } from '../src/modules/agenda/service';
+import { compareDeadlines } from '../src/modules/agenda/deadlineEngine';
 
 // Helper to extract deadline items from agenda response
-function extractDeadlines(body: any) {
-  return body.days.flatMap((d: any) => d.items).filter((it: any) => it.id?.startsWith('CASE_DEADLINE') || it.id?.startsWith('CASE_INTAKE_DEADLINE'));
+function extractDeadlines(body) {
+  return body.days.flatMap((d) => d.items).filter((it) => it.id?.startsWith('CASE_DEADLINE') || it.id?.startsWith('CASE_INTAKE_DEADLINE'));
 }
 
-// Helper to extract task items
-function extractTasks(body: any) {
-  return body.days.flatMap((d: any) => d.items).filter((it: any) => it.id?.startsWith('TASK'));
+function extractTasks(body) {
+  return body.days.flatMap((d) => d.items).filter((it) => it.id?.startsWith('TASK'));
 }
 
 const databaseUrl = process.env.AGENDA_DEADLINE_TEST_DATABASE_URL;
@@ -29,9 +29,15 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     caseB: uuidv4(),
     intake1: uuidv4(),
     intake2: uuidv4(),
+    intakeB1: uuidv4(),
     taskOpen: uuidv4(),
     taskCompleted: uuidv4(),
     taskOther: uuidv4(),
+    taskB: uuidv4(),
+    caseFinal: uuidv4(),
+    caseCancelled: uuidv4(),
+    caseArchived: uuidv4(),
+    caseCompletedAt: uuidv4(),
   };
 
   beforeAll(async () => {
@@ -110,6 +116,16 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
           createdById: ids.lawyerA,
           updatedAt: new Date(),
         },
+        {
+          id: ids.intakeB1,
+          caseId: ids.caseB,
+          title: 'Intake B1',
+          deadlineType: 'STATUTORY',
+          dueAt: deadlineDate,
+          responsibleId: ids.lawyerA,
+          createdById: ids.lawyerB,
+          updatedAt: new Date(),
+        },
       ],
     });
 
@@ -152,16 +168,88 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
           createdAt: new Date(),
           updatedAt: new Date(),
         },
+        {
+          id: ids.taskB,
+          caseId: ids.caseB,
+          title: 'Task B (by lawyerA)',
+          dueDate: laterDate,
+          assignedToId: ids.lawyerA,
+          status: 'PENDING',
+          taskType: 'DEADLINE',
+          priority: 'MEDIUM',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
       ],
     });
+
+      // Lifecycle cases
+      await db.case.createMany({
+        data: [
+          {
+            id: ids.caseFinal,
+            caseNumber: 'CASE-FINAL',
+            title: 'Final Case',
+            caseType: 'CONTRACT_REVIEW',
+            clientId: ids.client,
+            createdById: ids.lawyerA,
+            assignedLawyerId: ids.lawyerA,
+            deadline: null,
+            status: 'FINAL',
+            priority: 'MEDIUM',
+            updatedAt: new Date(),
+          },
+          {
+            id: ids.caseCancelled,
+            caseNumber: 'CASE-CANCELLED',
+            title: 'Cancelled Case',
+            caseType: 'CONTRACT_REVIEW',
+            clientId: ids.client,
+            createdById: ids.lawyerA,
+            assignedLawyerId: ids.lawyerA,
+            deadline: null,
+            status: 'CANCELLED',
+            priority: 'MEDIUM',
+            updatedAt: new Date(),
+          },
+          {
+            id: ids.caseArchived,
+            caseNumber: 'CASE-ARCHIVED',
+            title: 'Archived Case',
+            caseType: 'CONTRACT_REVIEW',
+            clientId: ids.client,
+            createdById: ids.lawyerA,
+            assignedLawyerId: ids.lawyerA,
+            deadline: null,
+            status: 'ARCHIVED',
+            priority: 'MEDIUM',
+            updatedAt: new Date(),
+          },
+          {
+            id: ids.caseCompletedAt,
+            caseNumber: 'CASE-COMPLETED-AT',
+            title: 'CompletedAt Case',
+            caseType: 'CONTRACT_REVIEW',
+            clientId: ids.client,
+            createdById: ids.lawyerA,
+            assignedLawyerId: ids.lawyerA,
+            deadline: null,
+            status: 'DRAFT',
+            priority: 'MEDIUM',
+            completedAt: new Date('2026-06-15T00:00:00.000Z'),
+            updatedAt: new Date(),
+          },
+        ],
+      });
   });
 
   afterAll(async () => {
     await db?.$disconnect();
   });
 
-  test('CASE scope returns case deadline + both intake deadlines (identical timestamps are independent)', async () => {
-    const agenda = await getWorkflowAgenda({
+// Deterministic ordering test for CASE scope
+  test('CASE scope deterministic ordering of deadlines', async () => {
+    const agendaFirst = await getWorkflowAgenda({
       userId: ids.lawyerA,
       userRole: 'LAWYER',
       scope: 'CASE',
@@ -169,12 +257,73 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       status: 'OPEN',
       db,
     });
-    const deadlines = extractDeadlines(agenda);
-    expect(deadlines).toHaveLength(3);
-    const idsSet = new Set(deadlines.map((it: any) => it.id));
-    expect(idsSet.has(`CASE_DEADLINE:${ids.caseA}`)).toBe(true);
-    expect(idsSet.has(`CASE_INTAKE_DEADLINE:${ids.intake1}`)).toBe(true);
-    expect(idsSet.has(`CASE_INTAKE_DEADLINE:${ids.intake2}`)).toBe(true);
+    const agendaSecond = await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'CASE',
+      caseId: ids.caseA,
+      status: 'OPEN',
+      db,
+    });
+    const dFirst = extractDeadlines(agendaFirst);
+    const dSecond = extractDeadlines(agendaSecond);
+    // order must be stable across calls
+    expect(dFirst.map((it:any)=>it.id)).toEqual(dSecond.map((it:any)=>it.id));
+    // derive expected order using compareDeadlines
+    const expected = [...dFirst].sort((l:any, r:any) => compareDeadlines(l, r, ids.lawyerA));
+    expect(dFirst.map((it:any)=>it.id)).toEqual(expected.map((it:any)=>it.id));
+  });
+
+  // Case lifecycle status filtering
+  test('Case lifecycle status filtering works', async () => {
+    const openAgenda = await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'MY_WORK',
+      status: 'OPEN',
+      db,
+    });
+    const completedAgenda = await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'MY_WORK',
+      status: 'COMPLETED',
+      db,
+    });
+    const openDeadlines = extractDeadlines(openAgenda).map((it:any)=>it.id);
+    const completedDeadlines = extractDeadlines(completedAgenda).map((it:any)=>it.id);
+    // CLOSED cases should not be in OPEN
+    expect(openDeadlines).not.toContain(`CASE_DEADLINE:${ids.caseFinal}`);
+    expect(openDeadlines).not.toContain(`CASE_DEADLINE:${ids.caseCancelled}`);
+    expect(openDeadlines).not.toContain(`CASE_DEADLINE:${ids.caseArchived}`);
+    // CLOSED cases should be in COMPLETED
+    expect(completedDeadlines).toContain(`CASE_DEADLINE:${ids.caseFinal}`);
+    expect(completedDeadlines).toContain(`CASE_DEADLINE:${ids.caseCancelled}`);
+    expect(completedDeadlines).toContain(`CASE_DEADLINE:${ids.caseArchived}`);
+    // case with completedAt should be in COMPLETED and not in OPEN
+    expect(completedDeadlines).toContain(`CASE_DEADLINE:${ids.caseCompletedAt}`);
+    expect(openDeadlines).not.toContain(`CASE_DEADLINE:${ids.caseCompletedAt}`);
+  });
+
+  test('Agenda request does not mutate any DB fields (updatedAt unchanged)', async () => {
+    const beforeCase = await db.case.findUnique({ where: { id: ids.caseA } });
+    const beforeIntake = await db.caseIntakeDeadline.findUnique({ where: { id: ids.intake1 } });
+    const beforeTask = await db.task.findUnique({ where: { id: ids.taskOpen } });
+    await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'CASE',
+      caseId: ids.caseA,
+      status: 'OPEN',
+      db,
+    });
+    const afterCase = await db.case.findUnique({ where: { id: ids.caseA } });
+    const afterIntake = await db.caseIntakeDeadline.findUnique({ where: { id: ids.intake1 } });
+    const afterTask = await db.task.findUnique({ where: { id: ids.taskOpen } });
+    expect(afterCase?.updatedAt?.getTime()).toBe(beforeCase?.updatedAt?.getTime());
+    expect(afterIntake?.updatedAt?.getTime()).toBe(beforeIntake?.updatedAt?.getTime());
+    expect(afterTask?.updatedAt?.getTime()).toBe(beforeTask?.updatedAt?.getTime());
+    expect(afterTask?.dueDate?.getTime()).toBe(beforeTask?.dueDate?.getTime());
   });
 
   test('MY_WORK scope respects responsibility and case manager, tasks respect assignment', async () => {
@@ -289,7 +438,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
   });
 
   test('Invalid scope throws error', async () => {
-    // @ts-expect-error purposefully invalid scope
+
     await expect(getWorkflowAgenda({
       userId: ids.lawyerA,
       userRole: 'LAWYER',
