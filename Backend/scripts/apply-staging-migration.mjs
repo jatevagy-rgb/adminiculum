@@ -1,6 +1,12 @@
 import { execSync } from 'child_process';
 import path from 'path';
 
+if ([process.env.NODE_ENV, process.env.ADMINICULUM_RUNTIME_ENVIRONMENT]
+  .some((value) => String(value || '').toLowerCase() === 'production')) {
+  console.error('ERROR: apply-staging-migration must never run in production.');
+  process.exit(1);
+}
+
 // IMPORTANT: Set DATABASE_URL env var before running.
 // Example: DATABASE_URL='postgresql://user:pass@host:5432/db?sslmode=require' node apply-staging-migration.mjs
 const DATABASE_URL = process.env.DATABASE_URL;

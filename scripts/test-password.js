@@ -5,7 +5,8 @@
 const bcrypt = require('bcryptjs');
 
 async function test() {
-  const password = 'teszt1234';
+  const password = process.env.TEST_PASSWORD;
+  if (!password) throw new Error('TEST_PASSWORD is required.');
   const hash = await bcrypt.hash(password, 10);
   console.log('Hash:', hash);
   

@@ -21,6 +21,12 @@ import { SecretClient } from '@azure/keyvault-secrets';
 import pg from 'pg';
 const { Client } = pg;
 
+if ([process.env.NODE_ENV, process.env.ADMINICULUM_RUNTIME_ENVIRONMENT]
+  .some((value) => String(value || '').toLowerCase() === 'production')) {
+  console.error('ERROR: run-staging-migration must never run in production.');
+  process.exit(1);
+}
+
 async function runMigration() {
   console.log('=== Adminiculum Staging DB Migration Script ===\n');
 

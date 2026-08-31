@@ -4,6 +4,7 @@
  * Matching Prisma Schema V2
  */
 
+import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma/prisma.service';
 import bcrypt from 'bcryptjs';
 import type { UserStatus } from '@prisma/client';
@@ -166,7 +167,7 @@ class UsersService {
    * Create new user
    */
   async createUser(params: CreateUserInput): Promise<{ id: string; name: string; email: string; role: string }> {
-    const hashedPassword = await bcrypt.hash('password123', 10);
+    const hashedPassword = await bcrypt.hash(randomUUID(), 10);
 
     const user = await prisma.user.create({
       data: {

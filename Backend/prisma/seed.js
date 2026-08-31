@@ -5,7 +5,13 @@
 
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
 const prisma = new PrismaClient();
+
+if ([process.env.NODE_ENV, process.env.ADMINICULUM_RUNTIME_ENVIRONMENT]
+  .some((value) => String(value || '').toLowerCase() === 'production')) {
+  throw new Error('prisma seed must never run in production.');
+}
 
 // ============================================================================
 // CONSTANTS
@@ -223,8 +229,6 @@ async function seedDocumentTemplates() {
 
 async function seedUsers() {
   console.log('\n👥 Creating users...');
-  const hashedPassword = await bcrypt.hash('password123', 10);
-
   for (const userData of USERS) {
     const { skills, ...userFields } = userData;
 
@@ -233,7 +237,7 @@ async function seedUsers() {
       update: {},
       create: {
         ...userFields,
-        passwordHash: hashedPassword,
+        passwordHash: await bcrypt.hash(randomUUID(), 10),
         skillProfile: skills ? {
           create: skills
         } : undefined
@@ -296,10 +300,7 @@ async function main() {
 
   console.log('\n✅ Seed completed successfully!');
   console.log('\n📝 Test users created:');
-  console.log('   - lawyer@adminiculum.com (LAWYER) - password: password123');
-  console.log('   - associate@adminiculum.com (COLLAB_LAWYER) - password: password123');
-  console.log('   - trainee@adminiculum.com (TRAINEE) - password: password123');
-  console.log('   - assistant@adminiculum.com (LEGAL_ASSISTANT) - password: password123');
+  console.log('   - workforce identities are provisioned through the configured identity provider');
 }
 
 main()
