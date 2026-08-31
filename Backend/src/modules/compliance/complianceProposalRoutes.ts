@@ -49,6 +49,14 @@ router.post('/:id/confirm', async (req, res) => {
   try { res.json(await proposals.confirmProposal(actor(req), String(req.params.id))); } catch (error) { fail(res, error); }
 });
 
+// "Ügy indítása" — elevate a proposal into a new (or already-linked) canonical
+// Case, creating the immutable Work Package snapshot and the compliance Task.
+router.post('/:id/start-case', async (req, res) => {
+  try {
+    res.status(201).json(await proposals.startCaseFromProposal(actor(req), String(req.params.id), { title: req.body?.title }));
+  } catch (error) { fail(res, error); }
+});
+
 router.post('/:id/reject', async (req, res) => {
   try { res.json(await proposals.rejectProposal(actor(req), String(req.params.id))); } catch (error) { fail(res, error); }
 });

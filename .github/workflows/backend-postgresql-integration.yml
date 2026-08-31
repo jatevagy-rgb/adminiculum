@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication internal-case-portal-publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary client-communication-summary demo-kft-text-id-verification demo-kft-identity-binding work-package-schema work-package-admin work-package-case-creation work-package-operational time-attribution phase7b phase7cb org-client-safe phase5b document-version task-lifecycle-schema task-review-decision task-submission agenda-deadline; do
+          for s in comparison review publication internal-case-portal-publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary client-communication-summary demo-kft-text-id-verification demo-kft-identity-binding work-package-schema work-package-admin work-package-case-creation work-package-operational time-attribution phase7b compliance-case-work-package phase7cb org-client-safe phase5b document-version task-lifecycle-schema task-review-decision task-submission agenda-deadline; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -474,6 +474,16 @@ jobs:
           sed -i "s/^phase7b=PENDING$/phase7b=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Compliance proposal to Case + Work Package convergence PG
+        working-directory: Backend
+        env:
+          COMPLIANCE_CASE_WP_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          if npm run test:compliance-case-work-package:db; then rc=0; else rc=$?; fi
+          sed -i "s/^compliance-case-work-package=PENDING$/compliance-case-work-package=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Phase 7C-B compliance overview PG
         working-directory: Backend
         env:
@@ -600,6 +610,7 @@ jobs:
             [work-package-case-creation]="WP-3 case creation work package integration"
             [work-package-operational]="Work package operational runtime"
             [phase7b]="Phase 7B compliance proposal workflow"
+            [compliance-case-work-package]="Compliance proposal to Case + Work Package convergence"
             [phase7cb]="Phase 7C-B compliance overview"
             [org-client-safe]="Org client safe compliance read model"
             [phase5b]="Phase 5B org contract + company customer surface"
