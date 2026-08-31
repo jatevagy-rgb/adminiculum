@@ -16,6 +16,8 @@ jest.mock('../src/prisma/prisma.service', () => ({
   prisma: {
     communication: { findUnique: jest.fn() },
     task: { findUnique: jest.fn(), update: jest.fn() },
+    case: { findUnique: jest.fn() },
+    caseCollaborator: { findFirst: jest.fn() },
   },
 }));
 
@@ -95,6 +97,9 @@ describe('POST /communications/:id/link-task', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (canUserActOnTask as jest.Mock).mockResolvedValue({ allowed: true, role: 'LAWYER' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'user-1' });
+    (prisma as any).caseCollaborator.findFirst.mockResolvedValue(null);
+    (prisma as any).communication.findUnique.mockResolvedValue({ id: 'comm-1', caseId: 'case-1', createdById: 'user-1' });
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
   });
 
@@ -111,9 +116,10 @@ describe('POST /communications/:id/link-task', () => {
 
   it('validates taskId before database reads', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communication.findUnique.mockResolvedValueOnce({ id: 'comm-1', caseId: 'case-1', createdById: 'user-1' });
     const response = await requestJson(createApp(), '/communications/comm-1/link-task');
     expect(response.status).toBe(400);
-    expect((prisma as any).communication.findUnique).not.toHaveBeenCalled();
+    expect((prisma as any).task.findUnique).not.toHaveBeenCalled();
   });
 
   it('rejects missing records and cross-case linkage', async () => {

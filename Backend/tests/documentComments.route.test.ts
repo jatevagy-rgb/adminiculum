@@ -81,6 +81,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
 
 import documentsRoutes from '../src/modules/documents/routes';
 import documentsService from '../src/modules/documents/services';
+import { setWorkforceScanner } from '../src/modules/upload-security/scannerAdapter';
 
 function createApp(): Express {
   const app = express();
@@ -158,6 +159,10 @@ const uploadBody = {
 describe('document upload route safety', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    setWorkforceScanner({
+      provider: 'MOCK',
+      scan: async () => ({ outcome: 'CLEAN', provider: 'MOCK', codeSafe: 'MOCK_CLEAN' }),
+    });
     mockPrisma.case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'creator-1' });
     mockPrisma.timelineEvent.create.mockResolvedValue({});
     (documentsService.createDocument as jest.Mock).mockResolvedValue({
@@ -256,7 +261,7 @@ describe('document comments routes', () => {
     mockPrisma.document.findUnique.mockResolvedValueOnce(null);
     const res = await requestJson(createApp(), 'GET', '/documents/missing/comments');
     expect(res.status).toBe(404);
-    expect(res.body.code).toBe('DOCUMENT_NOT_FOUND');
+    expect(res.body.code).toBe('NOT_FOUND');
     expect(mockPrisma.comment.findMany).not.toHaveBeenCalled();
   });
 

@@ -119,13 +119,10 @@ describe('outlookGraph.adapter', () => {
             contentType: 'application/pdf',
             size: 9001,
             // Fields Graph may return that must never be persisted or serialized:
-            // @ts-expect-error contentBytes is intentionally not part of GraphAttachment
             contentBytes: 'JVBERi0xLjcncontent',
-            // @ts-expect-error unknown provider fields must not be spread through
             '@odata.mediaContentType': 'application/pdf',
-            // @ts-expect-error unknown provider fields must not be spread through
             isInline: true,
-          },
+          } as any,
         ],
       },
       MAILBOX,
