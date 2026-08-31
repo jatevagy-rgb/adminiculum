@@ -417,7 +417,7 @@ router.get('/:id/comments', authenticate, requireDocumentObjectReadAccess, async
  * POST /api/v1/documents/:id/comments
  * Create bounded plain-text document-level comment. Author is always derived from auth.
  */
-router.post('/:id/comments', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await createDocumentComment(req, String(req.params.id || ''), req.body);
     res.status(201).json(result);
@@ -426,7 +426,7 @@ router.post('/:id/comments', authenticate, requireDocumentObjectReadAccess, asyn
   }
 });
 
-router.post('/:id/comments/:commentId/resolve', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments/:commentId/resolve', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await resolveDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
     res.json(result);
@@ -435,7 +435,7 @@ router.post('/:id/comments/:commentId/resolve', authenticate, requireDocumentObj
   }
 });
 
-router.post('/:id/comments/:commentId/reopen', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
+router.post('/:id/comments/:commentId/reopen', authenticate, requireDocumentObjectManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const result = await reopenDocumentComment(req, String(req.params.id || ''), String(req.params.commentId || ''));
     res.json(result);
@@ -752,7 +752,7 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
       return;
     }
 
-    const driveService = (await import('../sharepoint/driveService')).default;
+    const driveService = (await import('../sharepoint/driveService.js')).default;
     const fileBuffer = await driveService.downloadDocument(document.spItemId);
     if (!fileBuffer) {
       res.json({
@@ -1094,7 +1094,7 @@ router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async
     }
 
     // Download from SharePoint
-    const driveService = (await import('../sharepoint/driveService')).default;
+    const driveService = (await import('../sharepoint/driveService.js')).default;
     const downloadResult = await driveService.downloadDocumentResult(document.spItemId);
 
     if (downloadResult.success === false) {
