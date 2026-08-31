@@ -69,9 +69,13 @@ describe('syncOutlookMailbox (service unit)', () => {
   });
 
   it('returns zero summary when Graph returns no messages', async () => {
-    const res = await syncOutlookMailbox('u1', { reader: fakeReader([]) });
+    const reader = fakeReader([]);
+    const res = await syncOutlookMailbox('u1', { reader });
     expect(res.success).toBe(true);
     expect(res.summary).toEqual({ imported: 0, alreadyKnown: 0, needsAssignment: 0, failed: 0 });
+    expect(res).not.toHaveProperty('mailboxAddress');
+    expect(reader.fetchRecentInbound).toHaveBeenCalledWith(expect.any(Number));
+    expect(reader.config()).toMatchObject({ mailboxAddress: MAILBOX });
   });
 
   it('imports an inbound message and leaves it as needs-assignment when no thread linkage', async () => {

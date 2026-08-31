@@ -20,7 +20,7 @@ describeWithDatabase('WP-3 case creation work package integration (PostgreSQL)',
   const workPackageTemplateId = crypto.randomUUID();
   const requiredItemId = crypto.randomUUID();
   const optionalItemId = crypto.randomUUID();
-  let createdCaseId: string;
+  const createdCaseIds: string[] = [];
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
@@ -56,7 +56,7 @@ describeWithDatabase('WP-3 case creation work package integration (PostgreSQL)',
   });
 
   afterAll(async () => {
-    if (createdCaseId) {
+    for (const createdCaseId of createdCaseIds) {
       await db.task.deleteMany({ where: { caseId: createdCaseId } });
       await db.timelineEvent.deleteMany({ where: { caseId: createdCaseId } });
       await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: createdCaseId } } });
@@ -77,7 +77,7 @@ describeWithDatabase('WP-3 case creation work package integration (PostgreSQL)',
       clientId, clientName: `WP-3 Client ${suffix}`, matterType: 'OTHER',
       caseTypeDefinitionId, selectedModuleKeys: ['required-review'], createdById: userId,
     }, db);
-    createdCaseId = result.id;
+    createdCaseIds.push(result.id);
 
     const snapshot = await db.caseWorkPackage.findUniqueOrThrow({ where: { caseId: result.id }, include: { items: true } });
     const createdCase = await db.case.findUniqueOrThrow({ where: { id: result.id } });
@@ -90,6 +90,28 @@ describeWithDatabase('WP-3 case creation work package integration (PostgreSQL)',
     expect(snapshot.items[0]).toMatchObject({ moduleKey: 'required-review', sourceTemplateItemId: requiredItemId });
     expect(workflowTask.workflowTemplateKey).toBe(`wp3-workflow-${suffix}`);
     expect(workflowTask.workflowTemplateVersion).toBe(1);
+  });
+
+  it('creates the same immutable snapshot inside a caller-owned transaction', async () => {
+    const result = await db.$transaction((tx) => casesService.createCase({
+      clientId,
+      clientName: `WP-3 Client ${suffix}`,
+      title: 'Communication-originated case',
+      matterType: 'OTHER',
+      caseTypeDefinitionId,
+      selectedModuleKeys: ['required-review'],
+      createdById: userId,
+      assignedLawyerId: userId,
+    }, tx, { withinTransaction: true, provisionCaseFolders: false }));
+    createdCaseIds.push(result.id);
+
+    const [createdCase, snapshot] = await Promise.all([
+      db.case.findUniqueOrThrow({ where: { id: result.id } }),
+      db.caseWorkPackage.findUniqueOrThrow({ where: { caseId: result.id }, include: { items: true } }),
+    ]);
+    expect(createdCase).toMatchObject({ title: 'Communication-originated case', assignedLawyerId: userId });
+    expect(snapshot.items).toHaveLength(1);
+    expect(snapshot.items[0]).toMatchObject({ moduleKey: 'required-review', sourceTemplateItemId: requiredItemId });
   });
 
   it('rolls back the Case when module selection is invalid', async () => {

@@ -8,6 +8,7 @@ const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 describe('Communications live-integration UI (structural)', () => {
   const overview = () => read('src/components/communications/CommunicationsOverview.tsx');
+  const notifications = () => read('src/app/notifications/page.tsx');
   const page = () => read('src/app/communications/page.tsx');
   const api = () => read('src/lib/api.ts');
   const casePage = () => read('src/app/cases/[caseId]/communications/CommunicationsPageContent.tsx');
@@ -24,7 +25,7 @@ describe('Communications live-integration UI (structural)', () => {
 
   it('offers the bounded Outlook refresh action in Hungarian without technical Graph terms', () => {
     const src = overview();
-    assert.match(src, /Outlook kommunikáció frissítése/);
+    assert.match(src, /Szinkronizálás most/);
     assert.match(src, /Importálva/);
     assert.match(src, /Már ismert/);
     assert.match(src, /Feldolgozásra vár/);
@@ -45,6 +46,18 @@ describe('Communications live-integration UI (structural)', () => {
     for (const token of ['/communications/outlook/sync', '/link-client', '/link-case', '/ignore', '/unignore']) {
       assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
+  });
+
+  it('only reports Outlook sync success after the canonical success result and keeps case-client authority server-side', () => {
+    const src = overview();
+    const apiSrc = api();
+    assert.match(src, /if \(!result\.success\)/);
+    assert.doesNotMatch(apiSrc, /OutlookSyncResult[\s\S]{0,240}mailboxAddress/);
+    assert.doesNotMatch(src, /mailboxAddress/);
+    assert.match(src, /createCaseFromCommunication\(communicationId, \{/);
+    assert.doesNotMatch(src, /clientId:\s*createCaseForm\.clientId/);
+    assert.doesNotMatch(notifications(), /clientId,\s*priority: casePriority/);
+    assert.match(notifications(), /kommunikációt előbb ügyfélhez kell kapcsolni/i);
   });
 
   it('keeps the case workspace showing email/direction/source/thread context', () => {

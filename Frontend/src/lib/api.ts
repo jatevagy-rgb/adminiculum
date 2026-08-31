@@ -3728,7 +3728,6 @@ export type OutlookSyncSummary = {
 export type OutlookSyncResult = {
   success: boolean;
   configured: boolean;
-  mailboxAddress: string | null;
   summary: OutlookSyncSummary;
   threadLinked: number;
   items: Array<{
@@ -3748,6 +3747,17 @@ export async function runOutlookSync(): Promise<OutlookSyncResult> {
     method: 'POST',
     body: JSON.stringify({}),
   });
+}
+
+export type OutlookStatus = {
+  available: boolean;
+  reason?: string;
+  message: string;
+  lastSyncAt?: string | null;
+};
+
+export async function getOutlookStatus(): Promise<OutlookStatus> {
+  return fetchApi<OutlookStatus>('/communications/outlook/status');
 }
 
 export async function linkCommunicationToClient(
@@ -3801,11 +3811,10 @@ export async function createCaseFromCommunication(
   data: {
     title: string;
     matterType: string;
-    clientId?: string;
-    clientName?: string;
     priority?: string;
     deadline?: string;
     description?: string;
+    assignedLawyerId?: string;
     task?: {
       title: string;
       description?: string;

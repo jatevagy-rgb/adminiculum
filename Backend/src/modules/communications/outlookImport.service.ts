@@ -518,7 +518,6 @@ export async function applySafeConversationLinkage(
 export type OutlookSyncResult = {
   success: boolean;
   configured: boolean;
-  mailboxAddress: string | null;
   summary: { imported: number; alreadyKnown: number; needsAssignment: number; failed: number };
   threadLinked: number;
   items: Array<{
@@ -579,7 +578,6 @@ export async function syncOutlookMailbox(
     return {
       success: true,
       configured: true,
-      mailboxAddress: config.mailboxAddress,
       summary: { imported: 0, alreadyKnown: 0, needsAssignment: 0, failed: 0 },
       threadLinked: 0,
       items: [],
@@ -635,7 +633,6 @@ export async function syncOutlookMailbox(
   return {
     success: true,
     configured: true,
-    mailboxAddress: config.mailboxAddress,
     summary: { imported: importedCount, alreadyKnown, needsAssignment, failed },
     threadLinked: linked.length,
     items,

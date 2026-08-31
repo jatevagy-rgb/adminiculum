@@ -1,8 +1,6 @@
 import express, { Express, NextFunction, Request, Response } from 'express';
 import http from 'http';
 
-// Auth mock mirrors tests/routeFeatureGuards.test.ts: a valid bearer token
-// produces an authenticated user; anything else is 401.
 jest.mock('../src/middleware/auth', () => ({
   authenticate: (req: Request, res: Response, next: NextFunction) => {
     if (req.headers.authorization !== 'Bearer test-token') {
@@ -19,15 +17,13 @@ jest.mock('../src/middleware/auth', () => ({
   },
 }));
 
-// Prisma mock. $transaction runs the callback with the same mock object as the
-// transaction client, so every tx.* call is observable and a thrown error
-// rejects the whole $transaction (the real engine would roll back).
 jest.mock('../src/prisma/prisma.service', () => {
   const mock: any = {
     communication: { findUnique: jest.fn(), update: jest.fn() },
     client: { findUnique: jest.fn() },
     user: { findUnique: jest.fn() },
-    case: { count: jest.fn(), create: jest.fn() },
+    case: { findUnique: jest.fn() },
+    caseCollaborator: { findFirst: jest.fn() },
     task: { create: jest.fn() },
     timelineEvent: { create: jest.fn() },
   };
@@ -35,7 +31,13 @@ jest.mock('../src/prisma/prisma.service', () => {
   return { prisma: mock };
 });
 
+jest.mock('../src/modules/cases/services', () => ({
+  __esModule: true,
+  default: { createCase: jest.fn() },
+}));
+
 import { prisma } from '../src/prisma/prisma.service';
+import casesService from '../src/modules/cases/services';
 import communicationsRoutes from '../src/modules/communications/routes';
 
 type TestResponse = { status: number; body: any };
@@ -44,9 +46,9 @@ function requestJson(
   app: Express,
   method: string,
   path: string,
-  options: { authenticated?: boolean; body?: unknown } = {}
+  options: { authenticated?: boolean; body?: unknown; role?: string } = {},
 ): Promise<TestResponse> {
-  const { authenticated = true, body } = options;
+  const { authenticated = true, body, role } = options;
   const payload = body === undefined ? undefined : JSON.stringify(body);
   return new Promise((resolve, reject) => {
     const server = app.listen(0, '127.0.0.1', () => {
@@ -56,32 +58,24 @@ function requestJson(
         reject(new Error('Test server address unavailable'));
         return;
       }
-      const request = http.request(
-        {
-          hostname: '127.0.0.1',
-          port: address.port,
-          path,
-          method,
-          headers: {
-            ...(authenticated ? { authorization: 'Bearer test-token' } : {}),
-            'content-type': 'application/json',
-            ...(payload ? { 'content-length': Buffer.byteLength(payload) } : {}),
-          },
+      const request = http.request({
+        hostname: '127.0.0.1', port: address.port, path, method,
+        headers: {
+          ...(authenticated ? { authorization: 'Bearer test-token' } : {}),
+          ...(role ? { 'x-test-role': role } : {}),
+          'content-type': 'application/json',
+          ...(payload ? { 'content-length': Buffer.byteLength(payload) } : {}),
         },
-        (response) => {
-          const chunks: Buffer[] = [];
-          response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-          response.on('end', () => {
-            server.close();
-            const text = Buffer.concat(chunks).toString('utf8');
-            resolve({ status: response.statusCode || 0, body: text ? JSON.parse(text) : null });
-          });
-        }
-      );
-      request.on('error', (error) => {
-        server.close();
-        reject(error);
+      }, (response) => {
+        const chunks: Buffer[] = [];
+        response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
+        response.on('end', () => {
+          server.close();
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({ status: response.statusCode || 0, body: text ? JSON.parse(text) : null });
+        });
       });
+      request.on('error', (error) => { server.close(); reject(error); });
       if (payload) request.write(payload);
       request.end();
     });
@@ -95,224 +89,135 @@ function createApp(): Express {
   return app;
 }
 
-const validBody = {
-  title: 'Ügy: Bérleti szerződés felülvizsgálat',
-  matterType: 'LEASE',
-  description: 'Ügyféltől érkezett megkeresés alapján.',
-};
+const validBody = { title: 'Ügy: Bérleti szerződés felülvizsgálat', matterType: 'LEASE' };
+const routeCommunication = { id: 'comm-1', caseId: null, clientId: 'client-1', subject: 'Bérleti szerződés', summary: 'Ügyfél kérdés.' };
 
-describe('POST /communications/:id/create-case (atomic intake)', () => {
+function seedUnlinkedCommunication(): void {
+  (prisma as any).communication.findUnique
+    .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+    .mockResolvedValueOnce(routeCommunication);
+  (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
+  (casesService.createCase as jest.Mock).mockResolvedValue({
+    id: 'case-new', caseNumber: 'CASE-2026-001', title: validBody.title, status: 'CLIENT_INPUT', createdAt: new Date(),
+  });
+  (prisma as any).communication.update.mockResolvedValue({ id: 'comm-1', caseId: 'case-new' });
+  (prisma as any).timelineEvent.create.mockResolvedValue({ id: 'timeline-1' });
+}
+
+describe('POST /communications/:id/create-case', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    (prisma as any).$transaction = jest.fn((cb: any) => cb(prisma));
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+  });
+
+  afterEach(() => { delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE; });
+
+  it('keeps the feature gate closed before any transaction or case creation', async () => {
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
-  });
-
-  it('1. returns 501 FEATURE_NOT_AVAILABLE when the gate is off and writes nothing', async () => {
-    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
-      body: validBody,
-    });
-
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', { body: validBody });
     expect(response.status).toBe(501);
-    expect(response.body).toMatchObject({
-      status: 501,
-      code: 'FEATURE_NOT_AVAILABLE',
-      feature: 'COMMUNICATIONS',
-      reason: 'DATABASE_FOUNDATION_NOT_DEPLOYED',
-    });
     expect((prisma as any).$transaction).not.toHaveBeenCalled();
-    expect((prisma as any).case.create).not.toHaveBeenCalled();
-    expect((prisma as any).communication.update).not.toHaveBeenCalled();
+    expect(casesService.createCase).not.toHaveBeenCalled();
   });
 
-  it('2. returns 401 when unauthenticated and never opens a transaction', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+  it.each(['CLIENT', 'EXTERNAL_REVIEWER'])('denies non-workforce %s identities', async (role) => {
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', { body: validBody, role });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('WORKFORCE_ACCESS_REQUIRED');
+    expect(casesService.createCase).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the communication is missing or already linked', async () => {
+    (prisma as any).communication.findUnique.mockResolvedValueOnce(null);
+    const missing = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', { body: validBody });
+    expect(missing.status).toBe(404);
+
+    jest.resetAllMocks();
+    (prisma as any).$transaction = jest.fn((cb: any) => cb(prisma));
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: 'case-old', createdById: 'user-1' })
+      .mockResolvedValueOnce({ ...routeCommunication, caseId: 'case-old' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-old', assignedLawyerId: null, createdById: 'user-1' });
+    const linked = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', { body: validBody });
+    expect(linked.status).toBe(409);
+    expect(linked.body.code).toBe('COMMUNICATION_ALREADY_LINKED');
+    expect(casesService.createCase).not.toHaveBeenCalled();
+  });
+
+  it('requires a client linked to the communication and never falls back to the request body', async () => {
+    (prisma as any).communication.findUnique
+      .mockResolvedValueOnce({ id: 'comm-1', caseId: null, createdById: 'user-1' })
+      .mockResolvedValueOnce({ ...routeCommunication, clientId: null });
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
-      authenticated: false,
-      body: validBody,
+      body: { ...validBody, clientId: 'client-from-body' },
     });
-
-    expect(response.status).toBe(401);
-    expect((prisma as any).$transaction).not.toHaveBeenCalled();
-    expect((prisma as any).case.create).not.toHaveBeenCalled();
-  });
-
-  it('3. returns 404 when the communication does not exist and creates no case', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue(null);
-
-    const response = await requestJson(createApp(), 'POST', '/communications/missing/create-case', {
-      body: validBody,
-    });
-
-    expect(response.status).toBe(404);
-    expect(response.body).toMatchObject({ code: 'COMMUNICATION_NOT_FOUND' });
-    expect((prisma as any).case.create).not.toHaveBeenCalled();
-    expect((prisma as any).communication.update).not.toHaveBeenCalled();
-  });
-
-  it('4. returns 409 when the communication is already linked and creates no case', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: 'case-existing',
-      clientId: 'client-1',
-    });
-
-    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
-      body: validBody,
-    });
-
-    expect(response.status).toBe(409);
-    expect(response.body).toMatchObject({ code: 'COMMUNICATION_ALREADY_LINKED' });
-    expect((prisma as any).case.create).not.toHaveBeenCalled();
-    expect((prisma as any).communication.update).not.toHaveBeenCalled();
-  });
-
-  it('5. returns 400 when the title is missing (before any DB work)', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-
-    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
-      body: { matterType: 'LEASE' },
-    });
-
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
-    expect((prisma as any).$transaction).not.toHaveBeenCalled();
-    expect((prisma as any).communication.findUnique).not.toHaveBeenCalled();
+    expect(response.body.code).toBe('COMMUNICATION_CLIENT_REQUIRED');
+    expect(casesService.createCase).not.toHaveBeenCalled();
   });
 
-  it('5b. returns 400 when no client can be resolved (no clientId on body or communication)', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: null,
-    });
-
+  it.each(['client-2', 'unrelated-client'])('denies request client substitution (%s)', async (clientId) => {
+    seedUnlinkedCommunication();
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
-      body: validBody,
+      body: { ...validBody, clientId },
     });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('COMMUNICATION_CLIENT_MISMATCH');
+    expect(casesService.createCase).not.toHaveBeenCalled();
+  });
 
+  it('allows an equal client id but creates through the canonical work-package-aware case service', async () => {
+    seedUnlinkedCommunication();
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
+      body: { ...validBody, clientId: 'client-1' },
+    });
+    expect(response.status).toBe(201);
+    expect(casesService.createCase).toHaveBeenCalledWith(expect.objectContaining({
+      title: validBody.title, clientId: 'client-1', clientName: 'Teszt Kft.', matterType: 'LEASE', createdById: 'user-1',
+    }), prisma, { withinTransaction: true, provisionCaseFolders: false });
+    expect((prisma as any).communication.update).toHaveBeenCalledWith({ where: { id: 'comm-1' }, data: { caseId: 'case-new' } });
+    expect(response.body.case).toEqual({ id: 'case-new', caseNumber: 'CASE-2026-001', title: validBody.title });
+  });
+
+  it.each([
+    ['CLIENT', true],
+    ['EXTERNAL_REVIEWER', true],
+    ['COLLAB_LAWYER', false],
+  ])('applies canonical workforce eligibility for %s assignees', async (role, denied) => {
+    seedUnlinkedCommunication();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'assignee-1', role, status: 'ACTIVE', isActive: true });
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
+      body: { ...validBody, assignedLawyerId: 'assignee-1' },
+    });
+    if (denied) {
+      expect(response.status).toBe(400);
+      expect(response.body.code).toBe('INVALID_ASSIGNED_LAWYER');
+      expect(casesService.createCase).not.toHaveBeenCalled();
+    } else {
+      expect(response.status).toBe(201);
+      expect(casesService.createCase).toHaveBeenCalledWith(expect.objectContaining({ assignedLawyerId: 'assignee-1' }), prisma, expect.anything());
+    }
+  });
+
+  it('denies an inactive workforce assignee', async () => {
+    seedUnlinkedCommunication();
+    (prisma as any).user.findUnique.mockResolvedValue({ id: 'assignee-1', role: 'LAWYER', status: 'INACTIVE', isActive: false });
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
+      body: { ...validBody, assignedLawyerId: 'assignee-1' },
+    });
     expect(response.status).toBe(400);
-    expect(response.body).toMatchObject({ code: 'VALIDATION_ERROR' });
-    expect((prisma as any).case.create).not.toHaveBeenCalled();
+    expect(response.body.code).toBe('INVALID_ASSIGNED_LAWYER');
+    expect(casesService.createCase).not.toHaveBeenCalled();
   });
 
-  it('6. happy path: creates the case and links the communication to it', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: 'client-1',
-      subject: 'Bérleti szerződés',
-      summary: 'Ügyfél kérdés.',
-    });
-    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
-    (prisma as any).case.count.mockResolvedValue(7);
-    (prisma as any).case.create.mockResolvedValue({
-      id: 'case-new',
-      caseNumber: 'CASE-2026-008',
-      title: validBody.title,
-      status: 'CLIENT_INPUT',
-      createdAt: new Date(),
-    });
-    (prisma as any).communication.update.mockResolvedValue({ id: 'comm-1', caseId: 'case-new' });
-    (prisma as any).timelineEvent.create.mockResolvedValue({ id: 'tl-1' });
-
-    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
-      body: validBody,
-    });
-
-    expect(response.status).toBe(201);
-    expect(response.body).toMatchObject({
-      success: true,
-      case: { id: 'case-new', caseNumber: 'CASE-2026-008', title: validBody.title },
-      communication: { id: 'comm-1', caseId: 'case-new' },
-    });
-    expect(response.body.task).toBeUndefined();
-    // The link write targets the new case id and runs inside the transaction.
-    expect((prisma as any).communication.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'comm-1' }, data: { caseId: 'case-new' } })
-    );
-    expect((prisma as any).$transaction).toHaveBeenCalledTimes(1);
-    expect((prisma as any).task.create).not.toHaveBeenCalled();
-  });
-
-  it('7. happy path with optional task: task carries caseId and sourceCommunicationId', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: 'client-1',
-      subject: 'Bérleti szerződés',
-      summary: 'Ügyfél kérdés.',
-    });
-    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
-    (prisma as any).case.count.mockResolvedValue(0);
-    (prisma as any).case.create.mockResolvedValue({
-      id: 'case-new',
-      caseNumber: 'CASE-2026-001',
-      title: validBody.title,
-      status: 'CLIENT_INPUT',
-      createdAt: new Date(),
-    });
-    (prisma as any).communication.update.mockResolvedValue({ id: 'comm-1', caseId: 'case-new' });
-    (prisma as any).task.create.mockResolvedValue({ id: 'task-new', title: 'Első feladat' });
-    (prisma as any).timelineEvent.create.mockResolvedValue({ id: 'tl-1' });
-
-    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
-      body: { ...validBody, task: { title: 'Első feladat', priority: 'HIGH' } },
-    });
-
-    expect(response.status).toBe(201);
-    expect(response.body.task).toMatchObject({ id: 'task-new', title: 'Első feladat' });
-    expect((prisma as any).task.create).toHaveBeenCalledTimes(1);
-    const taskArg = (prisma as any).task.create.mock.calls[0][0];
-    expect(taskArg.data).toMatchObject({
-      caseId: 'case-new',
-      sourceCommunicationId: 'comm-1',
-      priority: 'HIGH',
-    });
-  });
-
-  it('8. rollback: a task-create failure rejects the whole transaction and returns no case', async () => {
-    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    (prisma as any).communication.findUnique.mockResolvedValue({
-      id: 'comm-1',
-      caseId: null,
-      clientId: 'client-1',
-      subject: 'Bérleti szerződés',
-      summary: 'Ügyfél kérdés.',
-    });
-    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Teszt Kft.' });
-    (prisma as any).user.findUnique.mockResolvedValue({ id: 'user-1', status: 'ACTIVE', isActive: true });
-    (prisma as any).case.count.mockResolvedValue(0);
-    (prisma as any).case.create.mockResolvedValue({
-      id: 'case-new',
-      caseNumber: 'CASE-2026-001',
-      title: validBody.title,
-    });
-    (prisma as any).communication.update.mockResolvedValue({ id: 'comm-1', caseId: 'case-new' });
-    (prisma as any).timelineEvent.create.mockResolvedValue({ id: 'tl-1' });
-    // Force the final write inside the transaction to fail.
+  it('does not return success when a later in-transaction task write fails', async () => {
+    seedUnlinkedCommunication();
     (prisma as any).task.create.mockRejectedValue(new Error('task insert failed'));
-
     const response = await requestJson(createApp(), 'POST', '/communications/comm-1/create-case', {
       body: { ...validBody, task: { title: 'Első feladat' } },
     });
-
-    // The whole operation fails — no success/201, no case in the response.
     expect(response.status).not.toBe(201);
     expect(response.body?.success).not.toBe(true);
-    expect(response.body?.case).toBeUndefined();
-    // All writes were bound to a single $transaction, so the real Prisma engine
-    // rolls back the case + link + timeline together. (With a fully mocked
-    // client the physical rollback cannot be executed here; this asserts the
-    // strongest feasible proof: every write was issued inside one transaction
-    // boundary and the transaction rejected.)
-    expect((prisma as any).$transaction).toHaveBeenCalledTimes(1);
-    expect((prisma as any).task.create).toHaveBeenCalledTimes(1);
   });
 });

@@ -12,6 +12,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { authenticate } from '../../middleware/auth';
+import { isWorkforceRole, requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
@@ -24,20 +25,13 @@ import {
   runOutlookImportDryRun,
   syncOutlookMailbox,
 } from './outlookImport.service';
-import { readOutlookSyncConfig } from './outlookGraphLive';
+import { readOutlookSyncConfig, isOutlookSyncConfigured } from './outlookGraphLive';
 import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
+import casesService from '../cases/services';
 
 const router = Router();
 
 const PRIVILEGED_COMMUNICATION_ROLES = new Set(['ADMIN', 'PARTNER']);
-
-function requireWorkforceCommunicationUser(req: Request, res: Response, next: NextFunction): void {
-  if (req.user?.role === 'CLIENT' || req.user?.role === 'EXTERNAL_REVIEWER') {
-    res.status(403).json({ status: 403, code: 'COMMUNICATION_WORKFORCE_ONLY', message: 'This communication workspace is for workforce users.' });
-    return;
-  }
-  next();
-}
 
 async function userCanReadCase(caseId: string, userId: string, role: string): Promise<boolean> {
   const caseRow = await prisma.case.findUnique({
@@ -57,7 +51,7 @@ async function userCanReadCommunication(userId: string, role: string, row: { cas
   return row.createdById === userId;
 }
 
-router.use(authenticate, requireWorkforceCommunicationUser);
+router.use(authenticate, requireWorkforceUser);
 
 router.param('id', async (req: Request, res: Response, next: NextFunction, id: string) => {
   // Let the feature gate produce its product-safe 501 response before doing
@@ -729,7 +723,6 @@ router.post('/:id/link-task', authenticate, requireCommunicationsFoundation, asy
 
 const VALID_CASE_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
 const DEFAULT_CASE_MATTER_TYPE = 'OTHER';
-const DEFAULT_CASE_STATUS = 'CLIENT_INPUT';
 const VALID_CASE_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 class CreateCaseFromCommunicationError extends Error {
@@ -748,8 +741,8 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
   const matterTypeRaw = typeof body.matterType === 'string' ? body.matterType.trim() : '';
   const priorityRaw = typeof body.priority === 'string' ? body.priority.trim().toUpperCase() : '';
   const clientIdInput = typeof body.clientId === 'string' ? body.clientId.trim() : '';
-  const clientNameInput = typeof body.clientName === 'string' ? body.clientName.trim() : '';
   const description = typeof body.description === 'string' && body.description.trim() ? body.description : undefined;
+  const assignedLawyerIdInput = typeof body.assignedLawyerId === 'string' ? body.assignedLawyerId.trim() : '';
   const taskInput = body.task && typeof body.task === 'object' ? (body.task as Record<string, any>) : null;
 
   // Cheap, write-free validation first.
@@ -781,13 +774,16 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
         throw new CreateCaseFromCommunicationError(409, 'COMMUNICATION_ALREADY_LINKED', 'Communication is already linked to a case');
       }
 
-      const resolvedClientId = clientIdInput || (communication.clientId || '');
+      const resolvedClientId = communication.clientId || '';
       if (!resolvedClientId) {
         throw new CreateCaseFromCommunicationError(
           400,
-          'VALIDATION_ERROR',
-          'A client is required: provide clientId or use a communication that already has a clientId',
+          'COMMUNICATION_CLIENT_REQUIRED',
+          'The communication must be linked to a client before creating a case.',
         );
+      }
+      if (clientIdInput && clientIdInput !== resolvedClientId) {
+        throw new CreateCaseFromCommunicationError(403, 'COMMUNICATION_CLIENT_MISMATCH', 'The requested client does not match this communication.');
       }
 
       const client = await tx.client.findUnique({ where: { id: resolvedClientId }, select: { id: true, name: true } });
@@ -795,42 +791,33 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
         throw new CreateCaseFromCommunicationError(400, 'CLIENT_NOT_FOUND', 'Client not found');
       }
 
-      const user = await tx.user.findUnique({
-        where: { id: userId },
-        select: { id: true, status: true, isActive: true },
-      });
-      if (!user) {
-        throw new CreateCaseFromCommunicationError(401, 'NOT_AUTHENTICATED', 'Authenticated user not found');
-      }
-      if (user.status !== 'ACTIVE' || user.isActive === false) {
-        throw new CreateCaseFromCommunicationError(403, 'USER_INACTIVE', 'Authenticated user is inactive');
-      }
-
       const matterType = VALID_CASE_MATTER_TYPES.includes(matterTypeRaw) ? matterTypeRaw : DEFAULT_CASE_MATTER_TYPE;
       const priority = VALID_CASE_PRIORITIES.includes(priorityRaw) ? priorityRaw : 'MEDIUM';
-      const resolvedClientName = clientNameInput || client.name;
+      const resolvedClientName = client.name;
 
-      const year = new Date().getFullYear();
-      const count = await tx.case.count();
-      const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
+      let resolvedAssignedLawyerId: string | null = null;
+      if (assignedLawyerIdInput) {
+        const assignedUser = await tx.user.findUnique({
+          where: { id: assignedLawyerIdInput },
+          select: { id: true, role: true, status: true, isActive: true },
+        });
+        if (!assignedUser || !isWorkforceRole(assignedUser.role) || assignedUser.status !== 'ACTIVE' || assignedUser.isActive === false) {
+          throw new CreateCaseFromCommunicationError(400, 'INVALID_ASSIGNED_LAWYER', 'A megadott felelős ügyvéd nem található vagy inaktív.');
+        }
+        resolvedAssignedLawyerId = assignedUser.id;
+      }
 
-      const newCase = await tx.case.create({
-        data: {
-          caseNumber,
-          title,
-          clientName: resolvedClientName,
-          matterType: matterType as any,
-          caseType: 'OTHER' as any,
-          description,
-          status: DEFAULT_CASE_STATUS as any,
-          priority: priority as any,
-          deadline: deadline || undefined,
-          sharepointSite: 'Adminiculum - Legal Workflow',
-          sharepointRoot: `/sites/AdminiculumLegalWorkflow/Cases/${caseNumber}`,
-          createdById: user.id,
-          clientId: client.id,
-        } as any,
-      });
+      const newCase = await casesService.createCase({
+        title,
+        clientName: resolvedClientName,
+        clientId: client.id,
+        matterType,
+        description,
+        priority,
+        deadline: deadline?.toISOString(),
+        assignedLawyerId: resolvedAssignedLawyerId,
+        createdById: userId,
+      }, tx, { withinTransaction: true, provisionCaseFolders: false });
 
       await tx.communication.update({
         where: { id: String(id) },
@@ -840,11 +827,11 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
       await tx.timelineEvent.create({
         data: {
           caseId: newCase.id,
-          userId: user.id,
+          userId,
           eventType: 'CASE_CREATED',
           type: 'CASE_CREATED',
           payload: {
-            caseNumber,
+            caseNumber: newCase.caseNumber,
             clientName: resolvedClientName,
             matterType,
             source: 'communication',
@@ -856,7 +843,7 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
       await tx.timelineEvent.create({
         data: {
           caseId: newCase.id,
-          userId: user.id,
+          userId,
           eventType: 'CLIENT_CONTACT',
           type: 'CLIENT_CONTACT',
           payload: {
@@ -886,7 +873,7 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
             status: 'TODO' as any,
             priority: taskPriority as any,
             caseId: newCase.id,
-            assignedById: user.id,
+            assignedById: userId,
             dueDate: taskDue && !Number.isNaN(taskDue.getTime()) ? taskDue : undefined,
             sourceCommunicationId: communication.id,
           } as any,
@@ -895,7 +882,7 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
         await tx.timelineEvent.create({
           data: {
             caseId: newCase.id,
-            userId: user.id,
+            userId,
             eventType: 'TASK_CREATED',
             type: 'TASK_CREATED',
             payload: {
@@ -1221,6 +1208,44 @@ router.get('/:id/attachments', authenticate, requireCommunicationsFoundation, as
   } catch (error) {
     console.error('Error fetching attachments:', error);
     res.status(500).json({ error: 'Error fetching attachments' });
+  }
+});
+
+// ============================================================================
+// GET /api/v1/communications/outlook/status
+// ----------------------------------------------------------------------------
+// Returns Outlook connection availability in customer-safe terms.
+// No tenant IDs, client IDs, tokens, or mailbox internals exposed.
+// ============================================================================
+
+router.get('/outlook/status', authenticate, async (req: Request, res: Response) => {
+  try {
+    const importEnabled = isDatabaseFoundationEnabled('ENABLE_OUTLOOK_IMPORT');
+    const configured = isOutlookSyncConfigured();
+
+    if (!importEnabled) {
+      res.json({ available: false, reason: 'DISABLED', message: 'Outlook nincs összekapcsolva.' });
+      return;
+    }
+    if (!configured) {
+      res.json({ available: false, reason: 'NOT_CONFIGURED', message: 'Outlook nincs összekapcsolva.' });
+      return;
+    }
+
+    const lastSync = await prisma.communication.findFirst({
+      where: { source: 'OUTLOOK' as any },
+      orderBy: { importedAt: 'desc' },
+      select: { importedAt: true },
+    });
+
+    res.json({
+      available: true,
+      message: 'Outlook szinkronizálható.',
+      lastSyncAt: lastSync?.importedAt?.toISOString() || null,
+    });
+  } catch (error) {
+    console.error('Outlook status error:', error);
+    res.json({ available: false, reason: 'UNAVAILABLE', message: 'Átmenetileg nem érhető el.' });
   }
 });
 

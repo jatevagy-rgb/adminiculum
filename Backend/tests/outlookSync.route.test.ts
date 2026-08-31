@@ -109,7 +109,6 @@ const SYNC_PATH = '/communications/outlook/sync';
 const OK_RESULT = {
   success: true,
   configured: true,
-  mailboxAddress: 'legal@example.com',
   summary: { imported: 2, alreadyKnown: 1, needsAssignment: 1, failed: 0 },
   threadLinked: 1,
   items: [],
@@ -139,7 +138,7 @@ describe('POST /communications/outlook/sync', () => {
     process.env.ENABLE_OUTLOOK_IMPORT = 'true';
     const res = await requestJson(createApp(), 'POST', SYNC_PATH, { role: 'CLIENT', body: {} });
     expect(res.status).toBe(403);
-    expect(res.body.code).toBe('COMMUNICATION_WORKFORCE_ONLY');
+    expect(res.body.code).toBe('WORKFORCE_ACCESS_REQUIRED');
     expect(syncOutlookMailbox).not.toHaveBeenCalled();
   });
 
@@ -149,8 +148,10 @@ describe('POST /communications/outlook/sync', () => {
     const res = await requestJson(createApp(), 'POST', SYNC_PATH, { body: {} });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ success: true, summary: { imported: 2, alreadyKnown: 1, needsAssignment: 1, failed: 0 } });
+    expect(res.body).not.toHaveProperty('mailboxAddress');
     expect(JSON.stringify(res.body)).not.toContain('Bearer');
     expect(JSON.stringify(res.body)).not.toContain('access_token');
+    expect(JSON.stringify(res.body)).not.toContain('legal@example.com');
   });
 
   it('4. Graph failure from service -> 502 safe message', async () => {
@@ -165,6 +166,8 @@ describe('POST /communications/outlook/sync', () => {
     const res = await requestJson(createApp(), 'POST', SYNC_PATH, { body: {} });
     expect(res.status).toBe(502);
     expect(res.body).toMatchObject({ code: 'OUTLOOK_GRAPH_RATE_LIMITED' });
+    expect(JSON.stringify(res.body)).not.toContain('legal@example.com');
+    expect(JSON.stringify(res.body)).not.toMatch(/tenantId|mailbox(Address|Id)?|objectId|provider(Id|Url)?|access_token|Bearer/i);
   });
 });
 

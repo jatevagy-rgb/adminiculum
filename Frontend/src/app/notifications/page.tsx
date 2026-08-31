@@ -107,7 +107,6 @@ function CommunicationWorkspace() {
   const [casePriority, setCasePriority] = useState("MEDIUM");
   const [caseDeadline, setCaseDeadline] = useState("");
   const [caseDescription, setCaseDescription] = useState("");
-  const [newCaseClientId, setNewCaseClientId] = useState("");
   const [caseBusy, setCaseBusy] = useState(false);
   const [caseFeedback, setCaseFeedback] = useState<Feedback | null>(null);
   const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
@@ -353,22 +352,22 @@ function CommunicationWorkspace() {
     setCasePriority("MEDIUM");
     setCaseDeadline("");
     setCaseDescription(item.subject ? `Kommunikációból indított ügy. Tárgy: ${item.subject}.` : "Kommunikációból indított ügy.");
-    setNewCaseClientId("");
     setCaseFeedback(null);
     setCreatedCaseId(null);
   };
 
   const submitCreateCase = async () => {
     if (!createCaseTarget || !caseTitle.trim()) return;
-    const clientId = createCaseTarget.clientId || newCaseClientId;
-    if (!clientId) return;
+    if (!createCaseTarget.clientId) {
+      setCaseFeedback({ tone: "error", message: "Az ügy indításához a kommunikációt előbb ügyfélhez kell kapcsolni." });
+      return;
+    }
     setCaseBusy(true);
     setCaseFeedback(null);
     try {
       const result = await createCaseFromCommunication(createCaseTarget.id, {
         title: caseTitle.trim(),
         matterType,
-        clientId,
         priority: casePriority,
         deadline: caseDeadline || undefined,
         description: caseDescription.trim() || undefined,
@@ -482,9 +481,9 @@ function CommunicationWorkspace() {
         <select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)} disabled={caseTasksLoading} className="adm-modal-field w-full px-3 py-2 text-sm"><option value="">{caseTasksLoading ? "Feladatok betöltése…" : caseTasks.length ? "Válassz nyitott feladatot…" : "Nincs nyitott feladat az ügyön"}</option>{caseTasks.map((task) => <option key={task.id} value={task.id}>{task.title} · {task.status}</option>)}</select>
       </SimpleModal> : null}
 
-      {createCaseTarget ? <SimpleModal title="Új ügy indítása" subtitle={createCaseTarget.subject || "Nincs tárgy"} busy={caseBusy} feedback={caseFeedback} onClose={() => setCreateCaseTarget(null)} onSubmit={submitCreateCase} submitLabel="Ügy létrehozása" submitDisabled={!caseTitle.trim() || (!createCaseTarget.clientId && !newCaseClientId)} successLink={createdCaseId ? { href: `/cases/${encodeURIComponent(createdCaseId)}`, label: "Ügy megnyitása" } : undefined}>
+      {createCaseTarget ? <SimpleModal title="Új ügy indítása" subtitle={createCaseTarget.subject || "Nincs tárgy"} busy={caseBusy} feedback={caseFeedback} onClose={() => setCreateCaseTarget(null)} onSubmit={submitCreateCase} submitLabel="Ügy létrehozása" submitDisabled={!caseTitle.trim() || !createCaseTarget.clientId} successLink={createdCaseId ? { href: `/cases/${encodeURIComponent(createdCaseId)}`, label: "Ügy megnyitása" } : undefined}>
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy címe<input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
-        {!createCaseTarget.clientId ? <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügyfél<select value={newCaseClientId} onChange={(event) => setNewCaseClientId(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="">Válassz ügyfelet…</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label> : null}
+        {!createCaseTarget.clientId ? <p className="text-[11px] text-[var(--adm-text-muted)]">Az ügy indításához a kommunikációt előbb ügyfélhez kell kapcsolni.</p> : null}
         <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügytípus<select value={matterType} onChange={(event) => setMatterType(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm">{caseMatterTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={casePriority} onChange={(event) => setCasePriority(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Sürgős</option></select></label></div>
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={caseDeadline} onChange={(event) => setCaseDeadline(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea value={caseDescription} onChange={(event) => setCaseDescription(event.target.value)} rows={3} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
