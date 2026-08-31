@@ -1302,7 +1302,7 @@ class TimesheetReportService {
       })
     );
 
-    return new Table({
+    return new DocxTable({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows,
     });
@@ -1314,8 +1314,8 @@ class TimesheetReportService {
       ? ['Ssz', 'Dátum', 'Leírás', 'Jogász', 'Óra']
       : ['No.', 'Date', 'Description', 'Lawyer', 'Hours'];
 
-    const rows: TableRow[] = [
-      new TableRow({
+    const rows: DocxTableRow[] = [
+      new DocxTableRow({
         children: headerCells.map((label) =>
           this.buildDocxCell(label, {
             bold: true,
@@ -1327,7 +1327,7 @@ class TimesheetReportService {
         ),
       }),
       ...report.rows.map((row) =>
-        new TableRow({
+        new DocxTableRow({
           children: [
             this.buildDocxCell(String(row.rowNumber), { align: 'center' }),
             this.buildDocxCell(row.date || (isHu ? '—' : 'N/A')),
@@ -1339,7 +1339,7 @@ class TimesheetReportService {
       ),
     ];
 
-    return new Table({
+    return new DocxTable({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows,
     });
@@ -1371,10 +1371,10 @@ class TimesheetReportService {
       ],
     ];
 
-    return new Table({
+    return new DocxTable({
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: rows.map(([label, value, isFinal]) =>
-        new TableRow({
+        new DocxTableRow({
           children: [
             this.buildDocxCell(label, {
               bold: Boolean(isFinal),
@@ -1391,7 +1391,8 @@ class TimesheetReportService {
     });
   }
 
-  private buildDocx(report: GeneratedTimesheetReportPayload): Document {
+  private buildDocx(report: GeneratedTimesheetReportPayload): DocxDocument {
+  
     const isHu = report.template.family === 'HU_DETAILED_MONTHLY';
 
     const closureLabel = isHu ? 'Havi záradék' : 'Pending/open matters note';
@@ -1404,7 +1405,7 @@ class TimesheetReportService {
     const rowsSectionLabel = isHu ? 'Részletes sorok' : 'Detailed work rows';
     const totalsLabel = isHu ? 'Összesítés' : 'Summary totals';
 
-    return new Document({
+    return new DocxDocument({
       styles: {
         default: {
           document: {
