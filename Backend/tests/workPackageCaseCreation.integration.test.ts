@@ -94,11 +94,12 @@ describeWithDatabase('WP-3 case creation work package integration (PostgreSQL)',
 
   it('rolls back the Case when module selection is invalid', async () => {
     const before = await db.case.count();
+    const wpBefore = await db.caseWorkPackage.count();
     await expect(casesService.createCase({
       clientId, clientName: `WP-3 Client ${suffix}`, matterType: 'OTHER',
       caseTypeDefinitionId, selectedModuleKeys: ['missing-module'], createdById: userId,
     }, db)).rejects.toMatchObject({ code: 'MODULE_NOT_IN_TEMPLATE' });
     expect(await db.case.count()).toBe(before);
-    expect(await db.caseWorkPackage.count()).toBe(1);
+    expect(await db.caseWorkPackage.count()).toBe(wpBefore);
   });
 });

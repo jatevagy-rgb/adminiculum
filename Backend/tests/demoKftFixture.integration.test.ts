@@ -73,7 +73,7 @@ d('DEMO KFT. organizational fixture (PostgreSQL)', () => {
     await db.$disconnect();
   });
 
-  async function reset() {
+  async function reset(customEnv: Record<string, string> = {}) {
     const { execFileSync } = await import('node:child_process');
     const path = await import('node:path');
     const fs = await import('node:fs');
@@ -86,19 +86,48 @@ d('DEMO KFT. organizational fixture (PostgreSQL)', () => {
     const scriptPath = path.resolve(__dirname, '../scripts/demo-kft-reset.mjs');
     execFileSync(process.execPath, [tsxCli, scriptPath], {
       cwd: path.resolve(__dirname, '..'),
-      env: { ...process.env, ADMINICULUM_DEMO_CONTENT_ENABLED: 'true' },
+      env: {
+        ...process.env,
+        DATABASE_URL: databaseUrl,
+        ADMINICULUM_DEMO_CONTENT_ENABLED: 'true',
+        ...customEnv,
+      },
       stdio: 'pipe',
     });
   }
 
   it('seeds a coherent organizational tenant (idempotent)', async () => {
-    await reset();
+    await db.clientPortalIdentity.upsert({
+      where: { id: IDS.identityId },
+      update: {},
+      create: {
+        id: IDS.identityId,
+        provider: 'ENTRA_EXTERNAL_ID',
+        issuer: 'https://login.microsoftonline.com/demo-kft',
+        subject: 'sub-peterfi',
+        normalizedEmail: 'test-exec@fixture.invalid',
+        displayName: 'Péterfi János',
+        accountType: 'ORGANIZATION_MEMBER',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+      },
+    });
+
+    await reset({ DEMO_KFT_PORTAL_IDENTITY_EMAIL: 'test-exec@fixture.invalid' });
 
     const workspace = await db.clientPortalWorkspace.findUnique({ where: { id: IDS.workspaceId }, select: { mode: true, status: true } });
     expect(workspace?.mode).toBe('ORGANIZATION');
     expect(workspace?.status).toBe('ACTIVE');
 
-    const membership = await db.clientPortalWorkspaceMembership.findUnique({ where: { id: IDS.membershipId }, select: { clientPortalIdentityId: true, workspaceId: true, status: true, role: true } });
+    const membership = await db.clientPortalWorkspaceMembership.findUnique({
+      where: {
+        clientPortalIdentityId_workspaceId: {
+          clientPortalIdentityId: IDS.identityId,
+          workspaceId: IDS.workspaceId,
+        },
+      },
+      select: { clientPortalIdentityId: true, workspaceId: true, status: true, role: true },
+    });
     expect(membership?.clientPortalIdentityId).toBe(IDS.identityId);
     expect(membership?.workspaceId).toBe(IDS.workspaceId);
     expect(membership?.status).toBe('ACTIVE');
