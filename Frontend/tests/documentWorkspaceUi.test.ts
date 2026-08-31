@@ -28,6 +28,22 @@ test("Document add and immutable version upload remain distinct", () => {
   assert.doesNotMatch(source, /contentEditable/);
 });
 
+test("Document Workspace surfaces existing Legal Analysis only for a real versioned document", () => {
+  const source = documentPage();
+  const panel = read("src/components/documents/LegalAnalysisIntakePanel.tsx");
+  assert.match(source, /LegalAnalysisIntakePanel/);
+  assert.match(source, /caseId=\{canonicalCaseId\}/);
+  assert.match(source, /documentId=\{selectedUploadedDocument\.id\}/);
+  assert.match(source, /documentSourceType="DOCUMENT"/);
+  assert.match(source, /documentTitle=\{activeTitle \|\| undefined\}/);
+  assert.match(source, /selectedVersion \? \(/);
+  assert.match(panel, /listDocumentLegalAnalyses/);
+  assert.match(panel, /getLegalAnalysis/);
+  assert.match(panel, /createDocumentLegalAnalysis/);
+  assert.match(panel, /updateLegalAnalysis/);
+  assert.match(panel, /data-testid="legal-analysis-intake"/);
+});
+
 test("Client context only enters a real client-scoped case document workspace", () => {
   const source = clientPage();
   assert.match(source, /getCases\(1, 100, undefined, clientId\)/);
