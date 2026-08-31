@@ -230,6 +230,28 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
     await db.caseWorkPackageItem.delete({ where: { id: caseAdded } });
   });
 
+  it('treats irrecoverable legacy items as required and prevents disabling them', async () => {
+    const legacyItem = crypto.randomUUID();
+    await db.caseWorkPackageItem.create({ data: {
+      id: legacyItem,
+      caseWorkPackageId: ids.package,
+      moduleType: 'CUSTOM',
+      moduleKey: 'legacy-no-provenance',
+      label: 'Legacy item',
+      createdById: ids.admin,
+      config: { legacy: true },
+      sourceTemplateItemId: null,
+    } });
+
+    const projection = (await getCaseWorkPackage(ids.case))!;
+    expect(projection.items.find((item) => item.id === legacyItem)?.required).toBe(true);
+    await expect(mutateCaseWorkPackageItem(ids.case, legacyItem, { status: 'DISABLED', expectedRevision: projection.revision }))
+      .rejects.toMatchObject({ code: 'REQUIRED_ITEM_CANNOT_DISABLE' });
+    expect(await db.caseWorkPackageItem.findUniqueOrThrow({ where: { id: legacyItem } })).toMatchObject({ sourceTemplateItemId: null, config: { legacy: true } });
+
+    await db.caseWorkPackageItem.delete({ where: { id: legacyItem } });
+  });
+
   it('creates one provenance task through the canonical task service and preserves matter/timeline links', async () => {
     const attempts = await Promise.all([
       createTaskFromCaseWorkPackageItem(ids.case, ids.requiredItem, { title: 'Prepare required review', assignedToId: ids.collaborator }, ids.admin),

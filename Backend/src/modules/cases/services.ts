@@ -113,11 +113,17 @@ interface CreateCaseInput {
   createdById?: string;
   assignedLawyerId?: string | null;
   responsibleLawyerId?: string | null;
+  priority?: string | null;
   deadline?: string | null;
   workflowTemplateKey?: string | null;
   workflowAssignees?: Record<string, string | null | undefined>;
   caseTypeDefinitionId?: string | null;
   selectedModuleKeys?: unknown;
+}
+
+interface CreateCaseOptions {
+  withinTransaction?: boolean;
+  provisionCaseFolders?: boolean;
 }
 
 type ActiveUserRecord = {
@@ -440,7 +446,11 @@ return {
   /**
    * Create new case
    */
-  async createCase(params: CreateCaseInput, db = prisma): Promise<{ id: string; caseNumber: string; status: string; createdAt: Date; workPackage?: unknown }> {
+  async createCase(
+    params: CreateCaseInput,
+    db: any = prisma,
+    options: CreateCaseOptions = {},
+  ): Promise<{ id: string; caseNumber: string; title: string; status: string; createdAt: Date; workPackage?: unknown }> {
     const year = new Date().getFullYear();
     const count = await db.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
     const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
@@ -534,7 +544,7 @@ return {
       }
     }
 
-    const created = await db.$transaction(async (tx) => {
+    const createInTransaction = async (tx: any) => {
       const newCase = await tx.case.create({
         data: {
           caseNumber,
@@ -546,7 +556,7 @@ return {
           description: params.description,
           clientRole: params.clientRole ?? null,
           status: DEFAULT_STATUS as any,
-          priority: 'MEDIUM' as any,
+          priority: (params.priority || 'MEDIUM') as any,
           deadline: params.deadline ? new Date(params.deadline) : undefined,
           assignedLawyerId: assignedLawyerId || undefined,
           sharepointSite: 'Adminiculum - Legal Workflow',
@@ -595,20 +605,26 @@ return {
       });
 
       return { newCase, workPackage };
-    });
+    };
+    const created = options.withinTransaction
+      ? await createInTransaction(db)
+      : await db.$transaction(createInTransaction);
     const newCase = created.newCase;
 
     // Create case folder in SharePoint
     // If folder creation fails, log but do NOT fail the case creation.
     // The case DB record is the source of truth; SharePoint is a convenience layer.
-    const folderResult = await driveService.createCaseFolders(caseNumber, resolvedClientName);
-    if (!folderResult) {
-      console.warn(`[CASES_SERVICE] SharePoint folder creation returned null for case ${caseNumber}. Case created in DB but SharePoint folder is missing.`);
+    if (options.provisionCaseFolders !== false) {
+      const folderResult = await driveService.createCaseFolders(caseNumber, resolvedClientName);
+      if (!folderResult) {
+        console.warn(`[CASES_SERVICE] SharePoint folder creation returned null for case ${caseNumber}. Case created in DB but SharePoint folder is missing.`);
+      }
     }
 
     return {
       id: newCase.id,
       caseNumber: newCase.caseNumber,
+      title: newCase.title,
       status: newCase.status,
       createdAt: newCase.createdAt,
       workPackage: created.workPackage ? {
