@@ -3,7 +3,6 @@
 import { PrismaClient } from '@prisma/client';
 import { v4 as uuidv4 } from 'uuid';
 import { getWorkflowAgenda, AgendaRequestError } from '../src/modules/agenda/service';
-import { compareDeadlines } from '../src/modules/agenda/deadlineEngine';
 
 // Helper to extract deadline items from agenda response
 function extractDeadlines(body) {
@@ -27,8 +26,8 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     client: uuidv4(),
     caseA: uuidv4(),
     caseB: uuidv4(),
-    intake1: uuidv4(),
-    intake2: uuidv4(),
+    intake1: '00000000-0000-0000-0000-000000000001',
+    intake2: '00000000-0000-0000-0000-000000000002',
     intakeB1: uuidv4(),
     taskOpen: uuidv4(),
     taskCompleted: uuidv4(),
@@ -59,7 +58,8 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
 
     const deadlineDate = new Date('2026-07-15T10:00:00.000Z');
     const laterDate = new Date('2026-07-20T12:00:00.000Z');
-    const pastDate = new Date('2026-06-01T09:00:00.000Z');
+    const pastDate = new Date('2026-07-01T09:00:00.000Z');
+    const completedAt = new Date('2026-07-05T00:00:00.000Z');
 
     // Cases
     await db.case.create({
@@ -194,7 +194,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
             clientId: ids.client,
             createdById: ids.lawyerA,
             assignedLawyerId: ids.lawyerA,
-            deadline: null,
+            deadline: deadlineDate,
             status: 'FINAL',
             priority: 'MEDIUM',
             updatedAt: new Date(),
@@ -207,7 +207,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
             clientId: ids.client,
             createdById: ids.lawyerA,
             assignedLawyerId: ids.lawyerA,
-            deadline: null,
+            deadline: deadlineDate,
             status: 'CANCELLED',
             priority: 'MEDIUM',
             updatedAt: new Date(),
@@ -220,7 +220,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
             clientId: ids.client,
             createdById: ids.lawyerA,
             assignedLawyerId: ids.lawyerA,
-            deadline: null,
+            deadline: deadlineDate,
             status: 'ARCHIVED',
             priority: 'MEDIUM',
             updatedAt: new Date(),
@@ -233,10 +233,10 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
             clientId: ids.client,
             createdById: ids.lawyerA,
             assignedLawyerId: ids.lawyerA,
-            deadline: null,
+            deadline: deadlineDate,
             status: 'DRAFT',
             priority: 'MEDIUM',
-            completedAt: new Date('2026-06-15T00:00:00.000Z'),
+            completedAt,
             updatedAt: new Date(),
           },
         ],
@@ -247,6 +247,8 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     await db?.$disconnect();
   });
 
+  const agendaRange = { from: '2026-07-01', to: '2026-08-15' };
+
 // Deterministic ordering test for CASE scope
   test('CASE scope deterministic ordering of deadlines', async () => {
     const agendaFirst = await getWorkflowAgenda({
@@ -255,6 +257,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       scope: 'CASE',
       caseId: ids.caseA,
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const agendaSecond = await getWorkflowAgenda({
@@ -263,15 +266,18 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       scope: 'CASE',
       caseId: ids.caseA,
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const dFirst = extractDeadlines(agendaFirst);
     const dSecond = extractDeadlines(agendaSecond);
     // order must be stable across calls
     expect(dFirst.map((it:any)=>it.id)).toEqual(dSecond.map((it:any)=>it.id));
-    // derive expected order using compareDeadlines
-    const expected = [...dFirst].sort((l:any, r:any) => compareDeadlines(l, r, ids.lawyerA));
-    expect(dFirst.map((it:any)=>it.id)).toEqual(expected.map((it:any)=>it.id));
+    expect(dFirst.map((it: any) => it.id)).toEqual([
+      `CASE_INTAKE_DEADLINE:${ids.intake1}`,
+      `CASE_INTAKE_DEADLINE:${ids.intake2}`,
+      `CASE_DEADLINE:${ids.caseA}`,
+    ]);
   });
 
   // Case lifecycle status filtering
@@ -281,6 +287,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       userRole: 'LAWYER',
       scope: 'MY_WORK',
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const completedAgenda = await getWorkflowAgenda({
@@ -288,6 +295,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       userRole: 'LAWYER',
       scope: 'MY_WORK',
       status: 'COMPLETED',
+      ...agendaRange,
       db,
     });
     const openDeadlines = extractDeadlines(openAgenda).map((it:any)=>it.id);
@@ -305,7 +313,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     expect(openDeadlines).not.toContain(`CASE_DEADLINE:${ids.caseCompletedAt}`);
   });
 
-  test('Agenda request does not mutate any DB fields (updatedAt unchanged)', async () => {
+  test('Agenda request does not mutate any DB fields', async () => {
     const beforeCase = await db.case.findUnique({ where: { id: ids.caseA } });
     const beforeIntake = await db.caseIntakeDeadline.findUnique({ where: { id: ids.intake1 } });
     const beforeTask = await db.task.findUnique({ where: { id: ids.taskOpen } });
@@ -315,13 +323,16 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       scope: 'CASE',
       caseId: ids.caseA,
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const afterCase = await db.case.findUnique({ where: { id: ids.caseA } });
     const afterIntake = await db.caseIntakeDeadline.findUnique({ where: { id: ids.intake1 } });
     const afterTask = await db.task.findUnique({ where: { id: ids.taskOpen } });
     expect(afterCase?.updatedAt?.getTime()).toBe(beforeCase?.updatedAt?.getTime());
+    expect(afterCase?.deadline?.getTime()).toBe(beforeCase?.deadline?.getTime());
     expect(afterIntake?.updatedAt?.getTime()).toBe(beforeIntake?.updatedAt?.getTime());
+    expect(afterIntake?.dueAt?.getTime()).toBe(beforeIntake?.dueAt?.getTime());
     expect(afterTask?.updatedAt?.getTime()).toBe(beforeTask?.updatedAt?.getTime());
     expect(afterTask?.dueDate?.getTime()).toBe(beforeTask?.dueDate?.getTime());
   });
@@ -332,6 +343,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       userRole: 'LAWYER',
       scope: 'MY_WORK',
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const deadlines = extractDeadlines(agenda);
@@ -346,26 +358,34 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     expect(taskIds).not.toContain(`TASK:${ids.taskOther}`);
   });
 
-  test('ADMIN and PARTNER have global read access across MY_WORK', async () => {
+  test('ADMIN and PARTNER can access unrelated cases through canonical case authorization', async () => {
     const adminAgenda = await getWorkflowAgenda({
       userId: ids.admin,
       userRole: 'ADMIN',
-      scope: 'MY_WORK',
+      scope: 'CASE',
+      caseId: ids.caseA,
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const adminDeadlines = extractDeadlines(adminAgenda);
-    expect(adminDeadlines.length).toBeGreaterThanOrEqual(3);
+    expect(adminDeadlines.map((item: any) => item.id)).toEqual([
+      `CASE_INTAKE_DEADLINE:${ids.intake1}`,
+      `CASE_INTAKE_DEADLINE:${ids.intake2}`,
+      `CASE_DEADLINE:${ids.caseA}`,
+    ]);
 
     const partnerAgenda = await getWorkflowAgenda({
       userId: ids.partner,
       userRole: 'PARTNER',
-      scope: 'MY_WORK',
+      scope: 'CASE',
+      caseId: ids.caseA,
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const partnerDeadlines = extractDeadlines(partnerAgenda);
-    expect(partnerDeadlines.length).toBeGreaterThanOrEqual(3);
+    expect(partnerDeadlines.map((item: any) => item.id)).toEqual(adminDeadlines.map((item: any) => item.id));
   });
 
   test('Unauthorized CASE scope throws 404 error', async () => {
@@ -387,6 +407,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       userRole: 'LAWYER',
       scope: 'MY_WORK',
       status: 'OPEN',
+      ...agendaRange,
       db,
     });
     const completedAgenda = await getWorkflowAgenda({
@@ -394,6 +415,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       userRole: 'LAWYER',
       scope: 'MY_WORK',
       status: 'COMPLETED',
+      ...agendaRange,
       db,
     });
     const allAgenda = await getWorkflowAgenda({
@@ -401,6 +423,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       userRole: 'LAWYER',
       scope: 'MY_WORK',
       status: 'ALL',
+      ...agendaRange,
       db,
     });
     const openTasks = extractTasks(openAgenda);
@@ -420,6 +443,7 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       status: 'ALL',
       limit: 2,
       offset: 0,
+      ...agendaRange,
       db,
     });
     const agendaPage2 = await getWorkflowAgenda({
@@ -429,11 +453,25 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
       status: 'ALL',
       limit: 2,
       offset: 2,
+      ...agendaRange,
       db,
     });
-    const totalItems = extractDeadlines(agendaPage1).length + extractTasks(agendaPage1).length +
-      extractDeadlines(agendaPage2).length + extractTasks(agendaPage2).length;
-    expect(totalItems).toBeGreaterThanOrEqual(5);
+    const allAgenda = await getWorkflowAgenda({
+      userId: ids.lawyerA,
+      userRole: 'LAWYER',
+      scope: 'MY_WORK',
+      status: 'ALL',
+      ...agendaRange,
+      db,
+    });
+    const allIds = allAgenda.days.flatMap((day) => day.items).map((item) => item.id);
+    const page1Ids = agendaPage1.days.flatMap((day) => day.items).map((item) => item.id);
+    const page2Ids = agendaPage2.days.flatMap((day) => day.items).map((item) => item.id);
+    expect(page1Ids).toHaveLength(2);
+    expect(page2Ids).toHaveLength(2);
+    expect(page1Ids).toEqual(allIds.slice(0, 2));
+    expect(page2Ids).toEqual(allIds.slice(2, 4));
+    expect(new Set([...page1Ids, ...page2Ids]).size).toBe(4);
     expect(agendaPage1.pagination.hasMore).toBe(true);
   });
 
@@ -449,20 +487,4 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     })).rejects.toMatchObject({ statusCode: 400, code: 'INVALID_AGENDA_SCOPE' });
   });
 
-  test('Agenda request does not mutate any DB fields (updatedAt unchanged)', async () => {
-    const beforeCase = await db.case.findUnique({ where: { id: ids.caseA } });
-    const beforeIntake = await db.caseIntakeDeadline.findUnique({ where: { id: ids.intake1 } });
-    await getWorkflowAgenda({
-      userId: ids.lawyerA,
-      userRole: 'LAWYER',
-      scope: 'CASE',
-      caseId: ids.caseA,
-      status: 'OPEN',
-      db,
-    });
-    const afterCase = await db.case.findUnique({ where: { id: ids.caseA } });
-    const afterIntake = await db.caseIntakeDeadline.findUnique({ where: { id: ids.intake1 } });
-    expect(afterCase?.updatedAt?.getTime()).toBe(beforeCase?.updatedAt?.getTime());
-    expect(afterIntake?.updatedAt?.getTime()).toBe(beforeIntake?.updatedAt?.getTime());
-  });
 });

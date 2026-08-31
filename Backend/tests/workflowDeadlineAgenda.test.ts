@@ -405,7 +405,7 @@ describe('workflow deadlines agenda and notifications', () => {
     expect(response.body.availability.caseDeadlines).toBe(true);
   });
 
-  it('deduplicates identical timestamp case deadline when intake deadline exists', async () => {
+  it('preserves identical timestamp case and intake deadlines as independent items', async () => {
     mockPrismaService.case.findMany
       .mockResolvedValueOnce([
         {
@@ -467,8 +467,9 @@ describe('workflow deadlines agenda and notifications', () => {
 
     expect(response.status).toBe(200);
     const items = response.body.days.flatMap((day: any) => day.items);
-    // Only the rich intake deadline should be present, not the redundant case generic deadline
-    expect(items.filter((i: any) => i.caseId === 'case-1').length).toBe(1);
-    expect(items[0].id).toBe('CASE_INTAKE_DEADLINE:intake-1');
+    expect(items.filter((i: any) => i.caseId === 'case-1').map((i: any) => i.id)).toEqual([
+      'CASE_INTAKE_DEADLINE:intake-1',
+      'CASE_DEADLINE:case-1',
+    ]);
   });
 });
