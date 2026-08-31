@@ -26,7 +26,7 @@ describe('Phase 7B proposal contract', () => {
     expect(schema).toMatch(/finding\s+AssessmentFinding\s+@relation\(fields: \[findingId\], references: \[id\], onDelete: Restrict\)/);
     expect(schema).toMatch(/applicabilityAtProposal\s+RequirementApplicability\s+@relation\([^\n]*onDelete: Restrict\)/);
     expect(schema).toMatch(/case\s+Case\?\s+@relation\(fields: \[caseId\], references: \[id\], onDelete: Restrict\)/);
-    expect(schema).toMatch(/caseId\s+String\n\s+case\s+Case/);
+    expect(schema).toMatch(/caseId\s+String\?\r?\n\s+case\s+Case\?/);
   });
 
   it('keeps routes internal and omits new-case backend creation', () => {

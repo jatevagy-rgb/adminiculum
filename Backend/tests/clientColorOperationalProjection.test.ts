@@ -6,7 +6,8 @@ const prismaMock = {
   communicationAttachment: { findMany: jest.fn() },
   task: { findMany: jest.fn() },
   client: { findMany: jest.fn(), findUnique: jest.fn() },
-  case: { findUnique: jest.fn() },
+  case: { findUnique: jest.fn(), findMany: jest.fn() },
+  caseCollaborator: { findFirst: jest.fn() },
   timelineEvent: { create: jest.fn() },
   notification: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn(), findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
 };
@@ -85,6 +86,9 @@ describe('operational client color projections', () => {
     prismaMock.communicationAttachment.findMany.mockResolvedValue([]);
     prismaMock.task.findMany.mockResolvedValue([]);
     prismaMock.communication.count.mockResolvedValue(2);
+    prismaMock.case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'user-1' });
+    prismaMock.case.findMany.mockResolvedValue([]);
+    prismaMock.caseCollaborator.findFirst.mockResolvedValue(null);
   });
 
   it('projects assigned communication color in one batched client query and leaves unassigned neutral', async () => {
@@ -127,8 +131,9 @@ describe('operational client color projections', () => {
 
   it('refreshes the communication color after case reassignment updates the persisted client relation', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
-    let row = communicationRow('comm-reassigned', 'client-alpha');
-    prismaMock.case.findUnique.mockResolvedValue({ id: 'case-beta', caseNumber: 'CASE-BETA', clientId: 'client-beta' });
+    let row = communicationRow('comm-reassigned', null);
+    prismaMock.case.findUnique.mockResolvedValue({ id: 'case-beta', caseNumber: 'CASE-BETA', clientId: 'client-beta', assignedLawyerId: 'user-1', createdById: 'user-1' });
+    prismaMock.communication.findUnique.mockResolvedValue({ ...row, attachments: [], relatedTasks: [] });
     prismaMock.communication.update.mockImplementation(async ({ data }: { data: { caseId: string; clientId: string } }) => {
       row = { ...row, caseId: data.caseId, clientId: data.clientId };
       return row;

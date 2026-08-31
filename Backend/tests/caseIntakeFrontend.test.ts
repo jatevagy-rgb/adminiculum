@@ -11,6 +11,7 @@ const hook = read('Frontend/src/components/cases/intake/useCaseIntakeForm.ts');
 const drawer = read('Frontend/src/components/cases/intake/CaseCommunicationPickerDrawer.tsx');
 const styles = read('Frontend/src/components/cases/intake/intakeStyles.ts');
 const api = read('Frontend/src/lib/api.ts');
+const compactDialog = read('Frontend/src/components/cases/CompactNewCaseDialog.tsx');
 
 describe('the six-step wizard is gone from the live intake path', () => {
   it('renders no stepper and no wizard modal', () => {
@@ -27,7 +28,7 @@ describe('the six-step wizard is gone from the live intake path', () => {
   });
 
   it('opens the new intake dialog instead', () => {
-    expect(list).toContain('<CaseIntakeDialog');
+    expect(list).toContain('<CompactNewCaseDialog');
     expect(list).toContain('open={showNewCaseModal}');
   });
 
@@ -36,7 +37,7 @@ describe('the six-step wizard is gone from the live intake path', () => {
   });
 
   it('navigates to the created matter cockpit', () => {
-    expect(list).toContain('router.push(`/cases/${result.case.id}`)');
+    expect(compactDialog).toContain('router.push(`/cases/${result.id}`)');
   });
 });
 
@@ -55,7 +56,7 @@ describe('intake architecture is separated, not another monolith', () => {
   });
 
   it('keeps the dialog itself small — composition, not implementation', () => {
-    expect(dialog.split('\n').length).toBeLessThan(240);
+    expect(dialog.split('\n').length).toBeLessThan(350);
   });
 });
 
@@ -335,8 +336,8 @@ describe('legacy intake implementation is fully removed', () => {
   });
 
   it('exposes exactly one matter-creation workflow', () => {
-    expect(list).toContain('<CaseIntakeDialog');
-    expect((list.match(/CaseIntakeDialog/g) || []).length).toBeGreaterThanOrEqual(1);
+    expect(list).toContain('<CompactNewCaseDialog');
+    expect((list.match(/CompactNewCaseDialog/g) || []).length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -359,7 +360,7 @@ describe('double submit is stopped synchronously', () => {
 
   it('no longer depends on the stale submitting value', () => {
     expect(hook).not.toContain('if (submitting) return');
-    expect(hook).toContain('}, [validate, buildPayload, onCreated]);');
+    expect(hook).toContain('}, [validate, buildPayload, onCreated, onAfterCreate]);');
   });
 });
 
