@@ -23,13 +23,16 @@ import { DocumentLinkedWorkSummary } from "./DocumentLinkedWorkSummary";
 import { DocumentVersionIdentity } from "./DocumentVersionIdentity";
 import { DocumentTechnicalDetails } from "./DocumentTechnicalDetails";
 import { useState } from "react";
+import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 
 export function DocumentWorkspaceHeader({
-  documentId, selectedVersion, currentVersion, canEdit = true,
+  caseId, documentId, selectedVersion, selectedVersionId, currentVersion, canEdit = true,
   onDownload, onNewVersion, onReview,
 }: {
+  caseId: string;
   documentId: string;
   selectedVersion?: number | null;
+  selectedVersionId?: string | null;
   currentVersion?: number | null;
   canEdit?: boolean;
   onDownload?: () => void;
@@ -38,6 +41,7 @@ export function DocumentWorkspaceHeader({
 }) {
   const { card, view, loading, error, reload, setCard } = useDocumentWorkContext(documentId, { selectedVersion, currentVersion });
   const [editing, setEditing] = useState(false);
+  const [aiPromptOpen, setAiPromptOpen] = useState(false);
 
   const shell = "min-w-0 max-w-full rounded-lg border border-[rgba(22,32,26,0.12)] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(22,32,26,0.06)]";
 
@@ -68,6 +72,7 @@ export function DocumentWorkspaceHeader({
           {onDownload ? <AdminButton variant="primary" size="xs" onClick={onDownload}>Letöltés</AdminButton> : null}
           {onNewVersion ? <AdminButton variant="neutral" size="xs" onClick={onNewVersion}>Új verzió</AdminButton> : null}
           {onReview ? <AdminButton variant="neutral" size="xs" onClick={onReview}>Review</AdminButton> : null}
+          {canEdit ? <AdminButton variant="neutral" size="xs" onClick={() => setAiPromptOpen(true)}>AI elemzés előkészítése</AdminButton> : null}
           {canEdit ? <AdminButton variant="neutral" size="xs" onClick={() => setEditing(true)}>Munkakontextus</AdminButton> : null}
         </div>
       </div>
@@ -100,6 +105,14 @@ export function DocumentWorkspaceHeader({
           card={card}
           onClose={() => setEditing(false)}
           onSaved={(next) => { setCard(next); setEditing(false); }}
+        />
+      ) : null}
+      {aiPromptOpen ? (
+        <AIPromptPreparationModal
+          caseId={caseId}
+          documentId={documentId}
+          documentVersionId={selectedVersionId}
+          onClose={() => setAiPromptOpen(false)}
         />
       ) : null}
     </section>

@@ -293,6 +293,9 @@ app.use('/api/v1/contracts', reviewNotesRoutes);
 import legalAnalysesRoutes from './modules/legal-analyses/routes';
 app.use('/api/v1', legalAnalysesRoutes);
 
+import aiPromptRoutes from './modules/ai-prompts/routes';
+app.use('/api/v1/ai-prompts', aiPromptRoutes);
+
 import documentsRoutes from './modules/documents/routes';
 app.use('/api/v1/documents', documentsRoutes);
 

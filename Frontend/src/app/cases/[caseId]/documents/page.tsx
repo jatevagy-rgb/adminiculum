@@ -1574,8 +1574,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                            Filename, type and version internals live in its Részletek. */
                         <div className="mt-2">
                           <DocumentWorkspaceHeader
+                            caseId={canonicalCaseId}
                             documentId={selectedUploadedDocument.id}
                             selectedVersion={selectedVersion?.versionNumber ?? null}
+                            selectedVersionId={selectedVersion?.id ?? null}
                             currentVersion={versions.find((v) => v.isCurrent)?.versionNumber ?? selectedVersion?.versionNumber ?? null}
                             onDownload={selectedVersion ? () => void handleDownloadVersion(selectedVersion) : undefined}
                             onNewVersion={() => versionFileInputRef.current?.click()}

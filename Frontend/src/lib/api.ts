@@ -5760,3 +5760,95 @@ export async function createCaseWorkPackageTask(
     },
   );
 }
+
+export type AiPromptTemplate = {
+  id: string;
+  stableKey: string;
+  version: number;
+  title: string;
+  description: string | null;
+  legalWorkCategory: string;
+  caseTypeKeys: unknown;
+  workPackageModuleKeys: unknown;
+  taskTypes: unknown;
+  blocks: unknown;
+  requiredContext: unknown;
+  optionalContext: unknown;
+  outputInstructions: string;
+  verificationChecklist: unknown;
+  isActive: boolean;
+};
+
+export type AiPromptDraft = {
+  id: string;
+  caseId: string;
+  promptTemplateId: string;
+  promptTemplateStableKey: string;
+  promptTemplateVersion: number;
+  sourceDocumentIds: string[];
+  sourceDocumentVersionIds: string[];
+  sourceTaskId: string | null;
+  sourceWorkPackageItemId: string | null;
+  selectedContext: Record<string, unknown>;
+  anonymizedPreview: string;
+  externalPromptText: string;
+  importedResponse: string | null;
+  rehydratedResponse: string | null;
+  rehydrationWarnings: string[];
+  status: string;
+  reviewerNotes: string | null;
+  preparedById: string;
+  importedById: string | null;
+  verifiedById: string | null;
+  approvedById: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export async function listAiPromptTemplates(params: {
+  caseTypeKey?: string;
+  workPackageModuleKey?: string;
+  taskType?: string;
+} = {}): Promise<{ items: AiPromptTemplate[] }> {
+  const query = new URLSearchParams();
+  if (params.caseTypeKey) query.set("caseTypeKey", params.caseTypeKey);
+  if (params.workPackageModuleKey) query.set("workPackageModuleKey", params.workPackageModuleKey);
+  if (params.taskType) query.set("taskType", params.taskType);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return fetchApi<{ items: AiPromptTemplate[] }>(`/ai-prompts/templates${suffix}`);
+}
+
+export async function prepareAiPrompt(caseId: string, body: Record<string, unknown>): Promise<AiPromptDraft> {
+  return fetchApi<AiPromptDraft>(`/ai-prompts/cases/${encodeURIComponent(caseId)}/prepare`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function importAiPromptResponse(draftId: string, importedResponse: string): Promise<AiPromptDraft> {
+  return fetchApi<AiPromptDraft>(`/ai-prompts/drafts/${encodeURIComponent(draftId)}/import`, {
+    method: "POST",
+    body: JSON.stringify({ importedResponse }),
+  });
+}
+
+export async function verifyAiPromptDraft(draftId: string, notes?: string): Promise<AiPromptDraft> {
+  return fetchApi<AiPromptDraft>(`/ai-prompts/drafts/${encodeURIComponent(draftId)}/verify`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  });
+}
+
+export async function approveAiPromptDraft(draftId: string, notes?: string): Promise<AiPromptDraft> {
+  return fetchApi<AiPromptDraft>(`/ai-prompts/drafts/${encodeURIComponent(draftId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  });
+}
+
+export async function returnAiPromptDraft(draftId: string, notes?: string): Promise<AiPromptDraft> {
+  return fetchApi<AiPromptDraft>(`/ai-prompts/drafts/${encodeURIComponent(draftId)}/return`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  });
+}

@@ -21,6 +21,7 @@ import { AdminButton } from "@/components/adminiculum/ui";
 import { ClientAccent } from "@/components/clients/ClientAccent";
 import { DocumentWorkCard } from "@/components/documents/DocumentWorkCard";
 import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
+import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
@@ -62,6 +63,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [modal, setModal] = useState<ModalState>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [aiPromptOpen, setAiPromptOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -265,6 +267,9 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       />
 
       {/* ---- 2c. Work package operational block ----------------------------- */}
+      <div className="flex justify-end">
+        <AdminButton variant="neutral" size="xs" onClick={() => setAiPromptOpen(true)}>AI előkészítés</AdminButton>
+      </div>
       <CaseWorkPackagePanel
         caseId={caseId}
         onTaskCreated={() => void refresh()}
@@ -476,6 +481,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       {modal?.type === "doc-upload" ? <DocumentUploadModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
+      {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} onClose={() => setAiPromptOpen(false)} /> : null}
     </div>
   );
 }
