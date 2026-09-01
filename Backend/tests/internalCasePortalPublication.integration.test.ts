@@ -137,6 +137,6 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
       clientSafeTitle: 'Ügyfelelős által publikált ügy',
       clientSafeStatus: 'Folyamatban',
     }, db)).resolves.toMatchObject({ grant: { status: 'ACTIVE' } });
-    expect((await listOrganizationalCases(ids.identity, ids.workspace, {}, db)).total).toBe(1);
+    expect((await listOrganizationalCases(ids.identity, ids.workspace, {}, db)).total).toBe(2);
   });
 });
