@@ -9,6 +9,7 @@ import {
   type OrgPersonDTO,
   type ResponsibilityGaps,
 } from "@/lib/clientOrganizationApi";
+import { clientWorkspaceApi, formatWorkspaceDate, type CompanyWorkspaceOverview } from "@/lib/clientWorkspaceApi";
 
 const pill = "rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-xs text-[var(--adm-text-muted)]";
 
@@ -44,6 +45,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
   const [groups, setGroups] = useState<OrgGroupDTO[]>([]);
   const [persons, setPersons] = useState<OrgPersonDTO[]>([]);
   const [gaps, setGaps] = useState<ResponsibilityGaps | null>(null);
+  const [overview, setOverview] = useState<CompanyWorkspaceOverview | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<OrgPersonDTO | null>(null);
   const [query, setQuery] = useState("");
@@ -57,11 +59,13 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
     setLoading(true);
     setError(null);
     try {
-      const [groupsResult, personsResult, gapsResult] = await Promise.all([
+      const [overviewResult, groupsResult, personsResult, gapsResult] = await Promise.all([
+        clientWorkspaceApi.getOverview(clientId),
         clientOrganizationApi.listGroups(clientId),
         clientOrganizationApi.listPersons(clientId),
         clientOrganizationApi.responsibilityGaps(clientId),
       ]);
+      setOverview(overviewResult);
       setGroups(groupsResult.items);
       setPersons(personsResult.items);
       setGaps(gapsResult);
@@ -181,6 +185,22 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
 
       {!loading && !error ? (
         <>
+          <Section title="Szervezeti adatok">
+            {overview?.profile?.summary ? <p className="text-sm text-[var(--adm-text)]">{overview.profile.summary}</p> : null}
+            {overview?.factGroups.length ? (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {overview.factGroups.map((group) => (
+                  <div key={group.key} className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--adm-text-muted)]">{group.label}</h3>
+                    <ul className="mt-2 space-y-1 text-sm text-[var(--adm-text)]">
+                      {group.facts.filter((fact) => fact.isCurrent).map((fact) => <li key={fact.id}>{fact.type}: {fact.value}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            ) : !overview?.profile ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített szervezeti adat.</p> : null}
+          </Section>
+
           <Section title="Szervezeti hierarchia" empty={!groups.length && !ungrouped.length}>
             <div className="space-y-5">
               {roots.map((root) => renderGroup(root))}
@@ -209,6 +229,16 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
           </Section> : null}
 
           {hasGaps ? <Section title="Felelősségi hiányosságok"><div className="space-y-1 text-sm text-[var(--adm-text-muted)]">{gaps?.contractsWithoutOwner.map((item) => <p key={item.id}>Szerződés felelős nélkül: {item.title}</p>)}{gaps?.obligationsWithoutOwner.map((item) => <p key={item.id}>Kötelezettség felelős nélkül: {item.title}</p>)}{gaps?.ownerPersonsInactive.map((item) => <p key={item.id}>Inaktív felelős: {item.name}</p>)}</div></Section> : null}
+          <Section title="Ügyek" empty={!overview?.cases.length}>
+            <ul className="space-y-2">
+              {overview?.cases.map((caseRecord) => (
+                <li key={caseRecord.id} className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
+                  <a href={`/clients/${encodeURIComponent(clientId)}/cases?caseId=${encodeURIComponent(caseRecord.id)}`} className="font-semibold text-[var(--adm-text)] hover:underline">{caseRecord.title}</a>
+                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{caseRecord.caseNumber} · {caseRecord.status}{caseRecord.responsibleLawyerName ? ` · Felelős: ${caseRecord.responsibleLawyerName}` : ''}{caseRecord.deadline ? ` · Határidő: ${formatWorkspaceDate(caseRecord.deadline)}` : ''}</p>
+                </li>
+              ))}
+            </ul>
+          </Section>
         </>
       ) : null}
     </div>

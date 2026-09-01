@@ -19,7 +19,7 @@ export default function OrganizationPage() {
     if (!clientId) return;
     void Promise.all([getClient(clientId), listAdminWorkspaces(clientId).catch(() => ({ items: [] }))]).then(([clientResult, workspaces]) => {
       setClient(clientResult);
-      setOrganizationMode(workspaces.items.some((item) => item.mode !== "INDIVIDUAL" && item.status !== "ARCHIVED"));
+      setOrganizationMode(workspaces.items.some((item) => item.mode === "ORGANIZATION" && item.status !== "ARCHIVED"));
     }).catch(() => setError(true));
   }, [clientId]);
 

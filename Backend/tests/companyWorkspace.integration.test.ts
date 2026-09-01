@@ -158,6 +158,13 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
   it('projects the coherent workspace overview for an admin', async () => {
     const view = await getWorkspaceOverview(admin, clientA, db);
     expect(view.client.id).toBe(clientA);
+    expect(view.cases).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: caseA,
+        title: 'Workspace Case A',
+        responsibleLawyerName: 'Workspace Lawyer',
+      }),
+    ]));
     expect(view.profile.summary).toContain('Családi');
     // Facts are grouped by category (not a raw flat table).
     const groupLabels = view.factGroups.map((g: any) => g.label);
@@ -282,6 +289,8 @@ d('Company workspace (Phase 4) (PostgreSQL)', () => {
     expect(view.contracts.some((c: any) => c.id === contractB)).toBe(false);
     expect(view.obligations.some((o: any) => o.id === obligationB)).toBe(false);
     expect(view.initiatives.some((i: any) => i.id === initiativeB)).toBe(false);
+    expect(view.cases.some((caseRecord: any) => caseRecord.id === caseA)).toBe(true);
+    expect(JSON.stringify(view)).not.toContain('B személy');
   });
 
   it('masks a corrupted cross-client owner relation in the read projection', async () => {

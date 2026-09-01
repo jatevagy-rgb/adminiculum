@@ -101,6 +101,15 @@ export interface WorkspaceGapItem {
   title: string;
 }
 
+export interface WorkspaceCase {
+  id: string;
+  caseNumber: string;
+  title: string;
+  status: string;
+  deadline: string | null;
+  responsibleLawyerName: string | null;
+}
+
 // Attention codes represent things that genuinely need the workforce's attention.
 // "Active initiatives" is normal, expected state (shown in the development plan
 // section), not a warning — it is intentionally NOT an attention code.
@@ -112,7 +121,7 @@ export interface WorkspaceAttentionItem {
 export async function getWorkspaceOverview(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma) {
   await assertClientReadAccess(actor, clientId, prisma);
 
-  const [client, profile, facts, assessments, contracts, openObligations, groups, persons, initiatives, milestones] = await Promise.all([
+  const [client, profile, facts, assessments, contracts, openObligations, groups, persons, initiatives, milestones, cases] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } }),
     prisma.clientOperatingProfile.findUnique({ where: { clientId } }),
     prisma.clientFact.findMany({ where: { clientId }, orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }], include: { factDefinition: { select: { valueType: true } } } }),
@@ -160,6 +169,18 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
     prisma.companyMilestone.findMany({
       where: { clientId },
       orderBy: [{ targetDate: 'asc' }, { milestoneDate: 'desc' }, { createdAt: 'desc' }],
+    }),
+    prisma.case.findMany({
+      where: { clientId },
+      orderBy: [{ deadline: 'asc' }, { updatedAt: 'desc' }],
+      select: {
+        id: true,
+        caseNumber: true,
+        title: true,
+        status: true,
+        deadline: true,
+        assignedLawyer: { select: { name: true } },
+      },
     }),
   ]);
 
@@ -360,6 +381,14 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
     gaps,
     initiatives: initiativesDto,
     milestones: milestonesDto,
+    cases: cases.map((caseRecord): WorkspaceCase => ({
+      id: caseRecord.id,
+      caseNumber: caseRecord.caseNumber,
+      title: caseRecord.title,
+      status: String(caseRecord.status),
+      deadline: iso(caseRecord.deadline),
+      responsibleLawyerName: caseRecord.assignedLawyer?.name ?? null,
+    })),
     attention,
   };
   assertClientSafe(dto);
