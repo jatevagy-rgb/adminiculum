@@ -128,6 +128,9 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
         { id: ids.otherCase, caseNumber: `PROMPT-X-${suffix.slice(0, 8)}`, title: 'Other prompt case', caseType: 'CONTRACT_REVIEW', clientId: ids.otherClient, createdById: ids.admin, assignedLawyerId: ids.admin },
       ],
     });
+    await db.caseCollaborator.create({
+      data: { caseId: ids.case, userId: ids.junior, role: 'REVIEWER' },
+    });
     await db.document.createMany({
       data: [
         {
