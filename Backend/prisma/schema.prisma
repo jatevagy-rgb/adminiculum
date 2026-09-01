@@ -3596,6 +3596,77 @@ model LawyerHandoffPackage {
   @@map("lawyer_handoff_packages")
 }
 
+enum AiPromptDraftStatus {
+  PREPARED
+  AI_DRAFT
+  JUNIOR_VERIFIED
+  LAWYER_APPROVED
+  RETURNED_FOR_CORRECTION
+  REJECTED
+}
+
+model AiPromptTemplateVersion {
+  id                    String   @id @default(uuid())
+  stableKey             String
+  version               Int
+  title                String
+  description          String?
+  legalWorkCategory    String
+  caseTypeKeys         Json     @default("[]")
+  workPackageModuleKeys Json    @default("[]")
+  taskTypes            Json     @default("[]")
+  blocks               Json
+  requiredContext      Json     @default("[]")
+  optionalContext      Json     @default("[]")
+  outputInstructions   String
+  verificationChecklist Json    @default("[]")
+  isActive             Boolean  @default(true)
+  createdById          String?
+  createdAt            DateTime @default(now())
+
+  @@unique([stableKey, version])
+  @@index([stableKey, isActive])
+  @@index([legalWorkCategory, isActive])
+  @@map("ai_prompt_template_versions")
+}
+
+model AiPromptDraft {
+  id                         String            @id @default(uuid())
+  caseId                     String
+  promptTemplateId           String
+  promptTemplateStableKey   String
+  promptTemplateVersion      Int
+  promptTemplateSnapshot     Json
+  sourceDocumentIds          Json              @default("[]")
+  sourceDocumentVersionIds   Json              @default("[]")
+  sourceTaskId               String?
+  sourceWorkPackageItemId   String?
+  selectedContext            Json
+  anonymizedPreview          String
+  externalPromptText         String
+  rehydrationMap             Json
+  anonymizationSnapshot      Json
+  importedResponse           String?
+  rehydratedResponse         String?
+  rehydrationWarnings        Json              @default("[]")
+  status                     AiPromptDraftStatus @default(PREPARED)
+  reviewerNotes              String?
+  preparedById               String
+  importedById               String?
+  verifiedById               String?
+  verifiedAt                 DateTime?
+  approvedById               String?
+  approvedAt                 DateTime?
+  createdAt                  DateTime          @default(now())
+  updatedAt                  DateTime          @updatedAt
+
+  @@index([caseId, status])
+  @@index([promptTemplateStableKey, promptTemplateVersion])
+  @@index([sourceTaskId])
+  @@index([sourceWorkPackageItemId])
+  @@map("ai_prompt_drafts")
+}
+
 // ============================================================================
 // Structured document comparison (STRUCTURED-DOC-COMPARISON-1)
 // Additive only. A comparison is always between two immutable DocumentVersion
