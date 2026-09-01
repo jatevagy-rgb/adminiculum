@@ -193,6 +193,7 @@ describe('internal portal-admin UI', () => {
     const src = caseGrant();
     assert.match(src, /createIdentityGrant/);
     assert.match(src, /case-identity-grant/);
+    assert.match(src, /const options = clientId \? scoped : memberships/);
     assert.doesNotMatch(src, /clientUserId\s*[:=]/);
   });
 

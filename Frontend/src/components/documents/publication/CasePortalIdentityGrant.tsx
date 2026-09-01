@@ -40,7 +40,7 @@ export function CasePortalIdentityGrant({ caseId, clientId }: { caseId: string; 
     () => memberships.filter((m) => !clientId || m.clientId === clientId),
     [memberships, clientId],
   );
-  const options = scoped.length ? scoped : memberships;
+  const options = clientId ? scoped : memberships;
   const toggle = (p: string) => setPermissions((prev) => prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]);
 
   const grant = useCallback(async () => {

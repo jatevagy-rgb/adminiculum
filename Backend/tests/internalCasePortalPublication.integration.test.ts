@@ -14,6 +14,8 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
   let db: PrismaClient;
   const ids = {
     admin: crypto.randomUUID(),
+    lawyer: crypto.randomUUID(),
+    outsider: crypto.randomUUID(),
     client: crypto.randomUUID(),
     otherClient: crypto.randomUUID(),
     workspace: crypto.randomUUID(),
@@ -31,7 +33,11 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.CLIENT_PORTAL_READ_ENABLED = 'true';
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
-    await db.user.create({ data: { id: ids.admin, email: `publication-${ids.admin}@t.io`, name: 'Portal publisher', role: 'ADMIN', status: 'ACTIVE' } as never });
+    await db.user.createMany({ data: [
+      { id: ids.admin, email: `publication-${ids.admin}@t.io`, name: 'Portal publisher', role: 'ADMIN', status: 'ACTIVE' },
+      { id: ids.lawyer, email: `publication-${ids.lawyer}@t.io`, name: 'Case lawyer', role: 'LAWYER', status: 'ACTIVE' },
+      { id: ids.outsider, email: `publication-${ids.outsider}@t.io`, name: 'Unrelated lawyer', role: 'LAWYER', status: 'ACTIVE' },
+    ] as never });
     await db.client.createMany({ data: [
       { id: ids.client, name: `Publication client ${ids.client}` },
       { id: ids.otherClient, name: `Other publication client ${ids.otherClient}` },
@@ -49,7 +55,7 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
       { id: ids.otherMembership, clientPortalIdentityId: ids.otherIdentity, workspaceId: ids.otherWorkspace, status: 'ACTIVE', approvedAt: new Date(), approvedById: ids.admin },
     ] });
     await db.case.createMany({ data: [
-      { id: ids.privateCase, caseNumber: `PRIVATE-${ids.privateCase.slice(0, 8)}`, title: 'Strictly internal private case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin },
+      { id: ids.privateCase, caseNumber: `PRIVATE-${ids.privateCase.slice(0, 8)}`, title: 'Strictly internal private case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.lawyer },
       { id: ids.publishedCase, caseNumber: `PUBLISH-${ids.publishedCase.slice(0, 8)}`, title: 'Strictly internal publication source', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin },
     ] } as never);
   });
@@ -65,7 +71,7 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
     await db.clientPortalIdentity.deleteMany({ where: { id: { in: [ids.identity, ids.otherIdentity] } } });
     await db.clientPortalWorkspace.deleteMany({ where: { id: { in: [ids.workspace, ids.otherWorkspace] } } });
     await db.client.deleteMany({ where: { id: { in: [ids.client, ids.otherClient] } } });
-    await db.user.deleteMany({ where: { id: ids.admin } });
+    await db.user.deleteMany({ where: { id: { in: [ids.admin, ids.lawyer, ids.outsider] } } });
     await db.$disconnect();
   });
 
@@ -119,6 +125,18 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
       clientSafeTitle: 'Kereszt ügyfél',
       clientSafeStatus: 'Folyamatban',
     }, db)).rejects.toMatchObject({ code: 'CASE_CLIENT_MISMATCH' });
+    await expect(publishInternalCaseToPortal({ userId: ids.outsider, role: 'LAWYER' }, ids.privateCase, {
+      workspaceId: ids.workspace,
+      workspaceMembershipId: ids.membership,
+      clientSafeTitle: 'Nincs ügyhozzáférés',
+      clientSafeStatus: 'Folyamatban',
+    }, db)).rejects.toMatchObject({ code: 'CASE_ACCESS_FORBIDDEN' });
+    await expect(publishInternalCaseToPortal({ userId: ids.lawyer, role: 'LAWYER' }, ids.privateCase, {
+      workspaceId: ids.workspace,
+      workspaceMembershipId: ids.membership,
+      clientSafeTitle: 'Ügyfelelős által publikált ügy',
+      clientSafeStatus: 'Folyamatban',
+    }, db)).resolves.toMatchObject({ grant: { status: 'ACTIVE' } });
     expect((await listOrganizationalCases(ids.identity, ids.workspace, {}, db)).total).toBe(1);
   });
 });
