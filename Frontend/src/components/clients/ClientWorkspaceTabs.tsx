@@ -4,7 +4,7 @@ import Link from "next/link";
 
 type ClientWorkspaceTabsProps = {
   clientId: string;
-  active?: "overview" | "organization" | "portal" | "cases" | "advanced";
+  active?: "overview" | "cases" | "organization" | "company-workspace" | "portal" | "advanced";
   organizationMode?: boolean;
 };
 
@@ -39,9 +39,8 @@ export function ClientWorkspaceTabs({ clientId, active = "overview", organizatio
             ••• Haladó
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-52 rounded border border-[var(--adm-border)] bg-white p-2 shadow-lg">
-               <Link className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]" href={`/clients/${encodeURIComponent(clientId)}/vallalati-mukodes`}>Működés és megfelelés</Link>
                <Link className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]" href={`/clients/${encodeURIComponent(clientId)}/workgroups`}>Munkacsoportok</Link>
-               <Link className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]" href={`/clients/${encodeURIComponent(clientId)}#house-style`}>Dokumentumstílus</Link>
+               <Link className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]" href={`/clients/${encodeURIComponent(clientId)}#house-style`}>Dokumentumst�lus</Link>
           </div>
         </details>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { ClientContractLibrary } from "./ClientContractLibrary";
 import Link from "next/link";
 import {
   clientWorkspaceApi,

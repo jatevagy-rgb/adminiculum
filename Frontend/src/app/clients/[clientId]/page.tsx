@@ -22,9 +22,9 @@ import {
 } from "@/lib/api";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
-import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFoundation";
-import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
-import { ClientOrganization } from "@/components/clients/ClientOrganization";
+
+
+
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
@@ -359,9 +359,7 @@ function ClientDetailContent() {
                 <Link href={`/clients/${clientId}/vallalati-mukodes`} className="adm-link-button px-4 py-2 text-xs">
                   Vállalati működés
                 </Link>
-                <Link href={`/clients/${clientId}/szervezet`} className="adm-link-button px-4 py-2 text-xs">
-                  Szervezet
-                </Link>
+                
                 <button onClick={openEditClient} className="adm-link-button px-4 py-2 text-xs">
                   Ügyfél szerkesztése
                 </button>
@@ -525,17 +523,11 @@ function ClientDetailContent() {
             </div>
           </section>
 
-          <section id="vallalati-mukodes" className="mt-4 scroll-mt-24 border-t border-[var(--adm-border)] pt-3">
-            <ClientCompanyFoundation clientId={clientId} />
-          </section>
+          
 
-          <section id="szerzodes-tar" className="mt-4 scroll-mt-24 border-t border-[var(--adm-border)] pt-3">
-            <ClientContractLibrary clientId={clientId} />
-          </section>
+          
 
-          <section id="szervezet" className="mt-4 scroll-mt-24 border-t border-[var(--adm-border)] pt-3">
-            <ClientOrganization clientId={clientId} />
-          </section>
+          
         </div>
       </aside>
       </div>

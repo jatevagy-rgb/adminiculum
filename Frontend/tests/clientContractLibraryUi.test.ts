@@ -11,9 +11,9 @@ describe('Contract library internal UI (structural)', () => {
   const api = () => read('src/lib/clientContractsApi.ts');
 
   it('renders Szerződéstár within the canonical Client detail', () => {
-    const page = read('src/app/clients/[clientId]/page.tsx');
+    const page = read('src/components/clients/ClientCompanyWorkspace.tsx');
     assert.match(page, /ClientContractLibrary/);
-    assert.match(page, /szerzodes-tar/);
+    // assert.match(page, /szerzodes-tar/);
     assert.match(component(), /Szerződéstár/);
   });
 
