@@ -69,7 +69,8 @@ describe('Inline actions wired into the workspace', () => {
 
   it('quick status change uses the lifecycle endpoints', () => {
     expect(overview).toContain('startTask(task.id)');
-    expect(overview).toContain('submitTask(task.id)');
+    expect(overview).toContain('TaskSubmissionWorkspace');
+    expect(overview).toContain('Review megnyitása');
   });
 
   it('keeps discreet secondary links into the compatibility routes', () => {
