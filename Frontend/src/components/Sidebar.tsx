@@ -84,7 +84,7 @@ const routeMap: Record<string, string> = {
   tasks: "/tasks",
   reviews: "/reviews",
   "documents-compare": "/documents/compare",
-  notifications: "/notifications",
+  notifications: "/communications",
   communications: "/communications",
   "time-entries": "/time-entries",
   "timesheet-presets": "/timesheet-presets",

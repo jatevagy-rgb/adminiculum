@@ -31,8 +31,8 @@ export const WORKLOAD_SUMMARY_CARDS: readonly WorkloadSummaryCardDef[] = [
   { valueKey: "todayTasks", label: "Mai teendők", emptyLabel: "Nincs mai teendő", href: "/deadlines?view=day", tone: "amber" },
   { valueKey: "deadlines", label: "Közeli határidők", emptyLabel: "Nincs közeli határidő", href: "/deadlines", tone: "gold" },
   { valueKey: "reviews", label: "Review tételek", emptyLabel: "Nincs review tétel", href: "/reviews", tone: "navy" },
-  { valueKey: "externalComms", label: "Külső kommunikáció", emptyLabel: "Nincs külső tétel", href: "/notifications?view=external", tone: "terracotta" },
-  { valueKey: "internalComms", label: "Belső kommunikáció", emptyLabel: "Nincs belső tétel", href: "/notifications?view=internal", tone: "green" },
+  { valueKey: "externalComms", label: "Külső kommunikáció", emptyLabel: "Nincs külső tétel", href: "/communications?view=external", tone: "terracotta" },
+  { valueKey: "internalComms", label: "Belső kommunikáció", emptyLabel: "Nincs belső tétel", href: "/communications?view=internal", tone: "green" },
 ];
 
 // Whole-card background carries the semantic color. Verbatim from a948839.

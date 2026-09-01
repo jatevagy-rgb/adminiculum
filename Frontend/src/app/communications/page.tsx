@@ -1,14 +1,12 @@
-import CommunicationsOverview from "@/components/communications/CommunicationsOverview";
-import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+"use client";
 
-export const metadata = {
-  title: "Ügykommunikáció",
-};
+import CommunicationWorkspace from "@/components/communications/CommunicationWorkspace";
+import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 
 export default function CommunicationsPage() {
   return (
     <AuthenticatedApp section="communications">
-      <CommunicationsOverview />
+      <CommunicationWorkspace />
     </AuthenticatedApp>
   );
 }

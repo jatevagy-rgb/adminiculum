@@ -50,7 +50,7 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
             <span>Ügy, ügyfél, irat keresése</span>
           </Link>
           <Link
-            href="/notifications"
+            href="/communications"
             className={`relative h-9 w-9 rounded-[var(--adm-radius-sm)] border grid place-items-center transition-colors ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1]" : "border-[var(--adm-border)] bg-[var(--adm-surface-raised)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"}`}
             title="Értesítések"
           >

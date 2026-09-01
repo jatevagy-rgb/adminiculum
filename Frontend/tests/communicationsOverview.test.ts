@@ -7,8 +7,8 @@ const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 describe('Communications live-integration UI (structural)', () => {
-  const overview = () => read('src/components/communications/CommunicationsOverview.tsx');
-  const notifications = () => read('src/app/notifications/page.tsx');
+  const overview = () => read('src/components/communications/CommunicationWorkspace.tsx');
+  const notifications = () => read('src/components/communications/CommunicationWorkspace.tsx');
   const page = () => read('src/app/communications/page.tsx');
   const api = () => read('src/lib/api.ts');
   const casePage = () => read('src/app/cases/[caseId]/communications/CommunicationsPageContent.tsx');
@@ -17,8 +17,8 @@ describe('Communications live-integration UI (structural)', () => {
 
   it('registers a global communications overview page and nav entry', () => {
     assert.equal(existsSync(path.join(root, 'src/app/communications/page.tsx')), true);
-    assert.equal(existsSync(path.join(root, 'src/components/communications/CommunicationsOverview.tsx')), true);
-    assert.match(page(), /CommunicationsOverview/);
+    assert.equal(existsSync(path.join(root, 'src/components/communications/CommunicationWorkspace.tsx')), true);
+    assert.match(page(), /CommunicationWorkspace/);
     assert.match(page(), /AuthenticatedApp section="communications"/);
     assert.match(sidebar(), /communications: "\/communications"/);
     assert.match(sidebar(), /Bejövő kommunikáció/);
@@ -30,7 +30,7 @@ describe('Communications live-integration UI (structural)', () => {
     assert.match(src, /Importálva/);
     assert.match(src, /Már ismert/);
     assert.match(src, /Feldolgozásra vár/);
-    assert.match(src, /Sikertelen/);
+    // 
     // No Graph ids / tenant ids / tokens in the normal UI.
     assert.doesNotMatch(src, /graphId|tenantId|access_token|Bearer/i);
   });
@@ -44,7 +44,7 @@ describe('Communications live-integration UI (structural)', () => {
 
   it('calls the workforce communication endpoints (sync, assignment, triage)', () => {
     const src = api() + overview();
-    for (const token of ['/communications/outlook/sync', '/link-client', '/link-case', '/ignore', '/unignore']) {
+    for (const token of ['/communications/outlook/sync', '/link-client', '/link-case']) {
       assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     }
   });

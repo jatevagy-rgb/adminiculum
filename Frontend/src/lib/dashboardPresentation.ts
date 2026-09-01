@@ -43,7 +43,7 @@ export function getDashboardPrimaryActions(activeCaseId?: string | null): Dashbo
     {
       label: "Kommunikáció megnyitása",
       description: "Beérkező és kimenő tételek áttekintése",
-      href: "/notifications",
+      href: "/communications",
       icon: "communication",
     },
   ];
