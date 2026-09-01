@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, requireRole } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseManageAccess, requireCaseReadAccess } from '../cases/authorization';
 import {
@@ -50,7 +50,7 @@ router.get('/templates', async (req, res) => {
   }
 });
 
-router.post('/templates', async (req, res) => {
+router.post('/templates', requireRole('ADMIN', 'PARTNER'), async (req, res) => {
   try {
     res.status(201).json(await createPromptTemplateVersion({
       ...req.body,
