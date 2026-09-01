@@ -33,6 +33,7 @@ import {
   createCommunication,
   createCaseHandoffPackage,
   ApiError,
+  safeUploadErrorMessage,
   getAnonymousDocumentsBySource,
   getCaseClientHouseStyle,
   listDocumentLegalAnalyses,
@@ -650,21 +651,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      const fallback = 'Dokumentum feltöltése sikertelen. Kérjük, próbáld újra később.';
-      if (err instanceof ApiError) {
-        if (err.status === 502) {
-          setActionResult({
-            type: 'error',
-            message: 'A dokumentumtár jelenleg nem érhető el. Próbáld újra később.',
-          });
-        } else if (err.status === 400 || err.status === 404 || err.status === 409) {
-          setActionResult({ type: 'error', message: 'A dokumentum a megadott adatokkal nem tölthető fel.' });
-        } else {
-          setActionResult({ type: 'error', message: fallback });
-        }
-      } else {
-        setActionResult({ type: 'error', message: fallback });
-      }
+      setActionResult({ type: 'error', message: safeUploadErrorMessage(err) });
     } finally {
       setIsUploading(false);
       setUploadPhase(null);

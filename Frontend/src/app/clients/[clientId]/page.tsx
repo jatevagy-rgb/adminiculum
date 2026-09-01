@@ -2,23 +2,17 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import {
   getClient,
   getCases,
-  createCase,
   updateClient,
   getCaseDocuments,
-  uploadCaseDocument,
   getClientCommunicationSummary,
-  getUsers,
-  addCaseCollaborator,
   type Client,
   type CaseListItem,
-  type CreateCaseData,
   type DocumentItem,
   type ClientCommunicationSummaryItem,
-  type User,
 } from "@/lib/api";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
@@ -31,30 +25,6 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
-
-type InitialDocumentState = {
-  id: string;
-  file: File;
-  status: "QUEUED" | "UPLOADING" | "UPLOADED" | "FAILED";
-  message?: string;
-};
-
-const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader();
-  reader.onload = () => {
-    const result = typeof reader.result === "string" ? reader.result : "";
-    resolve(result.includes(",") ? result.split(",").pop() || "" : result);
-  };
-  reader.onerror = () => reject(reader.error || new Error("File read failed"));
-  reader.readAsDataURL(file);
-});
-
-const WORKFLOW_TEMPLATES: ReadonlyArray<{
-  key: string;
-  label: string;
-  description: string;
-  steps: string[];
-}> = [];
 
 const formatDate = (value?: string) => {
   if (!value) return "—";
@@ -89,7 +59,6 @@ export default function ClientDetailPage() {
 
 function ClientDetailContent() {
   const params = useParams();
-  const router = useRouter();
   const clientId = (params?.clientId as string) || "";
 
   const [client, setClient] = useState<Client | null>(null);
@@ -111,21 +80,6 @@ function ClientDetailContent() {
   };
 
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
-  const [caseFormData, setCaseFormData] = useState<CreateCaseData>({
-    clientName: "",
-    clientId: "",
-    matterType: "OTHER",
-    priority: "MEDIUM",
-    description: "",
-    deadline: "",
-    workflowTemplateKey: "SIMPLE",
-  });
-  const [workflowAssignees, setWorkflowAssignees] = useState<Record<string, string>>({});
-  const [initialDocuments, setInitialDocuments] = useState<InitialDocumentState[]>([]);
-  const [selectedCollaboratorIds, setSelectedCollaboratorIds] = useState<string[]>([]);
-  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
-  const [isSavingCase, setIsSavingCase] = useState(false);
-  const [caseCreateError, setCaseCreateError] = useState<string | null>(null);
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFormData, setEditFormData] = useState<Partial<Client>>({});
@@ -158,8 +112,6 @@ function ClientDetailContent() {
       setPortalWorkspace(portalWorkspaces.items.find((item) => item.status !== "ARCHIVED") || portalWorkspaces.items[0] || null);
       setCases(relatedCases);
 
-      setCaseFormData((prev) => ({ ...prev, clientName: clientData.name, clientId: clientData.id }));
-
       const documentsByCase = await Promise.all(
         relatedCases.map(async (item) => {
           const docs = await getCaseDocuments(item.id).catch(() => [] as DocumentItem[]);
@@ -182,76 +134,6 @@ function ClientDetailContent() {
   useEffect(() => {
     loadClientData();
   }, [loadClientData]);
-
-  // Load available users when the new case modal opens
-  useEffect(() => {
-    if (showNewCaseModal) {
-      getUsers()
-        .then(setAvailableUsers)
-        .catch((err) => console.warn("Failed to load users:", err));
-    }
-  }, [showNewCaseModal]);
-
-  const handleCreateCase = async () => {
-    if (!caseFormData.clientName?.trim() || !caseFormData.matterType) return;
-    setIsSavingCase(true);
-    setCaseCreateError(null);
-    try {
-      const created = await createCase({
-        clientName: caseFormData.clientName,
-        clientId: client?.id,
-        matterType: caseFormData.matterType,
-        priority: caseFormData.priority,
-        description: caseFormData.description,
-        deadline: caseFormData.deadline || undefined,
-        workflowTemplateKey: caseFormData.workflowTemplateKey || "SIMPLE",
-        workflowAssignees,
-      });
-      for (const queued of initialDocuments) {
-        setInitialDocuments((current) => current.map((item) => item.id === queued.id ? { ...item, status: "UPLOADING", message: "Feltöltés folyamatban..." } : item));
-        try {
-          const fileContentBase64 = await fileToBase64(queued.file);
-          await uploadCaseDocument({
-            caseId: created.id,
-            fileName: queued.file.name,
-            fileContentBase64,
-            mimeType: queued.file.type || undefined,
-            documentType: "OTHER",
-          });
-          setInitialDocuments((current) => current.map((item) => item.id === queued.id ? { ...item, status: "UPLOADED", message: "Feltöltve és rögzítve." } : item));
-        } catch (uploadError) {
-          setInitialDocuments((current) => current.map((item) => item.id === queued.id ? { ...item, status: "FAILED", message: uploadError instanceof Error ? uploadError.message : "A dokumentum feltöltése nem sikerült." } : item));
-          throw new Error("Az ügy létrejött, de legalább egy induló dokumentum feltöltése nem sikerült. Próbálja újra az ügy dokumentumai között.");
-        }
-      }
-      // Attach selected collaborators after case is created
-      for (const userId of selectedCollaboratorIds) {
-        try {
-          await addCaseCollaborator(created.id, userId, 'COLLABORATOR');
-        } catch (collabErr) {
-          console.warn(`Failed to add collaborator ${userId}:`, collabErr);
-        }
-      }
-      setShowNewCaseModal(false);
-      setCaseFormData((prev) => ({ ...prev, deadline: "" }));
-      setSelectedCollaboratorIds([]);
-      setWorkflowAssignees({});
-      setInitialDocuments([]);
-      await loadClientData();
-      router.push(`/cases/${created.id}/documents`);
-    } catch (err) {
-      console.error("Create case failed:", err);
-      let message = "Nem sikerült létrehozni az ügyet.";
-      if (err instanceof Error && err.name === "ApiError") {
-        message = (err as any).message || message;
-      } else if (err instanceof Error && err.message) {
-        message = err.message;
-      }
-      setCaseCreateError(message);
-    } finally {
-      setIsSavingCase(false);
-    }
-  };
 
   const openEditClient = () => {
     if (!client) return;
@@ -539,158 +421,6 @@ function ClientDetailContent() {
         initialClientId={client?.id}
       />
 
-      {showNewCaseModal ? (false ? (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="adm-wizard-modal w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="adm-wizard-header p-6 border-b"><h2 className="text-lg font-serif text-[var(--adm-text)]">Új ügy</h2></div>
-            <div className="adm-wizard-body p-6 space-y-4">
-              <div>
-                <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Ügytípus</label>
-                <select value={caseFormData.matterType} onChange={(e) => setCaseFormData({ ...caseFormData, matterType: e.target.value })} className="adm-modal-field w-full px-3 py-2 text-sm">
-                  <option value="REAL_ESTATE_SALE">Ingatlan adásvétel</option>
-                  <option value="LEASE">Bérlet</option>
-                  <option value="EMPLOYMENT">Munkaviszony</option>
-                  <option value="CORPORATE">Cégjogi</option>
-                  <option value="LITIGATION">Peres</option>
-                  <option value="OTHER">Egyéb</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Prioritás</label>
-                <select value={caseFormData.priority} onChange={(e) => setCaseFormData({ ...caseFormData, priority: e.target.value })} className="adm-modal-field w-full px-3 py-2 text-sm">
-                  <option value="LOW">Alacsony</option>
-                  <option value="MEDIUM">Közepes</option>
-                  <option value="HIGH">Magas</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Határidő</label>
-                <input type="date" value={caseFormData.deadline || ""} onChange={(e) => setCaseFormData({ ...caseFormData, deadline: e.target.value })} className="adm-modal-field w-full px-3 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Résztvevők (opcionális)</label>
-                <div className="border border-[var(--adm-border)] rounded text-sm max-h-28 overflow-y-auto">
-                  {availableUsers.length === 0 ? (
-                    <div className="p-2 text-xs text-[var(--adm-text-soft)]">Betöltés...</div>
-                  ) : (
-                    availableUsers.map((user) => (
-                      <label key={user.id} className="flex items-center gap-2 px-3 py-2 hover:bg-[var(--adm-surface)] cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedCollaboratorIds.includes(user.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedCollaboratorIds([...selectedCollaboratorIds, user.id]);
-                            } else {
-                              setSelectedCollaboratorIds(selectedCollaboratorIds.filter((id) => id !== user.id));
-                            }
-                          }}
-                          className="accent-[#C9A227]"
-                        />
-                        <span className="text-xs">{user.name || user.email}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-                {selectedCollaboratorIds.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {selectedCollaboratorIds.map((id) => {
-                      const user = availableUsers.find((u) => u.id === id);
-                      return (
-                        <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[var(--adm-ochre-500)] text-white text-[10px] rounded-full">
-                          {user?.name || id}
-                          <button onClick={() => setSelectedCollaboratorIds(selectedCollaboratorIds.filter((cid) => cid !== id))} className="hover:text-white/70 ml-1">×</button>
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              <section className="rounded border border-[var(--adm-border)] bg-white/70 p-3">
-                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Munkafolyamat</label>
-                <select
-                  value={caseFormData.workflowTemplateKey || "SIMPLE"}
-                  onChange={(event) => {
-                    setCaseFormData({ ...caseFormData, workflowTemplateKey: event.target.value });
-                    setWorkflowAssignees({});
-                  }}
-                  className="adm-modal-field mt-2 w-full px-3 py-2 text-sm"
-                >
-                  {WORKFLOW_TEMPLATES.map((template) => <option key={template.key} value={template.key}>{template.label}</option>)}
-                </select>
-                {WORKFLOW_TEMPLATES.filter((template) => template.key === (caseFormData.workflowTemplateKey || "SIMPLE")).map((template) => (
-                  <div key={template.key} className="mt-3 space-y-2 text-xs text-[var(--adm-text-muted)]">
-                    <p>{template.description}</p>
-                    <ol className="space-y-1">
-                      {template.steps.map((step, index) => <li key={step}>{index + 1}. {step}</li>)}
-                    </ol>
-                    {template.key === "CONTRACT_REVIEW_TRIAD" ? (
-                      <div className="grid gap-2 md:grid-cols-3">
-                        {[
-                          ["legal-review", "Gyula"],
-                          ["compliance-check", "Amanda"],
-                          ["partner-final-review", "Csanád"],
-                        ].map(([stepKey, label]) => (
-                          <label key={stepKey} className="grid gap-1">
-                            <span>{label} felelőse</span>
-                            <select value={workflowAssignees[stepKey] || ""} onChange={(event) => setWorkflowAssignees((current) => ({ ...current, [stepKey]: event.target.value }))} className="adm-modal-field px-2 py-2 text-xs">
-                              <option value="">Alapértelmezett felelős</option>
-                              {availableUsers.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
-                            </select>
-                          </label>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </section>
-              <section className="rounded border border-[var(--adm-border)] bg-white/70 p-3">
-                <label className="block text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Induló dokumentumok</label>
-                <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A fájlok az ügy létrejötte után a kanonikus ügy-dokumentum feltöltésen mennek át; hiba esetén nincs hamis sikerüzenet.</p>
-                <input
-                  type="file"
-                  multiple
-                  onChange={(event) => {
-                    const selectedFiles = Array.from(event.target.files || []);
-                    setInitialDocuments((current) => [
-                      ...current,
-                      ...selectedFiles.map((file) => ({ id: `${file.name}-${file.size}-${file.lastModified}`, file, status: "QUEUED" as const, message: "Feltöltésre vár." })),
-                    ]);
-                    event.target.value = "";
-                  }}
-                  className="mt-3 block w-full text-xs text-[var(--adm-text-muted)]"
-                />
-                {initialDocuments.length ? (
-                  <div className="mt-3 space-y-2">
-                    {initialDocuments.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-3 rounded border border-[var(--adm-border)] px-3 py-2 text-xs">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-[var(--adm-text)]">{item.file.name}</p>
-                          <p className="text-[var(--adm-text-muted)]">{Math.ceil(item.file.size / 1024)} KB · {item.message || item.status}</p>
-                        </div>
-                        {item.status === "QUEUED" || item.status === "FAILED" ? <button type="button" onClick={() => setInitialDocuments((current) => current.filter((doc) => doc.id !== item.id))} className="text-[var(--adm-terracotta-700)]">Eltávolítás</button> : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
-              <div>
-                <label className="block text-xs text-[var(--adm-text-muted)] mb-1">Leírás</label>
-                <textarea value={caseFormData.description} onChange={(e) => setCaseFormData({ ...caseFormData, description: e.target.value })} rows={3} className="adm-modal-field w-full px-3 py-2 text-sm" />
-              </div>
-              {caseCreateError ? (
-                <div className="rounded border border-[#f0d2cc] bg-[#fff4f2] px-3 py-2 text-xs text-[#8b3a3a]">
-                  {caseCreateError}
-                </div>
-              ) : null}
-            </div>
-            <div className="adm-wizard-footer p-6 border-t flex justify-end gap-2">
-              <button onClick={() => setShowNewCaseModal(false)} className="px-4 py-2 text-xs border border-[var(--adm-border)] rounded">Mégsem</button>
-              <button onClick={handleCreateCase} disabled={isSavingCase} className="px-4 py-2 text-xs bg-[var(--adm-ochre-500)] text-white rounded disabled:opacity-50">{isSavingCase ? "Létrehozás..." : "Létrehozás"}</button>
-            </div>
-          </div>
-        </div>
-      ) : null) : null}
 
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

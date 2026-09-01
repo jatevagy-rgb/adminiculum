@@ -3,7 +3,6 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { CompactNewCaseDialog } from '@/components/cases/CompactNewCaseDialog';
-import { useRouter } from 'next/navigation';
 import {
   getClientWorkgroups,
   getWorkgroupWorkload,
@@ -12,7 +11,6 @@ import {
   deleteWorkgroup,
   recordWorkload,
   getClientWorkloadSummary,
-  createCase,
   type Client,
   type Workgroup,
   type WorkloadRecord,
@@ -20,7 +18,6 @@ import {
   type CreateWorkgroupData,
   type UpdateWorkgroupData,
   type CreateWorkloadData,
-  type CreateCaseData,
 } from '@/lib/api';
 
 interface PageContentProps {
@@ -36,7 +33,6 @@ export default function WorkgroupsPageContent({
   initialSummary,
   currentPeriod,
 }: PageContentProps) {
-  const router = useRouter();
   const [workgroups, setWorkgroups] = useState<Workgroup[]>(initialWorkgroups);
   const [selectedWorkgroup, setSelectedWorkgroup] = useState<Workgroup | null>(null);
   const [workloadRecords, setWorkloadRecords] = useState<WorkloadRecord[]>([]);
@@ -63,16 +59,7 @@ export default function WorkgroupsPageContent({
   // Delete confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Create case modal state
   const [showCreateCaseModal, setShowCreateCaseModal] = useState(false);
-  const [caseForm, setCaseForm] = useState<CreateCaseData>({
-    clientName: client?.name || '',
-    clientId: client?.id,
-    matterType: 'OTHER',
-    priority: 'MEDIUM',
-    description: '',
-  });
-  const [caseSaving, setCaseSaving] = useState(false);
 
   const loadWorkgroups = useCallback(async () => {
     if (!client) return;
@@ -186,30 +173,7 @@ export default function WorkgroupsPageContent({
     }
   };
 
-  const handleCreateCase = async () => {
-    if (!caseForm.clientName || !caseForm.matterType) return;
-    setCaseSaving(true);
-    setError(null);
-    try {
-      const result = await createCase(caseForm);
-      setShowCreateCaseModal(false);
-      // Navigate to the newly created case
-      router.push(`/cases/${result.id}`);
-    } catch (e: any) {
-      setError(e.message || 'Ügy创建 sikertelen');
-    } finally {
-      setCaseSaving(false);
-    }
-  };
-
   const openCreateCaseModal = () => {
-    setCaseForm({
-      clientName: client?.name || '',
-      clientId: client?.id,
-      matterType: 'OTHER',
-      priority: 'MEDIUM',
-      description: '',
-    });
     setShowCreateCaseModal(true);
   };
 
@@ -561,85 +525,11 @@ export default function WorkgroupsPageContent({
         </div>
       )}
 
-      {/* Create Case Modal */}
       <CompactNewCaseDialog
         open={showCreateCaseModal}
         onClose={() => setShowCreateCaseModal(false)}
         initialClientId={client?.id}
       />
-      {false && showCreateCaseModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Új ügy létrehozása
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ügyfél</label>
-                <input
-                  type="text"
-                  value={caseForm.clientName}
-                  onChange={(e) => setCaseForm(f => ({ ...f, clientName: e.target.value }))}
-                  className="w-full border rounded px-3 py-2 text-sm bg-gray-100"
-                  disabled
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ügytípus *</label>
-                <select
-                  value={caseForm.matterType}
-                  onChange={(e) => setCaseForm(f => ({ ...f, matterType: e.target.value }))}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                >
-                  <option value="REAL_ESTATE_SALE">Ingatlan adásvétel</option>
-                  <option value="LEASE">Bérlet</option>
-                  <option value="EMPLOYMENT">Munkaviszony</option>
-                  <option value="CORPORATE">Cégjogi</option>
-                  <option value="LITIGATION">Peres</option>
-                  <option value="OTHER">Egyéb</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Prioritás</label>
-                <select
-                  value={caseForm.priority}
-                  onChange={(e) => setCaseForm(f => ({ ...f, priority: e.target.value }))}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                >
-                  <option value="LOW">Alacsony</option>
-                  <option value="MEDIUM">Közepes</option>
-                  <option value="HIGH">Magas</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Leírás</label>
-                <textarea
-                  value={caseForm.description || ''}
-                  onChange={(e) => setCaseForm(f => ({ ...f, description: e.target.value }))}
-                  className="w-full border rounded px-3 py-2 text-sm"
-                  rows={3}
-                  placeholder="Opcionális leírás..."
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                onClick={() => setShowCreateCaseModal(false)}
-                className="px-4 py-2 text-sm text-gray-600 border rounded hover:bg-gray-50"
-              >
-                Mégse
-              </button>
-              <button
-                onClick={handleCreateCase}
-                disabled={caseSaving || !caseForm.clientName || !caseForm.matterType}
-                className="px-4 py-2 text-sm bg-[#C9A227] text-white rounded hover:bg-[#B8911F] disabled:opacity-50"
-              >
-                {caseSaving ? 'Létrehozás...' : 'Létrehozás'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

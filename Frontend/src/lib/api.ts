@@ -38,6 +38,52 @@ export class ApiError extends Error {
   }
 }
 
+const SECURITY_UPLOAD_ERROR_CODES = new Set([
+  "MALWARE_SCANNER_UNAVAILABLE",
+  "SCANNER_NOT_CONFIGURED",
+  "SCANNER_UNAVAILABLE",
+  "SCAN_FAILED",
+  "QUARANTINE_FAILED",
+]);
+
+const SECURITY_UPLOAD_ERROR_MARKERS = [
+  "MALWARE_SCANNER",
+  "SCANNER_NOT_CONFIGURED",
+  "SCANNER_UNAVAILABLE",
+  "SCAN_FAILED",
+  "QUARANTINE_FAILED",
+];
+
+/**
+ * Map workforce upload failures to product-level wording.
+ * Server/provider details may be retained in logs, but never rendered.
+ */
+export function safeUploadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const code = String(error.code || "").toUpperCase();
+    const detail = String(error.message || "").toUpperCase();
+    if (
+      SECURITY_UPLOAD_ERROR_CODES.has(code) ||
+      SECURITY_UPLOAD_ERROR_MARKERS.some((marker) => detail.includes(marker))
+    ) {
+      return "A biztonsági ellenőrzés jelenleg nem érhető el. A fájl nem került feltöltésre. Próbáld újra később.";
+    }
+    if (error.status === 0 || [502, 503, 504].includes(error.status)) {
+      return "A dokumentumtár jelenleg nem érhető el. A fájl nem került feltöltésre. Próbáld újra később.";
+    }
+    if (error.status === 400 || error.status === 413) {
+      return "A fájl a megadott adatokkal nem tölthető fel.";
+    }
+    if (error.status === 403) {
+      return "Nincs jogosultságod a fájl feltöltéséhez.";
+    }
+    if (error.status === 409) {
+      return "A fájl feltöltése ütközés miatt nem sikerült. Próbáld újra.";
+    }
+  }
+  return "A fájl feltöltése nem sikerült. A fájl nem került feltöltésre. Próbáld újra később.";
+}
+
 export type AuthTokenContext = 'workforce' | 'customer';
 
 const LEGACY_AUTH_TOKEN_KEY = 'auth_token';

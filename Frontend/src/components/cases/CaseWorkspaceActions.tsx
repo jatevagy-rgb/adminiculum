@@ -18,6 +18,7 @@ import {
   getDocumentComments,
   createDocumentComment,
   getUsers,
+  safeUploadErrorMessage,
   type CaseWorkspace,
   type User,
 } from "@/lib/api";
@@ -234,7 +235,8 @@ export function DocumentUploadModal({ caseId, onClose, onSaved }: { caseId: stri
       onSaved();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "A feltöltés nem sikerült.");
+      console.error("Case document upload failed:", e);
+      setErr(safeUploadErrorMessage(e));
       setBusy(false);
     }
   }, [busy, file, caseId, onSaved, onClose]);

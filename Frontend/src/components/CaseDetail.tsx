@@ -2,7 +2,7 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, safeUploadErrorMessage, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
 import { closeCaseLifecycle, archiveCaseLifecycle } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
@@ -970,7 +970,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      setUploadError(err instanceof ApiError ? err.message : 'A dokumentum feltöltése sikertelen.');
+      setUploadError(safeUploadErrorMessage(err));
     } finally {
       setIsUploading(false);
     }
