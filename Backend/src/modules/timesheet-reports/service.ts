@@ -1050,8 +1050,10 @@ class TimesheetReportService {
         ? (await prisma.case.findMany({ where: { matterId: caseRecord.matterId }, select: { id: true } })).map((row) => row.id)
         : [];
       attributionFiltered = entries.filter((entry) => {
-        if (entry.caseId && entry.caseId === input.caseId) return true;
-        if (!caseRecord?.matterId || entry.matterId !== caseRecord.matterId) return false;
+        if (!caseRecord?.matterId) {
+          return entry.caseId === input.caseId;
+        }
+        if (entry.matterId !== caseRecord.matterId) return false;
         const kind = classifyTimeAttribution({
           caseId: input.caseId!,
           matterId: caseRecord.matterId,
