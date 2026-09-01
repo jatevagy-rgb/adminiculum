@@ -6,13 +6,13 @@ import test from "node:test";
 const read = (rel) => readFileSync(path.resolve(process.cwd(), rel), "utf8");
 const rx = (t) => new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
-test("Defect 1: overview exposes ordinary approve/return for IN_REVIEW workflow tasks", () => {
+test("Case Workspace opens the canonical submission/review workspace", () => {
   const overview = read("src/components/cases/CaseWorkspaceOverview.tsx");
-  assert.match(overview, /quickComplete/);
-  assert.match(overview, /completeTask\(task\.id, approved\)/);
-  assert.match(overview, /IN_REVIEW" && t\.workflowStepKey/);
-  assert.match(overview, rx("Jóváhagyás"));
-  assert.match(overview, rx("Visszaküldés"));
+  const submissionWorkspace = read("src/components/tasks/TaskSubmissionWorkspace.tsx");
+  assert.match(overview, /TaskSubmissionWorkspace/);
+  assert.match(overview, /IN_REVIEW.*SUBMITTED/);
+  assert.match(submissionWorkspace, rx("Jóváhagyva"));
+  assert.match(overview, rx("Review megnyitása"));
 });
 
 test("Defect 1 backend: a workflow step is completable by its responsible (not only an independent reviewer)", () => {

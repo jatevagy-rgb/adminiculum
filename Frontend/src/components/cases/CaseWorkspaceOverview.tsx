@@ -12,7 +12,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseResponsibility, getCaseWorkspace, startTask, submitTask, completeTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
+import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
+import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
 import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCategory";
@@ -22,6 +23,7 @@ import { ClientAccent } from "@/components/clients/ClientAccent";
 import { DocumentWorkCard } from "@/components/documents/DocumentWorkCard";
 import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
+import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
@@ -64,52 +66,47 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiPromptOpen, setAiPromptOpen] = useState(false);
+  const [lifecycleTasks, setLifecycleTasks] = useState<TaskLifecycleListItem[]>([]);
+  const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
+
+  const load = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
+    if (!background) setLoading(true);
+    setError(null);
     try {
-      const [workspace, caseResponsibility] = await Promise.all([
+      const [workspace, caseResponsibility, lifecycle] = await Promise.all([
         getCaseWorkspace(caseId),
         getCaseResponsibility(caseId).catch(() => null),
+        listTaskLifecycleItems(),
       ]);
       setWs(workspace);
       setResponsibility(caseResponsibility);
+      setLifecycleTasks(lifecycle.filter((task) => task.case.id === caseId));
     }
-    catch { setError("Az ügy-munkatér most nem tölthető be."); }
-    finally { setLoading(false); }
+    catch {
+      if (!background) setError("Az ügy-munkatér most nem tölthető be.");
+    }
+    finally {
+      if (!background) setLoading(false);
+    }
   }, [caseId]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    try { setWs(await getCaseWorkspace(caseId)); }
-    catch { /* keep the last good projection; action errors surface separately */ }
+    try { await load({ background: true }); }
     finally { setRefreshing(false); }
-  }, [caseId]);
+  }, [load]);
 
   useEffect(() => { void load(); }, [load]);
 
-  const quickStatus = useCallback(async (task: WorkspaceTask, kind: "start" | "submit") => {
+  const quickStatus = useCallback(async (task: WorkspaceTask) => {
     if (rowBusy) return;
     setRowBusy(task.id); setActionError(null);
     try {
-      if (kind === "start") await startTask(task.id); else await submitTask(task.id);
+      await startTask(task.id);
       await refresh();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "A státuszváltás nem sikerült.");
-    } finally { setRowBusy(null); }
-  }, [rowBusy, refresh]);
-
-  // Ordinary workflow-step review/completion (independent of any document
-  // submission). Approve -> DONE (dependency engine activates successors);
-  // return -> IN_PROGRESS.
-  const quickComplete = useCallback(async (task: WorkspaceTask, approved: boolean) => {
-    if (rowBusy) return;
-    setRowBusy(task.id); setActionError(null);
-    try {
-      await completeTask(task.id, approved);
-      await refresh();
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "A feladat lezárása nem sikerült.");
     } finally { setRowBusy(null); }
   }, [rowBusy, refresh]);
 
@@ -164,22 +161,19 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             ) : null}
           </span>
         ) : t.status.toUpperCase() === "TODO" || t.status.toUpperCase() === "PENDING" ? (
-          <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "start")}>
+          <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t)}>
             {rowBusy === t.id ? "…" : "Indítás"}
           </AdminButton>
-        ) : t.status.toUpperCase() === "IN_PROGRESS" ? (
-          <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t, "submit")}>
-            {rowBusy === t.id ? "…" : "Beküldés review-ra"}
+        ) : ["IN_PROGRESS", "IN_REVIEW", "SUBMITTED", "RETURNED"].includes(t.status.toUpperCase()) ? (
+          <AdminButton
+            variant={t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED" ? "primary" : "neutral"}
+            size="xs"
+            disabled={!lifecycleTasks.some((task) => task.id === t.id)}
+            onClick={() => setSelectedLifecycleTask(lifecycleTasks.find((task) => task.id === t.id) || null)}
+            data-testid="task-submission-workspace"
+          >
+            {t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED" ? "Review megnyitása" : "Leadás megnyitása"}
           </AdminButton>
-        ) : t.status.toUpperCase() === "IN_REVIEW" && t.workflowStepKey ? (
-          <>
-            <AdminButton variant="primary" size="xs" disabled={rowBusy === t.id} onClick={() => void quickComplete(t, true)} data-testid="task-approve">
-              {rowBusy === t.id ? "…" : "Jóváhagyás"}
-            </AdminButton>
-            <AdminButton variant="muted" size="xs" disabled={rowBusy === t.id} onClick={() => void quickComplete(t, false)} data-testid="task-return">
-              Visszaküldés
-            </AdminButton>
-          </>
         ) : null}
       </div>
     </div>
@@ -482,6 +476,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} onClose={() => setAiPromptOpen(false)} /> : null}
+      {selectedLifecycleTask ? <TaskSubmissionWorkspace item={selectedLifecycleTask} onClose={() => setSelectedLifecycleTask(null)} onWorkflowChanged={refresh} /> : null}
+
     </div>
   );
 }
