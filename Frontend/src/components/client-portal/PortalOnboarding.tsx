@@ -10,6 +10,7 @@ import {
   buildOnboardingPayload,
   readSelectedModeIntent,
   submitMembershipRequest,
+  updateClientProfile,
   type OnboardingMode,
 } from '@/lib/clientOnboardingApi';
 
@@ -218,7 +219,12 @@ function RejectedPanel({ context, initialMode, onDone }: { context: PortalIdenti
 }
 
 function InvitationPanel({ context, onAccepted }: { context: PortalIdentityContext; onAccepted: (reference: string) => void }) {
-  const invitation = context.onboarding?.invitation || null;
+  const invitations = context.onboarding?.invitations?.length
+    ? context.onboarding.invitations
+    : context.onboarding?.invitation ? [context.onboarding.invitation] : [];
+  const [selectedId, setSelectedId] = useState(invitations[0]?.invitationId || '');
+  const invitation = invitations.find((item) => item.invitationId === selectedId) || invitations[0] || null;
+  const [displayName, setDisplayName] = useState(context.identity.displayName || '');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const accept = async () => {
@@ -226,6 +232,7 @@ function InvitationPanel({ context, onAccepted }: { context: PortalIdentityConte
     setBusy(true);
     setMessage(null);
     try {
+      await updateClientProfile(displayName);
       const result = await acceptInvitation(invitation.invitationId);
       onAccepted(result.workspaceReference);
     } catch (error) {
@@ -237,15 +244,17 @@ function InvitationPanel({ context, onAccepted }: { context: PortalIdentityConte
   return (
     <Card>
       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#9b7b25]">Meghívás</p>
-      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-stone-950">Meghívás egy ügyfélfelületre</h1>
-      <p className="mt-3 max-w-2xl text-stone-700">Az ügyvédi iroda meghívta Önt az alábbi ügyfélfelületre. A meghívás elfogadása munkatér-hozzáférést ad; ügyanyaghoz külön, kifejezett hozzáférés szükséges.</p>
+      <h1 className="mt-3 text-3xl font-semibold tracking-tight text-stone-950">Meghívást kaptál</h1>
+      <p className="mt-3 max-w-2xl text-stone-700">Válaszd ki, melyik szervezethez szeretnél csatlakozni, add meg a neved, majd csatlakozz.</p>
+      {invitations.length > 1 ? <div className="mt-6 grid gap-3"><p className="text-sm font-semibold text-stone-700">Meghívásaid</p>{invitations.map((item) => <button key={item.invitationId} type="button" onClick={() => setSelectedId(item.invitationId)} className={`rounded-2xl border px-4 py-3 text-left ${item.invitationId === invitation?.invitationId ? 'border-stone-950' : 'border-stone-300'}`}>{item.organizationName || 'Szervezet'} — Csatlakozás</button>)}</div> : null}
       <dl className="mt-6 grid gap-3 text-sm text-stone-700 sm:grid-cols-2">
         <div><dt className="font-semibold text-stone-500">Szervezet</dt><dd data-testid="invitation-org">{invitation?.organizationName || '—'}</dd></div>
         <div><dt className="font-semibold text-stone-500">Ügyfélfelület</dt><dd>{invitation?.workspaceName || '—'}</dd></div>
+        <label className="grid gap-1"><span className="font-semibold text-stone-500">Teljes név</span><input data-testid="invitation-display-name" value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="rounded-xl border border-stone-300 px-3 py-2" /></label>
         <div><dt className="font-semibold text-stone-500">Érvényes eddig</dt><dd>{formatDate(invitation?.expiresAt)}</dd></div>
       </dl>
       {message ? <p role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{message}</p> : null}
-      {invitation ? <button type="button" data-testid="invitation-accept" disabled={busy} onClick={accept} className="mt-6 inline-flex w-fit rounded-full bg-stone-950 px-6 py-3 font-semibold text-white disabled:opacity-50">{busy ? 'Feldolgozás…' : 'Meghívás elfogadása'}</button> : null}
+      {invitation ? <button type="button" data-testid="invitation-accept" disabled={busy || !displayName.trim()} onClick={accept} className="mt-6 inline-flex w-fit rounded-full bg-stone-950 px-6 py-3 font-semibold text-white disabled:opacity-50">{busy ? 'Feldolgozás…' : 'Csatlakozás'}</button> : null}
     </Card>
   );
 }

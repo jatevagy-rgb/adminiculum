@@ -16,6 +16,7 @@ import {
   rejectMembershipRequest,
   submitMembershipRequest,
   transitionMembership,
+  updateClientProfile,
   validateInvitation,
 } from './identityService';
 import {
@@ -102,6 +103,10 @@ clientIdentityRouter.post('/invitations/validate', async (req, res) => {
 clientIdentityRouter.use('/me', authenticateClientPortal);
 clientIdentityRouter.get('/me/profile', async (req, res) => {
   try { res.json(await getClientProfile(requireRegisteredClientPortalSession(req))); }
+  catch (error) { fail(res, error); }
+});
+clientIdentityRouter.patch('/me/profile', async (req, res) => {
+  try { res.json(await updateClientProfile(requireRegisteredClientPortalSession(req), req.body || {})); }
   catch (error) { fail(res, error); }
 });
 clientIdentityRouter.get('/me/membership-requests', async (req, res) => {

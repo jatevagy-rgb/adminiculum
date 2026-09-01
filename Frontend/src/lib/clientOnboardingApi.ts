@@ -41,6 +41,12 @@ export async function acceptInvitation(invitationId: string): Promise<{ workspac
   });
 }
 
+export async function updateClientProfile(displayName: string): Promise<{ id: string; displayName: string }> {
+  return fetchApi('/client-identity/me/profile', {
+    ...CUSTOMER, method: 'PATCH', body: JSON.stringify({ displayName }),
+  });
+}
+
 /** Map the selected /portal login-intent mode to the request mode enum. */
 export function readSelectedModeIntent(): OnboardingMode | null {
   if (typeof window === 'undefined') return null;

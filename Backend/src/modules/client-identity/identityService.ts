@@ -94,6 +94,18 @@ export async function getClientProfile(session: ClientPortalSession) {
   };
 }
 
+export async function updateClientProfile(session: ClientPortalSession, input: Record<string, unknown>) {
+  if (!session.emailVerified) throw new ClientIdentityError(403, 'CLIENT_EMAIL_NOT_VERIFIED', 'Verify e-mail before updating your profile.');
+  if (session.status === 'SUSPENDED' || session.status === 'REVOKED') throw new ClientIdentityError(403, `CLIENT_IDENTITY_${session.status}`, 'Client identity is not active.');
+  const displayName = safeString(input.displayName, 160);
+  if (!displayName) throw new ClientIdentityError(400, 'DISPLAY_NAME_REQUIRED', 'Your name is required.');
+  return prisma.clientPortalIdentity.update({
+    where: { id: session.clientPortalIdentityId },
+    data: { displayName, revision: { increment: 1 } },
+    select: { id: true, displayName: true },
+  });
+}
+
 export async function submitMembershipRequest(session: ClientPortalSession, input: Record<string, unknown>) {
   if (!session.emailVerified) throw new ClientIdentityError(403, 'CLIENT_EMAIL_NOT_VERIFIED', 'Verify e-mail before requesting portal access.');
   if (session.status === 'SUSPENDED' || session.status === 'REVOKED') throw new ClientIdentityError(403, `CLIENT_IDENTITY_${session.status}`, 'Client identity is not active.');
@@ -172,12 +184,19 @@ export async function acceptPortalInvitation(session: ClientPortalSession, input
   if (session.status === 'SUSPENDED' || session.status === 'REVOKED') throw new ClientIdentityError(403, `CLIENT_IDENTITY_${session.status}`, 'Client identity is not active.');
   const invitationId = safeString(input.invitationId, 80);
   if (!invitationId) throw new ClientIdentityError(400, 'INVITATION_ID_REQUIRED', 'Invitation identifier is required.');
-  const invitation = await prisma.clientPortalInvitation.findFirst({ where: { id: invitationId, status: 'ACTIVE', expiresAt: { gt: new Date() } } });
+  const invitation = await prisma.clientPortalInvitation.findUnique({ where: { id: invitationId } });
   if (!invitation) throw new ClientIdentityError(409, 'INVITATION_UNAVAILABLE', 'Invitation is not available.');
-  if (invitation.intendedEmail && invitation.intendedEmail.toLowerCase() !== session.normalizedEmail) throw new ClientIdentityError(403, 'INVITATION_EMAIL_MISMATCH', 'Invitation does not match the authenticated e-mail.');
+  if (!invitation.intendedEmail || invitation.intendedEmail.toLowerCase() !== session.normalizedEmail) throw new ClientIdentityError(403, 'INVITATION_EMAIL_MISMATCH', 'Invitation does not match the authenticated e-mail.');
   if (!invitation.workspaceId) throw new ClientIdentityError(409, 'INVITATION_WORKSPACE_MISSING', 'Invitation is not bound to a workspace.');
   const workspace = await prisma.clientPortalWorkspace.findFirst({ where: { id: invitation.workspaceId, status: 'ACTIVE' } });
   if (!workspace) throw new ClientIdentityError(409, 'WORKSPACE_NOT_ACTIVE', 'The invited workspace is not active.');
+  if (invitation.status === 'USED' && invitation.usedByIdentityId === session.clientPortalIdentityId) {
+    const existing = await prisma.clientPortalWorkspaceMembership.findUnique({
+      where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: session.clientPortalIdentityId, workspaceId: invitation.workspaceId } },
+    });
+    if (existing?.status === 'ACTIVE') return { workspaceReference: workspace.publicReference, membershipId: existing.id };
+  }
+  if (invitation.status !== 'ACTIVE' || invitation.expiresAt.getTime() <= Date.now()) throw new ClientIdentityError(409, 'INVITATION_UNAVAILABLE', 'Invitation is not available.');
   const now = new Date();
   return prisma.$transaction(async (tx) => {
     const membership = await tx.clientPortalWorkspaceMembership.upsert({
@@ -185,7 +204,11 @@ export async function acceptPortalInvitation(session: ClientPortalSession, input
       create: { clientPortalIdentityId: session.clientPortalIdentityId, workspaceId: invitation.workspaceId!, status: 'ACTIVE', role: 'MEMBER', invitedAt: invitation.createdAt, invitedById: invitation.createdById, approvedAt: now, approvedById: invitation.createdById },
       update: { status: 'ACTIVE', approvedAt: now, approvedById: invitation.createdById, revokedAt: null, revokedById: null, suspendedAt: null, suspendedById: null, revision: { increment: 1 } },
     });
-    await tx.clientPortalInvitation.update({ where: { id: invitation.id }, data: { status: 'USED', usedByIdentityId: session.clientPortalIdentityId, usedAt: now } });
+    const consumed = await tx.clientPortalInvitation.updateMany({
+      where: { id: invitation.id, status: 'ACTIVE', intendedEmail: session.normalizedEmail },
+      data: { status: 'USED', usedByIdentityId: session.clientPortalIdentityId, usedAt: now },
+    });
+    if (consumed.count !== 1) throw new ClientIdentityError(409, 'INVITATION_UNAVAILABLE', 'Invitation is not available.');
     await tx.clientPortalIdentity.update({ where: { id: session.clientPortalIdentityId }, data: { status: 'ACTIVE', revision: { increment: 1 } } });
     await tx.clientPortalWorkspaceEvent.create({ data: { workspaceId: invitation.workspaceId!, membershipId: membership.id, actorId: session.clientPortalIdentityId, action: 'MEMBERSHIP_APPROVED', toStatus: 'ACTIVE', metadataSafe: { source: 'invitation-acceptance' } } });
     return { workspaceReference: workspace.publicReference, membershipId: membership.id };
