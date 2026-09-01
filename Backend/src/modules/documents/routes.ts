@@ -269,23 +269,6 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       createdById: userId
     });
 
-    // Create TimelineEvent for document upload (AUTOMATIC)
-    await prisma.timelineEvent.create({
-      data: {
-        caseId,
-        userId,
-        documentId: result.id,
-        eventType: 'DOCUMENT_UPLOADED',
-        description: `Document uploaded: ${fileName}`,
-        metadata: {
-          documentId: result.id,
-          documentName: fileName,
-          documentType: documentType || 'OTHER',
-          folder: folder || '01_Client_Input'
-        }
-      }
-    });
-
     res.status(201).json(result);
   } catch (error) {
     console.error('Create document error:', error instanceof Error ? error.message : error);

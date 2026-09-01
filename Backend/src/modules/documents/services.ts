@@ -36,18 +36,6 @@ const normalizeSharePointItemId = (itemId: unknown): string | null => {
   return trimmed.length > 0 ? trimmed : null;
 };
 
-const isSpItemIdUniqueConflict = (error: unknown): boolean => {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
-    return false;
-  }
-
-  const target = (error.meta as { target?: unknown } | undefined)?.target;
-  if (Array.isArray(target)) {
-    return target.includes('spItemId');
-  }
-  return typeof target === 'string' && target.includes('spItemId');
-};
-
 const isMissingDatabaseObjectError = (error: unknown): boolean => {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -220,41 +208,12 @@ class DocumentsService {
         isLatest: true
       } as any;
 
-      let persistedSpItemId = sharePointItemId;
       let document: any;
       try {
-        document = await prisma.document.create({
-          data: {
-            ...baseDocumentData,
-            versions: {
-              create: {
-                version: 1,
-                name: nameField,
-                originalFileName: uploadedFileName || storedFileName || null,
-                mimeType: input.mimeType,
-                size: input.fileContent.length,
-                storageReference: sharePointItemId,
-                isCurrent: true,
-                reviewStatus: 'NOT_IN_REVIEW' as any,
-                publicationStatus: 'INTERNAL_ONLY' as any,
-                uploadSource: uploadSource as any,
-                versionType: 'ORIGINAL' as any,
-                spVersionLabel: uploadResult.version || '1',
-                spVersionId: uploadResult.version || null,
-                spItemId: sharePointItemId,
-                spWebUrl: uploadResult.webUrl || null,
-                uploadedById: input.createdById,
-              },
-            },
-          },
-        });
-      } catch (error) {
-        if (sharePointItemId && isSpItemIdUniqueConflict(error)) {
-          persistedSpItemId = null;
-          document = await prisma.document.create({
+        document = await prisma.$transaction(async (tx) => {
+          const createdDocument = await tx.document.create({
             data: {
               ...baseDocumentData,
-              spItemId: null,
               versions: {
                 create: {
                   version: 1,
@@ -262,7 +221,7 @@ class DocumentsService {
                   originalFileName: uploadedFileName || storedFileName || null,
                   mimeType: input.mimeType,
                   size: input.fileContent.length,
-                  storageReference: null,
+                  storageReference: sharePointItemId,
                   isCurrent: true,
                   reviewStatus: 'NOT_IN_REVIEW' as any,
                   publicationStatus: 'INTERNAL_ONLY' as any,
@@ -270,45 +229,45 @@ class DocumentsService {
                   versionType: 'ORIGINAL' as any,
                   spVersionLabel: uploadResult.version || '1',
                   spVersionId: uploadResult.version || null,
-                  spItemId: null,
+                  spItemId: sharePointItemId,
                   spWebUrl: uploadResult.webUrl || null,
                   uploadedById: input.createdById,
                 },
               },
             },
           });
-        } else {
-          if (sharePointItemId) {
-            await driveService.deleteDocument(sharePointItemId).catch(() => false);
-          }
-          throw error;
+
+          await tx.timelineEvent.create({
+            data: {
+              caseId: input.caseId,
+              userId: input.createdById,
+              eventType: 'DOCUMENT_UPLOADED',
+              type: 'DOCUMENT_UPLOADED' as any,
+              payload: {
+                documentId: createdDocument.id,
+                fileName: input.fileName,
+                documentType: input.documentType,
+                spItemId: sharePointItemId,
+                spPath: uploadResult.webUrl,
+                folder: folderType,
+                version: uploadResult.version,
+              },
+            } as any,
+          });
+
+          await tx.case.update({
+            where: { id: input.caseId },
+            data: { status: 'DRAFT' as any },
+          });
+
+          return createdDocument;
+        });
+      } catch (error) {
+        if (sharePointItemId) {
+          await driveService.deleteDocument(sharePointItemId).catch(() => false);
         }
+        throw error;
       }
-
-      // 5. Create TimelineEvent for document creation
-      await prisma.timelineEvent.create({
-        data: {
-          caseId: input.caseId,
-          userId: input.createdById,
-          eventType: 'DOCUMENT_UPLOADED',
-          type: 'DOCUMENT_UPLOADED' as any,
-          payload: {
-            documentId: document.id,
-            fileName: input.fileName,
-            documentType: input.documentType,
-            spItemId: persistedSpItemId,
-            spPath: uploadResult.webUrl,
-            folder: folderType,
-            version: uploadResult.version
-          }
-        } as any
-      });
-
-      // 6. Update Case status to DRAFT
-      await prisma.case.update({
-        where: { id: input.caseId },
-        data: { status: 'DRAFT' as any }
-      });
 
       return {
         id: document.id,
