@@ -33,6 +33,8 @@ describe('production deploy workflow portability guards', () => {
 
     expect(step).toContain('if [ "$HTTP_CODE" = "200" ] && [ "$CURL_STATUS" -eq 0 ]; then');
     expect(step).toContain('Kudu publish completed synchronously; proceeding to backend health gate.');
+    expect(step).toContain('REQUEST_STARTED_AT="$(date +%s%3N)"');
+    expect(step).toContain('"${API}/deployments" > "$PRE_CENSUS"');
     expect(step).toContain('if [ -z "$LOCATION" ]; then');
     expect(step).toContain('if { [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then');
     expect(step).toContain('const expectedHost = `${process.env.BACKEND_APP}.scm.azurewebsites.net`;');
@@ -41,10 +43,12 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('url.hostname !== expectedHost');
     expect(step).toContain('!url.pathname.startsWith(expectedPrefix)');
     expect(step).toContain("!id || id.includes('/')");
-    expect(step).toContain('Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history.');
     expect(step).toContain('Unexpected Kudu deployment Location; refusing to poll it.');
     expect(step).toContain('Unexpected Kudu publish HTTP response; refusing to poll it.');
     expect(step).toContain('curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION"');
+    expect(step).toContain('bounded deployment discovery');
+    expect(step).toContain('kudu-deployment-correlation.js');
+    expect(step).toContain('No uniquely correlated terminal-success deployment within discovery window; failing closed.');
     expect(workflow).not.toContain('/api/deployments/latest');
   });
 
@@ -59,8 +63,11 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('Timed out waiting for deployment $NEW_ID to reach a terminal state.');
     expect(step).not.toMatch(/if \[ "\$HTTP_CODE" !=/);
     expect(step).not.toMatch(/if \[ "\$CURL_STATUS" !=/);
-    expect(step).toContain('Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history.');
     expect(step).toContain('HTTP 200 with a clean');
+    expect(step).toContain('if ! { [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then');
+    expect(step).toContain('Cannot prove ownership of a successful deployment; failing closed.');
+    expect(step).toContain('exit 1');
+    expect(step).not.toMatch(/curl[^\n]*-X POST[^\n]*publish[\s\S]*curl[^\n]*-X POST[^\n]*publish/);
     expect(workflow).toContain('Backend health gate (/health 200)');
   });
 

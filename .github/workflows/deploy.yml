@@ -146,7 +146,14 @@ jobs:
           TOKEN="$(az account get-access-token --query accessToken -o tsv)"
           HEADERS="$(mktemp)"
           BODY="$(mktemp)"
-          trap 'rm -f "$HEADERS" "$BODY"' EXIT
+          PRE_CENSUS="$(mktemp)"
+          POST_CENSUS="$(mktemp)"
+          trap 'rm -f "$HEADERS" "$BODY" "$PRE_CENSUS" "$POST_CENSUS"' EXIT
+
+          REQUEST_STARTED_AT="$(date +%s%3N)"
+          curl -fsS -m 25 -H "Authorization: Bearer ${TOKEN}" \
+            "${API}/deployments" > "$PRE_CENSUS"
+          node -e "const fs=require('fs'); const value=JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); if (!Array.isArray(value)) process.exit(1)" "$PRE_CENSUS"
 
           # Keep the Entra token in memory only; never print it or use a publish profile.
           set +e
@@ -189,12 +196,38 @@ jobs:
             exit 0
           fi
 
-          # Async/timeout responses are safe to continue only when Kudu gave us
-          # the exact execution identity. Never retry the POST or infer identity
-          # from deployment history, because that could overlap deployments.
+          # Async/timeout responses with a Location are safe to continue only
+          # when Kudu gave us the exact execution identity.
           if [ -z "$LOCATION" ]; then
-            echo "Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history."
-            exit 1
+            if ! { [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then
+              echo "Unexpected Kudu publish response without Location; refusing discovery."
+              exit 1
+            fi
+            echo "Kudu publish returned an ambiguous response without Location; entering bounded deployment discovery."
+            EXPECTED_SHA="${{ needs.resolve.outputs.sha }}"
+            for i in $(seq 1 12); do
+              sleep 10
+              curl -fsS -m 25 -H "Authorization: Bearer ${TOKEN}" \
+                "${API}/deployments" > "$POST_CENSUS"
+              if RESULT="$(node .github/scripts/kudu-deployment-correlation.js \
+                "$PRE_CENSUS" "$POST_CENSUS" "$REQUEST_STARTED_AT" "$EXPECTED_SHA")"; then
+                NEW_ID="$(node -e "const r=JSON.parse(process.argv[1]); process.stdout.write(r.id)" "$RESULT")"
+                echo "Discovered exactly one correlated Kudu deployment: $NEW_ID"
+                break
+              fi
+              OUTCOME="$(node -e "const r=JSON.parse(process.argv[1]); process.stdout.write(r.outcome)" "$RESULT" 2>/dev/null || echo invalid)"
+              echo "[$i] bounded discovery outcome=$OUTCOME"
+              case "$OUTCOME" in
+                ambiguous|wrong-identity|failed) echo "Cannot prove ownership of a successful deployment; failing closed."; exit 1 ;;
+                active|none) ;;
+                *) echo "Invalid discovery result; failing closed."; exit 1 ;;
+              esac
+              if [ "$i" -eq 12 ]; then
+                echo "No uniquely correlated terminal-success deployment within discovery window; failing closed."
+                exit 1
+              fi
+            done
+            exit 0
           fi
           if { [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then
             NEW_ID="${LOCATION##*/}"
