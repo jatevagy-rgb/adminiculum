@@ -8,6 +8,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { driveService } from '../sharepoint';
 import { hrConfidentialReadAllowed } from './authorization';
+import { transitionReview, DocumentReviewWorkflowError } from './review/reviewService';
 import {
   CreateDocumentInput,
   DocumentResponse,
@@ -861,7 +862,8 @@ class DocumentsService {
   async approveDocument(
     documentId: string,
     userId: string,
-    comment?: string
+    comment?: string,
+    role?: string
   ): Promise<boolean> {
     try {
       const document = await prisma.document.findUnique({
@@ -875,6 +877,30 @@ class DocumentsService {
         throw new Error('SharePoint item ID is missing for this document');
       }
 
+      // Delegate the review-state decision to the canonical DocumentReview state
+      // machine FIRST. The legacy route remains a compatibility entry point but
+      // must never bypass evaluateTransition. If the canonical transition fails
+      // (invalid source state, unresolved blocking points, version mismatch,
+      // unauthorized actor, revision mismatch) the approval does NOT proceed and
+      // no legacy side effect is executed.
+      const activeReview = await prisma.documentReview.findFirst({
+        where: {
+          documentId,
+          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
+        },
+        include: { currentRound: true },
+      });
+      if (activeReview) {
+        const versionId = activeReview.currentRound?.reviewVersionId || activeReview.documentVersionId;
+        await transitionReview(
+          activeReview.id,
+          'APPROVE',
+          { userId, role },
+          { versionId, expectedRevision: activeReview.revision, safeRationale: comment },
+        );
+      }
+
+      // Only after the canonical transition succeeds do the legacy side effects run.
       // Update document folder to APPROVED
       await prisma.document.update({
         where: { id: documentId },
@@ -905,22 +931,11 @@ class DocumentsService {
         data: { status: 'APPROVED' as any }
       });
 
-      // Sync active DocumentReview state machine
-      const activeReview = await prisma.documentReview.findFirst({
-        where: {
-          documentId,
-          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
-        },
-      });
-      if (activeReview) {
-        await prisma.documentReview.update({
-          where: { id: activeReview.id },
-          data: { status: 'APPROVED' as any, completedAt: new Date() },
-        });
-      }
-
       return true;
     } catch (error) {
+      // Canonical transition failures must propagate so invalid approvals are
+      // surfaced (with the transition engine's status/code), not swallowed.
+      if (error instanceof DocumentReviewWorkflowError) throw error;
       console.error('Error approving document:', error);
       return false;
     }
@@ -932,7 +947,8 @@ class DocumentsService {
   async rejectDocument(
     documentId: string,
     userId: string,
-    reason: string
+    reason: string,
+    role?: string
   ): Promise<boolean> {
     try {
       const document = await prisma.document.findUnique({
@@ -943,6 +959,29 @@ class DocumentsService {
         throw new Error('Document not found');
       }
 
+      // Delegate the review-state decision to the canonical DocumentReview state
+      // machine FIRST. The legacy route remains a compatibility entry point but
+      // must never bypass evaluateTransition. If the canonical transition fails
+      // (invalid source state, no open points/rationale, unauthorized actor,
+      // revision mismatch) the rejection does NOT proceed and no legacy side
+      // effect is executed.
+      const activeReview = await prisma.documentReview.findFirst({
+        where: {
+          documentId,
+          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
+        },
+        include: { currentRound: true },
+      });
+      if (activeReview) {
+        await transitionReview(
+          activeReview.id,
+          'REQUEST_CHANGES',
+          { userId, role },
+          { expectedRevision: activeReview.revision, safeRationale: reason },
+        );
+      }
+
+      // Only after the canonical transition succeeds do the legacy side effects run.
       // Update document folder back to DRAFTS
       await prisma.document.update({
         where: { id: documentId },
@@ -970,22 +1009,11 @@ class DocumentsService {
         data: { status: 'DRAFT' as any }
       });
 
-      // Sync active DocumentReview state machine
-      const activeReview = await prisma.documentReview.findFirst({
-        where: {
-          documentId,
-          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
-        },
-      });
-      if (activeReview) {
-        await prisma.documentReview.update({
-          where: { id: activeReview.id },
-          data: { status: 'CHANGES_REQUESTED' as any },
-        });
-      }
-
       return true;
     } catch (error) {
+      // Canonical transition failures must propagate so invalid rejections are
+      // surfaced (with the transition engine's status/code), not swallowed.
+      if (error instanceof DocumentReviewWorkflowError) throw error;
       console.error('Error rejecting document:', error);
       return false;
     }
