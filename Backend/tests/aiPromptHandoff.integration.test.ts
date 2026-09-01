@@ -144,7 +144,7 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
     });
     await db.documentVersion.createMany({
       data: [
-        { id: ids.version, documentId: ids.document, version: 1, name: 'Selected document v1', description: 'Dr. John Smith reviewed Prompt Client.', uploadedById: ids.admin, isCurrent: true },
+        { id: ids.version, documentId: ids.document, version: 1, name: 'Selected document v1', description: `Dr. John Smith reviewed Prompt Client ${suffix}.`, uploadedById: ids.admin, isCurrent: true },
         { id: ids.otherVersion, documentId: ids.otherDocument, version: 1, name: 'Foreign document v1', description: 'Foreign content.', uploadedById: ids.admin, isCurrent: true },
       ],
     });
@@ -196,7 +196,7 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
 
     expect(prepared.sourceDocumentVersionIds).toEqual([ids.version]);
     expect(prepared.externalPromptText).not.toContain('Prompt Admin');
-    expect(prepared.externalPromptText).not.toContain('Prompt Client');
+    expect(prepared.externalPromptText).not.toContain(`Prompt Client ${suffix}`);
     expect(prepared.anonymizationSnapshot).toMatchObject({ isPseudonymized: true });
     expect((prepared as unknown as { rehydrationMap?: unknown }).rehydrationMap).toBeDefined();
     expect((prepared as unknown as { rehydrationMap: Array<{ replacement: string }> }).rehydrationMap.length).toBeGreaterThan(0);
