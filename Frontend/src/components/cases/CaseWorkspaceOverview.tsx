@@ -24,6 +24,8 @@ import { DocumentWorkCard } from "@/components/documents/DocumentWorkCard";
 import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
+import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummary";
+import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
@@ -68,6 +70,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [aiPromptOpen, setAiPromptOpen] = useState(false);
   const [lifecycleTasks, setLifecycleTasks] = useState<TaskLifecycleListItem[]>([]);
   const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
+  const [timeDialogOpen, setTimeDialogOpen] = useState(false);
+  const [timeRefreshKey, setTimeRefreshKey] = useState(0);
 
 
   const load = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
@@ -446,25 +450,14 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           )}
         </CockpitSection>
 
-        {/* Time stays secondary and honest — never a fabricated figure. */}
+        {/* Time remains secondary, but Munkaidő rögzítése starts in the Case context. */}
         <CockpitSection id="ck-time" title="Munkaidő" accent="neutral">
-          {ws.time.available ? (
-            <div className="px-3 py-3 text-[12.5px] text-[var(--adm-text)]">
-              Rögzített ügyidő: <span className="font-semibold">{ws.time.loggedMinutes} perc</span>
-            </div>
-          ) : (
-            <div className="px-3 py-3">
-              <p className="text-[11.5px] font-semibold text-[var(--adm-text)]">Nem áll rendelkezésre megbízható ügy-szintű összesítés.</p>
-              <p className="mt-1 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">
-                A munkaidő (TimeEntry) jelenleg nem köthető közvetlenül ügyhöz; a Matter-idő nem jeleníthető meg ügyidőként.
-              </p>
-            </div>
-          )}
-          <div className="px-3 pb-3">
-            <Link href={`/time-entries?caseId=${encodeURIComponent(caseId)}`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
-              Munkaidő rögzítése
-            </Link>
-          </div>
+          <CaseTimeBillingSummary
+            caseId={caseId}
+            refreshKey={timeRefreshKey}
+            onRecordTime={() => setTimeDialogOpen(true)}
+            onGenerateReport={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)}
+          />
         </CockpitSection>
       </div>
 
@@ -477,6 +470,18 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} onClose={() => setAiPromptOpen(false)} /> : null}
       {selectedLifecycleTask ? <TaskSubmissionWorkspace item={selectedLifecycleTask} onClose={() => setSelectedLifecycleTask(null)} onWorkflowChanged={refresh} /> : null}
+      {timeDialogOpen ? (
+        <CaseTimeEntryDialog
+          caseId={caseId}
+          tasks={ws.tasks}
+          onClose={() => setTimeDialogOpen(false)}
+          onSaved={() => {
+            setTimeDialogOpen(false);
+            setTimeRefreshKey((value) => value + 1);
+            void refresh();
+          }}
+        />
+      ) : null}
 
     </div>
   );
