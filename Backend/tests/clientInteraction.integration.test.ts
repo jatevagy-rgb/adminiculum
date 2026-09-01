@@ -5,7 +5,7 @@ import * as questions from '../src/modules/client-interaction/questionService';
 import * as submissions from '../src/modules/client-interaction/submissionService';
 import * as notifications from '../src/modules/client-interaction/notificationService';
 import { resolveActiveCustomerGrant } from '../src/modules/client-interaction/base';
-import { setScanner } from '../src/modules/client-interaction/scannerAdapter';
+import { setScanner } from '../src/modules/upload-security/scannerAdapter';
 import { setMailSender } from '../src/modules/client-interaction/mailAdapter';
 import { setQuarantineStore } from '../src/modules/client-interaction/quarantineAdapter';
 
@@ -36,7 +36,7 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     process.env.CLIENT_PORTAL_ACTIONS_ENABLED = 'true';
     for (const g of ['QUESTIONS', 'DOCUMENT_REQUESTS', 'DATA_REQUESTS', 'DOCUMENT_UPLOADS', 'EMAIL_NOTIFICATIONS']) process.env[`CLIENT_PORTAL_${g}_ENABLED`] = 'true';
 
-    setQuarantineStore({ provider: 'TEST', async put({ checksum, buffer }) { store.set(checksum, buffer); return { reference: `test:${checksum}`, provider: 'TEST' }; }, async get(ref) { return store.get(ref.replace('test:', '')) || Buffer.alloc(0); } });
+    setQuarantineStore({ provider: 'TEST', async put({ checksum, buffer }) { store.set(checksum, buffer); return { reference: `test:${checksum}`, provider: 'TEST' }; }, async get(ref) { return store.get(ref.replace('test:', '')) || Buffer.alloc(0); }, async remove(ref) { store.delete(ref.replace('test:', '')); } });
     setScanner({ provider: 'TEST', async scan() { return { outcome: 'CLEAN', provider: 'TEST', codeSafe: 'OK' }; } });
     setMailSender({ provider: 'TEST', async send(m) { sent.push({ to: m.to, idempotencyKey: m.idempotencyKey }); return { providerMessageId: `msg-${sent.length}`, provider: 'TEST' }; } });
 
@@ -130,3 +130,6 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     expect((await notifications.listNotificationDeliveries(unassignedLawyerActor, {}, db)).total).toBe(0);
   });
 });
+
+
+

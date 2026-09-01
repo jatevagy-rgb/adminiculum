@@ -30,12 +30,16 @@ export interface QuarantineStore {
   readonly provider: string;
   put(input: QuarantinePutInput): Promise<{ reference: string; provider: string }>;
   get(reference: string): Promise<Buffer>;
+  remove(reference: string): Promise<void>;
 }
 
 class UnconfiguredQuarantine implements QuarantineStore {
   readonly provider = 'NONE';
   async put(): Promise<{ reference: string; provider: string }> {
     throw new QuarantineError('QUARANTINE_NOT_CONFIGURED', 'No quarantine storage is configured.', true);
+  }
+  async remove(): Promise<void> {
+    // no-op for unconfigured
   }
   async get(): Promise<Buffer> {
     throw new QuarantineError('QUARANTINE_NOT_CONFIGURED', 'No quarantine storage is configured.', true);
@@ -56,3 +60,4 @@ export function setQuarantineStore(store: QuarantineStore | null): void {
 export function quarantineConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return getQuarantineStore(env).provider !== 'NONE';
 }
+

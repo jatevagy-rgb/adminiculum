@@ -1,4 +1,4 @@
-import { getScanner, scannerConfigured, isAcceptableFileStatus, setScanner } from '../src/modules/client-interaction/scannerAdapter';
+import { getScanner, scannerConfigured, isAcceptableFileStatus, setScanner } from '../src/modules/upload-security/scannerAdapter';
 import { getMailSender, mailConfigured, MailProviderError, setMailSender, DEFAULT_NOTIFICATION_BODY } from '../src/modules/client-interaction/mailAdapter';
 import { detectMimeFromMagicBytes, looksUnsafe, validateUploadFile, ACCEPTED_UPLOAD_MIME } from '../src/modules/client-interaction/fileValidation';
 
@@ -6,7 +6,7 @@ afterEach(() => { setScanner(null); setMailSender(null); });
 
 describe('malware scanner adapter (unconfigured)', () => {
   it('never returns CLEAN and reports SCANNER_NOT_CONFIGURED', async () => {
-    const result = await getScanner().scan({ sizeBytes: 10, detectedMimeType: 'application/pdf' });
+    const result = await getScanner().scan({ sizeBytes: 10, detectedMimeType: 'application/pdf', buffer: Buffer.from([]), fileName: 'test.pdf' });
     expect(result.outcome).toBe('SCAN_FAILED');
     expect(result.provider).toBe('NONE');
     expect(result.codeSafe).toBe('SCANNER_NOT_CONFIGURED');
@@ -72,3 +72,6 @@ describe('file validation (magic bytes, not declared MIME)', () => {
     expect(validateUploadFile({ buffer: Buffer.from([]), originalFileName: 'a.pdf' }).codeSafe).toBe('EMPTY_FILE');
   });
 });
+
+
+

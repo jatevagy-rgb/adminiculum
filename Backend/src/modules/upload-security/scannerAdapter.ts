@@ -1,5 +1,5 @@
 /**
- * SEC-2: Provider-Neutral Malware Scanner Adapter for Workforce Uploads
+ * SEC-2: Provider-Neutral Malware Scanner Adapter for All Uploads
  *
  * SAFETY INVARIANT: with no real scanner configured, a file can NEVER become
  * CLEAN. The unconfigured scanner returns SCAN_FAILED (code SCANNER_NOT_CONFIGURED)
@@ -12,41 +12,41 @@
  *   UNAVAILABLE → fail closed (reject) when scanner is required
  *   SCAN_FAILED → reject (scanner could not complete)
  *
- * Development/test may use a deterministic mock scanner via setWorkforceScanner().
+ * Development/test may use a deterministic mock scanner via setScanner().
  */
 
 import { httpScannerFromEnv } from './httpMalwareScanner';
 
-export type WorkforceScanOutcome = 'CLEAN' | 'INFECTED' | 'UNSUPPORTED' | 'SCAN_FAILED';
+export type ScanOutcome = 'CLEAN' | 'INFECTED' | 'UNSUPPORTED' | 'SCAN_FAILED';
 
-export interface WorkforceScanInput {
+export interface ScanInput {
   buffer: Buffer;
   detectedMimeType: string | null;
   sizeBytes: number;
   fileName: string;
 }
 
-export interface WorkforceScanResult {
-  outcome: WorkforceScanOutcome;
+export interface ScanResult {
+  outcome: ScanOutcome;
   provider: string;
   /** Bounded, non-sensitive code — never raw provider output. */
   codeSafe: string;
 }
 
-export interface WorkforceMalwareScanner {
+export interface MalwareScanner {
   readonly provider: string;
-  scan(input: WorkforceScanInput): Promise<WorkforceScanResult>;
+  scan(input: ScanInput): Promise<ScanResult>;
 }
 
 /** Default scanner when none is configured: never returns CLEAN. */
-class UnconfiguredWorkforceScanner implements WorkforceMalwareScanner {
+class UnconfiguredScanner implements MalwareScanner {
   readonly provider = 'NONE';
-  async scan(): Promise<WorkforceScanResult> {
+  async scan(): Promise<ScanResult> {
     return { outcome: 'SCAN_FAILED', provider: 'NONE', codeSafe: 'SCANNER_NOT_CONFIGURED' };
   }
 }
 
-let cached: WorkforceMalwareScanner | null = null;
+let cached: MalwareScanner | null = null;
 
 /**
  * Resolve the active workforce scanner.
@@ -55,25 +55,25 @@ let cached: WorkforceMalwareScanner | null = null;
  * WORKFORCE_MALWARE_SCANNER_URL is configured, the production HTTP adapter is
  * used. Otherwise the unconfigured scanner is used, which can NEVER return
  * CLEAN — so with no provider provisioned, uploads stay blocked. The result is
- * cached; use setWorkforceScanner(null) to force re-resolution (tests) or after
+ * cached; use setScanner(null) to force re-resolution (tests) or after
  * a config change.
  */
-export function getWorkforceScanner(env: NodeJS.ProcessEnv = process.env): WorkforceMalwareScanner {
+export function getScanner(env: NodeJS.ProcessEnv = process.env): MalwareScanner {
   if (cached) return cached;
-  cached = httpScannerFromEnv(env) ?? new UnconfiguredWorkforceScanner();
+  cached = httpScannerFromEnv(env) ?? new UnconfiguredScanner();
   return cached;
 }
 
 /** Test seam / provider wiring point. */
-export function setWorkforceScanner(scanner: WorkforceMalwareScanner | null): void {
+export function setScanner(scanner: MalwareScanner | null): void {
   cached = scanner;
 }
 
-export function workforceScannerConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
-  return getWorkforceScanner(env).provider !== 'NONE';
+export function scannerConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
+  return getScanner(env).provider !== 'NONE';
 }
 
-export interface WorkforceScannerReadiness {
+export interface ScannerReadiness {
   /** True only when a real (non-NONE) scanner provider is resolved. */
   configured: boolean;
   /** Stable provider label only — never a URL, key, or provider internals. */
@@ -85,8 +85,8 @@ export interface WorkforceScannerReadiness {
  * SCANNER_CONFIGURED vs SCANNER_UNAVAILABLE without exposing any credential,
  * endpoint, or provider internals.
  */
-export function workforceScannerReadiness(env: NodeJS.ProcessEnv = process.env): WorkforceScannerReadiness {
-  const scanner = getWorkforceScanner(env);
+export function scannerReadiness(env: NodeJS.ProcessEnv = process.env): ScannerReadiness {
+  const scanner = getScanner(env);
   return { configured: scanner.provider !== 'NONE', provider: scanner.provider };
 }
 
@@ -94,14 +94,14 @@ export function workforceScannerReadiness(env: NodeJS.ProcessEnv = process.env):
  * Map a scan outcome to a file status string.
  * Production policy: only CLEAN is acceptable.
  */
-export function workforceFileStatusForScan(outcome: WorkforceScanOutcome): string {
+export function fileStatusForScan(outcome: ScanOutcome): string {
   return outcome;
 }
 
 /**
  * A file may be accepted into the document store only when its scan status is CLEAN.
  */
-export function isWorkforceAcceptableFileStatus(status: string): boolean {
+export function isAcceptableFileStatus(status: string): boolean {
   return status === 'CLEAN';
 }
 
@@ -115,7 +115,7 @@ export function isWorkforceAcceptableFileStatus(status: string): boolean {
  * - SCAN_FAILED → reject
  * - CLEAN → accept
  */
-export function shouldRejectWorkforceScan(result: WorkforceScanResult): boolean {
+export function shouldRejectScan(result: ScanResult): boolean {
   return result.outcome !== 'CLEAN';
 }
 
@@ -124,10 +124,10 @@ export function shouldRejectWorkforceScan(result: WorkforceScanResult): boolean 
  * Returns CLEAN for files that pass basic heuristics, SCAN_FAILED for others.
  * This is NOT safe for production — use only in test environments.
  */
-export class DevMockWorkforceScanner implements WorkforceMalwareScanner {
+export class DevMockScanner implements MalwareScanner {
   readonly provider = 'DEV_MOCK';
 
-  async scan(input: WorkforceScanInput): Promise<WorkforceScanResult> {
+  async scan(input: ScanInput): Promise<ScanResult> {
     // In dev mode, accept common office document types
     const safeMimes = new Set([
       'application/pdf',
@@ -144,3 +144,5 @@ export class DevMockWorkforceScanner implements WorkforceMalwareScanner {
     return { outcome: 'UNSUPPORTED', provider: 'DEV_MOCK', codeSafe: 'MOCK_UNSUPPORTED_TYPE' };
   }
 }
+
+
