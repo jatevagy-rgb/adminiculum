@@ -93,174 +93,21 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
 
       {!loading && !error && overview ? (
         <>
-          {/* Áttekintés — Mire kell most figyelni? */}
-          <Panel title="Áttekintés">
-            {overview.attention.length ? (
-              <ul className="grid gap-2">
-                {overview.attention.map((item) => (
-                  <li key={item.code} className="rounded bg-[var(--adm-ivory-100)] px-3 py-2 text-sm text-[var(--adm-text)]">
-                    {attentionItemText(item.code, item.count)}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-[var(--adm-text-muted)]">Minden lényeges területen kijelölt felelős és friss állapot látható.</p>
-            )}
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded border border-[var(--adm-border)] bg-white p-3">
-                <p className="font-serif text-2xl text-[var(--adm-text)]">{activeContracts.length}</p>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Aktív szerződés</p>
-              </div>
-              <div className="rounded border border-[var(--adm-border)] bg-white p-3">
-                <p className="font-serif text-2xl text-[var(--adm-text)]">{openObligations.length}</p>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Nyitott kötelezettség</p>
-              </div>
-              <div className="rounded border border-[var(--adm-border)] bg-white p-3">
-                <p className="font-serif text-2xl text-[var(--adm-text)]">{overview.assessments.length}</p>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Felmérés</p>
-              </div>
-              <div className="rounded border border-[var(--adm-border)] bg-white p-3">
-                <p className="font-serif text-2xl text-[var(--adm-text)]">{overview.organization.personCount}</p>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Szervezeti személy</p>
-              </div>
-            </div>
-          </Panel>
-
-          {/* Cégkép — profil + csoportosított tények */}
-          <Panel title="Cégkép">
-            {overview.profile?.summary ? <p className="text-sm text-[var(--adm-text)]">{overview.profile.summary}</p> : null}
-            {overview.factGroups.length ? (
-              <div className="mt-3 grid gap-4 md:grid-cols-2">
-                {overview.factGroups.map((group) => (
-                  <div key={group.key} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{group.label}</p>
-                    <ul className="mt-2 space-y-1.5">
-                      {group.facts.map((fact) => (
-                        <li key={fact.id} className="text-sm text-[var(--adm-text)]">
-                          <span className="text-[var(--adm-text-muted)]">{companyFactTypeLabel(fact.type)}:</span> {fact.value}
-                          <span className="ml-1 text-xs text-[var(--adm-text-muted)]">({factVerificationLabel(fact.verificationStatus)}{fact.isCurrent ? '' : ' · korábbi vagy jövőbeli adat'})</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs rögzített cégtény.</p>
-            )}
-          </Panel>
-
-          {/* Felmérések — eredmények és fontos megállapítások */}
-          <Panel title="Felmérések">
-            <p className="mb-3 text-xs text-[var(--adm-text-muted)]">
-              Belső értékelési megállapítások; nem igazolt jogi kötelezettségek.
-            </p>
-            {overview.assessments.length ? (
-              <ul className="space-y-2">
-                {overview.assessments.map((assessment) => (
-                  <li key={assessment.id} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <b className="text-[var(--adm-text)]">{assessment.title}</b>
-                        <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{assessmentTypeLabel(assessment.type)}</span>
-                      </div>
-                      <span className={labelCls}>{assessmentStatusLabel(assessment.status)}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      {assessment.findingCount} megállapítás
-                      {assessment.completedAt ? ` · lezárva: ${formatWorkspaceDate(assessment.completedAt)}` : ''}
-                      {assessment.reviewAt ? ` · felülvizsgálat: ${formatWorkspaceDate(assessment.reviewAt)}` : ''}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-[var(--adm-text-muted)]">Még nincs aktív felmérés.</p>
-            )}
-          </Panel>
-
-          <ComplianceOverviewPanel findings={complianceFindings} loading={complianceLoading} error={complianceError} onRetry={loadCompliance} />
-          <ComplianceProposalPanel clientId={clientId} findings={complianceFindings} />
-
-          {/* Szerződések és kötelezettségek */}
-          <Panel title="Szerződések és kötelezettségek">
-            {overview.contracts.length ? (
-              <ul className="space-y-2">
-                {overview.contracts.map((contract) => (
-                  <li key={contract.id} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div>
-                        <b className="text-[var(--adm-text)]">{contract.title}</b>
-                        <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{contractTypeLabel(contract.contractType)}</span>
-                      </div>
-                      <span className={labelCls}>{contractStatusLabel(contract.status)}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      {contract.counterpartySummary ? `Szerződő fél/felek: ${contract.counterpartySummary} · ` : ''}
-                      Hatály: {formatWorkspaceDate(contract.effectiveDate)} – {formatWorkspaceDate(contract.expiryDate)}
-                      {contract.nextCriticalDate ? ` · Következő dátum: ${formatWorkspaceDate(contract.nextCriticalDate)}` : ''}
-                    </p>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      Ügyféloldali felelős: {ownerDisplayText(contract.businessOwnerDisplay)}
-                      {contract.businessOwnerPersonActive === false ? ' (nem aktív)' : ''}
-                      {contract.lawFirmOwnerName ? ` · Irodai felelős: ${contract.lawFirmOwnerName}` : ''}
-                      {contract.openObligationCount ? ` · Nyitott kötelezettség: ${contract.openObligationCount}` : ''}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs rögzített szerződés.</p>
-            )}
-
-            {openObligations.length ? (
-              <div className="mt-4 border-t border-[var(--adm-border)] pt-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Nyitott kötelezettségek</p>
-                <ul className="mt-2 space-y-1.5">
-                  {openObligations.map((obligation) => (
-                    <li key={obligation.id} className="rounded bg-[var(--adm-ivory-100)] px-3 py-2 text-sm">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <b className="text-[var(--adm-text)]">{obligation.title}</b>
-                          <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{obligationStatusLabel(obligation.status)}</span>
-                        </div>
-                        <span className={labelCls}>Felelős: {ownerDisplayText(obligation.ownerDisplay)}{obligation.ownerPersonActive === false ? ' (nem aktív)' : ''}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                        {obligation.sourceContractTitle ? `Kapcsolt szerződés: ${obligation.sourceContractTitle}` : ''}
-                        {obligation.nextDueDate ? ` · Esedékesség: ${formatWorkspaceDate(obligation.nextDueDate)}` : ''}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </Panel>
-
-          {/* Szervezet és felelősségek */}
-          <Panel title="Szervezet és felelősségek">
-            <div className="grid gap-3 md:grid-cols-2">
+          {/* 1. Figyelmet igényel */}
+          <Panel title="Figyelmet igényel">
+            <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <p className="text-sm text-[var(--adm-text-muted)]">
-                  {overview.organization.groupCount} szervezeti egység · {overview.organization.personCount} személy
-                  ({overview.organization.activePersonCount} aktív)
-                </p>
-                {overview.organization.keyPersons.length ? (
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Azonnali beavatkozás</p>
+                {overview.attention.length ? (
                   <ul className="mt-2 space-y-1.5">
-                    {overview.organization.keyPersons.map((person) => (
-                      <li key={person.id} className="rounded bg-[var(--adm-surface)] px-3 py-2 text-sm">
-                        <b className="text-[var(--adm-text)]">{person.name}</b>
-                        {person.jobTitle ? <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{person.jobTitle}</span> : null}
-                        <span className="ml-2 text-xs text-[var(--adm-text-muted)]">({personStatusLabel(person.employmentStatus)})</span>
-                        {person.groupName ? <p className="text-xs text-[var(--adm-text-muted)]">Egység: {person.groupName}</p> : null}
-                        {person.responsibilityLabels.length ? (
-                          <p className="text-xs text-[var(--adm-text-muted)]">Felelősség: {person.responsibilityLabels.join(', ')}</p>
-                        ) : null}
+                    {overview.attention.map((item) => (
+                      <li key={item.code} className="rounded bg-[var(--adm-terracotta-100)] px-3 py-2 text-sm text-[var(--adm-terracotta-950)]">
+                        {attentionItemText(item.code, item.count)}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-sm text-[var(--adm-text-muted)]">Még nincs rögzített kulcsfontosságú felelős személy.</p>
+                  <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Nincs kritikus figyelmet igénylő tétel.</p>
                 )}
               </div>
               <div>
@@ -268,55 +115,167 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
                 {overview.gaps.contractsWithoutOwnerCount + overview.gaps.obligationsWithoutOwnerCount + overview.gaps.inactiveOwnerCount > 0 ? (
                   <ul className="mt-2 space-y-1.5">
                     {overview.gaps.contractsWithoutOwner.length ? (
-                      <li className="text-sm text-[var(--adm-text)]">{attentionItemText('CONTRACTS_WITHOUT_OWNER', overview.gaps.contractsWithoutOwner.length)}</li>
+                      <li className="rounded bg-[var(--adm-amber-100)] px-3 py-2 text-sm text-[var(--adm-amber-950)]">{attentionItemText('CONTRACTS_WITHOUT_OWNER', overview.gaps.contractsWithoutOwner.length)}</li>
                     ) : null}
                     {overview.gaps.obligationsWithoutOwner.length ? (
-                      <li className="text-sm text-[var(--adm-text)]">{attentionItemText('OBLIGATIONS_WITHOUT_OWNER', overview.gaps.obligationsWithoutOwner.length)}</li>
+                      <li className="rounded bg-[var(--adm-amber-100)] px-3 py-2 text-sm text-[var(--adm-amber-950)]">{attentionItemText('OBLIGATIONS_WITHOUT_OWNER', overview.gaps.obligationsWithoutOwner.length)}</li>
                     ) : null}
                     {overview.gaps.inactiveOwnerPersons.length ? (
-                      <li className="text-sm text-[var(--adm-text)]">{attentionItemText('INACTIVE_OWNER_PERSONS', overview.gaps.inactiveOwnerPersons.length)}</li>
+                      <li className="rounded bg-[var(--adm-amber-100)] px-3 py-2 text-sm text-[var(--adm-amber-950)]">{attentionItemText('INACTIVE_OWNER_PERSONS', overview.gaps.inactiveOwnerPersons.length)}</li>
                     ) : null}
                   </ul>
-                ) : overview.contracts.length || overview.obligations.length ? (
-                  <p className="text-sm text-[var(--adm-text-muted)]">Minden aktív szerződéshez és nyitott kötelezettséghez van kijelölt felelős.</p>
                 ) : (
-                  <p className="text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs rögzített szerződés vagy kötelezettség.</p>
+                  <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Minden elemhez aktív felelős van kijelölve.</p>
                 )}
               </div>
             </div>
-            <Link href={`/clients/${clientId}#szervezet`} className="mt-3 inline-block text-xs text-[var(--adm-ochre-500)] hover:underline">
-              Megnyitás a szervezeti részleteknél →
-            </Link>
           </Panel>
 
-          {/* Fejlődési terv */}
-          <Panel title="Fejlődési terv">
-            {overview.initiatives.length ? (
-              <ul className="space-y-2">
-                {overview.initiatives.map((initiative) => (
-                  <li key={initiative.id} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <b className="text-[var(--adm-text)]">{initiative.title}</b>
-                      <span className={labelCls}>{initiativeStatusLabel(initiative.status)}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      Ügyféloldali felelős: {ownerDisplayText(initiative.clientOwnerDisplay)}{initiative.clientOwnerPersonActive === false ? ' (nem aktív)' : ''}
-                      {initiative.lawFirmOwnerName ? ` · Irodai felelős: ${initiative.lawFirmOwnerName}` : ''}
-                      {initiative.targetAt ? ` · Cél: ${formatWorkspaceDate(initiative.targetAt)}` : ''}
-                    </p>
-                    {initiative.nextMilestone ? (
-                      <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                        Következő mérföldkő: {initiative.nextMilestone.title} ({companyMilestoneStatusLabel(initiative.nextMilestone.status)}
-                        {initiative.nextMilestone.targetDate ? `, cél: ${formatWorkspaceDate(initiative.nextMilestone.targetDate)}` : ''})
-                      </p>
-                    ) : null}
+          {/* 2. Mi változott? */}
+          <Panel title="Mi változott?">
+            {overview.factGroups.some(g => g.facts.some(f => new Date(f.validFrom).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000)) ? (
+              <ul className="space-y-1.5">
+                {overview.factGroups.flatMap(g => g.facts).filter(f => new Date(f.validFrom).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000).slice(0, 3).map(f => (
+                  <li key={f.id} className="text-sm text-[var(--adm-text)]">
+                    Új adat rögzítve: <b>{f.value}</b> ({companyFactTypeLabel(f.type)}) - <span className="text-[var(--adm-text-muted)] text-xs">{formatWorkspaceDate(f.validFrom)}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs rögzített fejlesztési kezdeményezés.</p>
+              <p className="text-sm text-[var(--adm-text-muted)]">Az elmúlt 30 napban nem rögzítettünk jelentős változást az ügyfélprofilban.</p>
             )}
           </Panel>
+
+          {/* 3. Következő lépés */}
+          <Panel title="Következő lépés">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Aktív ügyek</p>
+                {overview.cases.length ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {overview.cases.slice(0, 2).map((c) => (
+                      <li key={c.id} className="rounded bg-[var(--adm-surface)] px-3 py-2 text-sm">
+                        <Link href={"/cases/" + encodeURIComponent(c.id)} className="text-[var(--adm-ochre-500)] hover:underline font-semibold">{c.title}</Link>
+                        <p className="text-xs text-[var(--adm-text-muted)] mt-1">{c.status || 'Folyamatban'}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Nincs aktív ügy a szervezethez.</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Határidők</p>
+                {overview.obligations.filter(o => o.nextDueDate).length ? (
+                  <ul className="mt-2 space-y-1.5">
+                    {overview.obligations.filter(o => o.nextDueDate).slice(0, 2).map((o) => (
+                      <li key={o.id} className="rounded bg-[var(--adm-surface)] px-3 py-2 text-sm">
+                        <b>{o.title}</b>
+                        <p className="text-xs text-[var(--adm-terracotta-700)] mt-1">Esedékes: {formatWorkspaceDate(o.nextDueDate)}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Nincs közeledő regisztrált határidő.</p>
+                )}
+              </div>
+            </div>
+          </Panel>
+
+          {/* 4. Cégprofil */}
+          <Panel title="Cégprofil">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {overview.factGroups.map((group) => (
+                <div key={group.key}>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{group.label}</p>
+                  <ul className="mt-2 space-y-1">
+                    {group.facts.map((fact) => (
+                      <li key={fact.id} className="flex justify-between text-sm">
+                        <span className="text-[var(--adm-text-muted)]">{companyFactTypeLabel(fact.type)}</span>
+                        <b className="text-[var(--adm-text)]">{fact.value}</b>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </Panel>
+
+          {/* 5. Releváns területek */}
+          <Panel title="Releváns területek">
+            {complianceLoading ? (
+              <p className="text-sm text-[var(--adm-text-muted)]">Területek betöltése...</p>
+            ) : complianceError ? (
+              <p className="text-sm text-[var(--adm-terracotta-700)]">{complianceError}</p>
+            ) : complianceFindings.length > 0 ? (
+              <ComplianceOverviewPanel findings={complianceFindings} />
+            ) : (
+              <p className="text-sm text-[var(--adm-text-muted)]">Belső értékelési megállapítások; nem igazolt jogi kötelezettségek. Nincs megjeleníthető.</p>
+            )}
+            <div className="mt-4 border-t border-[var(--adm-border)] pt-3">
+              <ComplianceProposalPanel clientId={clientId} findings={complianceFindings} />
+            </div>
+          </Panel>
+
+          {/* 6. Szerződések / kötelezettségek */}
+          <Panel title="Szerződések / kötelezettségek">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Szerződések ({overview.contracts.length})</p>
+                <ul className="mt-2 space-y-1.5">
+                  {overview.contracts.slice(0, 3).map((contract) => (
+                    <li key={contract.id} className="rounded bg-[var(--adm-surface)] px-3 py-2 text-sm flex justify-between items-center">
+                      <span className="truncate pr-2 font-medium">{contract.title}</span>
+                      <span className={labelCls}>{contractStatusLabel(contract.status)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kötelezettségek ({overview.obligations.length})</p>
+                <ul className="mt-2 space-y-1.5">
+                  {overview.obligations.slice(0, 3).map((obl) => (
+                    <li key={obl.id} className="rounded bg-[var(--adm-surface)] px-3 py-2 text-sm flex justify-between items-center">
+                      <span className="truncate pr-2 font-medium">{obl.title}</span>
+                      <span className={labelCls}>{obligationStatusLabel(obl.status)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </Panel>
+
+          {/* 7. Felelősök / kezdeményezések */}
+          <Panel title="Felelősök / kezdeményezések">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kulcsszemélyek ({overview.organization.keyPersons.length})</p>
+                <ul className="mt-2 space-y-1.5">
+                  {overview.organization.keyPersons.slice(0, 3).map((person) => (
+                    <li key={person.id} className="rounded bg-[var(--adm-surface)] px-3 py-2 text-sm">
+                      <b className="text-[var(--adm-text)]">{person.name}</b>
+                      {person.jobTitle ? <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{person.jobTitle}</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kezdeményezések ({overview.initiatives.length})</p>
+                <ul className="mt-2 space-y-1.5">
+                  {overview.initiatives.slice(0, 3).map((init) => (
+                    <li key={init.id} className="rounded bg-[var(--adm-surface)] px-3 py-2 text-sm">
+                      <b className="text-[var(--adm-text)]">{init.title}</b>
+                      <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{initiativeStatusLabel(init.status)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+            <Link href={"/clients/" + encodeURIComponent(clientId) + "/szervezet"} className="mt-3 inline-block text-xs text-[var(--adm-ochre-500)] hover:underline">
+              Szervezeti részletek megtekintése →
+            </Link>
+          </Panel>
+
         </>
       ) : null}
     </div>
