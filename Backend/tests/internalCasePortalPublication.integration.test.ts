@@ -16,6 +16,9 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
     admin: crypto.randomUUID(),
     lawyer: crypto.randomUUID(),
     outsider: crypto.randomUUID(),
+    creator: crypto.randomUUID(),
+    collaborator: crypto.randomUUID(),
+    collaboratorOutsider: crypto.randomUUID(),
     client: crypto.randomUUID(),
     otherClient: crypto.randomUUID(),
     workspace: crypto.randomUUID(),
@@ -37,6 +40,9 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
       { id: ids.admin, email: `publication-${ids.admin}@t.io`, name: 'Portal publisher', role: 'ADMIN', status: 'ACTIVE' },
       { id: ids.lawyer, email: `publication-${ids.lawyer}@t.io`, name: 'Case lawyer', role: 'LAWYER', status: 'ACTIVE' },
       { id: ids.outsider, email: `publication-${ids.outsider}@t.io`, name: 'Unrelated lawyer', role: 'LAWYER', status: 'ACTIVE' },
+      { id: ids.creator, email: `publication-${ids.creator}@t.io`, name: 'Case creator', role: 'LAWYER', status: 'ACTIVE' },
+      { id: ids.collaborator, email: `publication-${ids.collaborator}@t.io`, name: 'Read-only collaborator', role: 'COLLAB_LAWYER', status: 'ACTIVE' },
+      { id: ids.collaboratorOutsider, email: `publication-${ids.collaboratorOutsider}@t.io`, name: 'Unrelated collaborator', role: 'COLLAB_LAWYER', status: 'ACTIVE' },
     ] as never });
     await db.client.createMany({ data: [
       { id: ids.client, name: `Publication client ${ids.client}` },
@@ -55,9 +61,10 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
       { id: ids.otherMembership, clientPortalIdentityId: ids.otherIdentity, workspaceId: ids.otherWorkspace, status: 'ACTIVE', approvedAt: new Date(), approvedById: ids.admin },
     ] });
     await db.case.createMany({ data: [
-      { id: ids.privateCase, caseNumber: `PRIVATE-${ids.privateCase.slice(0, 8)}`, title: 'Strictly internal private case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.lawyer },
+      { id: ids.privateCase, caseNumber: `PRIVATE-${ids.privateCase.slice(0, 8)}`, title: 'Strictly internal private case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.creator, assignedLawyerId: ids.lawyer },
       { id: ids.publishedCase, caseNumber: `PUBLISH-${ids.publishedCase.slice(0, 8)}`, title: 'Strictly internal publication source', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin },
     ] } as never);
+    await db.caseCollaborator.create({ data: { caseId: ids.privateCase, userId: ids.collaborator, role: 'CONTRIBUTOR' } as never });
   });
 
   afterAll(async () => {
@@ -66,12 +73,13 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
     await db.clientMatterPublicationRevision.deleteMany({ where: { publicationId: { in: publications.map((publication) => publication.id) } } });
     await db.clientMatterPublication.deleteMany({ where: { id: { in: publications.map((publication) => publication.id) } } });
     await db.clientPortalGrant.deleteMany({ where: { caseId: { in: [ids.privateCase, ids.publishedCase] } } });
+    await db.caseCollaborator.deleteMany({ where: { caseId: ids.privateCase } });
     await db.case.deleteMany({ where: { id: { in: [ids.privateCase, ids.publishedCase] } } });
     await db.clientPortalWorkspaceMembership.deleteMany({ where: { id: { in: [ids.membership, ids.otherMembership] } } });
     await db.clientPortalIdentity.deleteMany({ where: { id: { in: [ids.identity, ids.otherIdentity] } } });
     await db.clientPortalWorkspace.deleteMany({ where: { id: { in: [ids.workspace, ids.otherWorkspace] } } });
     await db.client.deleteMany({ where: { id: { in: [ids.client, ids.otherClient] } } });
-    await db.user.deleteMany({ where: { id: { in: [ids.admin, ids.lawyer, ids.outsider] } } });
+    await db.user.deleteMany({ where: { id: { in: [ids.admin, ids.lawyer, ids.outsider, ids.creator, ids.collaborator, ids.collaboratorOutsider] } } });
     await db.$disconnect();
   });
 
@@ -131,10 +139,28 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
       clientSafeTitle: 'Nincs ügyhozzáférés',
       clientSafeStatus: 'Folyamatban',
     }, db)).rejects.toMatchObject({ code: 'CASE_ACCESS_FORBIDDEN' });
+    await expect(publishInternalCaseToPortal({ userId: ids.collaborator, role: 'COLLAB_LAWYER' }, ids.privateCase, {
+      workspaceId: ids.workspace,
+      workspaceMembershipId: ids.membership,
+      clientSafeTitle: 'Csak olvasási hozzáférés',
+      clientSafeStatus: 'Folyamatban',
+    }, db)).rejects.toMatchObject({ code: 'CASE_ACCESS_FORBIDDEN' });
+    await expect(publishInternalCaseToPortal({ userId: ids.collaboratorOutsider, role: 'COLLAB_LAWYER' }, ids.privateCase, {
+      workspaceId: ids.workspace,
+      workspaceMembershipId: ids.membership,
+      clientSafeTitle: 'Nincs ügyhozzáférés',
+      clientSafeStatus: 'Folyamatban',
+    }, db)).rejects.toMatchObject({ code: 'CASE_ACCESS_FORBIDDEN' });
     await expect(publishInternalCaseToPortal({ userId: ids.lawyer, role: 'LAWYER' }, ids.privateCase, {
       workspaceId: ids.workspace,
       workspaceMembershipId: ids.membership,
       clientSafeTitle: 'Ügyfelelős által publikált ügy',
+      clientSafeStatus: 'Folyamatban',
+    }, db)).resolves.toMatchObject({ grant: { status: 'ACTIVE' } });
+    await expect(publishInternalCaseToPortal({ userId: ids.creator, role: 'LAWYER' }, ids.privateCase, {
+      workspaceId: ids.workspace,
+      workspaceMembershipId: ids.membership,
+      clientSafeTitle: 'Ügy létrehozója által publikált ügy',
       clientSafeStatus: 'Folyamatban',
     }, db)).resolves.toMatchObject({ grant: { status: 'ACTIVE' } });
     expect((await listOrganizationalCases(ids.identity, ids.workspace, {}, db)).total).toBe(2);

@@ -48,8 +48,7 @@ async function requirePublicationActor(actor: InternalActor, tx: any, caseId: st
   const caseRow = await tx.case.findUnique({ where: { id: caseId }, select: { id: true, createdById: true, assignedLawyerId: true } });
   if (!caseRow) throw new OrganizationAdminError(404, 'CASE_NOT_FOUND', 'Case not found.');
   if (caseRow.createdById === actor.userId || caseRow.assignedLawyerId === actor.userId) return;
-  const collaborator = await tx.caseCollaborator.findFirst({ where: { caseId, userId: actor.userId }, select: { id: true } });
-  if (!collaborator) throw new OrganizationAdminError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access this case.');
+  throw new OrganizationAdminError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access this case.');
 }
 
 async function requireOrgWorkspace(workspaceId: string, prisma: Prisma): Promise<{ id: string; clientId: string }> {
