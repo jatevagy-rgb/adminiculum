@@ -94,6 +94,11 @@ describeWithDatabase('Legacy approve/reject delegate to canonical DocumentReview
     expect(caseRow.status).toBe('APPROVED');
     // A canonical review decision + timeline audit were recorded.
     expect(await db.reviewDecision.count({ where: { reviewId: ids.review, action: 'APPROVED' } })).toBe(1);
+    // The legacy timeline side effect persisted with a VALID canonical eventType,
+    // keeping the detailed legacy label only in the free-form compatibility field.
+    const timeline = await db.timelineEvent.findFirst({ where: { caseId: ids.case, documentId: ids.document, eventType: 'DOCUMENT_APPROVED' } });
+    expect(timeline).not.toBeNull();
+    expect(timeline?.type).toBe('CONTRACT_APPROVED');
   });
 
   it('2. repeated approve on already-APPROVED invalid state is blocked with no side effects', async () => {
@@ -127,5 +132,38 @@ describeWithDatabase('Legacy approve/reject delegate to canonical DocumentReview
     expect(review.status).toBe('APPROVED');
     // Approving must not create any client publication row.
     expect(await db.clientDocumentPublication.count({ where: { documentId: ids.document } })).toBe(0);
+  });
+
+  it('6. valid reject delegates to canonical REQUEST_CHANGES and persists a valid canonical timeline eventType', async () => {
+    // A fresh IN_REVIEW document/review on the other case, so this exercises the
+    // reject path independently of the approved fixture above.
+    const rj = {
+      doc: 'e4000000-0000-4000-8000-000000000021',
+      v1: 'e5000000-0000-4000-8000-000000000021',
+      v2: 'e5000000-0000-4000-8000-000000000022',
+      review: 'ef000000-0000-4000-8000-000000000021',
+      round: 'ef000000-0000-4000-8000-000000000022',
+    };
+    await db.document.create({ data: { id: rj.doc, name: 'Reject doc', fileName: 'reject.txt', category: 'CONTRACT', documentType: 'CONTRACT', mimeType: 'text/plain', caseId: ids.otherCase, clientId: ids.client, currentVersion: 2, currentVersionInt: 2, version: '2', spItemId: 'reject-sp-1', folder: 'REVIEW' } });
+    await db.documentVersion.createMany({ data: [
+      { id: rj.v1, documentId: rj.doc, version: 1, name: 'reject-v1.txt', originalFileName: 'reject-v1.txt', mimeType: 'text/plain', size: 10, storageReference: 'reject-v1-key', spItemId: 'reject-v1', isCurrent: false, uploadedById: ids.owner, versionType: 'ORIGINAL' },
+      { id: rj.v2, documentId: rj.doc, version: 2, name: 'reject-v2.txt', originalFileName: 'reject-v2.txt', mimeType: 'text/plain', size: 10, storageReference: 'reject-v2-key', spItemId: 'reject-v2', isCurrent: true, uploadedById: ids.owner, previousVersionId: rj.v1 },
+    ] });
+    await db.documentReview.create({ data: { id: rj.review, documentId: rj.doc, documentVersionId: rj.v2, status: 'IN_REVIEW', ownerId: ids.owner, createdById: ids.owner, assignedReviewerId: ids.reviewer } });
+    await db.documentReviewRound.create({ data: { id: rj.round, reviewId: rj.review, roundNumber: 1, reviewVersionId: rj.v2, status: 'IN_REVIEW', submittedAt: new Date(), createdById: ids.owner } });
+    await db.documentReview.update({ where: { id: rj.review }, data: { currentRoundId: rj.round } });
+
+    const ok = await documentsService.rejectDocument(rj.doc, ids.owner, 'Needs changes', 'LAWYER', db);
+    expect(ok).toBe(true);
+    const review = await db.documentReview.findUniqueOrThrow({ where: { id: rj.review } });
+    expect(review.status).toBe('CHANGES_REQUESTED'); // canonical transition, not a direct status write
+    expect(await db.reviewDecision.count({ where: { reviewId: rj.review, action: 'CHANGES_REQUESTED' } })).toBe(1);
+    const doc = await db.document.findUniqueOrThrow({ where: { id: rj.doc } });
+    expect(doc.folder).toBe('DRAFTS'); // legacy side effect after canonical success
+    const timeline = await db.timelineEvent.findFirst({ where: { caseId: ids.otherCase, documentId: rj.doc, eventType: 'DOCUMENT_REJECTED' } });
+    expect(timeline).not.toBeNull();
+    expect(timeline?.type).toBe('CONTRACT_REJECTED');
+    // Reject must not publish to the client.
+    expect(await db.clientDocumentPublication.count({ where: { documentId: rj.doc } })).toBe(0);
   });
 });

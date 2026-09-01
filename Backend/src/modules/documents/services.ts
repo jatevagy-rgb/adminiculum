@@ -917,8 +917,8 @@ class DocumentsService {
         data: {
           caseId: document.caseId,
           userId: userId,
-          eventType: 'CONTRACT_APPROVED',
-          type: 'CONTRACT_APPROVED' as any,
+          eventType: 'DOCUMENT_APPROVED',
+          type: 'CONTRACT_APPROVED' as any, // legacy compatibility label retained in free-form type
           payload: {
             documentId,
             fileName: document.fileName,
@@ -997,8 +997,8 @@ class DocumentsService {
         data: {
           caseId: document.caseId,
           userId: userId,
-          eventType: 'CONTRACT_REJECTED',
-          type: 'CONTRACT_REJECTED' as any,
+          eventType: 'DOCUMENT_REJECTED',
+          type: 'CONTRACT_REJECTED' as any, // legacy compatibility label retained in free-form type
           payload: {
             documentId,
             fileName: document.fileName,
