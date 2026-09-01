@@ -133,17 +133,7 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
 
           {/* 2. Mi változott? */}
           <Panel title="Mi változott?">
-            {overview.factGroups.some(g => g.facts.some(f => new Date(f.validFrom).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000)) ? (
-              <ul className="space-y-1.5">
-                {overview.factGroups.flatMap(g => g.facts).filter(f => new Date(f.validFrom).getTime() > Date.now() - 30 * 24 * 60 * 60 * 1000).slice(0, 3).map(f => (
-                  <li key={f.id} className="text-sm text-[var(--adm-text)]">
-                    Új adat rögzítve: <b>{f.value}</b> ({companyFactTypeLabel(f.type)}) - <span className="text-[var(--adm-text-muted)] text-xs">{formatWorkspaceDate(f.validFrom)}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-[var(--adm-text-muted)]">Az elmúlt 30 napban nem rögzítettünk jelentős változást az ügyfélprofilban.</p>
-            )}
+            <p className="text-sm text-[var(--adm-text-muted)]">Jelenleg nincs külön változás-összesítő adatforrás.</p>
           </Panel>
 
           {/* 3. Következő lépés */}

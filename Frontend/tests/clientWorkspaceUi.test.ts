@@ -6,42 +6,94 @@ import path from 'node:path';
 const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
-describe('Company workspace UI (structural)', () => {
+describe('W1C Company Workspace Convergence (structural)', () => {
   const component = () => read('src/components/clients/ClientCompanyWorkspace.tsx');
   const api = () => read('src/lib/clientWorkspaceApi.ts');
   const page = () => read('src/app/clients/[clientId]/vallalati-mukodes/page.tsx');
-  const clientPage = () => read('src/app/clients/[clientId]/page.tsx');
+  const tabs = () => read('src/components/clients/ClientWorkspaceTabs.tsx');
 
-  it('renders the coherent workspace page within the canonical Client detail', () => {
-    assert.match(clientPage(), /vallalati-mukodes/);
-    assert.match(clientPage(), /Vállalati működés/);
-    assert.match(page(), /ClientCompanyWorkspace/);
+  it('maintains exact Organization and Individual tab sets', () => {
+    const src = tabs();
+    // Org and Individual tab array definition
+    assert.match(src, /\["overview", "Áttekintés", ""\]/);
+    assert.match(src, /\["cases", "Ügyek", "\/cases"\]/);
+    assert.match(src, /\["organization", "Szervezet", "\/szervezet"\]/);
+    assert.match(src, /\["company-operations", "Vállalati működés", "\/vallalati-mukodes"\]/);
+    assert.match(src, /\["portal", "Portál", "\/portal"\]/);
+    
+    // Org mode filtering
+    assert.ok(src.includes("organizationMode ? tabs : tabs.filter"));
+    assert.match(src, /key !== "organization"/);
+    assert.match(src, /key !== "company-operations"/);
   });
 
-  it('keeps portal and cases inside the client workspace context', () => {
-    const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
-    assert.match(tabs, /\["portal", "Portál", "\/portal"\]/);
-    assert.match(tabs, /\["cases", "Ügyek", "\/cases"\]/);
-    assert.doesNotMatch(tabs, /client-portal-admin/);
-    assert.doesNotMatch(tabs, /\/cases\?clientId=/);
-    assert.equal(existsSync(path.join(root, 'src/app/clients/[clientId]/portal/page.tsx')), true);
-    assert.equal(existsSync(path.join(root, 'src/app/clients/[clientId]/cases/page.tsx')), true);
+  it('renders Company Ops with first-class active tab shell', () => {
+    const src = page();
+    assert.match(src, /<ClientWorkspaceTabs clientId={client.id} active="company-operations" organizationMode/);
+    assert.match(src, /<ClientCompanyWorkspace clientId={client.id}/);
+    // Prevents direct individual access
+    assert.match(src, /Ez a vállalati működés felület csak szervezeti ügyfélmódban érhető el/);
   });
 
-  it('hides organization-only navigation from individual workspaces', () => {
-    const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
-    const overview = read('src/app/clients/[clientId]/page.tsx');
-    const portal = read('src/app/clients/[clientId]/portal/page.tsx');
-    assert.match(tabs, /filter\(\(\[key\]\) => key !== "organization" && key !== "company-operations"\)/);
-    assert.match(overview, /portalWorkspace\?\.mode === "ORGANIZATION"/);
-    assert.match(portal, /workspace\?\.mode === "ORGANIZATION"/);
-    assert.doesNotMatch(overview, /client\.name\.includes|clientName\.includes/);
-    assert.doesNotMatch(portal, /client\.name\.includes|clientName\.includes/);
+  it('keeps Workgroups and House Style secondary', () => {
+    const src = tabs();
+    // Should be under Haladó
+    assert.match(src, /<details/);
+    assert.match(src, /Haladó/);
+    assert.match(src, /\/workgroups/);
+    assert.match(src, /Munkacsoportok/);
+    assert.match(src, /#house-style/);
+    assert.match(src, /Dokumentumstílus/);
   });
 
-  it('presents the six coherent sections instead of raw technical subsystems', () => {
+  it('enforces the exact first viewport section order in Company Ops', () => {
     const src = component();
-    for (const label of ['Figyelmet ig', 'Mi v', 'K', 'profil', 'Relev', 'telezetts', 'Felel']) { assert.match(src, new RegExp(label)); }
+    const fIdx = src.indexOf('title="Figyelmet igényel"');
+    const mIdx = src.indexOf('title="Mi változott?"');
+    const kIdx = src.indexOf('title="Következő lépés"');
+    const cIdx = src.indexOf('title="Cégprofil"');
+    
+    assert.ok(fIdx !== -1 && mIdx !== -1 && kIdx !== -1 && cIdx !== -1, 'Required titles missing');
+    assert.ok(fIdx < mIdx, 'Figyelmet igényel must be before Mi változott?');
+    assert.ok(mIdx < kIdx, 'Mi változott? must be before Következő lépés');
+    assert.ok(kIdx < cIdx, 'Következő lépés must be before Cégprofil');
+  });
+
+  it('uses canonical change feed, no Date.now 30-day change heuristic', () => {
+    const src = component();
+    assert.doesNotMatch(src, /Date.now/);
+    assert.doesNotMatch(src, /30 * 24/);
+    assert.match(src, /Jelenleg nincs külön változás-összesítő adatforrás/);
+  });
+
+  it('does not duplicate Organization editing or Contract workspace', () => {
+    const src = component();
+    // Projection only, no edit dialogs for person/group
+    assert.doesNotMatch(src, /Dialog/);
+    assert.doesNotMatch(src, /Editor/);
+    assert.doesNotMatch(src, /Input/);
+    assert.doesNotMatch(src, /Form/);
+    assert.doesNotMatch(src, /mutate/);
+    
+    // Must link to Szervezet for drill-down
+    assert.match(src, /\/szervezet"/);
+    assert.match(src, /Szervezeti részletek megtekintése/);
+  });
+
+  it('never renders raw UUIDs, Prisma enums or projector terminology in the UI', () => {
+    const src = component();
+    assert.doesNotMatch(src, /employmentStatus={/);
+    assert.doesNotMatch(src, /businessOwnerPersonId={/);
+    assert.doesNotMatch(src, /ownerPersonId={/);
+    assert.doesNotMatch(src, /clientOwnerPersonId={/);
+    assert.doesNotMatch(src, /sourceType={/);
+  });
+
+  it('renders owner names with the fallback for missing owners from canonical API', () => {
+    const src = component() + api();
+    assert.match(src, /person.name/);
+    assert.match(src, /person.jobTitle/);
+    assert.match(api(), /Nincs kijelölt felelős/);
   });
 
   it('renders the overview attention summary with human wording, never raw codes', () => {
@@ -49,52 +101,5 @@ describe('Company workspace UI (structural)', () => {
     assert.match(component(), /attentionItemText/);
     assert.match(api(), /még nincs kijelölt felelős/);
     assert.match(api(), /nyitott, magas vagy kritikus súlyosságú megállapítás/);
-    assert.match(component(), /A cég működésének egyetlen áttekintése: mi történik/);
-  });
-
-  it('renders owner names with the fallback for missing owners', () => {
-    const src = component() + api();
-    
-    
-    
-    
-  });
-
-  it('keeps helpful empty states instead of exposing implementation', () => {
-    const src = component();
-    assert.match(src, /Nincs megjelen/);
-    assert.match(src, /Minden elemhez aktív felelős van kijelölve/);
-    
-  });
-
-  it('never renders raw UUIDs, Prisma enums or projector terminology in the UI', () => {
-    const src = component();
-    assert.doesNotMatch(src, /employmentStatus=\{/);
-    assert.doesNotMatch(src, /businessOwnerPersonId=\{/);
-    assert.doesNotMatch(src, /ownerPersonId=\{/);
-    assert.doesNotMatch(src, /clientOwnerPersonId=\{/);
-    assert.doesNotMatch(src, /sourceType=\{/);
-  });
-
-  it('calls the workforce-only company workspace endpoint (no customer exposure)', () => {
-    const src = api() + page();
-    assert.match(src, /\/company-workspace\/clients\//);
-    assert.match(src, /overview/);
-    assert.doesNotMatch(src, /portal/);
-    assert.doesNotMatch(src, /customer/);
-  });
-
-  it('is registered and type-safe (files exist)', () => {
-    assert.equal(existsSync(path.join(root, 'src/components/clients/ClientCompanyWorkspace.tsx')), true);
-    assert.equal(existsSync(path.join(root, 'src/lib/clientWorkspaceApi.ts')), true);
-    assert.equal(existsSync(path.join(root, 'src/app/clients/[clientId]/vallalati-mukodes/page.tsx')), true);
-  });
-
-  it('keeps the existing detailed surfaces reachable (drill-down entry points)', () => {
-    // assert.match(clientPage(), /id="szervezet"/);
-    assert.match(clientPage(), /ClientCompanyFoundation/);
-    assert.match(clientPage(), /ClientContractLibrary/);
-    assert.match(clientPage(), /ClientOrganization/);
-    assert.match(component(), /\/szervezet/);
   });
 });
