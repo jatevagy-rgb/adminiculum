@@ -884,11 +884,12 @@ class DocumentsService {
       // (invalid source state, unresolved blocking points, version mismatch,
       // unauthorized actor, revision mismatch) the approval does NOT proceed and
       // no legacy side effect is executed.
+      // Find the document's current review REGARDLESS of status: an already-decided
+      // (e.g. APPROVED) review must still be handed to the canonical engine so an
+      // invalid repeat is rejected there, never silently bypassed by a status filter.
       const activeReview = await db.documentReview.findFirst({
-        where: {
-          documentId,
-          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
-        },
+        where: { documentId },
+        orderBy: { createdAt: 'desc' },
         include: { currentRound: true },
       });
       if (activeReview) {
@@ -968,11 +969,11 @@ class DocumentsService {
       // (invalid source state, no open points/rationale, unauthorized actor,
       // revision mismatch) the rejection does NOT proceed and no legacy side
       // effect is executed.
+      // Find the document's current review REGARDLESS of status so an invalid
+      // reject-after-approved is rejected by the canonical engine, never bypassed.
       const activeReview = await db.documentReview.findFirst({
-        where: {
-          documentId,
-          status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
-        },
+        where: { documentId },
+        orderBy: { createdAt: 'desc' },
         include: { currentRound: true },
       });
       if (activeReview) {

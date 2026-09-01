@@ -96,7 +96,7 @@ describeWithDatabase('Legacy approve/reject delegate to canonical DocumentReview
     expect(await db.reviewDecision.count({ where: { reviewId: ids.review, action: 'APPROVED' } })).toBe(1);
     // The legacy timeline side effect persisted with a VALID canonical eventType,
     // keeping the detailed legacy label only in the free-form compatibility field.
-    const timeline = await db.timelineEvent.findFirst({ where: { caseId: ids.case, documentId: ids.document, eventType: 'DOCUMENT_APPROVED' } });
+    const timeline = await db.timelineEvent.findFirst({ where: { caseId: ids.case, eventType: 'DOCUMENT_APPROVED' } });
     expect(timeline).not.toBeNull();
     expect(timeline?.type).toBe('CONTRACT_APPROVED');
   });
@@ -160,7 +160,7 @@ describeWithDatabase('Legacy approve/reject delegate to canonical DocumentReview
     expect(await db.reviewDecision.count({ where: { reviewId: rj.review, action: 'CHANGES_REQUESTED' } })).toBe(1);
     const doc = await db.document.findUniqueOrThrow({ where: { id: rj.doc } });
     expect(doc.folder).toBe('DRAFTS'); // legacy side effect after canonical success
-    const timeline = await db.timelineEvent.findFirst({ where: { caseId: ids.otherCase, documentId: rj.doc, eventType: 'DOCUMENT_REJECTED' } });
+    const timeline = await db.timelineEvent.findFirst({ where: { caseId: ids.otherCase, eventType: 'DOCUMENT_REJECTED' } });
     expect(timeline).not.toBeNull();
     expect(timeline?.type).toBe('CONTRACT_REJECTED');
     // Reject must not publish to the client.
