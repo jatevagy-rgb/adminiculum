@@ -919,7 +919,7 @@ router.post('/:id/approve', authenticate, requireDocumentObjectManageAccess, asy
     const userId = (req as any).user?.userId;
     const { comment } = req.body;
     const { id } = req.params as { id: string };
-    const success = await documentsService.approveDocument(id, userId, comment);
+    const success = await documentsService.approveDocument(id, userId, comment, (req as any).user?.role);
 
     if (!success) {
       res.status(500).json({ 
@@ -932,6 +932,10 @@ router.post('/:id/approve', authenticate, requireDocumentObjectManageAccess, asy
 
     res.json({ success: true, message: 'Document approved' });
   } catch (error) {
+    if (typeof (error as any)?.status === 'number' && typeof (error as any)?.code === 'string') {
+      res.status((error as any).status).json({ status: (error as any).status, code: (error as any).code, message: (error as any).message });
+      return;
+    }
     console.error('Approve document error:', error);
     res.status(500).json({ 
       status: 500, 
@@ -960,7 +964,7 @@ router.post('/:id/reject', authenticate, requireDocumentObjectManageAccess, asyn
     }
 
     const { id } = req.params as { id: string };
-    const success = await documentsService.rejectDocument(id, userId, reason);
+    const success = await documentsService.rejectDocument(id, userId, reason, (req as any).user?.role);
 
     if (!success) {
       res.status(500).json({ 
@@ -973,6 +977,10 @@ router.post('/:id/reject', authenticate, requireDocumentObjectManageAccess, asyn
 
     res.json({ success: true, message: 'Document rejected' });
   } catch (error) {
+    if (typeof (error as any)?.status === 'number' && typeof (error as any)?.code === 'string') {
+      res.status((error as any).status).json({ status: (error as any).status, code: (error as any).code, message: (error as any).message });
+      return;
+    }
     console.error('Reject document error:', error);
     res.status(500).json({ 
       status: 500, 
