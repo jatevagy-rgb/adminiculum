@@ -23,10 +23,10 @@ import {
   MAX_WORKFORCE_FILE_BYTES,
 } from '../src/modules/upload-security/uploadValidationCore';
 import {
-  getWorkforceScanner,
-  setWorkforceScanner,
-  DevMockWorkforceScanner,
-  shouldRejectWorkforceScan,
+  getScanner,
+  setScanner,
+  DevMockScanner,
+  shouldRejectScan,
 } from '../src/modules/upload-security/scannerAdapter';
 
 // ---------------------------------------------------------------------------
@@ -271,10 +271,10 @@ describe('SEC-2: hasPathTraversal', () => {
 
 describe('SEC-2: validateWorkforceUpload', () => {
   beforeEach(() => {
-    setWorkforceScanner(new DevMockWorkforceScanner());
+    setScanner(new DevMockScanner());
   });
   afterEach(() => {
-    setWorkforceScanner(null);
+    setScanner(null);
   });
 
   it('rejects empty file', async () => {
@@ -528,11 +528,11 @@ describe('SEC-2: inspectArchive', () => {
 
 describe('SEC-2: Scanner adapter', () => {
   afterEach(() => {
-    setWorkforceScanner(null);
+    setScanner(null);
   });
 
   it('returns SCAN_FAILED when no scanner is configured', async () => {
-    const scanner = getWorkforceScanner();
+    const scanner = getScanner();
     const result = await scanner.scan({
       buffer: PDF_BUFFER,
       detectedMimeType: 'application/pdf',
@@ -546,22 +546,22 @@ describe('SEC-2: Scanner adapter', () => {
 
   it('shouldReject returns true for SCAN_FAILED', () => {
     const result = { outcome: 'SCAN_FAILED' as const, provider: 'NONE', codeSafe: 'SCANNER_NOT_CONFIGURED' };
-    expect(shouldRejectWorkforceScan(result)).toBe(true);
+    expect(shouldRejectScan(result)).toBe(true);
   });
 
   it('shouldReject returns true for INFECTED', () => {
     const result = { outcome: 'INFECTED' as const, provider: 'TEST', codeSafe: 'MALWARE_DETECTED' };
-    expect(shouldRejectWorkforceScan(result)).toBe(true);
+    expect(shouldRejectScan(result)).toBe(true);
   });
 
   it('shouldReject returns false for CLEAN', () => {
     const result = { outcome: 'CLEAN' as const, provider: 'TEST', codeSafe: 'OK' };
-    expect(shouldRejectWorkforceScan(result)).toBe(false);
+    expect(shouldRejectScan(result)).toBe(false);
   });
 
-  it('DevMockWorkforceScanner returns CLEAN for supported types', async () => {
-    setWorkforceScanner(new DevMockWorkforceScanner());
-    const scanner = getWorkforceScanner();
+  it('DevMockScanner returns CLEAN for supported types', async () => {
+    setScanner(new DevMockScanner());
+    const scanner = getScanner();
     const result = await scanner.scan({
       buffer: PDF_BUFFER,
       detectedMimeType: 'application/pdf',
@@ -572,9 +572,9 @@ describe('SEC-2: Scanner adapter', () => {
     expect(result.provider).toBe('DEV_MOCK');
   });
 
-  it('DevMockWorkforceScanner returns UNSUPPORTED for image types', async () => {
-    setWorkforceScanner(new DevMockWorkforceScanner());
-    const scanner = getWorkforceScanner();
+  it('DevMockScanner returns UNSUPPORTED for image types', async () => {
+    setScanner(new DevMockScanner());
+    const scanner = getScanner();
     const result = await scanner.scan({
       buffer: Buffer.from([0xff, 0xd8, 0xff]),
       detectedMimeType: 'image/jpeg',
@@ -591,11 +591,11 @@ describe('SEC-2: Scanner adapter', () => {
 
 describe('SEC-2: Upload validation + scanner integration', () => {
   afterEach(() => {
-    setWorkforceScanner(null);
+    setScanner(null);
   });
 
   it('full pipeline: valid PDF passes validation with DevMock scanner', async () => {
-    setWorkforceScanner(new DevMockWorkforceScanner());
+    setScanner(new DevMockScanner());
     const validation = await validateWorkforceUpload({
       buffer: PDF_BUFFER,
       originalFileName: 'contract.pdf',
@@ -605,7 +605,7 @@ describe('SEC-2: Upload validation + scanner integration', () => {
   });
 
   it('full pipeline: valid DOCX passes validation', async () => {
-    setWorkforceScanner(new DevMockWorkforceScanner());
+    setScanner(new DevMockScanner());
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
     zip.file('word/document.xml', '<w:document/>');
@@ -642,7 +642,7 @@ describe('SEC-2: Upload validation + scanner integration', () => {
   });
 
   it('INFECTED scanner rejects valid content before storage', async () => {
-    setWorkforceScanner({
+    setScanner({
       provider: 'TEST_INFECTED',
       scan: async () => ({ outcome: 'INFECTED', provider: 'TEST_INFECTED', codeSafe: 'MALWARE_DETECTED' }),
     });
@@ -656,7 +656,7 @@ describe('SEC-2: Upload validation + scanner integration', () => {
   });
 
   it('SCAN_FAILED scanner rejects valid content before storage', async () => {
-    setWorkforceScanner({
+    setScanner({
       provider: 'TEST_ERROR',
       scan: async () => ({ outcome: 'SCAN_FAILED', provider: 'TEST_ERROR', codeSafe: 'SCANNER_TIMEOUT' }),
     });
@@ -869,11 +869,11 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
     singularMockPrisma.case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'test-user', createdById: 'test-user' });
     singularMockPrisma.caseCollaborator.findFirst.mockResolvedValue(null);
     mockUploadNewVersion.mockResolvedValue({ id: 'doc-1', version: 2 });
-    setWorkforceScanner(null);
+    setScanner(null);
   });
 
   afterEach(() => {
-    setWorkforceScanner(null);
+    setScanner(null);
   });
 
   it('rejects unauthenticated requests before validation', async () => {
@@ -913,7 +913,7 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
   });
 
   it('rejects when unconfigured scanner returns SCAN_FAILED (fail-closed)', async () => {
-    setWorkforceScanner(null);
+    setScanner(null);
     const res = await requestSingular(
       createSingularApp(),
       '/documents/doc-1/version',
@@ -928,7 +928,7 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
   });
 
   it('rejects when scanner returns INFECTED', async () => {
-    setWorkforceScanner({
+    setScanner({
       provider: 'TEST_INFECTED',
       scan: async () => ({ outcome: 'INFECTED', provider: 'TEST_INFECTED', codeSafe: 'MALWARE_DETECTED' }),
     });
@@ -946,7 +946,7 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
   });
 
   it('rejects when scanner returns SCAN_FAILED', async () => {
-    setWorkforceScanner({
+    setScanner({
       provider: 'TEST_ERROR',
       scan: async () => ({ outcome: 'SCAN_FAILED', provider: 'TEST_ERROR', codeSafe: 'SCANNER_TIMEOUT' }),
     });
@@ -964,7 +964,7 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
   });
 
   it('allows CLEAN valid content through to storage', async () => {
-    setWorkforceScanner(new DevMockWorkforceScanner());
+    setScanner(new DevMockScanner());
     const res = await requestSingular(
       createSingularApp(),
       '/documents/doc-1/version',
@@ -985,3 +985,5 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
     expect(mockUploadNewVersion).not.toHaveBeenCalled();
   });
 });
+
+

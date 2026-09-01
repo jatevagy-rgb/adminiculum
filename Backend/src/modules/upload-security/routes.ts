@@ -8,7 +8,7 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
-import { workforceScannerReadiness } from './scannerAdapter';
+import { scannerReadiness } from './scannerAdapter';
 
 const router = Router();
 router.use(authenticate, requireWorkforceUser);
@@ -19,7 +19,7 @@ router.use(authenticate, requireWorkforceUser);
  * ('HTTP' | 'NONE' | 'DEV_MOCK'), never a URL/key/provider internal.
  */
 router.get('/scanner-readiness', (_req: Request, res: Response) => {
-  const readiness = workforceScannerReadiness();
+  const readiness = scannerReadiness();
   res.json({
     configured: readiness.configured,
     provider: readiness.provider,
@@ -28,3 +28,4 @@ router.get('/scanner-readiness', (_req: Request, res: Response) => {
 });
 
 export default router;
+

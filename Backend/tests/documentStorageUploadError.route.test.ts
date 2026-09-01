@@ -73,7 +73,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
 
 import documentsRoutes from '../src/modules/documents/routes';
 import documentsService, { DocumentStorageUploadError } from '../src/modules/documents/services';
-import { DevMockWorkforceScanner, setWorkforceScanner } from '../src/modules/upload-security/scannerAdapter';
+import { DevMockScanner, setScanner } from '../src/modules/upload-security/scannerAdapter';
 
 const mockCreateDocument = jest.spyOn(documentsService, 'createDocument');
 
@@ -140,7 +140,7 @@ const VALID_FILE_CONTENT = Buffer.from('%PDF-1.4\n% test document\n%%EOF').toStr
 describe('DocumentStorageUploadError → safe 502 mapping across all upload routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    setWorkforceScanner(new DevMockWorkforceScanner());
+    setScanner(new DevMockScanner());
     mockPrisma.document.findUnique.mockResolvedValue({
       id: 'doc-1',
       caseId: 'case-1',
@@ -167,7 +167,7 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
   });
 
   afterAll(() => {
-    setWorkforceScanner(null);
+    setScanner(null);
   });
 
   describe('POST /documents (create new document)', () => {
@@ -275,3 +275,4 @@ describe('DocumentStorageUploadError → safe 502 mapping across all upload rout
     });
   });
 });
+

@@ -12,18 +12,18 @@ import {
   httpScannerFromEnv,
 } from '../src/modules/upload-security/httpMalwareScanner';
 import {
-  getWorkforceScanner,
-  setWorkforceScanner,
-  workforceScannerReadiness,
-  shouldRejectWorkforceScan,
-  type WorkforceScanInput,
+  getScanner,
+  setScanner,
+  scannerReadiness,
+  shouldRejectScan,
+  type ScanInput,
 } from '../src/modules/upload-security/scannerAdapter';
 import {
   mapWorkforceUploadRejection,
   type WorkforceUploadResult,
 } from '../src/modules/upload-security/uploadValidationCore';
 
-const SCAN_INPUT: WorkforceScanInput = {
+const SCAN_INPUT: ScanInput = {
   buffer: Buffer.from('%PDF-1.4 clean content'),
   detectedMimeType: 'application/pdf',
   sizeBytes: 22,
@@ -41,7 +41,7 @@ const realFetch = global.fetch;
 afterEach(() => {
   global.fetch = realFetch;
   jest.restoreAllMocks();
-  setWorkforceScanner(null);
+  setScanner(null);
 });
 
 describe('HttpMalwareScanner — verdicts', () => {
@@ -54,7 +54,7 @@ describe('HttpMalwareScanner — verdicts', () => {
     const scanner = new HttpMalwareScanner({ url: URL });
     const r = await scanner.scan(SCAN_INPUT);
     expect(r.outcome).toBe('CLEAN');
-    expect(shouldRejectWorkforceScan(r)).toBe(false);
+    expect(shouldRejectScan(r)).toBe(false);
     expect(Buffer.from(sentBody!)).toEqual(SCAN_INPUT.buffer);
   });
 
@@ -62,14 +62,14 @@ describe('HttpMalwareScanner — verdicts', () => {
     global.fetch = jest.fn(async () => jsonResponse({ result: 'infected' })) as any;
     const r = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
     expect(r.outcome).toBe('INFECTED');
-    expect(shouldRejectWorkforceScan(r)).toBe(true);
+    expect(shouldRejectScan(r)).toBe(true);
   });
 
   it('UNSUPPORTED → UNSUPPORTED (reject)', async () => {
     global.fetch = jest.fn(async () => jsonResponse({ result: 'unsupported' })) as any;
     const r = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
     expect(r.outcome).toBe('UNSUPPORTED');
-    expect(shouldRejectWorkforceScan(r)).toBe(true);
+    expect(shouldRejectScan(r)).toBe(true);
   });
 
   it('provider "error" → SCAN_FAILED (fail closed)', async () => {
@@ -154,7 +154,7 @@ describe('env selection & readiness (fail-closed default)', () => {
   const saved = { ...process.env };
   afterEach(() => {
     process.env = { ...saved };
-    setWorkforceScanner(null);
+    setScanner(null);
   });
 
   it('httpScannerFromEnv builds HTTP only when provider+url configured', () => {
@@ -164,17 +164,17 @@ describe('env selection & readiness (fail-closed default)', () => {
     expect(s?.provider).toBe('HTTP');
   });
 
-  it('getWorkforceScanner uses HTTP when configured, else fail-closed NONE', () => {
-    setWorkforceScanner(null);
+  it('getScanner uses HTTP when configured, else fail-closed NONE', () => {
+    setScanner(null);
     process.env.WORKFORCE_MALWARE_SCANNER = 'http';
     process.env.WORKFORCE_MALWARE_SCANNER_URL = URL;
-    expect(getWorkforceScanner(process.env).provider).toBe('HTTP');
+    expect(getScanner(process.env).provider).toBe('HTTP');
 
-    setWorkforceScanner(null);
+    setScanner(null);
     delete process.env.WORKFORCE_MALWARE_SCANNER;
     delete process.env.WORKFORCE_MALWARE_SCANNER_URL;
-    expect(getWorkforceScanner(process.env).provider).toBe('NONE');
-    expect(workforceScannerReadiness(process.env)).toEqual({ configured: false, provider: 'NONE' });
+    expect(getScanner(process.env).provider).toBe('NONE');
+    expect(scannerReadiness(process.env)).toEqual({ configured: false, provider: 'NONE' });
   });
 });
 
@@ -219,3 +219,5 @@ describe('mapWorkforceUploadRejection — safe user copy (RAW_PROVIDER_ERROR_NOT
     expect(generic.message).not.toContain('SOMETHING_WEIRD_INTERNAL');
   });
 });
+
+

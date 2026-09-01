@@ -16,7 +16,7 @@ import {
 } from './base';
 import { requireCapability, isCapabilityEnabled } from './gates';
 import { validateUploadFile, DEFAULT_MAX_FILE_BYTES } from './fileValidation';
-import { getScanner, isAcceptableFileStatus } from './scannerAdapter';
+import { getScanner, isAcceptableFileStatus } from '../upload-security/scannerAdapter';
 import { getQuarantineStore, QuarantineError } from './quarantineAdapter';
 
 function toClientSafeSubmission(row: any) {
@@ -228,8 +228,13 @@ export async function addFile(ctx: CustomerContext, submissionId: string, input:
     return { id: file.id, state: 'PROCESSING', codeSafe: code };
   }
 
-  const scan = await getScanner().scan({ buffer, sizeBytes: validation.sizeBytes, detectedMimeType: validation.detectedMimeType });
+  const scan = await getScanner().scan({ buffer, sizeBytes: validation.sizeBytes, detectedMimeType: validation.detectedMimeType, fileName: originalFileName });
   const status = scan.outcome; // CLEAN | INFECTED | UNSUPPORTED | SCAN_FAILED
+  if (status !== 'CLEAN' && quarantineReference) {
+    try { await getQuarantineStore().remove(quarantineReference); } catch (e) { console.error('Failed to cleanup quarantine', e); }
+    quarantineReference = null;
+    quarantineProvider = null;
+  }
   const file = await prisma.clientSubmissionFile.create({
     data: {
       submissionId, originalFileNameSafe: originalFileName, detectedMimeType: validation.detectedMimeType,
@@ -380,3 +385,5 @@ export async function acceptFileIntoMatter(actor: InternalActor, submissionId: s
   });
   return result;
 }
+
+

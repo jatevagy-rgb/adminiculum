@@ -4,7 +4,7 @@ import { InteractionError, safeText } from '../client-interaction/base';
 import { requireCapability } from '../client-interaction/gates';
 import { DEFAULT_MAX_FILE_BYTES, validateUploadFile } from '../client-interaction/fileValidation';
 import { getQuarantineStore, QuarantineError } from '../client-interaction/quarantineAdapter';
-import { getScanner } from '../client-interaction/scannerAdapter';
+import { getScanner } from '../upload-security/scannerAdapter';
 import { loadOwnedIntake } from './intakePolicy';
 
 type Prisma = typeof defaultPrisma;
@@ -67,7 +67,7 @@ export async function addIntakeAttachment(
     return { reference: row.id, fileName: row.originalFileNameSafe, state: customerState(String(row.status)) };
   }
 
-  const scan = await getScanner().scan({ buffer, sizeBytes: validation.sizeBytes, detectedMimeType: validation.detectedMimeType });
+  const scan = await getScanner().scan({ buffer, sizeBytes: validation.sizeBytes, detectedMimeType: validation.detectedMimeType, fileName: originalFileName });
   const row = await prisma.clientPortalIntakeAttachment.create({ data: {
     intakeRequestId: intakeId,
     originalFileNameSafe: originalFileName,
@@ -85,3 +85,5 @@ export async function addIntakeAttachment(
   } });
   return { reference: row.id, fileName: row.originalFileNameSafe, state: customerState(String(row.status)) };
 }
+
+

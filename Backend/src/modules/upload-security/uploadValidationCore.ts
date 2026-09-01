@@ -11,7 +11,7 @@
  */
 
 import * as path from 'path';
-import { getWorkforceScanner, shouldRejectWorkforceScan } from './scannerAdapter';
+import { getScanner, shouldRejectScan } from './scannerAdapter';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -430,7 +430,7 @@ export async function validateWorkforceUpload(
   }
 
   // 7. Malware scan — only CLEAN may continue
-  const scanner = getWorkforceScanner();
+  const scanner = getScanner();
   const scanResult = await scanner.scan({
     buffer: buf,
     detectedMimeType: detected,
@@ -438,7 +438,7 @@ export async function validateWorkforceUpload(
     fileName: input.originalFileName,
   });
 
-  if (shouldRejectWorkforceScan(scanResult)) {
+  if (shouldRejectScan(scanResult)) {
     return {
       ok: false,
       detectedMimeType: detected,
@@ -543,3 +543,4 @@ export function extensionForMime(mime: string): string | undefined {
 export function mimeForExtension(ext: string): string | undefined {
   return EXT_TO_MIME[ext.toLowerCase()];
 }
+
