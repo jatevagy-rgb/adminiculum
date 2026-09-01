@@ -18,6 +18,9 @@ type Props = {
   open: boolean;
   onClose: () => void;
   initialClientId?: string;
+  sourceCommunicationId?: string;
+  initialTitle?: string;
+  initialDescription?: string;
 };
 
 const ELIGIBLE_WORKFORCE_ROLES = new Set([
@@ -29,7 +32,7 @@ const ELIGIBLE_WORKFORCE_ROLES = new Set([
   "LEGAL_ASSISTANT",
 ]);
 
-export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) {
+export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCommunicationId, initialTitle, initialDescription }: Props) {
   const router = useRouter();
 
   const [clients, setClients] = useState<Client[]>([]);
@@ -41,6 +44,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
 
   const [clientId, setClientId] = useState(initialClientId || "");
   const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [caseTypeDefinitionId, setCaseTypeDefinitionId] = useState("");
   const [assignedLawyerId, setAssignedLawyerId] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -62,7 +66,9 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
 
   useEffect(() => {
     if (initialClientId) setClientId(initialClientId);
-  }, [initialClientId]);
+    if (initialTitle !== undefined) setTitle(initialTitle);
+    if (initialDescription !== undefined) setDescription(initialDescription);
+  }, [initialClientId, initialTitle, initialDescription]);
 
   const selectedOption = useMemo(
     () => creationOptions.find((o) => o.caseTypeDefinition.id === caseTypeDefinitionId) || null,
@@ -79,10 +85,8 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
       setSelectedModuleKeys(new Set());
       return;
     }
-    // Default selection includes ALL template items (both required and optional).
-    // Required items remain locked; optional items are toggleable.
-    const allKeys = new Set(selectedOption.template.items.map((item) => item.moduleKey));
-    setSelectedModuleKeys(allKeys);
+    const defaultKeys = new Set(selectedOption.template.items.map((item) => item.moduleKey));
+    setSelectedModuleKeys(defaultKeys);
   }, [selectedOption]);
 
   const canSubmit = Boolean(clientId && title.trim() && caseTypeDefinitionId && !submitting);
@@ -111,8 +115,10 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
         caseTypeDefinitionId,
         selectedModuleKeys: Array.from(selectedModuleKeys),
         title: title.trim(),
+        description: description.trim() || undefined,
         assignedLawyerId: assignedLawyerId || undefined,
         deadline: deadline || undefined,
+        sourceCommunicationId,
       });
       onClose();
       router.push(`/cases/${result.id}`);
@@ -162,6 +168,14 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
 
           {!loading && (
             <>
+              {creationOptions.length === 0 && (
+                <div role="alert" className="mb-3 rounded-md border border-[#DCCCA6] bg-[#FFF9E9] px-3 py-3 text-[12px] text-[var(--adm-text)]">
+                  Nincs aktív ügytípus-konfiguráció.
+                  <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
+                    Az ügy indításához egy adminisztrátornak aktív ügytípust és munkacsomagot kell beállítania.
+                  </span>
+                </div>
+              )}
               {/* Client + Title */}
               <div className={`${intake.area} mb-3`}>
                 <div className={intake.grid}>
@@ -180,6 +194,11 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId }: Props) 
                   </label>
                 </div>
               </div>
+
+              <label className={intake.label}>
+                Leírás / utasítás
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} className={intake.field} rows={3} />
+              </label>
 
               {/* Case Type + Responsible Lawyer */}
               <div className={`${intake.area} mb-3`}>
