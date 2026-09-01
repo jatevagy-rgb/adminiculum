@@ -325,17 +325,9 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
 
   // ---- one transaction: all of it, or none of it ------------------------
   const created = await prisma.$transaction(async (tx) => {
-    const year = now.getFullYear();
-    const countThisYear = await tx.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
-    const caseNumber = `CASE-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
-    const caseDeadline = input.deadline ? new Date(String(input.deadline)) : null;
-
-    let caseRow: any;
-    let workPackage: any = null;
-    if (caseTypeDefinitionId) {
-      let canonical;
-      try {
-        canonical = await casesService.createCase(
+    let canonical;
+    try {
+      canonical = await casesService.createCase(
           {
             title,
             clientName: client.name,
@@ -353,70 +345,39 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
           tx,
           { withinTransaction: true, provisionCaseFolders: false },
         );
-      } catch (error) {
-        if (error instanceof CaseWorkPackageError) {
-          throw new CaseIntakeError(error.code, error.message, error.status);
-        }
-        throw error;
+    } catch (error) {
+      if (error instanceof CaseWorkPackageError) {
+        throw new CaseIntakeError(error.code, error.message, error.status);
       }
-      workPackage = canonical.workPackage || null;
-      caseRow = await tx.case.findUnique({
-        where: { id: canonical.id },
-        select: {
-          id: true, caseNumber: true, title: true, status: true, priority: true,
-          matterType: true, clientRole: true, createdAt: true,
-          intakeOriginReason: true, intakeCurrentSituation: true,
-          intakeClientExpectation: true, intakeUrgentAction: true, intakeNextStep: true,
-          client: { select: { id: true, name: true } },
-          assignedLawyer: { select: { id: true, name: true } },
-        },
-      });
-      await tx.case.update({
-        where: { id: canonical.id },
-        data: {
-          intakeOriginReason: startingContext.intakeOriginReason ?? null,
-          intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
-          intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
-          intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
-          intakeNextStep: startingContext.intakeNextStep ?? null,
-        },
-      });
-      caseRow.intakeOriginReason = startingContext.intakeOriginReason ?? null;
-      caseRow.intakeCurrentSituation = startingContext.intakeCurrentSituation ?? null;
-      caseRow.intakeClientExpectation = startingContext.intakeClientExpectation ?? null;
-      caseRow.intakeUrgentAction = startingContext.intakeUrgentAction ?? null;
-      caseRow.intakeNextStep = startingContext.intakeNextStep ?? null;
-    } else {
-      caseRow = await tx.case.create({
-        data: {
-          caseNumber,
-          title,
-          caseType: matterType as never,
-          clientId,
-          clientName: client.name,
-          matterType,
-          clientRole,
-          createdById: actorId,
-          assignedLawyerId: assignedLawyerId || null,
-          intakeOriginReason: startingContext.intakeOriginReason ?? null,
-          intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
-          intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
-          intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
-          intakeNextStep: startingContext.intakeNextStep ?? null,
-          // NOTE: `Case.deadline` is an independent field.
-          // It is set only from explicit input.deadline at case creation.
-          deadline: caseDeadline || undefined,
-        } as never,
-        select: {
-          id: true, caseNumber: true, title: true, status: true, priority: true,
-          matterType: true, clientRole: true, createdAt: true,
-          intakeOriginReason: true, intakeCurrentSituation: true,
-          intakeClientExpectation: true, intakeUrgentAction: true, intakeNextStep: true,
-          client: { select: { id: true, name: true } },
-          assignedLawyer: { select: { id: true, name: true } },
-        },
-      });
+      throw error;
     }
+    const workPackage = canonical.workPackage || null;
+    const caseRow = await tx.case.findUnique({
+        where: { id: canonical.id },
+        select: {
+          id: true, caseNumber: true, title: true, status: true, priority: true,
+          matterType: true, clientRole: true, createdAt: true,
+          intakeOriginReason: true, intakeCurrentSituation: true,
+          intakeClientExpectation: true, intakeUrgentAction: true, intakeNextStep: true,
+          client: { select: { id: true, name: true } },
+          assignedLawyer: { select: { id: true, name: true } },
+        },
+    });
+    await tx.case.update({
+        where: { id: canonical.id },
+        data: {
+          intakeOriginReason: startingContext.intakeOriginReason ?? null,
+          intakeCurrentSituation: startingContext.intakeCurrentSituation ?? null,
+          intakeClientExpectation: startingContext.intakeClientExpectation ?? null,
+          intakeUrgentAction: startingContext.intakeUrgentAction ?? null,
+          intakeNextStep: startingContext.intakeNextStep ?? null,
+        },
+    });
+    caseRow.intakeOriginReason = startingContext.intakeOriginReason ?? null;
+    caseRow.intakeCurrentSituation = startingContext.intakeCurrentSituation ?? null;
+    caseRow.intakeClientExpectation = startingContext.intakeClientExpectation ?? null;
+    caseRow.intakeUrgentAction = startingContext.intakeUrgentAction ?? null;
+    caseRow.intakeNextStep = startingContext.intakeNextStep ?? null;
 
     const participantRows = [];
     for (const p of participants) {
@@ -606,26 +567,19 @@ export async function createCaseFromPortalIntakeInTransaction(actorId: string, i
   if (!actor || actor.status !== 'ACTIVE' || actor.isActive === false) throw new CaseIntakeError('USER_NOT_FOUND', 'Authenticated user is inactive.', 403);
   if (assignedLawyerId && (!assigned || assigned.status !== 'ACTIVE' || assigned.isActive === false)) throw new CaseIntakeError('USER_NOT_FOUND', 'Assigned user is inactive.', 400);
 
-  const year = new Date().getFullYear();
-  const countThisYear = await tx.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
-  const caseNumber = `CASE-${year}-${String(countThisYear + 1).padStart(3, '0')}`;
-  const caseTypes = new Set(['CONTRACT_REVIEW', 'CONTRACT_DRAFTING', 'LITIGATION', 'CORPORATE', 'IP', 'EMPLOYMENT', 'REAL_ESTATE', 'MERGERS_ACQUISITIONS', 'OTHER']);
-  const caseType = caseTypes.has(matterType) ? matterType : 'OTHER';
-  const row = await tx.case.create({
-    data: {
-      caseNumber,
-      title,
-      description,
-      caseType,
-      clientId,
-      clientName: client.name,
-      matterType,
-      createdById: actorId,
-      assignedLawyerId: assignedLawyerId || null,
-      deadline: input.deadline || null,
-      status: 'CLIENT_INPUT',
-      priority: 'MEDIUM',
-    },
+  const created = await casesService.createCase({
+    title,
+    description,
+    clientName: client.name,
+    clientId,
+    matterType,
+    createdById: actorId,
+    assignedLawyerId: assignedLawyerId || null,
+    deadline: input.deadline ? new Date(String(input.deadline)).toISOString() : null,
+  }, tx, { withinTransaction: true, provisionCaseFolders: false });
+  const row = await tx.case.update({
+    where: { id: created.id },
+    data: { status: 'CLIENT_INPUT' },
     select: { id: true, caseNumber: true, clientId: true, title: true, status: true, createdAt: true },
   });
   await tx.timelineEvent.create({

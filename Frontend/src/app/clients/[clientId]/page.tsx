@@ -26,6 +26,7 @@ import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFound
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
 import { ClientOrganization } from "@/components/clients/ClientOrganization";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
+import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
 
@@ -38,21 +39,6 @@ type InitialDocumentState = {
   message?: string;
 };
 
-const WORKFLOW_TEMPLATES = [
-  {
-    key: "SIMPLE",
-    label: "Egyszerű ügyintézés",
-    description: "Egy induló feladat a felelős ügyvédnek.",
-    steps: ["Ügyindító áttekintés"],
-  },
-  {
-    key: "CONTRACT_REVIEW_TRIAD",
-    label: "Szerződés-review",
-    description: "Gyula és Amanda párhuzamosan dolgozik, Csanád csak mindkettő után kapja meg a review-t.",
-    steps: ["Gyula: szerződés első jogi átnézése", "Amanda: ügyfél- és compliance-ellenőrzés", "Csanád: végső partneri review"],
-  },
-] as const;
-
 const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => {
@@ -62,6 +48,13 @@ const fileToBase64 = (file: File) => new Promise<string>((resolve, reject) => {
   reader.onerror = () => reject(reader.error || new Error("File read failed"));
   reader.readAsDataURL(file);
 });
+
+const WORKFLOW_TEMPLATES: ReadonlyArray<{
+  key: string;
+  label: string;
+  description: string;
+  steps: string[];
+}> = [];
 
 const formatDate = (value?: string) => {
   if (!value) return "—";
@@ -540,7 +533,13 @@ function ClientDetailContent() {
       </aside>
       </div>
 
-      {showNewCaseModal && (
+      <CompactNewCaseDialog
+        open={showNewCaseModal}
+        onClose={() => setShowNewCaseModal(false)}
+        initialClientId={client?.id}
+      />
+
+      {showNewCaseModal ? (false ? (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="adm-wizard-modal w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
             <div className="adm-wizard-header p-6 border-b"><h2 className="text-lg font-serif text-[var(--adm-text)]">Új ügy</h2></div>
@@ -691,7 +690,7 @@ function ClientDetailContent() {
             </div>
           </div>
         </div>
-      )}
+      ) : null) : null}
 
       {showEditModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

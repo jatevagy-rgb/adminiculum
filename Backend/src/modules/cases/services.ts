@@ -119,6 +119,7 @@ interface CreateCaseInput {
   workflowAssignees?: Record<string, string | null | undefined>;
   caseTypeDefinitionId?: string | null;
   selectedModuleKeys?: unknown;
+  sourceCommunicationId?: string | null;
 }
 
 interface CreateCaseOptions {
@@ -544,6 +545,11 @@ return {
       }
     }
 
+    const deadline = params.deadline ? new Date(params.deadline) : null;
+    if (deadline && Number.isNaN(deadline.getTime())) {
+      throw new CaseWorkPackageError('INVALID_DEADLINE', 'The deadline must be a valid date.', 400);
+    }
+
     const createInTransaction = async (tx: any) => {
       const newCase = await tx.case.create({
         data: {
@@ -557,7 +563,7 @@ return {
           clientRole: params.clientRole ?? null,
           status: DEFAULT_STATUS as any,
           priority: (params.priority || 'MEDIUM') as any,
-          deadline: params.deadline ? new Date(params.deadline) : undefined,
+          deadline: deadline || undefined,
           // Use validated assignedLawyerId if available, otherwise fallback to direct param (unlikely)
           assignedLawyerId: assignedLawyerId || undefined,
           sharepointSite: 'Adminiculum - Legal Workflow',
@@ -604,6 +610,26 @@ return {
           },
         } as any,
       });
+
+      if (params.sourceCommunicationId) {
+        const communication = await tx.communication.findUnique({
+          where: { id: params.sourceCommunicationId },
+          select: { id: true, clientId: true, caseId: true },
+        });
+        if (!communication) {
+          throw new CaseWorkPackageError('COMMUNICATION_NOT_FOUND', 'The source communication does not exist.', 404);
+        }
+        if (communication.caseId) {
+          throw new CaseWorkPackageError('COMMUNICATION_ALREADY_LINKED', 'The source communication is already linked to a case.', 409);
+        }
+        if (communication.clientId && communication.clientId !== clientId) {
+          throw new CaseWorkPackageError('COMMUNICATION_CLIENT_MISMATCH', 'The source communication belongs to a different client.', 403);
+        }
+        await tx.communication.update({
+          where: { id: communication.id },
+          data: { caseId: newCase.id },
+        });
+      }
 
       return { newCase, workPackage };
     };

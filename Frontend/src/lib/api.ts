@@ -1310,6 +1310,7 @@ export interface CreateCaseData {
   workflowAssignees?: Record<string, string | null | undefined>;
   caseTypeDefinitionId?: string;
   selectedModuleKeys?: string[];
+  sourceCommunicationId?: string;
 }
 
 export interface CreateCaseResponse {
@@ -1332,7 +1333,7 @@ export interface CreateCaseResponse {
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  const { clientName, clientId, matterType, title, description, clientRole, deadline, assignedLawyerId, responsibleLawyerId, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys } = data;
+  const { clientName, clientId, matterType, title, description, clientRole, deadline, assignedLawyerId, responsibleLawyerId, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys, sourceCommunicationId } = data;
   const payload: Record<string, unknown> = { clientName, matterType };
   if (clientId) payload.clientId = clientId;
   if (title) payload.title = title;
@@ -1345,6 +1346,7 @@ export async function createCase(data: CreateCaseData): Promise<CreateCaseRespon
   if (workflowAssignees && Object.keys(workflowAssignees).length > 0) payload.workflowAssignees = workflowAssignees;
   if (caseTypeDefinitionId) payload.caseTypeDefinitionId = caseTypeDefinitionId;
   if (selectedModuleKeys !== undefined) payload.selectedModuleKeys = selectedModuleKeys;
+  if (sourceCommunicationId) payload.sourceCommunicationId = sourceCommunicationId;
   return fetchApi<CreateCaseResponse>('/cases', {
     method: 'POST',
     body: JSON.stringify(payload),

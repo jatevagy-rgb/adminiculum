@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
+import { CompactNewCaseDialog } from '@/components/cases/CompactNewCaseDialog';
 import { useRouter } from 'next/navigation';
 import {
   getClientWorkgroups,
@@ -561,7 +562,12 @@ export default function WorkgroupsPageContent({
       )}
 
       {/* Create Case Modal */}
-      {showCreateCaseModal && (
+      <CompactNewCaseDialog
+        open={showCreateCaseModal}
+        onClose={() => setShowCreateCaseModal(false)}
+        initialClientId={client?.id}
+      />
+      {false && showCreateCaseModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">

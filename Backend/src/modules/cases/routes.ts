@@ -713,6 +713,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     let workflowAssignees = req.body?.workflowAssignees || req.body?.['workflowAssignees'];
     let caseTypeDefinitionId = req.body?.caseTypeDefinitionId || req.body?.['caseTypeDefinitionId'];
     let selectedModuleKeys = req.body?.selectedModuleKeys ?? req.body?.['selectedModuleKeys'];
+    let sourceCommunicationId = req.body?.sourceCommunicationId || req.body?.['sourceCommunicationId'];
 
     if (!clientName && !clientId) {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName or clientId' });
@@ -734,6 +735,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       workflowAssignees: workflowAssignees && typeof workflowAssignees === 'object' ? workflowAssignees : undefined,
       caseTypeDefinitionId: caseTypeDefinitionId || undefined,
       selectedModuleKeys,
+      sourceCommunicationId: sourceCommunicationId || undefined,
       createdById: userId
     });
 
@@ -761,7 +763,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       res.status(403).json({ status: 403, code: 'AUTH_USER_INACTIVE', message });
       return;
     }
-    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message });
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Case creation failed.' });
   }
 });
 
