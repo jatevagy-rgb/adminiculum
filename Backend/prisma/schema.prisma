@@ -403,8 +403,11 @@ model TimeEntry {
   updatedAt DateTime @updatedAt
 
   // Relations
-  matterId String
-  matter   Matter @relation(fields: [matterId], references: [id], onDelete: Cascade)
+  matterId String?
+  matter   Matter? @relation(fields: [matterId], references: [id], onDelete: Cascade)
+
+  caseId String?
+  case   Case?   @relation("CaseTimeEntries", fields: [caseId], references: [id], onDelete: Restrict)
 
   userId String
   user   User   @relation(fields: [userId], references: [id])
@@ -418,6 +421,7 @@ model TimeEntry {
 
   @@index([matterId, workDate])
   @@index([taskId])
+  @@index([caseId])
   @@map("time_entries")
 }
 
@@ -797,6 +801,7 @@ model Case {
   developmentInitiatives    DevelopmentInitiative[]
   contractRecords           ContractRecord[]
   workPackage               CaseWorkPackage?
+  caseTimeEntries           TimeEntry[]                @relation("CaseTimeEntries")
 
   @@map("cases")
 }
@@ -3609,20 +3614,20 @@ model AiPromptTemplateVersion {
   id                    String   @id @default(uuid())
   stableKey             String
   version               Int
-  title                String
-  description          String?
-  legalWorkCategory    String
-  caseTypeKeys         Json     @default("[]")
-  workPackageModuleKeys Json    @default("[]")
-  taskTypes            Json     @default("[]")
-  blocks               Json
-  requiredContext      Json     @default("[]")
-  optionalContext      Json     @default("[]")
-  outputInstructions   String
-  verificationChecklist Json    @default("[]")
-  isActive             Boolean  @default(true)
-  createdById          String?
-  createdAt            DateTime @default(now())
+  title                 String
+  description           String?
+  legalWorkCategory     String
+  caseTypeKeys          Json     @default("[]")
+  workPackageModuleKeys Json     @default("[]")
+  taskTypes             Json     @default("[]")
+  blocks                Json
+  requiredContext       Json     @default("[]")
+  optionalContext       Json     @default("[]")
+  outputInstructions    String
+  verificationChecklist Json     @default("[]")
+  isActive              Boolean  @default(true)
+  createdById           String?
+  createdAt             DateTime @default(now())
 
   @@unique([stableKey, version])
   @@index([stableKey, isActive])
@@ -3631,34 +3636,34 @@ model AiPromptTemplateVersion {
 }
 
 model AiPromptDraft {
-  id                         String            @id @default(uuid())
-  caseId                     String
-  promptTemplateId           String
-  promptTemplateStableKey   String
-  promptTemplateVersion      Int
-  promptTemplateSnapshot     Json
-  sourceDocumentIds          Json              @default("[]")
-  sourceDocumentVersionIds   Json              @default("[]")
-  sourceTaskId               String?
-  sourceWorkPackageItemId   String?
-  selectedContext            Json
-  anonymizedPreview          String
-  externalPromptText         String
-  rehydrationMap             Json
-  anonymizationSnapshot      Json
-  importedResponse           String?
-  rehydratedResponse         String?
-  rehydrationWarnings        Json              @default("[]")
-  status                     AiPromptDraftStatus @default(PREPARED)
-  reviewerNotes              String?
-  preparedById               String
-  importedById               String?
-  verifiedById               String?
-  verifiedAt                 DateTime?
-  approvedById               String?
-  approvedAt                 DateTime?
-  createdAt                  DateTime          @default(now())
-  updatedAt                  DateTime          @updatedAt
+  id                       String              @id @default(uuid())
+  caseId                   String
+  promptTemplateId         String
+  promptTemplateStableKey  String
+  promptTemplateVersion    Int
+  promptTemplateSnapshot   Json
+  sourceDocumentIds        Json                @default("[]")
+  sourceDocumentVersionIds Json                @default("[]")
+  sourceTaskId             String?
+  sourceWorkPackageItemId  String?
+  selectedContext          Json
+  anonymizedPreview        String
+  externalPromptText       String
+  rehydrationMap           Json
+  anonymizationSnapshot    Json
+  importedResponse         String?
+  rehydratedResponse       String?
+  rehydrationWarnings      Json                @default("[]")
+  status                   AiPromptDraftStatus @default(PREPARED)
+  reviewerNotes            String?
+  preparedById             String
+  importedById             String?
+  verifiedById             String?
+  verifiedAt               DateTime?
+  approvedById             String?
+  approvedAt               DateTime?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
 
   @@index([caseId, status])
   @@index([promptTemplateStableKey, promptTemplateVersion])

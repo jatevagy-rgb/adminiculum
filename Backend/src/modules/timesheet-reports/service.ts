@@ -1001,16 +1001,16 @@ class TimesheetReportService {
       ...(input.billableOnly ? { billable: true } : {}),
       ...(input.matterId ? { matterId: input.matterId } : {}),
       ...(input.lawyerId ? { userId: input.lawyerId } : {}),
-      matter: {
-        ...(input.clientId ? { clientId: input.clientId } : {}),
-        ...(input.caseId
-          ? {
-              cases: {
-                some: { id: input.caseId },
-              },
-            }
-          : {}),
-      },
+      ...(input.caseId
+        ? {
+            OR: [
+              { caseId: input.caseId },
+              { matter: { cases: { some: { id: input.caseId } } } },
+            ],
+          }
+        : input.clientId
+        ? { matter: { clientId: input.clientId } }
+        : {}),
     };
 
     const normalizedLawyerName = input.lawyerName?.trim();
@@ -1050,7 +1050,10 @@ class TimesheetReportService {
         ? (await prisma.case.findMany({ where: { matterId: caseRecord.matterId }, select: { id: true } })).map((row) => row.id)
         : [];
       attributionFiltered = entries.filter((entry) => {
-        if (!caseRecord?.matterId || entry.matterId !== caseRecord.matterId) return false;
+        if (!caseRecord?.matterId) {
+          return entry.caseId === input.caseId;
+        }
+        if (entry.matterId !== caseRecord.matterId) return false;
         const kind = classifyTimeAttribution({
           caseId: input.caseId!,
           matterId: caseRecord.matterId,

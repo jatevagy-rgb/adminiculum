@@ -329,24 +329,23 @@ router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: R
 
     // Case-first: when a Case is given without a Task or an explicit Matter,
     // derive the compatibility Matter scope from the Case SERVER-SIDE so a lawyer
-    // never selects a Matter manually. Never fabricate one — if the Case has no
-    // resolvable Matter scope, reject with a clear, actionable state.
+    // never selects a Matter manually. If the Case has no Matter, persist with
+    // matterId = NULL — the user must never be forced to create/select a Matter.
     if (!resolvedMatterId && resolvedCaseId) {
       const caseForMatter = await prisma.case.findUnique({
         where: { id: resolvedCaseId },
-        select: { matterId: true },
+        select: { matterId: true, clientId: true },
       });
       if (!caseForMatter) {
         return res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found.' });
       }
-      if (!caseForMatter.matterId) {
-        return res.status(409).json({ status: 409, code: 'TIME_ENTRY_CASE_MATTER_UNRESOLVED', message: 'This case has no billing scope yet; it must be provisioned before time can be recorded.' });
-      }
+      // Derive matterId if available; NULL is valid for Case-first without Matter.
       resolvedMatterId = caseForMatter.matterId;
     }
 
-    if (!resolvedMatterId) {
-      return res.status(400).json({ error: 'Missing required field: matterId (or taskId)' });
+    // At least one attribution scope is required — pure-null (no case, no task, no matter) is rejected.
+    if (!resolvedMatterId && !resolvedCaseId) {
+      return res.status(400).json({ error: 'Missing required field: caseId, matterId, or taskId' });
     }
 
     // Map Hungarian workType labels to Prisma enum values
@@ -361,18 +360,31 @@ router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: R
     };
     const mappedWorkType = workTypeMap[workType] || workType;
 
-    // Validate matterId exists
-    const matterExists = await prisma.matter.findUnique({ where: { id: resolvedMatterId }, select: { id: true } });
-    if (!matterExists) {
-      return res.status(400).json({ error: `Matter with id '${resolvedMatterId}' not found` });
+    // Validate matterId exists (only when Matter scope is available)
+    if (resolvedMatterId) {
+      const matterExists = await prisma.matter.findUnique({ where: { id: resolvedMatterId }, select: { id: true } });
+      if (!matterExists) {
+        return res.status(400).json({ error: `Matter with id '${resolvedMatterId}' not found` });
+      }
     }
     if (resolvedCaseId) {
       const caseRecord = await prisma.case.findUnique({
         where: { id: resolvedCaseId },
-        select: { id: true, matterId: true, assignedLawyerId: true, createdById: true },
+        select: { id: true, matterId: true, clientId: true, assignedLawyerId: true, createdById: true },
       });
-      if (!caseRecord || caseRecord.matterId !== resolvedMatterId) {
+      if (!caseRecord) {
+        return res.status(400).json({ status: 400, code: 'CASE_NOT_FOUND', message: 'Case not found.' });
+      }
+      // When Matter scope is present, verify Case-Matter consistency.
+      if (resolvedMatterId && caseRecord.matterId !== resolvedMatterId) {
         return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CASE_MATTER_MISMATCH', message: 'caseId must belong to the selected matter.' });
+      }
+      // Verify client scope when matterId is present: Matter.clientId must match Case.clientId.
+      if (resolvedMatterId) {
+        const matterRecord = await prisma.matter.findUnique({ where: { id: resolvedMatterId }, select: { clientId: true } });
+        if (matterRecord && matterRecord.clientId !== caseRecord.clientId) {
+          return res.status(400).json({ status: 400, code: 'TIME_ENTRY_CROSS_CLIENT', message: 'Matter and case belong to different clients.' });
+        }
       }
       if (!taskScopeAuthorized) {
         const collaborator = await prisma.caseCollaborator.findFirst({
@@ -394,6 +406,7 @@ router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: R
     const entry = await prisma.timeEntry.create({
       data: {
         matterId: resolvedMatterId,
+        caseId: resolvedCaseId,
         taskId: resolvedTaskId,
         workType: mappedWorkType,
         description,
@@ -407,6 +420,9 @@ router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: R
         matter: {
           select: { id: true, title: true }
         },
+        case: {
+          select: { id: true, caseNumber: true, title: true }
+        },
         user: {
           select: { id: true, name: true }
         },
@@ -416,15 +432,17 @@ router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: R
       }
     });
 
-    // Update matter total minutes
-    await prisma.matter.update({
-      where: { id: resolvedMatterId },
-      data: {
-        totalMinutes: {
-          increment: parseInt(minutes)
+    // Update matter total minutes (only when Matter scope is present)
+    if (resolvedMatterId) {
+      await prisma.matter.update({
+        where: { id: resolvedMatterId },
+        data: {
+          totalMinutes: {
+            increment: parseInt(minutes)
+          }
         }
-      }
-    });
+      });
+    }
 
     // If caseId provided, create timeline event
     if (resolvedCaseId) {
@@ -519,7 +537,7 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
     });
 
     // Update matter total if minutes changed
-    if (minuteDiff !== 0) {
+    if (minuteDiff !== 0 && original.matterId) {
       await prisma.matter.update({
         where: { id: original.matterId },
         data: {
@@ -567,14 +585,16 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
     });
 
     // Update matter total
-    await prisma.matter.update({
-      where: { id: entry.matterId },
-      data: {
-        totalMinutes: {
-          decrement: entry.minutes
+    if (entry.matterId) {
+      await prisma.matter.update({
+        where: { id: entry.matterId },
+        data: {
+          totalMinutes: {
+            decrement: entry.minutes
+          }
         }
-      }
-    });
+      });
+    }
 
     res.json({ message: 'Time entry deleted successfully' });
   } catch (error) {
