@@ -7,7 +7,8 @@ import {
 } from '@prisma/client';
 import prisma from '../../config/database';
 import { canUserActOnTask } from './taskAuthorization';
-import { validateTaskTransition, WorkflowTransitionError } from '../cases/workItems';
+import { WorkflowTransitionError } from '../cases/workItems';
+import { planCanonicalTaskTransition } from './taskLifecycle.service';
 import {
   AttachDocumentInput,
   AttachTimeEntryInput,
@@ -696,7 +697,7 @@ export class TaskSubmissionService {
     if (submission.zeroTimeConfirmed) warnings.push('ZERO_TIME_CONFIRMED');
 
     try {
-      validateTaskTransition(task, 'SUBMIT_FOR_REVIEW', actorId, actorRole);
+      planCanonicalTaskTransition(task, 'SUBMIT_FOR_REVIEW', actorId, actorRole);
     } catch (error) {
       if (error instanceof WorkflowTransitionError) blocking.push('TASK_STATE_NOT_SUBMITTABLE');
       else throw error;
@@ -839,7 +840,7 @@ export class TaskSubmissionService {
         throw new TaskSubmissionServiceError(409, 'HANDOFF_NOT_READY', 'The task submission is not ready.',);
       }
 
-      const transition = validateTaskTransition(task, 'SUBMIT_FOR_REVIEW', actorId, access.role);
+      const transition = planCanonicalTaskTransition(task, 'SUBMIT_FOR_REVIEW', actorId, access.role);
       const submittedAt = new Date();
       const updated = await tx.taskSubmission.update({
         where: { id: submissionId },
