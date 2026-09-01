@@ -67,8 +67,9 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [lifecycleTasks, setLifecycleTasks] = useState<TaskLifecycleListItem[]>([]);
   const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true); setError(null);
+  const load = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
+    if (!background) setLoading(true);
+    setError(null);
     try {
       const [workspace, caseResponsibility, lifecycle] = await Promise.all([
         getCaseWorkspace(caseId),
@@ -79,16 +80,19 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       setResponsibility(caseResponsibility);
       setLifecycleTasks(lifecycle.filter((task) => task.case.id === caseId));
     }
-    catch { setError("Az ügy-munkatér most nem tölthető be."); }
-    finally { setLoading(false); }
+    catch {
+      if (!background) setError("Az ügy-munkatér most nem tölthető be.");
+    }
+    finally {
+      if (!background) setLoading(false);
+    }
   }, [caseId]);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    try { setWs(await getCaseWorkspace(caseId)); }
-    catch { /* keep the last good projection; action errors surface separately */ }
+    try { await load({ background: true }); }
     finally { setRefreshing(false); }
-  }, [caseId]);
+  }, [load]);
 
   useEffect(() => { void load(); }, [load]);
 

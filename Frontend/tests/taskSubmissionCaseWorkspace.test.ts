@@ -19,4 +19,13 @@ describe('Case Workspace task submission convergence', () => {
     assert.doesNotMatch(workspace, /completeTask\(/);
     assert.doesNotMatch(workspace, /submitTask\(/);
   });
+
+  it('refreshes the Case Workspace and filtered lifecycle projection together', () => {
+    assert.match(workspace, /const load = useCallback\(async \(\{ background = false \}/);
+    assert.match(workspace, /getCaseWorkspace\(caseId\)/);
+    assert.match(workspace, /listTaskLifecycleItems\(\)/);
+    assert.match(workspace, /lifecycle\.filter\(\(task\) => task\.case\.id === caseId\)/);
+    assert.match(workspace, /await load\(\{ background: true \}\)/);
+    assert.match(workspace, /onWorkflowChanged=\{refresh\}/);
+  });
 });
