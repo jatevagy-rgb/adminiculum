@@ -45,7 +45,17 @@ describe('Canonical workforce communication workspace', () => {
     assert.match(src, /Az Outlook nincs összekötve/);
     assert.match(src, /Rögzített kommunikáció/);
     assert.match(src, /Outlook/);
+    assert.match(src, /Demo adat/);
+    assert.match(src, /fixture\.invalid/);
     assert.doesNotMatch(src, /mailboxAddress|access_token|Bearer/i);
+  });
+
+  it('sanitizes unknown conflicts and keeps only functional quick views', () => {
+    const src = workspace();
+    assert.doesNotMatch(src, /error\.message \|\| fallback/);
+    assert.match(src, /A művelet ütközik a jelenlegi állapottal/);
+    assert.doesNotMatch(src, /Válaszra vár|value: "replies"|activeView === "replies"/);
+    for (const label of ['Összes', 'Bejövő', 'Kimenő', 'Belső', 'Feldolgozásra vár']) assert.match(src, new RegExp(label));
   });
 
   it('keeps contextual case communication separate from the global inbox', () => {

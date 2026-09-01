@@ -29,12 +29,10 @@ const closedTaskStatuses = new Set(["DONE", "COMPLETED", "APPROVED", "FINALIZED"
 
 const viewOptions = [
   { label: "Összes", value: "all" },
-  { label: "Külső", value: "external" },
+  { label: "Bejövő", value: "incoming" },
+  { label: "Kimenő", value: "outgoing" },
   { label: "Belső", value: "internal" },
-  { label: "Válaszra vár", value: "replies" },
-  { label: "Ügyfélhez sorolt", value: "clients" },
-  { label: "Ügyhöz sorolt", value: "cases" },
-  { label: "Feladathoz kapcsolt", value: "tasks" },
+  { label: "Feldolgozásra vár", value: "pending" },
 ] as const;
 
 const caseMatterTypeOptions = [
@@ -192,12 +190,10 @@ export default function CommunicationWorkspace() {
       const relatedCase = item.caseId ? caseById.get(item.caseId) : null;
       const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
 
-      if (activeView === "external" && audience !== "external") return false;
+      if (activeView === "incoming" && signal.direction !== "incoming") return false;
+      if (activeView === "outgoing" && signal.direction !== "outgoing") return false;
       if (activeView === "internal" && audience !== "internal") return false;
-      if (activeView === "clients" && !item.clientId) return false;
-      if (activeView === "cases" && !item.caseId) return false;
-      if (activeView === "tasks" && item.sourceTaskCount <= 0) return false;
-      if (activeView === "replies") return false;
+      if (activeView === "pending" && item.triage !== "NEEDS_ASSIGNMENT") return false;
       if (clientFilter !== "all" && item.clientId !== clientFilter) return false;
       if (caseFilter !== "all" && item.caseId !== caseFilter) return false;
       if (directionFilter !== "all" && signal.direction !== directionFilter) return false;
@@ -465,7 +461,7 @@ export default function CommunicationWorkspace() {
             <div className="hidden grid-cols-[1.05fr_1.45fr_0.9fr_0.75fr_0.6fr] border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)] md:grid">
               <span>Feladó / forrás</span><span>Tárgy / jelzés</span><span>Ügyfél / ügy</span><span>Státusz</span><span>Idő</span>
             </div>
-            {loading ? <EmptyState title="Kommunikáció betöltése…" /> : filtered.length === 0 ? <EmptyState title={activeView === "replies" ? "Nincs megbízható válaszállapot-adat." : "Nincs találat."} detail={activeView === "replies" ? "A válaszállapot csak későbbi, perzisztált modellből jeleníthető meg." : "Módosítsd a szűrőket."} /> : (
+            {loading ? <EmptyState title="Kommunikáció betöltése…" /> : filtered.length === 0 ? <EmptyState title="Nincs találat." detail="Módosítsd a szűrőket." /> : (
               <div className="divide-y divide-[var(--adm-border)]">
                 {filtered.map((item) => {
                   const signal = toCommunicationSignal(item);
@@ -511,6 +507,7 @@ export default function CommunicationWorkspace() {
         <select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)} disabled={caseTasksLoading} className="adm-modal-field w-full px-3 py-2 text-sm"><option value="">{caseTasksLoading ? "Feladatok betöltése…" : caseTasks.length ? "Válassz nyitott feladatot…" : "Nincs nyitott feladat az ügyön"}</option>{caseTasks.map((task) => <option key={task.id} value={task.id}>{task.title} · {task.status}</option>)}</select>
       </SimpleModal> : null}
 
+      {/* W1B_TRANSITIONAL_CASE_CREATION: retained only until the canonical Case Type / Work Package surface lands. */}
       {createCaseTarget ? <SimpleModal title="Új ügy indítása" subtitle={createCaseTarget.subject || "Nincs tárgy"} busy={caseBusy} feedback={caseFeedback} onClose={() => setCreateCaseTarget(null)} onSubmit={submitCreateCase} submitLabel="Ügy létrehozása" submitDisabled={!caseTitle.trim() || !createCaseTarget.clientId} successLink={createdCaseId ? { href: `/cases/${encodeURIComponent(createdCaseId)}`, label: "Ügy megnyitása" } : undefined}>
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy címe<input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
         {!createCaseTarget.clientId ? <p className="text-[11px] text-[var(--adm-text-muted)]">Az ügy indításához a kommunikációt előbb ügyfélhez kell kapcsolni.</p> : null}
@@ -564,7 +561,10 @@ function EmptyState({ title, detail }: { title: string; detail?: string }) {
 function apiFeedback(error: unknown, fallback: string): Feedback {
   if (error instanceof ApiError && error.status === 501) return { tone: "info", message: "A művelet nincs bekapcsolva ezen a környezeten." };
   if (error instanceof ApiError && error.status === 401) return { tone: "error", message: "Jelentkezz be újra, majd próbáld újra." };
-  if (error instanceof ApiError && error.status === 409) return { tone: "error", message: error.message || fallback };
+  if (error instanceof ApiError && error.status === 409) {
+    const knownConflict = error.message === "A kommunikáció már ehhez az ügyhöz tartozik." || error.message === "Ez a feladat már ehhez a kommunikációhoz tartozik.";
+    return { tone: "error", message: knownConflict ? error.message : "A művelet ütközik a jelenlegi állapottal." };
+  }
   return { tone: "error", message: fallback };
 }
 
@@ -574,9 +574,14 @@ function formatContact(item: CommunicationItem) {
 }
 
 function sourceLabel(item: CommunicationItem) {
+  if (isDemoFixture(item)) return "Demo adat";
   if (item.source === "OUTLOOK") return "Outlook";
   if (item.source === "MANUAL") return "Rögzített kommunikáció";
   return item.type === "NOTE" ? "Belső" : "Kommunikáció";
+}
+
+function isDemoFixture(item: CommunicationItem) {
+  return [item.senderEmail, item.recipientEmail].some((email) => String(email || "").toLowerCase().endsWith("@fixture.invalid"));
 }
 
 function formatCommunicationType(type: CommunicationItem["type"]) {
