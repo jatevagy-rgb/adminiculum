@@ -15,7 +15,7 @@ describe('primary navigation contextual access', () => {
     );
     assert.doesNotMatch(sidebar, /items:.*documents-compare/);
     assert.doesNotMatch(sidebar, /items:.*calendar/);
-    for (const label of ['Műszerfal', 'Ügyek', 'Ügyfelek', 'Feladatok', 'Bejövő kommunikáció', 'Beállítások']) {
+    for (const label of ['Műszerfal', 'Ügyek', 'Ügyfelek', 'Feladatok', 'Kommunikáció', 'Beállítások']) {
       assert.match(sidebar, new RegExp(label));
     }
   });

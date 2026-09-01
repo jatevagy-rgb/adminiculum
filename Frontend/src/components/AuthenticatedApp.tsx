@@ -74,7 +74,6 @@ type AuthenticatedAppProps = {
     | "case-detail"
     | "generation"
     | "tasks"
-    | "notifications"
     | "communications"
     | "reviews"
     | "clients"
