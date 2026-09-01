@@ -30,7 +30,7 @@
     "seed:escalation-default": "node scripts/seed-escalation-default-rule.js",
     "test": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js",
     "test:comparison:db": "jest --runInBand tests/comparisonPersistence.integration.test.ts",
-    "test:review:db": "jest --runInBand tests/documentReviewWorkflow.integration.test.ts",
+    "test:review:db": "jest --runInBand tests/documentReviewWorkflow.integration.test.ts tests/documentReviewLegacyTransition.integration.test.ts",
     "test:publication:db": "jest --runInBand tests/clientPublicationFoundation.integration.test.ts",
     "test:internal-case-portal-publication:db": "jest --runInBand tests/internalCasePortalPublication.integration.test.ts",
     "test:automation:l1": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand tests/automationSuggestions.accept.integration.test.ts",

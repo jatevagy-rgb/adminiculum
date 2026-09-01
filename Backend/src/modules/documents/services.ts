@@ -863,10 +863,11 @@ class DocumentsService {
     documentId: string,
     userId: string,
     comment?: string,
-    role?: string
+    role?: string,
+    db: Prisma.TransactionClient | typeof prisma = prisma
   ): Promise<boolean> {
     try {
-      const document = await prisma.document.findUnique({
+      const document = await db.document.findUnique({
         where: { id: documentId }
       });
 
@@ -883,7 +884,7 @@ class DocumentsService {
       // (invalid source state, unresolved blocking points, version mismatch,
       // unauthorized actor, revision mismatch) the approval does NOT proceed and
       // no legacy side effect is executed.
-      const activeReview = await prisma.documentReview.findFirst({
+      const activeReview = await db.documentReview.findFirst({
         where: {
           documentId,
           status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
@@ -897,12 +898,13 @@ class DocumentsService {
           'APPROVE',
           { userId, role },
           { versionId, expectedRevision: activeReview.revision, safeRationale: comment },
+          db as any,
         );
       }
 
       // Only after the canonical transition succeeds do the legacy side effects run.
       // Update document folder to APPROVED
-      await prisma.document.update({
+      await db.document.update({
         where: { id: documentId },
         data: { folder: 'APPROVED' as any }
       });
@@ -911,7 +913,7 @@ class DocumentsService {
       await driveService.checkinDocument(document.spItemId, userId, comment || 'Document approved');
 
       // Create TimelineEvent
-      await prisma.timelineEvent.create({
+      await db.timelineEvent.create({
         data: {
           caseId: document.caseId,
           userId: userId,
@@ -926,7 +928,7 @@ class DocumentsService {
       });
 
       // Update Case status to APPROVED
-      await prisma.case.update({
+      await db.case.update({
         where: { id: document.caseId },
         data: { status: 'APPROVED' as any }
       });
@@ -948,10 +950,11 @@ class DocumentsService {
     documentId: string,
     userId: string,
     reason: string,
-    role?: string
+    role?: string,
+    db: Prisma.TransactionClient | typeof prisma = prisma
   ): Promise<boolean> {
     try {
-      const document = await prisma.document.findUnique({
+      const document = await db.document.findUnique({
         where: { id: documentId }
       });
 
@@ -965,7 +968,7 @@ class DocumentsService {
       // (invalid source state, no open points/rationale, unauthorized actor,
       // revision mismatch) the rejection does NOT proceed and no legacy side
       // effect is executed.
-      const activeReview = await prisma.documentReview.findFirst({
+      const activeReview = await db.documentReview.findFirst({
         where: {
           documentId,
           status: { in: ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as any },
@@ -978,18 +981,19 @@ class DocumentsService {
           'REQUEST_CHANGES',
           { userId, role },
           { expectedRevision: activeReview.revision, safeRationale: reason },
+          db as any,
         );
       }
 
       // Only after the canonical transition succeeds do the legacy side effects run.
       // Update document folder back to DRAFTS
-      await prisma.document.update({
+      await db.document.update({
         where: { id: documentId },
         data: { folder: 'DRAFTS' as any }
       });
 
       // Create TimelineEvent
-      await prisma.timelineEvent.create({
+      await db.timelineEvent.create({
         data: {
           caseId: document.caseId,
           userId: userId,
@@ -1004,7 +1008,7 @@ class DocumentsService {
       });
 
       // Update Case status to DRAFT (back to drafting)
-      await prisma.case.update({
+      await db.case.update({
         where: { id: document.caseId },
         data: { status: 'DRAFT' as any }
       });
