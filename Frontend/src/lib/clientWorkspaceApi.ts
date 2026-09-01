@@ -106,6 +106,15 @@ export type WorkspaceMilestone = {
   developmentInitiativeId: string | null;
 };
 
+export type WorkspaceCase = {
+  id: string;
+  caseNumber: string;
+  title: string;
+  status: string;
+  deadline: string | null;
+  responsibleLawyerName: string | null;
+};
+
 export type WorkspaceAttentionCode =
   | 'OPEN_IMPORTANT_FINDINGS'
   | 'CONTRACTS_WITHOUT_OWNER'
@@ -140,6 +149,7 @@ export type CompanyWorkspaceOverview = {
   };
   initiatives: WorkspaceInitiative[];
   milestones: WorkspaceMilestone[];
+  cases: WorkspaceCase[];
   attention: Array<{ code: WorkspaceAttentionCode; count: number }>;
 };
 

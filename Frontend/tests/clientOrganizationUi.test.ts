@@ -51,6 +51,15 @@ describe('Organization internal UI (structural)', () => {
     assert.match(api(), /method: "PATCH"/);
   });
 
+  it('uses the coherent client workspace projection for facts and cases', () => {
+    const src = component();
+    assert.match(src, /clientWorkspaceApi\.getOverview/);
+    assert.match(src, /Szervezeti adatok/);
+    assert.match(src, /Ügyek/);
+    assert.match(src, /\/clients\/\$\{encodeURIComponent\(clientId\)\}\/cases/);
+    assert.doesNotMatch(src, /grant|workspaceId|permission JSON/i);
+  });
+
   it('keeps the route client-scoped and does not use portal access for workforce auth', () => {
     const backend = read('../Backend/src/modules/client-organization/service.ts');
     assert.match(backend, /assertClientReadAccess\(actor, clientId/);
