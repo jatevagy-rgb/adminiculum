@@ -258,13 +258,14 @@ type OnboardingState =
 type OnboardingPayload = {
   latestRequest: OnboardingRequestView | null;
   invitation: OnboardingInvitationView | null;
+  invitations: OnboardingInvitationView[];
   allowedNextAction: string;
 };
 
 async function resolveOnboardingState(session: ClientPortalSession, db: Prisma = defaultPrisma): Promise<{ state: OnboardingState; payload: OnboardingPayload }> {
   const identityId = session.clientPortalIdentityId;
   const now = new Date();
-  const empty = (allowedNextAction: string): OnboardingPayload => ({ latestRequest: null, invitation: null, allowedNextAction });
+  const empty = (allowedNextAction: string): OnboardingPayload => ({ latestRequest: null, invitation: null, invitations: [], allowedNextAction });
 
   const memberships = await db.clientPortalWorkspaceMembership.findMany({ where: { clientPortalIdentityId: identityId }, orderBy: { updatedAt: 'desc' } });
   if (memberships.length) {
@@ -280,9 +281,9 @@ async function resolveOnboardingState(session: ClientPortalSession, db: Prisma =
 
   // A direct invitation addressed to this verified e-mail takes precedence over
   // the onboarding form — never force a request on an invited user.
-  const invitation = await db.clientPortalInvitation.findFirst({
+  const invitations = await db.clientPortalInvitation.findMany({
     where: { status: 'ACTIVE', expiresAt: { gt: now }, intendedEmail: session.normalizedEmail },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: 'asc' },
   });
 
   const request = await db.clientOrganizationMembershipRequest.findFirst({
@@ -292,27 +293,41 @@ async function resolveOnboardingState(session: ClientPortalSession, db: Prisma =
   });
   const latestRequest = request ? toOnboardingRequestView(request) : null;
 
-  if (invitation) {
-    const [client, workspace] = await Promise.all([
-      db.client.findUnique({ where: { id: invitation.clientId }, select: { name: true } }),
-      invitation.workspaceId ? db.clientPortalWorkspace.findUnique({ where: { id: invitation.workspaceId }, select: { name: true, mode: true } }) : Promise.resolve(null),
+  if (invitations.length) {
+    const [clients, workspaces] = await Promise.all([
+      db.client.findMany({ where: { id: { in: [...new Set(invitations.map((item) => item.clientId))] } }, select: { id: true, name: true } }),
+      db.clientPortalWorkspace.findMany({ where: { id: { in: invitations.flatMap((item) => item.workspaceId ? [item.workspaceId] : []) } }, select: { id: true, name: true, mode: true } }),
     ]);
+    const clientNames = new Map(clients.map((item) => [item.id, item.name]));
+    const workspaceViews = new Map(workspaces.map((item) => [item.id, item]));
+    const invitationViews = invitations.flatMap((item) => {
+      const workspace = item.workspaceId ? workspaceViews.get(item.workspaceId) : null;
+      if (!workspace) return [];
+      return [{
+        invitationId: item.id,
+        organizationName: clientNames.get(item.clientId) || null,
+        workspaceName: workspace.name,
+        mode: String(workspace.mode),
+        expiresAt: item.expiresAt,
+      }];
+    });
     return {
       state: 'INVITATION_PENDING',
       payload: {
         latestRequest,
-        invitation: { invitationId: invitation.id, organizationName: client?.name || null, workspaceName: workspace?.name || null, mode: workspace ? String(workspace.mode) : null, expiresAt: invitation.expiresAt },
+        invitation: invitationViews[0] || null,
+        invitations: invitationViews,
         allowedNextAction: 'ACCEPT_INVITATION',
       },
     };
   }
   if (request && String(request.status) === 'PENDING_REVIEW') {
-    return { state: 'REQUEST_PENDING', payload: { latestRequest, invitation: null, allowedNextAction: 'VIEW_PENDING_REQUEST' } };
+    return { state: 'REQUEST_PENDING', payload: { latestRequest, invitation: null, invitations: [], allowedNextAction: 'VIEW_PENDING_REQUEST' } };
   }
   if (request && String(request.status) === 'REJECTED') {
-    return { state: 'REQUEST_REJECTED', payload: { latestRequest, invitation: null, allowedNextAction: 'RESUBMIT_REQUEST' } };
+    return { state: 'REQUEST_REJECTED', payload: { latestRequest, invitation: null, invitations: [], allowedNextAction: 'RESUBMIT_REQUEST' } };
   }
-  return { state: 'ONBOARDING_REQUIRED', payload: { latestRequest, invitation: null, allowedNextAction: 'SUBMIT_REQUEST' } };
+  return { state: 'ONBOARDING_REQUIRED', payload: { latestRequest, invitation: null, invitations: [], allowedNextAction: 'SUBMIT_REQUEST' } };
 }
 
 function selectionView(workspaces: Awaited<ReturnType<typeof activeWorkspaceRows>>, requestedReference?: string | null) {
@@ -341,7 +356,12 @@ export async function getOnboardingContext(session: ClientPortalSession, request
     : [];
   if (workspaces.length > 0) {
     const view = selectionView(workspaces, requestedReference);
-    return { identity, ...view, onboarding: null as OnboardingPayload | null };
+    const onboarding = await resolveOnboardingState(session, db);
+    return {
+      identity,
+      ...view,
+      onboarding: onboarding.payload.invitations.length ? onboarding.payload as OnboardingPayload : null,
+    };
   }
   const onboarding = await resolveOnboardingState(session, db);
   return { identity, state: onboarding.state as string, workspaces: [] as ReturnType<typeof selectionView>['workspaces'], selectedWorkspace: null as ReturnType<typeof selectionView>['selectedWorkspace'], onboarding: onboarding.payload as OnboardingPayload | null };

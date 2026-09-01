@@ -7,6 +7,7 @@ import {
   getCurrentMembershipRequests,
   rejectMembershipRequest,
   submitMembershipRequest,
+  updateClientProfile,
 } from '../src/modules/client-identity/identityService';
 import { createWorkspace, getOnboardingContext, inviteWorkspaceMember } from '../src/modules/client-workspace/workspaceService';
 import type { ClientPortalSession } from '../src/middleware/clientPortalAuth';
@@ -187,6 +188,35 @@ d('Client portal membership onboarding (PostgreSQL)', () => {
 
     const readyContext = await getOnboardingContext(sessionFor(id, email, 'ACTIVE'), undefined, db);
     expect(readyContext.state).toBe('READY');
+  });
+
+  it('supports multiple invitations, profile completion, identity binding, and idempotent acceptance', async () => {
+    const email = `multi-${crypto.randomUUID()}@t.io`;
+    const firstWorkspace = await createWorkspace(reviewer, { clientId: client, name: 'Első szervezet', mode: 'ORGANIZATION', communicationMode: 'PORTAL_PRIMARY' });
+    const secondWorkspace = await createWorkspace(reviewer, { clientId: otherClient, name: 'Második szervezet', mode: 'ORGANIZATION', communicationMode: 'PORTAL_PRIMARY' });
+    setMailSender(null);
+    await inviteWorkspaceMember(reviewer, firstWorkspace.id, { email });
+    await inviteWorkspaceMember(reviewer, secondWorkspace.id, { email });
+    const id = await makeIdentity(email);
+    const session = sessionFor(id, email);
+    const context = await getOnboardingContext(session, undefined, db);
+    expect(context.onboarding?.invitations).toHaveLength(2);
+    expect(JSON.stringify(context.onboarding)).not.toMatch(/grant|scope|membershipId|workspaceId|tenantId/i);
+
+    await expect(acceptPortalInvitation(sessionFor(crypto.randomUUID(), `other-${email}`), {
+      invitationId: context.onboarding!.invitations![0].invitationId,
+    })).rejects.toMatchObject({ code: 'INVITATION_EMAIL_MISMATCH' });
+
+    const profile = await updateClientProfile(session, { displayName: 'Meghívott Anna' });
+    expect(profile.displayName).toBe('Meghívott Anna');
+    const accepted = await acceptPortalInvitation(session, { invitationId: context.onboarding!.invitations![0].invitationId });
+    const repeated = await acceptPortalInvitation(session, { invitationId: context.onboarding!.invitations![0].invitationId });
+    expect(repeated).toEqual(accepted);
+    expect(await db.clientPortalWorkspaceMembership.count({ where: { clientPortalIdentityId: id, workspaceId: firstWorkspace.id } })).toBe(1);
+    const after = await getOnboardingContext(sessionFor(id, email, 'ACTIVE'), undefined, db);
+    expect(after.state).toBe('READY');
+    expect(after.onboarding?.invitations).toHaveLength(1);
+    expect(after.onboarding?.invitations?.[0].organizationName).toBe('Other Onboarding Client');
   });
 
   // --- Assignment-model orchestration (existing vs new client) -------------

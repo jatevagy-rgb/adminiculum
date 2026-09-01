@@ -67,4 +67,13 @@ describe('portal onboarding UI contract (structural)', () => {
     assert.ok(onboarding.includes('Hozzáférési kérelme elbírálásra vár'));
     assert.ok(onboarding.includes('pending-submitted-at'));
   });
+
+  it('keeps invited onboarding human-facing and supports selection plus profile completion', () => {
+    assert.ok(onboarding.includes('Meghívást kaptál'));
+    assert.ok(onboarding.includes('Meghívásaid'));
+    assert.ok(onboarding.includes('invitation-display-name'));
+    assert.ok(onboarding.includes('updateClientProfile'));
+    assert.ok(onboarding.includes('Csatlakozás'));
+    assert.doesNotMatch(onboarding, /grant|scope|workspaceId|membershipId|tenantId/i);
+  });
 });

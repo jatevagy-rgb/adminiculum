@@ -227,6 +227,7 @@ export type OnboardingInvitationView = {
 export type PortalOnboarding = {
   latestRequest: OnboardingRequestView | null;
   invitation: OnboardingInvitationView | null;
+  invitations?: OnboardingInvitationView[];
   allowedNextAction: string;
 };
 
