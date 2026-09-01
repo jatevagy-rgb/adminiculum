@@ -132,9 +132,11 @@ describeWithDatabase('Time -> billing preparation -> client reporting convergenc
     expect(res.body.taskId).toBeNull();
   });
 
-  it('fails safely when a Case has no resolvable Matter compatibility scope', async () => {
+  it('case-first: records time on a Case without a Matter and sets matterId = null', async () => {
     const res = await request('POST', '/time-entries', { workType: 'DRAFTING', description: 'Unscoped', minutes: 10, caseId: ids.noMatterCase, workDate: WORKDATE }, lawyerHeaders);
-    expect(res).toMatchObject({ status: 409, body: { code: 'TIME_ENTRY_CASE_MATTER_UNRESOLVED' } });
+    expect(res.status).toBe(201);
+    expect(res.body.caseId).toBe(ids.noMatterCase);
+    expect(res.body.matterId).toBeNull();
   });
 
   it('task provenance: task-derived entry keeps taskId and work-package-linked case scope', async () => {

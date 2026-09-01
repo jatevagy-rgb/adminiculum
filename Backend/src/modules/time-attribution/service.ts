@@ -18,7 +18,7 @@ export class TaskTimeAttributionError extends Error {
 export type ResolvedTaskTimeAttribution = {
   taskId: string;
   caseId: string;
-  matterId: string;
+  matterId: string | null;
   workPackageItemId: string | null;
   assignedToId: string | null;
   assignedById: string | null;
@@ -47,13 +47,8 @@ export async function resolveTaskTimeAttribution(
 
   const taskMatterId = task.matterId;
   const caseMatterId = task.case.matterId;
-  if (!taskMatterId && !caseMatterId) {
-    throw new TaskTimeAttributionError(
-      'TASK_TIME_SCOPE_UNRESOLVED',
-      'The task does not have an authoritative matter scope.',
-      409,
-    );
-  }
+  // When both Task and Case have no matter scope, matterId remains null.
+  // This is valid for Case-first time attribution on Cases without a Matter.
   if (taskMatterId && caseMatterId && taskMatterId !== caseMatterId) {
     throw new TaskTimeAttributionError(
       'TASK_TIME_SCOPE_UNRESOLVED',
@@ -62,17 +57,19 @@ export async function resolveTaskTimeAttribution(
     );
   }
 
-  const matterId = taskMatterId || caseMatterId!;
-  const matter = await db.matter.findUnique({
-    where: { id: matterId },
-    select: { id: true, clientId: true },
-  });
-  if (!matter || matter.clientId !== task.case.clientId) {
-    throw new TaskTimeAttributionError(
-      'TASK_TIME_SCOPE_UNRESOLVED',
-      'The task matter scope cannot be resolved safely.',
-      409,
-    );
+  const matterId = taskMatterId || caseMatterId || null;
+  if (matterId) {
+    const matter = await db.matter.findUnique({
+      where: { id: matterId },
+      select: { id: true, clientId: true },
+    });
+    if (!matter || matter.clientId !== task.case.clientId) {
+      throw new TaskTimeAttributionError(
+        'TASK_TIME_SCOPE_UNRESOLVED',
+        'The task matter scope cannot be resolved safely.',
+        409,
+      );
+    }
   }
 
   const workPackageCaseId = task.workPackageItem?.caseWorkPackage.caseId;
