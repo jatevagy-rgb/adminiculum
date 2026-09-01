@@ -247,6 +247,7 @@ export async function createAndPublishMatterPublicationForGrantInTransaction(
   const caseId = String(input.caseId || '');
   const grantId = String(input.grantId || '');
   const publicationSource = input.publicationSource === 'internal-case' ? 'internal-case' : 'portal-intake';
+  await exec(tx, 'SELECT pg_advisory_xact_lock(hashtext($1))', `${caseId}:${workspaceId}`);
   const caseRow = await getCase(tx, caseId);
   const workspace = await one(tx, 'SELECT id, "clientId", mode::text, status::text FROM client_portal_workspaces WHERE id=$1', workspaceId);
   if (!workspace || workspace.status !== 'ACTIVE' || workspace.mode !== 'ORGANIZATION') throw new ClientPublicationError(409, 'WORKSPACE_NOT_ACTIVE', 'An active organizational workspace is required.');

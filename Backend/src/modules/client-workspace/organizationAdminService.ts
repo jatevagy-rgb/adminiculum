@@ -15,6 +15,7 @@ type Prisma = typeof defaultPrisma;
 type InternalActor = { userId: string; role?: string | null };
 
 const ADMIN_ROLES = new Set(['ADMIN', 'PARTNER']);
+const PUBLICATION_ROLES = new Set(['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']);
 const PARTICIPANT_ROLES = new Set(['REQUESTER', 'CLIENT_OWNER', 'PARTICIPANT', 'OBSERVER']);
 const UNIT_ROLES = new Set(['MEMBER', 'CONTACT', 'APPROVER', 'MANAGER']);
 const ALLOWED_PERMISSIONS = new Set([
@@ -33,6 +34,21 @@ function requireAdmin(actor: InternalActor): void {
   if (!actor?.userId || !ADMIN_ROLES.has(String(actor.role || ''))) {
     throw new OrganizationAdminError(403, 'ORG_ADMIN_FORBIDDEN', 'Organizational administration requires an authorized internal actor.');
   }
+}
+
+async function requirePublicationActor(actor: InternalActor, tx: any, caseId: string): Promise<void> {
+  if (!actor?.userId || !PUBLICATION_ROLES.has(String(actor.role || ''))) {
+    throw new OrganizationAdminError(403, 'ORG_ADMIN_FORBIDDEN', 'Case publication requires an authorized workforce actor.');
+  }
+  const user = await tx.user.findUnique({ where: { id: actor.userId }, select: { id: true, role: true, status: true, isActive: true } });
+  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') {
+    throw new OrganizationAdminError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access this case.');
+  }
+  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return;
+  const caseRow = await tx.case.findUnique({ where: { id: caseId }, select: { id: true, createdById: true, assignedLawyerId: true } });
+  if (!caseRow) throw new OrganizationAdminError(404, 'CASE_NOT_FOUND', 'Case not found.');
+  if (caseRow.createdById === actor.userId || caseRow.assignedLawyerId === actor.userId) return;
+  throw new OrganizationAdminError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access this case.');
 }
 
 async function requireOrgWorkspace(workspaceId: string, prisma: Prisma): Promise<{ id: string; clientId: string }> {
@@ -73,10 +89,11 @@ function samePermissions(left: unknown, right: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-export async function createOrReactivateParticipantInTransaction(actor: InternalActor, input: Record<string, unknown>, tx: any) {
-  requireAdmin(actor);
+async function createOrReactivateParticipant(actor: InternalActor, input: Record<string, unknown>, tx: any, publicationActor: boolean) {
   const workspaceId = String(input.workspaceId || '');
   const caseId = String(input.caseId || '');
+  if (publicationActor) await requirePublicationActor(actor, tx, caseId);
+  else requireAdmin(actor);
   const participantRole = enumValue(input.participantRole, PARTICIPANT_ROLES, 'INVALID_PARTICIPANT_ROLE');
   const permissions = sanitizePermissions(input.permissions);
   if (!permissions.length) throw new OrganizationAdminError(400, 'PARTICIPANT_PERMISSIONS_REQUIRED', 'Participant permissions must be explicit.');
@@ -138,6 +155,14 @@ export async function createOrReactivateParticipantInTransaction(actor: Internal
   } });
   await tx.clientPublicationEvent.create({ data: { action: 'GRANT_ACTIVATED', actorId: actor.userId, caseId, clientId: workspace.clientId, grantId: row.id, toStatus: 'ACTIVE', metadataSafe: { participantRole } } });
   return { row, idempotent: false, reactivated: false };
+}
+
+export async function createOrReactivateParticipantInTransaction(actor: InternalActor, input: Record<string, unknown>, tx: any) {
+  return createOrReactivateParticipant(actor, input, tx, false);
+}
+
+export async function createOrReactivateParticipantForPublicationInTransaction(actor: InternalActor, input: Record<string, unknown>, tx: any) {
+  return createOrReactivateParticipant(actor, input, tx, true);
 }
 
 // ---------------------------------------------------------------------------

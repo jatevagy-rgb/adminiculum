@@ -1,12 +1,12 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { createOrReactivateParticipantInTransaction } from '../client-workspace/organizationAdminService';
+import { createOrReactivateParticipantForPublicationInTransaction } from '../client-workspace/organizationAdminService';
 import { createAndPublishMatterPublicationForGrantInTransaction } from './publicationService';
 
 type Actor = { userId: string; role?: string | null };
 type Row = Record<string, unknown>;
 
-const PUBLISH_ROLES = new Set(['ADMIN', 'PARTNER']);
+const PUBLISH_ROLES = new Set(['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']);
 
 export class InternalCasePortalPublicationError extends Error {
   constructor(public status: number, public code: string, message: string) {
@@ -109,7 +109,7 @@ export async function publishInternalCaseToPortal(
         throw new InternalCasePortalPublicationError(409, 'WORKSPACE_MEMBERSHIP_NOT_ACTIVE', 'Select an active member of the chosen portal workspace.');
       }
 
-      const participant = await createOrReactivateParticipantInTransaction(actor, {
+      const participant = await createOrReactivateParticipantForPublicationInTransaction(actor, {
         workspaceId,
         caseId,
         clientPortalIdentityId: membership.clientPortalIdentityId,
