@@ -130,7 +130,15 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
     });
     await db.document.createMany({
       data: [
-        { id: ids.document, name: 'Selected document', title: 'Selected document', category: 'CONTRACT', caseId: ids.case, clientId: ids.client, workspaceText: 'Dr. John Smith reviewed Prompt Client.' },
+        {
+          id: ids.document,
+          name: 'Selected document',
+          title: 'Selected document',
+          category: 'CONTRACT',
+          caseId: ids.case,
+          clientId: ids.client,
+          workspaceText: `Prompt Admin reviewed Prompt Client ${suffix}.`,
+        },
         { id: ids.otherDocument, name: 'Foreign document', title: 'Foreign document', category: 'CONTRACT', caseId: ids.otherCase, clientId: ids.otherClient, workspaceText: 'Foreign content.' },
       ] as never,
     });
@@ -187,7 +195,7 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
     }, db);
 
     expect(prepared.sourceDocumentVersionIds).toEqual([ids.version]);
-    expect(prepared.externalPromptText).not.toContain('John Smith');
+    expect(prepared.externalPromptText).not.toContain('Prompt Admin');
     expect(prepared.externalPromptText).not.toContain('Prompt Client');
     expect(prepared.anonymizationSnapshot).toMatchObject({ isPseudonymized: true });
     expect((prepared as unknown as { rehydrationMap?: unknown }).rehydrationMap).toBeDefined();
@@ -196,7 +204,7 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
     const placeholder = (prepared as unknown as { rehydrationMap: Array<{ replacement: string }> }).rehydrationMap[0].replacement;
     const imported = await importPromptResponse(adminActor, prepared.id, `Finding: ${placeholder}`, db);
     expect(imported.status).toBe('AI_DRAFT');
-    expect(imported.rehydratedResponse).toContain('John Smith');
+    expect(imported.rehydratedResponse).toContain('Prompt Admin');
 
     await expect(verifyPromptDraft(adminActor, prepared.id, 'self verification', db)).rejects.toMatchObject({ code: 'AI_CANNOT_SELF_APPROVE' });
     const verified = await verifyPromptDraft(juniorActor, prepared.id, 'Sources and facts checked.', db);
