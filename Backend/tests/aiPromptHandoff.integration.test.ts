@@ -204,7 +204,7 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
     const placeholder = (prepared as unknown as { rehydrationMap: Array<{ replacement: string }> }).rehydrationMap[0].replacement;
     const imported = await importPromptResponse(adminActor, prepared.id, `Finding: ${placeholder}`, db);
     expect(imported.status).toBe('AI_DRAFT');
-    expect(imported.rehydratedResponse).toContain('Prompt Admin');
+    expect(imported.rehydratedResponse).toContain(`Prompt Client ${suffix}`);
 
     await expect(verifyPromptDraft(adminActor, prepared.id, 'self verification', db)).rejects.toMatchObject({ code: 'AI_CANNOT_SELF_APPROVE' });
     const verified = await verifyPromptDraft(juniorActor, prepared.id, 'Sources and facts checked.', db);
