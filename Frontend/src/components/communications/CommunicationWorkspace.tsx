@@ -6,7 +6,6 @@ import { ClientAccent } from "@/components/clients/ClientAccent";
 import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import {
   ApiError,
-  createCaseFromCommunication,
   extractTaskFromCommunication,
   getCases,
   getCaseTasks,
@@ -35,15 +34,6 @@ const viewOptions = [
   { label: "Belső", value: "internal" },
   { label: "Feldolgozásra vár", value: "pending" },
 ] as const;
-
-const caseMatterTypeOptions = [
-  { value: "REAL_ESTATE_SALE", label: "Ingatlan adásvétel" },
-  { value: "LEASE", label: "Bérlet" },
-  { value: "EMPLOYMENT", label: "Munkaviszony" },
-  { value: "CORPORATE", label: "Cégjogi" },
-  { value: "LITIGATION", label: "Peres" },
-  { value: "OTHER", label: "Egyéb" },
-];
 
 type Feedback = { tone: "success" | "error" | "info"; message: string };
 
@@ -98,14 +88,6 @@ export default function CommunicationWorkspace() {
   const [linkTaskFeedback, setLinkTaskFeedback] = useState<Feedback | null>(null);
 
   const [createCaseTarget, setCreateCaseTarget] = useState<CommunicationItem | null>(null);
-  const [caseTitle, setCaseTitle] = useState("");
-  const [matterType, setMatterType] = useState("OTHER");
-  const [casePriority, setCasePriority] = useState("MEDIUM");
-  const [caseDeadline, setCaseDeadline] = useState("");
-  const [caseDescription, setCaseDescription] = useState("");
-  const [caseBusy, setCaseBusy] = useState(false);
-  const [caseFeedback, setCaseFeedback] = useState<Feedback | null>(null);
-  const [createdCaseId, setCreatedCaseId] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -369,39 +351,6 @@ export default function CommunicationWorkspace() {
 
   const openCreateCase = (item: CommunicationItem) => {
     setCreateCaseTarget(item);
-    setCaseTitle(item.subject || "");
-    setMatterType("OTHER");
-    setCasePriority("MEDIUM");
-    setCaseDeadline("");
-    setCaseDescription(item.subject ? `Kommunikációból indított ügy. Tárgy: ${item.subject}.` : "Kommunikációból indított ügy.");
-    setCaseFeedback(null);
-    setCreatedCaseId(null);
-  };
-
-  const submitCreateCase = async () => {
-    if (!createCaseTarget || !caseTitle.trim()) return;
-    if (!createCaseTarget.clientId) {
-      setCaseFeedback({ tone: "error", message: "Az ügy indításához a kommunikációt előbb ügyfélhez kell kapcsolni." });
-      return;
-    }
-    setCaseBusy(true);
-    setCaseFeedback(null);
-    try {
-      const result = await createCaseFromCommunication(createCaseTarget.id, {
-        title: caseTitle.trim(),
-        matterType,
-        priority: casePriority,
-        deadline: caseDeadline || undefined,
-        description: caseDescription.trim() || undefined,
-      });
-      updateCommunication(createCaseTarget.id, { caseId: result.case.id });
-      setCreatedCaseId(result.case.id);
-      setCaseFeedback({ tone: "success", message: `Ügy létrehozva: ${result.case.caseNumber}` });
-    } catch (error) {
-      setCaseFeedback(apiFeedback(error, "Nem sikerült új ügyet indítani."));
-    } finally {
-      setCaseBusy(false);
-    }
   };
 
   return (
@@ -508,13 +457,6 @@ export default function CommunicationWorkspace() {
         <select value={selectedTaskId} onChange={(event) => setSelectedTaskId(event.target.value)} disabled={caseTasksLoading} className="adm-modal-field w-full px-3 py-2 text-sm"><option value="">{caseTasksLoading ? "Feladatok betöltése…" : caseTasks.length ? "Válassz nyitott feladatot…" : "Nincs nyitott feladat az ügyön"}</option>{caseTasks.map((task) => <option key={task.id} value={task.id}>{task.title} · {task.status}</option>)}</select>
       </SimpleModal> : null}
 
-      {createCaseTarget ? (false ? <SimpleModal title="Új ügy indítása" subtitle={createCaseTarget?.subject || "Nincs tárgy"} busy={caseBusy} feedback={caseFeedback} onClose={() => setCreateCaseTarget(null)} onSubmit={submitCreateCase} submitLabel="Ügy létrehozása" submitDisabled={!caseTitle.trim() || !createCaseTarget?.clientId} successLink={createdCaseId ? { href: `/cases/${encodeURIComponent(createdCaseId?.toString() || "")}`, label: "Ügy megnyitása" } : undefined}>
-        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy címe<input value={caseTitle} onChange={(event) => setCaseTitle(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
-        {!createCaseTarget?.clientId ? <p className="text-[11px] text-[var(--adm-text-muted)]">Az ügy indításához a kommunikációt előbb ügyfélhez kell kapcsolni.</p> : null}
-        <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügytípus<select value={matterType} onChange={(event) => setMatterType(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm">{caseMatterTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={casePriority} onChange={(event) => setCasePriority(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Sürgős</option></select></label></div>
-        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={caseDeadline} onChange={(event) => setCaseDeadline(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
-        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea value={caseDescription} onChange={(event) => setCaseDescription(event.target.value)} rows={3} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
-      </SimpleModal> : null) : null}
       <CompactNewCaseDialog
         open={Boolean(createCaseTarget)}
         onClose={() => setCreateCaseTarget(null)}

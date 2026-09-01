@@ -51,10 +51,8 @@ function SettingsPageContent() {
           <p className={`text-[10px] font-bold uppercase tracking-[0.18em] ${p.textMuted}`}>Beállítások navigáció</p>
           <nav className="mt-4 space-y-2 text-xs">
             {[
-              ["#profile", "Profil"],
               ["#appearance", "Megjelenés"],
               ["#house-style", "House style"],
-              ["#integrations", "Integrációk"],
               ["#security", "Adatkezelés"],
             ].map(([href, label]) => (
               <a key={href} href={href} className={`block rounded border ${p.borderLight} ${p.bgSection} px-3 py-2 ${p.text} hover:border-[var(--adm-ochre-500)]`}>
@@ -89,25 +87,6 @@ function SettingsPageContent() {
           </p>
         </div>
         <div className="grid gap-6">
-          <section id="profile" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
-            <h2 className={`text-lg font-semibold ${p.textDark} mb-3`}>Profil</h2>
-            <div className="grid md:grid-cols-3 gap-3 text-xs">
-              <div className={`border ${p.borderLight} p-3`}>
-                <p className={p.textMuted}>Név</p>
-                <p className={`mt-1 font-medium ${p.textDark}`}>Későbbi patchben</p>
-              </div>
-              <div className={`border ${p.borderLight} p-3`}>
-                <p className={p.textMuted}>Email</p>
-                <p className={`mt-1 font-medium ${p.textDark}`}>Későbbi patchben</p>
-              </div>
-              <div className={`border ${p.borderLight} p-3`}>
-                <p className={p.textMuted}>Szerepkör</p>
-                <p className={`mt-1 font-medium ${p.textDark}`}>Későbbi patchben</p>
-              </div>
-            </div>
-            <p className={`text-xs ${p.textMuted} mt-3`}>A felhasználói adatok kezelése későbbi patchben.</p>
-          </section>
-
           <section id="appearance" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
             <div className="flex items-center justify-between gap-2 mb-3">
               <h2 className={`text-lg font-semibold ${p.textDark}`}>Megjelenés</h2>
@@ -179,20 +158,6 @@ function SettingsPageContent() {
             </Link>
           </section>
 
-          <section id="integrations" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
-            <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Integrációk</h2>
-            <div className="grid md:grid-cols-2 gap-3 text-xs">
-              <div className={`border ${p.borderLight} p-3`}>
-                <p className={`font-medium ${p.textDark}`}>SharePoint</p>
-                <p className={`mt-1 ${p.textMuted}`}>Kapcsolati státusz megjelenítése későbbi patchben.</p>
-              </div>
-              <div className={`border ${p.borderLight} p-3`}>
-                <p className={`font-medium ${p.textDark}`}>Microsoft/Azure bejelentkezés</p>
-                <p className={`mt-1 ${p.textMuted}`}>Kapcsolati státusz megjelenítése későbbi patchben.</p>
-              </div>
-            </div>
-          </section>
-
           <section id="security" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
             <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Adatkezelés / biztonság</h2>
             <p className={`text-xs ${p.textMuted} mb-2`}>
@@ -201,18 +166,6 @@ function SettingsPageContent() {
             <p className={`text-xs ${p.textMuted} mb-4`}>
               Review feladatjavaslatok helyi állapota: {reviewTaskSuggestions ? "engedélyezve" : "kikapcsolva"}.
             </p>
-            <button type="button" disabled className={`px-3 py-2 text-xs border ${p.border} ${p.textMuted} ${p.bgSection}`}>
-              Mentés későbbi patchben
-            </button>
-          </section>
-
-          <section className={`${p.bgSection} border ${p.border} rounded p-4`}>
-            <h3 className={`text-xs font-semibold ${p.textDark} mb-2`}>Kapcsolódó felületek</h3>
-            <div className="flex flex-wrap gap-2">
-              <Link href="/reviews" className="adm-link-button px-3 py-2 text-xs">Review sor megnyitása</Link>
-              <Link href="/clause-library" className="adm-link-button px-3 py-2 text-xs">Záradék könyvtár</Link>
-              <Link href="/clients" className="adm-link-button px-3 py-2 text-xs">Ügyfelek megnyitása</Link>
-            </div>
           </section>
         </div>
         </main>
