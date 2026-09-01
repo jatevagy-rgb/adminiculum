@@ -562,8 +562,15 @@ function apiFeedback(error: unknown, fallback: string): Feedback {
   if (error instanceof ApiError && error.status === 501) return { tone: "info", message: "A művelet nincs bekapcsolva ezen a környezeten." };
   if (error instanceof ApiError && error.status === 401) return { tone: "error", message: "Jelentkezz be újra, majd próbáld újra." };
   if (error instanceof ApiError && error.status === 409) {
-    const knownConflict = error.message === "A kommunikáció már ehhez az ügyhöz tartozik." || error.message === "Ez a feladat már ehhez a kommunikációhoz tartozik.";
-    return { tone: "error", message: knownConflict ? error.message : "A művelet ütközik a jelenlegi állapottal." };
+    const knownConflict = error.code === "COMMUNICATION_ALREADY_LINKED" || error.code === "TASK_ALREADY_LINKED";
+    return {
+      tone: "error",
+      message: knownConflict && error.code === "COMMUNICATION_ALREADY_LINKED"
+        ? "A kommunikáció már ehhez az ügyhöz tartozik."
+        : knownConflict
+          ? "Ez a feladat már egy másik kommunikációhoz tartozik."
+          : "A művelet ütközik a jelenlegi állapottal.",
+    };
   }
   return { tone: "error", message: fallback };
 }

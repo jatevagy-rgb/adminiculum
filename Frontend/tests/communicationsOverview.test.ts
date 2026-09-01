@@ -46,7 +46,9 @@ describe('Canonical workforce communication workspace', () => {
     assert.match(src, /Rögzített kommunikáció/);
     assert.match(src, /Outlook/);
     assert.match(src, /Demo adat/);
-    assert.match(src, /fixture\.invalid/);
+    const canonicalDemoFixtureSender = 'demo-kft-uzletvezeto@fixture.invalid';
+    assert.match(canonicalDemoFixtureSender, /@fixture\.invalid$/);
+    assert.match(src, /endsWith\("@fixture\.invalid"\)/);
     assert.doesNotMatch(src, /mailboxAddress|access_token|Bearer/i);
   });
 
