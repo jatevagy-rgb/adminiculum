@@ -11,6 +11,22 @@ import {
 const databaseUrl = process.env.AI_PROMPT_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 
+jest.mock('../src/prisma/prisma.service', () => {
+  const { PrismaClient: TestPrismaClient } = require('@prisma/client') as typeof import('@prisma/client');
+  return {
+    prisma: new TestPrismaClient({
+      datasources: {
+        db: {
+          url:
+            process.env.AI_PROMPT_TEST_DATABASE_URL ||
+            process.env.MIGRATION_REPLAY_DATABASE_URL ||
+            'postgresql://localhost/unused',
+        },
+      },
+    }),
+  };
+});
+
 describeWithDatabase('AI prompt handoff PostgreSQL persistence', () => {
   let db: PrismaClient;
   const templateId = 'a1000000-0000-4000-8000-000000000001';
