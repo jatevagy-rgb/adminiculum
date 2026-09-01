@@ -9,10 +9,11 @@ import { getCaseBillingPreparation, minutesToHours, type CaseBillingPreparation 
  * rate, or an attribution-type code. Time that is not safely attributable to the
  * Case is surfaced simply as "Ellenőrzést igényel".
  */
-export function CaseTimeBillingSummary({ caseId, onRecordTime, onGenerateReport }: {
+export function CaseTimeBillingSummary({ caseId, onRecordTime, onGenerateReport, refreshKey }: {
   caseId: string;
   onRecordTime?: () => void;
   onGenerateReport?: () => void;
+  refreshKey?: number;
 }) {
   const [prep, setPrep] = useState<CaseBillingPreparation | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -27,16 +28,16 @@ export function CaseTimeBillingSummary({ caseId, onRecordTime, onGenerateReport 
     }
   }, [caseId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, refreshKey]);
 
   const totalMinutes = prep ? prep.billableMinutes + prep.nonBillableMinutes : 0;
 
   return (
-    <section className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4" aria-label="Idő és számlázás">
+    <div className="px-3 py-3" aria-label="Idő és számlázás">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-[var(--adm-text)]">Idő az ügyön</h3>
         <div className="flex gap-2">
-          <button type="button" onClick={onRecordTime} className="rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-1.5 text-xs font-semibold text-white">Idő rögzítése</button>
+          <button type="button" aria-label="Idő rögzítése" onClick={onRecordTime} className="rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-1.5 text-xs font-semibold text-white">Munkaidő rögzítése</button>
           <button type="button" onClick={onGenerateReport} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs text-[var(--adm-text)]">Riport készítése</button>
         </div>
       </div>
@@ -54,7 +55,7 @@ export function CaseTimeBillingSummary({ caseId, onRecordTime, onGenerateReport 
           ) : null}
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }
 
