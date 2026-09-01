@@ -327,6 +327,24 @@ router.post('/', authenticate, requireWorkforceUser, async (req: Request, res: R
       taskScopeAuthorized = true;
     }
 
+    // Case-first: when a Case is given without a Task or an explicit Matter,
+    // derive the compatibility Matter scope from the Case SERVER-SIDE so a lawyer
+    // never selects a Matter manually. Never fabricate one — if the Case has no
+    // resolvable Matter scope, reject with a clear, actionable state.
+    if (!resolvedMatterId && resolvedCaseId) {
+      const caseForMatter = await prisma.case.findUnique({
+        where: { id: resolvedCaseId },
+        select: { matterId: true },
+      });
+      if (!caseForMatter) {
+        return res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found.' });
+      }
+      if (!caseForMatter.matterId) {
+        return res.status(409).json({ status: 409, code: 'TIME_ENTRY_CASE_MATTER_UNRESOLVED', message: 'This case has no billing scope yet; it must be provisioned before time can be recorded.' });
+      }
+      resolvedMatterId = caseForMatter.matterId;
+    }
+
     if (!resolvedMatterId) {
       return res.status(400).json({ error: 'Missing required field: matterId (or taskId)' });
     }
