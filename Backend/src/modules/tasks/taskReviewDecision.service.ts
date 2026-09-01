@@ -6,7 +6,8 @@ import {
   TaskReviewDecisionType,
 } from '@prisma/client';
 import prisma from '../../config/database';
-import { validateTaskTransition, WorkflowTransitionError } from '../cases/workItems';
+import { WorkflowTransitionError } from '../cases/workItems';
+import { planCanonicalTaskTransition } from './taskLifecycle.service';
 import {
   ApproveSubmissionInput,
   ExternalCompletionInput,
@@ -483,7 +484,7 @@ export class TaskReviewDecisionService {
         if (context.submission.status !== 'SUBMITTED') {
           throw new TaskReviewDecisionServiceError(409, 'SUBMISSION_NOT_REVIEWABLE', 'Only a submitted revision may be reviewed.');
         }
-        const transition = validateTaskTransition(context.task, 'RETURN_FOR_CORRECTION', actorId, context.scope.role);
+        const transition = planCanonicalTaskTransition(context.task, 'RETURN_FOR_CORRECTION', actorId, context.scope.role);
         const returnedAt = new Date();
         await tx.taskReviewDecision.create({
           data: {
@@ -660,7 +661,7 @@ export class TaskReviewDecisionService {
         if (context.submission.externalActionRequired && !context.submission.externalActionType) {
           throw new TaskReviewDecisionServiceError(409, 'EXTERNAL_ACTION_TYPE_REQUIRED', 'The approved external action requires a persisted action type.');
         }
-        const transition = validateTaskTransition(context.task, 'APPROVE', actorId, context.scope.role);
+        const transition = planCanonicalTaskTransition(context.task, 'APPROVE', actorId, context.scope.role);
         const approvedAt = new Date();
         await tx.taskReviewDecision.create({
           data: { submissionId, reviewerId: actorId, decision: TaskReviewDecisionType.APPROVED, note },
@@ -767,7 +768,7 @@ export class TaskReviewDecisionService {
         if (String(context.submission.externalActionType) !== actionType) {
           throw new TaskReviewDecisionServiceError(409, 'EXTERNAL_ACTION_TYPE_MISMATCH', 'actionType does not match the approved external action.');
         }
-        const transition = validateTaskTransition(context.task, 'APPROVE', actorId, context.scope.role);
+        const transition = planCanonicalTaskTransition(context.task, 'APPROVE', actorId, context.scope.role);
         await tx.taskSubmission.update({
           where: { id: submissionId },
           data: { externalCompletedAt: completedAt, externalCompletedById: actorId },

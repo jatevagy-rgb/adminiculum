@@ -9,9 +9,9 @@ import { canUserActOnTask } from './taskAuthorization';
 export { canUserActOnTask } from './taskAuthorization';
 import {
   SupportedTaskAction,
-  validateTaskTransition,
   WorkflowTransitionError,
 } from '../cases/workItems';
+import { planCanonicalTaskTransition } from './taskLifecycle.service';
 import { activateReadyWorkflowSuccessors } from '../cases/caseWorkflowOrchestration';
 import {
   AttentionCategory,
@@ -161,7 +161,7 @@ async function transitionTask(taskId: string, userId: string, action: SupportedT
     throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to perform this task action.');
   }
 
-  const transition = validateTaskTransition(existing, action, userId, actor.role);
+  const transition = planCanonicalTaskTransition(existing, action as Extract<SupportedTaskAction, 'START' | 'SUBMIT_FOR_REVIEW' | 'APPROVE' | 'RETURN_FOR_CORRECTION'>, userId, actor.role);
   const task = await prisma.task.update({
     where: { id: taskId },
     data: {
