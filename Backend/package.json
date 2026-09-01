@@ -64,6 +64,7 @@
     "backfill:work-package-requiredness": "tsx scripts/backfill-case-work-package-requiredness.ts --dry-run",
     "test:work-package-admin:db": "jest --runInBand tests/workPackageAdmin.integration.test.ts",
     "test:phase7b:db": "jest --runInBand tests/phase7BComplianceProposal.integration.test.ts",
+    "test:compliance-case-work-package:db": "jest --runInBand tests/complianceProposalCaseWorkPackage.integration.test.ts",
     "test:phase7cb:db": "jest --runInBand tests/phase7CBComplianceOverview.integration.test.ts",
     "test:org-client-safe:db": "jest --runInBand tests/orgClientSafeComplianceReadModel.integration.test.ts",
     "test:phase5b:db": "jest --runInBand tests/phase5OrgPortalContractsCompany.integration.test.ts",

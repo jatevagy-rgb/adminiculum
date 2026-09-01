@@ -2,6 +2,8 @@ import { Prisma, PrismaClient, ComplianceProposalKind, ComplianceProposalStatus 
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { InteractionError, InternalActor, assertClientReadAccess, assertInternalCaseAccess, requireInternal, safeText } from '../client-interaction/base';
 import { ACTION_INTENT_BY_KIND, COMPLIANCE_ACTION_INTENT_KEYS, COMPLIANCE_PROPOSAL_KINDS, isCompatibleActionIntent } from './complianceProposalRegistry';
+import casesService from '../cases/services';
+import { resolveComplianceCaseType } from './complianceCaseTypeResolver';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = InternalActor;
@@ -215,6 +217,37 @@ export async function bindProposalToCase(actor: Actor, proposalId: string, caseI
   }
 }
 
+/**
+ * Create the canonical compliance Task on the resolved Case and mark the proposal
+ * CONFIRMED. Task provenance is preserved through the compliance task type and the
+ * proposal.taskId link (finding -> proposal -> task remains traceable); the Task is
+ * not tied to a specific Work Package item, so no workPackageItemId is fabricated.
+ */
+async function createComplianceTaskAndConfirm(actor: Actor, proposal: any, caseId: string, tx: Prisma.TransactionClient): Promise<any> {
+  await assertAssignee(proposal.assigneeId, tx);
+  const task = await tx.task.create({
+    data: {
+      caseId,
+      title: proposal.title,
+      description: proposal.description || proposal.suggestedAction,
+      taskType: 'OTHER',
+      type: 'COMPLIANCE_PROPOSAL',
+      status: 'TODO',
+      priority: 'MEDIUM',
+      assignedToId: proposal.assigneeId,
+      assignedById: actor.userId,
+      requiredSkills: [],
+      dueDate: proposal.deadline,
+    },
+    select: { id: true, title: true, status: true, caseId: true, type: true, dueDate: true, assignedToId: true },
+  });
+  await tx.complianceProposal.update({
+    where: { id: proposal.id },
+    data: { status: 'CONFIRMED', taskId: task.id, confirmedById: actor.userId, confirmedAt: new Date(), confirmedCaseId: caseId },
+  });
+  return task;
+}
+
 async function confirmTransaction(actor: Actor, proposalId: string, tx: Prisma.TransactionClient): Promise<{ kind: 'CONFIRMED'; task: any } | { kind: 'STALE' }> {
   const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "compliance_proposals" WHERE "id" = ${proposalId} FOR UPDATE`;
   if (!locked.length) throw new InteractionError(404, 'PROPOSAL_NOT_FOUND', 'Compliance proposal not found.');
@@ -235,24 +268,7 @@ async function confirmTransaction(actor: Actor, proposalId: string, tx: Prisma.T
   }
   if (!proposal.caseId) throw new InteractionError(409, 'PROPOSAL_NO_CASE', 'A Case must be linked before confirmation.');
   await assertCaseForClient(actor, proposal.caseId, proposal.clientId, tx as PrismaClient);
-  await assertAssignee(proposal.assigneeId, tx);
-  const task = await tx.task.create({
-    data: {
-      caseId: proposal.caseId,
-      title: proposal.title,
-      description: proposal.description || proposal.suggestedAction,
-      taskType: 'OTHER',
-      type: 'COMPLIANCE_PROPOSAL',
-      status: 'TODO',
-      priority: 'MEDIUM',
-      assignedToId: proposal.assigneeId,
-      assignedById: actor.userId,
-      requiredSkills: [],
-      dueDate: proposal.deadline,
-    },
-    select: { id: true, title: true, status: true, caseId: true, type: true, dueDate: true, assignedToId: true },
-  });
-  await tx.complianceProposal.update({ where: { id: proposalId }, data: { status: 'CONFIRMED', taskId: task.id, confirmedById: actor.userId, confirmedAt: new Date(), confirmedCaseId: proposal.caseId } });
+  const task = await createComplianceTaskAndConfirm(actor, proposal, proposal.caseId, tx);
   return { kind: 'CONFIRMED', task };
 }
 
@@ -273,6 +289,81 @@ export async function confirmProposal(actor: Actor, proposalId: string, db: Pris
   const result = await withProposalConfirmationRetry(db, (tx) => confirmTransaction(actor, proposalId, tx));
   if (result.kind === 'STALE') throw new InteractionError(409, 'PROPOSAL_STALE', 'Finding evidence changed; create a new proposal.');
   return result.task;
+}
+
+async function startCaseTransaction(
+  actor: Actor,
+  proposalId: string,
+  input: { title?: unknown },
+  tx: Prisma.TransactionClient,
+): Promise<{ kind: 'CONFIRMED'; case: any; task: any } | { kind: 'STALE' }> {
+  const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "compliance_proposals" WHERE "id" = ${proposalId} FOR UPDATE`;
+  if (!locked.length) throw new InteractionError(404, 'PROPOSAL_NOT_FOUND', 'Compliance proposal not found.');
+  const proposal = await loadProposal(proposalId, tx);
+  await assertClientReadAccess(actor, proposal.clientId, tx as PrismaClient);
+
+  // Idempotency: a already-confirmed proposal returns its existing Case + Task
+  // instead of creating a second Case / Work Package / Task.
+  if (proposal.status === 'CONFIRMED' && proposal.taskId) {
+    if (!proposal.caseId) throw new InteractionError(409, 'PROPOSAL_INTEGRITY_ERROR', 'Confirmed proposal is missing its Case link.');
+    await assertCaseForClient(actor, proposal.caseId, proposal.clientId, tx as PrismaClient);
+    return { kind: 'CONFIRMED', case: proposal.case, task: proposal.task };
+  }
+  if (proposal.status === 'CONFIRMED') throw new InteractionError(409, 'PROPOSAL_INTEGRITY_ERROR', 'Confirmed proposal is missing its Task link.');
+  if (proposal.status === 'REJECTED' || proposal.status === 'STALE') throw new InteractionError(409, 'PROPOSAL_TERMINAL', 'Terminal proposals cannot be confirmed.');
+  if (proposal.status !== 'PROPOSED') throw new InteractionError(409, 'PROPOSAL_NOT_PROPOSED', 'Proposal is not available for confirmation.');
+
+  const finding = await tx.assessmentFinding.findUnique({ where: { id: proposal.findingId }, select: { requirementApplicabilityId: true, status: true } });
+  if (!finding || finding.requirementApplicabilityId !== proposal.applicabilityIdAtProposal || finding.status !== proposal.findingStatusAtProposal) {
+    await tx.complianceProposal.update({ where: { id: proposalId }, data: { status: 'STALE' } });
+    return { kind: 'STALE' };
+  }
+
+  let caseId: string = proposal.caseId;
+  if (!caseId) {
+    // Reuse the canonical Case creation service: it creates the Case, the
+    // immutable CaseWorkPackage snapshot, and the workflow instance. No Case
+    // creation logic is copied into compliance; the Work Package format is the
+    // canonical one. A safely-resolved recommended Case Type drives the snapshot,
+    // degrading to a Case without a snapshot when none is usable.
+    const recommended = await resolveComplianceCaseType(tx, proposal.proposalKind);
+    const requestedTitle = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 300) : undefined;
+    const created = await casesService.createCase(
+      {
+        clientId: proposal.clientId,
+        matterType: recommended.matterType,
+        caseTypeDefinitionId: recommended.caseTypeDefinitionId,
+        title: requestedTitle || proposal.title,
+        description: proposal.description || proposal.suggestedAction || undefined,
+        deadline: proposal.deadline ? new Date(proposal.deadline).toISOString() : null,
+        createdById: actor.userId,
+      } as any,
+      tx as any,
+      { withinTransaction: true, provisionCaseFolders: false },
+    );
+    caseId = created.id;
+    await tx.complianceProposal.update({ where: { id: proposalId }, data: { caseId } });
+  } else {
+    // A Case is already linked — reuse it, never create a duplicate.
+    await assertCaseForClient(actor, caseId, proposal.clientId, tx as PrismaClient);
+  }
+
+  const task = await createComplianceTaskAndConfirm(actor, { ...proposal, caseId }, caseId, tx);
+  const caseRow = await tx.case.findUnique({ where: { id: caseId }, select: { id: true, caseNumber: true, title: true, clientId: true } });
+  return { kind: 'CONFIRMED', case: caseRow, task };
+}
+
+/**
+ * Elevate a confirmed-able compliance proposal into canonical legal work:
+ * create (or reuse) a Case via the canonical Case service — which also builds the
+ * immutable Work Package snapshot and workflow — then create the compliance Task
+ * and mark the proposal CONFIRMED. Idempotent and serializable.
+ */
+export async function startCaseFromProposal(actor: Actor, proposalId: string, input: { title?: unknown } = {}, db: PrismaClient = defaultPrisma): Promise<any> {
+  requireMutationActor(actor);
+  const result = await withProposalConfirmationRetry(db, (tx) => startCaseTransaction(actor, proposalId, input, tx));
+  if (result.kind === 'STALE') throw new InteractionError(409, 'PROPOSAL_STALE', 'Finding evidence changed; create a new proposal.');
+  return { case: result.case, task: result.task };
 }
 
 export async function rejectProposal(actor: Actor, proposalId: string, db: PrismaClient = defaultPrisma): Promise<any> {

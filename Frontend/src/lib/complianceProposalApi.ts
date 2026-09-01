@@ -51,3 +51,14 @@ export async function confirmComplianceProposal(id: string): Promise<{ id: strin
 export async function rejectComplianceProposal(id: string): Promise<ComplianceProposal> {
   return fetchApi<ComplianceProposal>(`/compliance/proposals/${encodeURIComponent(id)}/reject`, { method: 'POST' });
 }
+
+export type StartedComplianceCase = {
+  case: { id: string; caseNumber: string; title: string; clientId: string } | null;
+  task: { id: string; title: string; status: string; caseId: string } | null;
+};
+
+// "Ügy indítása" — elevate a proposal into a new (or already-linked) Case with a
+// Work Package and a first Task, reusing the canonical Case creation on the server.
+export async function startCaseFromComplianceProposal(id: string): Promise<StartedComplianceCase> {
+  return fetchApi<StartedComplianceCase>(`/compliance/proposals/${encodeURIComponent(id)}/start-case`, { method: 'POST' });
+}
