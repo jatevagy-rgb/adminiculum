@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { authenticate } from '../../middleware/auth';
-import { AgendaRequestError, getCaseDeadlines, getWorkflowAgenda } from './service';
+import { AgendaRequestError, getWorkflowAgenda } from './service';
 
 const router = Router();
 
@@ -35,33 +35,6 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       return;
     }
     console.error('Get agenda error:', error);
-    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
-  }
-});
-
-// Canonical single-Case deadline projection for the Case Workspace. Reuses the
-// same agenda engine (scope=CASE), which enforces case read access (404 when the
-// case is not readable), so there is no second deadline store or engine.
-router.get('/case/:caseId', authenticate, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = getUserId(req);
-    if (!userId) {
-      res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
-      return;
-    }
-    const deadlines = await getCaseDeadlines(String(req.params.caseId), userId, {
-      status: req.query.status,
-      limit: req.query.limit,
-      offset: req.query.offset,
-      userRole: (req as any).user?.role,
-    });
-    res.json(deadlines);
-  } catch (error) {
-    if (error instanceof AgendaRequestError) {
-      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
-      return;
-    }
-    console.error('Get case deadlines error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });

@@ -1,8 +1,9 @@
 import { fetchApi } from './api';
 
 // Canonical single-Case deadline projection for the Case Workspace. Reuses the
-// same agenda engine as the global Agenda (scope=CASE) via one backend endpoint,
-// so the Case Workspace never queries a second deadline store.
+// existing GET /cases/:caseId/deadlines endpoint, which runs the same agenda
+// engine (scope=CASE) as the global Agenda, so the Case Workspace never queries a
+// second deadline store or engine.
 
 export type CaseAgendaUrgency = 'OVERDUE' | 'TODAY' | 'TOMORROW' | 'THIS_WEEK' | 'LATER';
 
@@ -29,5 +30,5 @@ export type CaseAgendaResponse = {
 };
 
 export async function getCaseAgenda(caseId: string, status: 'OPEN' | 'COMPLETED' | 'ALL' = 'OPEN'): Promise<CaseAgendaResponse> {
-  return fetchApi<CaseAgendaResponse>(`/agenda/case/${encodeURIComponent(caseId)}?status=${status}`);
+  return fetchApi<CaseAgendaResponse>(`/cases/${encodeURIComponent(caseId)}/deadlines?status=${status}`);
 }

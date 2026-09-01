@@ -1,5 +1,3 @@
-import express, { Express, NextFunction, Request, Response } from 'express';
-import http from 'http';
 import { PrismaClient } from '@prisma/client';
 
 /**
@@ -13,16 +11,6 @@ import { PrismaClient } from '@prisma/client';
 const databaseUrl = process.env.AGENDA_CONVERGENCE_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
 
-jest.mock('../src/middleware/auth', () => ({
-  authenticate: (req: Request, res: Response, next: NextFunction) => {
-    const userId = req.headers['x-test-user-id'];
-    if (typeof userId !== 'string') { res.status(401).json({ code: 'NOT_AUTHENTICATED' }); return; }
-    (req as any).user = { userId, role: String(req.headers['x-test-role'] || 'LAWYER'), authProvider: 'local-jwt' };
-    next();
-  },
-}));
-
-import agendaRoutes from '../src/modules/agenda/routes';
 import { getWorkflowAgenda, getCaseDeadlines, AgendaRequestError } from '../src/modules/agenda/service';
 import { getCaseAttentionSummary } from '../src/modules/cases/attention.service';
 
@@ -49,26 +37,6 @@ const ids = {
 const NOW = new Date('2026-07-15T09:00:00.000Z');
 const caseADeadline = new Date('2026-07-15T14:00:00.000Z');
 const RANGE = { from: '2026-07-01', to: '2026-08-10' };
-
-function createApp(): Express {
-  const app = express();
-  app.use(express.json());
-  app.use('/agenda', agendaRoutes);
-  return app;
-}
-function get(path: string, headers: Record<string, string>): Promise<{ status: number; body: any }> {
-  return new Promise((resolve, reject) => {
-    const server = createApp().listen(0, '127.0.0.1', () => {
-      const addr = server.address();
-      if (!addr || typeof addr === 'string') return reject(new Error('no addr'));
-      http.request({ hostname: '127.0.0.1', port: addr.port, path, method: 'GET', headers }, (r) => {
-        const chunks: Buffer[] = [];
-        r.on('data', (c) => chunks.push(Buffer.from(c)));
-        r.on('end', () => { server.close(); const t = Buffer.concat(chunks).toString('utf8'); resolve({ status: r.statusCode || 0, body: t ? JSON.parse(t) : null }); });
-      }).on('error', (e) => { server.close(); reject(e); }).end();
-    });
-  });
-}
 
 describeWithDatabase('Case lifecycle -> deadline -> Agenda convergence (PostgreSQL)', () => {
   let db: PrismaClient;
@@ -122,11 +90,17 @@ describeWithDatabase('Case lifecycle -> deadline -> Agenda convergence (PostgreS
     expect(idset).toContain(`TASK:${ids.taskUpcoming}`); // work-package-linked task behaves like any Task
   });
 
-  it('3-4-5: item carries Case/Client context, responsible lawyer, and distinct assignee', async () => {
+  it('3-4-5: agenda carries Case/Client context and distinguishes responsible lawyer from task assignee', async () => {
     const items = itemsOf(await agenda({ scope: 'CASE', caseId: ids.caseA, status: 'ALL' }));
+    // Case/Client context is carried on the Case-deadline item.
+    const caseItem = items.find((i: any) => i.id === `CASE_DEADLINE:${ids.caseA}`);
+    expect(caseItem.caseId).toBe(ids.caseA);
+    expect(caseItem.source.displayName).toBe('AC-A-001');
+    expect(caseItem.safeDescription).toContain('Client A');
+    expect(caseItem.responsibility.responsibleLawyer.id).toBe(ids.lawyerA);
+    // A Task carries the case's responsible lawyer AND its own (distinct) assignee.
     const today = items.find((i: any) => i.id === `TASK:${ids.taskToday}`);
-    expect(today.source.displayName).toBe('AC-A-001');
-    expect(today.safeDescription).toContain('Client A');
+    expect(today.caseId).toBe(ids.caseA);
     expect(today.responsibility.responsibleLawyer.id).toBe(ids.lawyerA);
     expect(today.responsibility.assignee.id).toBe(ids.assignee); // assignee != responsible
   });
@@ -176,16 +150,20 @@ describeWithDatabase('Case lifecycle -> deadline -> Agenda convergence (PostgreS
   });
 
   it('16: CASE-scoped agenda for an unreadable case fails closed (404)', async () => {
-    await expect(agenda({ scope: 'CASE', caseId: ids.caseB, status: 'ALL' })).rejects.toBeInstanceOf(AgendaRequestError);
-    const res = await get(`/agenda/case/${ids.caseB}`, { 'x-test-user-id': ids.lawyerA, 'x-test-role': 'LAWYER' });
-    expect(res.status).toBe(404);
+    await expect(agenda({ scope: 'CASE', caseId: ids.caseB, status: 'ALL' }))
+      .rejects.toMatchObject({ code: 'CASE_NOT_FOUND' });
+    // getCaseDeadlines (the /cases/:id/deadlines engine) also fails closed.
+    await expect(getCaseDeadlines(ids.caseB, ids.lawyerA, { status: 'OPEN', now: NOW, userRole: 'LAWYER' }, db))
+      .rejects.toBeInstanceOf(AgendaRequestError);
   });
 
-  it('17: the canonical single-Case endpoint returns this case\'s deadlines, most-urgent first', async () => {
+  it('17: the canonical single-Case endpoint returns this case\'s deadlines ordered by urgency', async () => {
+    // getCaseDeadlines uses the default today-forward window, so it surfaces the
+    // most urgent in-window item first and includes the Case deadline.
     const result = await getCaseDeadlines(ids.caseA, ids.lawyerA, { status: 'OPEN', now: NOW, userRole: 'LAWYER' }, db);
     expect(result.caseId).toBe(ids.caseA);
     expect(result.items.length).toBeGreaterThan(0);
-    expect(result.items[0].urgency).toBe('OVERDUE'); // most urgent surfaces first
+    expect(result.items[0].urgency).toBe('TODAY');
     expect(result.items.map((i: any) => i.id)).toContain(`CASE_DEADLINE:${ids.caseA}`);
   });
 

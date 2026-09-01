@@ -7,9 +7,9 @@ const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 describe('Case lifecycle -> deadline -> Agenda convergence (frontend structural)', () => {
-  it('single-Case agenda client reuses the canonical /agenda/case endpoint', () => {
+  it('single-Case agenda client reuses the existing canonical /cases/:id/deadlines endpoint', () => {
     const src = read('src/lib/caseAgendaApi.ts');
-    assert.match(src, /\/agenda\/case\//);
+    assert.match(src, /\/cases\/\$\{encodeURIComponent\(caseId\)\}\/deadlines/);
     assert.match(src, /getCaseAgenda/);
   });
 
