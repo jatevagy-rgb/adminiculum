@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma/prisma.service';
+import { classifyTimeAttribution } from '../time-attribution/attribution';
 import {
   AlignmentType,
   BorderStyle,
@@ -1023,17 +1024,56 @@ class TimesheetReportService {
             name: true,
           },
         },
+        task: {
+          select: {
+            caseId: true,
+            matterId: true,
+            workPackageItem: { select: { caseWorkPackage: { select: { caseId: true } } } },
+          },
+        },
       },
       orderBy: [{ workDate: 'asc' }, { createdAt: 'asc' }],
     });
 
+    // Case-scoped reports must include ONLY time that is safely attributable to
+    // the requested Case (EXACT_CASE or TASK_DERIVED_CASE). The matter-level
+    // filter above can otherwise pull sibling-case or AMBIGUOUS time from a
+    // multi-case matter into a single-case report. Client-level reports keep the
+    // matter.clientId scope, which already excludes other clients' time.
+    let attributionFiltered = entries;
+    if (input.caseId) {
+      const caseRecord = await prisma.case.findUnique({
+        where: { id: input.caseId },
+        select: { id: true, matterId: true },
+      });
+      const matterCaseIds = caseRecord?.matterId
+        ? (await prisma.case.findMany({ where: { matterId: caseRecord.matterId }, select: { id: true } })).map((row) => row.id)
+        : [];
+      attributionFiltered = entries.filter((entry) => {
+        if (!caseRecord?.matterId || entry.matterId !== caseRecord.matterId) return false;
+        const kind = classifyTimeAttribution({
+          caseId: input.caseId!,
+          matterId: caseRecord.matterId,
+          matterCaseIds,
+          task: entry.task
+            ? {
+                caseId: entry.task.caseId,
+                matterId: entry.task.matterId,
+                workPackageCaseId: entry.task.workPackageItem?.caseWorkPackage.caseId || null,
+              }
+            : null,
+        });
+        return kind === 'EXACT_CASE' || kind === 'TASK_DERIVED_CASE';
+      });
+    }
+
     const nameFiltered = normalizedLawyerName
-      ? entries.filter((entry) =>
+      ? attributionFiltered.filter((entry) =>
           String(entry.user?.name || '')
             .toLocaleLowerCase()
             .includes(normalizedLawyerName.toLocaleLowerCase())
         )
-      : entries;
+      : attributionFiltered;
 
     const rows: TimesheetReportRowInput[] = nameFiltered.map((entry) => ({
       date: entry.workDate.toISOString().slice(0, 10),
