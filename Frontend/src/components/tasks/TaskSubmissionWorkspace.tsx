@@ -466,7 +466,7 @@ export function TaskSubmissionWorkspace({
                   <div><dt className="text-[var(--adm-text-muted)]">Munkacsomag</dt><dd className="mt-0.5 font-semibold">{workflow.task.matterId ? workflow.task.case.title : "Nincs kapcsolt munkacsomag"}</dd></div>
                 </dl>
                 {workflow.task.description ? <p className="mt-4 border-t border-[var(--adm-border)] pt-3 text-[12px] leading-5 text-[var(--adm-text-muted)]">{workflow.task.description}</p> : null}
-                {item.sourceCommunicationId ? <p className="mt-3 text-[11px]"><Link href={`/notifications?communicationId=${encodeURIComponent(item.sourceCommunicationId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt kommunikáció megnyitása</Link></p> : null}
+                {item.sourceCommunicationId ? <p className="mt-3 text-[11px]"><Link href={`/communications?communicationId=${encodeURIComponent(item.sourceCommunicationId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt kommunikáció megnyitása</Link></p> : null}
               </section>
 
               {!draft && workflow.permittedActions.createDraft ? (

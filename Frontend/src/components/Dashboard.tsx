@@ -680,7 +680,7 @@ export function Dashboard() {
         kind: "Kommunikáció",
         title: importantCommunication.subject,
         detail: `${importantCommunication.senderName || importantCommunication.senderEmail || "Külső fél"} · kommunikációs munkatér`,
-        href: "/notifications?view=external",
+        href: "/communications?view=external",
       });
     }
     return items;
@@ -796,8 +796,8 @@ export function Dashboard() {
           <KpiCard label="Mai teendők" value={openTasks.length} tone="amber" zeroHint="Nincs nyitott teendő" href="/tasks" />
           <KpiCard label="Közeli határidők" value={upcomingDeadlines.length} tone="yellow" zeroHint="Nincs közeli határidő" href="/deadlines" />
           <KpiCard label="Review tételek" value={reviewDocumentCount} tone="navy" zeroHint="Nincs review tétel" href="/reviews" />
-          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/notifications?view=external" />
-          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" href="/notifications?view=internal" />
+          <KpiCard label="Külső kommunikáció" value={externalComms.length} tone="cyan" zeroHint="Nincs új külső jelzés" href="/communications?view=external" />
+          <KpiCard label="Belső kommunikáció" value={internalComms.length} tone="petrol" zeroHint="Nincs új belső jelzés" href="/communications?view=internal" />
         </section>
 
         <DashboardAttentionWorkloadBlock workload={operationalOverview?.attentionWorkload || null} loading={loading} unavailable={attentionWorkloadUnavailable} />
@@ -906,7 +906,7 @@ export function Dashboard() {
                 <span className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-blue-500)]/30 bg-[var(--adm-blue-100)]/35 px-3 py-1 text-[10.5px] font-semibold text-[var(--adm-blue-700)]">
                   {Math.min(communicationSignals.length, 16)}/16 jelzés
                 </span>
-                <Link href="/notifications" className="adm-link-button px-3 py-1.5 text-[11px]">
+                <Link href="/communications" className="adm-link-button px-3 py-1.5 text-[11px]">
                   Munkatér
                 </Link>
               </div>
@@ -978,7 +978,7 @@ export function Dashboard() {
                   <p className="adm-kicker text-[var(--adm-blue-700)]">Kiemelt ügyfélkör</p>
                   <h3 className="adm-heading mt-0.5 text-[20px]">Ügyfélhez sorolt kommunikáció</h3>
                 </div>
-                <Link href="/notifications?view=clients" className="adm-link-button px-2.5 py-1.5 text-[10.5px]">
+                <Link href="/communications?view=clients" className="adm-link-button px-2.5 py-1.5 text-[10.5px]">
                   Munkatér
                 </Link>
               </div>

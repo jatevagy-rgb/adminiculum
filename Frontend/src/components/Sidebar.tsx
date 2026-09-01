@@ -84,7 +84,6 @@ const routeMap: Record<string, string> = {
   tasks: "/tasks",
   reviews: "/reviews",
   "documents-compare": "/documents/compare",
-  notifications: "/notifications",
   communications: "/communications",
   "time-entries": "/time-entries",
   "timesheet-presets": "/timesheet-presets",
@@ -112,7 +111,6 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   const isTasksActive = activeItem === "tasks";
   const isReviewsActive = activeItem === "reviews";
   const isDocumentsCompareActive = activeItem === "documents-compare";
-  const isNotificationsActive = activeItem === "notifications";
   const isCommunicationsActive = activeItem === "communications";
   const isTimeEntriesActive = activeItem === "time-entries";
   const isTimesheetPresetsActive = activeItem === "timesheet-presets";
@@ -123,8 +121,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   const navLabelMap: Record<string, string> = {
     dashboard: "Műszerfal",
     tasks: "Feladatok",
-    notifications: "Kommunikáció",
-    communications: "Bejövő kommunikáció",
+    communications: "Kommunikáció",
     reviews: "Review sor",
     cases: "Ügyek",
     "clause-library": "Záradék könyvtár",
@@ -234,7 +231,6 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                 || nav.id === "tasks" && isTasksActive
                 || nav.id === "reviews" && isReviewsActive
                 || nav.id === "documents-compare" && isDocumentsCompareActive
-                || nav.id === "notifications" && isNotificationsActive
                 || nav.id === "communications" && isCommunicationsActive
                 || nav.id === "time-entries" && isTimeEntriesActive
                 || nav.id === "timesheet-presets" && isTimesheetPresetsActive
@@ -257,7 +253,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                   {!collapsed && (
                     <>
                       <span className="hidden md:inline">{navLabelMap[nav.id] || nav.label}</span>
-                      {nav.id === "notifications" && unreadNotifications > 0 ? (
+                      {nav.id === "communications" && unreadNotifications > 0 ? (
                         <span className={`ml-auto hidden rounded-full px-2 py-0.5 text-[11px] font-semibold md:inline-flex ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[var(--adm-ochre-500)] text-[var(--adm-green-950)]"}`}>
                           {unreadNotifications}
                         </span>

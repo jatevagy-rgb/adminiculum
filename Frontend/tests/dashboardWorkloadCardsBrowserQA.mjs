@@ -170,8 +170,8 @@ async function main() {
     { label: "Mai teendők", href: "/deadlines?view=day" },
     { label: "Közeli határidők", href: "/deadlines" },
     { label: "Review tételek", href: "/reviews" },
-    { label: "Külső kommunikáció", href: "/notifications?view=external" },
-    { label: "Belső kommunikáció", href: "/notifications?view=internal" },
+    { label: "Külső kommunikáció", href: "/communications?view=external" },
+    { label: "Belső kommunikáció", href: "/communications?view=internal" },
   ];
   try {
     // POPULATED

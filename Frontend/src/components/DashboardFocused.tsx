@@ -789,7 +789,7 @@ export function DashboardFocused() {
               <h2 id="dashboard-communications-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Kommunikáció</h2>
               <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Legutóbbi tételek, opcionális ügyfélszűréssel.</p>
             </div>
-            <nav aria-label="Kommunikációs nézetek" className="flex flex-wrap gap-x-4 gap-y-2"><DashboardTextLink href="/notifications">Összes</DashboardTextLink><DashboardTextLink href="/notifications?view=external">Külső ({externalCommunicationCount ?? "—"})</DashboardTextLink><DashboardTextLink href="/notifications?view=internal">Belső ({internalCommunicationCount ?? "—"})</DashboardTextLink></nav>
+            <nav aria-label="Kommunikációs nézetek" className="flex flex-wrap gap-x-4 gap-y-2"><DashboardTextLink href="/communications">Összes</DashboardTextLink><DashboardTextLink href="/communications?view=external">Külső ({externalCommunicationCount ?? "—"})</DashboardTextLink><DashboardTextLink href="/communications?view=internal">Belső ({internalCommunicationCount ?? "—"})</DashboardTextLink></nav>
           </div>
           {clientCommunicationOptions.length ? (
             <div className="flex gap-1 overflow-x-auto border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2" aria-label="Kommunikáció szűrése ügyfél szerint">
@@ -806,7 +806,7 @@ export function DashboardFocused() {
                 const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
                 const audience = classifyAudience(item);
                 return (
-                  <Link key={item.id} href={`/notifications?communicationId=${encodeURIComponent(item.id)}`} className="relative grid gap-1 px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)] sm:grid-cols-[minmax(150px,0.7fr)_minmax(0,1.4fr)_minmax(180px,0.8fr)_auto] sm:items-center">
+                  <Link key={item.id} href={`/communications?communicationId=${encodeURIComponent(item.id)}`} className="relative grid gap-1 px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)] sm:grid-cols-[minmax(150px,0.7fr)_minmax(0,1.4fr)_minmax(180px,0.8fr)_auto] sm:items-center">
                     <ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
                     <span className="truncate text-[11px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || item.recipientName || "Nincs forrásadat"}</span>
                     <span className="truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span>
