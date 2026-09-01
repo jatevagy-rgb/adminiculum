@@ -11,6 +11,7 @@ import fs from 'fs';
 import yaml from 'js-yaml';
 import { createCorsOptions } from './config/cors';
 import { sanitizeUrlForLog } from './config/logRedaction';
+import { loadReleaseIdentity } from './releaseIdentity';
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -133,6 +134,7 @@ function handleOpenApiJson(_req: Request, res: Response): void {
   }
 }
 
+loadReleaseIdentity();
 startupConfigHealth = evaluateStartupConfigHealth();
 
 const app = express();

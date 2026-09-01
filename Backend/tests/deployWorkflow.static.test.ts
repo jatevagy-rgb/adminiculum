@@ -95,4 +95,21 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow.indexOf('Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS')).toBeLessThan(workflow.indexOf('Backend health gate (/health 200)'));
     expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(workflow.indexOf('Backend health gate after migration (/health 200)'));
   });
+
+  it('resolves one immutable SHA and propagates release identity to both artifacts', () => {
+    expect(workflow).toContain('sha: ${{ steps.rev.outputs.sha }}');
+    expect(workflow).toContain('build_time: ${{ steps.rev.outputs.build_time }}');
+    expect(workflow).toContain('SHA=$(git rev-parse HEAD)');
+    expect(workflow).toContain('BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")');
+    expect(workflow).toContain('ref: ${{ needs.resolve.outputs.sha }}');
+    expect(workflow).toContain('Backend/release-identity.json');
+    expect(workflow).toContain('NEXT_PUBLIC_APP_COMMIT_SHA: ${{ needs.resolve.outputs.sha }}');
+    expect(workflow).toContain('NEXT_PUBLIC_APP_BUILD_TIME: ${{ needs.resolve.outputs.build_time }}');
+    expect(workflow).toContain('Verify backend release identity');
+    expect(workflow).toContain('Verify frontend release identity');
+    expect(workflow.match(/git rev-parse/g)).toHaveLength(1);
+    expect(workflow).not.toContain('git rev-parse release/editor-ops-workflow-1');
+    expect(workflow).not.toContain('APP_COMMIT_SHA: ${{ secrets.');
+    expect(workflow).not.toContain('APP_BUILD_TIME: ${{ secrets.');
+  });
 });
