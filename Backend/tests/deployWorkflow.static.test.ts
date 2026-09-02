@@ -58,6 +58,20 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('inputs.deploy_backend != true');
   });
 
+  it('separates workflow control SHA from the recovery product SHA', () => {
+    expect(workflow).toContain('recovery_product_sha:');
+    expect(workflow).toContain('product_sha: ${{ steps.product.outputs.sha }}');
+    expect(workflow).toContain('recovery_product_sha must be empty when deploy_backend=true.');
+    expect(workflow).toContain('recovery_product_sha must be exactly 40 lowercase hexadecimal characters in recovery mode.');
+    expect(workflow).toContain('git cat-file -e "${RECOVERY_SHA}^{commit}"');
+    expect(workflow).toContain('git merge-base --is-ancestor "$RECOVERY_SHA" "$CONTROL_SHA"');
+    expect(workflow).toContain('EXPECTED_SHA="${{ needs.resolve.outputs.product_sha }}"');
+    expect(workflow).toContain('ref: ${{ needs.resolve.outputs.product_sha }}');
+    expect(workflow).toContain('NEXT_PUBLIC_APP_COMMIT_SHA: ${{ needs.resolve.outputs.product_sha }}');
+    expect(workflow).toContain('if [ "${{ inputs.deploy_backend }}" = "true" ]; then');
+    expect(workflow).toContain('PRODUCT_SHA="$CONTROL_SHA"');
+  });
+
   it('runs migration WebJob polling on the host runner with exact run identity', () => {
     const step = stepBlock('Trigger + verify THIS migration WebJob run');
 
@@ -99,7 +113,8 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")');
     expect(workflow).toContain('ref: ${{ needs.resolve.outputs.sha }}');
     expect(workflow).toContain('Backend/release-identity.json');
-    expect(workflow).toContain('NEXT_PUBLIC_APP_COMMIT_SHA: ${{ needs.resolve.outputs.sha }}');
+    expect(workflow).toContain('RELEASE_SHA: ${{ needs.resolve.outputs.sha }}');
+    expect(workflow).toContain('PRODUCT_SHA="$CONTROL_SHA"');
     expect(workflow).toContain('NEXT_PUBLIC_APP_BUILD_TIME: ${{ needs.resolve.outputs.build_time }}');
     expect(workflow).toContain('Verify backend release identity');
     expect(workflow).toContain('Verify frontend release identity');
