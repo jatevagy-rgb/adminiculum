@@ -104,6 +104,23 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('RELEASE_SHA: ${{ needs.resolve.outputs.product_sha }}');
   });
 
+  it('keeps deep Kudu diagnostics read-only and separate from recovery actions', () => {
+    const step = stepBlock('Inspect exact Kudu deployment and runtime diagnostics (read-only)');
+
+    expect(workflow).toContain('diagnose_deep');
+    expect(step).toContain('az account get-access-token');
+    expect(step).toContain('${KUDU}/deployments');
+    expect(step).toContain('az webapp log download');
+    expect(step).toContain('az webapp config show');
+    expect(step).toContain('az appservice plan show');
+    expect(step).toContain('az monitor metrics list');
+    expect(step).not.toContain('az webapp deploy');
+    expect(step).not.toContain('az webapp restart');
+    expect(step).not.toContain('az webapp config appsettings set');
+    expect(step).not.toContain('prisma migrate');
+    expect(step).not.toContain('prisma db push');
+  });
+
   it('runs migration WebJob polling on the host runner with exact run identity', () => {
     const step = stepBlock('Trigger + verify THIS migration WebJob run');
 
