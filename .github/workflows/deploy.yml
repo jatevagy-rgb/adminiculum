@@ -302,6 +302,47 @@ jobs:
           open('scanner-origin.txt', 'w').write(origin)
           PY
           ORIGIN="$(cat scanner-origin.txt)"
+          # Enumerate independently of backend configuration. Only scanner-like
+          # names/tags and non-secret resource metadata may leave the runner.
+          set +e
+          az resource list --resource-group "${RESOURCE_GROUP}" --output json > scanner-resources.json
+          RESOURCE_LIST_STATUS=$?
+          set -e
+          if [ "$RESOURCE_LIST_STATUS" = "0" ]; then
+            python3 - <<'PY'
+          import json, re
+          terms = re.compile(r'adminiculum-malware-scanner|scanner|malware|clamav|upload-security', re.I)
+          matches = []
+          for item in json.load(open('scanner-resources.json')):
+              tags = item.get('tags') or {}
+              tag_text = ' '.join(f'{k}={v}' for k, v in tags.items())
+              if terms.search(str(item.get('name') or '')) or terms.search(tag_text):
+                  matches.append(item)
+          print(f'AZURE_SCANNER_CANDIDATE_COUNT={len(matches)}')
+          for item in matches:
+              tags = item.get('tags') or {}
+              safe_tags = {k:v for k,v in tags.items() if terms.search(str(k)) or terms.search(str(v))}
+              print('SCANNER_RESOURCE_CANDIDATE=' + json.dumps({
+                  'name': item.get('name'), 'type': item.get('type'),
+                  'region': item.get('location'), 'scannerTags': safe_tags,
+              }, separators=(',', ':')))
+          PY
+          else
+            echo 'AZURE_SCANNER_CANDIDATE_COUNT=UNPROVABLE'
+          fi
+          set +e
+          az acr list --resource-group "${RESOURCE_GROUP}" --query '[].name' -o tsv > acr-names.txt
+          ACR_LIST_STATUS=$?
+          set -e
+          if [ "$ACR_LIST_STATUS" = "0" ]; then
+            while IFS= read -r ACR; do
+              [ -n "$ACR" ] || continue
+              REPOS="$(az acr repository list --name "$ACR" -o tsv 2>/dev/null)" || continue
+              while IFS= read -r REPO; do
+                case "${REPO,,}" in *scanner*|*malware*|*clamav*|*upload-security*) echo "SCANNER_ACR_IMAGE=${ACR}/${REPO}" ;; esac
+              done <<< "$REPOS"
+            done < acr-names.txt
+          fi
           if [ -n "$ORIGIN" ]; then
             set +e
             az webapp list --resource-group "${RESOURCE_GROUP}" --query '[].{name:name,host:defaultHostName,state:state,kind:kind,region:location}' --output json > scanner-webapps.json
