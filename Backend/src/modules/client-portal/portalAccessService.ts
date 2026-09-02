@@ -6,10 +6,15 @@
  * fail-closed authorization boundaries across all client portal resources.
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { authenticate } from '../../middleware/auth';
-import { authenticateClientPortal } from '../../middleware/clientPortalAuth';
+import {
+  acceptedAudiences,
+  authenticateClientPortal,
+  hasRequiredClientPortalScope,
+} from '../../middleware/clientPortalAuth';
 
 type Prisma = typeof defaultPrisma;
 
@@ -42,6 +47,125 @@ const INTERNAL_STAFF_ROLES = new Set([
 ]);
 
 /**
+ * Inspects unverified token metadata ONLY to route to the correct canonical verifier.
+ * Full cryptographic validation is subsequently performed by the selected verifier.
+ */
+function isLikelyCustomerPortalToken(payload: Record<string, unknown> | null): boolean {
+  if (!payload) return false;
+
+  const issuer = String(
+    process.env.CLIENT_IDENTITY_ISSUER ||
+      process.env.CLIENT_PORTAL_IDENTITY_ISSUER ||
+      ''
+  ).trim();
+  const configuredAudiences = new Set(acceptedAudiences());
+
+  // 1. Audience match with configured customer audience
+  if (typeof payload.aud === 'string' && configuredAudiences.has(payload.aud)) {
+    return true;
+  }
+  if (Array.isArray(payload.aud) && payload.aud.some((a) => configuredAudiences.has(String(a)))) {
+    return true;
+  }
+  if (payload.aud === 'adminiculum-client-portal') {
+    return true;
+  }
+
+  // 2. Issuer match with customer identity provider
+  if (issuer && typeof payload.iss === 'string' && payload.iss === issuer) {
+    return true;
+  }
+  if (
+    typeof payload.iss === 'string' &&
+    (payload.iss.includes('ciamlogin.com') ||
+      payload.iss.includes('b2clogin.com') ||
+      payload.iss.includes('customer_identity'))
+  ) {
+    return true;
+  }
+
+  // 3. Required client portal delegated scope
+  if (hasRequiredClientPortalScope(payload)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Deterministically routes authentication to either Entra External ID (Client Portal)
+ * or Azure AD / Local JWT (Workforce) without premature 401 response collisions.
+ */
+export async function requireAuthenticatedPortalUser(
+  req: Request,
+  res: Response
+): Promise<boolean> {
+  if (req.user || req.clientPortalSession) return true;
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({
+      status: 401,
+      code: 'CLIENT_PORTAL_AUTH_REQUIRED',
+      error: 'No token provided',
+      message: 'Client portal authentication is required.',
+    });
+    return false;
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim();
+  let decodedPayload: Record<string, unknown> | null = null;
+  try {
+    const decoded = jwt.decode(token) as Record<string, unknown> | null;
+    if (decoded && typeof decoded === 'object') {
+      decodedPayload = decoded;
+    }
+  } catch {
+    res.status(401).json({
+      status: 401,
+      code: 'CLIENT_PORTAL_TOKEN_INVALID',
+      error: 'Invalid token',
+      message: 'Client portal token is invalid.',
+    });
+    return false;
+  }
+
+  const isCustomerPortalToken = isLikelyCustomerPortalToken(decodedPayload);
+
+  if (isCustomerPortalToken) {
+    await new Promise<void>((resolve) => {
+      authenticateClientPortal(req, res, () => resolve());
+    });
+    if (res.headersSent) return false;
+    if (!req.clientPortalSession) {
+      res.status(401).json({
+        status: 401,
+        code: 'CLIENT_PORTAL_AUTH_REQUIRED',
+        error: 'Authentication required',
+        message: 'Client portal authentication is required.',
+      });
+      return false;
+    }
+    return true;
+  } else {
+    await new Promise<void>((resolve) => {
+      authenticate(req, res, () => resolve());
+    });
+    if (res.headersSent) return false;
+    if (!req.user) {
+      res.status(401).json({
+        status: 401,
+        code: 'CLIENT_PORTAL_AUTH_REQUIRED',
+        error: 'Authentication required',
+        message: 'Client portal authentication is required.',
+      });
+      return false;
+    }
+    return true;
+  }
+}
+
+/**
  * Resolves the authenticated user's authorized client scope.
  * Derives client ownership server-side; never trusts user-provided identifiers.
  */
@@ -49,12 +173,14 @@ export async function resolvePortalAccess(
   req: Request,
   db: Prisma = defaultPrisma
 ): Promise<PortalAccessContext> {
+  const now = new Date();
+
   // 1. Check if caller is authenticated as an internal or workforce user (via req.user)
   if (req.user) {
     const userRole = String(req.user.role || '').toUpperCase();
     const userId = req.user.userId;
 
-    // Internal staff users have full visibility for client portal preview & administration
+    // Internal staff users have preview and management access across clients
     if (INTERNAL_STAFF_ROLES.has(userRole)) {
       return {
         userId,
@@ -65,66 +191,22 @@ export async function resolvePortalAccess(
       };
     }
 
-    // CLIENT role user
+    // Workforce user with CLIENT role
     if (userRole === 'CLIENT') {
       const authorizedClientIds = new Set<string>();
 
-      // a. Active grants for this client user
+      // Active grants for this client user
       const grants = await db.clientPortalGrant.findMany({
         where: {
           clientUserId: userId,
           status: 'ACTIVE',
-          OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+          validFrom: { lte: now },
+          OR: [{ validUntil: null }, { validUntil: { gt: now } }],
         },
         select: { clientId: true },
       });
       for (const g of grants) {
         if (g.clientId) authorizedClientIds.add(g.clientId);
-      }
-
-      // b. Direct client match (userId === clientId or email match)
-      const directClients = await db.client.findMany({
-        where: {
-          OR: [
-            { id: userId },
-            ...(req.user.email ? [{ email: { equals: req.user.email, mode: 'insensitive' as const } }] : []),
-          ],
-        },
-        select: { id: true },
-      });
-      for (const c of directClients) {
-        authorizedClientIds.add(c.id);
-      }
-
-      // c. Workspace memberships via ClientPortalIdentity matching user's email
-      if (req.user.email) {
-        const portalIdentity = await db.clientPortalIdentity.findFirst({
-          where: { normalizedEmail: req.user.email.toLowerCase() },
-          select: { id: true },
-        });
-
-        if (portalIdentity) {
-          const memberships = await db.clientPortalWorkspaceMembership.findMany({
-            where: {
-              clientPortalIdentityId: portalIdentity.id,
-              status: 'ACTIVE',
-            },
-            select: { workspaceId: true },
-          });
-
-          if (memberships.length > 0) {
-            const workspaces = await db.clientPortalWorkspace.findMany({
-              where: {
-                id: { in: memberships.map((m) => m.workspaceId) },
-                status: 'ACTIVE',
-              },
-              select: { clientId: true },
-            });
-            for (const w of workspaces) {
-              if (w.clientId) authorizedClientIds.add(w.clientId);
-            }
-          }
-        }
       }
 
       return {
@@ -136,7 +218,6 @@ export async function resolvePortalAccess(
       };
     }
 
-    // Other non-internal, non-client roles have no portal access
     return {
       userId,
       userRole,
@@ -150,6 +231,37 @@ export async function resolvePortalAccess(
   if (req.clientPortalSession) {
     const session = req.clientPortalSession;
     const identityId = session.clientPortalIdentityId;
+
+    // Enforce verified email & active identity status semantics
+    if (!session.emailVerified) {
+      throw new PortalAccessError(
+        403,
+        'CLIENT_EMAIL_NOT_VERIFIED',
+        'Verified e-mail is required.'
+      );
+    }
+    if (session.status === 'SUSPENDED') {
+      throw new PortalAccessError(
+        403,
+        'CLIENT_IDENTITY_SUSPENDED',
+        'Client identity is suspended.'
+      );
+    }
+    if (session.status === 'REVOKED') {
+      throw new PortalAccessError(
+        403,
+        'CLIENT_IDENTITY_REVOKED',
+        'Client identity is revoked.'
+      );
+    }
+    if (session.status !== 'ACTIVE') {
+      throw new PortalAccessError(
+        403,
+        `CLIENT_IDENTITY_${session.status}`,
+        'Client identity is not active.'
+      );
+    }
+
     const authorizedClientIds = new Set<string>();
 
     // a. Active workspace memberships
@@ -157,6 +269,7 @@ export async function resolvePortalAccess(
       where: {
         clientPortalIdentityId: identityId,
         status: 'ACTIVE',
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
       },
       select: { workspaceId: true },
     });
@@ -179,23 +292,13 @@ export async function resolvePortalAccess(
       where: {
         clientPortalIdentityId: identityId,
         status: 'ACTIVE',
-        OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }],
+        validFrom: { lte: now },
+        OR: [{ validUntil: null }, { validUntil: { gt: now } }],
       },
       select: { clientId: true },
     });
     for (const g of grants) {
       if (g.clientId) authorizedClientIds.add(g.clientId);
-    }
-
-    // c. Direct client by verified email
-    if (session.normalizedEmail) {
-      const directClients = await db.client.findMany({
-        where: { email: { equals: session.normalizedEmail, mode: 'insensitive' as const } },
-        select: { id: true },
-      });
-      for (const c of directClients) {
-        authorizedClientIds.add(c.id);
-      }
     }
 
     return {
@@ -207,53 +310,11 @@ export async function resolvePortalAccess(
     };
   }
 
-  throw new PortalAccessError(401, 'CLIENT_PORTAL_AUTH_REQUIRED', 'Client portal authentication is required.');
-}
-
-/**
- * Ensures the request is authenticated before performing any resource lookup.
- */
-export async function requireAuthenticatedPortalUser(
-  req: Request,
-  res: Response
-): Promise<boolean> {
-  if (req.user || req.clientPortalSession) return true;
-
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({
-      status: 401,
-      code: 'CLIENT_PORTAL_AUTH_REQUIRED',
-      error: 'No token provided',
-      message: 'Client portal authentication is required.',
-    });
-    return false;
-  }
-
-  await new Promise<void>((resolve) => {
-    authenticate(req, res, () => resolve());
-  });
-
-  if (res.headersSent) return false;
-
-  if (!req.user) {
-    await new Promise<void>((resolve) => {
-      authenticateClientPortal(req, res, () => resolve());
-    });
-    if (res.headersSent) return false;
-  }
-
-  if (!req.user && !req.clientPortalSession) {
-    res.status(401).json({
-      status: 401,
-      code: 'CLIENT_PORTAL_AUTH_REQUIRED',
-      error: 'Authentication required',
-      message: 'Client portal authentication is required.',
-    });
-    return false;
-  }
-
-  return true;
+  throw new PortalAccessError(
+    401,
+    'CLIENT_PORTAL_AUTH_REQUIRED',
+    'Client portal authentication is required.'
+  );
 }
 
 /**

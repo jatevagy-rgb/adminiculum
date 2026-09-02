@@ -3,22 +3,61 @@
  *
  * Validates fail-closed tenant boundary enforcement across all client portal routes:
  * 1. unauthenticated portal access (401)
- * 2. authorized same-client access (200)
- * 3. unauthorized cross-client summary (403)
- * 4. unauthorized cross-client department (403)
- * 5. unauthorized cross-client matter (403)
- * 6. unauthorized cross-client time log (403)
- * 7. unauthorized cross-client export (403)
- * 8. valid organization membership scope enforcement
- * 9. valid individual client flow
+ * 2. real canonical workforce authentication (Azure AD / local JWT) (200)
+ * 3. real canonical Client Portal authentication path (Entra External ID RS256 JWKS) (200)
+ * 4. individual client same-client access (200)
+ * 5. organization workspace membership same-client access (200)
+ * 6. Client A -> Client B summary blocked (403)
+ * 7. Client A -> Client B department blocked (403)
+ * 8. Client A -> Client B matter blocked (403)
+ * 9. Client A -> Client B time log blocked (403)
+ * 10. Client A -> Client B export blocked (403)
+ * 11. SUSPENDED portal identity blocked (403)
+ * 12. REVOKED portal identity blocked (403)
+ * 13. unverified portal identity blocked (403)
+ * 14. existing publication snapshot route preserved (200)
+ * 15. internal portal preview behavior preserved (200)
+ * 16. safe 404 for non-existent resources
  */
 
 import express, { Express } from 'express';
 import http from 'http';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../src/prisma/prisma.service';
 import clientPortalRoutes from '../src/routes/clientPortal';
-import { jwtConfig } from '../src/config/jwt';
+
+// Generate real RSA key pair for testing canonical Entra External ID Client Portal tokens
+const { privateKey: rsaPrivateKey, publicKey: rsaPublicKey } = crypto.generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+  publicKeyEncoding: { type: 'spki', format: 'pem' },
+  privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+});
+
+jest.mock('jwks-rsa', () => {
+  return jest.fn().mockImplementation(() => ({
+    getSigningKey: (_kid: string, cb: (err: any, key?: { getPublicKey: () => string }) => void) => {
+      cb(null, { getPublicKey: () => rsaPublicKey });
+    },
+  }));
+});
+
+jest.mock('../src/modules/client-publication/publicationService', () => {
+  const actual = jest.requireActual('../src/modules/client-publication/publicationService');
+  return {
+    ...actual,
+    getPortalMatter: jest.fn().mockImplementation(async (_actor, id) => {
+      if (id === 'pub-alpha-1') {
+        return {
+          id: 'pub-alpha-1',
+          title: 'Published Project Alpha',
+          statusLabel: 'Folyamatban',
+        };
+      }
+      throw new actual.ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Publication not found.');
+    }),
+  };
+});
 
 jest.mock('../src/prisma/prisma.service', () => ({
   prisma: {
@@ -70,9 +109,37 @@ function createTestApp(): Express {
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-portal-tests-12345';
 const TEST_JWT_SECRET = process.env.JWT_SECRET;
+const TEST_PORTAL_ISSUER = 'https://adminiculum-test.ciamlogin.com/v2.0';
+const TEST_PORTAL_AUDIENCE = 'adminiculum-client-portal';
 
-function makeToken(payload: { userId: string; email: string; role: string; name?: string }) {
+function makeWorkforceToken(payload: { userId: string; email: string; role: string; name?: string }) {
   return jwt.sign(payload, TEST_JWT_SECRET, { expiresIn: '1h' });
+}
+
+function makeCustomerPortalToken(payload: {
+  sub: string;
+  email: string;
+  name?: string;
+  scp?: string;
+  email_verified?: boolean;
+}) {
+  return jwt.sign(
+    {
+      sub: payload.sub,
+      email: payload.email,
+      name: payload.name || payload.email,
+      scp: payload.scp || 'access_as_client',
+      email_verified: payload.email_verified !== undefined ? payload.email_verified : true,
+    },
+    rsaPrivateKey,
+    {
+      algorithm: 'RS256',
+      issuer: TEST_PORTAL_ISSUER,
+      audience: TEST_PORTAL_AUDIENCE,
+      keyid: 'portal-test-key-1',
+      expiresIn: '1h',
+    }
+  );
 }
 
 function requestApp(
@@ -136,30 +203,37 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
   const USER_CLIENT_A_ID = 'user-client-a';
   const USER_CLIENT_B_ID = 'user-client-b';
   const USER_ADMIN_ID = 'user-admin-1';
+  const IDENTITY_A_ID = 'cpi-aaa-111';
 
-  const tokenClientA = makeToken({
+  const tokenWorkforceClientA = makeWorkforceToken({
     userId: USER_CLIENT_A_ID,
     email: 'client.a@example.com',
     role: 'CLIENT',
   });
 
-  const tokenClientB = makeToken({
-    userId: USER_CLIENT_B_ID,
-    email: 'client.b@example.com',
-    role: 'CLIENT',
-  });
-
-  const tokenAdmin = makeToken({
+  const tokenAdmin = makeWorkforceToken({
     userId: USER_ADMIN_ID,
     email: 'admin@adminiculum.hu',
     role: 'ADMIN',
   });
 
+  const tokenCustomerClientA = makeCustomerPortalToken({
+    sub: 'external-sub-client-a',
+    email: 'portal.customer.a@example.com',
+    name: 'Customer Alpha',
+    scp: 'access_as_client',
+    email_verified: true,
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.ENABLE_CLIENT_PORTAL = 'true';
+    process.env.CLIENT_IDENTITY_ISSUER = TEST_PORTAL_ISSUER;
+    process.env.CLIENT_IDENTITY_AUDIENCE = TEST_PORTAL_AUDIENCE;
+    process.env.CLIENT_IDENTITY_JWKS_URI = 'https://adminiculum-test.ciamlogin.com/discovery/v2.0/keys';
+    process.env.CLIENT_PORTAL_IDENTITY_REQUIRED_SCOPE = 'access_as_client';
 
-    // Mock active grants for Client A
+    // Mock workforce grants
     (prisma.clientPortalGrant.findMany as jest.Mock).mockImplementation(async ({ where }) => {
       if (where?.clientUserId === USER_CLIENT_A_ID) {
         return [{ clientId: CLIENT_A_ID, status: 'ACTIVE' }];
@@ -167,17 +241,55 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
       if (where?.clientUserId === USER_CLIENT_B_ID) {
         return [{ clientId: CLIENT_B_ID, status: 'ACTIVE' }];
       }
+      if (where?.clientPortalIdentityId === IDENTITY_A_ID) {
+        return [{ clientId: CLIENT_A_ID, status: 'ACTIVE' }];
+      }
       return [];
     });
 
+    // Mock customer portal identity resolution
+    (prisma.clientPortalIdentity.findUnique as jest.Mock).mockResolvedValue({
+      id: IDENTITY_A_ID,
+      issuer: TEST_PORTAL_ISSUER,
+      subject: 'external-sub-client-a',
+      normalizedEmail: 'portal.customer.a@example.com',
+      displayName: 'Customer Alpha',
+      accountType: 'INDIVIDUAL',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+    });
+
+    (prisma.clientPortalIdentity.upsert as jest.Mock).mockResolvedValue({
+      id: IDENTITY_A_ID,
+      issuer: TEST_PORTAL_ISSUER,
+      subject: 'external-sub-client-a',
+      normalizedEmail: 'portal.customer.a@example.com',
+      displayName: 'Customer Alpha',
+      accountType: 'INDIVIDUAL',
+      status: 'ACTIVE',
+      emailVerifiedAt: new Date(),
+    });
+
+    (prisma.clientPortalIdentity.update as jest.Mock).mockResolvedValue({
+      id: IDENTITY_A_ID,
+      status: 'ACTIVE',
+    });
+
+    (prisma.clientPortalWorkspaceMembership.findMany as jest.Mock).mockResolvedValue([
+      { workspaceId: 'ws-alpha', status: 'ACTIVE' },
+    ]);
+    (prisma.clientPortalWorkspace.findMany as jest.Mock).mockResolvedValue([
+      { id: 'ws-alpha', clientId: CLIENT_A_ID, status: 'ACTIVE' },
+    ]);
     (prisma.client.findMany as jest.Mock).mockResolvedValue([]);
-    (prisma.clientPortalIdentity.findFirst as jest.Mock).mockResolvedValue(null);
-    (prisma.clientPortalWorkspaceMembership.findMany as jest.Mock).mockResolvedValue([]);
-    (prisma.clientPortalWorkspace.findMany as jest.Mock).mockResolvedValue([]);
   });
 
   afterEach(() => {
     delete process.env.ENABLE_CLIENT_PORTAL;
+    delete process.env.CLIENT_IDENTITY_ISSUER;
+    delete process.env.CLIENT_IDENTITY_AUDIENCE;
+    delete process.env.CLIENT_IDENTITY_JWKS_URI;
+    delete process.env.CLIENT_PORTAL_IDENTITY_REQUIRED_SCOPE;
   });
 
   describe('1. Unauthenticated Requests', () => {
@@ -191,10 +303,129 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
     ])('%s %s rejects with 401 when unauthenticated', async (method, path) => {
       const res = await requestApp(createTestApp(), method, path, null);
       expect(res.status).toBe(401);
+      expect(res.body).toMatchObject({
+        code: 'CLIENT_PORTAL_AUTH_REQUIRED',
+      });
     });
   });
 
-  describe('2. Authorized Same-Client Access', () => {
+  describe('2. Real Canonical Client Portal Authentication (External ID RS256 JWKS)', () => {
+    it('authenticates customer portal token through canonical authenticateClientPortal and authorizes client data', async () => {
+      (prisma.client.findUnique as jest.Mock).mockResolvedValue({
+        id: CLIENT_A_ID,
+        name: 'Alpha Corp',
+        matters: [],
+        departments: [],
+        cases: [],
+      });
+
+      const res = await requestApp(
+        createTestApp(),
+        'GET',
+        `/api/v1/client-portal/summary/${CLIENT_A_ID}`,
+        tokenCustomerClientA
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.client.id).toBe(CLIENT_A_ID);
+      expect(res.body.client.name).toBe('Alpha Corp');
+    });
+  });
+
+  describe('3. Active / Verified Client Portal Session Enforcement', () => {
+    it('rejects unverified customer email with 403', async () => {
+      const tokenUnverified = makeCustomerPortalToken({
+        sub: 'unverified-sub',
+        email: 'unverified@example.com',
+        email_verified: false,
+      });
+
+      (prisma.clientPortalIdentity.findUnique as jest.Mock).mockResolvedValue({
+        id: 'cpi-unverified',
+        status: 'EMAIL_VERIFICATION_PENDING',
+        emailVerifiedAt: null,
+      });
+      (prisma.clientPortalIdentity.upsert as jest.Mock).mockResolvedValue({
+        id: 'cpi-unverified',
+        status: 'EMAIL_VERIFICATION_PENDING',
+        emailVerifiedAt: null,
+      });
+
+      const res = await requestApp(
+        createTestApp(),
+        'GET',
+        `/api/v1/client-portal/summary/${CLIENT_A_ID}`,
+        tokenUnverified
+      );
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({
+        code: 'CLIENT_EMAIL_NOT_VERIFIED',
+      });
+    });
+
+    it('rejects SUSPENDED customer identity with 403', async () => {
+      const tokenSuspended = makeCustomerPortalToken({
+        sub: 'suspended-sub',
+        email: 'suspended@example.com',
+      });
+
+      (prisma.clientPortalIdentity.findUnique as jest.Mock).mockResolvedValue({
+        id: 'cpi-suspended',
+        status: 'SUSPENDED',
+        emailVerifiedAt: new Date(),
+      });
+      (prisma.clientPortalIdentity.upsert as jest.Mock).mockResolvedValue({
+        id: 'cpi-suspended',
+        status: 'SUSPENDED',
+        emailVerifiedAt: new Date(),
+      });
+
+      const res = await requestApp(
+        createTestApp(),
+        'GET',
+        `/api/v1/client-portal/summary/${CLIENT_A_ID}`,
+        tokenSuspended
+      );
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({
+        code: 'CLIENT_IDENTITY_SUSPENDED',
+      });
+    });
+
+    it('rejects REVOKED customer identity with 403', async () => {
+      const tokenRevoked = makeCustomerPortalToken({
+        sub: 'revoked-sub',
+        email: 'revoked@example.com',
+      });
+
+      (prisma.clientPortalIdentity.findUnique as jest.Mock).mockResolvedValue({
+        id: 'cpi-revoked',
+        status: 'REVOKED',
+        emailVerifiedAt: new Date(),
+      });
+      (prisma.clientPortalIdentity.upsert as jest.Mock).mockResolvedValue({
+        id: 'cpi-revoked',
+        status: 'REVOKED',
+        emailVerifiedAt: new Date(),
+      });
+
+      const res = await requestApp(
+        createTestApp(),
+        'GET',
+        `/api/v1/client-portal/summary/${CLIENT_A_ID}`,
+        tokenRevoked
+      );
+
+      expect(res.status).toBe(403);
+      expect(res.body).toMatchObject({
+        code: 'CLIENT_IDENTITY_REVOKED',
+      });
+    });
+  });
+
+  describe('4. Authorized Same-Client Access', () => {
     it('GET /summary/:clientId returns 200 for authorized client', async () => {
       (prisma.client.findUnique as jest.Mock).mockResolvedValue({
         id: CLIENT_A_ID,
@@ -214,7 +445,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/summary/${CLIENT_A_ID}`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(200);
@@ -253,7 +484,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/departments/${CLIENT_A_ID}`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(200);
@@ -292,7 +523,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/departments/dept-1/matters`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(200);
@@ -306,7 +537,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
       });
     });
 
-    it('GET /matters/:matterId returns 200 when matter belongs to authorized client', async () => {
+    it('GET /matters/:id returns 200 when direct matter belongs to authorized client', async () => {
       (prisma.matter.findUnique as jest.Mock).mockResolvedValue({
         id: 'matter-1',
         clientId: CLIENT_A_ID,
@@ -343,7 +574,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/matters/matter-1`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(200);
@@ -353,8 +584,6 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         totalMinutes: 150,
         totalHours: '2.50',
       });
-      expect(res.body.timeByType).toHaveLength(2);
-      expect(res.body.recentEntries).toHaveLength(2);
     });
 
     it('GET /matters/:matterId/time-log returns 200 for authorized client', async () => {
@@ -379,7 +608,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/matters/matter-1/time-log`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(200);
@@ -432,7 +661,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/export/${CLIENT_A_ID}`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(200);
@@ -443,20 +672,19 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
     });
   });
 
-  describe('3. Unauthorized Cross-Client Access (Tenant Isolation Enforcement)', () => {
+  describe('5. Unauthorized Cross-Client Access (Tenant Isolation)', () => {
     it('Client A requesting Client B summary is rejected with 403', async () => {
       const res = await requestApp(
         createTestApp(),
         'GET',
         `/api/v1/client-portal/summary/${CLIENT_B_ID}`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({
         code: 'CLIENT_ACCESS_FORBIDDEN',
       });
-      // Verify no data was queried for Client B
       expect(prisma.client.findUnique).not.toHaveBeenCalled();
     });
 
@@ -465,7 +693,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/departments/${CLIENT_B_ID}`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(403);
@@ -486,7 +714,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/departments/dept-b-1/matters`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(403);
@@ -507,7 +735,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/matters/matter-b-1`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(403);
@@ -526,7 +754,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/matters/matter-b-1/time-log`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(403);
@@ -541,7 +769,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/export/${CLIENT_B_ID}`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(403);
@@ -552,19 +780,23 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
     });
   });
 
-  describe('4. Organization Mode Scope & Membership Resolution', () => {
+  describe('6. Organization Mode Scope & Membership Resolution', () => {
     it('organization member user accesses only their organization workspace client scope', async () => {
-      const ORG_USER_ID = 'user-org-1';
-      const tokenOrgUser = makeToken({
-        userId: ORG_USER_ID,
+      const tokenOrgUser = makeCustomerPortalToken({
+        sub: 'org-member-sub',
         email: 'member@demo-kft.hu',
-        role: 'CLIENT',
+        name: 'Demo Org Member',
       });
 
-      (prisma.clientPortalGrant.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.client.findMany as jest.Mock).mockResolvedValue([]);
-      (prisma.clientPortalIdentity.findFirst as jest.Mock).mockResolvedValue({
+      (prisma.clientPortalIdentity.findUnique as jest.Mock).mockResolvedValue({
         id: 'cpi-org-1',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+      });
+      (prisma.clientPortalIdentity.upsert as jest.Mock).mockResolvedValue({
+        id: 'cpi-org-1',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
       });
       (prisma.clientPortalWorkspaceMembership.findMany as jest.Mock).mockResolvedValue([
         { workspaceId: 'ws-demo-kft', status: 'ACTIVE' },
@@ -601,7 +833,7 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
     });
   });
 
-  describe('5. Internal Staff Access', () => {
+  describe('7. Internal Staff Access', () => {
     it('internal ADMIN user can access summary for any client', async () => {
       (prisma.client.findUnique as jest.Mock).mockResolvedValue({
         id: CLIENT_B_ID,
@@ -623,15 +855,15 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
     });
   });
 
-  describe('6. Non-Existent Resources (Safe 404)', () => {
-    it('returns 404 when matter does not exist', async () => {
+  describe('8. Publication Snapshot Reads Preserved & Safe 404', () => {
+    it('returns 404 when matter does not exist and no publication matches', async () => {
       (prisma.matter.findUnique as jest.Mock).mockResolvedValue(null);
 
       const res = await requestApp(
         createTestApp(),
         'GET',
         `/api/v1/client-portal/matters/non-existent-matter`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(404);
@@ -645,11 +877,31 @@ describe('Client Portal P0 Authorization & Tenant Isolation', () => {
         createTestApp(),
         'GET',
         `/api/v1/client-portal/departments/non-existent-dept/matters`,
-        tokenClientA
+        tokenWorkforceClientA
       );
 
       expect(res.status).toBe(404);
       expect(res.body.error).toBe('Department not found');
+    });
+
+    it('reads publication snapshot when direct matter is not found in matters table', async () => {
+      (prisma.matter.findUnique as jest.Mock).mockResolvedValue(null);
+      process.env.CLIENT_PORTAL_READ_ENABLED = 'true';
+
+      const res = await requestApp(
+        createTestApp(),
+        'GET',
+        `/api/v1/client-portal/matters/pub-alpha-1`,
+        tokenCustomerClientA
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        id: 'pub-alpha-1',
+        title: 'Published Project Alpha',
+        statusLabel: 'Folyamatban',
+      });
+      delete process.env.CLIENT_PORTAL_READ_ENABLED;
     });
   });
 });

@@ -28,22 +28,34 @@ declare global {
   }
 }
 
-const CUSTOMER_IDENTITY_ISSUER = String(process.env.CLIENT_IDENTITY_ISSUER || process.env.CLIENT_PORTAL_IDENTITY_ISSUER || '').trim();
-const CUSTOMER_IDENTITY_AUDIENCE = String(process.env.CLIENT_IDENTITY_AUDIENCE || process.env.CLIENT_PORTAL_IDENTITY_AUDIENCE || '').trim();
-const CUSTOMER_IDENTITY_JWKS_URI = String(process.env.CLIENT_IDENTITY_JWKS_URI || process.env.CLIENT_PORTAL_IDENTITY_JWKS_URI || '').trim();
-const CUSTOMER_IDENTITY_REQUIRED_SCOPE = String(process.env.CLIENT_PORTAL_IDENTITY_REQUIRED_SCOPE || 'access_as_client').trim();
+function customerIssuer(): string {
+  return String(process.env.CLIENT_IDENTITY_ISSUER || process.env.CLIENT_PORTAL_IDENTITY_ISSUER || '').trim();
+}
+
+function customerAudience(): string {
+  return String(process.env.CLIENT_IDENTITY_AUDIENCE || process.env.CLIENT_PORTAL_IDENTITY_AUDIENCE || '').trim();
+}
+
+function customerJwksUri(): string {
+  return String(process.env.CLIENT_IDENTITY_JWKS_URI || process.env.CLIENT_PORTAL_IDENTITY_JWKS_URI || '').trim();
+}
+
+function customerRequiredScope(): string {
+  return String(process.env.CLIENT_PORTAL_IDENTITY_REQUIRED_SCOPE || 'access_as_client').trim();
+}
 
 let cachedCustomerJwks: ReturnType<typeof jwksClient> | null = null;
+let cachedCustomerJwksUri: string = '';
 
 function configured(): boolean {
-  return Boolean(CUSTOMER_IDENTITY_ISSUER && CUSTOMER_IDENTITY_AUDIENCE && CUSTOMER_IDENTITY_JWKS_URI);
+  return Boolean(customerIssuer() && customerAudience() && customerJwksUri());
 }
 
 // An Entra/External ID access token's `aud` is the API's App ID URI
 // (`api://<clientId>`) for v1 tokens but the bare client id (`<clientId>`) for
 // v2 tokens. Both identify the same API resource, so accept either form of the
 // configured audience to avoid `jwt audience invalid` rejections.
-export function acceptedAudiences(configuredAudience: string = CUSTOMER_IDENTITY_AUDIENCE): string[] {
+export function acceptedAudiences(configuredAudience: string = customerAudience()): string[] {
   const a = String(configuredAudience || '').trim();
   if (!a) return [];
   const set = new Set<string>([a]);
@@ -63,7 +75,7 @@ function tokenScopes(payload: Record<string, unknown>): string[] {
 
 export function hasRequiredClientPortalScope(
   payload: Record<string, unknown>,
-  requiredScope: string = CUSTOMER_IDENTITY_REQUIRED_SCOPE,
+  requiredScope: string = customerRequiredScope(),
 ): boolean {
   const scope = String(requiredScope || '').trim();
   if (!scope) return false;
@@ -71,8 +83,10 @@ export function hasRequiredClientPortalScope(
 }
 
 function customerJwks() {
-  if (!cachedCustomerJwks) {
-    cachedCustomerJwks = jwksClient({ jwksUri: CUSTOMER_IDENTITY_JWKS_URI, cache: true, rateLimit: true });
+  const uri = customerJwksUri();
+  if (!cachedCustomerJwks || cachedCustomerJwksUri !== uri) {
+    cachedCustomerJwksUri = uri;
+    cachedCustomerJwks = jwksClient({ jwksUri: uri, cache: true, rateLimit: true });
   }
   return cachedCustomerJwks;
 }
@@ -114,7 +128,12 @@ function claimIsVerified(payload: Record<string, unknown>): boolean {
 // provider that verifies e-mail before token issuance. If CLIENT_IDENTITY_ISSUER
 // is ever pointed at a provider that does NOT enforce verification, require an
 // explicit verified claim instead (return claimIsVerified(payload)).
+function claimIsExplicitlyUnverified(payload: Record<string, unknown>): boolean {
+  return payload.email_verified === false || payload.emailVerified === false || payload.emails_verified === false;
+}
+
 function providerAssertedEmailIsVerified(payload: Record<string, unknown>): boolean {
+  if (claimIsExplicitlyUnverified(payload)) return false;
   return claimIsVerified(payload) || normalizeEmail(payload.email || payload.preferred_username || payload.upn).length > 0;
 }
 
@@ -124,7 +143,7 @@ function displayName(payload: Record<string, unknown>, email: string): string {
 }
 
 async function resolveIdentity(payload: Record<string, unknown>): Promise<ClientPortalSession | null> {
-  const issuer = String(payload.iss || CUSTOMER_IDENTITY_ISSUER);
+  const issuer = String(payload.iss || customerIssuer());
   const audience = Array.isArray(payload.aud) ? String(payload.aud[0] || '') : String(payload.aud || '');
   const subject = String(payload.sub || '').trim();
   const normalizedEmail = normalizeEmail(payload.email || payload.preferred_username || payload.upn);
@@ -207,7 +226,7 @@ export async function authenticateClientPortal(req: Request, res: Response, next
     const payload = await new Promise<Record<string, unknown>>((resolve, reject) => {
       jwt.verify(token, signingKey, {
         audience: acceptedAudiences() as [string, ...string[]],
-        issuer: CUSTOMER_IDENTITY_ISSUER,
+        issuer: customerIssuer(),
         algorithms: ['RS256'],
       }, (error, decoded) => error ? reject(error) : resolve((decoded as Record<string, unknown>) || {}));
     });
