@@ -266,7 +266,8 @@ export const authenticate = async (
   }
 
   try {
-    const decoded = jwt.verify(token, jwtConfig.secret) as LocalJwtPayload;
+    const secret = process.env.JWT_SECRET || jwtConfig.secret;
+    const decoded = jwt.verify(token, secret) as LocalJwtPayload;
     req.user = {
       userId: String(decoded.userId || ''),
       email: String(decoded.email || '').trim().toLowerCase(),
