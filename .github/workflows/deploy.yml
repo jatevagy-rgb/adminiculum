@@ -218,10 +218,7 @@ jobs:
             if ! BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"; then
               CONSECUTIVE_OK=0; sleep 15; continue
             fi
-            EXPECTED_SHA="${{ needs.resolve.outputs.product_sha }}" BODY="$BODY" node <<'NODE'
-            const body = JSON.parse(process.env.BODY);
-            if (body.commitSha !== process.env.EXPECTED_SHA || !body.buildTime) process.exit(1);
-            NODE
+            EXPECTED_SHA="${{ needs.resolve.outputs.product_sha }}" BODY="$BODY" node -e 'const body = JSON.parse(process.env.BODY); if (body.commitSha !== process.env.EXPECTED_SHA || !body.buildTime) process.exit(1);'
             CONSECUTIVE_OK=$((CONSECUTIVE_OK + 1))
             echo "[$i] expected backend identity verified ($CONSECUTIVE_OK/3)."
             if [ "$CONSECUTIVE_OK" -ge 3 ]; then
