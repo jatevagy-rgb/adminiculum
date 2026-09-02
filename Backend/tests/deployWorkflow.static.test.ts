@@ -58,6 +58,25 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('inputs.deploy_backend != true');
   });
 
+  it('keeps recovery input out of shell source and validates it before use', () => {
+    expect(workflow).toContain('RECOVERY_PRODUCT_SHA_INPUT: ${{ inputs.recovery_product_sha }}');
+    expect(workflow).toContain('RECOVERY_SHA="${RECOVERY_PRODUCT_SHA_INPUT}"');
+    expect(workflow).not.toContain('RECOVERY_SHA="${{ inputs.recovery_product_sha }}"');
+    expect(workflow).toContain('=~ ^[0-9a-f]{40}$');
+    expect(workflow).toContain('git cat-file -e "${RECOVERY_SHA}^{commit}"');
+    expect(workflow).toContain('git merge-base --is-ancestor "$RECOVERY_SHA" "$CONTROL_SHA"');
+  });
+
+  it('makes requested migration mandatory before frontend deployment', () => {
+    expect(workflow).toContain('always()');
+    expect(workflow).toContain("needs.backend.result == 'skipped'");
+    expect(workflow).toContain("needs.recovery.result == 'success'");
+    expect(workflow).toContain('(inputs.run_migration && needs.migration.result == \'success\')');
+    expect(workflow).toContain('!inputs.run_migration');
+    expect(workflow).not.toContain("&& (needs.migration.result == 'success' || needs.migration.result == 'skipped') }}");
+    expect(workflow).toContain("needs.migration.result == 'success'");
+  });
+
   it('separates workflow control SHA from the recovery product SHA', () => {
     expect(workflow).toContain('recovery_product_sha:');
     expect(workflow).toContain('product_sha: ${{ steps.product.outputs.sha }}');
@@ -101,7 +120,8 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain("needs.recovery.result == 'success'");
     expect(workflow).toContain('needs: [resolve, backend, migration]');
     expect(workflow).toContain("&& (needs.backend.result == 'success' || needs.backend.result == 'skipped')");
-    expect(workflow).toContain("&& (needs.migration.result == 'success' || needs.migration.result == 'skipped')");
+    expect(workflow).toContain('(inputs.run_migration && needs.migration.result == \'success\')');
+    expect(workflow).toContain('!inputs.run_migration');
     expect(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')).toBeLessThan(workflow.indexOf('Backend health gate (/health 200)'));
     expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(workflow.indexOf('Backend health gate after migration (/health 200)'));
   });
