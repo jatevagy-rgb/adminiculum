@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   verify-production-schema:
@@ -12,7 +13,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       PRODUCT_SHA: 8703eae598c1b4ce5a71eefd24ec974c9d21595b
       MIGRATION_RUN_ID: "202609021106086304"
     steps:
@@ -29,6 +29,13 @@ jobs:
           cache: npm
           cache-dependency-path: Backend/package-lock.json
 
+      - name: Azure login (OIDC, no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Install database client dependency
         working-directory: Backend
         run: npm ci --ignore-scripts
@@ -38,7 +45,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set +x
+          export AZURE_CORE_OUTPUT=none
+          DATABASE_URL="$(az webapp config appsettings list \
+            --resource-group Adminiculum \
+            --name adminiculumbackend-b1-01 \
+            --query "[?name=='DATABASE_URL'].value | [0]" \
+            --output tsv)"
           test -n "${DATABASE_URL:-}" || { echo "DATABASE_URL is required." >&2; exit 1; }
+          echo "::add-mask::${DATABASE_URL}"
+          export DATABASE_URL
           node --input-type=module <<'NODE'
           import pg from 'pg';
 
@@ -145,3 +161,4 @@ jobs:
             await client.end();
           }
           NODE
+          unset DATABASE_URL
