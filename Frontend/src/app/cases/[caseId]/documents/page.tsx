@@ -8,6 +8,7 @@ import { AnnotationCapabilityToolbar } from "@/components/documents/annotations/
 import { NotPublishedBadge, isClientExplanationDraft } from "@/components/documents/annotations/NotPublishedBadge";
 import {
   getCaseContracts,
+  getCaseById,
   getCases,
   getCaseTimeline,
   getCaseDocuments,
@@ -369,15 +370,19 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     requestedDocumentIdRef.current = requestedDocumentId;
   }
 
-  // Fetch case record from case list to resolve caseNumber -> CUID.
-  // caseRecord.id (CUID) is used for ALL API calls; resolvedParams.caseId may be a caseNumber string.
+  // Resolve a canonical case ID directly so document controls do not depend on
+  // the case appearing in an arbitrary pagination window. Keep the list lookup
+  // only for legacy case-number URLs.
   useEffect(() => {
     const fetchCaseRecord = async () => {
       try {
-        const response = await getCases(1, 200);
-        const record = response.data.find(
-          (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
-        );
+        let record;
+        try {
+          record = await getCaseById(resolvedParams.caseId);
+        } catch {
+          const response = await getCases(1, 200);
+          record = response.data.find((item) => item.caseNumber === resolvedParams.caseId);
+        }
         if (record) {
           setCaseRecord({
             id: record.id,

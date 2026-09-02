@@ -28,6 +28,13 @@ test("Document add and immutable version upload remain distinct", () => {
   assert.doesNotMatch(source, /contentEditable/);
 });
 
+test("Document workspace resolves the case directly before the legacy paginated fallback", () => {
+  const source = documentPage();
+  assert.match(source, /getCaseById\(resolvedParams\.caseId\)/);
+  assert.match(source, /getCases\(1, 200\)/);
+  assert.match(source, /item\.caseNumber === resolvedParams\.caseId/);
+});
+
 test("Document Workspace surfaces existing Legal Analysis only for a real versioned document", () => {
   const source = documentPage();
   const panel = read("src/components/documents/LegalAnalysisIntakePanel.tsx");
