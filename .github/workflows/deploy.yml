@@ -32,11 +32,12 @@ on:
         type: boolean
         default: true
       backend_recovery_action:
-        description: 'P0 backend recovery action. diagnose is read-only; restart and redeploy_known_good require a product SHA.'
+        description: 'P0 backend recovery action. diagnose actions are read-only; restart and redeploy_known_good require a product SHA.'
         type: choice
         options:
           - none
           - diagnose
+          - diagnose_deep
           - restart
           - redeploy_known_good
         default: none
@@ -82,7 +83,7 @@ jobs:
             [ "${{ inputs.run_migration }}" = "false" ] || { echo "Backend recovery never runs migrations."; exit 1; }
             [ "${{ inputs.deploy_frontend }}" = "false" ] || { echo "Backend recovery never deploys the frontend."; exit 1; }
             case "$ACTION" in
-              diagnose)
+              diagnose|diagnose_deep)
                 [ "${{ inputs.deploy_backend }}" = "false" ] || { echo "diagnose must not deploy the backend."; exit 1; }
                 [ -z "$BACKEND_RECOVERY_PRODUCT_SHA" ] || { echo "diagnose does not accept a product SHA."; exit 1; }
                 ;;
@@ -94,7 +95,7 @@ jobs:
                 ;;
               *) echo "Unsupported backend recovery action: $ACTION"; exit 1 ;;
             esac
-            if [ "$ACTION" != "diagnose" ]; then
+            if [ "$ACTION" != "diagnose" ] && [ "$ACTION" != "diagnose_deep" ]; then
               [[ "$BACKEND_RECOVERY_PRODUCT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Recovery product SHA must be exactly 40 lowercase hexadecimal characters."; exit 1; }
             fi
             echo "P0 backend recovery inputs OK (action=$ACTION)."
@@ -139,7 +140,7 @@ jobs:
           BACKEND_RECOVERY_ACTION="${BACKEND_RECOVERY_ACTION_INPUT}"
           BACKEND_RECOVERY_SHA="${BACKEND_RECOVERY_SHA_INPUT}"
           if [ "$BACKEND_RECOVERY_ACTION" != "none" ]; then
-            if [ "$BACKEND_RECOVERY_ACTION" = "diagnose" ]; then
+            if [ "$BACKEND_RECOVERY_ACTION" = "diagnose" ] || [ "$BACKEND_RECOVERY_ACTION" = "diagnose_deep" ]; then
               PRODUCT_SHA="$CONTROL_SHA"
             else
               [[ "$BACKEND_RECOVERY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Recovery product SHA must be exactly 40 lowercase hexadecimal characters."; exit 1; }
@@ -203,6 +204,86 @@ jobs:
             # a successful deployment identity or to select an artifact.
             az webapp log deployment list --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" \
               --query '[0:10].{id:id,status:status,active:active,startTime:startTime,endTime:endTime,deployer:deployer}' --output json
+
+      - name: Inspect exact Kudu deployment and runtime diagnostics (read-only)
+        if: ${{ inputs.backend_recovery_action == 'diagnose_deep' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
+          KUDU="https://${BACKEND_APP}.scm.azurewebsites.net/api"
+          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/deployments" > deployments.json
+          python3 - <<'PY'
+          import json, re
+          def scrub(value):
+              text = str(value or '')
+              text = re.sub(r'(?i)(password|token|secret|key|authorization|database_url)(\s*[:=]\s*)\S+', r'\1\2***', text)
+              text = re.sub(r'(?i)(https?://)[^\s/@:]+:[^\s/@]+@', r'\1***:***@', text)
+              return text
+          deployments = json.load(open('deployments.json'))
+          selected = [{key: scrub(item.get(key)) for key in ('id', 'status', 'message', 'author', 'start_time', 'end_time', 'active', 'deployer')} for item in deployments[:5]]
+          print(json.dumps(selected, indent=2))
+          PY
+          DEPLOYMENT_ID="$(python3 -c \"import json; print(json.load(open('deployments.json'))[0]['id'])\")"
+          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/deployments/${DEPLOYMENT_ID}/log" > deployment-log.json
+          DEPLOYMENT_ID="$DEPLOYMENT_ID" KUDU="$KUDU" TOKEN="$TOKEN" python3 - <<'PY'
+          import json, os, re, urllib.parse, urllib.request
+          def scrub(value):
+              text = str(value or '')
+              text = re.sub(r'(?i)(password|token|secret|key|authorization|database_url)(\s*[:=]\s*)\S+', r'\1\2***', text)
+              text = re.sub(r'(?i)(https?://)[^\s/@:]+:[^\s/@]+@', r'\1***:***@', text)
+              return text
+          logs = json.load(open('deployment-log.json'))
+          selected = [{key: scrub(item.get(key)) for key in ('id', 'message', 'type', 'details_url', 'log_time')} for item in logs]
+          print(json.dumps(selected, indent=2))
+          base = urllib.parse.urlparse(os.environ['KUDU'])
+          for item in logs:
+              detail = item.get('details_url')
+              if not detail:
+                  continue
+              url = urllib.parse.urljoin(os.environ['KUDU'] + '/', detail)
+              parsed = urllib.parse.urlparse(url)
+              if parsed.scheme != 'https' or parsed.netloc != base.netloc or not parsed.path.startswith('/api/'):
+                  raise RuntimeError('Unexpected Kudu deployment detail URL.')
+              request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + os.environ['TOKEN']})
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  text = response.read().decode('utf-8', errors='replace')
+              print(f'DEPLOYMENT_LOG_DETAIL_{item.get("id", "unknown")}={scrub(text)}')
+          PY
+          for PATH in package.json dist/index.js node_modules release-identity.json; do
+            CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/site/wwwroot/${PATH}" -o /dev/null -w '%{http_code}')"
+            echo "WWWROOT_${PATH//\//_}_HTTP=${CODE}"
+          done
+          set +e
+          az webapp log download --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --log-file runtime-logs.zip
+          LOG_DOWNLOAD_STATUS=$?
+          set -e
+          echo "RUNTIME_LOG_DOWNLOAD_STATUS=${LOG_DOWNLOAD_STATUS}"
+          if [ "$LOG_DOWNLOAD_STATUS" = "0" ]; then
+            unzip -Z1 runtime-logs.zip | sed -n '1,100p'
+            python3 - <<'PY'
+          import re, zipfile
+          pattern = re.compile(r'error|fail|exception|crash|oom|out of memory|startup|oryx|npm|prisma', re.I)
+          secret = re.compile(r'(?i)(password|token|secret|key|authorization|database_url)(\s*[:=]\s*)\S+')
+          with zipfile.ZipFile('runtime-logs.zip') as archive:
+              for name in archive.namelist():
+                  if name.endswith('/'):
+                      continue
+                  text = archive.read(name).decode('utf-8', errors='replace')
+                  matches = [secret.sub(r'\1\2***', line) for line in text.splitlines() if pattern.search(line)]
+                  for line in matches[-40:]:
+                      print(f'RUNTIME_LOG[{name}]={line}')
+          PY
+          fi
+          az webapp config show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query '{startup:appCommandLine,linuxFxVersion:linuxFxVersion}' --output json
+          az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query "[?name=='SCM_DO_BUILD_DURING_DEPLOYMENT' || name=='WEBSITE_RUN_FROM_PACKAGE'].{name:name,present:value!=null}" --output json
+          PLAN_ID="$(az webapp show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query serverFarmId -o tsv)"
+          az appservice plan show --ids "$PLAN_ID" --query '{sku:sku,workerCount:numberOfWorkers,capacity:sku.capacity,reserved:reserved}' --output json
+          set +e
+          az monitor metrics list --resource "$(az webapp show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query id -o tsv)" --metric MemoryWorkingSet --interval PT1H --aggregation Maximum --output json
+          METRICS_STATUS=$?
+          set -e
+          echo "MEMORY_METRICS_STATUS=${METRICS_STATUS}"
 
       - name: Restart and verify the known-good backend
         if: ${{ inputs.backend_recovery_action == 'restart' }}
