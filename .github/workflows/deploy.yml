@@ -96,7 +96,7 @@ jobs:
         run: |
           set -euo pipefail
           CONTROL_SHA="${{ steps.rev.outputs.sha }}"
-          RECOVERY_SHA="${{ inputs.recovery_product_sha }}"
+          RECOVERY_SHA="${RECOVERY_PRODUCT_SHA_INPUT}"
           if [ "${{ inputs.deploy_backend }}" = "true" ]; then
             if [ -n "$RECOVERY_SHA" ]; then
               echo "recovery_product_sha must be empty when deploy_backend=true."; exit 1
@@ -116,6 +116,8 @@ jobs:
           fi
           echo "Resolved product SHA: $PRODUCT_SHA"
           echo "sha=$PRODUCT_SHA" >> "$GITHUB_OUTPUT"
+        env:
+          RECOVERY_PRODUCT_SHA_INPUT: ${{ inputs.recovery_product_sha }}
 
   # ---------------------------------------------------------------------------
   # Backend: source ZIP with package.json at ROOT -> Kudu ZipDeploy -> Oryx.
@@ -266,7 +268,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [resolve, backend, recovery]
     if: >-
-      ${{ inputs.run_migration
+      ${{ always()
+          && inputs.run_migration
+          && needs.resolve.result == 'success'
           && (
             needs.backend.result == 'success'
             || (
@@ -372,7 +376,13 @@ jobs:
           && inputs.deploy_frontend
           && needs.resolve.result == 'success'
           && (needs.backend.result == 'success' || needs.backend.result == 'skipped')
-          && (needs.migration.result == 'success' || needs.migration.result == 'skipped') }}
+          && (
+            (inputs.run_migration && needs.migration.result == 'success')
+            || (
+              !inputs.run_migration
+              && (needs.migration.result == 'success' || needs.migration.result == 'skipped')
+            )
+          ) }}
     environment: production
     # Public, browser-exposed build configuration. Next.js inlines NEXT_PUBLIC_*
     # at BUILD TIME, so these MUST be present when `next build` runs — a runtime
