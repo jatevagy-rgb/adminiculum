@@ -353,7 +353,9 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+import { jobService } from './modules/jobs';
+
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(
     `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${PORT}`,
   );
@@ -374,7 +376,26 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('[Startup Validation] CORS mode=development (localhost origins allowed)');
   }
 
+  if (jobService.isEnabled()) {
+    jobService.start().catch((err) => {
+      console.error('[Startup] Failed to start background job service:', err);
+    });
+  }
+
   console.log(`🚀 Adminiculum API V2 running on http://localhost:${PORT}`);
 });
+
+const handleGracefulShutdown = async (signal: string) => {
+  console.log(`[Shutdown] Received ${signal}, initiating graceful shutdown...`);
+  if (jobService.isStarted()) {
+    await jobService.stop({ graceful: true, timeout: 5000 });
+  }
+  server.close(() => {
+    process.exit(0);
+  });
+};
+
+process.once('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
+process.once('SIGINT', () => handleGracefulShutdown('SIGINT'));
 
 export default app;

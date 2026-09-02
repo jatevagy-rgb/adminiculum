@@ -114,6 +114,7 @@
     "multer": "^2.0.2",
     "pdf-parse": "^2.4.5",
     "pg": "^8.18.0",
+    "pg-boss": "^10.4.2",
     "pizzip": "^3.1.7",
     "prisma": "^5.22.0",
     "swagger-ui-express": "^5.0.1",

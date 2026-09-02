@@ -1,0 +1,155 @@
+/**
+ * Adminiculum Job Service Adapter
+ *
+ * Implements a lightweight, resilient adapter wrapping pg-boss for asynchronous background task execution.
+ */
+
+import PgBoss from 'pg-boss';
+import { getJobServiceConfig } from './config';
+import { JobContext, JobHandler, JobOptions, JobServiceConfig, WorkerOptions } from './types';
+
+export class JobService {
+  private boss: PgBoss | null = null;
+  private config: JobServiceConfig;
+  private registeredWorkers: Map<
+    string,
+    { handler: JobHandler; options?: WorkerOptions }
+  > = new Map();
+  private isRunning = false;
+
+  constructor(customConfig?: Partial<JobServiceConfig>) {
+    this.config = { ...getJobServiceConfig(), ...customConfig };
+  }
+
+  public isEnabled(): boolean {
+    return Boolean(this.config.enabled);
+  }
+
+  public isStarted(): boolean {
+    return this.isRunning;
+  }
+
+  public registerWorker<TData = any, TResult = any>(
+    queueName: string,
+    handler: JobHandler<TData, TResult>,
+    options?: WorkerOptions
+  ): void {
+    this.registeredWorkers.set(queueName, { handler, options });
+    if (this.isRunning && this.boss) {
+      this.bindWorker(queueName, handler, options).catch((err) => {
+        console.error(`[JobService] Failed to bind worker for queue "${queueName}":`, err);
+      });
+    }
+  }
+
+  public async enqueue<TData extends object = any>(
+    queueName: string,
+    data: TData,
+    options?: JobOptions
+  ): Promise<string | null> {
+    if (!this.isEnabled()) {
+      console.warn(`[JobService] Jobs disabled. Skipping enqueue for queue: ${queueName}`);
+      return null;
+    }
+    if (!this.isRunning || !this.boss) {
+      throw new Error(`[JobService] Cannot enqueue job. Job service is not started.`);
+    }
+
+    const sendOptions: PgBoss.SendOptions = {
+      retryLimit: options?.retryLimit ?? this.config.defaultRetryLimit,
+      retryDelay: options?.retryDelay ?? this.config.defaultRetryDelay,
+      retryBackoff: options?.retryBackoff ?? this.config.defaultRetryBackoff,
+      expireInSeconds: options?.expireInSeconds ?? this.config.defaultExpireInSeconds,
+      retentionSeconds: options?.retentionSeconds ?? this.config.defaultRetentionSeconds,
+      priority: options?.priority,
+      startAfter: options?.startAfter,
+      singletonKey: options?.singletonKey,
+      deadLetter: options?.deadLetter,
+    };
+
+    return await this.boss.send(queueName, data, sendOptions);
+  }
+
+  public async start(): Promise<void> {
+    if (!this.isEnabled()) {
+      console.log('[JobService] Background jobs are disabled (BACKGROUND_JOBS_ENABLED != true).');
+      return;
+    }
+
+    if (this.isRunning) {
+      return;
+    }
+
+    if (!this.config.connectionString) {
+      console.warn('[JobService] Missing database connection string for pg-boss.');
+      return;
+    }
+
+    this.boss = new PgBoss({
+      connectionString: this.config.connectionString,
+      schema: this.config.schema,
+      max: this.config.maxConnections,
+      application_name: 'adminiculum-jobs',
+    });
+
+    this.boss.on('error', (err) => {
+      console.error('[JobService] pg-boss internal error:', err.message);
+    });
+
+    await this.boss.start();
+    this.isRunning = true;
+    console.log(`[JobService] pg-boss started successfully in schema "${this.config.schema}".`);
+
+    for (const [queueName, { handler, options }] of this.registeredWorkers.entries()) {
+      await this.bindWorker(queueName, handler, options);
+    }
+  }
+
+  public async stop(options?: { graceful?: boolean; timeout?: number }): Promise<void> {
+    if (!this.isRunning || !this.boss) {
+      return;
+    }
+
+    const timeout = options?.timeout ?? 5000;
+    const graceful = options?.graceful ?? true;
+
+    try {
+      await this.boss.stop({ graceful, timeout });
+      console.log('[JobService] pg-boss stopped cleanly.');
+    } catch (error) {
+      console.error('[JobService] Error stopping pg-boss:', error);
+    } finally {
+      this.isRunning = false;
+      this.boss = null;
+    }
+  }
+
+  public getBossInstance(): PgBoss | null {
+    return this.boss;
+  }
+
+  private async bindWorker<TData, TResult>(
+    queueName: string,
+    handler: JobHandler<TData, TResult>,
+    options?: WorkerOptions
+  ): Promise<void> {
+    if (!this.boss) return;
+
+    const workOptions: PgBoss.WorkOptions = {
+      batchSize: options?.batchSize ?? 1,
+      pollingIntervalSeconds: options?.pollingIntervalSeconds ?? 2,
+    };
+
+    await this.boss.work(queueName, workOptions, async (jobs: PgBoss.Job<TData>[]) => {
+      for (const job of jobs) {
+        const context: JobContext = {
+          jobId: job.id,
+          queueName,
+        };
+        await handler(job.data, context);
+      }
+    });
+  }
+}
+
+export const jobService = new JobService();
