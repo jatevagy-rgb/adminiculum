@@ -114,6 +114,8 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('az webapp config show');
     expect(step).toContain('az appservice plan show');
     expect(step).toContain('az monitor metrics list');
+    expect(step).toContain('for ARTIFACT_PATH in package.json dist/index.js node_modules release-identity.json');
+    expect(step).not.toContain('for PATH in');
     expect(step).not.toContain('az webapp deploy');
     expect(step).not.toContain('az webapp restart');
     expect(step).not.toContain('az webapp config appsettings set');

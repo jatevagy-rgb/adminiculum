@@ -250,9 +250,9 @@ jobs:
                   text = response.read().decode('utf-8', errors='replace')
               print(f'DEPLOYMENT_LOG_DETAIL_{item.get("id", "unknown")}={scrub(text)}')
           PY
-          for PATH in package.json dist/index.js node_modules release-identity.json; do
-            CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/site/wwwroot/${PATH}" -o /dev/null -w '%{http_code}')"
-            echo "WWWROOT_${PATH//\//_}_HTTP=${CODE}"
+          for ARTIFACT_PATH in package.json dist/index.js node_modules release-identity.json; do
+            CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/site/wwwroot/${ARTIFACT_PATH}" -o /dev/null -w '%{http_code}')"
+            echo "WWWROOT_${ARTIFACT_PATH//\//_}_HTTP=${CODE}"
           done
           set +e
           az webapp log download --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --log-file runtime-logs.zip
