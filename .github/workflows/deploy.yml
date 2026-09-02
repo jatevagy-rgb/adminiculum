@@ -224,7 +224,7 @@ jobs:
           selected = [{key: scrub(item.get(key)) for key in ('id', 'status', 'message', 'author', 'start_time', 'end_time', 'active', 'deployer')} for item in deployments[:5]]
           print(json.dumps(selected, indent=2))
           PY
-          DEPLOYMENT_ID="$(python3 -c \"import json; print(json.load(open('deployments.json'))[0]['id'])\")"
+          DEPLOYMENT_ID="$(python3 -c 'import json; print(json.load(open("deployments.json"))[0]["id"])')"
           curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/deployments/${DEPLOYMENT_ID}/log" > deployment-log.json
           DEPLOYMENT_ID="$DEPLOYMENT_ID" KUDU="$KUDU" TOKEN="$TOKEN" python3 - <<'PY'
           import json, os, re, urllib.parse, urllib.request
