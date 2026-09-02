@@ -277,6 +277,83 @@ jobs:
           fi
           az webapp config show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query '{startup:appCommandLine,linuxFxVersion:linuxFxVersion}' --output json
           az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query "[?name=='SCM_DO_BUILD_DURING_DEPLOYMENT' || name=='WEBSITE_RUN_FROM_PACKAGE'].{name:name,present:value!=null}" --output json
+          # Scanner diagnosis is deliberately observation-only. Settings are read
+          # into a local file and reduced to presence/masked-host facts before output.
+          az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" > scanner-settings.json
+          python3 - <<'PY'
+          import json, os, sys, urllib.parse
+          settings = {item.get('name'): item.get('value') for item in json.load(open('scanner-settings.json'))}
+          mode = str(settings.get('WORKFORCE_MALWARE_SCANNER') or '').strip().lower()
+          url = str(settings.get('WORKFORCE_MALWARE_SCANNER_URL') or '').strip()
+          auth = str(settings.get('WORKFORCE_MALWARE_SCANNER_API_KEY') or '').strip()
+          timeout = str(settings.get('WORKFORCE_MALWARE_SCANNER_TIMEOUT_MS') or '').strip()
+          parsed = urllib.parse.urlparse(url)
+          if url and (not parsed.scheme or not parsed.hostname):
+              raise SystemExit('Scanner URL is configured but is not an absolute URL.')
+          origin = f'{parsed.scheme}://{parsed.netloc}' if url else ''
+          for value in (url, auth, timeout):
+              if value:
+                  print(f'::add-mask::{value}')
+          print(f'WORKFORCE_MALWARE_SCANNER={mode or "NONE"}')
+          print(f'WORKFORCE_MALWARE_SCANNER_URL_PRESENT={"YES" if url else "NO"}')
+          print(f'WORKFORCE_MALWARE_SCANNER_HOST={parsed.netloc if url else "NOT_CONFIGURED"}')
+          print(f'WORKFORCE_MALWARE_SCANNER_AUTH_PRESENT={"YES" if auth else "NO"}')
+          print(f'WORKFORCE_MALWARE_SCANNER_TIMEOUT_PRESENT={"YES" if timeout else "NO"}')
+          open('scanner-origin.txt', 'w').write(origin)
+          PY
+          ORIGIN="$(cat scanner-origin.txt)"
+          if [ -n "$ORIGIN" ]; then
+            set +e
+            az webapp list --resource-group "${RESOURCE_GROUP}" --query '[].{name:name,host:defaultHostName,state:state,kind:kind,region:location}' --output json > scanner-webapps.json
+            WEBAPPS_STATUS=$?
+            set -e
+            if [ "$WEBAPPS_STATUS" = "0" ]; then
+              ORIGIN="$ORIGIN" python3 - <<'PY'
+          import json, os, urllib.parse
+          host = urllib.parse.urlparse(os.environ['ORIGIN']).hostname or ''
+          matches = [item for item in json.load(open('scanner-webapps.json')) if str(item.get('host') or '').lower() == host.lower()]
+          if len(matches) == 1:
+              item = matches[0]
+              print(f'SCANNER_RESOURCE_FOUND=YES')
+              print(f'SCANNER_RESOURCE_NAME={item.get("name")}')
+              print(f'SCANNER_RESOURCE_TYPE={item.get("kind")}')
+              print(f'SCANNER_RESOURCE_STATE={item.get("state")}')
+              print(f'SCANNER_RESOURCE_REGION={item.get("region")}')
+          elif len(matches) == 0:
+              print('SCANNER_RESOURCE_FOUND=NO')
+          else:
+              print('SCANNER_RESOURCE_FOUND=AMBIGUOUS')
+          PY
+            else
+              echo 'SCANNER_RESOURCE_FOUND=UNPROVABLE'
+            fi
+            READY_CODE="$(curl -sS -m 20 -o ready-body.txt -w '%{http_code}' "${ORIGIN}/health/ready" || echo 000)"
+            echo "SCANNER_READY_HTTP_STATUS=${READY_CODE}"
+            case "$READY_CODE" in
+              200) echo 'SCANNER_READY_RESPONSE_CLASS=READY' ;;
+              401|403) echo 'SCANNER_READY_RESPONSE_CLASS=AUTH_REQUIRED' ;;
+              000) echo 'SCANNER_READY_RESPONSE_CLASS=NETWORK_OR_TLS_FAILURE' ;;
+              *) echo 'SCANNER_READY_RESPONSE_CLASS=NON_READY' ;;
+            esac
+            # A synthetic byte is used only to prove routing/auth/response shape.
+            # No bearer secret is extracted from App Service or Key Vault.
+            SCAN_CODE="$(printf x | curl -sS -m 20 -o scan-body.txt -w '%{http_code}' -X POST \
+              -H 'Content-Type: application/octet-stream' \
+              -H 'X-File-Size: 1' \
+              -H 'X-Content-Type: text/plain' \
+              --data-binary @- "${ORIGIN}/scan" || echo 000)"
+            echo "SCANNER_SCAN_HTTP_STATUS=${SCAN_CODE}"
+            case "$SCAN_CODE" in
+              401|403) echo 'SCANNER_SCAN_AUTH_RESULT=AUTH_REQUIRED' ;;
+              2*) echo 'SCANNER_SCAN_AUTH_RESULT=NOT_REQUIRED_OR_ACCEPTED' ;;
+              000) echo 'SCANNER_SCAN_AUTH_RESULT=NETWORK_OR_TLS_FAILURE' ;;
+              *) echo 'SCANNER_SCAN_AUTH_RESULT=UNPROVABLE' ;;
+            esac
+          else
+            echo 'SCANNER_RESOURCE_FOUND=NOT_CONFIGURED'
+            echo 'SCANNER_READY_HTTP_STATUS=NOT_CONFIGURED'
+            echo 'SCANNER_SCAN_HTTP_STATUS=NOT_CONFIGURED'
+          fi
           PLAN_ID="$(az webapp show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query serverFarmId -o tsv)"
           az appservice plan show --ids "$PLAN_ID" --query '{sku:sku,workerCount:numberOfWorkers,capacity:sku.capacity,reserved:reserved}' --output json
           set +e

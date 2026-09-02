@@ -112,6 +112,10 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('${KUDU}/deployments');
     expect(step).toContain('az webapp log download');
     expect(step).toContain('az webapp config show');
+    expect(step).toContain('WORKFORCE_MALWARE_SCANNER_URL_PRESENT');
+    expect(step).toContain('SCANNER_READY_HTTP_STATUS');
+    expect(step).toContain('SCANNER_SCAN_HTTP_STATUS');
+    expect(step).toContain('No bearer secret is extracted from App Service or Key Vault.');
     expect(step).toContain('az appservice plan show');
     expect(step).toContain('az monitor metrics list');
     expect(step).toContain('for ARTIFACT_PATH in package.json dist/index.js node_modules release-identity.json');
