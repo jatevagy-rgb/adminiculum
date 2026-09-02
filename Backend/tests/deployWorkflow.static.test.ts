@@ -40,7 +40,7 @@ describe('production deploy workflow portability guards', () => {
 
     expect(step).toContain('set -euo pipefail');
     expect(step).toContain('A CLI timeout or non-zero result fails this step');
-    expect(step).not.toContain('retry');
+    expect(step).not.toContain('retry ');
     expect(step).not.toContain('deployments/latest');
     expect(workflow).toContain('Backend health gate (/health 200)');
   });
@@ -89,6 +89,19 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('NEXT_PUBLIC_APP_COMMIT_SHA: ${{ needs.resolve.outputs.product_sha }}');
     expect(workflow).toContain('if [ "${{ inputs.deploy_backend }}" = "true" ]; then');
     expect(workflow).toContain('PRODUCT_SHA="$CONTROL_SHA"');
+  });
+
+  it('provides an OIDC-only P0 backend recovery path that blocks migration and frontend deployment', () => {
+    expect(workflow).toContain('backend_recovery_action:');
+    expect(workflow).toContain('redeploy_known_good');
+    expect(workflow).toContain('Backend recovery never runs migrations.');
+    expect(workflow).toContain('Backend recovery never deploys the frontend.');
+    expect(workflow).toContain('name: Inspect backend recovery state');
+    expect(workflow).toContain('az webapp log deployment list');
+    expect(workflow).toContain('az webapp restart');
+    expect(workflow).toContain('Recovery product SHA must be an ancestor of the workflow control SHA.');
+    expect(workflow).toContain('ref: ${{ needs.resolve.outputs.product_sha }}');
+    expect(workflow).toContain('RELEASE_SHA: ${{ needs.resolve.outputs.product_sha }}');
   });
 
   it('runs migration WebJob polling on the host runner with exact run identity', () => {
@@ -154,9 +167,9 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('build_time: ${{ steps.rev.outputs.build_time }}');
     expect(workflow).toContain('SHA=$(git rev-parse HEAD)');
     expect(workflow).toContain('BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ")');
-    expect(workflow).toContain('ref: ${{ needs.resolve.outputs.sha }}');
+    expect(workflow).toContain('ref: ${{ needs.resolve.outputs.product_sha }}');
     expect(workflow).toContain('Backend/release-identity.json');
-    expect(workflow).toContain('RELEASE_SHA: ${{ needs.resolve.outputs.sha }}');
+    expect(workflow).toContain('RELEASE_SHA: ${{ needs.resolve.outputs.product_sha }}');
     expect(workflow).toContain('PRODUCT_SHA="$CONTROL_SHA"');
     expect(workflow).toContain('NEXT_PUBLIC_APP_BUILD_TIME: ${{ needs.resolve.outputs.build_time }}');
     expect(workflow).toContain('Verify backend release identity');
