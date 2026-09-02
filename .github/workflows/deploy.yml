@@ -20,7 +20,7 @@ on:
         type: boolean
         default: true
       run_migration:
-        description: 'Run the adminiculum-db-migrate WebJob (requires deploy_backend; enable ONLY when the release adds a new Prisma migration).'
+        description: 'Run the adminiculum-db-migrate WebJob after backend deployment or verified backend recovery.'
         type: boolean
         default: false
       deploy_frontend:
@@ -62,9 +62,10 @@ jobs:
           if [ "${{ inputs.deploy_backend }}" != "true" ] && [ "${{ inputs.deploy_frontend }}" != "true" ]; then
             echo "Nothing to deploy: enable deploy_backend and/or deploy_frontend."; exit 1
           fi
-          # No migration against an unverified backend release: run_migration requires a backend deploy in the same run.
-          if [ "${{ inputs.run_migration }}" = "true" ] && [ "${{ inputs.deploy_backend }}" != "true" ]; then
-            echo "run_migration=true requires deploy_backend=true."; exit 1
+          # Recovery migration is valid only with the frontend enabled so the
+          # manual release sequence remains explicit and fully gated.
+          if [ "${{ inputs.run_migration }}" = "true" ] && [ "${{ inputs.deploy_backend }}" != "true" ] && [ "${{ inputs.deploy_frontend }}" != "true" ]; then
+            echo "run_migration=true without backend deployment requires deploy_frontend=true recovery path."; exit 1
           fi
           echo "Inputs OK (backend=${{ inputs.deploy_backend }}, migration=${{ inputs.run_migration }}, frontend=${{ inputs.deploy_frontend }})."
 
@@ -192,14 +193,56 @@ jobs:
           NODE
 
   # ---------------------------------------------------------------------------
+  # Recovery: prove the already-running backend is the resolved release before
+  # permitting migration when this run intentionally skips backend deployment.
+  # ---------------------------------------------------------------------------
+  recovery:
+    name: Verify current backend for recovery
+    runs-on: ubuntu-latest
+    needs: resolve
+    if: ${{ !inputs.deploy_backend && inputs.run_migration }}
+    environment: production
+    steps:
+      - name: Verify current backend health and exact release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v curl >/dev/null
+          command -v node >/dev/null
+          HEALTH_CODE="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
+          echo "Recovery backend /health -> $HEALTH_CODE"
+          [ "$HEALTH_CODE" = "200" ] || { echo "Recovery backend health gate failed."; exit 1; }
+          BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
+          EXPECTED_SHA="${{ needs.resolve.outputs.sha }}" BODY="$BODY" node <<'NODE'
+          const body = JSON.parse(process.env.BODY);
+          const expected = process.env.EXPECTED_SHA;
+          if (body.commitSha !== expected) {
+            throw new Error(`Recovery backend SHA mismatch: expected ${expected}, got ${body.commitSha ?? '<null>'}`);
+          }
+          if (typeof body.buildTime !== 'string' || !body.buildTime.trim()) {
+            throw new Error('Recovery backend build time is missing.');
+          }
+          console.log(`Recovery backend release identity verified: ${body.commitSha}`);
+          NODE
+
+  # ---------------------------------------------------------------------------
   # Migration: canonical adminiculum-db-migrate WebJob ONLY. Verifies the EXACT
   # run created by THIS trigger (a prior Success must never satisfy this run).
   # ---------------------------------------------------------------------------
   migration:
     name: Run canonical migration WebJob
     runs-on: ubuntu-latest
-    needs: [resolve, backend]
-    if: ${{ inputs.run_migration && needs.backend.result == 'success' }}
+    needs: [resolve, backend, recovery]
+    if: >-
+      ${{ inputs.run_migration
+          && (
+            needs.backend.result == 'success'
+            || (
+              needs.backend.result == 'skipped'
+              && inputs.deploy_backend != true
+              && needs.recovery.result == 'success'
+            )
+          ) }}
     environment: production
     steps:
       - name: Azure login (OIDC, no client secret)
