@@ -1,0 +1,147 @@
+name: Verify Production W2B Schema (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-production-schema:
+    name: Read-only production W2B schema proof
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PRODUCT_SHA: 8703eae598c1b4ce5a71eefd24ec974c9d21595b
+      MIGRATION_RUN_ID: "202609021106086304"
+    steps:
+      - name: Checkout canonical release
+        uses: actions/checkout@v4
+        with:
+          ref: release/editor-ops-workflow-1
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install database client dependency
+        working-directory: Backend
+        run: npm ci --ignore-scripts
+
+      - name: Execute read-only production proof
+        working-directory: Backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${DATABASE_URL:-}" || { echo "DATABASE_URL is required." >&2; exit 1; }
+          node --input-type=module <<'NODE'
+          import pg from 'pg';
+
+          const { Client } = pg;
+          const client = new Client({ connectionString: process.env.DATABASE_URL });
+          const migrationName = '20260901220000_w2b_case_first_time';
+          const fail = (message) => { throw new Error(message); };
+          const one = (result) => result.rows[0];
+
+          const print = (name, value) => process.stdout.write(`${name}=${value}\n`);
+
+          await client.connect();
+          try {
+            await client.query('BEGIN READ ONLY');
+
+            const migration = one(await client.query({
+              text: `SELECT migration_name, finished_at IS NOT NULL AS finished,
+                            rolled_back_at IS NOT NULL AS rolled_back
+                     FROM "_prisma_migrations" WHERE migration_name = $1
+                     ORDER BY started_at DESC LIMIT 1`,
+              values: [migrationName],
+            }));
+            const unfinished = one(await client.query(
+              `SELECT COUNT(*)::int AS count FROM "_prisma_migrations"
+               WHERE finished_at IS NULL AND rolled_back_at IS NULL`,
+            ));
+
+            const columns = (await client.query({
+              text: `SELECT column_name, is_nullable FROM information_schema.columns
+                     WHERE table_schema = 'public' AND table_name = 'time_entries'
+                       AND column_name IN ('caseId', 'matterId')`,
+            })).rows;
+            const column = (name) => columns.find((row) => row.column_name === name);
+
+            const foreignKey = one(await client.query(`
+              SELECT con.conname AS constraint_name,
+                     src.relname AS source_table,
+                     src_col.attname AS source_column,
+                     target.relname AS target_table,
+                     target_col.attname AS target_column,
+                     CASE con.confdeltype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT'
+                       WHEN 'c' THEN 'CASCADE' WHEN 'd' THEN 'SET DEFAULT' WHEN 'n' THEN 'SET NULL' END AS on_delete,
+                     CASE con.confupdtype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT'
+                       WHEN 'c' THEN 'CASCADE' WHEN 'd' THEN 'SET DEFAULT' WHEN 'n' THEN 'SET NULL' END AS on_update
+              FROM pg_constraint con
+              JOIN pg_class src ON src.oid = con.conrelid
+              JOIN pg_namespace src_ns ON src_ns.oid = src.relnamespace AND src_ns.nspname = 'public'
+              JOIN pg_attribute src_col ON src_col.attrelid = con.conrelid AND src_col.attnum = con.conkey[1]
+              JOIN pg_class target ON target.oid = con.confrelid
+              JOIN pg_namespace target_ns ON target_ns.oid = target.relnamespace AND target_ns.nspname = 'public'
+              JOIN pg_attribute target_col ON target_col.attrelid = con.confrelid AND target_col.attnum = con.confkey[1]
+              WHERE con.contype = 'f' AND con.conname = 'time_entries_caseId_fkey'
+            `));
+            const index = one(await client.query(`
+              SELECT indexname, indexdef FROM pg_indexes
+              WHERE schemaname = 'public' AND tablename = 'time_entries'
+                AND indexname = 'time_entries_caseId_idx'
+            `));
+            const counts = one(await client.query(`
+              SELECT COUNT(*)::int AS total,
+                     COUNT(*) FILTER (WHERE "caseId" IS NOT NULL)::int AS case_id_nonnull,
+                     COUNT(*) FILTER (WHERE "matterId" IS NOT NULL)::int AS matter_id_nonnull,
+                     COUNT(*) FILTER (WHERE "caseId" IS NULL AND "matterId" IS NULL)::int AS both_null
+              FROM "time_entries"
+            `));
+
+            const migrationOk = Boolean(migration?.migration_name === migrationName && migration.finished && !migration.rolled_back);
+            const noUnfinished = Number(unfinished.count) === 0;
+            const caseColumn = column('caseId');
+            const matterColumn = column('matterId');
+            const columnsOk = Boolean(caseColumn && matterColumn && caseColumn.is_nullable === 'YES' && matterColumn.is_nullable === 'YES');
+            const fkOk = Boolean(foreignKey && foreignKey.source_table === 'time_entries' && foreignKey.source_column === 'caseId'
+              && foreignKey.target_table === 'cases' && foreignKey.target_column === 'id'
+              && foreignKey.on_delete === 'RESTRICT' && foreignKey.on_update === 'CASCADE');
+            const indexOk = Boolean(index && index.indexname === 'time_entries_caseId_idx'
+              && /time_entries/i.test(index.indexdef) && /\("caseId"\)/i.test(index.indexdef));
+
+            print('PRODUCT_SHA', process.env.PRODUCT_SHA);
+            print('MIGRATION_RUN_ID', process.env.MIGRATION_RUN_ID);
+            print('W2B_MIGRATION_RECORD_PRESENT', migration ? 'YES' : 'NO');
+            print('W2B_MIGRATION_FINISHED', migration?.finished ? 'YES' : 'NO');
+            print('W2B_MIGRATION_ROLLED_BACK', migration?.rolled_back ? 'YES' : 'NO');
+            print('UNFINISHED_MIGRATION_COUNT', unfinished.count);
+            print('TIMEENTRY_CASE_ID_PRESENT', caseColumn ? 'YES' : 'NO');
+            print('TIMEENTRY_CASE_ID_NULLABLE', caseColumn?.is_nullable === 'YES' ? 'YES' : 'NO');
+            print('TIMEENTRY_MATTER_ID_PRESENT', matterColumn ? 'YES' : 'NO');
+            print('TIMEENTRY_MATTER_ID_NULLABLE', matterColumn?.is_nullable === 'YES' ? 'YES' : 'NO');
+            print('W2B_CASE_FK_PRESENT', foreignKey ? 'YES' : 'NO');
+            print('W2B_CASE_FK_MATCHES_CANONICAL', fkOk ? 'YES' : 'NO');
+            print('W2B_INDEXES_PRESENT', index ? 'YES' : 'NO');
+            print('W2B_CONSTRAINTS_MATCH_CANONICAL', fkOk ? 'YES' : 'NO');
+            print('TIME_ENTRIES_TOTAL', counts.total);
+            print('TIME_ENTRIES_CASE_ID_NONNULL', counts.case_id_nonnull);
+            print('TIME_ENTRIES_MATTER_ID_NONNULL', counts.matter_id_nonnull);
+            print('TIME_ENTRIES_BOTH_NULL', counts.both_null);
+            print('DATABASE_MUTATED', 'NO');
+            print('W2B_SCHEMA_PROVEN', migrationOk && noUnfinished && columnsOk && fkOk && indexOk ? 'YES' : 'NO');
+
+            if (!migrationOk || !noUnfinished || !columnsOk || !fkOk || !indexOk) {
+              fail('W2B production schema proof failed.');
+            }
+          } finally {
+            await client.query('ROLLBACK').catch(() => {});
+            await client.end();
+          }
+          NODE
