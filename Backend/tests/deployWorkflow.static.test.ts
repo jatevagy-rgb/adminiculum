@@ -16,51 +16,32 @@ function stepBlock(name: string): string {
 }
 
 describe('production deploy workflow portability guards', () => {
-  it('runs Kudu backend deployment polling on the host runner without awk', () => {
-    const step = stepBlock('Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS');
+  it('uses supported synchronous Azure CLI backend deployment', () => {
+    const step = stepBlock('Deploy backend via Azure CLI and wait for terminal result');
 
-    expect(step).toContain('shell: bash');
-    expect(step).not.toContain('uses: azure/cli@v2');
-    expect(step).not.toMatch(/\bawk\b/);
-    expect(step).toContain('command -v az >/dev/null');
-    expect(step).toContain('command -v curl >/dev/null');
-    expect(step).toContain('command -v node >/dev/null');
-    expect(step).toContain('TOKEN="$(az account get-access-token --query accessToken -o tsv)"');
+    expect(step).toContain('uses: azure/cli@v2');
+    expect(step).toContain('az webapp deploy');
+    expect(step).toContain('--name "${BACKEND_APP}"');
+    expect(step).toContain('--src-path backend-deploy.zip');
+    expect(step).toContain('--type zip');
+    expect(step).toContain('--async false');
+    expect(step).toContain('--timeout 1200000');
+    expect(step).toContain('does not return until the deployment command has a terminal result');
+    expect(step).toContain('no deployment-history');
   });
 
-  it('accepts synchronous 200 success without Location and validates async identity', () => {
-    const step = stepBlock('Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS');
-
-    expect(step).toContain('if [ "$HTTP_CODE" = "200" ] && [ "$CURL_STATUS" -eq 0 ]; then');
-    expect(step).toContain('Kudu publish completed synchronously; proceeding to backend health gate.');
-    expect(step).toContain('if [ -z "$LOCATION" ]; then');
-    expect(step).toContain('if { [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then');
-    expect(step).toContain('const expectedHost = `${process.env.BACKEND_APP}.scm.azurewebsites.net`;');
-    expect(step).toContain("const expectedPrefix = '/api/deployments/';");
-    expect(step).toContain("url.protocol !== 'https:'");
-    expect(step).toContain('url.hostname !== expectedHost');
-    expect(step).toContain('!url.pathname.startsWith(expectedPrefix)');
-    expect(step).toContain("!id || id.includes('/')");
-    expect(step).toContain('Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history.');
-    expect(step).toContain('Unexpected Kudu deployment Location; refusing to poll it.');
-    expect(step).toContain('Unexpected Kudu publish HTTP response; refusing to poll it.');
-    expect(step).toContain('curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION"');
+  it('does not use ambiguous Kudu publish or deployment history inference', () => {
+    expect(workflow).not.toContain('/api/publish?type=zip&isAsync=true');
     expect(workflow).not.toContain('/api/deployments/latest');
   });
 
-  it('preserves exact backend deployment status semantics for 202/504/transport failure', () => {
-    const step = stepBlock('Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS');
+  it('fails closed when synchronous deployment returns a failure', () => {
+    const step = stepBlock('Deploy backend via Azure CLI and wait for terminal result');
 
-    expect(step.indexOf('Kudu publish HTTP status=${HTTP_CODE:-<none>} curl_status=${CURL_STATUS}')).toBeLessThan(step.indexOf('LOCATION="$(HEADERS="$HEADERS"'));
-    expect(step).toContain('not authoritative once a');
-    expect(step).toContain('deployment Location was returned; poll this exact server-side run.');
-    expect(step).toContain('if [ "$ST" = "4" ]; then echo "Deployment $NEW_ID succeeded."; exit 0; fi');
-    expect(step).toContain('if [ "$ST" = "3" ]; then echo "Deployment $NEW_ID failed server-side."; exit 1; fi');
-    expect(step).toContain('Timed out waiting for deployment $NEW_ID to reach a terminal state.');
-    expect(step).not.toMatch(/if \[ "\$HTTP_CODE" !=/);
-    expect(step).not.toMatch(/if \[ "\$CURL_STATUS" !=/);
-    expect(step).toContain('Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history.');
-    expect(step).toContain('HTTP 200 with a clean');
+    expect(step).toContain('set -euo pipefail');
+    expect(step).toContain('A CLI timeout or non-zero result fails this step');
+    expect(step).not.toContain('retry');
+    expect(step).not.toContain('deployments/latest');
     expect(workflow).toContain('Backend health gate (/health 200)');
   });
 
@@ -92,7 +73,7 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('needs: [resolve, backend, migration]');
     expect(workflow).toContain("&& (needs.backend.result == 'success' || needs.backend.result == 'skipped')");
     expect(workflow).toContain("&& (needs.migration.result == 'success' || needs.migration.result == 'skipped')");
-    expect(workflow.indexOf('Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS')).toBeLessThan(workflow.indexOf('Backend health gate (/health 200)'));
+    expect(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')).toBeLessThan(workflow.indexOf('Backend health gate (/health 200)'));
     expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(workflow.indexOf('Backend health gate after migration (/health 200)'));
   });
 

@@ -147,87 +147,22 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy via Kudu ZipDeploy and verify THIS deployment reaches SUCCESS
-        shell: bash
-        run: |
-          set -euo pipefail
-          command -v az >/dev/null
-          command -v curl >/dev/null
-          command -v node >/dev/null
-
-          API="https://${BACKEND_APP}.scm.azurewebsites.net/api"
-          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
-          HEADERS="$(mktemp)"
-          BODY="$(mktemp)"
-          trap 'rm -f "$HEADERS" "$BODY"' EXIT
-
-          # Keep the Entra token in memory only; never print it or use a publish profile.
-          set +e
-          HTTP_CODE="$(curl -sS -m 1200 -D "$HEADERS" -o "$BODY" -w '%{http_code}' \
-            -X POST \
-            -H "Authorization: Bearer ${TOKEN}" \
-            -H 'Content-Type: application/zip' \
-            --data-binary @backend-deploy.zip \
-            "${API}/publish?type=zip&isAsync=true")"
-          CURL_STATUS=$?
-          set -e
-          echo "Kudu publish HTTP status=${HTTP_CODE:-<none>} curl_status=${CURL_STATUS}"
-
-          LOCATION="$(HEADERS="$HEADERS" BACKEND_APP="$BACKEND_APP" node <<'NODE'
-          const fs = require('fs');
-          const headers = fs.readFileSync(process.env.HEADERS, 'utf8').split(/\r?\n/);
-          const line = headers.find((entry) => /^location:/i.test(entry));
-          if (!line) process.exit(0);
-          const location = line.replace(/^[^:]*:\s*/i, '').trim();
-          try {
-            const url = new URL(location);
-            const expectedHost = `${process.env.BACKEND_APP}.scm.azurewebsites.net`;
-            const expectedPrefix = '/api/deployments/';
-            const id = url.pathname.slice(expectedPrefix.length);
-            if (url.protocol !== 'https:' || url.hostname !== expectedHost || !url.pathname.startsWith(expectedPrefix) || !id || id.includes('/')) {
-              process.exit(2);
-            }
-            process.stdout.write(url.toString());
-          } catch {
-            process.exit(2);
-          }
-          NODE
-          )" || { echo "Unexpected Kudu deployment Location; refusing to poll it."; exit 1; }
-
-          # Kudu may complete this publish synchronously. HTTP 200 with a clean
-          # transport is terminal success; no Location or deployment-history
-          # lookup is needed. The health gate below remains the runtime gate.
-          if [ "$HTTP_CODE" = "200" ] && [ "$CURL_STATUS" -eq 0 ]; then
-            echo "Kudu publish completed synchronously; proceeding to backend health gate."
-            exit 0
-          fi
-
-          # Async/timeout responses are safe to continue only when Kudu gave us
-          # the exact execution identity. Never retry the POST or infer identity
-          # from deployment history, because that could overlap deployments.
-          if [ -z "$LOCATION" ]; then
-            echo "Kudu publish did not provide an exact deployment identity; refusing to infer identity from deployment history."
-            exit 1
-          fi
-          if { [ "$HTTP_CODE" = "202" ] || [ "$HTTP_CODE" = "504" ] || [ "$CURL_STATUS" -ne 0 ]; }; then
-            NEW_ID="${LOCATION##*/}"
-            echo "This run's deployment id: $NEW_ID"
-          else
-            echo "Unexpected Kudu publish HTTP response; refusing to poll it."
-            exit 1
-          fi
-
-          # A CLI/curl timeout or non-zero status is not authoritative once a
-          # deployment Location was returned; poll this exact server-side run.
-          for i in $(seq 1 40); do
-            ST="$(curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION" \
-              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.status??'?'))}catch(e){process.stdout.write('?')}})")"
-            echo "[$i] deployment $NEW_ID status=$ST"
-            if [ "$ST" = "4" ]; then echo "Deployment $NEW_ID succeeded."; exit 0; fi
-            if [ "$ST" = "3" ]; then echo "Deployment $NEW_ID failed server-side."; exit 1; fi
-            sleep 20
-          done
-          echo "Timed out waiting for deployment $NEW_ID to reach a terminal state."; exit 1
+      - name: Deploy backend via Azure CLI and wait for terminal result
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            set -euo pipefail
+            # Azure CLI performs the supported synchronous ZipDeploy operation
+            # and does not return until the deployment command has a terminal result.
+            # A CLI timeout or non-zero result fails this step; no deployment-history
+            # lookup or retry is permitted.
+            az webapp deploy \
+              --resource-group "${RESOURCE_GROUP}" \
+              --name "${BACKEND_APP}" \
+              --src-path backend-deploy.zip \
+              --type zip \
+              --async false \
+              --timeout 1200000
 
       - name: Backend health gate (/health 200)
         run: |
