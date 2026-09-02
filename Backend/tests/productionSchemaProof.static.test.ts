@@ -11,9 +11,24 @@ describe("production schema proof safety contract", () => {
   test("is manual-only and production-scoped", () => {
     expect(workflow).toMatch(/on:\s*\n\s+workflow_dispatch:\s*\n\s*\n/);
     expect(workflow).toMatch(/environment:\s+production/);
-    expect(workflow).toMatch(
-      /DATABASE_URL:\s+\$\{\{\s*secrets\.DATABASE_URL\s*\}\}/,
+    expect(workflow).toContain("uses: azure/login@v2");
+    expect(workflow).toContain("client-id: ${{ vars.AZURE_CLIENT_ID }}");
+    expect(workflow).toContain("tenant-id: ${{ vars.AZURE_TENANT_ID }}");
+    expect(workflow).toContain(
+      "subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}",
     );
+    expect(workflow).not.toMatch(/secrets\.DATABASE_URL/);
+    expect(workflow).toMatch(
+      /az webapp config appsettings list[\s\S]*--query "\[\?name=='DATABASE_URL'\]\.value \| \[0\]"/,
+    );
+    expect(workflow).not.toMatch(
+      /az webapp config appsettings list(?![\s\S]*--query)/,
+    );
+    expect(workflow).toContain('echo "::add-mask::${DATABASE_URL}"');
+    expect(workflow).not.toMatch(
+      /DATABASE_URL.*GITHUB_(?:OUTPUT|STEP_SUMMARY)/i,
+    );
+    expect(workflow).toContain("set +x");
     expect(workflow).not.toMatch(
       /echo\s+["']?\$\{?DATABASE_URL|print\(\s*["']DATABASE_URL|console\.log\(\s*["']DATABASE_URL/i,
     );
