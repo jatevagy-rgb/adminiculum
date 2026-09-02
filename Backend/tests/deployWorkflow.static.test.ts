@@ -45,6 +45,19 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('Backend health gate (/health 200)');
   });
 
+  it('supports a fail-closed recovery path without backend redeployment', () => {
+    expect(workflow).toContain('recovery:');
+    expect(workflow).toContain('if: ${{ !inputs.deploy_backend && inputs.run_migration }}');
+    expect(workflow).toContain('Recovery backend /health -> $HEALTH_CODE');
+    expect(workflow).toContain('[ "$HEALTH_CODE" = "200" ]');
+    expect(workflow).toContain('Recovery backend SHA mismatch: expected');
+    expect(workflow).toContain('Recovery backend build time is missing.');
+    expect(workflow).toContain('needs: [resolve, backend, recovery]');
+    expect(workflow).toContain("needs.backend.result == 'skipped'");
+    expect(workflow).toContain("needs.recovery.result == 'success'");
+    expect(workflow).toContain('inputs.deploy_backend != true');
+  });
+
   it('runs migration WebJob polling on the host runner with exact run identity', () => {
     const step = stepBlock('Trigger + verify THIS migration WebJob run');
 
@@ -69,7 +82,9 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('BACKEND_APP: adminiculumbackend-b1-01');
     expect(workflow).not.toContain('vikoli-app');
     expect(workflow).toContain('concurrency:\n  group: adminiculum-appservice-production-deploy\n  cancel-in-progress: false');
-    expect(workflow).toContain('needs: [resolve, backend]\n    if: ${{ inputs.run_migration && needs.backend.result == \'success\' }}');
+    expect(workflow).toContain('needs: [resolve, backend, recovery]');
+    expect(workflow).toContain("needs.backend.result == 'success'");
+    expect(workflow).toContain("needs.recovery.result == 'success'");
     expect(workflow).toContain('needs: [resolve, backend, migration]');
     expect(workflow).toContain("&& (needs.backend.result == 'success' || needs.backend.result == 'skipped')");
     expect(workflow).toContain("&& (needs.migration.result == 'success' || needs.migration.result == 'skipped')");
