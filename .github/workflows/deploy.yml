@@ -298,10 +298,52 @@ jobs:
           command -v node >/dev/null
 
           API="https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}"
+          HISTORY_API="${API}/history"
           TOKEN="$(az account get-access-token --query accessToken -o tsv)"
+          BASELINE_ONE="$(mktemp)"
+          BASELINE_TWO="$(mktemp)"
           HEADERS="$(mktemp)"
           BODY="$(mktemp)"
-          trap 'rm -f "$HEADERS" "$BODY"' EXIT
+          trap 'rm -f "$BASELINE_ONE" "$BASELINE_TWO" "$HEADERS" "$BODY"' EXIT
+
+          # Establish a complete, stable pre-trigger run set and reject any
+          # already-active migration before this one-shot trigger.
+          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$BASELINE_ONE"
+          if ! BASELINE_FILE="$BASELINE_ONE" node <<'NODE'
+          const fs = require('fs');
+          const value = JSON.parse(fs.readFileSync(process.env.BASELINE_FILE, 'utf8'));
+          const runs = Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
+          if (!Array.isArray(runs)) throw new Error('Migration history response is not a run list.');
+          for (const run of runs) {
+            const status = String(run.status ?? '').toLowerCase();
+            if (['running', 'starting', 'pending', 'in_progress', 'in-progress'].includes(status)) {
+              throw new Error('An active migration execution already exists.');
+            }
+          }
+          NODE
+          then
+            echo "Active migration baseline rejected."; exit 1
+          fi
+          sleep 3
+          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$BASELINE_TWO"
+          BASELINE_ONE="$BASELINE_ONE" BASELINE_TWO="$BASELINE_TWO" node <<'NODE'
+          const fs = require('fs');
+          const readIds = (file) => {
+            const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const runs = Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
+            if (!Array.isArray(runs)) throw new Error('Migration history response is not a run list.');
+            return new Set(runs.map((run) => String(run.id ?? run.runId ?? '')).filter(Boolean));
+          };
+          const first = readIds(process.env.BASELINE_ONE);
+          const second = readIds(process.env.BASELINE_TWO);
+          if (first.size !== second.size || [...first].some((id) => !second.has(id))) {
+            throw new Error('Migration history baseline changed before trigger.');
+          }
+          NODE
+          cp "$BASELINE_TWO" "$BASELINE_ONE"
+          TRIGGER_START_UTC="$(date -u +%s%3N)"
+          echo "Migration trigger boundary recorded (UTC)."
+
           set +e
           HTTP_CODE="$(curl -sS -m 60 -D "$HEADERS" -o "$BODY" -w '%{http_code}' \
             -X POST -H "Authorization: Bearer ${TOKEN}" "${API}/run")"
@@ -329,10 +371,47 @@ jobs:
           NODE
           )" || { echo "Unexpected WebJob run Location; refusing to poll it."; exit 1; }
           if [ -z "$LOCATION" ]; then
-            echo "WebJob trigger did not return a run Location; refusing to infer identity from history."
-            exit 1
+            if [ "$HTTP_CODE" != "200" ] || [ "$CURL_STATUS" -ne 0 ]; then
+              echo "WebJob trigger did not meet the HTTP 200 success contract; refusing history fallback."
+              exit 1
+            fi
+            echo "WebJob trigger returned HTTP 200 without Location; using stable history delta."
+            FOUND_RUN=""
+            for i in $(seq 1 40); do
+              CURRENT_HISTORY="$(mktemp)"
+              curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$CURRENT_HISTORY"
+              RESULT="$(BASELINE_FILE="$BASELINE_ONE" HISTORY_FILE="$CURRENT_HISTORY" TRIGGER_START_UTC="$TRIGGER_START_UTC" node <<'NODE'
+          const fs = require('fs');
+          const baseline = JSON.parse(fs.readFileSync(process.env.BASELINE_FILE, 'utf8'));
+          const current = JSON.parse(fs.readFileSync(process.env.HISTORY_FILE, 'utf8'));
+          const list = (value) => Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
+          const baseRuns = list(baseline);
+          const currentRuns = list(current);
+          const baselineIds = new Set(baseRuns.map((run) => String(run.id ?? run.runId ?? '')).filter(Boolean));
+          const boundary = Number(process.env.TRIGGER_START_UTC) - 120000;
+          const candidates = currentRuns.filter((run) => {
+            const id = String(run.id ?? run.runId ?? '');
+            const started = Date.parse(run.start_time ?? run.startTime ?? run.startTimeUtc ?? '') || Number(run.start_time ?? 0);
+            return id && !baselineIds.has(id) && Number.isFinite(started) && started >= boundary;
+          });
+          if (candidates.length > 1) process.exit(3);
+          if (candidates.length === 1) process.stdout.write(String(candidates[0].id ?? candidates[0].runId));
+          NODE
+              )"
+              CODE=$?
+              rm -f "$CURRENT_HISTORY"
+              if [ "$CODE" -eq 3 ]; then echo "Multiple qualifying new migration runs; refusing ambiguity."; exit 1; fi
+              if [ "$CODE" -ne 0 ]; then echo "Unable to identify migration history delta."; exit 1; fi
+              if [ -n "$RESULT" ]; then FOUND_RUN="$RESULT"; break; fi
+              echo "[$i] No unique post-trigger migration run yet."
+              sleep 10
+            done
+            [ -n "$FOUND_RUN" ] || { echo "Timed out identifying a unique new migration run."; exit 1; }
+            NEW_RUN="$FOUND_RUN"
+            LOCATION="${API}/history/${NEW_RUN}"
+          else
+            NEW_RUN="${LOCATION##*/}"
           fi
-          NEW_RUN="${LOCATION##*/}"
           echo "This run's WebJob execution id: $NEW_RUN"
 
           # Poll ONLY the run URL returned by THIS trigger; a prior Success
