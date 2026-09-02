@@ -103,12 +103,35 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('const expectedHost = `${process.env.BACKEND_APP}.scm.azurewebsites.net`;');
     expect(step).toContain('const expectedPrefix = `/api/triggeredwebjobs/${process.env.MIGRATION_WEBJOB}/history/`;');
     expect(step).toContain("!id || id.includes('/')");
-    expect(step).toContain('WebJob trigger did not return a run Location; refusing to infer identity from history.');
+    expect(step).toContain('WebJob trigger returned HTTP 200 without Location; using stable history delta.');
     expect(step).toContain('Unexpected WebJob run Location; refusing to poll it.');
     expect(step).toContain('curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION"');
     expect(step).toContain('if [ "$ST" = "Success" ]; then echo "Migration WebJob run $NEW_RUN succeeded."; exit 0; fi');
     expect(step).toContain('if [ "$ST" = "Failed" ] || [ "$ST" = "Error" ] || [ "$ST" = "Aborted" ]; then');
     expect(step).toContain('Timed out waiting for WebJob run $NEW_RUN.');
+  });
+
+  it('uses stable history delta only as the HTTP 200 no-Location fallback', () => {
+    const step = stepBlock('Trigger + verify THIS migration WebJob run');
+
+    expect(step).toContain('HISTORY_API="${API}/history"');
+    expect(step).toContain('BASELINE_ONE="$(mktemp)"');
+    expect(step).toContain('BASELINE_TWO="$(mktemp)"');
+    expect(step).toContain('An active migration execution already exists.');
+    expect(step).toContain("'in_progress', 'in-progress'");
+    expect(step).toContain('Migration history baseline changed before trigger.');
+    expect(step).toContain('TRIGGER_START_UTC="$(date -u +%s%3N)"');
+    expect(step).toContain('if [ "$HTTP_CODE" != "200" ] || [ "$CURL_STATUS" -ne 0 ]; then');
+    expect(step).toContain('!baselineIds.has(id)');
+    expect(step).toContain('started >= boundary');
+    expect(step).toContain('if (candidates.length > 1) process.exit(3);');
+    expect(step).toContain('Multiple qualifying new migration runs; refusing ambiguity.');
+    expect(step).toContain('No unique post-trigger migration run yet.');
+    expect(step).toContain('Timed out identifying a unique new migration run.');
+    expect(step).toContain('LOCATION="${API}/history/${NEW_RUN}"');
+    expect(step).not.toContain('history[0]');
+    expect(step).not.toContain('latest_run');
+    expect(step).not.toMatch(/curl[^\n]+\$HISTORY_API[^\n]+latest/);
   });
 
   it('preserves production target and deployment job ordering', () => {
