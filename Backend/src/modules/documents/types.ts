@@ -39,6 +39,7 @@ export interface DocumentListItem {
   spWebUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
+  securityScanStatus: 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
 }
 
 export interface DocumentVersionDto {
@@ -60,6 +61,7 @@ export interface DocumentVersionDto {
   publicationStatus: string;
   uploadSource: string;
   versionType: string;
+  securityScanStatus: 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
   spItemId: string | null;
   spWebUrl: string | null;
 }

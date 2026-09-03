@@ -26,6 +26,7 @@ import {
   resolveDocumentAnnotation,
   uploadCaseDocument,
   uploadImmutableDocumentVersion,
+  retryDocumentSecurityScan,
   uploadGeneratedContractToSharePoint,
   promoteDocumentVersion,
   createContractGenerationRevision,
@@ -215,6 +216,15 @@ type DocumentLedgerPageProps = {
 type SelectedLedgerItem =
   | { kind: 'uploaded'; item: DocumentItem }
   | { kind: 'generated'; item: CaseContractListItem };
+
+const scanStatusLabel = (status?: DocumentItem['securityScanStatus']): string => {
+  switch (status) {
+    case 'PENDING_SCAN': return 'Biztonsági ellenőrzés folyamatban';
+    case 'SCAN_FAILED': return 'Biztonsági ellenőrzés sikertelen';
+    case 'INFECTED': return 'A fájl nem használható';
+    default: return 'Feltöltve';
+  }
+};
 
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -509,6 +519,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const handleDownloadUploadedDocument = async (document: DocumentItem) => {
+    if (document.securityScanStatus && document.securityScanStatus !== 'CLEAN') return;
     setIsDownloading(document.id);
     try {
       const blob = await downloadDocument(document.id);
@@ -587,6 +598,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   const handleDownloadVersion = async (version: DocumentVersionItem) => {
+    if (version.securityScanStatus !== 'CLEAN') return;
     setIsDownloading(version.id);
     try {
       const blob = await downloadDocumentVersion(version.documentId, version.id);
@@ -604,6 +616,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setActionResult({ type: 'error', message: 'Verzió letöltése sikertelen.' });
     } finally {
       setIsDownloading(null);
+    }
+  };
+
+  const handleRetrySecurityScan = async (version: DocumentVersionItem) => {
+    try {
+      await retryDocumentSecurityScan(version.documentId, version.id);
+      setActionResult({ type: 'success', message: 'A biztonsági ellenőrzés újraindult.' });
+      await refreshSelectedDocumentVersions(version.documentId);
+    } catch {
+      setActionResult({ type: 'error', message: 'A biztonsági ellenőrzés nem indítható újra.' });
     }
   };
 
@@ -1494,7 +1516,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             active={isSelected}
                             variant="upload"
                             onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                            status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : "Feltöltve"}</AdminBadge>}
+                            status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : scanStatusLabel(doc.securityScanStatus)}</AdminBadge>}
                           />
                         );
                       })}
@@ -1699,11 +1721,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <p><b>Publikáció:</b> {selectedVersion.publicationStatus}</p>
                                         <p><b>Forrás:</b> {selectedVersion.uploadSource}</p>
                                         <p><b>Előző verzió:</b> {selectedVersion.previousVersionId ? 'Kapcsolva' : 'Nincs'}</p>
+                                        {selectedVersion.securityScanStatus !== 'CLEAN' ? <p className="font-semibold text-[#92400E]">{scanStatusLabel(selectedVersion.securityScanStatus)}</p> : null}
                                       </div>
                                       <div className="space-y-2 border-t border-[rgba(22,32,26,0.12)] pt-3">
-                                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadVersion(selectedVersion)} disabled={isDownloading === selectedVersion.id}>
+                                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadVersion(selectedVersion)} disabled={isDownloading === selectedVersion.id || selectedVersion.securityScanStatus !== 'CLEAN'}>
                                           {isDownloading === selectedVersion.id ? 'Letöltés...' : 'Verzió letöltése'}
                                         </AdminButton>
+                                        {selectedVersion.securityScanStatus === 'SCAN_FAILED' ? <AdminButton className="w-full justify-start" variant="gold" onClick={() => void handleRetrySecurityScan(selectedVersion)}>Ellenőrzés újraindítása</AdminButton> : null}
                                         <AdminButton className="w-full justify-start" variant="gold" onClick={() => handlePromoteVersion(selectedVersion)} disabled={selectedVersion.isCurrent || isPromotingVersion === selectedVersion.id}>
                                           {selectedVersion.isCurrent ? 'Már aktuális' : isPromotingVersion === selectedVersion.id ? 'Kijelölés...' : 'Legyen aktuális'}
                                         </AdminButton>
@@ -2025,7 +2049,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </AdminButton>
                           <div className="grid gap-2 border-t border-[#E7DECB] pt-2">
                             {selectedUploadedDocument ? (
-                              <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id}>
+                              <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)} disabled={isDownloading === selectedUploadedDocument.id || (selectedUploadedDocument.securityScanStatus && selectedUploadedDocument.securityScanStatus !== 'CLEAN')}>
                                 {isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Letöltés"}
                               </AdminButton>
                             ) : selectedGeneratedContract ? (

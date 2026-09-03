@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { driveService } from '../sharepoint';
 import { hrConfidentialReadAllowed } from './authorization';
 import { transitionReview, DocumentReviewWorkflowError } from './review/reviewService';
+import { queueDocumentVersionScan, securityScanBlock } from './securityScan.service';
 import {
   CreateDocumentInput,
   DocumentResponse,
@@ -90,6 +91,7 @@ const mapDocumentVersion = (version: any): DocumentVersionDto => ({
   versionType: version.versionType || 'WORKING_COPY',
   spItemId: version.spItemId || version.storageReference || null,
   spWebUrl: version.spWebUrl || null,
+  securityScanStatus: version.securityScanStatus || 'CLEAN',
 });
 
 const countOptionalDependency = async (query: Promise<number>): Promise<number> => {
@@ -209,6 +211,7 @@ class DocumentsService {
       } as any;
 
       let document: any;
+      const documentVersionId = randomUUID();
       try {
         document = await prisma.$transaction(async (tx) => {
           const createdDocument = await tx.document.create({
@@ -216,6 +219,7 @@ class DocumentsService {
               ...baseDocumentData,
               versions: {
                 create: {
+                  id: documentVersionId,
                   version: 1,
                   name: nameField,
                   originalFileName: uploadedFileName || storedFileName || null,
@@ -232,6 +236,7 @@ class DocumentsService {
                   spItemId: sharePointItemId,
                   spWebUrl: uploadResult.webUrl || null,
                   uploadedById: input.createdById,
+                  securityScanStatus: 'PENDING_SCAN' as any,
                 },
               },
             },
@@ -269,6 +274,7 @@ class DocumentsService {
         throw error;
       }
 
+      queueDocumentVersionScan(documentVersionId, input.fileContent);
       return {
         id: document.id,
         caseId: document.caseId,
@@ -298,6 +304,7 @@ class DocumentsService {
         ...(userRole && !hrConfidentialReadAllowed(userRole) ? { securityClassification: { not: 'HR_CONFIDENTIAL' } } : {}),
       },
       orderBy: { createdAt: 'desc' }
+      , include: { versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 } }
     });
 
     return documents.map((doc: any) => ({
@@ -308,7 +315,8 @@ class DocumentsService {
       status: doc.folder,
       spWebUrl: doc.spPath,
       createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt
+      updatedAt: doc.updatedAt,
+      securityScanStatus: doc.versions?.[0]?.securityScanStatus || 'CLEAN'
     }));
   }
 
@@ -492,6 +500,7 @@ class DocumentsService {
       clientId: doc.case?.clientId || '',
       clientName: doc.case?.client?.name || 'Ismeretlen ügyfél',
       updatedAt: doc.updatedAt,
+      securityScanStatus: doc.versions?.[0]?.securityScanStatus || 'CLEAN',
       createdAt: doc.createdAt,
     }));
   }
@@ -512,6 +521,7 @@ class DocumentsService {
       let timelineCaseId = '';
       let timelineFileName: string | null = null;
       let timelinePreviousVersion: string | null = null;
+      let createdVersionId = '';
 
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         const document = await prisma.document.findUnique({
@@ -564,6 +574,7 @@ class DocumentsService {
 
             await tx.documentVersion.create({
               data: {
+                id: (createdVersionId = randomUUID()),
                 version: versionNumber,
                 name: originalFileName,
                 originalFileName,
@@ -582,6 +593,7 @@ class DocumentsService {
                 uploadedById: userId,
                 documentId,
                 previousVersionId: latestVersion?.id || null,
+                securityScanStatus: 'PENDING_SCAN' as any,
               },
             });
 
@@ -629,6 +641,8 @@ class DocumentsService {
           }
         } as any
       }).catch(() => undefined);
+
+      queueDocumentVersionScan(createdVersionId, fileContent);
 
       return {
         id: updatedDoc.id,
@@ -742,6 +756,8 @@ class DocumentsService {
     });
 
     if (!version) return null;
+    const blocked = securityScanBlock(version.securityScanStatus || 'CLEAN');
+    if (blocked) return blocked;
     const storageId = version.spItemId || version.storageReference;
     if (!storageId) {
       return { status: 400, code: 'NO_VERSION_STORAGE_REFERENCE', error: 'Document version has no storage reference.' };
@@ -1001,6 +1017,7 @@ class DocumentsService {
         isLatest: true,
         createdAt: true,
         updatedAt: true,
+        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
       },
     });
 
@@ -1018,6 +1035,7 @@ class DocumentsService {
       isLatest: document.isLatest,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt
+      , securityScanStatus: document.versions?.[0]?.securityScanStatus || 'CLEAN'
     };
   }
 }

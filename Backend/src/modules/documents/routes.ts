@@ -27,6 +27,7 @@ import { requireDocumentObjectReadAccess, requireDocumentObjectManageAccess } fr
 import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
+import { retryDocumentVersionScan, securityScanBlock } from './securityScan.service';
 import {
   createDocumentComment,
   DocumentCommentError,
@@ -248,6 +249,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       declaredMimeType: req.body.mimeType,
       originalFileName: fileName,
       inspectArchiveContent: true,
+      scan: false,
     });
     if (!contentValidation.ok) {
       const rejection = mapWorkforceUploadRejection(contentValidation);
@@ -546,6 +548,7 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
       declaredMimeType: req.body?.mimeType,
       originalFileName: fileName,
       inspectArchiveContent: true,
+      scan: false,
     });
     if (!contentValidation.ok) {
       const rejection = mapWorkforceUploadRejection(contentValidation);
@@ -637,6 +640,26 @@ router.get('/:id/versions/:versionId/download', authenticate, requireDocumentRea
   }
 });
 
+/** Retry a failed background security scan without replacing stored content. */
+router.post('/:id/versions/:versionId/security-scan/retry', authenticate, requireDocumentManageAccess, async (req: Request, res: Response): Promise<void> => {
+  const { id, versionId } = req.params as { id: string; versionId: string };
+  const version = await documentsService.getDocumentVersion(id, versionId);
+  if (!version) {
+    res.status(404).json({ status: 404, code: 'DOCUMENT_VERSION_NOT_FOUND', message: 'Document version not found.' });
+    return;
+  }
+  if (version.securityScanStatus !== 'SCAN_FAILED') {
+    res.status(409).json({ status: 409, code: 'DOCUMENT_SCAN_RETRY_NOT_ALLOWED', message: 'This document does not need a security scan retry.' });
+    return;
+  }
+  const started = await retryDocumentVersionScan(versionId);
+  if (!started) {
+    res.status(502).json({ status: 502, code: 'DOCUMENT_SCAN_RETRY_UNAVAILABLE', message: 'The security scan could not be restarted.' });
+    return;
+  }
+  res.status(202).json({ status: 202, code: 'DOCUMENT_SCAN_RETRY_STARTED', message: 'Security scan retry started.' });
+});
+
 /**
  * POST /api/v1/documents/:id/versions/:versionId/promote-current
  */
@@ -707,11 +730,18 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
         mimeType: true,
         fileName: true,
         name: true,
+        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
       },
     });
 
     if (!document) {
       res.status(404).json({ status: 404, code: 'NOT_FOUND', message: 'Document not found' });
+      return;
+    }
+
+    const textBlocked = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+    if (textBlocked) {
+      res.status(textBlocked.status).json(textBlocked);
       return;
     }
 
@@ -817,6 +847,7 @@ router.post('/:id/version', authenticate, requireDocumentObjectManageAccess, asy
       declaredMimeType: req.body?.mimeType,
       originalFileName: fileName || 'document',
       inspectArchiveContent: true,
+      scan: false,
     });
     if (!contentValidation.ok) {
       const rejection = mapWorkforceUploadRejection(contentValidation);
@@ -1063,7 +1094,8 @@ router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async
 
     // Get document to find SharePoint item ID
     const document = await prisma.document.findUnique({
-      where: { id }
+      where: { id },
+      include: { versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 } },
     });
 
     if (!document) {
@@ -1072,6 +1104,12 @@ router.get('/:id/download', authenticate, requireDocumentObjectReadAccess, async
         code: 'NOT_FOUND', 
         message: 'Document not found' 
       });
+      return;
+    }
+
+    const downloadBlocked = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+    if (downloadBlocked) {
+      res.status(downloadBlocked.status).json(downloadBlocked);
       return;
     }
 

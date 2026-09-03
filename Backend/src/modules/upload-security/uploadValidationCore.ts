@@ -335,6 +335,7 @@ export interface WorkforceUploadInput {
   buffer: Buffer;
   declaredMimeType?: string | null;
   originalFileName: string;
+  scan?: boolean;
   maxFileBytes?: number;
   /** If true, perform ZIP/DOCX archive inspection. */
   inspectArchiveContent?: boolean;
@@ -427,6 +428,10 @@ export async function validateWorkforceUpload(
         archiveInspection: archiveResult,
       };
     }
+  }
+
+  if (input.scan === false) {
+    return { ok: true, detectedMimeType: detected, sizeBytes, codeSafe: 'LOCAL_VALIDATION_PASSED' };
   }
 
   // 7. Malware scan — only CLEAN may continue
