@@ -142,6 +142,10 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('az rest --method get');
     expect(step).toContain('ACTIVE_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"');
     expect(step).toContain('SUBSCRIPTION_ID_SOURCE=ACTIVE_AZURE_CONTEXT');
+    expect(step).toContain('providers/Microsoft.KeyVault/vaults?api-version=2023-07-01');
+    expect(step).toContain('KEY_VAULT_ENUMERATION=PASS');
+    expect(step).toContain('KEY_VAULT_RESOURCE_ID');
+    expect(step).toContain('SCANNER_KEY_VAULT_ATTRIBUTION=PROVEN');
     expect(step).toContain('management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${SCANNER_APP}');
     expect(step).not.toContain('subscriptions/6663573b-fcf7-497d-b2f5-c3498f4b/');
     expect(step).toContain('ARM_PERMISSION_USED=Microsoft.Web/sites/read');
@@ -158,6 +162,8 @@ describe('production deploy workflow portability guards', () => {
     expect(step).not.toContain('${KUDU}');
     expect(step).not.toContain('/scan');
     expect(step).not.toContain('az webapp restart');
+    expect(step).not.toContain('az keyvault');
+    expect(step).not.toContain('/secrets');
   });
 
   it('runs migration WebJob polling on the host runner with exact run identity', () => {
