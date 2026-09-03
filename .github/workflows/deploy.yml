@@ -38,6 +38,7 @@ on:
           - none
           - diagnose
           - diagnose_deep
+          - diagnose_scanner_runtime
           - restart
           - redeploy_known_good
         default: none
@@ -83,7 +84,7 @@ jobs:
             [ "${{ inputs.run_migration }}" = "false" ] || { echo "Backend recovery never runs migrations."; exit 1; }
             [ "${{ inputs.deploy_frontend }}" = "false" ] || { echo "Backend recovery never deploys the frontend."; exit 1; }
             case "$ACTION" in
-              diagnose|diagnose_deep)
+              diagnose|diagnose_deep|diagnose_scanner_runtime)
                 [ "${{ inputs.deploy_backend }}" = "false" ] || { echo "diagnose must not deploy the backend."; exit 1; }
                 [ -z "$BACKEND_RECOVERY_PRODUCT_SHA" ] || { echo "diagnose does not accept a product SHA."; exit 1; }
                 ;;
@@ -95,7 +96,7 @@ jobs:
                 ;;
               *) echo "Unsupported backend recovery action: $ACTION"; exit 1 ;;
             esac
-            if [ "$ACTION" != "diagnose" ] && [ "$ACTION" != "diagnose_deep" ]; then
+            if [ "$ACTION" != "diagnose" ] && [ "$ACTION" != "diagnose_deep" ] && [ "$ACTION" != "diagnose_scanner_runtime" ]; then
               [[ "$BACKEND_RECOVERY_PRODUCT_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Recovery product SHA must be exactly 40 lowercase hexadecimal characters."; exit 1; }
             fi
             echo "P0 backend recovery inputs OK (action=$ACTION)."
@@ -140,7 +141,7 @@ jobs:
           BACKEND_RECOVERY_ACTION="${BACKEND_RECOVERY_ACTION_INPUT}"
           BACKEND_RECOVERY_SHA="${BACKEND_RECOVERY_SHA_INPUT}"
           if [ "$BACKEND_RECOVERY_ACTION" != "none" ]; then
-            if [ "$BACKEND_RECOVERY_ACTION" = "diagnose" ] || [ "$BACKEND_RECOVERY_ACTION" = "diagnose_deep" ]; then
+            if [ "$BACKEND_RECOVERY_ACTION" = "diagnose" ] || [ "$BACKEND_RECOVERY_ACTION" = "diagnose_deep" ] || [ "$BACKEND_RECOVERY_ACTION" = "diagnose_scanner_runtime" ]; then
               PRODUCT_SHA="$CONTROL_SHA"
             else
               [[ "$BACKEND_RECOVERY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "Recovery product SHA must be exactly 40 lowercase hexadecimal characters."; exit 1; }
@@ -194,6 +195,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Inspect App Service and Kudu deployment records
+        if: ${{ inputs.backend_recovery_action != 'diagnose_scanner_runtime' }}
         uses: azure/cli@v2
         with:
           inlineScript: |
@@ -275,33 +277,6 @@ jobs:
                       print(f'RUNTIME_LOG[{name}]={line}')
           PY
           fi
-          az webapp config show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query '{startup:appCommandLine,linuxFxVersion:linuxFxVersion}' --output json
-          az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query "[?name=='SCM_DO_BUILD_DURING_DEPLOYMENT' || name=='WEBSITE_RUN_FROM_PACKAGE'].{name:name,present:value!=null}" --output json
-          # Scanner diagnosis is deliberately observation-only. Settings are read
-          # into a local file and reduced to presence/masked-host facts before output.
-          az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" > scanner-settings.json
-          python3 - <<'PY'
-          import json, os, sys, urllib.parse
-          settings = {item.get('name'): item.get('value') for item in json.load(open('scanner-settings.json'))}
-          mode = str(settings.get('WORKFORCE_MALWARE_SCANNER') or '').strip().lower()
-          url = str(settings.get('WORKFORCE_MALWARE_SCANNER_URL') or '').strip()
-          auth = str(settings.get('WORKFORCE_MALWARE_SCANNER_API_KEY') or '').strip()
-          timeout = str(settings.get('WORKFORCE_MALWARE_SCANNER_TIMEOUT_MS') or '').strip()
-          parsed = urllib.parse.urlparse(url)
-          if url and (not parsed.scheme or not parsed.hostname):
-              raise SystemExit('Scanner URL is configured but is not an absolute URL.')
-          origin = f'{parsed.scheme}://{parsed.netloc}' if url else ''
-          for value in (url, auth, timeout):
-              if value:
-                  print(f'::add-mask::{value}')
-          print(f'WORKFORCE_MALWARE_SCANNER={mode or "NONE"}')
-          print(f'WORKFORCE_MALWARE_SCANNER_URL_PRESENT={"YES" if url else "NO"}')
-          print(f'WORKFORCE_MALWARE_SCANNER_HOST={parsed.netloc if url else "NOT_CONFIGURED"}')
-          print(f'WORKFORCE_MALWARE_SCANNER_AUTH_PRESENT={"YES" if auth else "NO"}')
-          print(f'WORKFORCE_MALWARE_SCANNER_TIMEOUT_PRESENT={"YES" if timeout else "NO"}')
-          open('scanner-origin.txt', 'w').write(origin)
-          PY
-          ORIGIN="$(cat scanner-origin.txt)"
           # Enumerate independently of backend configuration. Only scanner-like
           # names/tags and non-secret resource metadata may leave the runner.
           set +e
@@ -343,60 +318,51 @@ jobs:
               done <<< "$REPOS"
             done < acr-names.txt
           fi
-          # Inspect the confirmed scanner App Service independently of backend
-          # configuration. Only non-secret runtime metadata is printed.
+          # Reader-compatible scanner runtime inspection. It intentionally uses
+          # only Microsoft.Web/sites/read metadata and a public readiness probe.
           SCANNER_APP='adminiculum-malware-scanner-01'
           set +e
           az webapp show --resource-group "${RESOURCE_GROUP}" --name "${SCANNER_APP}" \
-            --query '{state:state,enabled:enabled,host:defaultHostName,httpsOnly:httpsOnly,kind:kind,region:location,plan:serverFarmId}' \
+            --query '{state:state,enabled:enabled,host:defaultHostName,httpsOnly:httpsOnly,kind:kind,region:location}' \
             --output json > scanner-app.json
           SCANNER_APP_STATUS=$?
-          az webapp config show --resource-group "${RESOURCE_GROUP}" --name "${SCANNER_APP}" \
-            --query '{image:linuxFxVersion,startup:appCommandLine,alwaysOn:alwaysOn}' --output json > scanner-config.json
-          SCANNER_CONFIG_STATUS=$?
-          az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${SCANNER_APP}" \
-            --query "[?name=='WEBSITES_PORT'].{name:name,value:value}" --output json > scanner-port.json
-          SCANNER_PORT_STATUS=$?
           set -e
-          if [ "$SCANNER_APP_STATUS" != "0" ] || [ "$SCANNER_CONFIG_STATUS" != "0" ] || [ "$SCANNER_PORT_STATUS" != "0" ]; then
+          if [ "$SCANNER_APP_STATUS" != "0" ]; then
+            echo 'SCANNER_RESOURCE_READ=FAIL'
             echo 'SCANNER_RESOURCE_FOUND=UNPROVABLE'
+            echo 'SCANNER_RESOURCE_STATE=UNPROVABLE'
+            echo 'SCANNER_DEFAULT_HOSTNAME=UNPROVABLE'
+            echo 'SCANNER_HTTPS_ONLY=UNPROVABLE'
+            echo 'SCANNER_ENABLED=UNPROVABLE'
+            echo 'READY_DNS_RESOLUTION=UNPROVABLE'
+            echo 'READY_CONNECTIVITY=UNPROVABLE'
             echo 'SCANNER_READY_HTTP_STATUS=UNPROVABLE'
             echo 'SCANNER_SCAN_HTTP_STATUS=UNPROVABLE'
           else
             python3 - <<'PY'
-          import json, re, urllib.parse
+          import json
           app = json.load(open('scanner-app.json'))
-          config = json.load(open('scanner-config.json'))
-          ports = json.load(open('scanner-port.json'))
-          image = str(config.get('image') or '').removeprefix('DOCKER|')
-          parsed = urllib.parse.urlparse('//' + image)
-          image = (parsed.hostname or '') + parsed.path if parsed.netloc else image
-          port = next((str(item.get('value')) for item in ports if item.get('name') == 'WEBSITES_PORT' and item.get('value') is not None), 'NOT_CONFIGURED')
-          startup = str(config.get('startup') or '').strip()
-          if re.search(r'(?i)(password|secret|token|key)\s*[=:]', startup):
-              startup = 'MASKED_POTENTIALLY_SENSITIVE_STARTUP_COMMAND'
-          expected_repositories = (
-              'adminiculumscan6663573b/adminiculum-malware-scanner',
-              'adminiculumscan6663573b.azurecr.io/adminiculum-malware-scanner',
-          )
+          host = str(app.get('host') or '').strip()
+          print('SCANNER_RESOURCE_READ=PASS')
           print('SCANNER_RESOURCE_FOUND=YES')
           print(f'SCANNER_RESOURCE_NAME={app.get("name") or "adminiculum-malware-scanner-01"}')
           print(f'SCANNER_RESOURCE_TYPE={app.get("kind")}')
           print(f'SCANNER_RESOURCE_STATE={app.get("state")}')
           print(f'SCANNER_RESOURCE_REGION={app.get("region")}')
           print(f'SCANNER_ENABLED={"YES" if app.get("enabled") else "NO"}')
-          print(f'SCANNER_DEFAULT_HOSTNAME={app.get("host") or "NOT_CONFIGURED"}')
+          print(f'SCANNER_DEFAULT_HOSTNAME={host or "NOT_CONFIGURED"}')
           print(f'SCANNER_HTTPS_ONLY={"YES" if app.get("httpsOnly") else "NO"}')
-          print(f'SCANNER_CONTAINER_IMAGE={image or "NOT_CONFIGURED"}')
-          print(f'SCANNER_CONTAINER_TAG={image.rsplit(":", 1)[1] if ":" in image.rsplit("/", 1)[-1] else "NOT_CONFIGURED"}')
-          print(f'SCANNER_PORT_CONFIG={port}')
-          print(f'SCANNER_STARTUP_COMMAND={startup or "NOT_CONFIGURED"}')
-          print(f'SCANNER_ALWAYS_ON={"YES" if config.get("alwaysOn") else "NO"}')
-          print(f'DEPLOYED_IMAGE_MATCHES_EXPECTED={"YES" if any(expected in image.lower() for expected in expected_repositories) else "NO"}')
-          open('scanner-runtime-origin.txt', 'w').write('https://' + str(app.get('host') or ''))
+          open('scanner-runtime-host.txt', 'w').write(host)
           PY
-            SCANNER_ORIGIN="$(cat scanner-runtime-origin.txt)"
-            READY_CODE="$(curl -sS -m 20 -o ready-body.txt -w '%{http_code}' "${SCANNER_ORIGIN}/health/ready" || echo 000)"
+            SCANNER_HOST="$(cat scanner-runtime-host.txt)"
+            set +e
+            getent ahosts "${SCANNER_HOST}" >/dev/null 2>&1
+            DNS_STATUS=$?
+            READY_CODE="$(curl -sS --connect-timeout 10 -m 20 -o ready-body.txt -w '%{http_code}' "https://${SCANNER_HOST}/health/ready")"
+            CURL_STATUS=$?
+            set -e
+            echo "READY_DNS_RESOLUTION=$([ "$DNS_STATUS" = "0" ] && echo PASS || echo FAIL)"
+            echo "READY_CONNECTIVITY=$([ "$CURL_STATUS" = "0" ] && echo PASS || echo FAIL)"
             echo "SCANNER_READY_HTTP_STATUS=${READY_CODE}"
             case "$READY_CODE" in
               200) echo 'SCANNER_READY_RESPONSE_CLASS=READY' ;;
@@ -405,8 +371,7 @@ jobs:
               *) echo 'SCANNER_READY_RESPONSE_CLASS=NON_READY' ;;
             esac
             # The scanner key is deliberately not read from App Service or Key Vault.
-            # Without a configured non-secret auth path, a scan probe is not safe.
-            echo 'SCANNER_SCAN_HTTP_STATUS=NOT_PROBED_AUTH_SECRET_NOT_AVAILABLE'
+            echo 'SCANNER_SCAN_HTTP_STATUS=NOT_PROBED_SAFE_AUTH_UNAVAILABLE'
             echo 'SCANNER_SCAN_AUTH_RESULT=UNPROVABLE'
           fi
           PLAN_ID="$(az webapp show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query serverFarmId -o tsv)"
@@ -416,6 +381,69 @@ jobs:
           METRICS_STATUS=$?
           set -e
           echo "MEMORY_METRICS_STATUS=${METRICS_STATUS}"
+
+      - name: Inspect scanner runtime (Reader-only)
+        if: ${{ inputs.backend_recovery_action == 'diagnose_scanner_runtime' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This mode must remain limited to Microsoft.Web/sites/read metadata
+          # and a public readiness request. It never reads app settings, publish
+          # profiles, deployment credentials, Kudu, or scanner secrets.
+          SCANNER_APP='adminiculum-malware-scanner-01'
+          set +e
+          az webapp show --resource-group "${RESOURCE_GROUP}" --name "${SCANNER_APP}" \
+            --query '{state:state,enabled:enabled,host:defaultHostName,httpsOnly:httpsOnly,kind:kind,region:location}' \
+            --output json > scanner-runtime-app.json
+          SCANNER_RESOURCE_STATUS=$?
+          set -e
+          if [ "$SCANNER_RESOURCE_STATUS" != "0" ]; then
+            echo 'SCANNER_RESOURCE_READ=FAIL'
+            echo 'SCANNER_RESOURCE_STATE=UNPROVABLE'
+            echo 'SCANNER_DEFAULT_HOSTNAME=UNPROVABLE'
+            echo 'SCANNER_HTTPS_ONLY=UNPROVABLE'
+            echo 'SCANNER_ENABLED=UNPROVABLE'
+            echo 'READY_DNS_RESOLUTION=UNPROVABLE'
+            echo 'READY_CONNECTIVITY=UNPROVABLE'
+            echo 'READY_HTTP_STATUS=UNPROVABLE'
+            echo 'READY_STATUS=UNPROVABLE'
+          else
+            python3 - <<'PY'
+          import json
+          app = json.load(open('scanner-runtime-app.json'))
+          host = str(app.get('host') or '').strip()
+          print('SCANNER_RESOURCE_READ=PASS')
+          print(f'SCANNER_RESOURCE_STATE={app.get("state") or "UNPROVABLE"}')
+          print(f'SCANNER_DEFAULT_HOSTNAME={host or "UNPROVABLE"}')
+          print(f'SCANNER_HTTPS_ONLY={"YES" if app.get("httpsOnly") else "NO"}')
+          print(f'SCANNER_ENABLED={"YES" if app.get("enabled") else "NO"}')
+          open('scanner-runtime-host.txt', 'w').write(host)
+          PY
+            SCANNER_HOST="$(cat scanner-runtime-host.txt)"
+            if [ -z "$SCANNER_HOST" ]; then
+              echo 'READY_DNS_RESOLUTION=UNPROVABLE'
+              echo 'READY_CONNECTIVITY=UNPROVABLE'
+              echo 'READY_HTTP_STATUS=UNPROVABLE'
+              echo 'READY_STATUS=UNPROVABLE'
+            else
+              set +e
+              getent ahosts "$SCANNER_HOST" >/dev/null 2>&1
+              DNS_STATUS=$?
+              READY_CODE="$(curl -sS --connect-timeout 10 -m 20 -o ready-body.txt -w '%{http_code}' "https://${SCANNER_HOST}/health/ready")"
+              CURL_STATUS=$?
+              set -e
+              echo "READY_DNS_RESOLUTION=$([ "$DNS_STATUS" = "0" ] && echo PASS || echo FAIL)"
+              echo "READY_CONNECTIVITY=$([ "$CURL_STATUS" = "0" ] && echo PASS || echo FAIL)"
+              echo "READY_HTTP_STATUS=${READY_CODE}"
+              if [ "$READY_CODE" = '200' ]; then
+                echo 'READY_STATUS=PASS'
+              else
+                echo 'READY_STATUS=FAIL'
+              fi
+            fi
+          fi
+          echo 'SCAN_STATUS=NOT_PROBED_SAFE_AUTH_UNAVAILABLE'
+          echo 'AUTH_WORKS=UNPROVABLE'
 
       - name: Restart and verify the known-good backend
         if: ${{ inputs.backend_recovery_action == 'restart' }}
