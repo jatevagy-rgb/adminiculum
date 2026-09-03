@@ -4,9 +4,9 @@
  * Validates real PostgreSQL database integration:
  * 1. Startup & schema migration in isolated test schema (pgboss_integration_test)
  * 2. Enqueueing and receiving jobs via worker
- * 3. Execution completion
+ * 3. Execution completion and payload context handling
  * 4. Retry handling on failure
- * 5. Singleton key deduplication
+ * 5. Singleton key deduplication (pg-boss 10.4.2 semantics)
  * 6. Graceful shutdown
  * 7. Clean restart with state persistence
  */
@@ -15,6 +15,7 @@ import { Client } from 'pg';
 import { JobService } from '../src/modules/jobs/jobService';
 
 const databaseUrl =
+  process.env.JOB_FOUNDATION_TEST_DATABASE_URL ||
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
   process.env.MIGRATION_REPLAY_DATABASE_URL ||
   process.env.CLIENT_IDENTITY_TEST_DATABASE_URL ||
@@ -149,6 +150,52 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
     expect(finalAttempts).toBe(2);
 
     await service.stop({ graceful: true, timeout: 3000 });
+  });
+
+  it('deduplicates duplicate job submissions using singletonKey', async () => {
+    const service = new JobService({
+      enabled: true,
+      connectionString: databaseUrl,
+      schema: TEST_SCHEMA,
+      maxConnections: 3,
+    });
+
+    await service.start();
+
+    const singletonKey = `doc-extract-${Date.now()}`;
+    const firstJobId = await service.enqueue(
+      'test.singleton',
+      { docId: 'doc-101', attempt: 1 },
+      { singletonKey }
+    );
+    expect(firstJobId).toBeTruthy();
+
+    // Second submission with same singleton key while first is active/pending returns null
+    const secondJobId = await service.enqueue(
+      'test.singleton',
+      { docId: 'doc-101', attempt: 2 },
+      { singletonKey }
+    );
+    expect(secondJobId).toBeNull();
+
+    await service.stop({ graceful: true, timeout: 3000 });
+  });
+
+  it('gracefully stops worker execution and drains cleanly', async () => {
+    const service = new JobService({
+      enabled: true,
+      connectionString: databaseUrl,
+      schema: TEST_SCHEMA,
+      maxConnections: 3,
+    });
+
+    await service.start();
+    expect(service.isStarted()).toBe(true);
+    expect(service.getBossInstance()).not.toBeNull();
+
+    await service.stop({ graceful: true, timeout: 3000 });
+    expect(service.isStarted()).toBe(false);
+    expect(service.getBossInstance()).toBeNull();
   });
 
   it('preserves state across restart', async () => {

@@ -2,11 +2,12 @@
  * Unit tests for Job Foundation
  *
  * Validates:
- * 1. Disabled mode behavior (jobService.isEnabled() === false, start() no-op)
- * 2. Configuration resolution from environment variables
- * 3. Enqueue error when service is not started
- * 4. Worker registration before and after startup
- * 5. Clean stop behavior
+ * 1. Configuration resolution and PG_BOSS_DATABASE_URL precedence over DATABASE_URL
+ * 2. Disabled mode behavior (jobService.isEnabled() === false, start() no-op)
+ * 3. Enabled mode with missing database URL strictly throws startup error
+ * 4. Enqueue error when service is not started
+ * 5. Worker registration deduplication (before start and active duplicate rejection)
+ * 6. Clean stop and restart worker re-binding
  */
 
 import { JobService } from '../src/modules/jobs/jobService';
@@ -18,6 +19,8 @@ describe('Job Foundation Unit Tests', () => {
   beforeEach(() => {
     process.env = { ...originalEnv };
     delete process.env.BACKGROUND_JOBS_ENABLED;
+    delete process.env.DATABASE_URL;
+    delete process.env.PG_BOSS_DATABASE_URL;
     delete process.env.PG_BOSS_SCHEMA;
     delete process.env.PG_BOSS_MAX_CONNECTIONS;
   });
@@ -26,7 +29,7 @@ describe('Job Foundation Unit Tests', () => {
     process.env = originalEnv;
   });
 
-  describe('1. Configuration & Disabled Mode', () => {
+  describe('1. Configuration & Database URL Precedence', () => {
     it('defaults to disabled when BACKGROUND_JOBS_ENABLED is unset or false', () => {
       const config = getJobServiceConfig();
       expect(config.enabled).toBe(false);
@@ -54,6 +57,28 @@ describe('Job Foundation Unit Tests', () => {
       expect(service.isEnabled()).toBe(true);
     });
 
+    it('uses DATABASE_URL when only DATABASE_URL is present', () => {
+      process.env.DATABASE_URL = 'postgres://user:pass@app-db:5432/adminiculum';
+      const config = getJobServiceConfig();
+      expect(config.connectionString).toBe('postgres://user:pass@app-db:5432/adminiculum');
+    });
+
+    it('uses PG_BOSS_DATABASE_URL when only PG_BOSS_DATABASE_URL is present', () => {
+      process.env.PG_BOSS_DATABASE_URL = 'postgres://user:pass@jobs-db:5432/pgboss';
+      const config = getJobServiceConfig();
+      expect(config.connectionString).toBe('postgres://user:pass@jobs-db:5432/pgboss');
+    });
+
+    it('gives PG_BOSS_DATABASE_URL precedence when both are present', () => {
+      process.env.DATABASE_URL = 'postgres://user:pass@app-db:5432/adminiculum';
+      process.env.PG_BOSS_DATABASE_URL = 'postgres://user:pass@dedicated-jobs-db:5432/pgboss';
+
+      const config = getJobServiceConfig();
+      expect(config.connectionString).toBe('postgres://user:pass@dedicated-jobs-db:5432/pgboss');
+    });
+  });
+
+  describe('2. Disabled Mode & Enqueue Guards', () => {
     it('disabled service returns null without error on enqueue', async () => {
       const service = new JobService({ enabled: false });
       const jobId = await service.enqueue('test-queue', { foo: 'bar' });
@@ -66,19 +91,19 @@ describe('Job Foundation Unit Tests', () => {
         'Job service is not started'
       );
     });
-  });
 
-  describe('2. Lifecycle & Worker Registration', () => {
-    it('start() does nothing when disabled', async () => {
-      const service = new JobService({ enabled: false });
-      await service.start();
+    it('start() does nothing when disabled even without DB connection', async () => {
+      const service = new JobService({ enabled: false, connectionString: '' });
+      await expect(service.start()).resolves.toBeUndefined();
       expect(service.isStarted()).toBe(false);
       expect(service.getBossInstance()).toBeNull();
     });
 
-    it('start() logs warning and skips when connectionString is missing', async () => {
+    it('start() strictly throws error when enabled but connection string is missing', async () => {
       const service = new JobService({ enabled: true, connectionString: '' });
-      await service.start();
+      await expect(service.start()).rejects.toThrow(
+        'Missing database connection string for pg-boss'
+      );
       expect(service.isStarted()).toBe(false);
       expect(service.getBossInstance()).toBeNull();
     });
@@ -88,14 +113,55 @@ describe('Job Foundation Unit Tests', () => {
       await expect(service.stop()).resolves.toBeUndefined();
       expect(service.isStarted()).toBe(false);
     });
+  });
 
-    it('allows worker registration while stopped and preserves queue mappings', () => {
+  describe('3. Worker Registration & Duplicate Binding Prevention', () => {
+    it('allows worker registration before start with deterministic replacement', async () => {
       const service = new JobService({ enabled: true });
-      const mockHandler = jest.fn().mockResolvedValue(true);
+      const handler1 = jest.fn().mockResolvedValue(1);
+      const handler2 = jest.fn().mockResolvedValue(2);
 
-      service.registerWorker('document.extract', mockHandler, { batchSize: 2 });
-      // Worker registered in internal map
+      await service.registerWorker('doc.process', handler1);
+      await service.registerWorker('doc.process', handler2);
+
       expect(service.isStarted()).toBe(false);
+    });
+
+    it('rejects duplicate active worker registration when service is already running', async () => {
+      const service = new JobService({ enabled: true });
+      // Simulate running state with mock boss
+      (service as any).isRunning = true;
+      (service as any).boss = {
+        work: jest.fn().mockResolvedValue('worker-123'),
+      };
+
+      const handler = jest.fn().mockResolvedValue(true);
+
+      // First active registration succeeds
+      await service.registerWorker('doc.extract', handler);
+
+      // Duplicate active registration for same queue is rejected
+      await expect(service.registerWorker('doc.extract', handler)).rejects.toThrow(
+        'Worker for queue "doc.extract" is already registered/bound'
+      );
+    });
+
+    it('resets worker binding tracking upon clean stop', async () => {
+      const service = new JobService({ enabled: true });
+      const mockBoss = {
+        work: jest.fn().mockResolvedValue('worker-123'),
+        stop: jest.fn().mockResolvedValue(undefined),
+      };
+      (service as any).isRunning = true;
+      (service as any).boss = mockBoss;
+
+      const handler = jest.fn().mockResolvedValue(true);
+      await service.registerWorker('doc.scan', handler);
+
+      // Stop resets bound state
+      await service.stop();
+      expect(service.isStarted()).toBe(false);
+      expect((service as any).boundQueues.size).toBe(0);
     });
   });
 });

@@ -353,49 +353,98 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+import http from 'http';
 import { jobService } from './modules/jobs';
 
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(
-    `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${PORT}`,
-  );
+let server: http.Server | null = null;
+let isShuttingDown = false;
 
-  startupConfigHealth = evaluateStartupConfigHealth();
-  if (startupConfigHealth.status === 'healthy') {
-    console.log(`[Startup Validation] PASS credentialSet=${startupConfigHealth.matchedCredentialSet}`);
-  } else {
-    console.warn(
-      `[Startup Validation] DEGRADED missing=${startupConfigHealth.missing.join(' | ')}`,
-    );
-  }
-  if (isProduction) {
-    console.log(
-      `[Startup Validation] CORS allowlist entries=${productionAllowedOrigins.length}`,
-    );
-  } else {
-    console.log('[Startup Validation] CORS mode=development (localhost origins allowed)');
-  }
-
+export async function bootstrap(port: number = PORT): Promise<http.Server> {
+  // 1. If background jobs are enabled, initialize pg-boss BEFORE accepting traffic
   if (jobService.isEnabled()) {
-    jobService.start().catch((err) => {
-      console.error('[Startup] Failed to start background job service:', err);
+    try {
+      await jobService.start();
+    } catch (err) {
+      console.error('[Startup] FATAL: Failed to start background job service:', err);
+      throw err;
+    }
+  }
+
+  // 2. Start HTTP listener only after job service (if enabled) is ready
+  return new Promise<http.Server>((resolve, reject) => {
+    const s = app.listen(port, '0.0.0.0', () => {
+      console.log(
+        `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${port}`,
+      );
+
+      startupConfigHealth = evaluateStartupConfigHealth();
+      if (startupConfigHealth.status === 'healthy') {
+        console.log(`[Startup Validation] PASS credentialSet=${startupConfigHealth.matchedCredentialSet}`);
+      } else {
+        console.warn(
+          `[Startup Validation] DEGRADED missing=${startupConfigHealth.missing.join(' | ')}`,
+        );
+      }
+      if (isProduction) {
+        console.log(
+          `[Startup Validation] CORS allowlist entries=${productionAllowedOrigins.length}`,
+        );
+      } else {
+        console.log('[Startup Validation] CORS mode=development (localhost origins allowed)');
+      }
+
+      console.log(`🚀 Adminiculum API V2 running on http://localhost:${port}`);
+      resolve(s);
     });
-  }
 
-  console.log(`🚀 Adminiculum API V2 running on http://localhost:${PORT}`);
-});
+    s.on('error', (err) => {
+      reject(err);
+    });
 
-const handleGracefulShutdown = async (signal: string) => {
-  console.log(`[Shutdown] Received ${signal}, initiating graceful shutdown...`);
-  if (jobService.isStarted()) {
-    await jobService.stop({ graceful: true, timeout: 5000 });
-  }
-  server.close(() => {
-    process.exit(0);
+    server = s;
   });
+}
+
+export const handleGracefulShutdown = async (signal: string): Promise<void> => {
+  if (isShuttingDown) {
+    console.log(`[Shutdown] Already shutting down. Ignoring duplicate signal: ${signal}`);
+    return;
+  }
+  isShuttingDown = true;
+  console.log(`[Shutdown] Received ${signal}, closing HTTP server to reject new connections...`);
+
+  const forceExitTimer = setTimeout(() => {
+    console.error('[Shutdown] Forcefully terminating process after shutdown timeout.');
+    process.exit(1);
+  }, 10000);
+  forceExitTimer.unref();
+
+  if (server) {
+    server.close(async () => {
+      console.log('[Shutdown] HTTP server closed, draining background jobs...');
+      if (jobService.isStarted()) {
+        await jobService.stop({ graceful: true, timeout: 5000 });
+      }
+      clearTimeout(forceExitTimer);
+      process.exit(0);
+    });
+  } else {
+    if (jobService.isStarted()) {
+      await jobService.stop({ graceful: true, timeout: 5000 });
+    }
+    clearTimeout(forceExitTimer);
+    process.exit(0);
+  }
 };
 
-process.once('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
-process.once('SIGINT', () => handleGracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
+
+if (process.env.NODE_ENV !== 'test') {
+  bootstrap().catch((err) => {
+    console.error('[Startup] Unhandled bootstrap error:', err);
+    process.exit(1);
+  });
+}
 
 export default app;

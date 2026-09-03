@@ -15,6 +15,7 @@ export class JobService {
     string,
     { handler: JobHandler; options?: WorkerOptions }
   > = new Map();
+  private boundQueues: Set<string> = new Set();
   private isRunning = false;
 
   constructor(customConfig?: Partial<JobServiceConfig>) {
@@ -29,16 +30,20 @@ export class JobService {
     return this.isRunning;
   }
 
-  public registerWorker<TData = any, TResult = any>(
+  public async registerWorker<TData = any, TResult = any>(
     queueName: string,
     handler: JobHandler<TData, TResult>,
     options?: WorkerOptions
-  ): void {
-    this.registeredWorkers.set(queueName, { handler, options });
+  ): Promise<void> {
     if (this.isRunning && this.boss) {
-      this.bindWorker(queueName, handler, options).catch((err) => {
-        console.error(`[JobService] Failed to bind worker for queue "${queueName}":`, err);
-      });
+      if (this.boundQueues.has(queueName)) {
+        throw new Error(`[JobService] Worker for queue "${queueName}" is already registered/bound.`);
+      }
+      this.registeredWorkers.set(queueName, { handler, options });
+      this.boundQueues.add(queueName);
+      await this.bindWorker(queueName, handler, options);
+    } else {
+      this.registeredWorkers.set(queueName, { handler, options });
     }
   }
 
@@ -81,8 +86,7 @@ export class JobService {
     }
 
     if (!this.config.connectionString) {
-      console.warn('[JobService] Missing database connection string for pg-boss.');
-      return;
+      throw new Error('[JobService] Missing database connection string for pg-boss.');
     }
 
     this.boss = new PgBoss({
@@ -98,9 +102,11 @@ export class JobService {
 
     await this.boss.start();
     this.isRunning = true;
+    this.boundQueues.clear();
     console.log(`[JobService] pg-boss started successfully in schema "${this.config.schema}".`);
 
     for (const [queueName, { handler, options }] of this.registeredWorkers.entries()) {
+      this.boundQueues.add(queueName);
       await this.bindWorker(queueName, handler, options);
     }
   }
@@ -119,6 +125,7 @@ export class JobService {
     } catch (error) {
       console.error('[JobService] Error stopping pg-boss:', error);
     } finally {
+      this.boundQueues.clear();
       this.isRunning = false;
       this.boss = null;
     }
