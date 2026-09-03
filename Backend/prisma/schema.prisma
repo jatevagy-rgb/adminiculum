@@ -1061,6 +1061,13 @@ enum DocumentWorkStatus {
   ARCHIVED
 }
 
+enum DocumentSecurityScanStatus {
+  PENDING_SCAN
+  CLEAN
+  SCAN_FAILED
+  INFECTED
+}
+
 enum DocumentCategory {
   CONTRACT
   CORRESPONDENCE
@@ -1080,6 +1087,7 @@ enum DocumentCategory {
 model DocumentVersion {
   id                String                           @id @default(uuid())
   version           Int
+  securityScanStatus DocumentSecurityScanStatus     @default(CLEAN)
   name              String
   description       String?
   originalFileName  String?

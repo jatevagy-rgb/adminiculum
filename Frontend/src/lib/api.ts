@@ -1727,6 +1727,7 @@ export interface DocumentItem {
   isLatest: boolean;
   createdAt: string;
   updatedAt: string;
+  securityScanStatus?: 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
 }
 
 export interface DocumentVersionItem {
@@ -1750,6 +1751,7 @@ export interface DocumentVersionItem {
   versionType: string;
   spItemId: string | null;
   spWebUrl: string | null;
+  securityScanStatus: 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
 }
 
 export interface DocumentVersionsResponse {
@@ -1970,6 +1972,13 @@ export async function promoteDocumentVersion(documentId: string, versionId: stri
       body: JSON.stringify({}),
     }
   );
+}
+
+export async function retryDocumentSecurityScan(documentId: string, versionId: string): Promise<void> {
+  await fetchApi(`/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/security-scan/retry`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 export async function downloadDocumentVersion(documentId: string, versionId: string): Promise<Blob> {
