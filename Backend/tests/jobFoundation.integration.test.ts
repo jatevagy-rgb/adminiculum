@@ -31,13 +31,10 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
     if (!databaseUrl) return;
     pgClient = new Client({ connectionString: databaseUrl });
     await pgClient.connect();
-    // Drop test schema to start fresh
-    await pgClient.query(`DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;`);
   });
 
   afterAll(async () => {
     if (pgClient) {
-      await pgClient.query(`DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;`).catch(() => {});
       await pgClient.end().catch(() => {});
     }
   });
