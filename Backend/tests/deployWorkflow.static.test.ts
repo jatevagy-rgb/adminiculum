@@ -115,7 +115,11 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('WORKFORCE_MALWARE_SCANNER_URL_PRESENT');
     expect(step).toContain('SCANNER_READY_HTTP_STATUS');
     expect(step).toContain('SCANNER_SCAN_HTTP_STATUS');
-    expect(step).toContain('No bearer secret is extracted from App Service or Key Vault.');
+    expect(step).toContain("SCANNER_APP='adminiculum-malware-scanner-01'");
+    expect(step).toContain('SCANNER_DEFAULT_HOSTNAME');
+    expect(step).toContain('DEPLOYED_IMAGE_MATCHES_EXPECTED');
+    expect(step).toContain("--query \"[?name=='WEBSITES_PORT'].{name:name,value:value}\"");
+    expect(step).toContain('The scanner key is deliberately not read from App Service or Key Vault.');
     expect(step).toContain('az appservice plan show');
     expect(step).toContain('az monitor metrics list');
     expect(step).toContain('for ARTIFACT_PATH in package.json dist/index.js node_modules release-identity.json');
@@ -123,6 +127,7 @@ describe('production deploy workflow portability guards', () => {
     expect(step).not.toContain('az webapp deploy');
     expect(step).not.toContain('az webapp restart');
     expect(step).not.toContain('az webapp config appsettings set');
+    expect(step).not.toContain('--data-binary @- "${SCANNER_ORIGIN}/scan"');
     expect(step).not.toContain('prisma migrate');
     expect(step).not.toContain('prisma db push');
   });

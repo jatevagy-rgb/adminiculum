@@ -343,32 +343,60 @@ jobs:
               done <<< "$REPOS"
             done < acr-names.txt
           fi
-          if [ -n "$ORIGIN" ]; then
-            set +e
-            az webapp list --resource-group "${RESOURCE_GROUP}" --query '[].{name:name,host:defaultHostName,state:state,kind:kind,region:location}' --output json > scanner-webapps.json
-            WEBAPPS_STATUS=$?
-            set -e
-            if [ "$WEBAPPS_STATUS" = "0" ]; then
-              ORIGIN="$ORIGIN" python3 - <<'PY'
-          import json, os, urllib.parse
-          host = urllib.parse.urlparse(os.environ['ORIGIN']).hostname or ''
-          matches = [item for item in json.load(open('scanner-webapps.json')) if str(item.get('host') or '').lower() == host.lower()]
-          if len(matches) == 1:
-              item = matches[0]
-              print(f'SCANNER_RESOURCE_FOUND=YES')
-              print(f'SCANNER_RESOURCE_NAME={item.get("name")}')
-              print(f'SCANNER_RESOURCE_TYPE={item.get("kind")}')
-              print(f'SCANNER_RESOURCE_STATE={item.get("state")}')
-              print(f'SCANNER_RESOURCE_REGION={item.get("region")}')
-          elif len(matches) == 0:
-              print('SCANNER_RESOURCE_FOUND=NO')
-          else:
-              print('SCANNER_RESOURCE_FOUND=AMBIGUOUS')
+          # Inspect the confirmed scanner App Service independently of backend
+          # configuration. Only non-secret runtime metadata is printed.
+          SCANNER_APP='adminiculum-malware-scanner-01'
+          set +e
+          az webapp show --resource-group "${RESOURCE_GROUP}" --name "${SCANNER_APP}" \
+            --query '{state:state,enabled:enabled,host:defaultHostName,httpsOnly:httpsOnly,kind:kind,region:location,plan:serverFarmId}' \
+            --output json > scanner-app.json
+          SCANNER_APP_STATUS=$?
+          az webapp config show --resource-group "${RESOURCE_GROUP}" --name "${SCANNER_APP}" \
+            --query '{image:linuxFxVersion,startup:appCommandLine,alwaysOn:alwaysOn}' --output json > scanner-config.json
+          SCANNER_CONFIG_STATUS=$?
+          az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${SCANNER_APP}" \
+            --query "[?name=='WEBSITES_PORT'].{name:name,value:value}" --output json > scanner-port.json
+          SCANNER_PORT_STATUS=$?
+          set -e
+          if [ "$SCANNER_APP_STATUS" != "0" ] || [ "$SCANNER_CONFIG_STATUS" != "0" ] || [ "$SCANNER_PORT_STATUS" != "0" ]; then
+            echo 'SCANNER_RESOURCE_FOUND=UNPROVABLE'
+            echo 'SCANNER_READY_HTTP_STATUS=UNPROVABLE'
+            echo 'SCANNER_SCAN_HTTP_STATUS=UNPROVABLE'
+          else
+            python3 - <<'PY'
+          import json, re, urllib.parse
+          app = json.load(open('scanner-app.json'))
+          config = json.load(open('scanner-config.json'))
+          ports = json.load(open('scanner-port.json'))
+          image = str(config.get('image') or '').removeprefix('DOCKER|')
+          parsed = urllib.parse.urlparse('//' + image)
+          image = (parsed.hostname or '') + parsed.path if parsed.netloc else image
+          port = next((str(item.get('value')) for item in ports if item.get('name') == 'WEBSITES_PORT' and item.get('value') is not None), 'NOT_CONFIGURED')
+          startup = str(config.get('startup') or '').strip()
+          if re.search(r'(?i)(password|secret|token|key)\s*[=:]', startup):
+              startup = 'MASKED_POTENTIALLY_SENSITIVE_STARTUP_COMMAND'
+          expected_repositories = (
+              'adminiculumscan6663573b/adminiculum-malware-scanner',
+              'adminiculumscan6663573b.azurecr.io/adminiculum-malware-scanner',
+          )
+          print('SCANNER_RESOURCE_FOUND=YES')
+          print(f'SCANNER_RESOURCE_NAME={app.get("name") or "adminiculum-malware-scanner-01"}')
+          print(f'SCANNER_RESOURCE_TYPE={app.get("kind")}')
+          print(f'SCANNER_RESOURCE_STATE={app.get("state")}')
+          print(f'SCANNER_RESOURCE_REGION={app.get("region")}')
+          print(f'SCANNER_ENABLED={"YES" if app.get("enabled") else "NO"}')
+          print(f'SCANNER_DEFAULT_HOSTNAME={app.get("host") or "NOT_CONFIGURED"}')
+          print(f'SCANNER_HTTPS_ONLY={"YES" if app.get("httpsOnly") else "NO"}')
+          print(f'SCANNER_CONTAINER_IMAGE={image or "NOT_CONFIGURED"}')
+          print(f'SCANNER_CONTAINER_TAG={image.rsplit(":", 1)[1] if ":" in image.rsplit("/", 1)[-1] else "NOT_CONFIGURED"}')
+          print(f'SCANNER_PORT_CONFIG={port}')
+          print(f'SCANNER_STARTUP_COMMAND={startup or "NOT_CONFIGURED"}')
+          print(f'SCANNER_ALWAYS_ON={"YES" if config.get("alwaysOn") else "NO"}')
+          print(f'DEPLOYED_IMAGE_MATCHES_EXPECTED={"YES" if any(expected in image.lower() for expected in expected_repositories) else "NO"}')
+          open('scanner-runtime-origin.txt', 'w').write('https://' + str(app.get('host') or ''))
           PY
-            else
-              echo 'SCANNER_RESOURCE_FOUND=UNPROVABLE'
-            fi
-            READY_CODE="$(curl -sS -m 20 -o ready-body.txt -w '%{http_code}' "${ORIGIN}/health/ready" || echo 000)"
+            SCANNER_ORIGIN="$(cat scanner-runtime-origin.txt)"
+            READY_CODE="$(curl -sS -m 20 -o ready-body.txt -w '%{http_code}' "${SCANNER_ORIGIN}/health/ready" || echo 000)"
             echo "SCANNER_READY_HTTP_STATUS=${READY_CODE}"
             case "$READY_CODE" in
               200) echo 'SCANNER_READY_RESPONSE_CLASS=READY' ;;
@@ -376,24 +404,10 @@ jobs:
               000) echo 'SCANNER_READY_RESPONSE_CLASS=NETWORK_OR_TLS_FAILURE' ;;
               *) echo 'SCANNER_READY_RESPONSE_CLASS=NON_READY' ;;
             esac
-            # A synthetic byte is used only to prove routing/auth/response shape.
-            # No bearer secret is extracted from App Service or Key Vault.
-            SCAN_CODE="$(printf x | curl -sS -m 20 -o scan-body.txt -w '%{http_code}' -X POST \
-              -H 'Content-Type: application/octet-stream' \
-              -H 'X-File-Size: 1' \
-              -H 'X-Content-Type: text/plain' \
-              --data-binary @- "${ORIGIN}/scan" || echo 000)"
-            echo "SCANNER_SCAN_HTTP_STATUS=${SCAN_CODE}"
-            case "$SCAN_CODE" in
-              401|403) echo 'SCANNER_SCAN_AUTH_RESULT=AUTH_REQUIRED' ;;
-              2*) echo 'SCANNER_SCAN_AUTH_RESULT=NOT_REQUIRED_OR_ACCEPTED' ;;
-              000) echo 'SCANNER_SCAN_AUTH_RESULT=NETWORK_OR_TLS_FAILURE' ;;
-              *) echo 'SCANNER_SCAN_AUTH_RESULT=UNPROVABLE' ;;
-            esac
-          else
-            echo 'SCANNER_RESOURCE_FOUND=NOT_CONFIGURED'
-            echo 'SCANNER_READY_HTTP_STATUS=NOT_CONFIGURED'
-            echo 'SCANNER_SCAN_HTTP_STATUS=NOT_CONFIGURED'
+            # The scanner key is deliberately not read from App Service or Key Vault.
+            # Without a configured non-secret auth path, a scan probe is not safe.
+            echo 'SCANNER_SCAN_HTTP_STATUS=NOT_PROBED_AUTH_SECRET_NOT_AVAILABLE'
+            echo 'SCANNER_SCAN_AUTH_RESULT=UNPROVABLE'
           fi
           PLAN_ID="$(az webapp show --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --query serverFarmId -o tsv)"
           az appservice plan show --ids "$PLAN_ID" --query '{sku:sku,workerCount:numberOfWorkers,capacity:sku.capacity,reserved:reserved}' --output json
