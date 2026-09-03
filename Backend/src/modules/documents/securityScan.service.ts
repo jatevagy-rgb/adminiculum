@@ -1,6 +1,7 @@
 import { prisma } from '../../prisma/prisma.service';
 import { getScanner } from '../upload-security/scannerAdapter';
 import { validateWorkforceUpload } from '../upload-security/uploadValidationCore';
+import { driveService } from '../sharepoint';
 
 export type DocumentSecurityScanStatus = 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
 
@@ -39,7 +40,7 @@ export async function retryDocumentVersionScan(versionId: string): Promise<boole
   });
   if (!version || version.securityScanStatus !== 'SCAN_FAILED' || !version.storageReference) return false;
 
-  const content = await (await import('../sharepoint/driveService.js')).default.downloadDocument(version.storageReference);
+  const content = await driveService.downloadDocument(version.storageReference);
   if (!content) return false;
   const local = await validateWorkforceUpload({
     buffer: content,
