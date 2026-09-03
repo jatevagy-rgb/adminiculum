@@ -113,6 +113,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
       connectionString: databaseUrl,
       schema: TEST_SCHEMA,
       maxConnections: 3,
+      clockMonitorIntervalSeconds: 1,
     });
 
     let attemptCount = 0;

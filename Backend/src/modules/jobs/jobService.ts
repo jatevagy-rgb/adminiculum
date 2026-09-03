@@ -94,6 +94,7 @@ export class JobService {
       schema: this.config.schema,
       max: this.config.maxConnections,
       application_name: 'adminiculum-jobs',
+      clockMonitorIntervalSeconds: this.config.clockMonitorIntervalSeconds,
     });
 
     this.boss.on('error', (err) => {

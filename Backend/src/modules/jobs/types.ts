@@ -50,4 +50,5 @@ export interface JobServiceConfig {
   defaultRetryBackoff?: boolean;
   defaultExpireInSeconds?: number;
   defaultRetentionSeconds?: number;
+  clockMonitorIntervalSeconds?: number;
 }
