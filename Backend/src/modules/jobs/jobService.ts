@@ -6,10 +6,11 @@
 
 import PgBoss from 'pg-boss';
 import { getJobServiceConfig } from './config';
-import { JobContext, JobHandler, JobOptions, JobServiceConfig, QueueDefinition, QueuePolicy, WorkerOptions } from './types';
+import { JobContext, JobHandler, JobOptions, JobServiceConfig, PgBossFactory, QueueDefinition, QueuePolicy, WorkerOptions } from './types';
 
 export class JobService {
   private boss: PgBoss | null = null;
+  private bossFactory: PgBossFactory;
   private config: JobServiceConfig;
   private registeredWorkers: Map<
     string,
@@ -20,8 +21,12 @@ export class JobService {
   private createdQueues: Set<string> = new Set();
   private isRunning = false;
 
-  constructor(customConfig?: Partial<JobServiceConfig>) {
+  constructor(
+    customConfig?: Partial<JobServiceConfig>,
+    bossFactory: PgBossFactory = (options) => new PgBoss(options)
+  ) {
     this.config = { ...getJobServiceConfig(), ...customConfig };
+    this.bossFactory = bossFactory;
   }
 
   public isEnabled(): boolean {
@@ -135,10 +140,10 @@ export class JobService {
       bossOptions.clockMonitorIntervalSeconds = this.config.clockMonitorIntervalSeconds;
     }
 
-    this.boss = new PgBoss(bossOptions);
+    this.boss = this.bossFactory(bossOptions);
 
-    this.boss.on('error', (err) => {
-      console.error('[JobService] pg-boss internal error:', err.message);
+    this.boss.on('error', (err: any) => {
+      console.error('[JobService] pg-boss internal error:', err?.message || err);
     });
 
     try {
@@ -198,12 +203,12 @@ export class JobService {
       return;
     }
 
-    // Determine stable queue policy: explicit parameter > registered queue/worker definition > default 'short'
+    // Determine stable queue policy: explicit parameter > registered queue/worker definition > default 'standard'
     const policy: QueuePolicy =
       explicitPolicy ||
       this.registeredQueues.get(queueName)?.policy ||
       this.registeredWorkers.get(queueName)?.options?.policy ||
-      'short';
+      'standard';
 
     const queueOptions: PgBoss.Queue = {
       name: queueName,

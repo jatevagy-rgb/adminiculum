@@ -6,9 +6,10 @@
  * 2. Enqueueing and receiving jobs via worker
  * 3. Execution completion and payload context handling
  * 4. Retry handling on failure
- * 5. Deterministic singleton key deduplication regardless of submission order
- * 6. Real active-handler graceful drain with controlled barrier
- * 7. Clean restart with state persistence
+ * 5. Ordinary multi-job backlog on default standard queue without silent deduplication
+ * 6. Explicit singleton key deduplication on configured short queue
+ * 7. Real active-handler graceful drain with controlled barrier
+ * 8. Clean restart with state persistence
  */
 
 import { Client } from 'pg';
@@ -169,7 +170,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
     await service.stop({ graceful: true, timeout: 3000 });
   });
 
-  it('deduplicates duplicate job submissions using singletonKey regardless of submission order', async () => {
+  it('maintains ordinary multi-job backlog on default standard queue without silent deduplication', async () => {
     const service = new JobService({
       enabled: true,
       connectionString: databaseUrl,
@@ -180,24 +181,66 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
 
     await service.start();
 
-    // 1. Order A: singleton job -> duplicate singleton job on same key -> second is deduplicated (null)
-    const keyA = `singleton-order-a-${Date.now()}`;
-    const jobA1 = await service.enqueue('test.singleton_order', { doc: 'A' }, { singletonKey: keyA });
-    expect(jobA1).toBeTruthy();
+    // Default queue without worker accumulates backlog of jobs without rejection
+    const jobA = await service.enqueue('test.backlog', { docId: 'doc-1' });
+    const jobB = await service.enqueue('test.backlog', { docId: 'doc-2' });
+    const jobC = await service.enqueue('test.backlog', { docId: 'doc-3' });
 
-    const jobA2 = await service.enqueue('test.singleton_order', { doc: 'A-dup' }, { singletonKey: keyA });
-    expect(jobA2).toBeNull();
+    expect(jobA).toBeTruthy();
+    expect(jobB).toBeTruthy();
+    expect(jobC).toBeTruthy();
 
-    // 2. Order B: normal non-singleton job -> singleton job on same queue -> both succeed independently
-    const keyB = `singleton-order-b-${Date.now()}`;
-    const jobB1 = await service.enqueue('test.singleton_order', { doc: 'B-normal' });
-    expect(jobB1).toBeTruthy();
+    const distinctIds = new Set([jobA, jobB, jobC]);
+    expect(distinctIds.size).toBe(3);
 
-    const jobB2 = await service.enqueue('test.singleton_order', { doc: 'B-singleton' }, { singletonKey: keyB });
-    expect(jobB2).toBeTruthy();
+    // Verify all 3 jobs exist in PostgreSQL database as created/pending
+    const res = await pgClient.query(
+      `SELECT id, name, state FROM ${TEST_SCHEMA}.job WHERE id = ANY($1::uuid[]);`,
+      [[jobA, jobB, jobC]]
+    );
+    expect(res.rows.length).toBe(3);
+    expect(res.rows.every((r) => r.state === 'created')).toBe(true);
 
-    const jobB3 = await service.enqueue('test.singleton_order', { doc: 'B-singleton-dup' }, { singletonKey: keyB });
-    expect(jobB3).toBeNull();
+    await service.stop({ graceful: true, timeout: 3000 });
+  });
+
+  it('deduplicates duplicate job submissions on explicitly configured short queue', async () => {
+    const service = new JobService({
+      enabled: true,
+      connectionString: databaseUrl,
+      schema: TEST_SCHEMA,
+      maxConnections: 3,
+    });
+    activeServices.push(service);
+
+    service.registerQueue('test.explicit_singleton', { policy: 'short' });
+
+    await service.start();
+
+    const key = `doc-ver-${Date.now()}`;
+    const firstJobId = await service.enqueue(
+      'test.explicit_singleton',
+      { docId: 'doc-101', attempt: 1 },
+      { singletonKey: key }
+    );
+    expect(firstJobId).toBeTruthy();
+
+    // Duplicate submission with same singleton key while first is pending returns null
+    const secondJobId = await service.enqueue(
+      'test.explicit_singleton',
+      { docId: 'doc-101', attempt: 2 },
+      { singletonKey: key }
+    );
+    expect(secondJobId).toBeNull();
+
+    // Submission with different singleton key succeeds
+    const otherKey = `doc-ver-${Date.now()}-other`;
+    const thirdJobId = await service.enqueue(
+      'test.explicit_singleton',
+      { docId: 'doc-102' },
+      { singletonKey: otherKey }
+    );
+    expect(thirdJobId).toBeTruthy();
 
     await service.stop({ graceful: true, timeout: 3000 });
   });

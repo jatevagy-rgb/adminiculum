@@ -6,8 +6,8 @@
  * 2. Disabled mode behavior (jobService.isEnabled() === false, start() no-op)
  * 3. Enabled mode with missing database URL strictly throws startup error
  * 4. Enqueue error when service is not started
- * 5. ensureQueue error propagation and createdQueues tracking
- * 6. Worker registration atomicity, duplicate binding rejection, and failure rollback
+ * 5. ensureQueue error propagation, default 'standard' policy, and createdQueues tracking
+ * 6. Worker registration atomicity, duplicate binding rejection, and production start() failure rollback
  * 7. Stable queue policy determination
  */
 
@@ -117,7 +117,7 @@ describe('Job Foundation Unit Tests', () => {
   });
 
   describe('3. ensureQueue() Error Propagation & State Tracking', () => {
-    it('records queue in createdQueues on successful createQueue', async () => {
+    it('records queue in createdQueues on successful createQueue with default standard policy', async () => {
       const service = new JobService({ enabled: true, connectionString: 'postgres://localhost/test' });
       const mockCreateQueue = jest.fn().mockResolvedValue(undefined);
       (service as any).boss = { createQueue: mockCreateQueue };
@@ -126,7 +126,7 @@ describe('Job Foundation Unit Tests', () => {
 
       expect(mockCreateQueue).toHaveBeenCalledWith('doc.extract', {
         name: 'doc.extract',
-        policy: 'short',
+        policy: 'standard',
       });
       expect(service.getCreatedQueues()).toContain('doc.extract');
     });
@@ -235,65 +235,98 @@ describe('Job Foundation Unit Tests', () => {
       expect(service.getBoundQueues()).not.toContain('doc.fail_bind');
     });
 
-    it('rolls back startup and resources cleanly if any pre-registered worker fails to bind', async () => {
-      const service = new JobService({
-        enabled: true,
-        connectionString: 'postgres://localhost/test',
-      });
-
-      const handler1 = jest.fn().mockResolvedValue(true);
-      const handler2 = jest.fn().mockResolvedValue(true);
-
-      await service.registerWorker('queue.ok', handler1);
-      await service.registerWorker('queue.broken', handler2);
-
+    it('tests actual production start() rollback and resource cleanup when a worker fails to bind', async () => {
       const mockStop = jest.fn().mockResolvedValue(undefined);
       const mockStart = jest.fn().mockResolvedValue(undefined);
       const mockCreateQueue = jest.fn().mockResolvedValue(undefined);
       const mockWork = jest.fn().mockImplementation((queueName: string) => {
-        if (queueName === 'queue.broken') {
-          return Promise.reject(new Error('Failed to bind queue.broken worker'));
+        if (queueName === 'worker.b') {
+          return Promise.reject(new Error('Worker B bind failure'));
+        }
+        return Promise.resolve('worker-a-id');
+      });
+
+      const mockBoss = {
+        start: mockStart,
+        stop: mockStop,
+        createQueue: mockCreateQueue,
+        work: mockWork,
+        on: jest.fn(),
+      };
+
+      const fakeBossFactory = jest.fn().mockReturnValue(mockBoss);
+
+      const service = new JobService(
+        {
+          enabled: true,
+          connectionString: 'postgres://localhost/test',
+        },
+        fakeBossFactory
+      );
+
+      const handlerA = jest.fn().mockResolvedValue(true);
+      const handlerB = jest.fn().mockResolvedValue(true);
+
+      await service.registerWorker('worker.a', handlerA);
+      await service.registerWorker('worker.b', handlerB);
+
+      // Invoke the ACTUAL production start() without mocking or overriding it
+      await expect(service.start()).rejects.toThrow('Worker B bind failure');
+
+      expect(mockStart).toHaveBeenCalled();
+      expect(mockStop).toHaveBeenCalledWith({ graceful: false, timeout: 1000 });
+      expect(service.isStarted()).toBe(false);
+      expect(service.getBossInstance()).toBeNull();
+      expect(service.getBoundQueues()).toEqual([]);
+      expect(service.getCreatedQueues()).toEqual([]);
+    });
+
+    it('proves clean retry after failed startup without stale state blocking retry', async () => {
+      let shouldFail = true;
+      const mockStop = jest.fn().mockResolvedValue(undefined);
+      const mockStart = jest.fn().mockResolvedValue(undefined);
+      const mockCreateQueue = jest.fn().mockResolvedValue(undefined);
+      const mockWork = jest.fn().mockImplementation(() => {
+        if (shouldFail) {
+          return Promise.reject(new Error('Temporary worker bind failure'));
         }
         return Promise.resolve('worker-ok-id');
       });
 
-      // Mock PgBoss constructor behavior by overriding start
-      jest.spyOn(service as any, 'start').mockImplementation(async () => {
-        (service as any).boss = {
-          start: mockStart,
-          stop: mockStop,
-          createQueue: mockCreateQueue,
-          work: mockWork,
-          on: jest.fn(),
-        };
-
-        try {
-          await mockStart();
-          for (const [qName, { handler, options }] of (service as any).registeredWorkers.entries()) {
-            await (service as any).ensureQueue(qName);
-            await (service as any).bindWorker(qName, handler, options);
-            (service as any).boundQueues.add(qName);
-          }
-          (service as any).isRunning = true;
-        } catch (err) {
-          try {
-            await mockStop({ graceful: false, timeout: 1000 });
-          } finally {
-            (service as any).boss = null;
-            (service as any).boundQueues.clear();
-            (service as any).createdQueues.clear();
-            (service as any).isRunning = false;
-          }
-          throw err;
-        }
+      const createMockBoss = () => ({
+        start: mockStart,
+        stop: mockStop,
+        createQueue: mockCreateQueue,
+        work: mockWork,
+        on: jest.fn(),
       });
 
-      await expect(service.start()).rejects.toThrow('Failed to bind queue.broken worker');
+      const fakeBossFactory = jest.fn().mockImplementation(createMockBoss);
 
+      const service = new JobService(
+        {
+          enabled: true,
+          connectionString: 'postgres://localhost/test',
+        },
+        fakeBossFactory
+      );
+
+      await service.registerWorker('retryable.queue', jest.fn());
+
+      // First attempt fails and rolls back cleanly
+      await expect(service.start()).rejects.toThrow('Temporary worker bind failure');
       expect(service.isStarted()).toBe(false);
       expect(service.getBoundQueues()).toEqual([]);
-      expect(service.getBossInstance()).toBeNull();
-      expect(mockStop).toHaveBeenCalled();
+
+      // Second attempt succeeds
+      shouldFail = false;
+      await expect(service.start()).resolves.toBeUndefined();
+      expect(service.isStarted()).toBe(true);
+      expect(service.getBoundQueues()).toContain('retryable.queue');
+      expect(service.getCreatedQueues()).toContain('retryable.queue');
+
+      await service.stop();
+      expect(service.isStarted()).toBe(false);
     });
 
     it('resets worker binding tracking upon clean stop', async () => {
@@ -318,6 +351,23 @@ describe('Job Foundation Unit Tests', () => {
   });
 
   describe('5. Stable Queue Policy', () => {
+    it('defaults queue policy to standard when no special policy is configured', async () => {
+      const service = new JobService({ enabled: true, connectionString: 'postgres://localhost/test' });
+      const mockCreateQueue = jest.fn().mockResolvedValue(undefined);
+      const mockSend = jest.fn().mockResolvedValue('job-id-1');
+      (service as any).boss = {
+        createQueue: mockCreateQueue,
+        send: mockSend,
+      };
+      (service as any).isRunning = true;
+
+      await service.enqueue('document.extract', { docId: 'doc-123' });
+      expect(mockCreateQueue).toHaveBeenCalledWith('document.extract', {
+        name: 'document.extract',
+        policy: 'standard',
+      });
+    });
+
     it('preserves explicitly registered queue policy regardless of enqueue parameters', async () => {
       const service = new JobService({ enabled: true, connectionString: 'postgres://localhost/test' });
       const mockCreateQueue = jest.fn().mockResolvedValue(undefined);
@@ -328,13 +378,13 @@ describe('Job Foundation Unit Tests', () => {
       };
       (service as any).isRunning = true;
 
-      service.registerQueue('custom.queue', { policy: 'stately' });
+      service.registerQueue('custom.queue', { policy: 'short' });
 
       // First enqueue without singletonKey
       await service.enqueue('custom.queue', { msg: 'normal' });
       expect(mockCreateQueue).toHaveBeenCalledWith('custom.queue', {
         name: 'custom.queue',
-        policy: 'stately',
+        policy: 'short',
       });
 
       // Second enqueue with singletonKey

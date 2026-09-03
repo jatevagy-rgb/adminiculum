@@ -65,3 +65,6 @@ export interface JobServiceConfig {
   defaultRetentionSeconds?: number;
   clockMonitorIntervalSeconds?: number;
 }
+
+export type PgBossFactory = (options: any) => any;
+
