@@ -387,9 +387,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # This mode must remain limited to Microsoft.Web/sites/read metadata
-          # and a public readiness request. It never reads app settings, publish
-          # profiles, deployment credentials, Kudu, or scanner secrets.
+          # This mode must remain limited to ARM resource metadata and a public
+          # readiness request. It never reads app settings, publish profiles,
+          # deployment credentials, Kudu, or scanner secrets.
           SCANNER_APP='adminiculum-malware-scanner-01'
           ACTIVE_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"
           [[ "$ACTIVE_SUBSCRIPTION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || {
@@ -400,6 +400,38 @@ jobs:
           }
           echo "ACTIVE_SUBSCRIPTION_ID=${ACTIVE_SUBSCRIPTION_ID}"
           echo 'SUBSCRIPTION_ID_SOURCE=ACTIVE_AZURE_CONTEXT'
+          KEY_VAULTS_URL="https://management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01"
+          set +e
+          az rest --method get --url "${KEY_VAULTS_URL}" --output json > scanner-key-vaults.json
+          KEY_VAULT_ENUMERATION_STATUS=$?
+          set -e
+          if [ "$KEY_VAULT_ENUMERATION_STATUS" != "0" ]; then
+            echo 'KEY_VAULT_ENUMERATION=FAIL'
+            echo 'KEY_VAULT_COUNT=UNPROVABLE'
+            echo 'SCANNER_KEY_VAULT_ATTRIBUTION=UNPROVABLE'
+            echo 'SCANNER_KEY_VAULT_NAME=UNPROVABLE'
+          else
+            python3 - <<'PY'
+          import json
+
+          vaults = json.load(open('scanner-key-vaults.json')).get('value') or []
+          print('KEY_VAULT_ENUMERATION=PASS')
+          print(f'KEY_VAULT_COUNT={len(vaults)}')
+          for vault in vaults:
+              print(f'KEY_VAULT_NAME={vault.get("name") or "UNPROVABLE"}')
+              print(f'KEY_VAULT_RESOURCE_ID={vault.get("id") or "UNPROVABLE"}')
+              print(f'KEY_VAULT_LOCATION={vault.get("location") or "UNPROVABLE"}')
+          if len(vaults) == 1:
+              print('SCANNER_KEY_VAULT_ATTRIBUTION=PROVEN')
+              print(f'SCANNER_KEY_VAULT_NAME={vaults[0].get("name") or "UNPROVABLE"}')
+          elif vaults:
+              print('SCANNER_KEY_VAULT_ATTRIBUTION=AMBIGUOUS')
+              print('SCANNER_KEY_VAULT_NAME=UNPROVABLE')
+          else:
+              print('SCANNER_KEY_VAULT_ATTRIBUTION=NOT_FOUND')
+              print('SCANNER_KEY_VAULT_NAME=UNPROVABLE')
+          PY
+          fi
           SCANNER_RESOURCE_URL="https://management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${SCANNER_APP}?api-version=2024-04-01"
           set +e
           az rest --method get --url "${SCANNER_RESOURCE_URL}" --output json > scanner-runtime-app.json
