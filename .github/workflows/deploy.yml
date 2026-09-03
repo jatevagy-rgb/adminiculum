@@ -400,6 +400,30 @@ jobs:
           }
           echo "ACTIVE_SUBSCRIPTION_ID=${ACTIVE_SUBSCRIPTION_ID}"
           echo 'SUBSCRIPTION_ID_SOURCE=ACTIVE_AZURE_CONTEXT'
+          BACKEND_RESOURCE_URL="https://management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${BACKEND_APP}?api-version=2024-04-01"
+          set +e
+          az rest --method get --url "${BACKEND_RESOURCE_URL}" --output json > backend-runtime-app.json
+          BACKEND_RESOURCE_STATUS=$?
+          set -e
+          if [ "$BACKEND_RESOURCE_STATUS" != "0" ]; then
+            echo 'BACKEND_OUTBOUND_IPS=UNPROVABLE'
+            echo 'BACKEND_POSSIBLE_OUTBOUND_IPS=UNPROVABLE'
+            echo 'BACKEND_VNET_INTEGRATION=UNPROVABLE'
+            echo 'BACKEND_SUBNET_ID=UNPROVABLE'
+          else
+            python3 - <<'PY'
+          import json
+
+          app = json.load(open('backend-runtime-app.json')).get('properties') or {}
+          outbound = str(app.get('outboundIpAddresses') or '').strip()
+          possible = str(app.get('possibleOutboundIpAddresses') or '').strip()
+          subnet = str(app.get('virtualNetworkSubnetId') or '').strip()
+          print(f'BACKEND_OUTBOUND_IPS={outbound or "UNPROVABLE"}')
+          print(f'BACKEND_POSSIBLE_OUTBOUND_IPS={possible or "UNPROVABLE"}')
+          print(f'BACKEND_VNET_INTEGRATION={"YES" if subnet else "NO"}')
+          print(f'BACKEND_SUBNET_ID={subnet or "NONE"}')
+          PY
+          fi
           KEY_VAULTS_URL="https://management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.KeyVault/vaults?api-version=2023-07-01"
           set +e
           az rest --method get --url "${KEY_VAULTS_URL}" --output json > scanner-key-vaults.json
@@ -430,6 +454,84 @@ jobs:
           else:
               print('SCANNER_KEY_VAULT_ATTRIBUTION=NOT_FOUND')
               print('SCANNER_KEY_VAULT_NAME=UNPROVABLE')
+          PY
+          fi
+          SCANNER_ACCESS_RESTRICTIONS_URL="https://management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${SCANNER_APP}/config/web?api-version=2024-04-01"
+          set +e
+          az rest --method get --url "${SCANNER_ACCESS_RESTRICTIONS_URL}" --output json > scanner-access-restrictions.json
+          SCANNER_ACCESS_RESTRICTIONS_STATUS=$?
+          set -e
+          if [ "$SCANNER_ACCESS_RESTRICTIONS_STATUS" != "0" ]; then
+            echo 'SCANNER_ACCESS_RESTRICTIONS_READ=FAIL'
+            echo 'SCANNER_DEFAULT_ACTION=UNPROVABLE'
+            echo 'SCANNER_RULE_COUNT=UNPROVABLE'
+            echo 'BACKEND_EGRESS_MATCHES_SCANNER_ALLOWLIST=UNPROVABLE'
+          elif [ "$BACKEND_RESOURCE_STATUS" != "0" ]; then
+            echo 'SCANNER_ACCESS_RESTRICTIONS_READ=PASS'
+            echo 'BACKEND_EGRESS_MATCHES_SCANNER_ALLOWLIST=UNPROVABLE'
+          else
+            python3 - <<'PY'
+          import ipaddress
+          import json
+
+          backend = json.load(open('backend-runtime-app.json')).get('properties') or {}
+          scanner = json.load(open('scanner-access-restrictions.json')).get('properties') or {}
+          rules = scanner.get('ipSecurityRestrictions') or []
+          default_action = str(scanner.get('ipSecurityRestrictionsDefaultAction') or 'UNPROVABLE').upper()
+          backend_ips = [item.strip() for item in str(backend.get('outboundIpAddresses') or '').split(',') if item.strip()]
+          backend_subnet = str(backend.get('virtualNetworkSubnetId') or '').strip().lower()
+
+          print('SCANNER_ACCESS_RESTRICTIONS_READ=PASS')
+          print(f'SCANNER_DEFAULT_ACTION={default_action}')
+          print(f'SCANNER_RULE_COUNT={len(rules)}')
+          matched = False
+          comparable = bool(backend_ips or backend_subnet)
+          for rule in rules:
+              action = str(rule.get('action') or 'UNPROVABLE').upper()
+              name = str(rule.get('name') or 'UNPROVABLE')
+              priority = str(rule.get('priority') or 'UNPROVABLE')
+              cidrs = [item.strip() for item in str(rule.get('ipAddress') or '').split(',') if item.strip()]
+              subnet = str(rule.get('vnetSubnetResourceId') or '').strip()
+              service_tag = str(rule.get('tag') or '').strip()
+              if cidrs:
+                  source_type = 'IP_OR_CIDR'
+                  source = ','.join(cidrs)
+              elif subnet:
+                  source_type = 'VNET_SUBNET'
+                  source = subnet
+              elif service_tag:
+                  source_type = 'SERVICE_TAG'
+                  source = service_tag
+              else:
+                  source_type = 'UNPROVABLE'
+                  source = 'UNPROVABLE'
+              print(f'RULE_NAME={name}')
+              print(f'RULE_ACTION={action}')
+              print(f'RULE_PRIORITY={priority}')
+              print(f'RULE_SOURCE_TYPE={source_type}')
+              print(f'RULE_SOURCE_SAFE_SUMMARY={source}')
+              if action != 'ALLOW':
+                  continue
+              if backend_subnet and subnet and backend_subnet == subnet.lower():
+                  matched = True
+              for backend_ip in backend_ips:
+                  try:
+                      address = ipaddress.ip_address(backend_ip)
+                  except ValueError:
+                      continue
+                  for cidr in cidrs:
+                      try:
+                          if address in ipaddress.ip_network(cidr, strict=False):
+                              matched = True
+                      except ValueError:
+                          continue
+          if matched:
+              result = 'YES'
+          elif default_action == 'DENY' and comparable:
+              result = 'NO'
+          else:
+              result = 'UNPROVABLE'
+          print(f'BACKEND_EGRESS_MATCHES_SCANNER_ALLOWLIST={result}')
           PY
           fi
           SCANNER_RESOURCE_URL="https://management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${SCANNER_APP}?api-version=2024-04-01"
