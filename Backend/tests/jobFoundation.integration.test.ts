@@ -199,7 +199,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
   });
 
   it('preserves state across restart', async () => {
-    // 1. Start first instance, enqueue a future job
+    // 1. Start first instance, enqueue a job without registering a worker on service1
     const service1 = new JobService({
       enabled: true,
       connectionString: databaseUrl,
@@ -208,13 +208,12 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
     });
     await service1.start();
 
-    const futureDate = new Date(Date.now() + 1000); // 1 second in future
-    const jobId = await service1.enqueue('test.restart', { token: 'persist-123' }, { startAfter: futureDate });
+    const jobId = await service1.enqueue('test.restart', { token: 'persist-123' });
     expect(jobId).toBeTruthy();
 
     await service1.stop({ graceful: true, timeout: 3000 });
 
-    // 2. Start second instance, worker receives persisted job
+    // 2. Start second instance with worker registered, receives persisted job
     const service2 = new JobService({
       enabled: true,
       connectionString: databaseUrl,
