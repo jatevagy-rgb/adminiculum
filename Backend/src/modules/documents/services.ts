@@ -315,7 +315,8 @@ class DocumentsService {
       status: doc.folder,
       spWebUrl: doc.spPath,
       createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt
+      updatedAt: doc.updatedAt,
+      securityScanStatus: doc.versions?.[0]?.securityScanStatus || 'CLEAN'
     }));
   }
 
