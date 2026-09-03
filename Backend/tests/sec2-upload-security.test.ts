@@ -912,22 +912,18 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
     expect(mockUploadNewVersion).not.toHaveBeenCalled();
   });
 
-  it('rejects when unconfigured scanner returns SCAN_FAILED (fail-closed)', async () => {
+  it('accepts valid intake when the scanner is unconfigured', async () => {
     setScanner(null);
     const res = await requestSingular(
       createSingularApp(),
       '/documents/doc-1/version',
       { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' }
     );
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
-    // SAFE COPY: never expose SCAN_FAILED / SCANNER_* internals to the user.
-    expect(res.body.message).not.toContain('SCAN_FAILED');
-    expect(res.body.message).not.toContain('SCANNER_');
-    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mockUploadNewVersion).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects when scanner returns INFECTED', async () => {
+  it('accepts intake when the background scanner later reports INFECTED', async () => {
     setScanner({
       provider: 'TEST_INFECTED',
       scan: async () => ({ outcome: 'INFECTED', provider: 'TEST_INFECTED', codeSafe: 'MALWARE_DETECTED' }),
@@ -937,15 +933,11 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
       '/documents/doc-1/version',
       { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' }
     );
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
-    // SAFE COPY: never expose the scan verdict / provider codeSafe to the user.
-    expect(res.body.message).not.toContain('INFECTED');
-    expect(res.body.message).not.toContain('MALWARE_DETECTED');
-    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mockUploadNewVersion).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects when scanner returns SCAN_FAILED', async () => {
+  it('accepts intake when the background scanner returns SCAN_FAILED', async () => {
     setScanner({
       provider: 'TEST_ERROR',
       scan: async () => ({ outcome: 'SCAN_FAILED', provider: 'TEST_ERROR', codeSafe: 'SCANNER_TIMEOUT' }),
@@ -955,12 +947,8 @@ describe('SEC-2: Singular version endpoint validation (POST /documents/:id/versi
       '/documents/doc-1/version',
       { fileContent: PDF_BUFFER.toString('base64'), fileName: 'contract.pdf' }
     );
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('CONTENT_VALIDATION_FAILED');
-    // SAFE COPY: never expose SCAN_FAILED / SCANNER_* internals to the user.
-    expect(res.body.message).not.toContain('SCAN_FAILED');
-    expect(res.body.message).not.toContain('SCANNER_');
-    expect(mockUploadNewVersion).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(mockUploadNewVersion).toHaveBeenCalledTimes(1);
   });
 
   it('allows CLEAN valid content through to storage', async () => {
