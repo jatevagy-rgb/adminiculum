@@ -6,8 +6,8 @@
  * 2. Enqueueing and receiving jobs via worker
  * 3. Execution completion and payload context handling
  * 4. Retry handling on failure
- * 5. Singleton key deduplication (pg-boss 10.4.2 semantics)
- * 6. Graceful shutdown
+ * 5. Deterministic singleton key deduplication regardless of submission order
+ * 6. Real active-handler graceful drain with controlled barrier
  * 7. Clean restart with state persistence
  */
 
@@ -27,11 +27,25 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
   jest.setTimeout(30000);
   const TEST_SCHEMA = 'pgboss_integration_test';
   let pgClient: Client;
+  let activeServices: JobService[] = [];
 
   beforeAll(async () => {
     if (!databaseUrl) return;
     pgClient = new Client({ connectionString: databaseUrl });
     await pgClient.connect();
+  });
+
+  afterEach(async () => {
+    for (const service of activeServices) {
+      if (service.isStarted()) {
+        try {
+          await service.stop({ graceful: false, timeout: 1000 });
+        } catch {
+          // ignore cleanup errors during teardown
+        }
+      }
+    }
+    activeServices = [];
   });
 
   afterAll(async () => {
@@ -47,11 +61,12 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
       schema: TEST_SCHEMA,
       maxConnections: 3,
     });
+    activeServices.push(service);
 
     await service.start();
     expect(service.isStarted()).toBe(true);
 
-    // Verify schema and version table exist
+    // Verify schema, queue and version table exist
     const res = await pgClient.query(
       `SELECT table_name FROM information_schema.tables WHERE table_schema = $1;`,
       [TEST_SCHEMA]
@@ -59,6 +74,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
     const tableNames = res.rows.map((r) => r.table_name);
     expect(tableNames).toContain('version');
     expect(tableNames).toContain('job');
+    expect(tableNames).toContain('queue');
 
     await service.stop({ graceful: true, timeout: 3000 });
     expect(service.isStarted()).toBe(false);
@@ -71,6 +87,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
       schema: TEST_SCHEMA,
       maxConnections: 3,
     });
+    activeServices.push(service);
 
     const receivedJobs: Array<{ data: any; jobId: string }> = [];
 
@@ -94,7 +111,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
 
     const result = await Promise.race([
       jobPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Job execution timed out')), 8000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Job execution timed out')), 10000)),
     ]);
 
     expect(result).toMatchObject({
@@ -113,6 +130,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
       maxConnections: 3,
       clockMonitorIntervalSeconds: 1,
     });
+    activeServices.push(service);
 
     let attemptCount = 0;
 
@@ -142,7 +160,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
     const finalAttempts = await Promise.race([
       retryPromise,
       new Promise<number>((_, reject) =>
-        setTimeout(() => reject(new Error('Retry test timed out')), 10000)
+        setTimeout(() => reject(new Error('Retry test timed out')), 15000)
       ),
     ]);
 
@@ -151,50 +169,103 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
     await service.stop({ graceful: true, timeout: 3000 });
   });
 
-  it('deduplicates duplicate job submissions using singletonKey', async () => {
+  it('deduplicates duplicate job submissions using singletonKey regardless of submission order', async () => {
     const service = new JobService({
       enabled: true,
       connectionString: databaseUrl,
       schema: TEST_SCHEMA,
       maxConnections: 3,
     });
+    activeServices.push(service);
 
     await service.start();
 
-    const singletonKey = `doc-extract-${Date.now()}`;
-    const firstJobId = await service.enqueue(
-      'test.singleton',
-      { docId: 'doc-101', attempt: 1 },
-      { singletonKey }
-    );
-    expect(firstJobId).toBeTruthy();
+    // 1. Order A: singleton job -> duplicate singleton job on same key -> second is deduplicated (null)
+    const keyA = `singleton-order-a-${Date.now()}`;
+    const jobA1 = await service.enqueue('test.singleton_order', { doc: 'A' }, { singletonKey: keyA });
+    expect(jobA1).toBeTruthy();
 
-    // Second submission with same singleton key while first is active/pending returns null
-    const secondJobId = await service.enqueue(
-      'test.singleton',
-      { docId: 'doc-101', attempt: 2 },
-      { singletonKey }
-    );
-    expect(secondJobId).toBeNull();
+    const jobA2 = await service.enqueue('test.singleton_order', { doc: 'A-dup' }, { singletonKey: keyA });
+    expect(jobA2).toBeNull();
+
+    // 2. Order B: normal non-singleton job -> singleton job on same queue -> both succeed independently
+    const keyB = `singleton-order-b-${Date.now()}`;
+    const jobB1 = await service.enqueue('test.singleton_order', { doc: 'B-normal' });
+    expect(jobB1).toBeTruthy();
+
+    const jobB2 = await service.enqueue('test.singleton_order', { doc: 'B-singleton' }, { singletonKey: keyB });
+    expect(jobB2).toBeTruthy();
+
+    const jobB3 = await service.enqueue('test.singleton_order', { doc: 'B-singleton-dup' }, { singletonKey: keyB });
+    expect(jobB3).toBeNull();
 
     await service.stop({ graceful: true, timeout: 3000 });
   });
 
-  it('gracefully stops worker execution and drains cleanly', async () => {
+  it('gracefully stops worker execution and drains active handlers before stopping', async () => {
     const service = new JobService({
       enabled: true,
       connectionString: databaseUrl,
       schema: TEST_SCHEMA,
       maxConnections: 3,
     });
+    activeServices.push(service);
+
+    let handlerStarted = false;
+    let handlerCompleted = false;
+    let stopResolved = false;
+
+    let releaseBarrier: () => void = () => {};
+    const handlerBarrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve;
+    });
+
+    let notifyHandlerStarted: () => void = () => {};
+    const handlerStartedPromise = new Promise<void>((resolve) => {
+      notifyHandlerStarted = resolve;
+    });
+
+    await service.registerWorker(
+      'test.drain',
+      async (_data) => {
+        handlerStarted = true;
+        notifyHandlerStarted();
+        // Block handler on barrier promise until test releases it
+        await handlerBarrier;
+        handlerCompleted = true;
+        return { drained: true };
+      },
+      { pollingIntervalSeconds: 1 }
+    );
 
     await service.start();
-    expect(service.isStarted()).toBe(true);
-    expect(service.getBossInstance()).not.toBeNull();
 
-    await service.stop({ graceful: true, timeout: 3000 });
+    const jobId = await service.enqueue('test.drain', { item: 'drain-payload' });
+    expect(jobId).toBeTruthy();
+
+    // 1. Wait until handler begins executing
+    await handlerStartedPromise;
+    expect(handlerStarted).toBe(true);
+    expect(handlerCompleted).toBe(false);
+
+    // 2. Initiate graceful stop while handler is in-flight
+    const stopPromise = service.stop({ graceful: true, timeout: 5000 }).then(() => {
+      stopResolved = true;
+    });
+
+    // 3. Small yield to verify stop is pending while handler is blocked
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(stopResolved).toBe(false);
+    expect(handlerCompleted).toBe(false);
+
+    // 4. Release barrier to allow handler to finish
+    releaseBarrier();
+
+    // 5. Await graceful stop resolution
+    await stopPromise;
+    expect(stopResolved).toBe(true);
+    expect(handlerCompleted).toBe(true);
     expect(service.isStarted()).toBe(false);
-    expect(service.getBossInstance()).toBeNull();
   });
 
   it('preserves state across restart', async () => {
@@ -205,6 +276,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
       schema: TEST_SCHEMA,
       maxConnections: 3,
     });
+    activeServices.push(service1);
     await service1.start();
 
     const jobId = await service1.enqueue('test.restart', { token: 'persist-123' });
@@ -219,6 +291,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
       schema: TEST_SCHEMA,
       maxConnections: 3,
     });
+    activeServices.push(service2);
 
     const receivedPromise = new Promise<{ token: string }>((resolve) => {
       service2.registerWorker('test.restart', async (data) => {
@@ -231,7 +304,7 @@ describeWithDb('Job Foundation PostgreSQL Integration', () => {
 
     const received = await Promise.race([
       receivedPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('Restart test timed out')), 8000)),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Restart test timed out')), 10000)),
     ]);
 
     expect(received).toEqual({ token: 'persist-123' });

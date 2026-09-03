@@ -35,9 +35,22 @@ export type JobHandler<TData = any, TResult = any> = (
   context: JobContext
 ) => Promise<TResult>;
 
+export type QueuePolicy = 'standard' | 'short' | 'singleton' | 'stately';
+
+export interface QueueDefinition {
+  policy?: QueuePolicy;
+  retryLimit?: number;
+  retryDelay?: number;
+  retryBackoff?: boolean;
+  expireInSeconds?: number;
+  retentionMinutes?: number;
+  deadLetter?: string;
+}
+
 export interface WorkerOptions {
   batchSize?: number;
   pollingIntervalSeconds?: number;
+  policy?: QueuePolicy;
 }
 
 export interface JobServiceConfig {

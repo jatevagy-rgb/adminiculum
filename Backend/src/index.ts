@@ -12,6 +12,7 @@ import yaml from 'js-yaml';
 import { createCorsOptions } from './config/cors';
 import { sanitizeUrlForLog } from './config/logRedaction';
 import { loadReleaseIdentity } from './releaseIdentity';
+import { AppLifecycle } from './lifecycle';
 
 type StartupConfigHealthStatus = {
   checkedAt: string;
@@ -356,86 +357,31 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 import http from 'http';
 import { jobService } from './modules/jobs';
 
-let server: http.Server | null = null;
-let isShuttingDown = false;
-
-export async function bootstrap(port: number = PORT): Promise<http.Server> {
-  // 1. If background jobs are enabled, initialize pg-boss BEFORE accepting traffic
-  if (jobService.isEnabled()) {
-    try {
-      await jobService.start();
-    } catch (err) {
-      console.error('[Startup] FATAL: Failed to start background job service:', err);
-      throw err;
-    }
-  }
-
-  // 2. Start HTTP listener only after job service (if enabled) is ready
-  return new Promise<http.Server>((resolve, reject) => {
-    const s = app.listen(port, '0.0.0.0', () => {
-      console.log(
-        `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${port}`,
+export const lifecycle = new AppLifecycle({
+  app,
+  jobService,
+  port: PORT,
+  onStartupValidation: () => {
+    startupConfigHealth = evaluateStartupConfigHealth();
+    if (startupConfigHealth.status === 'healthy') {
+      console.log(`[Startup Validation] PASS credentialSet=${startupConfigHealth.matchedCredentialSet}`);
+    } else {
+      console.warn(
+        `[Startup Validation] DEGRADED missing=${startupConfigHealth.missing.join(' | ')}`,
       );
-
-      startupConfigHealth = evaluateStartupConfigHealth();
-      if (startupConfigHealth.status === 'healthy') {
-        console.log(`[Startup Validation] PASS credentialSet=${startupConfigHealth.matchedCredentialSet}`);
-      } else {
-        console.warn(
-          `[Startup Validation] DEGRADED missing=${startupConfigHealth.missing.join(' | ')}`,
-        );
-      }
-      if (isProduction) {
-        console.log(
-          `[Startup Validation] CORS allowlist entries=${productionAllowedOrigins.length}`,
-        );
-      } else {
-        console.log('[Startup Validation] CORS mode=development (localhost origins allowed)');
-      }
-
-      console.log(`🚀 Adminiculum API V2 running on http://localhost:${port}`);
-      resolve(s);
-    });
-
-    s.on('error', (err) => {
-      reject(err);
-    });
-
-    server = s;
-  });
-}
-
-export const handleGracefulShutdown = async (signal: string): Promise<void> => {
-  if (isShuttingDown) {
-    console.log(`[Shutdown] Already shutting down. Ignoring duplicate signal: ${signal}`);
-    return;
-  }
-  isShuttingDown = true;
-  console.log(`[Shutdown] Received ${signal}, closing HTTP server to reject new connections...`);
-
-  const forceExitTimer = setTimeout(() => {
-    console.error('[Shutdown] Forcefully terminating process after shutdown timeout.');
-    process.exit(1);
-  }, 10000);
-  forceExitTimer.unref();
-
-  if (server) {
-    server.close(async () => {
-      console.log('[Shutdown] HTTP server closed, draining background jobs...');
-      if (jobService.isStarted()) {
-        await jobService.stop({ graceful: true, timeout: 5000 });
-      }
-      clearTimeout(forceExitTimer);
-      process.exit(0);
-    });
-  } else {
-    if (jobService.isStarted()) {
-      await jobService.stop({ graceful: true, timeout: 5000 });
     }
-    clearTimeout(forceExitTimer);
-    process.exit(0);
-  }
-};
+    if (isProduction) {
+      console.log(
+        `[Startup Validation] CORS allowlist entries=${productionAllowedOrigins.length}`,
+      );
+    } else {
+      console.log('[Startup Validation] CORS mode=development (localhost origins allowed)');
+    }
+  },
+});
+
+export const bootstrap = (port?: number) => lifecycle.bootstrap(port);
+export const handleGracefulShutdown = (signal: string) => lifecycle.handleGracefulShutdown(signal);
 
 process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));

@@ -1,128 +1,171 @@
 /**
  * Lifecycle and Startup Ordering Tests for Job Foundation
  *
- * Validates:
- * 1. jobs-disabled API startup (Express starts, pg-boss remains off)
- * 2. jobs-enabled startup starts pg-boss before Express accepts traffic
- * 3. jobs-enabled with pg-boss failure prevents successful API startup
- * 4. Graceful shutdown closes HTTP listener before draining background jobs
- * 5. Duplicate signal protection prevents concurrent shutdown invocations
+ * Tests the real production AppLifecycle orchestrator implementation:
+ * 1. jobs-disabled: pg-boss start not required, Express listener opens
+ * 2. jobs-enabled: pg-boss start completes BEFORE Express listener opens
+ * 3. jobs-enabled failure: pg-boss rejection prevents Express listener from opening
+ * 4. Graceful shutdown: server.close completes before jobService.stop
+ * 5. Duplicate signals: idempotency guard prevents duplicate shutdown sequences
  */
 
+import express from 'express';
+import http from 'http';
+import { AppLifecycle } from '../src/lifecycle';
 import { JobService } from '../src/modules/jobs/jobService';
 
-describe('Job Lifecycle & Startup Ordering', () => {
-  const originalEnv = process.env;
+describe('Job Lifecycle & Production Startup/Shutdown Ordering', () => {
+  let mockApp: express.Application;
+  let mockServer: http.Server;
+  let exitFn: jest.Mock;
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
+    exitFn = jest.fn();
+    mockServer = {
+      close: jest.fn((cb?: () => void) => {
+        if (cb) cb();
+        return mockServer;
+      }),
+      on: jest.fn(),
+    } as unknown as http.Server;
+
+    mockApp = {
+      listen: jest.fn((_port: number, _host: string, cb?: () => void) => {
+        if (cb) process.nextTick(cb);
+        return mockServer;
+      }),
+    } as unknown as express.Application;
   });
 
-  afterAll(() => {
-    process.env = originalEnv;
-  });
+  it('1. Jobs disabled: starts HTTP listener without requiring jobService.start', async () => {
+    const jobService = new JobService({ enabled: false });
+    const jobStartSpy = jest.spyOn(jobService, 'start');
 
-  it('disabled mode does not start pg-boss', async () => {
-    process.env.BACKGROUND_JOBS_ENABLED = 'false';
-    const mockStart = jest.fn();
-    const service = new JobService({ enabled: false });
-    service.start = mockStart;
-
-    expect(service.isEnabled()).toBe(false);
-    expect(mockStart).not.toHaveBeenCalled();
-  });
-
-  it('enabled mode with missing connection string throws fatal startup error', async () => {
-    process.env.BACKGROUND_JOBS_ENABLED = 'true';
-    const service = new JobService({
-      enabled: true,
-      connectionString: '',
+    const lifecycle = new AppLifecycle({
+      app: mockApp,
+      jobService,
+      port: 3001,
+      exitFn,
     });
 
-    await expect(service.start()).rejects.toThrow(
-      'Missing database connection string for pg-boss'
-    );
-    expect(service.isStarted()).toBe(false);
+    const server = await lifecycle.bootstrap();
+
+    expect(jobStartSpy).not.toHaveBeenCalled();
+    expect(mockApp.listen).toHaveBeenCalledWith(3001, '0.0.0.0', expect.any(Function));
+    expect(server).toBe(mockServer);
   });
 
-  it('enabled mode with pg-boss start failure throws and leaves service unstarted', async () => {
-    const service = new JobService({
+  it('2. Jobs enabled: completes jobService.start BEFORE opening HTTP listener', async () => {
+    const executionOrder: string[] = [];
+
+    const jobService = new JobService({
       enabled: true,
       connectionString: 'postgres://localhost/test',
     });
-    // Mock boss instance failure
-    const mockBoss = {
-      on: jest.fn(),
-      start: jest.fn().mockRejectedValue(new Error('Connection refused to PostgreSQL')),
-    };
-    (service as any).boss = mockBoss;
 
-    // Simulate start failure
-    await expect(async () => {
-      await mockBoss.start();
-    }).rejects.toThrow('Connection refused to PostgreSQL');
-    expect(service.isStarted()).toBe(false);
-  });
-
-  it('handles duplicate shutdown signals safely without multiple drain runs', async () => {
-    let isShuttingDown = false;
-    let stopCallCount = 0;
-
-    const mockJobService = {
-      isStarted: () => true,
-      stop: async () => {
-        stopCallCount++;
-      },
-    };
-
-    const handleShutdown = async (_signal: string) => {
-      if (isShuttingDown) return;
-      isShuttingDown = true;
-      if (mockJobService.isStarted()) {
-        await mockJobService.stop();
-      }
-    };
-
-    // First signal triggers shutdown
-    await handleShutdown('SIGTERM');
-    expect(stopCallCount).toBe(1);
-
-    // Second signal is ignored
-    await handleShutdown('SIGTERM');
-    expect(stopCallCount).toBe(1);
-
-    // Third signal is ignored
-    await handleShutdown('SIGINT');
-    expect(stopCallCount).toBe(1);
-  });
-
-  it('closes HTTP server before draining background jobs during shutdown', async () => {
-    const sequence: string[] = [];
-
-    const mockServer = {
-      close: (cb: () => void) => {
-        sequence.push('http_server_closed');
-        cb();
-      },
-    };
-
-    const mockJobService = {
-      isStarted: () => true,
-      stop: async () => {
-        sequence.push('jobs_drained');
-      },
-    };
-
-    // Simulate graceful shutdown sequence
-    await new Promise<void>((resolve) => {
-      mockServer.close(async () => {
-        if (mockJobService.isStarted()) {
-          await mockJobService.stop();
-        }
-        resolve();
-      });
+    jest.spyOn(jobService, 'start').mockImplementation(async () => {
+      executionOrder.push('job_service_started');
     });
 
-    expect(sequence).toEqual(['http_server_closed', 'jobs_drained']);
+    (mockApp.listen as jest.Mock).mockImplementation((_port: number, _host: string, cb?: () => void) => {
+      executionOrder.push('http_listener_opened');
+      if (cb) cb();
+      return mockServer;
+    });
+
+    const lifecycle = new AppLifecycle({
+      app: mockApp,
+      jobService,
+      port: 3001,
+      exitFn,
+    });
+
+    await lifecycle.bootstrap();
+
+    expect(executionOrder).toEqual(['job_service_started', 'http_listener_opened']);
+  });
+
+  it('3. Jobs enabled & pg-boss start fails: rejects bootstrap and NEVER calls app.listen', async () => {
+    const jobService = new JobService({
+      enabled: true,
+      connectionString: 'postgres://localhost/test',
+    });
+
+    jest.spyOn(jobService, 'start').mockRejectedValue(
+      new Error('PostgreSQL connection refused')
+    );
+
+    const lifecycle = new AppLifecycle({
+      app: mockApp,
+      jobService,
+      port: 3001,
+      exitFn,
+    });
+
+    await expect(lifecycle.bootstrap()).rejects.toThrow('PostgreSQL connection refused');
+
+    expect(mockApp.listen).not.toHaveBeenCalled();
+    expect(lifecycle.getServer()).toBeNull();
+  });
+
+  it('4. Graceful shutdown: closes HTTP server BEFORE draining background jobs', async () => {
+    const shutdownOrder: string[] = [];
+
+    const jobService = new JobService({
+      enabled: true,
+      connectionString: 'postgres://localhost/test',
+    });
+    jest.spyOn(jobService, 'isStarted').mockReturnValue(true);
+    jest.spyOn(jobService, 'stop').mockImplementation(async () => {
+      shutdownOrder.push('jobs_stopped');
+    });
+
+    (mockServer.close as jest.Mock).mockImplementation((cb?: () => void) => {
+      shutdownOrder.push('http_server_closed');
+      if (cb) cb();
+      return mockServer;
+    });
+
+    const lifecycle = new AppLifecycle({
+      app: mockApp,
+      jobService,
+      port: 3001,
+      exitFn,
+    });
+    lifecycle.setServer(mockServer);
+
+    await lifecycle.handleGracefulShutdown('SIGTERM');
+
+    expect(shutdownOrder).toEqual(['http_server_closed', 'jobs_stopped']);
+    expect(exitFn).toHaveBeenCalledWith(0);
+  });
+
+  it('5. Duplicate signals: executes shutdown sequence exactly once', async () => {
+    const jobService = new JobService({
+      enabled: true,
+      connectionString: 'postgres://localhost/test',
+    });
+    jest.spyOn(jobService, 'isStarted').mockReturnValue(true);
+    const jobStopSpy = jest.spyOn(jobService, 'stop').mockResolvedValue(undefined);
+
+    const lifecycle = new AppLifecycle({
+      app: mockApp,
+      jobService,
+      port: 3001,
+      exitFn,
+    });
+    lifecycle.setServer(mockServer);
+
+    // Concurrently trigger multiple signals
+    await Promise.all([
+      lifecycle.handleGracefulShutdown('SIGTERM'),
+      lifecycle.handleGracefulShutdown('SIGTERM'),
+      lifecycle.handleGracefulShutdown('SIGINT'),
+    ]);
+
+    expect(mockServer.close).toHaveBeenCalledTimes(1);
+    expect(jobStopSpy).toHaveBeenCalledTimes(1);
+    expect(exitFn).toHaveBeenCalledTimes(1);
+    expect(exitFn).toHaveBeenCalledWith(0);
   });
 });

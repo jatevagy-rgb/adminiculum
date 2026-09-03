@@ -6,7 +6,7 @@
 
 import PgBoss from 'pg-boss';
 import { getJobServiceConfig } from './config';
-import { JobContext, JobHandler, JobOptions, JobServiceConfig, WorkerOptions } from './types';
+import { JobContext, JobHandler, JobOptions, JobServiceConfig, QueueDefinition, QueuePolicy, WorkerOptions } from './types';
 
 export class JobService {
   private boss: PgBoss | null = null;
@@ -15,10 +15,10 @@ export class JobService {
     string,
     { handler: JobHandler; options?: WorkerOptions }
   > = new Map();
+  private registeredQueues: Map<string, QueueDefinition> = new Map();
   private boundQueues: Set<string> = new Set();
+  private createdQueues: Set<string> = new Set();
   private isRunning = false;
-
-  private createdQueues: Set<string> = new Set<string>();
 
   constructor(customConfig?: Partial<JobServiceConfig>) {
     this.config = { ...getJobServiceConfig(), ...customConfig };
@@ -32,19 +32,46 @@ export class JobService {
     return this.isRunning;
   }
 
+  public isWorkerBound(queueName: string): boolean {
+    return this.boundQueues.has(queueName);
+  }
+
+  public getBoundQueues(): string[] {
+    return Array.from(this.boundQueues);
+  }
+
+  public getCreatedQueues(): string[] {
+    return Array.from(this.createdQueues);
+  }
+
+  public registerQueue(queueName: string, definition: QueueDefinition): void {
+    this.registeredQueues.set(queueName, definition);
+  }
+
   public async registerWorker<TData = any, TResult = any>(
     queueName: string,
     handler: JobHandler<TData, TResult>,
     options?: WorkerOptions
   ): Promise<void> {
+    if (this.boundQueues.has(queueName)) {
+      throw new Error(`[JobService] Worker for queue "${queueName}" is already registered/bound.`);
+    }
+
+    if (options?.policy) {
+      this.registeredQueues.set(queueName, { policy: options.policy });
+    }
+
     if (this.isRunning && this.boss) {
-      if (this.boundQueues.has(queueName)) {
-        throw new Error(`[JobService] Worker for queue "${queueName}" is already registered/bound.`);
-      }
       this.registeredWorkers.set(queueName, { handler, options });
-      this.boundQueues.add(queueName);
-      await this.ensureQueue(queueName);
-      await this.bindWorker(queueName, handler, options);
+      try {
+        await this.ensureQueue(queueName);
+        await this.bindWorker(queueName, handler, options);
+        this.boundQueues.add(queueName);
+      } catch (err) {
+        this.registeredWorkers.delete(queueName);
+        this.boundQueues.delete(queueName);
+        throw err;
+      }
     } else {
       this.registeredWorkers.set(queueName, { handler, options });
     }
@@ -63,7 +90,7 @@ export class JobService {
       throw new Error(`[JobService] Cannot enqueue job. Job service is not started.`);
     }
 
-    await this.ensureQueue(queueName, options?.singletonKey ? 'short' : 'standard');
+    await this.ensureQueue(queueName);
 
     const rawSendOptions: PgBoss.SendOptions = {
       retryLimit: options?.retryLimit ?? this.config.defaultRetryLimit,
@@ -114,16 +141,34 @@ export class JobService {
       console.error('[JobService] pg-boss internal error:', err.message);
     });
 
-    await this.boss.start();
-    this.isRunning = true;
-    this.boundQueues.clear();
-    this.createdQueues.clear();
-    console.log(`[JobService] pg-boss started successfully in schema "${this.config.schema}".`);
+    try {
+      await this.boss.start();
 
-    for (const [queueName, { handler, options }] of this.registeredWorkers.entries()) {
-      this.boundQueues.add(queueName);
-      await this.ensureQueue(queueName);
-      await this.bindWorker(queueName, handler, options);
+      // Bind all pre-registered workers BEFORE marking service as running
+      for (const [queueName, { handler, options }] of this.registeredWorkers.entries()) {
+        await this.ensureQueue(queueName);
+        await this.bindWorker(queueName, handler, options);
+        this.boundQueues.add(queueName);
+      }
+
+      this.isRunning = true;
+      console.log(`[JobService] pg-boss started successfully in schema "${this.config.schema}".`);
+    } catch (err) {
+      console.error('[JobService] Failed to complete startup and worker binding:', err);
+      // Clean up any partially started resources to prevent leaked handles or half-bound states
+      try {
+        if (this.boss) {
+          await this.boss.stop({ graceful: false, timeout: 1000 });
+        }
+      } catch (cleanupErr) {
+        console.error('[JobService] Error during startup failure cleanup:', cleanupErr);
+      } finally {
+        this.boss = null;
+        this.boundQueues.clear();
+        this.createdQueues.clear();
+        this.isRunning = false;
+      }
+      throw err;
     }
   }
 
@@ -148,15 +193,25 @@ export class JobService {
     }
   }
 
-  private async ensureQueue(queueName: string, policy: PgBoss.QueuePolicy = 'standard'): Promise<void> {
+  public async ensureQueue(queueName: string, explicitPolicy?: QueuePolicy): Promise<void> {
     if (!this.boss || this.createdQueues.has(queueName)) {
       return;
     }
-    try {
-      await this.boss.createQueue(queueName, { name: queueName, policy });
-    } catch {
-      // queue may already exist in database
-    }
+
+    // Determine stable queue policy: explicit parameter > registered queue/worker definition > default 'short'
+    const policy: QueuePolicy =
+      explicitPolicy ||
+      this.registeredQueues.get(queueName)?.policy ||
+      this.registeredWorkers.get(queueName)?.options?.policy ||
+      'short';
+
+    const queueOptions: PgBoss.Queue = {
+      name: queueName,
+      policy,
+    };
+
+    // Propagate unexpected createQueue failures to caller (do not swallow DB/config errors)
+    await this.boss.createQueue(queueName, queueOptions);
     this.createdQueues.add(queueName);
   }
 
