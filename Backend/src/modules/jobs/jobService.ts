@@ -60,7 +60,7 @@ export class JobService {
       throw new Error(`[JobService] Cannot enqueue job. Job service is not started.`);
     }
 
-    const sendOptions: PgBoss.SendOptions = {
+    const rawSendOptions: PgBoss.SendOptions = {
       retryLimit: options?.retryLimit ?? this.config.defaultRetryLimit,
       retryDelay: options?.retryDelay ?? this.config.defaultRetryDelay,
       retryBackoff: options?.retryBackoff ?? this.config.defaultRetryBackoff,
@@ -71,6 +71,10 @@ export class JobService {
       singletonKey: options?.singletonKey,
       deadLetter: options?.deadLetter,
     };
+
+    const sendOptions: PgBoss.SendOptions = Object.fromEntries(
+      Object.entries(rawSendOptions).filter(([_, v]) => v !== undefined)
+    ) as PgBoss.SendOptions;
 
     return await this.boss.send(queueName, data, sendOptions);
   }
@@ -89,13 +93,17 @@ export class JobService {
       throw new Error('[JobService] Missing database connection string for pg-boss.');
     }
 
-    this.boss = new PgBoss({
+    const bossOptions: PgBoss.ConstructorOptions = {
       connectionString: this.config.connectionString,
       schema: this.config.schema,
       max: this.config.maxConnections,
       application_name: 'adminiculum-jobs',
-      clockMonitorIntervalSeconds: this.config.clockMonitorIntervalSeconds,
-    });
+    };
+    if (this.config.clockMonitorIntervalSeconds !== undefined) {
+      bossOptions.clockMonitorIntervalSeconds = this.config.clockMonitorIntervalSeconds;
+    }
+
+    this.boss = new PgBoss(bossOptions);
 
     this.boss.on('error', (err) => {
       console.error('[JobService] pg-boss internal error:', err.message);
