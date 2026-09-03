@@ -140,7 +140,10 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('diagnose_scanner_runtime');
     expect(step).toContain("SCANNER_APP='adminiculum-malware-scanner-01'");
     expect(step).toContain('az rest --method get');
-    expect(step).toContain('management.azure.com/subscriptions/6663573b-fcf7-497d-b2f5-c3498f4b/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${SCANNER_APP}');
+    expect(step).toContain('ACTIVE_SUBSCRIPTION_ID="$(az account show --query id -o tsv)"');
+    expect(step).toContain('SUBSCRIPTION_ID_SOURCE=ACTIVE_AZURE_CONTEXT');
+    expect(step).toContain('management.azure.com/subscriptions/${ACTIVE_SUBSCRIPTION_ID}/resourceGroups/${RESOURCE_GROUP}/providers/Microsoft.Web/sites/${SCANNER_APP}');
+    expect(step).not.toContain('subscriptions/6663573b-fcf7-497d-b2f5-c3498f4b/');
     expect(step).toContain('ARM_PERMISSION_USED=Microsoft.Web/sites/read');
     expect(step).toContain('SCANNER_RESOURCE_READ=PASS');
     expect(step).toContain('READY_DNS_RESOLUTION');
