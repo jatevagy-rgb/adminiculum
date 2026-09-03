@@ -18,6 +18,8 @@ export class JobService {
   private boundQueues: Set<string> = new Set();
   private isRunning = false;
 
+  private createdQueues: Set<string> = new Set<string>();
+
   constructor(customConfig?: Partial<JobServiceConfig>) {
     this.config = { ...getJobServiceConfig(), ...customConfig };
   }
@@ -41,6 +43,7 @@ export class JobService {
       }
       this.registeredWorkers.set(queueName, { handler, options });
       this.boundQueues.add(queueName);
+      await this.ensureQueue(queueName);
       await this.bindWorker(queueName, handler, options);
     } else {
       this.registeredWorkers.set(queueName, { handler, options });
@@ -59,6 +62,8 @@ export class JobService {
     if (!this.isRunning || !this.boss) {
       throw new Error(`[JobService] Cannot enqueue job. Job service is not started.`);
     }
+
+    await this.ensureQueue(queueName, options?.singletonKey ? 'singleton' : 'standard');
 
     const rawSendOptions: PgBoss.SendOptions = {
       retryLimit: options?.retryLimit ?? this.config.defaultRetryLimit,
@@ -112,10 +117,12 @@ export class JobService {
     await this.boss.start();
     this.isRunning = true;
     this.boundQueues.clear();
+    this.createdQueues.clear();
     console.log(`[JobService] pg-boss started successfully in schema "${this.config.schema}".`);
 
     for (const [queueName, { handler, options }] of this.registeredWorkers.entries()) {
       this.boundQueues.add(queueName);
+      await this.ensureQueue(queueName);
       await this.bindWorker(queueName, handler, options);
     }
   }
@@ -135,9 +142,22 @@ export class JobService {
       console.error('[JobService] Error stopping pg-boss:', error);
     } finally {
       this.boundQueues.clear();
+      this.createdQueues.clear();
       this.isRunning = false;
       this.boss = null;
     }
+  }
+
+  private async ensureQueue(queueName: string, policy: 'standard' | 'singleton' = 'standard'): Promise<void> {
+    if (!this.boss || this.createdQueues.has(queueName)) {
+      return;
+    }
+    try {
+      await this.boss.createQueue(queueName, { name: queueName, policy });
+    } catch {
+      // queue may already exist in database
+    }
+    this.createdQueues.add(queueName);
   }
 
   public getBossInstance(): PgBoss | null {

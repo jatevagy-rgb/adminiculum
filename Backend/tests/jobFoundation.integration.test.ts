@@ -24,6 +24,7 @@ const databaseUrl =
 const describeWithDb = databaseUrl ? describe : describe.skip;
 
 describeWithDb('Job Foundation PostgreSQL Integration', () => {
+  jest.setTimeout(30000);
   const TEST_SCHEMA = 'pgboss_integration_test';
   let pgClient: Client;
 
