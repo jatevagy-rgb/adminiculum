@@ -111,14 +111,13 @@ describe('production deploy workflow portability guards', () => {
     expect(step).toContain('az account get-access-token');
     expect(step).toContain('${KUDU}/deployments');
     expect(step).toContain('az webapp log download');
-    expect(step).toContain('az webapp config show');
-    expect(step).toContain('WORKFORCE_MALWARE_SCANNER_URL_PRESENT');
     expect(step).toContain('SCANNER_READY_HTTP_STATUS');
     expect(step).toContain('SCANNER_SCAN_HTTP_STATUS');
     expect(step).toContain("SCANNER_APP='adminiculum-malware-scanner-01'");
+    expect(step).toContain('SCANNER_RESOURCE_READ=PASS');
     expect(step).toContain('SCANNER_DEFAULT_HOSTNAME');
-    expect(step).toContain('DEPLOYED_IMAGE_MATCHES_EXPECTED');
-    expect(step).toContain("--query \"[?name=='WEBSITES_PORT'].{name:name,value:value}\"");
+    expect(step).toContain('READY_DNS_RESOLUTION');
+    expect(step).toContain('READY_CONNECTIVITY');
     expect(step).toContain('The scanner key is deliberately not read from App Service or Key Vault.');
     expect(step).toContain('az appservice plan show');
     expect(step).toContain('az monitor metrics list');
@@ -126,10 +125,33 @@ describe('production deploy workflow portability guards', () => {
     expect(step).not.toContain('for PATH in');
     expect(step).not.toContain('az webapp deploy');
     expect(step).not.toContain('az webapp restart');
+    expect(step).not.toContain('az webapp config show');
+    expect(step).not.toContain('az webapp config appsettings list');
+    expect(step).not.toContain('publishxml');
     expect(step).not.toContain('az webapp config appsettings set');
-    expect(step).not.toContain('--data-binary @- "${SCANNER_ORIGIN}/scan"');
+    expect(step).not.toContain('/scan"');
     expect(step).not.toContain('prisma migrate');
     expect(step).not.toContain('prisma db push');
+  });
+
+  it('uses only Reader-compatible metadata for scanner runtime discovery', () => {
+    const step = stepBlock('Inspect scanner runtime (Reader-only)');
+
+    expect(workflow).toContain('diagnose_scanner_runtime');
+    expect(step).toContain("SCANNER_APP='adminiculum-malware-scanner-01'");
+    expect(step).toContain('az webapp show');
+    expect(step).toContain('SCANNER_RESOURCE_READ=PASS');
+    expect(step).toContain('READY_DNS_RESOLUTION');
+    expect(step).toContain('READY_CONNECTIVITY');
+    expect(step).toContain('/health/ready');
+    expect(step).toContain('SCAN_STATUS=NOT_PROBED_SAFE_AUTH_UNAVAILABLE');
+    expect(step).not.toContain('get-access-token');
+    expect(step).not.toContain('config appsettings');
+    expect(step).not.toContain('config show');
+    expect(step).not.toContain('publishxml');
+    expect(step).not.toContain('${KUDU}');
+    expect(step).not.toContain('/scan');
+    expect(step).not.toContain('az webapp restart');
   });
 
   it('runs migration WebJob polling on the host runner with exact run identity', () => {
