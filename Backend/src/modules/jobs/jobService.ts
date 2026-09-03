@@ -63,7 +63,7 @@ export class JobService {
       throw new Error(`[JobService] Cannot enqueue job. Job service is not started.`);
     }
 
-    await this.ensureQueue(queueName, options?.singletonKey ? 'singleton' : 'standard');
+    await this.ensureQueue(queueName, options?.singletonKey ? 'short' : 'standard');
 
     const rawSendOptions: PgBoss.SendOptions = {
       retryLimit: options?.retryLimit ?? this.config.defaultRetryLimit,
@@ -148,7 +148,7 @@ export class JobService {
     }
   }
 
-  private async ensureQueue(queueName: string, policy: 'standard' | 'singleton' = 'standard'): Promise<void> {
+  private async ensureQueue(queueName: string, policy: PgBoss.QueuePolicy = 'standard'): Promise<void> {
     if (!this.boss || this.createdQueues.has(queueName)) {
       return;
     }
