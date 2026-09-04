@@ -1,5 +1,6 @@
 const mockUploadDocument = jest.fn();
 const mockDeleteDocument = jest.fn();
+const mockQueueDocumentVersionScan = jest.fn();
 
 const mockPrisma = {
   case: { findUnique: jest.fn(), update: jest.fn() },
@@ -15,6 +16,11 @@ jest.mock('../src/modules/sharepoint', () => ({
     uploadDocument: mockUploadDocument,
     deleteDocument: mockDeleteDocument,
   },
+}));
+
+jest.mock('../src/modules/documents/securityScan.service', () => ({
+  queueDocumentVersionScan: mockQueueDocumentVersionScan,
+  securityScanBlock: () => null,
 }));
 
 import documentsService, { DocumentStorageUploadError } from '../src/modules/documents/services';
@@ -69,7 +75,9 @@ describe('canonical document upload persistence', () => {
       storageReference: 'sp-item-1',
       spItemId: 'sp-item-1',
       isCurrent: true,
+      securityScanStatus: 'CLEAN',
     });
+    expect(mockQueueDocumentVersionScan).not.toHaveBeenCalled();
     expect(mockPrisma.timelineEvent.create).toHaveBeenCalledTimes(1);
     expect(mockPrisma.case.update).toHaveBeenCalledWith({
       where: { id: 'case-1' },

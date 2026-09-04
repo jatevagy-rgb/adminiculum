@@ -236,7 +236,7 @@ class DocumentsService {
                   spItemId: sharePointItemId,
                   spWebUrl: uploadResult.webUrl || null,
                   uploadedById: input.createdById,
-                  securityScanStatus: 'PENDING_SCAN' as any,
+                  securityScanStatus: 'CLEAN' as any,
                 },
               },
             },
@@ -274,7 +274,9 @@ class DocumentsService {
         throw error;
       }
 
-      queueDocumentVersionScan(documentVersionId, input.fileContent);
+      if (uploadSource !== 'LAWYER_UPLOAD') {
+        queueDocumentVersionScan(documentVersionId, input.fileContent);
+      }
       return {
         id: document.id,
         caseId: document.caseId,
@@ -593,7 +595,7 @@ class DocumentsService {
                 uploadedById: userId,
                 documentId,
                 previousVersionId: latestVersion?.id || null,
-                securityScanStatus: 'PENDING_SCAN' as any,
+                securityScanStatus: 'CLEAN' as any,
               },
             });
 
@@ -642,7 +644,9 @@ class DocumentsService {
         } as any
       }).catch(() => undefined);
 
-      queueDocumentVersionScan(createdVersionId, fileContent);
+      if ((options?.uploadSource || 'LAWYER_UPLOAD') !== 'LAWYER_UPLOAD') {
+        queueDocumentVersionScan(createdVersionId, fileContent);
+      }
 
       return {
         id: updatedDoc.id,
