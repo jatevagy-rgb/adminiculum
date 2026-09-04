@@ -464,6 +464,12 @@ jobs:
           has_express = res_exp and 'EXPRESS_FOUND' in (res_exp.get('Output') or '')
           print(f"EXPRESS FOUND: {has_express}")
 
+          print("=== LATEST DOCKER LOG FROM /home/LogFiles ===")
+          run_kudu_bash("tail -n 80 /home/LogFiles/$(ls -t /home/LogFiles | grep default_docker | head -n 1)")
+
+          print("=== NODE TEST LOAD ./dist/index.js ===")
+          run_kudu_bash("node -e \"try { require('./dist/index.js'); } catch (e) { console.error('STARTUP_TEST_ERROR:', e.stack || e); }\"")
+
           if not has_express:
               print("\nRepairing node_modules in /home/site/wwwroot...")
               print("Step A: extract node_modules.tar.gz directly in /home/site/wwwroot...")
