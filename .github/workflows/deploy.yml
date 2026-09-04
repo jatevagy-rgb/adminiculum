@@ -435,52 +435,56 @@ jobs:
           kudu = os.environ['KUDU']
           token = os.environ['TOKEN']
 
-          def run_kudu(cmd, dir_path="/home/site/wwwroot"):
+          def run_kudu_bash(cmd_str):
               url = f"{kudu}/command"
-              body = json.dumps({"command": cmd, "dir": dir_path}).encode('utf-8')
+              body = json.dumps({"command": f"bash -c {json.dumps(cmd_str)}", "dir": "/home/site/wwwroot"}).encode('utf-8')
               req = urllib.request.Request(url, data=body, headers={
                   'Authorization': f"Bearer {token}",
                   'Content-Type': 'application/json'
               })
               try:
-                  with urllib.request.urlopen(req, timeout=120) as resp:
+                  with urllib.request.urlopen(req, timeout=180) as resp:
                       res = json.loads(resp.read().decode('utf-8'))
                       out = (res.get('Output') or '').strip()
                       err = (res.get('Error') or '').strip()
                       exit_code = res.get('ExitCode')
-                      print(f"[KUDU: {cmd}] Exit: {exit_code}")
+                      print(f"[KUDU BASH: {cmd_str[:60]}] Exit: {exit_code}")
                       if out:
                           print(f"OUT:\n{out[:500]}")
                       if err:
                           print(f"ERR:\n{err[:500]}")
                       return res
               except Exception as e:
-                  print(f"[KUDU: {cmd}] EXCEPTION: {e}")
+                  print(f"[KUDU BASH: {cmd_str[:60]}] EXCEPTION: {e}")
                   return None
 
           print("\n=== KUDU SITE ROOT INSPECTION ===")
-          run_kudu("ls -la")
-          res_sym = run_kudu("test -L node_modules && echo 'IS_SYMLINK' || echo 'NOT_SYMLINK'")
-          is_symlink = res_sym and 'IS_SYMLINK' in (res_sym.get('Output') or '')
-          res_exp = run_kudu("test -f node_modules/express/package.json && echo 'EXPRESS_FOUND' || echo 'EXPRESS_MISSING'")
+          run_kudu_bash("ls -la")
+          res_exp = run_kudu_bash("test -f node_modules/express/package.json && echo 'EXPRESS_FOUND' || echo 'EXPRESS_MISSING'")
           has_express = res_exp and 'EXPRESS_FOUND' in (res_exp.get('Output') or '')
-
-          print(f"NODE_MODULES IS_SYMLINK: {is_symlink}")
           print(f"EXPRESS FOUND: {has_express}")
 
-          if is_symlink or not has_express:
-              print("\nRepairing node_modules in /home/site/wwwroot...")
-              tar_check = run_kudu("tar -tf node_modules.tar.gz | head -n 5")
-              first_entry = (tar_check.get('Output') or '').strip().split('\n')[0]
-              print(f"Tar first entry: {first_entry}")
-              run_kudu("rm -rf node_modules")
-              if first_entry.startswith('node_modules/'):
-                  run_kudu("tar -xzf node_modules.tar.gz")
-              else:
-                  run_kudu("mkdir -p node_modules && tar -xzf node_modules.tar.gz -C node_modules")
-              ver = run_kudu("test -f node_modules/express/package.json && echo 'RESTORE SUCCESS: express found' || echo 'RESTORE FAILED: express still missing'")
-              print((ver.get('Output') or '').strip())
-              open('/tmp/node_modules_healed.txt', 'w').write('HEALED')
+          if not has_express:
+              print("\nRepairing node_modules in /home/site/wwwroot via bash...")
+              restore_cmd = (
+                  "first=$(tar -tf node_modules.tar.gz | head -n 1) && "
+                  "echo \"Tar first entry: $first\" && "
+                  "rm -rf node_modules && "
+                  "if [[ \"$first\" == node_modules/* ]]; then "
+                  "  tar -xzf node_modules.tar.gz; "
+                  "else "
+                  "  mkdir -p node_modules && tar -xzf node_modules.tar.gz -C node_modules; "
+                  "fi && "
+                  "if [ -f node_modules/express/package.json ]; then "
+                  "  echo 'RESTORE SUCCESS: express found'; "
+                  "else "
+                  "  echo 'RESTORE FAILED'; "
+                  "fi"
+              )
+              ver = run_kudu_bash(restore_cmd)
+              if ver and 'RESTORE SUCCESS' in (ver.get('Output') or ''):
+                  open('/tmp/node_modules_healed.txt', 'w').write('HEALED')
+                  print("node_modules successfully healed and validated.")
           PY
 
           if [ -f /tmp/node_modules_healed.txt ]; then
@@ -595,6 +599,20 @@ jobs:
                       print(f"Selected test case ID: {case_id}")
           except Exception as e:
               print(f"Error fetching cases: {e}")
+
+          if not case_id:
+              try:
+                  create_req = urllib.request.Request(
+                      cases_url,
+                      data=json.dumps({"clientName": "Acceptance Test Client", "title": "Acceptance Case"}).encode('utf-8'),
+                      headers=headers
+                  )
+                  with urllib.request.urlopen(create_req) as c_resp:
+                      c_data = json.loads(c_resp.read().decode('utf-8'))
+                      case_id = c_data.get('id')
+                      print(f"Created fallback test case ID: {case_id}")
+              except Exception as ce:
+                  print(f"Error creating test case: {ce}")
 
           if case_id:
               test_content = "Adminiculum SharePoint Live Acceptance Test Document.\nGenerated at " + time.strftime('%Y-%m-%dT%H:%M:%SZ')
