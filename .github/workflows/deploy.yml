@@ -214,6 +214,7 @@ jobs:
           set -euo pipefail
           TOKEN="$(az account get-access-token --query accessToken -o tsv)"
           KUDU="https://${BACKEND_APP}.scm.azurewebsites.net/api"
+          export TOKEN KUDU
           curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/deployments" > deployments.json
           python3 - <<'PY'
           import json, re
@@ -227,6 +228,7 @@ jobs:
           print(json.dumps(selected, indent=2))
           PY
           DEPLOYMENT_ID="$(python3 -c 'import json; print(json.load(open("deployments.json"))[0]["id"])')"
+          export DEPLOYMENT_ID
           curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/deployments/${DEPLOYMENT_ID}/log" > deployment-log.json
           python3 - <<'PY'
           import json, os, re, urllib.parse, urllib.request
