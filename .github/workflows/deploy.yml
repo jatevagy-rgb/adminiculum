@@ -264,18 +264,17 @@ jobs:
           if [ "$LOG_DOWNLOAD_STATUS" = "0" ]; then
             unzip -Z1 runtime-logs.zip | sed -n '1,100p'
             python3 - <<'PY'
-          import re, zipfile
-          pattern = re.compile(r'error|fail|exception|crash|oom|out of memory|startup|oryx|npm|prisma', re.I)
-          secret = re.compile(r'(?i)(password|token|secret|key|authorization|database_url)(\s*[:=]\s*)\S+')
-          with zipfile.ZipFile('runtime-logs.zip') as archive:
-              for name in archive.namelist():
-                  if name.endswith('/'):
-                      continue
-                  text = archive.read(name).decode('utf-8', errors='replace')
-                  matches = [secret.sub(r'\1\2***', line) for line in text.splitlines() if pattern.search(line)]
-                  for line in matches[-40:]:
-                      print(f'RUNTIME_LOG[{name}]={line}')
-          PY
+            import re, zipfile
+            secret = re.compile(r'(?i)(password|token|secret|key|authorization|database_url)(\s*[:=]\s*)\S+')
+            with zipfile.ZipFile('runtime-logs.zip') as archive:
+                names = [n for n in archive.namelist() if not n.endswith('/')]
+                for name in names:
+                    if '2026_09_04' in name or 'StartupLogs' in name:
+                        lines = [secret.sub(r'\1\2***', l) for l in archive.read(name).decode('utf-8', errors='replace').splitlines()]
+                        print(f"=== RECENT LOG: {name} (last 40 of {len(lines)} lines) ===")
+                        for l in lines[-40:]:
+                            print(f"[{name}] {l}")
+            PY
           fi
           # -------------------------------------------------------------------
           # Live SharePoint / Microsoft Graph credential inventory & token probe
@@ -423,19 +422,27 @@ jobs:
             echo "=== STEP 4: APPLYING CONFIG-ONLY REPAIR ==="
             az webapp config appsettings delete --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --setting-names SP_CLIENT_ID SP_CLIENT_SECRET SP_TENANT_ID
             echo "CONFIG CHANGE APPLIED: Deleted obsolete SP_* overrides."
+          fi
 
-            echo "=== STEP 5: LIVE VALIDATION AFTER CONFIG CHANGE ==="
+          echo "=== STEP 5: LIVE VALIDATION AFTER CONFIG CHANGE ==="
+          CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
+          echo "Initial /health status: $CODE"
+          if [ "$CODE" != "200" ]; then
+            echo "Live backend not 200 ($CODE). Issuing az webapp restart to ensure clean container startup..."
+            az webapp restart --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}"
             echo "Waiting for App Service to restart cleanly..."
-            for i in $(seq 1 24); do
+            for i in $(seq 1 30); do
               sleep 5
               CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
               echo "[$i] /health -> $CODE"
               if [ "$CODE" = "200" ]; then
-                echo "Live backend healthy after config change."
+                echo "Live backend healthy after restart."
                 break
               fi
             done
+          fi
 
+          if [ "$CODE" = "200" ]; then
             BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
             echo "LIVE /health/version: $BODY"
 
@@ -563,6 +570,8 @@ jobs:
                   print(e.read().decode('utf-8', errors='replace'))
           PY
             fi
+          else
+            echo "LIVE /health FAILED TO RETURN 200 (LAST STATUS: $CODE)"
           fi
           rm -f backend-appsettings.json
           else
