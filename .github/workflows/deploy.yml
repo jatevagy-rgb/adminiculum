@@ -426,6 +426,69 @@ jobs:
             echo "CONFIG CHANGE APPLIED: Deleted obsolete SP_* overrides."
           fi
 
+          # -------------------------------------------------------------------
+          # Step 4b: Inspect /home/site/wwwroot via Kudu command & heal runtime node_modules
+          # -------------------------------------------------------------------
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          kudu = os.environ['KUDU']
+          token = os.environ['TOKEN']
+
+          def run_kudu(cmd, dir_path="/home/site/wwwroot"):
+              url = f"{kudu}/command"
+              body = json.dumps({"command": cmd, "dir": dir_path}).encode('utf-8')
+              req = urllib.request.Request(url, data=body, headers={
+                  'Authorization': f"Bearer {token}",
+                  'Content-Type': 'application/json'
+              })
+              try:
+                  with urllib.request.urlopen(req, timeout=120) as resp:
+                      res = json.loads(resp.read().decode('utf-8'))
+                      out = (res.get('Output') or '').strip()
+                      err = (res.get('Error') or '').strip()
+                      exit_code = res.get('ExitCode')
+                      print(f"[KUDU: {cmd}] Exit: {exit_code}")
+                      if out:
+                          print(f"OUT:\n{out[:500]}")
+                      if err:
+                          print(f"ERR:\n{err[:500]}")
+                      return res
+              except Exception as e:
+                  print(f"[KUDU: {cmd}] EXCEPTION: {e}")
+                  return None
+
+          print("\n=== KUDU SITE ROOT INSPECTION ===")
+          run_kudu("ls -la")
+          res_sym = run_kudu("test -L node_modules && echo 'IS_SYMLINK' || echo 'NOT_SYMLINK'")
+          is_symlink = res_sym and 'IS_SYMLINK' in (res_sym.get('Output') or '')
+          res_exp = run_kudu("test -f node_modules/express/package.json && echo 'EXPRESS_FOUND' || echo 'EXPRESS_MISSING'")
+          has_express = res_exp and 'EXPRESS_FOUND' in (res_exp.get('Output') or '')
+
+          print(f"NODE_MODULES IS_SYMLINK: {is_symlink}")
+          print(f"EXPRESS FOUND: {has_express}")
+
+          if is_symlink or not has_express:
+              print("\nRepairing node_modules in /home/site/wwwroot...")
+              tar_check = run_kudu("tar -tf node_modules.tar.gz | head -n 5")
+              first_entry = (tar_check.get('Output') or '').strip().split('\n')[0]
+              print(f"Tar first entry: {first_entry}")
+              run_kudu("rm -rf node_modules")
+              if first_entry.startswith('node_modules/'):
+                  run_kudu("tar -xzf node_modules.tar.gz")
+              else:
+                  run_kudu("mkdir -p node_modules && tar -xzf node_modules.tar.gz -C node_modules")
+              ver = run_kudu("test -f node_modules/express/package.json && echo 'RESTORE SUCCESS: express found' || echo 'RESTORE FAILED: express still missing'")
+              print((ver.get('Output') or '').strip())
+              open('/tmp/node_modules_healed.txt', 'w').write('HEALED')
+          PY
+
+          if [ -f /tmp/node_modules_healed.txt ]; then
+            echo "node_modules healed. Restarting App Service to boot healthy container..."
+            az webapp restart --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}"
+            sleep 15
+          fi
+
           echo "=== STEP 5: LIVE VALIDATION AFTER CONFIG CHANGE ==="
           CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
           echo "Initial /health status: $CODE"
