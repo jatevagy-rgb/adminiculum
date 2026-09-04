@@ -150,6 +150,122 @@ jobs:
       - name: DOCX/PDF comparison regression (REQUIRED)
         run: npx jest --runInBand --verbose tests/documentDocxPdfDiff.test.ts
 
+  backend-deployment-artifact-gate:
+    name: Backend prebuilt artifact & deploy workflow gate (Node 20)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install backend dependencies (Linux x64)
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          npm ci
+
+      - name: Generate Prisma client
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          npx prisma generate
+
+      - name: Deploy workflow static guard (FAIL-CLOSED)
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          npx jest --runInBand --verbose tests/deployWorkflow.static.test.ts
+
+      - name: Build backend TypeScript
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          npx tsc
+
+      - name: Write release identity fixture
+        run: |
+          set -euo pipefail
+          node -e 'const fs=require("fs"); fs.writeFileSync("Backend/release-identity.json", JSON.stringify({commitSha: process.env.GITHUB_SHA || "ci-test-sha", buildTime: new Date().toISOString()}) + "\n")'
+
+      - name: Configure .deployment for zero server-side build
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          printf "[config]\nSCM_DO_BUILD_DURING_DEPLOYMENT = false\n" > .deployment
+
+      - name: Package prebuilt backend runtime artifact
+        run: |
+          set -euo pipefail
+          rm -f backend-deploy.zip
+          ( cd Backend && zip -r -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
+              package.json package-lock.json tsconfig.json .deployment release-identity.json \
+              dist node_modules prisma templates scripts App_Data )
+          for spec in swagger2.yaml swagger.yaml; do
+            if [ -f "$spec" ]; then zip -j -q backend-deploy.zip "$spec"; fi
+          done
+
+      - name: Validate prebuilt backend artifact (fail fast)
+        run: |
+          set -euo pipefail
+          unzip -Z1 backend-deploy.zip > ziplist.txt
+          echo "--- prebuilt archive entries (top) ---"; head -n 25 ziplist.txt
+          fail() { echo "ARTIFACT INVALID: $1"; exit 1; }
+          grep -qxF 'package.json'        ziplist.txt || fail "package.json not at archive root"
+          grep -qxF 'package-lock.json'   ziplist.txt || fail "package-lock.json missing"
+          grep -qxF 'tsconfig.json'       ziplist.txt || fail "tsconfig.json missing"
+          grep -qxF '.deployment'         ziplist.txt || fail ".deployment missing"
+          grep -qxF 'release-identity.json' ziplist.txt || fail "release identity missing"
+          grep -qxF 'dist/index.js'       ziplist.txt || fail "compiled dist/index.js missing"
+          grep -qxF 'prisma/schema.prisma' ziplist.txt || fail "prisma/schema.prisma missing"
+          grep -qxF 'App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs' ziplist.txt || fail "migration WebJob missing"
+          grep -q '^node_modules/express/' ziplist.txt || fail "runtime node_modules/express missing"
+          grep -q '^node_modules/@prisma/client/' ziplist.txt || fail "generated @prisma/client missing"
+          grep -q '^node_modules/\.prisma/client/' ziplist.txt || fail "generated .prisma/client engine missing"
+          grep -q '^node_modules/bcrypt/' ziplist.txt || fail "runtime bcrypt module missing"
+          grep -q '^templates/'           ziplist.txt || fail "templates missing"
+          grep -q '^swagger'              ziplist.txt || fail "OpenAPI/swagger specs missing"
+          grep -q '^Backend/'  ziplist.txt && fail "Backend/ wrapper present (breaks root)"
+          grep -q '^Frontend/' ziplist.txt && fail "Frontend/ present in backend archive"
+          echo "Prebuilt backend artifact OK: dist/index.js, node_modules (express, prisma, bcrypt), WebJob, templates, and specs verified."
+
+      - name: Extract prebuilt artifact and assert module loading (clean dir, offline)
+        run: |
+          set -euo pipefail
+          TMP_DIR=$(mktemp -d)
+          unzip -q backend-deploy.zip -d "$TMP_DIR"
+          grep -qxF 'SCM_DO_BUILD_DURING_DEPLOYMENT = false' "$TMP_DIR/.deployment" || {
+            echo "ERROR: .deployment missing SCM_DO_BUILD_DURING_DEPLOYMENT = false"
+            exit 1
+          }
+          test -f "$TMP_DIR/dist/index.js" || { echo "dist/index.js missing"; exit 1; }
+          test -f "$TMP_DIR/release-identity.json" || { echo "release-identity.json missing"; exit 1; }
+          test -f "$TMP_DIR/App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs" || { echo "WebJob runner missing"; exit 1; }
+          test -d "$TMP_DIR/templates" || { echo "templates dir missing"; exit 1; }
+          test -f "$TMP_DIR/swagger.yaml" || test -f "$TMP_DIR/swagger2.yaml" || { echo "swagger files missing"; exit 1; }
+          node -e '
+            const fs = require("fs");
+            const files = fs.readdirSync(process.argv[1] + "/node_modules/.prisma/client");
+            const engines = files.filter(f => f.includes("libquery_engine"));
+            console.log("Prisma engines in extracted artifact:", engines);
+            if (!engines.some(e => e.includes("debian-openssl") || e.includes("rhel-openssl") || e.includes("linux"))) {
+              throw new Error("Linux Prisma engine missing from extracted artifact");
+            }
+          ' "$TMP_DIR"
+          ( cd "$TMP_DIR" && node -e "require('express'); console.log('express loaded');" )
+          ( cd "$TMP_DIR" && node -e "require('bcrypt'); console.log('bcrypt loaded');" )
+          ( cd "$TMP_DIR" && node -e "require('@prisma/client'); console.log('prisma client loaded');" )
+          ( cd "$TMP_DIR" && node -e "require('./dist/releaseIdentity.js'); console.log('releaseIdentity loaded');" )
+          rm -rf "$TMP_DIR"
+          echo "Prebuilt artifact offline extraction & module loading checks PASS."
+
   frontend-preflight:
     name: Frontend preflight
     needs: changes

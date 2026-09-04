@@ -703,15 +703,30 @@ jobs:
           grep -q '^node_modules/@prisma/client/' ziplist.txt || fail "generated @prisma/client missing"
           grep -q '^node_modules/\.prisma/client/' ziplist.txt || fail "generated .prisma/client engine missing"
           grep -q '^node_modules/bcrypt/' ziplist.txt || fail "runtime bcrypt module missing"
+          grep -q '^templates/'           ziplist.txt || fail "templates missing"
+          grep -q '^swagger'              ziplist.txt || fail "OpenAPI/swagger specs missing"
           grep -q '^Backend/'  ziplist.txt && fail "Backend/ wrapper present (breaks root)"
           grep -q '^Frontend/' ziplist.txt && fail "Frontend/ present in backend archive"
-          echo "Prebuilt backend artifact OK: dist/index.js, node_modules (express, prisma, bcrypt), and WebJob verified."
+          echo "Prebuilt backend artifact OK: dist/index.js, node_modules (express, prisma, bcrypt), WebJob, templates, and specs verified."
 
       - name: Assert prebuilt artifact module loading (offline sanity)
         run: |
           set -euo pipefail
           TMP_DIR=$(mktemp -d)
           unzip -q backend-deploy.zip -d "$TMP_DIR"
+          grep -qxF 'SCM_DO_BUILD_DURING_DEPLOYMENT = false' "$TMP_DIR/.deployment" || {
+            echo "ERROR: .deployment missing SCM_DO_BUILD_DURING_DEPLOYMENT = false"
+            exit 1
+          }
+          node -e '
+            const fs = require("fs");
+            const files = fs.readdirSync(process.argv[1] + "/node_modules/.prisma/client");
+            const engines = files.filter(f => f.includes("libquery_engine"));
+            console.log("Prisma engines in artifact:", engines);
+            if (!engines.some(e => e.includes("debian-openssl") || e.includes("rhel-openssl") || e.includes("linux"))) {
+              throw new Error("Linux Prisma engine missing from prebuilt artifact");
+            }
+          ' "$TMP_DIR"
           ( cd "$TMP_DIR" && node -e "require('express'); console.log('express loaded');" )
           ( cd "$TMP_DIR" && node -e "require('bcrypt'); console.log('bcrypt loaded');" )
           ( cd "$TMP_DIR" && node -e "require('@prisma/client'); console.log('prisma client loaded');" )
@@ -726,7 +741,7 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy prebuilt backend via Azure CLI
+      - name: Deploy backend via Azure CLI and wait for terminal result
         uses: azure/cli@v2
         with:
           inlineScript: |
