@@ -21,6 +21,27 @@ import {
 // Legacy compatibility: SP_SITE_URL
 const SITE_URL = process.env.SHAREPOINT_SITE_URL || process.env.SP_SITE_URL || '';
 
+function logGraphDiagnostic(context: string, error: unknown): void {
+  const secretPattern = /(password|token|secret|key|authorization|bearer|database_url)(\s*[:=]\s*)\S+/gi;
+  if (error instanceof GraphClientError) {
+    const rawEndpoint = String(error.endpoint || '').replace(/\?.*$/, '');
+    const safeEndpoint = rawEndpoint.replace(secretPattern, '$1$2***');
+    const safeMessage = String(error.message || '').replace(secretPattern, '$1$2***').slice(0, 300);
+    console.error(
+      `[SharePoint Diagnostic] ${context} GRAPH_OPERATION=${error.operation} GRAPH_ENDPOINT=${safeEndpoint} GRAPH_HTTP_STATUS=${error.status ?? 'UNKNOWN'} GRAPH_ERROR_CODE=${error.code ?? 'UNKNOWN'} GRAPH_ERROR_MESSAGE=${safeMessage}`
+    );
+  } else if (error instanceof Error) {
+    const safeMessage = String(error.message || '').replace(secretPattern, '$1$2***').slice(0, 300);
+    console.error(
+      `[SharePoint Diagnostic] ${context} ERROR_TYPE=${error.name || 'Error'} SAFE_MESSAGE=${safeMessage}`
+    );
+  } else {
+    console.error(
+      `[SharePoint Diagnostic] ${context} ERROR_TYPE=Unknown SAFE_MESSAGE=Unknown error`
+    );
+  }
+}
+
 class DriveService {
   private siteId: string = '';
 
@@ -78,10 +99,12 @@ class DriveService {
           }
         } catch (error) {
           lastError = error;
+          logGraphDiagnostic('site-resolution-candidate', error);
         }
       }
 
       if (!this.siteId) {
+        logGraphDiagnostic('site-resolution-exhausted', lastError);
         throw new Error(
           `Unable to resolve SharePoint site id from configured site URL. Tried endpoints: ${candidates.join(', ')}. Last error: ${
             lastError instanceof Error ? lastError.message : String(lastError)
@@ -112,6 +135,7 @@ class DriveService {
         version: response.file?.versions?.current?.id || '1',
       };
     } catch (error) {
+      logGraphDiagnostic('uploadDocument', error);
       return {
         success: false,
         error: this.toSafeErrorMessage('sharepoint-upload', error),
@@ -133,6 +157,7 @@ class DriveService {
       );
       return { success: true, content: response };
     } catch (error) {
+      logGraphDiagnostic('downloadDocument', error);
       if (error instanceof GraphClientError) {
         const code = error.code || 'SHAREPOINT_DOWNLOAD_FAILED';
         const status = error.status;
@@ -182,6 +207,7 @@ class DriveService {
       const response = await graphClient.get<any>(`/sites/${siteId}/drive/items/${documentId}`, { siteId });
       return response;
     } catch (error) {
+      logGraphDiagnostic('getDocument', error);
       console.error(this.toSafeErrorMessage('sharepoint-metadata', error));
       return null;
     }
@@ -202,6 +228,7 @@ class DriveService {
         version: response.file?.versions?.current?.id || '1',
       };
     } catch (error) {
+      logGraphDiagnostic('uploadNewVersion', error);
       return {
         success: false,
         error: this.toSafeErrorMessage('sharepoint-version-upload', error),
@@ -219,6 +246,7 @@ class DriveService {
 
       return true;
     } catch (error) {
+      logGraphDiagnostic('checkoutDocument', error);
       console.error(this.toSafeErrorMessage('sharepoint-checkout', error));
       return false;
     }
@@ -234,6 +262,7 @@ class DriveService {
 
       return true;
     } catch (error) {
+      logGraphDiagnostic('checkinDocument', error);
       console.error(this.toSafeErrorMessage('sharepoint-checkin', error));
       return false;
     }
@@ -248,6 +277,7 @@ class DriveService {
       const response = await graphClient.get<any>(`/sites/${siteId}/drive/items/${documentId}/versions`, { siteId });
       return response.value || [];
     } catch (error) {
+      logGraphDiagnostic('getDocumentVersions', error);
       console.error(this.toSafeErrorMessage('sharepoint-versions', error));
       return [];
     }
@@ -326,6 +356,7 @@ class DriveService {
         path: `/Cases/${caseFolderName}`,
       };
     } catch (error) {
+      logGraphDiagnostic('createCaseFolders', error);
       console.error(this.toSafeErrorMessage('sharepoint-create-folders', error));
       return null;
     }
@@ -366,6 +397,7 @@ class DriveService {
 
       return response;
     } catch (error) {
+      logGraphDiagnostic('moveFile', error);
       console.error(this.toSafeErrorMessage('sharepoint-move', error));
       return null;
     }
@@ -414,6 +446,7 @@ class DriveService {
       );
       return response.value || [];
     } catch (error) {
+      logGraphDiagnostic('searchDocuments', error);
       console.error(this.toSafeErrorMessage('sharepoint-search', error));
       return [];
     }
@@ -432,6 +465,7 @@ class DriveService {
       );
       return response.value || [];
     } catch (error) {
+      logGraphDiagnostic('getCaseDocuments', error);
       console.error(this.toSafeErrorMessage('sharepoint-list-case-docs', error));
       return [];
     }
@@ -450,6 +484,7 @@ class DriveService {
       );
       return true;
     } catch (error) {
+      logGraphDiagnostic('deleteDocument', error);
       console.error(this.toSafeErrorMessage('sharepoint-delete', error));
       return false;
     }
