@@ -277,6 +277,112 @@ jobs:
                       print(f'RUNTIME_LOG[{name}]={line}')
           PY
           fi
+          # -------------------------------------------------------------------
+          # Live SharePoint / Microsoft Graph credential inventory & token probe
+          # -------------------------------------------------------------------
+          set +e
+          az webapp config appsettings list --resource-group "${RESOURCE_GROUP}" --name "${BACKEND_APP}" --output json > backend-appsettings.json
+          APP_SETTINGS_STATUS=$?
+          set -e
+          if [ "$APP_SETTINGS_STATUS" = "0" ]; then
+            python3 - <<'PY'
+          import json, re, urllib.request, urllib.parse, urllib.error
+
+          settings_list = json.load(open('backend-appsettings.json'))
+          app_settings = {item.get('name'): str(item.get('value') or '') for item in settings_list if item.get('name')}
+
+          def is_present(k):
+              val = app_settings.get(k, '')
+              return 'PRESENT' if val.strip() else 'MISSING'
+
+          print("=== STEP 1: SHAREPOINT CONFIG INVENTORY ===")
+          target_keys = [
+              'SP_CLIENT_ID', 'SP_CLIENT_SECRET', 'SP_TENANT_ID',
+              'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'AZURE_TENANT_ID',
+              'SP_SITE_ID', 'SHAREPOINT_SITE_ID',
+              'SHAREPOINT_SITE_URL', 'SP_SITE_URL',
+              'SP_DRIVE_ID', 'SHAREPOINT_DRIVE_ID'
+          ]
+          for k in target_keys:
+              print(f"{k}: {is_present(k)}")
+
+          sp_cid = app_settings.get('SP_CLIENT_ID', '').strip()
+          az_cid = app_settings.get('AZURE_CLIENT_ID', '').strip()
+          eff_cid = sp_cid or az_cid
+          eff_cid_src = 'SP_CLIENT_ID' if sp_cid else ('AZURE_CLIENT_ID' if az_cid else 'NONE')
+
+          sp_sec = app_settings.get('SP_CLIENT_SECRET', '').strip()
+          az_sec = app_settings.get('AZURE_CLIENT_SECRET', '').strip()
+          eff_sec = sp_sec or az_sec
+          eff_sec_src = 'SP_CLIENT_SECRET' if sp_sec else ('AZURE_CLIENT_SECRET' if az_sec else 'NONE')
+
+          sp_tid = app_settings.get('SP_TENANT_ID', '').strip()
+          az_tid = app_settings.get('AZURE_TENANT_ID', '').strip()
+          eff_tid = sp_tid or az_tid
+          eff_tid_src = 'SP_TENANT_ID' if sp_tid else ('AZURE_TENANT_ID' if az_tid else 'NONE')
+
+          sources = {eff_cid_src, eff_sec_src, eff_tid_src} - {'NONE'}
+          is_mixed = len(sources) > 1
+
+          print("\n=== CREDENTIAL RESOLUTION ===")
+          print(f"EFFECTIVE CLIENT ID SOURCE: {eff_cid_src}")
+          print(f"EFFECTIVE CLIENT SECRET SOURCE: {eff_sec_src}")
+          print(f"EFFECTIVE TENANT SOURCE: {eff_tid_src}")
+          print(f"MIXED CREDENTIAL SET: {'YES' if is_mixed else 'NO'}")
+
+          def probe_token(label, tenant_id, client_id, client_secret):
+              if not tenant_id or not client_id or not client_secret:
+                  print(f"\n[{label}] SKIP: Incomplete credentials (tenant={bool(tenant_id)}, client={bool(client_id)}, secret={bool(client_secret)})")
+                  return
+              print(f"\n=== TOKEN PROBE: {label} ===")
+              url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+              body = urllib.parse.urlencode({
+                  'client_id': client_id,
+                  'client_secret': client_secret,
+                  'scope': 'https://graph.microsoft.com/.default',
+                  'grant_type': 'client_credentials'
+              }).encode('utf-8')
+              req = urllib.request.Request(url, data=body, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      status = resp.getcode()
+                      print(f"[{label}] TOKEN HTTP STATUS: {status}")
+                      print(f"[{label}] TOKEN RESULT: SUCCESS")
+              except urllib.error.HTTPError as e:
+                  status = e.code
+                  resp_text = e.read().decode('utf-8', errors='replace')
+                  oauth_error = "UNKNOWN"
+                  aadsts = "NONE"
+                  sanitized_desc = ""
+                  try:
+                      err_json = json.loads(resp_text)
+                      oauth_error = err_json.get('error', 'UNKNOWN')
+                      desc = err_json.get('error_description', '')
+                      m = re.search(r'AADSTS\d+', desc)
+                      if m:
+                          aadsts = m.group(0)
+                      first_line = desc.split('\r\n')[0].split('\n')[0]
+                      sanitized_desc = re.sub(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}', '<GUID>', first_line)
+                  except Exception as ex:
+                      sanitized_desc = f"Parsing error: {ex}"
+                  print(f"[{label}] TOKEN HTTP STATUS: {status}")
+                  print(f"[{label}] OAUTH ERROR: {oauth_error}")
+                  print(f"[{label}] AADSTS CODE: {aadsts}")
+                  print(f"[{label}] SANITIZED ERROR DESCRIPTION: {sanitized_desc}")
+
+          probe_token("EFFECTIVE", eff_tid, eff_cid, eff_sec)
+
+          if sp_cid and sp_sec and sp_tid and (eff_cid_src != 'SP_CLIENT_ID' or eff_sec_src != 'SP_CLIENT_SECRET' or eff_tid_src != 'SP_TENANT_ID'):
+              probe_token("SP_TRIPLET", sp_tid, sp_cid, sp_sec)
+
+          if az_cid and az_sec and az_tid:
+              probe_token("AZURE_TRIPLET", az_tid, az_cid, az_sec)
+
+          PY
+            rm -f backend-appsettings.json
+          else
+            echo "APP_SETTINGS_READ=FAIL"
+          fi
           # Enumerate independently of backend configuration. Only scanner-like
           # names/tags and non-secret resource metadata may leave the runner.
           set +e
