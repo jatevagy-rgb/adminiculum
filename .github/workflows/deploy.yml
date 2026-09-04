@@ -1,7 +1,7 @@
 name: Deploy to Azure App Service (manual, sequential)
 
 # Adminiculum production runs on Azure App Service (NOT Container Apps).
-#   Backend  : source ZIP (package.json at archive ROOT) -> Kudu ZipDeploy -> Oryx Linux server-side build.
+#   Backend  : prebuilt runtime artifact (built on Ubuntu / Node 20) -> Kudu ZipDeploy (Oryx OFF, prebuilt dist + node_modules).
 #   Migration: canonical `adminiculum-db-migrate` triggered WebJob ONLY (no direct SQL / db push / DATABASE_URL here).
 #   Frontend : Next.js standalone (.next/standalone + .next/static + public) -> ZIP -> App Service (Oryx OFF, `node server.js`).
 #   Sequence : backend -> health -> (migration -> health) -> frontend -> smoke. Backend and frontend never run concurrently.
@@ -617,11 +617,12 @@ jobs:
           echo "Restart did not recover the expected backend release identity."; exit 1
 
   # ---------------------------------------------------------------------------
-  # Backend: source ZIP with package.json at ROOT -> Kudu ZipDeploy -> Oryx.
-  # Verifies the EXACT deployment record created by THIS run.
+  # Backend: prebuilt runtime artifact (built on Ubuntu / Node 20) -> Kudu ZipDeploy.
+  # Prebuilds dist, generates Prisma client, and packages Linux-compatible runtime node_modules.
+  # SCM_DO_BUILD_DURING_DEPLOYMENT is set to false so production Kudu/Oryx does not rebuild.
   # ---------------------------------------------------------------------------
   backend:
-    name: Deploy backend (App Service, Oryx build)
+    name: Deploy backend (App Service, prebuilt artifact)
     runs-on: ubuntu-latest
     needs: [resolve, recovery_inspection]
     if: ${{ always() && inputs.deploy_backend && needs.resolve.result == 'success' && (needs.recovery_inspection.result == 'success' || needs.recovery_inspection.result == 'skipped') }}
@@ -631,6 +632,13 @@ jobs:
         with:
           ref: ${{ needs.resolve.outputs.product_sha }}
 
+      - name: Setup Node.js 20 for backend prebuild
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
       - name: Write immutable release identity metadata
         run: |
           set -euo pipefail
@@ -639,38 +647,77 @@ jobs:
           RELEASE_SHA: ${{ needs.resolve.outputs.product_sha }}
           RELEASE_BUILD_TIME: ${{ needs.resolve.outputs.build_time }}
 
-      - name: Package backend source (package.json at archive ROOT)
+      - name: Install backend dependencies (Linux x64)
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          npm ci
+
+      - name: Generate Prisma client
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          npx prisma generate
+
+      - name: Build backend TypeScript
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          npx tsc
+
+      - name: Configure .deployment for zero server-side build
+        working-directory: Backend
+        run: |
+          set -euo pipefail
+          printf "[config]\nSCM_DO_BUILD_DURING_DEPLOYMENT = false\n" > .deployment
+
+      - name: Package prebuilt backend runtime artifact
         run: |
           set -euo pipefail
           rm -f backend-deploy.zip
-          # Zip from INSIDE Backend/ so package.json is at the archive root (Oryx contract).
-          # No Backend/ wrapper, no node_modules (Linux deps are built server-side by Oryx).
+          # Zip from INSIDE Backend/ so package.json and dist are at the archive root.
+          # Prebuilt artifact contains compiled dist/, complete Linux node_modules/,
+          # prisma schema/migrations, templates, scripts, WebJob, and OpenAPI specs.
           ( cd Backend && zip -r -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
               package.json package-lock.json tsconfig.json .deployment release-identity.json \
-              src prisma templates scripts App_Data )
-          # OpenAPI spec files live at repository root and must land at archive root.
+              dist node_modules prisma templates scripts App_Data )
           for spec in swagger2.yaml swagger.yaml; do
             if [ -f "$spec" ]; then zip -j -q backend-deploy.zip "$spec"; fi
           done
 
-      - name: Validate backend archive (fail fast)
+      - name: Validate prebuilt backend artifact (fail fast)
         run: |
           set -euo pipefail
           unzip -Z1 backend-deploy.zip > ziplist.txt
-          echo "--- archive entries (top) ---"; head -n 20 ziplist.txt
+          echo "--- prebuilt archive entries (top) ---"; head -n 25 ziplist.txt
           fail() { echo "ARTIFACT INVALID: $1"; exit 1; }
           grep -qxF 'package.json'        ziplist.txt || fail "package.json not at archive root"
           grep -qxF 'package-lock.json'   ziplist.txt || fail "package-lock.json missing"
           grep -qxF 'tsconfig.json'       ziplist.txt || fail "tsconfig.json missing"
           grep -qxF '.deployment'         ziplist.txt || fail ".deployment missing"
           grep -qxF 'release-identity.json' ziplist.txt || fail "release identity missing"
-          grep -qxF 'src/index.ts'        ziplist.txt || fail "src/index.ts missing"
+          grep -qxF 'dist/index.js'       ziplist.txt || fail "compiled dist/index.js missing"
           grep -qxF 'prisma/schema.prisma' ziplist.txt || fail "prisma/schema.prisma missing"
           grep -qxF 'App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs' ziplist.txt || fail "migration WebJob missing"
-          grep -q '^Backend/'  ziplist.txt && fail "Backend/ wrapper present (breaks Oryx root)"
-          grep -q 'node_modules/' ziplist.txt && fail "node_modules present (Windows/Linux mismatch risk)"
+          grep -q '^node_modules/express/' ziplist.txt || fail "runtime node_modules/express missing"
+          grep -q '^node_modules/@prisma/client/' ziplist.txt || fail "generated @prisma/client missing"
+          grep -q '^node_modules/\.prisma/client/' ziplist.txt || fail "generated .prisma/client engine missing"
+          grep -q '^node_modules/bcrypt/' ziplist.txt || fail "runtime bcrypt module missing"
+          grep -q '^Backend/'  ziplist.txt && fail "Backend/ wrapper present (breaks root)"
           grep -q '^Frontend/' ziplist.txt && fail "Frontend/ present in backend archive"
-          echo "Backend archive OK: package.json at root, webjob present, no wrapper/node_modules/Frontend."
+          echo "Prebuilt backend artifact OK: dist/index.js, node_modules (express, prisma, bcrypt), and WebJob verified."
+
+      - name: Assert prebuilt artifact module loading (offline sanity)
+        run: |
+          set -euo pipefail
+          TMP_DIR=$(mktemp -d)
+          unzip -q backend-deploy.zip -d "$TMP_DIR"
+          ( cd "$TMP_DIR" && node -e "require('express'); console.log('express loaded');" )
+          ( cd "$TMP_DIR" && node -e "require('bcrypt'); console.log('bcrypt loaded');" )
+          ( cd "$TMP_DIR" && node -e "require('@prisma/client'); console.log('prisma client loaded');" )
+          ( cd "$TMP_DIR" && node -e "require('./dist/releaseIdentity.js'); console.log('releaseIdentity loaded');" )
+          rm -rf "$TMP_DIR"
+          echo "Offline module loading checks PASS."
 
       - name: Azure login (OIDC, no client secret)
         uses: azure/login@v2
@@ -679,7 +726,7 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy backend via Azure CLI and wait for terminal result
+      - name: Deploy prebuilt backend via Azure CLI
         uses: azure/cli@v2
         with:
           inlineScript: |
