@@ -85,6 +85,18 @@ describe('canonical document upload persistence', () => {
     });
   });
 
+  it('keeps CLIENT_INPUT as a category while preserving trusted workforce provenance', async () => {
+    const result = await documentsService.createDocument({ ...input, documentType: 'CLIENT_INPUT' as any });
+
+    expect(result.id).toBe('document-1');
+    expect(mockPrisma.document.create.mock.calls[0][0].data).toMatchObject({ category: 'CLIENT_INPUT' });
+    expect(mockPrisma.document.create.mock.calls[0][0].data.versions.create).toMatchObject({
+      uploadSource: 'LAWYER_UPLOAD',
+      securityScanStatus: 'CLEAN',
+    });
+    expect(mockQueueDocumentVersionScan).not.toHaveBeenCalled();
+  });
+
   it('removes SharePoint content and persists no document when canonical persistence fails', async () => {
     mockPrisma.document.create.mockRejectedValueOnce(new Error('database unavailable'));
 

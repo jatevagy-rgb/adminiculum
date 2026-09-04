@@ -188,7 +188,7 @@ class DocumentsService {
       const documentTitle = (input as any).title || '';
       const nameField = uploadedFileName || storedFileName || documentTitle || `Uploaded document - ${new Date().toISOString()}`;
       const sharePointItemId = normalizeSharePointItemId(uploadResult.item.id);
-      const uploadSource = String(input.documentType || '') === 'CLIENT_INPUT' ? 'CLIENT_UPLOAD' : 'LAWYER_UPLOAD';
+      const uploadSource = 'LAWYER_UPLOAD';
       const baseDocumentData = {
         id: documentId,
         name: nameField,
@@ -524,6 +524,7 @@ class DocumentsService {
       let timelineFileName: string | null = null;
       let timelinePreviousVersion: string | null = null;
       let createdVersionId = '';
+      const versionUploadSource = options?.uploadSource || 'LAWYER_UPLOAD';
 
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         const document = await prisma.document.findUnique({
@@ -586,7 +587,7 @@ class DocumentsService {
                 isCurrent: true,
                 reviewStatus: (options?.reviewStatus || 'NOT_IN_REVIEW') as any,
                 publicationStatus: (options?.publicationStatus || 'INTERNAL_ONLY') as any,
-                uploadSource: (options?.uploadSource || 'LAWYER_UPLOAD') as any,
+                uploadSource: versionUploadSource as any,
                 versionType: (options?.versionType || 'WORKING_COPY') as any,
                 spVersionLabel: uploadResult.version || String(versionNumber),
                 spVersionId: uploadResult.version || null,
@@ -595,7 +596,7 @@ class DocumentsService {
                 uploadedById: userId,
                 documentId,
                 previousVersionId: latestVersion?.id || null,
-                securityScanStatus: 'CLEAN' as any,
+                securityScanStatus: versionUploadSource === 'LAWYER_UPLOAD' ? 'CLEAN' : 'PENDING_SCAN' as any,
               },
             });
 
@@ -644,7 +645,7 @@ class DocumentsService {
         } as any
       }).catch(() => undefined);
 
-      if ((options?.uploadSource || 'LAWYER_UPLOAD') !== 'LAWYER_UPLOAD') {
+      if (versionUploadSource !== 'LAWYER_UPLOAD') {
         queueDocumentVersionScan(createdVersionId, fileContent);
       }
 
