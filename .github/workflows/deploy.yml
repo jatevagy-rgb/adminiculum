@@ -264,17 +264,17 @@ jobs:
           if [ "$LOG_DOWNLOAD_STATUS" = "0" ]; then
             unzip -Z1 runtime-logs.zip | sed -n '1,100p'
             python3 - <<'PY'
-            import re, zipfile
-            secret = re.compile(r'(?i)(password|token|secret|key|authorization|database_url)(\s*[:=]\s*)\S+')
-            with zipfile.ZipFile('runtime-logs.zip') as archive:
-                names = [n for n in archive.namelist() if not n.endswith('/')]
-                for name in names:
-                    if '2026_09_04' in name or 'StartupLogs' in name:
-                        lines = [secret.sub(r'\1\2***', l) for l in archive.read(name).decode('utf-8', errors='replace').splitlines()]
-                        print(f"=== RECENT LOG: {name} (last 40 of {len(lines)} lines) ===")
-                        for l in lines[-40:]:
-                            print(f"[{name}] {l}")
-            PY
+import re, zipfile
+secret = re.compile(r'(?i)(password|token|secret|key|authorization|database_url)(\s*[:=]\s*)\S+')
+with zipfile.ZipFile('runtime-logs.zip') as archive:
+    names = [n for n in archive.namelist() if not n.endswith('/')]
+    for name in names:
+        if '2026_09_04' in name or 'StartupLogs' in name:
+            lines = [secret.sub(r'\1\2***', l) for l in archive.read(name).decode('utf-8', errors='replace').splitlines()]
+            print(f"=== RECENT LOG: {name} (last 40 of {len(lines)} lines) ===")
+            for l in lines[-40:]:
+                print(f"[{name}] {l}")
+PY
           fi
           # -------------------------------------------------------------------
           # Live SharePoint / Microsoft Graph credential inventory & token probe
@@ -447,128 +447,128 @@ jobs:
             echo "LIVE /health/version: $BODY"
 
             python3 - <<'PY'
-          import urllib.request, urllib.parse, json, base64, hmac, hashlib, time, os
+import urllib.request, urllib.parse, json, base64, hmac, hashlib, time, os
 
-          settings_list = json.load(open('backend-appsettings.json'))
-          jwt_secret = {item.get('name'): str(item.get('value') or '') for item in settings_list}.get('JWT_SECRET', '')
+settings_list = json.load(open('backend-appsettings.json'))
+jwt_secret = {item.get('name'): str(item.get('value') or '') for item in settings_list}.get('JWT_SECRET', '')
 
-          def make_jwt(secret):
-              header = {"alg": "HS256", "typ": "JWT"}
-              payload = {
-                  "userId": "00000000-0000-0000-0000-000000000001",
-                  "email": "admin@balintfy.hu",
-                  "role": "ADMIN",
-                  "iat": int(time.time()),
-                  "exp": int(time.time()) + 3600
-              }
-              def b64url(b):
-                  return base64.urlsafe_b64encode(b).rstrip(b'=').decode('utf-8')
-              h_b64 = b64url(json.dumps(header, separators=(',', ':')).encode('utf-8'))
-              p_b64 = b64url(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
-              msg = f"{h_b64}.{p_b64}".encode('utf-8')
-              sig = hmac.new(secret.encode('utf-8'), msg, hashlib.sha256).digest()
-              return f"{h_b64}.{p_b64}.{b64url(sig)}"
+def make_jwt(secret):
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "userId": "00000000-0000-0000-0000-000000000001",
+        "email": "admin@balintfy.hu",
+        "role": "ADMIN",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 3600
+    }
+    def b64url(b):
+        return base64.urlsafe_b64encode(b).rstrip(b'=').decode('utf-8')
+    h_b64 = b64url(json.dumps(header, separators=(',', ':')).encode('utf-8'))
+    p_b64 = b64url(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
+    msg = f"{h_b64}.{p_b64}".encode('utf-8')
+    sig = hmac.new(secret.encode('utf-8'), msg, hashlib.sha256).digest()
+    return f"{h_b64}.{p_b64}.{b64url(sig)}"
 
-          backend_app = os.environ['BACKEND_APP']
-          diag_url = f"https://{backend_app}.azurewebsites.net/api/v1/sharepoint/diagnostics"
-          token = make_jwt(jwt_secret)
+backend_app = os.environ['BACKEND_APP']
+diag_url = f"https://{backend_app}.azurewebsites.net/api/v1/sharepoint/diagnostics"
+token = make_jwt(jwt_secret)
 
-          req = urllib.request.Request(diag_url, headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
-          try:
-              with urllib.request.urlopen(req) as resp:
-                  print(f"\nDIAGNOSTICS HTTP STATUS: {resp.getcode()}")
-                  data = json.loads(resp.read().decode('utf-8'))
-                  print("DIAGNOSTICS RESPONSE:")
-                  print(json.dumps(data, indent=2))
-                  errors = data.get('errors') or []
-                  perm_ok = data.get('permissionsSmoke', {}).get('ok', False)
-                  if len(errors) == 0 and perm_ok:
-                      open('/tmp/diag_ok.txt', 'w').write('OK')
-          except urllib.error.HTTPError as e:
-              print(f"DIAGNOSTICS HTTP STATUS: {e.code}")
-              print(e.read().decode('utf-8', errors='replace'))
-          PY
+req = urllib.request.Request(diag_url, headers={'Authorization': f'Bearer {token}', 'Accept': 'application/json'})
+try:
+    with urllib.request.urlopen(req) as resp:
+        print(f"\nDIAGNOSTICS HTTP STATUS: {resp.getcode()}")
+        data = json.loads(resp.read().decode('utf-8'))
+        print("DIAGNOSTICS RESPONSE:")
+        print(json.dumps(data, indent=2))
+        errors = data.get('errors') or []
+        perm_ok = data.get('permissionsSmoke', {}).get('ok', False)
+        if len(errors) == 0 and perm_ok:
+            open('/tmp/diag_ok.txt', 'w').write('OK')
+except urllib.error.HTTPError as e:
+    print(f"DIAGNOSTICS HTTP STATUS: {e.code}")
+    print(e.read().decode('utf-8', errors='replace'))
+PY
 
             if [ -f /tmp/diag_ok.txt ] && [ "$(cat /tmp/diag_ok.txt)" = "OK" ]; then
               echo "=== STEP 6: LIVE DOCUMENT ACCEPTANCE ==="
               python3 - <<'PY'
-          import urllib.request, urllib.parse, json, base64, hmac, hashlib, time, os
+import urllib.request, urllib.parse, json, base64, hmac, hashlib, time, os
 
-          settings_list = json.load(open('backend-appsettings.json'))
-          jwt_secret = {item.get('name'): str(item.get('value') or '') for item in settings_list}.get('JWT_SECRET', '')
+settings_list = json.load(open('backend-appsettings.json'))
+jwt_secret = {item.get('name'): str(item.get('value') or '') for item in settings_list}.get('JWT_SECRET', '')
 
-          def make_jwt(secret):
-              header = {"alg": "HS256", "typ": "JWT"}
-              payload = {
-                  "userId": "00000000-0000-0000-0000-000000000001",
-                  "email": "admin@balintfy.hu",
-                  "role": "ADMIN",
-                  "iat": int(time.time()),
-                  "exp": int(time.time()) + 3600
-              }
-              def b64url(b):
-                  return base64.urlsafe_b64encode(b).rstrip(b'=').decode('utf-8')
-              h_b64 = b64url(json.dumps(header, separators=(',', ':')).encode('utf-8'))
-              p_b64 = b64url(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
-              msg = f"{h_b64}.{p_b64}".encode('utf-8')
-              sig = hmac.new(secret.encode('utf-8'), msg, hashlib.sha256).digest()
-              return f"{h_b64}.{p_b64}.{b64url(sig)}"
+def make_jwt(secret):
+    header = {"alg": "HS256", "typ": "JWT"}
+    payload = {
+        "userId": "00000000-0000-0000-0000-000000000001",
+        "email": "admin@balintfy.hu",
+        "role": "ADMIN",
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 3600
+    }
+    def b64url(b):
+        return base64.urlsafe_b64encode(b).rstrip(b'=').decode('utf-8')
+    h_b64 = b64url(json.dumps(header, separators=(',', ':')).encode('utf-8'))
+    p_b64 = b64url(json.dumps(payload, separators=(',', ':')).encode('utf-8'))
+    msg = f"{h_b64}.{p_b64}".encode('utf-8')
+    sig = hmac.new(secret.encode('utf-8'), msg, hashlib.sha256).digest()
+    return f"{h_b64}.{p_b64}.{b64url(sig)}"
 
-          backend_app = os.environ['BACKEND_APP']
-          token = make_jwt(jwt_secret)
-          headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/json', 'Content-Type': 'application/json'}
+backend_app = os.environ['BACKEND_APP']
+token = make_jwt(jwt_secret)
+headers = {'Authorization': f'Bearer {token}', 'Accept': 'application/json', 'Content-Type': 'application/json'}
 
-          cases_url = f"https://{backend_app}.azurewebsites.net/api/v1/cases"
-          req = urllib.request.Request(cases_url, headers=headers)
-          case_id = None
-          try:
-              with urllib.request.urlopen(req) as resp:
-                  cases_data = json.loads(resp.read().decode('utf-8'))
-                  cases = cases_data if isinstance(cases_data, list) else cases_data.get('cases', cases_data.get('items', []))
-                  if cases:
-                      case_id = cases[0]['id']
-                      print(f"Selected test case ID: {case_id}")
-          except Exception as e:
-              print(f"Error fetching cases: {e}")
+cases_url = f"https://{backend_app}.azurewebsites.net/api/v1/cases"
+req = urllib.request.Request(cases_url, headers=headers)
+case_id = None
+try:
+    with urllib.request.urlopen(req) as resp:
+        cases_data = json.loads(resp.read().decode('utf-8'))
+        cases = cases_data if isinstance(cases_data, list) else cases_data.get('cases', cases_data.get('items', []))
+        if cases:
+            case_id = cases[0]['id']
+            print(f"Selected test case ID: {case_id}")
+except Exception as e:
+    print(f"Error fetching cases: {e}")
 
-          if case_id:
-              test_content = "Adminiculum SharePoint Live Acceptance Test Document.\nGenerated at " + time.strftime('%Y-%m-%dT%H:%M:%SZ')
-              file_b64 = base64.b64encode(test_content.encode('utf-8')).decode('utf-8')
-              upload_url = f"https://{backend_app}.azurewebsites.net/api/v1/documents"
-              upload_body = json.dumps({
-                  "caseId": case_id,
-                  "fileName": "SharePoint_Acceptance_Test.txt",
-                  "fileContent": file_b64,
-                  "mimeType": "text/plain",
-                  "documentType": "CLIENT_INPUT",
-                  "folder": "CLIENT_INPUT"
-              }).encode('utf-8')
+if case_id:
+    test_content = "Adminiculum SharePoint Live Acceptance Test Document.\nGenerated at " + time.strftime('%Y-%m-%dT%H:%M:%SZ')
+    file_b64 = base64.b64encode(test_content.encode('utf-8')).decode('utf-8')
+    upload_url = f"https://{backend_app}.azurewebsites.net/api/v1/documents"
+    upload_body = json.dumps({
+        "caseId": case_id,
+        "fileName": "SharePoint_Acceptance_Test.txt",
+        "fileContent": file_b64,
+        "mimeType": "text/plain",
+        "documentType": "CLIENT_INPUT",
+        "folder": "CLIENT_INPUT"
+    }).encode('utf-8')
 
-              upload_req = urllib.request.Request(upload_url, data=upload_body, headers=headers)
-              try:
-                  with urllib.request.urlopen(upload_req) as resp:
-                      st = resp.getcode()
-                      doc_data = json.loads(resp.read().decode('utf-8'))
-                      doc_id = doc_data.get('id')
-                      src = doc_data.get('uploadSource')
-                      scan = doc_data.get('securityScanStatus')
-                      print(f"DOCUMENT UPLOAD STATUS: {st}")
-                      print(f"DOCUMENT ID: {doc_id}")
-                      print(f"UPLOAD SOURCE: {src}")
-                      print(f"SECURITY SCAN STATUS: {scan}")
-                      if doc_id:
-                          dl_url = f"https://{backend_app}.azurewebsites.net/api/v1/documents/{doc_id}/download"
-                          dl_req = urllib.request.Request(dl_url, headers={'Authorization': f'Bearer {token}'})
-                          with urllib.request.urlopen(dl_req) as dl_resp:
-                              print(f"DOCUMENT DOWNLOAD STATUS: {dl_resp.getcode()}")
-                              content_len = len(dl_resp.read())
-                              print(f"DOWNLOAD CONTENT LENGTH: {content_len}")
-                              print("IMMEDIATELY USABLE: PASS")
-                              print("LIVE DOCUMENT ACCEPTANCE: PASS")
-              except urllib.error.HTTPError as e:
-                  print(f"DOCUMENT UPLOAD FAILED: {e.code}")
-                  print(e.read().decode('utf-8', errors='replace'))
-          PY
+    upload_req = urllib.request.Request(upload_url, data=upload_body, headers=headers)
+    try:
+        with urllib.request.urlopen(upload_req) as resp:
+            st = resp.getcode()
+            doc_data = json.loads(resp.read().decode('utf-8'))
+            doc_id = doc_data.get('id')
+            src = doc_data.get('uploadSource')
+            scan = doc_data.get('securityScanStatus')
+            print(f"DOCUMENT UPLOAD STATUS: {st}")
+            print(f"DOCUMENT ID: {doc_id}")
+            print(f"UPLOAD SOURCE: {src}")
+            print(f"SECURITY SCAN STATUS: {scan}")
+            if doc_id:
+                dl_url = f"https://{backend_app}.azurewebsites.net/api/v1/documents/{doc_id}/download"
+                dl_req = urllib.request.Request(dl_url, headers={'Authorization': f'Bearer {token}'})
+                with urllib.request.urlopen(dl_req) as dl_resp:
+                    print(f"DOCUMENT DOWNLOAD STATUS: {dl_resp.getcode()}")
+                    content_len = len(dl_resp.read())
+                    print(f"DOWNLOAD CONTENT LENGTH: {content_len}")
+                    print("IMMEDIATELY USABLE: PASS")
+                    print("LIVE DOCUMENT ACCEPTANCE: PASS")
+    except urllib.error.HTTPError as e:
+        print(f"DOCUMENT UPLOAD FAILED: {e.code}")
+        print(e.read().decode('utf-8', errors='replace'))
+PY
             fi
           else
             echo "LIVE /health FAILED TO RETURN 200 (LAST STATUS: $CODE)"
