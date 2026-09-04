@@ -4,8 +4,10 @@ const mockQueueDocumentVersionScan = jest.fn();
 
 const mockPrisma = {
   case: { findUnique: jest.fn(), update: jest.fn() },
-  document: { create: jest.fn() },
+  document: { create: jest.fn(), findUnique: jest.fn(), update: jest.fn() },
+  documentVersion: { findFirst: jest.fn(), updateMany: jest.fn(), create: jest.fn() },
   timelineEvent: { create: jest.fn() },
+  $queryRaw: jest.fn(),
   $transaction: jest.fn(),
 };
 
@@ -60,6 +62,19 @@ describe('canonical document upload persistence', () => {
       updatedAt: new Date(),
     });
     mockPrisma.timelineEvent.create.mockResolvedValue({ id: 'event-1' });
+    mockPrisma.document.findUnique.mockResolvedValue({
+      id: 'document-1', caseId: 'case-1', caseNumber: 'CASE-1', fileName: 'clean.pdf', name: 'clean.pdf',
+      mimeType: 'application/pdf', folder: 'Internal', spPath: 'https://sharepoint.example/items/old',
+      spWebUrl: 'https://sharepoint.example/items/old', currentVersion: 1, currentVersionInt: 1,
+      versions: [{ id: 'version-1', version: 1 }], case: { caseNumber: 'CASE-1' },
+    });
+    mockPrisma.documentVersion.findFirst.mockResolvedValue({ id: 'version-1', version: 1 });
+    mockPrisma.documentVersion.create.mockResolvedValue({ id: 'version-2' });
+    mockPrisma.document.update.mockResolvedValue({
+      id: 'document-1', caseId: 'case-1', fileName: 'new.pdf', documentType: 'OTHER',
+      spItemId: 'sp-item-1', spPath: 'https://sharepoint.example/items/sp-item-1', version: '2',
+      createdAt: new Date(), updatedAt: new Date(),
+    });
   });
 
   it('creates one canonical document, initial version, timeline event, and case projection in one transaction', async () => {
@@ -83,6 +98,28 @@ describe('canonical document upload persistence', () => {
       where: { id: 'case-1' },
       data: { status: 'DRAFT' },
     });
+  });
+
+  it.each([
+    ['default source', undefined],
+    ['explicit workforce source', 'LAWYER_UPLOAD'],
+  ])('uploadNewVersion with %s is CLEAN and skips scanning', async (_label, uploadSource) => {
+    await documentsService.uploadNewVersion('document-1', Buffer.from('new content'), 'user-1', undefined, uploadSource ? { uploadSource } : undefined);
+
+    expect(mockPrisma.documentVersion.create.mock.calls[0][0].data).toMatchObject({
+      uploadSource: 'LAWYER_UPLOAD', securityScanStatus: 'CLEAN',
+    });
+    expect(mockQueueDocumentVersionScan).not.toHaveBeenCalled();
+  });
+
+  it.each(['CLIENT_UPLOAD', 'EMAIL_IMPORT'])('uploadNewVersion with %s remains pending and queues scanning', async (uploadSource) => {
+    await documentsService.uploadNewVersion('document-1', Buffer.from('new content'), 'user-1', undefined, { uploadSource });
+
+    expect(mockPrisma.documentVersion.create.mock.calls[0][0].data).toMatchObject({
+      uploadSource, securityScanStatus: 'PENDING_SCAN',
+    });
+    expect(mockPrisma.documentVersion.create.mock.calls[0][0].data.securityScanStatus).not.toBe('CLEAN');
+    expect(mockQueueDocumentVersionScan).toHaveBeenCalledTimes(1);
   });
 
   it('keeps CLIENT_INPUT as a category while preserving trusted workforce provenance', async () => {
