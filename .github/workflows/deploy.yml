@@ -443,7 +443,7 @@ jobs:
                   'Content-Type': 'application/json'
               })
               try:
-                  with urllib.request.urlopen(req, timeout=180) as resp:
+                  with urllib.request.urlopen(req, timeout=300) as resp:
                       res = json.loads(resp.read().decode('utf-8'))
                       out = (res.get('Output') or '').strip()
                       err = (res.get('Error') or '').strip()
@@ -465,26 +465,23 @@ jobs:
           print(f"EXPRESS FOUND: {has_express}")
 
           if not has_express:
-              print("\nRepairing node_modules in /home/site/wwwroot via bash...")
-              restore_cmd = (
-                  "first=$(tar -tf node_modules.tar.gz | head -n 1) && "
-                  "echo \"Tar first entry: $first\" && "
-                  "rm -rf node_modules && "
-                  "if [[ \"$first\" == node_modules/* ]]; then "
-                  "  tar -xzf node_modules.tar.gz; "
-                  "else "
-                  "  mkdir -p node_modules && tar -xzf node_modules.tar.gz -C node_modules; "
-                  "fi && "
-                  "if [ -f node_modules/express/package.json ]; then "
-                  "  echo 'RESTORE SUCCESS: express found'; "
-                  "else "
-                  "  echo 'RESTORE FAILED'; "
-                  "fi"
-              )
-              ver = run_kudu_bash(restore_cmd)
-              if ver and 'RESTORE SUCCESS' in (ver.get('Output') or ''):
+              print("\nRepairing node_modules in /home/site/wwwroot...")
+              print("Step A: extract node_modules.tar.gz directly in /home/site/wwwroot...")
+              run_kudu_bash("tar -xzf node_modules.tar.gz")
+              res_chk = run_kudu_bash("test -f node_modules/express/package.json && echo 'FOUND' || echo 'MISSING'")
+              if res_chk and 'FOUND' in (res_chk.get('Output') or ''):
+                  print("Express found after direct tar extraction.")
                   open('/tmp/node_modules_healed.txt', 'w').write('HEALED')
-                  print("node_modules successfully healed and validated.")
+              else:
+                  print("Step B: extract with -C node_modules...")
+                  run_kudu_bash("mkdir -p node_modules")
+                  run_kudu_bash("tar -xzf node_modules.tar.gz -C node_modules")
+                  res_chk2 = run_kudu_bash("test -f node_modules/express/package.json && echo 'FOUND' || echo 'MISSING'")
+                  if res_chk2 and 'FOUND' in (res_chk2.get('Output') or ''):
+                      print("Express found after -C node_modules extraction.")
+                      open('/tmp/node_modules_healed.txt', 'w').write('HEALED')
+                  else:
+                      print("Express still missing after extraction attempts.")
           PY
 
           if [ -f /tmp/node_modules_healed.txt ]; then
