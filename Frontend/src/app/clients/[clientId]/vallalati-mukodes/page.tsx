@@ -19,7 +19,13 @@ export default function CompanyWorkspacePage() {
     if (!clientId) return;
     void Promise.all([getClient(clientId), listAdminWorkspaces(clientId).catch(() => ({ items: [] }))]).then(([clientResult, workspaces]) => {
       setClient(clientResult);
-      setOrganizationMode(workspaces.items.some((item) => item.mode === "ORGANIZATION" && item.status !== "ARCHIVED"));
+      setOrganizationMode(
+        workspaces.items.some(
+          (item) =>
+            item.status !== "ARCHIVED" &&
+            (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY")
+        )
+      );
     }).catch(() => setError(true));
   }, [clientId]);
 

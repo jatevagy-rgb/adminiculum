@@ -116,14 +116,24 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(controlCenterSrc, /href=\{`\/cases\?clientId=\$\{encodedId\}&scope=ACTIVE`\}/);
   });
 
-  it("8. organizationMode is exactly ORGANIZATION || CASE_RELAY", () => {
-    assert.match(
-      pageSrc,
-      /const organizationMode =\s*portalWorkspace\?\.mode === "ORGANIZATION" \|\|\s*portalWorkspace\?\.mode === "CASE_RELAY";/,
+  it("8. organizationMode is derived authoritatively from full workspace collection and NOT from portalWorkspace?.mode", () => {
+    assert.ok(
+      !pageSrc.includes("portalWorkspace?.mode ==="),
+      "Dossier organization capability must NOT be derived from portalWorkspace?.mode",
     );
     assert.ok(
-      !pageSrc.includes('portalWorkspace.mode !== "INDIVIDUAL"'),
-      "Must not broaden organizationMode beyond accepted ORGANIZATION || CASE_RELAY contract",
+      !pageSrc.includes('portalWorkspace?.mode !== "INDIVIDUAL"'),
+      "Must not use portalWorkspace mode !== INDIVIDUAL",
+    );
+    assert.match(
+      pageSrc,
+      /portalWorkspaces\.items\.some\(\s*\(item\)\s*=>\s*item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\),?\s*\)/,
+      "pageSrc must derive hasOrganizationCapability using items.some with status !== ARCHIVED and ORGANIZATION || CASE_RELAY",
+    );
+    assert.match(
+      pageSrc,
+      /const organizationMode = hasOrganizationCapability;/,
+      "Dossier organizationMode must use hasOrganizationCapability",
     );
   });
 
@@ -134,7 +144,11 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     );
     assert.match(
       controlCenterSrc,
-      /\{organizationMode\s*&&\s*\(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Vállalati működés/,
+      /\{organizationMode\s*&&\s*\(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode\s*&&\s*\(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
     );
   });
 
@@ -178,7 +192,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /ClientHouseStylePanel/);
     assert.match(pageSrc, /ClientCompanyFoundation/);
     assert.match(pageSrc, /ClientContractLibrary/);
-    assert.match(pageSrc, /ClientOrganization/);
+    assert.match(pageSrc, /ClientOrganizationPreview/);
   });
 
   it("13. Client color visual language is strengthened in dashboard and control center", () => {
@@ -331,12 +345,426 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(controlCenterSrc, /Kommunikációk/);
     assert.match(controlCenterSrc, /Ügyfélportál/);
     assert.match(controlCenterSrc, /Szervezeti felépítés/);
-    assert.match(controlCenterSrc, /Vállalati működés/);
+    assert.match(controlCenterSrc, /Grow with us/);
+    assert.match(controlCenterSrc, /Compliance/);
 
     // Canonical lower panels
     assert.match(pageSrc, /<ClientCompanyFoundation/);
     assert.match(pageSrc, /<ClientContractLibrary/);
-    assert.match(pageSrc, /<ClientOrganization/);
+    assert.match(pageSrc, /<ClientOrganizationPreview/);
     assert.match(pageSrc, /<ClientHouseStylePanel/);
+  });
+
+  it("24. Dossier overview no longer directly renders full ClientOrganization, but renders ClientOrganizationPreview for organizationMode clients", () => {
+    assert.ok(
+      !pageSrc.includes("<ClientOrganization "),
+      "Dossier overview must NOT render full ClientOrganization",
+    );
+    assert.ok(
+      !pageSrc.includes("<ClientOrganization/"),
+      "Dossier overview must NOT render full ClientOrganization",
+    );
+    assert.match(
+      pageSrc,
+      /\{organizationMode && \(\s*<section id="szervezet"[\s\S]*?<ClientOrganizationPreview/,
+      "Dossier overview must render ClientOrganizationPreview guarded by organizationMode",
+    );
+
+    // Dedicated /szervezet page still renders full ClientOrganization
+    const orgPageSrc = read("src/app/clients/[clientId]/szervezet/page.tsx");
+    assert.match(
+      orgPageSrc,
+      /<ClientOrganization clientId=\{client\.id\} clientName=\{client\.name\} \/>/,
+      "Dedicated /szervezet page must still render full ClientOrganization",
+    );
+  });
+
+  it("25. ClientOrganizationPreview remains compact and does NOT contain person search, person editor, or full linked case list", () => {
+    const previewSrc = read("src/components/clients/ClientOrganizationPreview.tsx");
+
+    // No search
+    assert.ok(!previewSrc.includes("setQuery"), "Preview must NOT contain query search state");
+    assert.ok(!previewSrc.includes('type="search"'), "Preview must NOT contain search input");
+
+    // No person editor
+    assert.ok(!previewSrc.includes("updatePerson"), "Preview must NOT contain person editor handler");
+    assert.ok(!previewSrc.includes("setEditTitle"), "Preview must NOT contain person edit title state");
+
+    // No full responsibilities or contracts/cases lists
+    assert.ok(!previewSrc.includes("ownedContracts"), "Preview must NOT contain full ownedContracts list");
+    assert.ok(!previewSrc.includes("ownedObligations"), "Preview must NOT contain full ownedObligations list");
+
+    // Snapshot counts and clear CTA
+    assert.match(previewSrc, /Szervezeti felépítés megnyitása/);
+    assert.match(previewSrc, /\/szervezet/);
+    assert.match(previewSrc, /\{persons\.length\}/);
+    assert.match(previewSrc, /\{groups\.length\}/);
+  });
+
+  it("26. Organization-mode ClientControlCenter contains exact 6-card set with Grow with us and Compliance", () => {
+    // 6 canonical cards
+    assert.match(controlCenterSrc, /Nyitott ügyek/);
+    assert.match(controlCenterSrc, /Kommunikációk/);
+    assert.match(controlCenterSrc, /Ügyfélportál/);
+    assert.match(controlCenterSrc, /Szervezeti felépítés/);
+    assert.match(controlCenterSrc, /Grow with us/);
+    assert.match(controlCenterSrc, /Compliance/);
+
+    // Old generic card title replaced
+    assert.ok(
+      !controlCenterSrc.includes('<h3 className="mt-2 font-serif text-xl text-[var(--adm-text)] group-hover:text-[var(--adm-ochre-600)]">\n                Vállalati működés'),
+      "Old generic Vállalati működés primary card title must be replaced",
+    );
+
+    // Grow with us links to existing company workspace
+    assert.match(
+      controlCenterSrc,
+      /href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+      "Grow with us must link to /vallalati-mukodes",
+    );
+
+    // Grow with us card does NOT present demo-specific numeric data
+    assert.ok(!controlCenterSrc.includes("DEMO_KFT_COMPANY_EMPLOYEE_COUNT"), "Must NOT consume DEMO_KFT_COMPANY_EMPLOYEE_COUNT");
+    assert.ok(!controlCenterSrc.includes("growthNarrative"), "Must NOT consume growth narrative generically");
+
+    // Compliance links to /vallalati-mukodes#compliance
+    assert.match(
+      controlCenterSrc,
+      /href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
+      "Compliance must link to /vallalati-mukodes#compliance",
+    );
+  });
+
+  it("27. ClientCompanyWorkspace has stable id='compliance' on relevant-areas panel", () => {
+    const companyWsSrc = read("src/components/clients/ClientCompanyWorkspace.tsx");
+    assert.match(
+      companyWsSrc,
+      /<Panel id="compliance" title="Releváns területek">/,
+      "Existing compliance panel must have stable id='compliance'",
+    );
+  });
+
+  it("28. Individual mode does not expose organization-only cards", () => {
+    // Cards 4, 5, 6 in ClientControlCenter are all guarded by organizationMode
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/szervezet`\}[\s\S]*?Szervezeti felépítés/,
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
+    );
+  });
+
+  it("29. ClientOrganizationPreview does not swallow API errors and reaches outer error state with truthful copy", () => {
+    const previewSrc = read("src/components/clients/ClientOrganizationPreview.tsx");
+
+    // Must NOT swallow errors with fallback empty array inside Promise.all
+    assert.ok(
+      !previewSrc.includes(".catch(() => ({ items: []"),
+      "Preview must NOT swallow API rejection with fake empty arrays in Promise.all",
+    );
+    assert.match(
+      previewSrc,
+      /Promise\.all\(\[\s*clientOrganizationApi\.listGroups\(clientId\),\s*clientOrganizationApi\.listPersons\(clientId\),?\s*\]\)/,
+      "Preview must pass direct API promises to Promise.all",
+    );
+
+    // Outer error state must be reachable and set the canonical truthful message
+    assert.match(
+      previewSrc,
+      /setError\("A szervezeti pillanatkép jelenleg nem tölthető be\."\)/,
+      "Preview outer catch must set truthful error message",
+    );
+  });
+
+  it("30. ClientOrganizationPreview failure, genuine-empty, and populated states maintain strict truthfulness and reset stale data", () => {
+    const previewSrc = read("src/components/clients/ClientOrganizationPreview.tsx");
+
+    // Stale data reset on reload/new client
+    assert.match(
+      previewSrc,
+      /setLoading\(true\);\s*setError\(null\);\s*setGroups\(\[\]\);\s*setPersons\(\[\]\);/,
+      "Must clear stale groups and persons immediately upon clientId change",
+    );
+
+    // Header counts only rendered when not loading and not in error
+    assert.match(
+      previewSrc,
+      /\{!loading && !error && \(/,
+      "Header counts must only be rendered when !loading && !error",
+    );
+
+    // Error state rendered distinctly
+    assert.match(previewSrc, /: error \? \(\s*<div[^>]*>\s*\{error\}\s*<\/div>/);
+
+    // Genuine empty state rendered only when both authoritative arrays are empty
+    assert.match(previewSrc, /: persons\.length === 0 && groups\.length === 0 \?/);
+    assert.match(previewSrc, /Még nincsenek rögzített szervezeti egységek vagy munkatársak\./);
+
+    // Behavioral simulation of render semantics
+    type State = {
+      loading: boolean;
+      error: string | null;
+      persons: Array<{ id: string }>;
+      groups: Array<{ id: string }>;
+    };
+
+    const renderPreviewSemantics = (state: State) => {
+      const countsAuthoritative = !state.loading && !state.error;
+      const body = state.loading
+        ? "LOADING"
+        : state.error
+          ? `ERROR: ${state.error}`
+          : state.persons.length === 0 && state.groups.length === 0
+            ? "GENUINE_EMPTY"
+            : "POPULATED_PREVIEW";
+      return { countsAuthoritative, body };
+    };
+
+    // 1. Failure state (API rejection): counts NOT authoritative, error shown, empty state NOT shown
+    const failureRes = renderPreviewSemantics({
+      loading: false,
+      error: "A szervezeti pillanatkép jelenleg nem tölthető be.",
+      persons: [],
+      groups: [],
+    });
+    assert.equal(failureRes.countsAuthoritative, false, "Zero counts must not be authoritative on failure");
+    assert.equal(failureRes.body, "ERROR: A szervezeti pillanatkép jelenleg nem tölthető be.");
+    assert.ok(!failureRes.body.includes("GENUINE_EMPTY"));
+
+    // 2. Genuine empty state: counts authoritative (0, 0), empty copy shown
+    const emptyRes = renderPreviewSemantics({
+      loading: false,
+      error: null,
+      persons: [],
+      groups: [],
+    });
+    assert.equal(emptyRes.countsAuthoritative, true);
+    assert.equal(emptyRes.body, "GENUINE_EMPTY");
+
+    // 3. Populated state: counts authoritative, preview shown
+    const populatedRes = renderPreviewSemantics({
+      loading: false,
+      error: null,
+      persons: [{ id: "p1" }],
+      groups: [{ id: "g1" }],
+    });
+    assert.equal(populatedRes.countsAuthoritative, true);
+    assert.equal(populatedRes.body, "POPULATED_PREVIEW");
+  });
+
+  it("31. Dedicated /szervezet page accepts ORGANIZATION and CASE_RELAY, rejecting INDIVIDUAL, unknown modes, and ARCHIVED workspaces", () => {
+    const orgPageSrc = read("src/app/clients/[clientId]/szervezet/page.tsx");
+
+    assert.match(
+      orgPageSrc,
+      /item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\)/,
+      "Dedicated /szervezet page must accept ORGANIZATION and CASE_RELAY while excluding ARCHIVED",
+    );
+    assert.ok(
+      !orgPageSrc.includes('item.mode !== "INDIVIDUAL"'),
+      "Dedicated /szervezet page must NOT use mode !== 'INDIVIDUAL'",
+    );
+
+    // Behavioral test of /szervezet workspace resolution
+    const checkSzervezetAccess = (items: Array<{ mode?: string | null; status?: string }>) =>
+      items.some(
+        (item) =>
+          item.status !== "ARCHIVED" &&
+          (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
+      );
+
+    // Accepts ORGANIZATION
+    assert.equal(checkSzervezetAccess([{ mode: "ORGANIZATION", status: "ACTIVE" }]), true);
+    // Accepts CASE_RELAY
+    assert.equal(checkSzervezetAccess([{ mode: "CASE_RELAY", status: "ACTIVE" }]), true);
+    // Rejects INDIVIDUAL
+    assert.equal(checkSzervezetAccess([{ mode: "INDIVIDUAL", status: "ACTIVE" }]), false);
+    // Rejects unknown/null modes
+    assert.equal(checkSzervezetAccess([{ mode: "CUSTOM", status: "ACTIVE" }]), false);
+    assert.equal(checkSzervezetAccess([{ mode: null, status: "ACTIVE" }]), false);
+    assert.equal(checkSzervezetAccess([{ status: "ACTIVE" }]), false);
+    // Rejects ARCHIVED workspace even if mode is ORGANIZATION or CASE_RELAY
+    assert.equal(checkSzervezetAccess([{ mode: "ORGANIZATION", status: "ARCHIVED" }]), false);
+    assert.equal(checkSzervezetAccess([{ mode: "CASE_RELAY", status: "ARCHIVED" }]), false);
+  });
+
+  it("32. Full ClientOrganization detail workspace remains rendered on dedicated /szervezet page", () => {
+    const orgPageSrc = read("src/app/clients/[clientId]/szervezet/page.tsx");
+    assert.match(
+      orgPageSrc,
+      /<ClientOrganization clientId=\{client\.id\} clientName=\{client\.name\} \/>/,
+      "Dedicated /szervezet page must still render full ClientOrganization component",
+    );
+  });
+
+  it("33. Dedicated /vallalati-mukodes page accepts ORGANIZATION and CASE_RELAY, rejecting INDIVIDUAL, unknown modes, and ARCHIVED workspaces", () => {
+    const opsPageSrc = read("src/app/clients/[clientId]/vallalati-mukodes/page.tsx");
+
+    assert.match(
+      opsPageSrc,
+      /item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\)/,
+      "Dedicated /vallalati-mukodes page must accept ORGANIZATION and CASE_RELAY while excluding ARCHIVED",
+    );
+    assert.ok(
+      !opsPageSrc.includes('item.mode !== "INDIVIDUAL"'),
+      "Dedicated /vallalati-mukodes page must NOT use mode !== 'INDIVIDUAL'",
+    );
+
+    // Behavioral test of /vallalati-mukodes workspace resolution
+    const checkCompanyOpsAccess = (items: Array<{ mode?: string | null; status?: string }>) =>
+      items.some(
+        (item) =>
+          item.status !== "ARCHIVED" &&
+          (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
+      );
+
+    // Accepts active ORGANIZATION
+    assert.equal(checkCompanyOpsAccess([{ mode: "ORGANIZATION", status: "ACTIVE" }]), true);
+    // Accepts active CASE_RELAY
+    assert.equal(checkCompanyOpsAccess([{ mode: "CASE_RELAY", status: "ACTIVE" }]), true);
+    // Rejects INDIVIDUAL
+    assert.equal(checkCompanyOpsAccess([{ mode: "INDIVIDUAL", status: "ACTIVE" }]), false);
+    // Rejects unknown/null modes
+    assert.equal(checkCompanyOpsAccess([{ mode: "UNKNOWN", status: "ACTIVE" }]), false);
+    assert.equal(checkCompanyOpsAccess([{ mode: null, status: "ACTIVE" }]), false);
+    assert.equal(checkCompanyOpsAccess([{ status: "ACTIVE" }]), false);
+    // Rejects ARCHIVED workspace even if mode is ORGANIZATION or CASE_RELAY
+    assert.equal(checkCompanyOpsAccess([{ mode: "ORGANIZATION", status: "ARCHIVED" }]), false);
+    assert.equal(checkCompanyOpsAccess([{ mode: "CASE_RELAY", status: "ARCHIVED" }]), false);
+  });
+
+  it("34. End-to-end capability contract: Grow with us and Compliance remain guarded by identical organizationMode semantics and reach valid destinations", () => {
+    // Both cards guarded by organizationMode in controlCenterSrc
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+      "Grow with us must be guarded by organizationMode",
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
+      "Compliance must be guarded by organizationMode",
+    );
+
+    // Compliance anchor remains #compliance on panel in ClientCompanyWorkspace
+    const companyWsSrc = read("src/components/clients/ClientCompanyWorkspace.tsx");
+    assert.match(
+      companyWsSrc,
+      /<Panel id="compliance" title="Releváns területek">/,
+      "Existing compliance panel must have stable id='compliance'",
+    );
+
+    // Full ClientCompanyWorkspace component remains rendered on dedicated page
+    const opsPageSrc = read("src/app/clients/[clientId]/vallalati-mukodes/page.tsx");
+    assert.match(
+      opsPageSrc,
+      /<ClientCompanyWorkspace clientId=\{client\.id\} clientName=\{client\.name\} \/>/,
+      "Dedicated /vallalati-mukodes page must render ClientCompanyWorkspace",
+    );
+  });
+
+  it("35. Dossier organization capability resolution matrix, stale reset, and archived fallback safety", () => {
+    // Stale capability reset on load start
+    assert.match(
+      pageSrc,
+      /setHasOrganizationCapability\(false\);/,
+      "Must reset hasOrganizationCapability to false at the start of loadClientData",
+    );
+
+    // Canonical dossier capability resolver matching pageSrc implementation:
+    const resolveDossierCapability = (workspaces: { items?: Array<{ mode?: string | null; status?: string }> } | null | undefined) => {
+      const items = workspaces?.items || [];
+      return items.some(
+        (item) =>
+          item.status !== "ARCHIVED" &&
+          (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
+      );
+    };
+
+    // 1. ACTIVE ORGANIZATION => true
+    assert.equal(resolveDossierCapability({ items: [{ mode: "ORGANIZATION", status: "ACTIVE" }] }), true);
+
+    // 2. ACTIVE CASE_RELAY => true
+    assert.equal(resolveDossierCapability({ items: [{ mode: "CASE_RELAY", status: "ACTIVE" }] }), true);
+
+    // 3. ACTIVE INDIVIDUAL only => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "INDIVIDUAL", status: "ACTIVE" }] }), false);
+
+    // 4. ARCHIVED ORGANIZATION only => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "ORGANIZATION", status: "ARCHIVED" }] }), false);
+
+    // 5. ARCHIVED CASE_RELAY only => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "CASE_RELAY", status: "ARCHIVED" }] }), false);
+
+    // 6. ACTIVE INDIVIDUAL + ARCHIVED ORGANIZATION => false
+    assert.equal(
+      resolveDossierCapability({
+        items: [
+          { mode: "INDIVIDUAL", status: "ACTIVE" },
+          { mode: "ORGANIZATION", status: "ARCHIVED" },
+        ],
+      }),
+      false,
+    );
+
+    // 7. ACTIVE INDIVIDUAL + ACTIVE CASE_RELAY => true
+    assert.equal(
+      resolveDossierCapability({
+        items: [
+          { mode: "INDIVIDUAL", status: "ACTIVE" },
+          { mode: "CASE_RELAY", status: "ACTIVE" },
+        ],
+      }),
+      true,
+    );
+
+    // 8. ACTIVE INDIVIDUAL + ACTIVE ORGANIZATION => true
+    assert.equal(
+      resolveDossierCapability({
+        items: [
+          { mode: "INDIVIDUAL", status: "ACTIVE" },
+          { mode: "ORGANIZATION", status: "ACTIVE" },
+        ],
+      }),
+      true,
+    );
+
+    // 9. Unknown/null mode => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "CUSTOM", status: "ACTIVE" }] }), false);
+    assert.equal(resolveDossierCapability({ items: [{ mode: null, status: "ACTIVE" }] }), false);
+    assert.equal(resolveDossierCapability({ items: [{ status: "ACTIVE" }] }), false);
+
+    // 10. Workspace API failure (catch returns { items: [] } or null) => false
+    assert.equal(resolveDossierCapability({ items: [] }), false);
+    assert.equal(resolveDossierCapability(null), false);
+    assert.equal(resolveDossierCapability(undefined), false);
+
+    // 12 & 13. Archived fallback portalWorkspace cannot expose organization capability
+    const archivedOnlyItems = [{ mode: "ORGANIZATION", status: "ARCHIVED" }];
+    const fallbackDisplayWorkspace =
+      archivedOnlyItems.find((item) => item.status !== "ARCHIVED") || archivedOnlyItems[0] || null;
+    assert.equal(fallbackDisplayWorkspace?.status, "ARCHIVED");
+    // Even though display workspace has mode ORGANIZATION:
+    assert.equal(fallbackDisplayWorkspace?.mode, "ORGANIZATION");
+    // Authoritative capability resolution correctly evaluates to false:
+    assert.equal(resolveDossierCapability({ items: archivedOnlyItems }), false);
+
+    // Multi-workspace order independence:
+    const orderA = [
+      { mode: "INDIVIDUAL", status: "ACTIVE" },
+      { mode: "CASE_RELAY", status: "ACTIVE" },
+    ];
+    const orderB = [
+      { mode: "CASE_RELAY", status: "ACTIVE" },
+      { mode: "INDIVIDUAL", status: "ACTIVE" },
+    ];
+    assert.equal(resolveDossierCapability({ items: orderA }), true);
+    assert.equal(resolveDossierCapability({ items: orderB }), true);
   });
 });

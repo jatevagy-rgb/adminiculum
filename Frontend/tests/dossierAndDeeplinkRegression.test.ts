@@ -61,7 +61,8 @@ describe("Client dossier & dedicated portal surface separation", () => {
     // These capabilities remain preserved elsewhere in the integrated dashboard
     assert.match(dossierSrc, /Ügyfél szerkesztése/);
     assert.match(dossierSrc, /Dokumentum hozzáadása/);
-    assert.match(controlCenterSrc, /Vállalati működés/);
+    assert.match(controlCenterSrc, /Grow with us/);
+    assert.match(controlCenterSrc, /Compliance/);
     assert.match(controlCenterSrc, /Szervezeti felépítés/);
     assert.match(dossierSrc, /id="vallalati-mukodes"/);
     assert.match(dossierSrc, /id="szervezet"/);

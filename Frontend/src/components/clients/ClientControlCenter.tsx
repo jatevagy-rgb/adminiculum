@@ -200,7 +200,7 @@ export function ClientControlCenter({
           </Link>
         )}
 
-        {/* 5. Vállalati működés (Only organizationMode) */}
+        {/* 5. Grow with us (Only organizationMode) */}
         {organizationMode && (
           <Link
             href={`/clients/${encodedId}/vallalati-mukodes`}
@@ -212,25 +212,61 @@ export function ClientControlCenter({
                   {colorDef.key && (
                     <span className={`h-1.5 w-1.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
                   )}
-                  <span className="font-semibold uppercase tracking-[0.14em]">Működés</span>
+                  <span className="font-semibold uppercase tracking-[0.14em]">Fejlődés</span>
                 </div>
                 <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
                   Megnyitás →
                 </span>
               </div>
               <h3 className="mt-2 font-serif text-xl text-[var(--adm-text)] group-hover:text-[var(--adm-ochre-600)]">
-                Vállalati működés
+                Grow with us
               </h3>
               <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                Megfelelés, megállapítások és intézkedések
+                A vállalat változásainak, fejlődési lépéseinek és következő teendőinek folyamatos kísérése.
               </p>
             </div>
             <div className="mt-4 pt-3 border-t border-[var(--adm-border)] flex items-center justify-between">
               <span className="text-xs font-semibold text-[var(--adm-text)]">
-                Folyamatos kísérés
+                Vállalati kísérés
               </span>
               <span className="rounded-full bg-[var(--adm-surface)] px-2 py-0.5 text-[10px] text-[var(--adm-text-muted)]">
-                Grow-with-us
+                Folyamatos kísérés
+              </span>
+            </div>
+          </Link>
+        )}
+
+        {/* 6. Compliance (Only organizationMode) */}
+        {organizationMode && (
+          <Link
+            href={`/clients/${encodedId}/vallalati-mukodes#compliance`}
+            className={cardBaseClasses}
+          >
+            <div>
+              <div className="flex items-center justify-between text-[11px] text-[var(--adm-text-muted)]">
+                <div className="flex items-center gap-1.5">
+                  {colorDef.key && (
+                    <span className={`h-1.5 w-1.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
+                  )}
+                  <span className="font-semibold uppercase tracking-[0.14em]">Megfelelés</span>
+                </div>
+                <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
+                  Megnyitás →
+                </span>
+              </div>
+              <h3 className="mt-2 font-serif text-xl text-[var(--adm-text)] group-hover:text-[var(--adm-ochre-600)]">
+                Compliance
+              </h3>
+              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+                Releváns megfelelőségi területek, megállapítások és következő jogi lépések.
+              </p>
+            </div>
+            <div className="mt-4 pt-3 border-t border-[var(--adm-border)] flex items-center justify-between">
+              <span className="text-xs font-semibold text-[var(--adm-text)]">
+                Megfelelőségi területek
+              </span>
+              <span className="rounded-full bg-[var(--adm-surface)] px-2 py-0.5 text-[10px] text-[var(--adm-text-muted)]">
+                Értékelések
               </span>
             </div>
           </Link>
