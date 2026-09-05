@@ -55,7 +55,14 @@ export default function CommunicationWorkspace() {
   const [contactFilter, setContactFilter] = useState("");
   const [emailFilter, setEmailFilter] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
-  const [clientFilter, setClientFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const clientId = params.get("clientId");
+      if (clientId && clientId.trim()) return clientId.trim();
+    }
+    return "all";
+  });
   const [caseFilter, setCaseFilter] = useState("all");
   const [directionFilter, setDirectionFilter] = useState("all");
   const [audienceFilter, setAudienceFilter] = useState("all");
@@ -95,6 +102,8 @@ export default function CommunicationWorkspace() {
     if (viewOptions.some((option) => option.value === view)) setActiveView(view);
     const communicationId = params.get("communicationId");
     if (communicationId) setSelectedId(communicationId);
+    const clientId = params.get("clientId");
+    if (clientId && clientId.trim()) setClientFilter(clientId.trim());
   }, []);
 
   useEffect(() => {

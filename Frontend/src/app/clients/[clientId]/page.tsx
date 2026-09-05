@@ -206,31 +206,19 @@ function ClientDetailContent() {
       <div className="adm-board-container grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
       <main className="min-w-0 space-y-5">
           <header className="adm-board-hero p-5 lg:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 items-center justify-center rounded-[var(--adm-radius-md)] bg-[var(--adm-green-800)] text-2xl font-serif text-white shadow-[0_8px_20px_rgba(31,74,51,0.14)]">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--adm-radius-md)] bg-[var(--adm-green-800)] text-2xl font-serif text-white shadow-[0_8px_20px_rgba(31,74,51,0.14)]">
                   {client.name?.charAt(0)?.toUpperCase() || "?"}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">Ügyfél dosszié</p>
-                   <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)]">{client.name}</h1>
+                  <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)] break-words">{client.name}</h1>
                   <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Kapcsolt ügyek, dokumentumok és kommunikációk belső operatív nézete</p>
                 </div>
               </div>
-              <section className="mt-5 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Client Portal control plane</p><h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Ügyfélkapcsolati működés</h2></div><span className="rounded-full bg-[var(--adm-gold-soft,#f3ead2)] px-3 py-1 text-xs font-semibold">{client.portalAccessEnabled ? 'Portál előkészítve' : 'Portál hozzáférés kikapcsolva'}</span></div>
-                <div className="mt-3 grid gap-3 md:grid-cols-2"><label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Működési mód</span><select value={client.relationshipMode || 'PORTAL_CENTRIC'} disabled={savingPortal} onChange={(event) => void savePortalSettings({ relationshipMode: event.target.value as Client['relationshipMode'] })} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]"><option value="PORTAL_CENTRIC">Portálközpontú</option><option value="EMAIL_CENTRIC">E-mail központú</option><option value="CONNECTED_SYSTEM">Kapcsolt rendszer</option></select></label><label className="flex items-end gap-2 text-sm"><input type="checkbox" checked={Boolean(client.portalAccessEnabled)} disabled={savingPortal} onChange={(event) => void savePortalSettings({ portalAccessEnabled: event.target.checked })} />Portál elérhetőségének előkészítése</label></div>
-                {client.relationshipMode === 'CONNECTED_SYSTEM' ? (
-                  <div className="mt-3 rounded border border-[var(--adm-border)] bg-white/70 p-3">
-                    <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]"><span>Kapcsolt rendszer állapota</span><input value={client.connectedSystemState || ''} disabled={savingPortal} onChange={(event) => setClient((current) => current ? { ...current, connectedSystemState: event.target.value } : current)} onBlur={(event) => void savePortalSettings({ connectedSystemState: event.target.value })} placeholder="Nincs konfigurálva" className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]" /></label>
-                    <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Ez az állapot a külső ügykezelő rendszer kapcsolatának konfigurációját jelzi. Nem jelent automatikus szinkronizációt.</p>
-                  </div>
-                ) : (
-                  <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Normál ügyfélfelületnél nincs kapcsolt-rendszer állapot a fő adminisztrációban.</p>
-                )}
-              </section>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
                 <Link href={`/clients/${clientId}/vallalati-mukodes`} className="adm-link-button px-4 py-2 text-xs">
                   Vállalati működés
                 </Link>
@@ -266,6 +254,66 @@ function ClientDetailContent() {
               />
             </div>
           </header>
+
+          {/* Client Portal control plane - repositioned to a separate full-width section below the hero */}
+          <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Client Portal control plane</p>
+                <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Ügyfélkapcsolati működés</h2>
+              </div>
+              <span className="rounded-full bg-[var(--adm-gold-soft,#f3ead2)] px-3 py-1 text-xs font-semibold">
+                {client.portalAccessEnabled ? 'Portál előkészítve' : 'Portál hozzáférés kikapcsolva'}
+              </span>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+                <span>Működési mód</span>
+                <select
+                  value={client.relationshipMode || 'PORTAL_CENTRIC'}
+                  disabled={savingPortal}
+                  onChange={(event) => void savePortalSettings({ relationshipMode: event.target.value as Client['relationshipMode'] })}
+                  className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]"
+                >
+                  <option value="PORTAL_CENTRIC">Portálközpontú</option>
+                  <option value="EMAIL_CENTRIC">E-mail központú</option>
+                  <option value="CONNECTED_SYSTEM">Kapcsolt rendszer</option>
+                </select>
+              </label>
+              <label className="flex items-end gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(client.portalAccessEnabled)}
+                  disabled={savingPortal}
+                  onChange={(event) => void savePortalSettings({ portalAccessEnabled: event.target.checked })}
+                />
+                Portál elérhetőségének előkészítése
+              </label>
+            </div>
+            {client.relationshipMode === 'CONNECTED_SYSTEM' ? (
+              <div className="mt-3 rounded border border-[var(--adm-border)] bg-white/70 p-3">
+                <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+                  <span>Kapcsolt rendszer állapota</span>
+                  <input
+                    value={client.connectedSystemState || ''}
+                    disabled={savingPortal}
+                    onChange={(event) => setClient((current) => current ? { ...current, connectedSystemState: event.target.value } : current)}
+                    onBlur={(event) => void savePortalSettings({ connectedSystemState: event.target.value })}
+                    placeholder="Nincs konfigurálva"
+                    className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]"
+                  />
+                </label>
+                <p className="mt-2 text-xs text-[var(--adm-text-muted)]">
+                  Ez az állapot a külső ügykezelő rendszer kapcsolatának konfigurációját jelzi. Nem jelent automatikus szinkronizációt.
+                </p>
+              </div>
+            ) : (
+              <p className="mt-3 text-xs text-[var(--adm-text-muted)]">
+                Normál ügyfélfelületnél nincs kapcsolt-rendszer állapot a fő adminisztrációban.
+              </p>
+            )}
+          </section>
+
 
           <section className="adm-board-panel p-5">
             <div className="flex items-center justify-between mb-4">

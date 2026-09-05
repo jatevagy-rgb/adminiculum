@@ -194,9 +194,16 @@ function formatDeadlinePreview(value?: string) {
 export function CasesList() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [scopeFilter, setScopeFilter] = useState<"ACTIVE" | "MINE" | "CLOSED">("ACTIVE");
+  const [scopeFilter, setScopeFilter] = useState<"ACTIVE" | "MINE" | "CLOSED">(() => {
+    const rawScope = searchParams?.get("scope")?.toUpperCase();
+    if (rawScope === "ACTIVE" || rawScope === "MINE" || rawScope === "CLOSED") {
+      return rawScope;
+    }
+    return "ACTIVE";
+  });
   const [practiceArea, setPracticeArea] = useState("all");
   const [clientName, setClientName] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<string>(() => (searchParams?.get("clientId") || "").trim());
   const [workPriorityFilter, setWorkPriorityFilter] = useState("all");
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
@@ -312,11 +319,12 @@ export function CasesList() {
             ? ["CLOSED", "ARCHIVED"].includes(status)
             : item.assignedLawyer?.id === currentUser?.id && !["CLOSED", "ARCHIVED"].includes(status);
       const practiceMatch = practiceArea === "all" || item.matterType === practiceArea;
+      const clientIdMatch = !selectedClientId || item.clientId === selectedClientId;
       const clientMatch = !normalizedQuery || (item.clientName ?? "").toLowerCase().includes(normalizedQuery);
       const workPriorityMatch = workPriorityFilter === "all" || deriveWorkPriorityLabel(item.priority) === workPriorityFilter;
-      return scopeMatch && practiceMatch && clientMatch && workPriorityMatch;
+      return scopeMatch && practiceMatch && clientIdMatch && clientMatch && workPriorityMatch;
     });
-  }, [backendCases, clientName, currentUser?.id, deriveWorkPriorityLabel, practiceArea, scopeFilter, workPriorityFilter]);
+  }, [backendCases, clientName, currentUser?.id, deriveWorkPriorityLabel, practiceArea, scopeFilter, selectedClientId, workPriorityFilter]);
 
   const caseEntrypointStats = useMemo(() => {
     const activeCases = backendCases.filter(
@@ -362,10 +370,37 @@ export function CasesList() {
             ))}
           </select>
         </label>
-        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
-          Ügyfél
-          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className="adm-board-field mt-1 block h-9 w-48 px-2 text-xs" placeholder="Ügyfél keresése" />
-        </label>
+        <div className="flex flex-col">
+          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+            Ügyfél
+            <input
+              value={clientName}
+              onChange={(e) => {
+                setClientName(e.target.value);
+                if (selectedClientId) setSelectedClientId("");
+              }}
+              className="adm-board-field mt-1 block h-9 w-48 px-2 text-xs"
+              placeholder="Ügyfél keresése"
+            />
+          </label>
+          {selectedClientId && (
+            <div className="mt-1 flex items-center gap-1 rounded bg-[var(--adm-sand-100)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
+              <span className="font-semibold">Szűrt ügyfél ID:</span>
+              <span className="max-w-[120px] truncate">
+                {backendCases.find((c) => c.clientId === selectedClientId)?.clientName || selectedClientId}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedClientId("")}
+                className="ml-auto font-bold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
+                title="Ügyfélszűrő törlése"
+                aria-label="Ügyfélszűrő törlése"
+              >
+                ×
+              </button>
+            </div>
+          )}
+        </div>
         <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
           Munkaprioritás
           <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="adm-board-field mt-1 block h-9 w-40 px-2 text-xs">
@@ -376,7 +411,18 @@ export function CasesList() {
           </select>
         </label>
         <div className="ml-auto flex flex-wrap gap-2">
-          <AdminButton size="sm" variant="neutral" onClick={() => { setPracticeArea("all"); setClientName(""); setWorkPriorityFilter("all"); }}>Szűrők törlése</AdminButton>
+          <AdminButton
+            size="sm"
+            variant="neutral"
+            onClick={() => {
+              setPracticeArea("all");
+              setClientName("");
+              setSelectedClientId("");
+              setWorkPriorityFilter("all");
+            }}
+          >
+            Szűrők törlése
+          </AdminButton>
         </div>
       </div>
 
