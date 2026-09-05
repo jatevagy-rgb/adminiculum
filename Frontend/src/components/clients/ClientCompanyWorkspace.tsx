@@ -30,9 +30,9 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">{children}</h2>;
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5">
+    <section id={id} className={`rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5 ${id ? "scroll-mt-24" : ""}`}>
       <SectionTitle>{title}</SectionTitle>
       <div className="mt-3">{children}</div>
     </section>
@@ -191,8 +191,8 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
             </div>
           </Panel>
 
-          {/* 5. Releváns területek */}
-          <Panel title="Releváns területek">
+          {/* 5. Releváns területek (Compliance) */}
+          <Panel id="compliance" title="Releváns területek">
             {complianceLoading ? (
               <p className="text-sm text-[var(--adm-text-muted)]">Területek betöltése...</p>
             ) : complianceError ? (
