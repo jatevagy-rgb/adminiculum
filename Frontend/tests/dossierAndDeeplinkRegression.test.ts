@@ -10,6 +10,7 @@ const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
 
 describe("Client dossier & dedicated portal surface separation", () => {
   const dossierSrc = read("src/app/clients/[clientId]/page.tsx");
+  const controlCenterSrc = read("src/components/clients/ClientControlCenter.tsx");
   const portalSrc = read("src/app/clients/[clientId]/portal/page.tsx");
 
   it("full portal control plane is NOT on the dossier overview page", () => {
@@ -28,11 +29,15 @@ describe("Client dossier & dedicated portal surface separation", () => {
     );
   });
 
-  it("dossier overview provides concise human-facing portal summary and navigation affordance", () => {
-    assert.match(dossierSrc, /Ügyfélportál/);
-    assert.match(dossierSrc, /client\.portalAccessEnabled \? "Előkészítve" : "Nincs előkészítve"/);
-    assert.match(dossierSrc, /href=\{`\/clients\/\$\{clientId\}\/portal`\}/);
-    assert.match(dossierSrc, /Portál megnyitása/);
+  it("dossier overview provides concise human-facing portal summary and navigation affordance via ClientControlCenter", () => {
+    assert.match(controlCenterSrc, /Ügyfélportál/);
+    assert.match(controlCenterSrc, /client\.portalAccessEnabled \? "Előkészítve" : "Nincs előkészítve"/);
+    assert.match(controlCenterSrc, /href=\{`\/clients\/\$\{encodedId\}\/portal`\}/);
+    assert.match(controlCenterSrc, /Portál adatok/);
+    assert.ok(
+      !dossierSrc.includes("Portál megnyitása"),
+      "Dossier overview must NOT duplicate portal action card outside ClientControlCenter",
+    );
   });
 
   it("hero header maintains responsive layout and all primary actions", () => {

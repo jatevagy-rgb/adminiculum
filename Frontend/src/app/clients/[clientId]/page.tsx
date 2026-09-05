@@ -299,7 +299,7 @@ function ClientDetailContent() {
         {/* 2. Integrated Client Basics & Operational Hub */}
         <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Card 1: Identity & Contact */}
-          <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
+          <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
             <div>
               <div className="flex items-center justify-between pb-3 border-b border-[var(--adm-border)]">
                 <div className="flex items-center gap-2">
@@ -330,56 +330,59 @@ function ClientDetailContent() {
             </div>
           </div>
 
-          {/* Card 2: Portal Snapshot & Quick Operations */}
-          <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between pb-3 border-b border-[var(--adm-border)]">
-                  <div className="flex items-center gap-2">
-                    {clientColorDef.key && (
-                      <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
-                    )}
-                    <h2 className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[var(--adm-text-muted)]">
-                      Ügyfélportál
-                    </h2>
-                  </div>
-                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${client.portalAccessEnabled ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-neutral-100 text-neutral-600 border border-neutral-200"}`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${client.portalAccessEnabled ? "bg-emerald-500" : "bg-neutral-400"}`} />
-                    {client.portalAccessEnabled ? "Előkészítve" : "Nincs előkészítve"}
-                  </span>
+          {/* Card 2: Gyors műveletek */}
+          <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
+            <div>
+              <div className="flex items-center justify-between pb-3 border-b border-[var(--adm-border)]">
+                <div className="flex items-center gap-2">
+                  {clientColorDef.key && (
+                    <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
+                  )}
+                  <h2 className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[var(--adm-text-muted)]">
+                    Gyors műveletek
+                  </h2>
                 </div>
-                <div className="flex items-center justify-between text-xs mt-3 mb-2">
-                  <span className="text-[var(--adm-text-muted)]">Állapot:</span>
-                  <span className="font-semibold text-[var(--adm-text)]">
-                    {client.portalAccessEnabled ? "Előkészítve" : "Nincs előkészítve"}
-                  </span>
-                </div>
-                <Link
-                  href={`/clients/${clientId}/portal`}
-                  className="adm-link-button block px-3 py-2 text-center text-xs font-medium"
-                >
-                  Portál megnyitása
-                </Link>
+                <span className="text-[10px] text-[var(--adm-text-muted)]">Műveleti központ</span>
               </div>
 
-              <div className="border-t border-[var(--adm-border)] pt-4">
-                <h3 className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[var(--adm-text-muted)] mb-2.5">
-                  Gyors műveletek
-                </h3>
-                <div className="space-y-2">
-                  <button
-                    onClick={() => setShowNewCaseModal(true)}
-                    className="adm-link-button w-full px-3 py-2 text-left text-xs"
-                  >
-                    Új ügy indítása
-                  </button>
+              <div className="mt-3 space-y-2">
+                <button
+                  onClick={() => setShowNewCaseModal(true)}
+                  className="adm-link-button w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
+                >
+                  <span>Új ügy indítása</span>
+                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                </button>
+                <button
+                  onClick={openEditClient}
+                  className="adm-link-button w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
+                >
+                  <span>Ügyfél szerkesztése</span>
+                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                </button>
+                <Link
+                  href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`}
+                  className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
+                >
+                  <span>Dokumentum hozzáadása</span>
+                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                </Link>
+                {organizationMode && (
                   <Link
-                    href={`/clients/${clientId}/workgroups`}
-                    className="adm-link-button block px-3 py-2 text-xs"
+                    href={`/clients/${encodeURIComponent(clientId)}/workgroups`}
+                    className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
                   >
-                    Munkacsoportok
+                    <span>Munkacsoportok</span>
+                    <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                   </Link>
-                </div>
+                )}
+                <Link
+                  href={`/communications?clientId=${encodeURIComponent(clientId)}`}
+                  className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
+                >
+                  <span>Ügyfél kommunikációk</span>
+                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                </Link>
               </div>
             </div>
           </div>
@@ -387,7 +390,7 @@ function ClientDetailContent() {
           {/* Card 3: House Style */}
           <section
             id="house-style"
-            className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}
+            className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
           >
             <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3 mb-3">
               <div className="flex items-center gap-2 mb-1">
@@ -405,7 +408,7 @@ function ClientDetailContent() {
         </section>
 
         {/* 3. Connected Working Lists */}
-        <section className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
+        <section className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               {clientColorDef.key && (
@@ -463,7 +466,7 @@ function ClientDetailContent() {
         </section>
 
         <section className="grid gap-5 lg:grid-cols-2">
-          <div className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
+          <div className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 {clientColorDef.key && (
@@ -490,7 +493,7 @@ function ClientDetailContent() {
             )}
           </div>
 
-          <div className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
+          <div className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 {clientColorDef.key && (
@@ -541,16 +544,16 @@ function ClientDetailContent() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <section id="vallalati-mukodes" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
+            <section id="vallalati-mukodes" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
               <ClientCompanyFoundation clientId={clientId} />
             </section>
 
-            <section id="szerzodes-tar" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
+            <section id="szerzodes-tar" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
               <ClientContractLibrary clientId={clientId} />
             </section>
           </div>
 
-          <section id="szervezet" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentBorderClass.replace("border-l-", "border-t-")}` : ""}`}>
+          <section id="szervezet" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
             <ClientOrganization clientId={clientId} />
           </section>
         </section>

@@ -2,6 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import {
+  CLIENT_COLOR_DEFINITIONS,
+  CLIENT_COLOR_KEYS,
+  NEUTRAL_CLIENT_COLOR,
+  getClientAccentTopBorderClass,
+} from "../src/lib/clientColors";
 
 const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -167,7 +173,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
   it("12. Former sidebar modules are fully integrated into main dashboard content", () => {
     assert.match(pageSrc, /Ügyfélazonosság és kapcsolódó adatok/);
     assert.match(pageSrc, /Gyors műveletek/);
-    assert.match(pageSrc, /Ügyfélportál/);
+    assert.match(controlCenterSrc, /Ügyfélportál/);
     assert.match(pageSrc, /House style/);
     assert.match(pageSrc, /ClientHouseStylePanel/);
     assert.match(pageSrc, /ClientCompanyFoundation/);
@@ -188,5 +194,90 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /Kapcsolt ügyek/);
     assert.match(pageSrc, /Kapcsolt dokumentumok/);
     assert.match(pageSrc, /Kapcsolt kommunikációk/);
+  });
+
+  it("15. Workgroups capability boundary in Quick Actions and Haladó dropdown is strictly guarded by organizationMode", () => {
+    // Quick Actions card workgroups link is guarded strictly by organizationMode
+    assert.match(
+      pageSrc,
+      /\{organizationMode && \(\s*<Link\s+href=\{`\/clients\/\$\{encodeURIComponent\(clientId\)\}\/workgroups`\}[\s\S]*?Munkacsoportok[\s\S]*?<\/Link>\s*\)\}/,
+      "Quick Actions workgroups link must be strictly guarded by organizationMode",
+    );
+
+    // Header Haladó dropdown workgroups link is guarded strictly by organizationMode
+    assert.match(
+      pageSrc,
+      /\{organizationMode \? \(\s*<Link[\s\S]*?\/workgroups`\}[\s\S]*?Munkacsoportok[\s\S]*?<\/Link>\s*\) : null\}/,
+      "Header Haladó dropdown workgroups link must be guarded by organizationMode",
+    );
+  });
+
+  it("16. Quick Actions contains NO duplicate portal card or 'Portál megnyitása' affordance", () => {
+    assert.ok(
+      !pageSrc.includes("Portál megnyitása"),
+      "Dossier overview must NOT contain duplicate 'Portál megnyitása' action",
+    );
+    assert.ok(
+      !pageSrc.includes("portalAccessEnabled ?"),
+      "Dossier overview must NOT duplicate portal status toggle in secondary cards",
+    );
+    assert.match(
+      controlCenterSrc,
+      /Ügyfélportál/,
+      "ClientControlCenter must contain canonical Ügyfélportál card",
+    );
+    assert.match(
+      controlCenterSrc,
+      /href=\{`\/clients\/\$\{encodedId\}\/portal`\}/,
+      "ClientControlCenter must link to dedicated portal page",
+    );
+  });
+
+  it("17. No dynamic Tailwind class synthesis exists in pageSrc, controlCenterSrc, or tabsSrc", () => {
+    assert.ok(
+      !pageSrc.includes('.replace("border-l-'),
+      "pageSrc must NOT perform runtime .replace('border-l-', ...) class synthesis",
+    );
+    assert.ok(
+      !controlCenterSrc.includes('.replace("border-l-'),
+      "controlCenterSrc must NOT perform runtime .replace('border-l-', ...) class synthesis",
+    );
+    assert.ok(
+      !tabsSrc.includes('.replace("border-l-'),
+      "tabsSrc must NOT perform runtime .replace('border-l-', ...) class synthesis",
+    );
+  });
+
+  it("18. All client color definitions in clientColors.ts define static accentTopBorderClass", () => {
+    assert.equal(NEUTRAL_CLIENT_COLOR.accentTopBorderClass, "border-t-transparent");
+    for (const key of CLIENT_COLOR_KEYS) {
+      const def = CLIENT_COLOR_DEFINITIONS[key];
+      assert.ok(
+        def.accentTopBorderClass && def.accentTopBorderClass.startsWith("border-t-"),
+        `Color ${key} must have static accentTopBorderClass starting with border-t-`,
+      );
+      assert.equal(getClientAccentTopBorderClass(key), def.accentTopBorderClass);
+    }
+    assert.equal(getClientAccentTopBorderClass(null), "border-t-transparent");
+    assert.equal(getClientAccentTopBorderClass(undefined), "border-t-transparent");
+    assert.equal(getClientAccentTopBorderClass("UNKNOWN_COLOR"), "border-t-transparent");
+  });
+
+  it("19. Organization mode resolution correctly distinguishes INDIVIDUAL from ORGANIZATION and CASE_RELAY", () => {
+    const resolveOrgMode = (mode?: string | null) =>
+      mode === "ORGANIZATION" || mode === "CASE_RELAY";
+
+    assert.equal(resolveOrgMode("INDIVIDUAL"), false, "INDIVIDUAL mode must not enable organizationMode");
+    assert.equal(resolveOrgMode(null), false, "Null mode must not enable organizationMode");
+    assert.equal(resolveOrgMode(undefined), false, "Undefined mode must not enable organizationMode");
+    assert.equal(resolveOrgMode("UNKNOWN"), false, "Unknown mode must not enable organizationMode");
+    assert.equal(resolveOrgMode("ORGANIZATION"), true, "ORGANIZATION mode must enable organizationMode");
+    assert.equal(resolveOrgMode("CASE_RELAY"), true, "CASE_RELAY mode must enable organizationMode");
+  });
+
+  it("20. Dashboard panels utilize static clientColorDef.accentTopBorderClass for top accents", () => {
+    assert.match(pageSrc, /clientColorDef\.accentTopBorderClass/);
+    const matches = pageSrc.match(/clientColorDef\.accentTopBorderClass/g);
+    assert.ok(matches && matches.length >= 7, "All accented panels must use clientColorDef.accentTopBorderClass");
   });
 });
