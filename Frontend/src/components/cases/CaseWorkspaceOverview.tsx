@@ -10,7 +10,7 @@
  * component never invents an operational number.
  */
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
@@ -367,48 +367,17 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             )}
           </CockpitSection>
 
-          <CockpitSection id="ck-documents" title="Dokumentumok" accent="ochre" count={cp.kpi.activeDocuments.count}
-            action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>+ Feltöltés</AdminButton>}>
-            {warn("documents") ? (
-              <ActionableEmpty message="A dokumentumok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
-            ) : cp.activeDocuments.length === 0 ? (
-              <ActionableEmpty message="Nincs aktív munkairat." actionLabel="Dokumentum feltöltése" onAction={() => setModal({ type: "doc-upload" })} />
-            ) : (
-              <ul data-testid="active-documents" className="divide-y divide-[rgba(22,32,26,0.06)]">
-                {cp.activeDocuments.map((d) => {
-                  const full = ws.documents.find((x) => x.id === d.id);
-                  const reasonLabel = d.reason === "REVIEW_PENDING" ? "Review-ra vár"
-                    : d.reason === "DEADLINE_PASSED" ? "Határidő lejárt" : "Munka alatt";
-                  const reasonAccent: Accent = d.reason === "REVIEW_PENDING" ? "navy"
-                    : d.reason === "DEADLINE_PASSED" ? "terracotta" : "ochre";
-                  return (
-                    <li key={d.id} className="px-2 py-2">
-                      <span className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                        <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT[reasonAccent].soft} ${ACCENT[reasonAccent].text}`}>
-                          {reasonLabel}
-                        </span>
-                        {/* Document comments stay reachable from the cockpit. */}
-                        {full ? (
-                          <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-comments", doc: full })}>
-                            Kommentek{full.commentCount ? ` (${full.commentCount})` : ""}
-                          </AdminButton>
-                        ) : null}
-                      </span>
-                      {/* Compact operational work card — title, instruction, owner,
-                          reviewer, due date and linked task, not a filename row. */}
-                      <DocumentWorkCard
-                        documentId={d.id}
-                        compact
-                        caseTasks={ws.tasks}
-                        onChanged={() => void refresh()}
-                        onOpen={() => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(d.id)}`)}
-                      />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CockpitSection>
+          <CaseWorkspaceDocumentsSection
+            documents={ws.documents}
+            activeDocuments={cp.activeDocuments}
+            tasks={ws.tasks}
+            caseId={caseId}
+            hasWarning={Boolean(warn("documents"))}
+            onRefresh={() => void refresh()}
+            onOpenUpload={() => setModal({ type: "doc-upload" })}
+            onOpenDocComments={(doc) => setModal({ type: "doc-comments", doc })}
+            onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
+          />
         </div>
       </div>
 
@@ -484,5 +453,77 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       ) : null}
 
     </div>
+  );
+}
+
+export interface CaseWorkspaceDocumentsSectionProps {
+  documents: CaseWorkspace["documents"];
+  activeDocuments: CaseWorkspace["cockpit"]["activeDocuments"];
+  tasks: CaseWorkspace["tasks"];
+  caseId: string;
+  hasWarning?: boolean;
+  onRefresh?: () => void;
+  onOpenUpload?: () => void;
+  onOpenDocComments?: (doc: CaseWorkspace["documents"][number]) => void;
+  onOpenDocument?: (docId: string) => void;
+}
+
+export function CaseWorkspaceDocumentsSection({
+  documents,
+  activeDocuments,
+  tasks,
+  caseId,
+  hasWarning = false,
+  onRefresh,
+  onOpenUpload,
+  onOpenDocComments,
+  onOpenDocument,
+}: CaseWorkspaceDocumentsSectionProps) {
+  return (
+    <CockpitSection id="ck-documents" title="Dokumentumok" accent="ochre" count={documents.length}
+      action={<AdminButton variant="neutral" size="xs" onClick={onOpenUpload}>+ Feltöltés</AdminButton>}>
+      {hasWarning ? (
+        <ActionableEmpty message="A dokumentumok most nem érhetők el." actionLabel="Újratöltés" onAction={onRefresh} />
+      ) : documents.length === 0 ? (
+        <ActionableEmpty message="Nincs dokumentum." actionLabel="Dokumentum feltöltése" onAction={onOpenUpload} />
+      ) : (
+        <ul data-testid="active-documents" className="divide-y divide-[rgba(22,32,26,0.06)]">
+          {documents.map((doc) => {
+            const active = activeDocuments.find((a) => a.id === doc.id);
+            const reasonLabel = active
+              ? (active.reason === "REVIEW_PENDING" ? "Review-ra vár"
+                : active.reason === "DEADLINE_PASSED" ? "Határidő lejárt"
+                : "Munka alatt")
+              : null;
+            const reasonAccent: Accent = active?.reason === "REVIEW_PENDING" ? "navy"
+              : active?.reason === "DEADLINE_PASSED" ? "terracotta" : "ochre";
+            return (
+              <li key={doc.id} className="px-2 py-2">
+                <span className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  {reasonLabel ? (
+                    <span className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT[reasonAccent].soft} ${ACCENT[reasonAccent].text}`}>
+                      {reasonLabel}
+                    </span>
+                  ) : <span />}
+                  {/* Document comments stay reachable from the cockpit. */}
+                  <AdminButton variant="neutral" size="xs" onClick={() => onOpenDocComments?.(doc)}>
+                    Kommentek{doc.commentCount ? ` (${doc.commentCount})` : ""}
+                  </AdminButton>
+                </span>
+                {/* Compact operational work card — title, instruction, owner,
+                    reviewer, due date and linked task, not a filename row. */}
+                <DocumentWorkCard
+                  documentId={doc.id}
+                  compact
+                  caseTasks={tasks}
+                  onChanged={onRefresh}
+                  onOpen={() => onOpenDocument?.(doc.id)}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </CockpitSection>
   );
 }
