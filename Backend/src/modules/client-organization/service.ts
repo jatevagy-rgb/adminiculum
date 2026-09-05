@@ -130,6 +130,8 @@ export function toPersonDTO(row: any): any {
     deputyPersonId: row.deputyPersonId,
     name: row.name,
     jobTitle: row.jobTitle,
+    email: row.email ?? null,
+    phone: row.phone ?? null,
     employmentStatus: row.employmentStatus,
     startDate: iso(row.startDate),
     endDate: iso(row.endDate),
@@ -316,6 +318,8 @@ export async function createPerson(actor: InternalActor, clientId: string, input
       deputyPersonId: deputyId,
       name: safeText(input.name, 'name', 180, true)!,
       jobTitle: safeText(input.jobTitle, 'jobTitle', 180, false),
+      email: safeText(input.email, 'email', 320, false),
+      phone: safeText(input.phone, 'phone', 80, false),
       employmentStatus: status as any,
       startDate: input.startDate ? new Date(String(input.startDate)) : null,
       endDate: input.endDate ? new Date(String(input.endDate)) : null,
@@ -334,6 +338,8 @@ export async function updatePerson(actor: InternalActor, personId: string, input
   const data: any = {};
   if (input.name !== undefined) data.name = safeText(input.name, 'name', 180, true)!;
   if (input.jobTitle !== undefined) data.jobTitle = safeText(input.jobTitle, 'jobTitle', 180, false);
+  if (input.email !== undefined) data.email = safeText(input.email, 'email', 320, false);
+  if (input.phone !== undefined) data.phone = safeText(input.phone, 'phone', 80, false);
   if (input.responsibilitiesSummary !== undefined) data.responsibilitiesSummary = safeText(input.responsibilitiesSummary, 'responsibilitiesSummary', 2000, false);
   if (input.startDate !== undefined) data.startDate = input.startDate ? new Date(String(input.startDate)) : null;
   if (input.endDate !== undefined) data.endDate = input.endDate ? new Date(String(input.endDate)) : null;

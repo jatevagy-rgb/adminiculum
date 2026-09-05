@@ -71,4 +71,19 @@ describe('Organization internal UI (structural)', () => {
     assert.equal(existsSync(path.join(root, 'src/components/clients/ClientOrganization.tsx')), true);
     assert.equal(existsSync(path.join(root, 'src/lib/clientOrganizationApi.ts')), true);
   });
+
+  it('exposes full organization editor API foundation methods and contact fields', () => {
+    const src = api();
+    assert.match(src, /email:\s*string\s*\|\s*null/);
+    assert.match(src, /phone:\s*string\s*\|\s*null/);
+    assert.match(src, /createGroup\(/);
+    assert.match(src, /updateGroup\(/);
+    assert.match(src, /createPerson\(/);
+    assert.match(src, /updatePerson\(/);
+    assert.match(src, /transitionPerson\(/);
+    assert.match(src, /CreateOrgGroupInput/);
+    assert.match(src, /UpdateOrgGroupInput/);
+    assert.match(src, /CreateOrgPersonInput/);
+    assert.match(src, /UpdateOrgPersonInput/);
+  });
 });

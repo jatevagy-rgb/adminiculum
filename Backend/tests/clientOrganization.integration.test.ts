@@ -273,4 +273,44 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
     const personB = await createPerson(admin, clientB, { name: 'B személy', employmentStatus: 'ACTIVE' });
     await expect(setContractBusinessOwner(admin, contractId, personB.id)).rejects.toMatchObject({ code: 'CROSS_CLIENT_PERSON' });
   });
+
+  it('persists, updates and clears email and phone on OrganizationPerson, preserving customer-safe boundary', async () => {
+    const person = await createPerson(admin, clientA, {
+      name: 'Kapcsolattartó',
+      jobTitle: 'Irodavezető',
+      email: 'kapcsolat@example.invalid',
+      phone: '+36 1 234 5678',
+      employmentStatus: 'ACTIVE',
+    });
+    expect(person.email).toBe('kapcsolat@example.invalid');
+    expect(person.phone).toBe('+36 1 234 5678');
+
+    const fetched = await getPerson(admin, person.id);
+    expect(fetched.email).toBe('kapcsolat@example.invalid');
+    expect(fetched.phone).toBe('+36 1 234 5678');
+
+    const dbRow = await db.organizationPerson.findUnique({ where: { id: person.id } });
+    expect(dbRow?.email).toBe('kapcsolat@example.invalid');
+    expect(dbRow?.phone).toBe('+36 1 234 5678');
+
+    const updated = await updatePerson(admin, person.id, {
+      email: 'uj-email@example.invalid',
+      phone: '+36 30 987 6543',
+    });
+    expect(updated.email).toBe('uj-email@example.invalid');
+    expect(updated.phone).toBe('+36 30 987 6543');
+
+    const cleared = await updatePerson(admin, person.id, {
+      email: null,
+      phone: null,
+    });
+    expect(cleared.email).toBeNull();
+    expect(cleared.phone).toBeNull();
+
+    const customerProj = await projectOrganizationForCustomer(clientA, db);
+    const projectedPerson = customerProj.persons.find((p: any) => p.id === person.id);
+    expect(projectedPerson).toBeDefined();
+    expect((projectedPerson as any).email).toBeUndefined();
+    expect((projectedPerson as any).phone).toBeUndefined();
+  });
 });
