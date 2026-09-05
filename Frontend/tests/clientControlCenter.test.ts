@@ -280,4 +280,63 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     const matches = pageSrc.match(/clientColorDef\.accentTopBorderClass/g);
     assert.ok(matches && matches.length >= 7, "All accented panels must use clientColorDef.accentTopBorderClass");
   });
+
+  it("21. Hero contains only Új ügy and Haladó, with no duplicate module entrypoints or secondary actions", () => {
+    const heroStart = pageSrc.indexOf('<header className="adm-board-hero');
+    const heroEnd = pageSrc.indexOf("</header>", heroStart);
+    assert.ok(heroStart !== -1 && heroEnd !== -1, "Hero header must exist");
+    const heroContent = pageSrc.slice(heroStart, heroEnd);
+
+    // Kept in HERO:
+    assert.match(heroContent, /Új ügy/);
+    assert.match(heroContent, /••• Haladó/);
+
+    // Removed from HERO:
+    assert.ok(!heroContent.includes("Vállalati működés"), "Hero must not contain Vállalati működés");
+    assert.ok(!heroContent.includes("Szervezet"), "Hero must not contain Szervezet");
+    assert.ok(!heroContent.includes("Ügyfél szerkesztése"), "Hero must not contain Ügyfél szerkesztése");
+    assert.ok(!heroContent.includes("Dokumentum hozzáadása"), "Hero must not contain Dokumentum hozzáadása");
+  });
+
+  it("22. Gyors műveletek contains actions only, without duplicate Új ügy or Ügyfél kommunikációk", () => {
+    const qmStart = pageSrc.indexOf("Gyors műveletek");
+    const qmEnd = pageSrc.indexOf("House style", qmStart);
+    assert.ok(qmStart !== -1 && qmEnd !== -1, "Gyors műveletek section must exist");
+    const qmContent = pageSrc.slice(qmStart, qmEnd);
+
+    // Kept in Gyors műveletek:
+    assert.match(qmContent, /Ügyfél szerkesztése/);
+    assert.match(qmContent, /Dokumentum hozzáadása/);
+    assert.match(qmContent, /Munkacsoportok/);
+
+    // Removed from Gyors műveletek:
+    assert.ok(!qmContent.includes("Új ügy indítása"), "Gyors műveletek must not contain Új ügy indítása");
+    assert.ok(!qmContent.includes("Ügyfél kommunikációk"), "Gyors műveletek must not contain Ügyfél kommunikációk");
+  });
+
+  it("23. Removing duplicate entrypoints preserves all canonical functional targets elsewhere", () => {
+    // Primary New Case modal is in Hero
+    assert.match(pageSrc, /setShowNewCaseModal\(true\)/);
+    assert.match(pageSrc, /<CompactNewCaseDialog/);
+
+    // Edit Client modal is in Gyors műveletek
+    assert.match(pageSrc, /openEditClient/);
+    assert.match(pageSrc, /showEditModal &&/);
+
+    // Document add action is in Gyors műveletek
+    assert.match(pageSrc, /Dokumentum hozzáadása/);
+
+    // Canonical Control Center modules
+    assert.match(controlCenterSrc, /Nyitott ügyek/);
+    assert.match(controlCenterSrc, /Kommunikációk/);
+    assert.match(controlCenterSrc, /Ügyfélportál/);
+    assert.match(controlCenterSrc, /Szervezeti felépítés/);
+    assert.match(controlCenterSrc, /Vállalati működés/);
+
+    // Canonical lower panels
+    assert.match(pageSrc, /<ClientCompanyFoundation/);
+    assert.match(pageSrc, /<ClientContractLibrary/);
+    assert.match(pageSrc, /<ClientOrganization/);
+    assert.match(pageSrc, /<ClientHouseStylePanel/);
+  });
 });

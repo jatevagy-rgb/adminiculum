@@ -237,24 +237,9 @@ function ClientDetailContent() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Link href={`/clients/${clientId}/vallalati-mukodes`} className="adm-link-button px-4 py-2 text-xs">
-                Vállalati működés
-              </Link>
-              <Link href={`/clients/${clientId}/szervezet`} className="adm-link-button px-4 py-2 text-xs">
-                Szervezet
-              </Link>
-              <button onClick={openEditClient} className="adm-link-button px-4 py-2 text-xs">
-                Ügyfél szerkesztése
-              </button>
               <button onClick={() => setShowNewCaseModal(true)} className="adm-link-button adm-link-button-primary px-4 py-2 text-xs">
                 Új ügy
               </button>
-              <Link
-                href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`}
-                className="adm-link-button px-4 py-2 text-xs"
-              >
-                Dokumentum hozzáadása
-              </Link>
               <details className="relative">
                 <summary className="cursor-pointer list-none rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]">
                   ••• Haladó
@@ -347,13 +332,6 @@ function ClientDetailContent() {
 
               <div className="mt-3 space-y-2">
                 <button
-                  onClick={() => setShowNewCaseModal(true)}
-                  className="adm-link-button w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
-                >
-                  <span>Új ügy indítása</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </button>
-                <button
                   onClick={openEditClient}
                   className="adm-link-button w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
                 >
@@ -376,13 +354,6 @@ function ClientDetailContent() {
                     <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
                   </Link>
                 )}
-                <Link
-                  href={`/communications?clientId=${encodeURIComponent(clientId)}`}
-                  className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
-                >
-                  <span>Ügyfél kommunikációk</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
               </div>
             </div>
           </div>
