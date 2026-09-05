@@ -1085,20 +1085,20 @@ enum DocumentCategory {
 // ============================================================================
 
 model DocumentVersion {
-  id                 String                           @id @default(uuid())
-  version            Int
-  securityScanStatus DocumentSecurityScanStatus       @default(CLEAN)
-  name               String
-  description        String?
-  originalFileName   String?
-  mimeType           String?
-  size               Int?
-  storageReference   String?
-  isCurrent          Boolean                          @default(false) @map("currentVersion")
-  reviewStatus       DocumentVersionReviewStatus      @default(NOT_IN_REVIEW)
-  publicationStatus  DocumentVersionPublicationStatus @default(INTERNAL_ONLY)
-  uploadSource       DocumentVersionUploadSource      @default(LAWYER_UPLOAD)
-  versionType        DocumentVersionType              @default(WORKING_COPY)
+  id                String                           @id @default(uuid())
+  version           Int
+  securityScanStatus DocumentSecurityScanStatus     @default(CLEAN)
+  name              String
+  description       String?
+  originalFileName  String?
+  mimeType          String?
+  size              Int?
+  storageReference  String?
+  isCurrent         Boolean                          @default(false) @map("currentVersion")
+  reviewStatus      DocumentVersionReviewStatus      @default(NOT_IN_REVIEW)
+  publicationStatus DocumentVersionPublicationStatus @default(INTERNAL_ONLY)
+  uploadSource      DocumentVersionUploadSource      @default(LAWYER_UPLOAD)
+  versionType       DocumentVersionType              @default(WORKING_COPY)
 
   // SharePoint Version Info
   spVersionLabel String? // e.g., "1.0", "2.0"

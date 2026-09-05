@@ -126,7 +126,7 @@ export const clientOrganizationApi = {
   transitionPerson(personId: string, employmentStatus: string) {
     return fetchApi<OrgPersonDTO>(`/client-organization/persons/${encodeURIComponent(personId)}/status`, {
       method: "POST",
-      body: JSON.stringify({ employmentStatus, status: employmentStatus }),
+      body: JSON.stringify({ employmentStatus }),
     });
   },
   responsibilityGaps(clientId: string) {

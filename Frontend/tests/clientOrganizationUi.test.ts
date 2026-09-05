@@ -85,5 +85,6 @@ describe('Organization internal UI (structural)', () => {
     assert.match(src, /UpdateOrgGroupInput/);
     assert.match(src, /CreateOrgPersonInput/);
     assert.match(src, /UpdateOrgPersonInput/);
+    assert.match(src, /JSON\.stringify\(\{\s*employmentStatus\s*\}\)/);
   });
 });

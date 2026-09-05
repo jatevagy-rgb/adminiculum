@@ -41,6 +41,42 @@ function iso(v: Date | null | undefined): string | null {
   return v ? v.toISOString() : null;
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function normalizeOrganizationEmail(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (raw.length > 320 || !EMAIL_REGEX.test(raw)) {
+    throw new InteractionError(400, 'EMAIL_INVALID', 'Invalid email address format.');
+  }
+  return raw.toLowerCase();
+}
+
+export function normalizeOrganizationPhone(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const raw = String(value).trim().replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ');
+  if (!raw) return null;
+  if (raw.length > 80) {
+    throw new InteractionError(400, 'PHONE_TOO_LONG', 'Phone number is too long.');
+  }
+  return raw;
+}
+
+function redactContactFields(obj: unknown): unknown {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(redactContactFields);
+  const clone: Record<string, unknown> = { ...(obj as Record<string, unknown>) };
+  delete clone.email;
+  delete clone.phone;
+  return clone;
+}
+
+export function assertOrganizationInternalDto(dto: unknown): void {
+  const safeCopy = redactContactFields(dto);
+  assertClientSafe(safeCopy);
+}
+
 /** Walk the manager chain from `proposedManagerId`; throws on a cycle if the
  *  chain reaches `personId`, and on cross-client manager. */
 async function resolveManagerRoot(prisma: Prisma, personId: string, clientId: string, proposedManagerId: string): Promise<void> {
@@ -247,7 +283,7 @@ export async function listPersons(actor: InternalActor, clientId: string, opts: 
     orderBy: [{ name: 'asc' }],
   });
   const dto = rows.map((row) => ({ ...toPersonDTO(row), organizationGroupName: row.organizationGroup?.name ?? null, managerName: row.managerPerson?.name ?? null, deputyName: row.deputyPerson?.name ?? null }));
-  assertClientSafe(dto);
+  assertOrganizationInternalDto(dto);
   return { items: dto };
 }
 
@@ -275,7 +311,7 @@ export async function getPerson(actor: InternalActor, personId: string, prisma: 
     ownedObligations: row.ownedObligations,
     ownedInitiatives: row.ownedInitiatives,
   };
-  assertClientSafe(dto);
+  assertOrganizationInternalDto(dto);
   return dto;
 }
 
@@ -318,8 +354,8 @@ export async function createPerson(actor: InternalActor, clientId: string, input
       deputyPersonId: deputyId,
       name: safeText(input.name, 'name', 180, true)!,
       jobTitle: safeText(input.jobTitle, 'jobTitle', 180, false),
-      email: safeText(input.email, 'email', 320, false),
-      phone: safeText(input.phone, 'phone', 80, false),
+      email: normalizeOrganizationEmail(input.email),
+      phone: normalizeOrganizationPhone(input.phone),
       employmentStatus: status as any,
       startDate: input.startDate ? new Date(String(input.startDate)) : null,
       endDate: input.endDate ? new Date(String(input.endDate)) : null,
@@ -338,8 +374,8 @@ export async function updatePerson(actor: InternalActor, personId: string, input
   const data: any = {};
   if (input.name !== undefined) data.name = safeText(input.name, 'name', 180, true)!;
   if (input.jobTitle !== undefined) data.jobTitle = safeText(input.jobTitle, 'jobTitle', 180, false);
-  if (input.email !== undefined) data.email = safeText(input.email, 'email', 320, false);
-  if (input.phone !== undefined) data.phone = safeText(input.phone, 'phone', 80, false);
+  if (input.email !== undefined) data.email = normalizeOrganizationEmail(input.email);
+  if (input.phone !== undefined) data.phone = normalizeOrganizationPhone(input.phone);
   if (input.responsibilitiesSummary !== undefined) data.responsibilitiesSummary = safeText(input.responsibilitiesSummary, 'responsibilitiesSummary', 2000, false);
   if (input.startDate !== undefined) data.startDate = input.startDate ? new Date(String(input.startDate)) : null;
   if (input.endDate !== undefined) data.endDate = input.endDate ? new Date(String(input.endDate)) : null;

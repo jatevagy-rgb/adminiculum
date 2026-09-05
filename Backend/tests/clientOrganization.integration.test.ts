@@ -274,43 +274,92 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
     await expect(setContractBusinessOwner(admin, contractId, personB.id)).rejects.toMatchObject({ code: 'CROSS_CLIENT_PERSON' });
   });
 
-  it('persists, updates and clears email and phone on OrganizationPerson, preserving customer-safe boundary', async () => {
-    const person = await createPerson(admin, clientA, {
-      name: 'Kapcsolattartó',
-      jobTitle: 'Irodavezető',
-      email: 'kapcsolat@example.invalid',
+  it('persists, updates and clears email and phone on OrganizationPerson, preserving customer-safe boundary and handling token/secret emails', async () => {
+    // 1. createPerson accepts secretary@example.com
+    const secPerson = await createPerson(admin, clientA, {
+      name: 'Titkárságvezető',
+      jobTitle: 'Titkár',
+      email: 'secretary@example.com',
       phone: '+36 1 234 5678',
       employmentStatus: 'ACTIVE',
     });
-    expect(person.email).toBe('kapcsolat@example.invalid');
-    expect(person.phone).toBe('+36 1 234 5678');
+    expect(secPerson.email).toBe('secretary@example.com');
+    expect(secPerson.phone).toBe('+36 1 234 5678');
 
-    const fetched = await getPerson(admin, person.id);
-    expect(fetched.email).toBe('kapcsolat@example.invalid');
-    expect(fetched.phone).toBe('+36 1 234 5678');
-
-    const dbRow = await db.organizationPerson.findUnique({ where: { id: person.id } });
-    expect(dbRow?.email).toBe('kapcsolat@example.invalid');
-    expect(dbRow?.phone).toBe('+36 1 234 5678');
-
-    const updated = await updatePerson(admin, person.id, {
-      email: 'uj-email@example.invalid',
-      phone: '+36 30 987 6543',
+    // 2. createPerson accepts token.smith@example.com
+    const tokenPerson = await createPerson(admin, clientA, {
+      name: 'Token Smith',
+      jobTitle: 'Developer',
+      email: 'token.smith@example.com',
+      phone: '+36 30 111 2222',
+      employmentStatus: 'ACTIVE',
     });
-    expect(updated.email).toBe('uj-email@example.invalid');
-    expect(updated.phone).toBe('+36 30 987 6543');
+    expect(tokenPerson.email).toBe('token.smith@example.com');
 
-    const cleared = await updatePerson(admin, person.id, {
+    // 3. updatePerson accepts those addresses
+    const updatedSec = await updatePerson(admin, secPerson.id, {
+      email: 'token.smith@example.com',
+    });
+    expect(updatedSec.email).toBe('token.smith@example.com');
+    const updatedToken = await updatePerson(admin, tokenPerson.id, {
+      email: 'secretary@example.com',
+    });
+    expect(updatedToken.email).toBe('secretary@example.com');
+
+    // 4. listPersons succeeds and returns those addresses (proves assertOrganizationInternalDto read-path safety)
+    const listRes = await listPersons(admin, clientA);
+    const foundSec = listRes.items.find((p: any) => p.id === secPerson.id);
+    const foundToken = listRes.items.find((p: any) => p.id === tokenPerson.id);
+    expect(foundSec).toBeDefined();
+    expect(foundSec?.email).toBe('token.smith@example.com');
+    expect(foundToken).toBeDefined();
+    expect(foundToken?.email).toBe('secretary@example.com');
+
+    // 5. getPerson succeeds and returns those addresses (proves assertOrganizationInternalDto read-path safety)
+    const fetchedSec = await getPerson(admin, secPerson.id);
+    expect(fetchedSec.email).toBe('token.smith@example.com');
+    const fetchedToken = await getPerson(admin, tokenPerson.id);
+    expect(fetchedToken.email).toBe('secretary@example.com');
+
+    // 6. malformed not-an-email is rejected with 400 / EMAIL_INVALID
+    await expect(createPerson(admin, clientA, {
+      name: 'Hibás Email',
+      email: 'not-an-email',
+      employmentStatus: 'ACTIVE',
+    })).rejects.toMatchObject({ status: 400, code: 'EMAIL_INVALID' });
+
+    await expect(updatePerson(admin, secPerson.id, {
+      email: 'not-an-email',
+    })).rejects.toMatchObject({ status: 400, code: 'EMAIL_INVALID' });
+
+    // 7. blank email becomes null
+    const blankPerson = await createPerson(admin, clientA, {
+      name: 'Üres Email',
+      email: '   ',
+      phone: '   ',
+      employmentStatus: 'ACTIVE',
+    });
+    expect(blankPerson.email).toBeNull();
+    expect(blankPerson.phone).toBeNull();
+
+    // 8. email can be cleared back to null
+    const cleared = await updatePerson(admin, secPerson.id, {
       email: null,
       phone: null,
     });
     expect(cleared.email).toBeNull();
     expect(cleared.phone).toBeNull();
 
+    // 9. customer-safe projector still contains no email
+    // 10. customer-safe projector still contains no phone
     const customerProj = await projectOrganizationForCustomer(clientA, db);
-    const projectedPerson = customerProj.persons.find((p: any) => p.id === person.id);
-    expect(projectedPerson).toBeDefined();
-    expect((projectedPerson as any).email).toBeUndefined();
-    expect((projectedPerson as any).phone).toBeUndefined();
+    const projectedSec = customerProj.persons.find((p: any) => p.id === secPerson.id);
+    const projectedToken = customerProj.persons.find((p: any) => p.id === tokenPerson.id);
+    expect(projectedSec).toBeDefined();
+    expect((projectedSec as any).email).toBeUndefined();
+    expect((projectedSec as any).phone).toBeUndefined();
+    expect(projectedToken).toBeDefined();
+    expect((projectedToken as any).email).toBeUndefined();
+    expect((projectedToken as any).phone).toBeUndefined();
   });
 });

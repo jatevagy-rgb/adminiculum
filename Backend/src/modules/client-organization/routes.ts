@@ -50,7 +50,7 @@ clientOrganizationRouter.patch('/persons/:personId', async (req, res) => {
   try { res.json(await org.updatePerson(actor(req), String(req.params.personId), req.body || {})); } catch (e) { fail(res, e); }
 });
 clientOrganizationRouter.post('/persons/:personId/status', async (req, res) => {
-  try { res.json(await org.transitionPerson(actor(req), String(req.params.personId), req.body?.employmentStatus ?? req.body?.status)); } catch (e) { fail(res, e); }
+  try { res.json(await org.transitionPerson(actor(req), String(req.params.personId), req.body?.employmentStatus)); } catch (e) { fail(res, e); }
 });
 
 // Responsibilities
