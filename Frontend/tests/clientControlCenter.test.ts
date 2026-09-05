@@ -2,6 +2,12 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import {
+  CLIENT_COLOR_DEFINITIONS,
+  CLIENT_COLOR_KEYS,
+  NEUTRAL_CLIENT_COLOR,
+  getClientAccentTopBorderClass,
+} from "../src/lib/clientColors";
 
 const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
@@ -151,5 +157,186 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /••• Haladó/);
     assert.match(pageSrc, /#house-style/);
     assert.match(pageSrc, /Munkacsoportok/);
+  });
+
+  it("11. No separate long right-hand sidebar rail exists in dossier overview layout", () => {
+    assert.ok(
+      !pageSrc.includes("<aside"),
+      "Dossier overview must NOT contain a separate <aside> sidebar rail",
+    );
+    assert.ok(
+      !pageSrc.includes("xl:grid-cols-[minmax(0,1fr)_360px]"),
+      "Dossier overview must NOT use split 360px sidebar layout",
+    );
+  });
+
+  it("12. Former sidebar modules are fully integrated into main dashboard content", () => {
+    assert.match(pageSrc, /Ügyfélazonosság és kapcsolódó adatok/);
+    assert.match(pageSrc, /Gyors műveletek/);
+    assert.match(controlCenterSrc, /Ügyfélportál/);
+    assert.match(pageSrc, /House style/);
+    assert.match(pageSrc, /ClientHouseStylePanel/);
+    assert.match(pageSrc, /ClientCompanyFoundation/);
+    assert.match(pageSrc, /ClientContractLibrary/);
+    assert.match(pageSrc, /ClientOrganization/);
+  });
+
+  it("13. Client color visual language is strengthened in dashboard and control center", () => {
+    assert.match(pageSrc, /getClientColorDefinition/);
+    assert.match(pageSrc, /clientColorDef\.accentClass/);
+    assert.match(pageSrc, /clientColorDef\.softBackgroundClass/);
+    assert.match(controlCenterSrc, /colorDef\.accentBorderClass/);
+    assert.match(controlCenterSrc, /colorDef\.softBackgroundClass/);
+    assert.match(controlCenterSrc, /colorDef\.accentClass/);
+  });
+
+  it("14. Connected working lists (cases, documents, communications) remain present and rendered", () => {
+    assert.match(pageSrc, /Kapcsolt ügyek/);
+    assert.match(pageSrc, /Kapcsolt dokumentumok/);
+    assert.match(pageSrc, /Kapcsolt kommunikációk/);
+  });
+
+  it("15. Workgroups capability boundary in Quick Actions and Haladó dropdown is strictly guarded by organizationMode", () => {
+    // Quick Actions card workgroups link is guarded strictly by organizationMode
+    assert.match(
+      pageSrc,
+      /\{organizationMode && \(\s*<Link\s+href=\{`\/clients\/\$\{encodeURIComponent\(clientId\)\}\/workgroups`\}[\s\S]*?Munkacsoportok[\s\S]*?<\/Link>\s*\)\}/,
+      "Quick Actions workgroups link must be strictly guarded by organizationMode",
+    );
+
+    // Header Haladó dropdown workgroups link is guarded strictly by organizationMode
+    assert.match(
+      pageSrc,
+      /\{organizationMode \? \(\s*<Link[\s\S]*?\/workgroups`\}[\s\S]*?Munkacsoportok[\s\S]*?<\/Link>\s*\) : null\}/,
+      "Header Haladó dropdown workgroups link must be guarded by organizationMode",
+    );
+  });
+
+  it("16. Quick Actions contains NO duplicate portal card or 'Portál megnyitása' affordance", () => {
+    assert.ok(
+      !pageSrc.includes("Portál megnyitása"),
+      "Dossier overview must NOT contain duplicate 'Portál megnyitása' action",
+    );
+    assert.ok(
+      !pageSrc.includes("portalAccessEnabled ?"),
+      "Dossier overview must NOT duplicate portal status toggle in secondary cards",
+    );
+    assert.match(
+      controlCenterSrc,
+      /Ügyfélportál/,
+      "ClientControlCenter must contain canonical Ügyfélportál card",
+    );
+    assert.match(
+      controlCenterSrc,
+      /href=\{`\/clients\/\$\{encodedId\}\/portal`\}/,
+      "ClientControlCenter must link to dedicated portal page",
+    );
+  });
+
+  it("17. No dynamic Tailwind class synthesis exists in pageSrc, controlCenterSrc, or tabsSrc", () => {
+    assert.ok(
+      !pageSrc.includes('.replace("border-l-'),
+      "pageSrc must NOT perform runtime .replace('border-l-', ...) class synthesis",
+    );
+    assert.ok(
+      !controlCenterSrc.includes('.replace("border-l-'),
+      "controlCenterSrc must NOT perform runtime .replace('border-l-', ...) class synthesis",
+    );
+    assert.ok(
+      !tabsSrc.includes('.replace("border-l-'),
+      "tabsSrc must NOT perform runtime .replace('border-l-', ...) class synthesis",
+    );
+  });
+
+  it("18. All client color definitions in clientColors.ts define static accentTopBorderClass", () => {
+    assert.equal(NEUTRAL_CLIENT_COLOR.accentTopBorderClass, "border-t-transparent");
+    for (const key of CLIENT_COLOR_KEYS) {
+      const def = CLIENT_COLOR_DEFINITIONS[key];
+      assert.ok(
+        def.accentTopBorderClass && def.accentTopBorderClass.startsWith("border-t-"),
+        `Color ${key} must have static accentTopBorderClass starting with border-t-`,
+      );
+      assert.equal(getClientAccentTopBorderClass(key), def.accentTopBorderClass);
+    }
+    assert.equal(getClientAccentTopBorderClass(null), "border-t-transparent");
+    assert.equal(getClientAccentTopBorderClass(undefined), "border-t-transparent");
+    assert.equal(getClientAccentTopBorderClass("UNKNOWN_COLOR"), "border-t-transparent");
+  });
+
+  it("19. Organization mode resolution correctly distinguishes INDIVIDUAL from ORGANIZATION and CASE_RELAY", () => {
+    const resolveOrgMode = (mode?: string | null) =>
+      mode === "ORGANIZATION" || mode === "CASE_RELAY";
+
+    assert.equal(resolveOrgMode("INDIVIDUAL"), false, "INDIVIDUAL mode must not enable organizationMode");
+    assert.equal(resolveOrgMode(null), false, "Null mode must not enable organizationMode");
+    assert.equal(resolveOrgMode(undefined), false, "Undefined mode must not enable organizationMode");
+    assert.equal(resolveOrgMode("UNKNOWN"), false, "Unknown mode must not enable organizationMode");
+    assert.equal(resolveOrgMode("ORGANIZATION"), true, "ORGANIZATION mode must enable organizationMode");
+    assert.equal(resolveOrgMode("CASE_RELAY"), true, "CASE_RELAY mode must enable organizationMode");
+  });
+
+  it("20. Dashboard panels utilize static clientColorDef.accentTopBorderClass for top accents", () => {
+    assert.match(pageSrc, /clientColorDef\.accentTopBorderClass/);
+    const matches = pageSrc.match(/clientColorDef\.accentTopBorderClass/g);
+    assert.ok(matches && matches.length >= 7, "All accented panels must use clientColorDef.accentTopBorderClass");
+  });
+
+  it("21. Hero contains only Új ügy and Haladó, with no duplicate module entrypoints or secondary actions", () => {
+    const heroStart = pageSrc.indexOf('<header className="adm-board-hero');
+    const heroEnd = pageSrc.indexOf("</header>", heroStart);
+    assert.ok(heroStart !== -1 && heroEnd !== -1, "Hero header must exist");
+    const heroContent = pageSrc.slice(heroStart, heroEnd);
+
+    // Kept in HERO:
+    assert.match(heroContent, /Új ügy/);
+    assert.match(heroContent, /••• Haladó/);
+
+    // Removed from HERO:
+    assert.ok(!heroContent.includes("Vállalati működés"), "Hero must not contain Vállalati működés");
+    assert.ok(!heroContent.includes("Szervezet"), "Hero must not contain Szervezet");
+    assert.ok(!heroContent.includes("Ügyfél szerkesztése"), "Hero must not contain Ügyfél szerkesztése");
+    assert.ok(!heroContent.includes("Dokumentum hozzáadása"), "Hero must not contain Dokumentum hozzáadása");
+  });
+
+  it("22. Gyors műveletek contains actions only, without duplicate Új ügy or Ügyfél kommunikációk", () => {
+    const qmStart = pageSrc.indexOf("Gyors műveletek");
+    const qmEnd = pageSrc.indexOf("House style", qmStart);
+    assert.ok(qmStart !== -1 && qmEnd !== -1, "Gyors műveletek section must exist");
+    const qmContent = pageSrc.slice(qmStart, qmEnd);
+
+    // Kept in Gyors műveletek:
+    assert.match(qmContent, /Ügyfél szerkesztése/);
+    assert.match(qmContent, /Dokumentum hozzáadása/);
+    assert.match(qmContent, /Munkacsoportok/);
+
+    // Removed from Gyors műveletek:
+    assert.ok(!qmContent.includes("Új ügy indítása"), "Gyors műveletek must not contain Új ügy indítása");
+    assert.ok(!qmContent.includes("Ügyfél kommunikációk"), "Gyors műveletek must not contain Ügyfél kommunikációk");
+  });
+
+  it("23. Removing duplicate entrypoints preserves all canonical functional targets elsewhere", () => {
+    // Primary New Case modal is in Hero
+    assert.match(pageSrc, /setShowNewCaseModal\(true\)/);
+    assert.match(pageSrc, /<CompactNewCaseDialog/);
+
+    // Edit Client modal is in Gyors műveletek
+    assert.match(pageSrc, /openEditClient/);
+    assert.match(pageSrc, /showEditModal &&/);
+
+    // Document add action is in Gyors műveletek
+    assert.match(pageSrc, /Dokumentum hozzáadása/);
+
+    // Canonical Control Center modules
+    assert.match(controlCenterSrc, /Nyitott ügyek/);
+    assert.match(controlCenterSrc, /Kommunikációk/);
+    assert.match(controlCenterSrc, /Ügyfélportál/);
+    assert.match(controlCenterSrc, /Szervezeti felépítés/);
+    assert.match(controlCenterSrc, /Vállalati működés/);
+
+    // Canonical lower panels
+    assert.match(pageSrc, /<ClientCompanyFoundation/);
+    assert.match(pageSrc, /<ClientContractLibrary/);
+    assert.match(pageSrc, /<ClientOrganization/);
+    assert.match(pageSrc, /<ClientHouseStylePanel/);
   });
 });

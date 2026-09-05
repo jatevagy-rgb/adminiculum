@@ -32,17 +32,22 @@ export function ClientControlCenter({
     <section aria-label="Ügyfél irányítópult" className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">
-            Irányítóközpont
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">
+              Irányítóközpont
+            </p>
+            {colorDef.key && (
+              <span className={`h-1.5 w-6 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
+            )}
+          </div>
           <h2 className="mt-0.5 font-serif text-lg text-[var(--adm-text)]">
             Ügyfél modulok és vezérlőpult
           </h2>
         </div>
         {colorDef.key && (
-          <div className="flex items-center gap-2 rounded-full border border-[var(--adm-border)] bg-white px-3 py-1 text-[11px] text-[var(--adm-text-muted)]">
+          <div className={`flex items-center gap-2 rounded-full border ${colorDef.borderClass} ${colorDef.softBackgroundClass} px-3 py-1 text-[11px] text-[var(--adm-text)] shadow-xs`}>
             <span className={`h-2.5 w-2.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
-            <span>{colorDef.label}</span>
+            <span className="font-medium">{colorDef.label} kategória</span>
           </div>
         )}
       </div>
@@ -55,7 +60,12 @@ export function ClientControlCenter({
         >
           <div>
             <div className="flex items-center justify-between text-[11px] text-[var(--adm-text-muted)]">
-              <span className="font-semibold uppercase tracking-[0.14em]">Ügyek</span>
+              <div className="flex items-center gap-1.5">
+                {colorDef.key && (
+                  <span className={`h-1.5 w-1.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
+                )}
+                <span className="font-semibold uppercase tracking-[0.14em]">Ügyek</span>
+              </div>
               <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
                 Megnyitás →
               </span>
@@ -93,7 +103,12 @@ export function ClientControlCenter({
         >
           <div>
             <div className="flex items-center justify-between text-[11px] text-[var(--adm-text-muted)]">
-              <span className="font-semibold uppercase tracking-[0.14em]">Kommunikáció</span>
+              <div className="flex items-center gap-1.5">
+                {colorDef.key && (
+                  <span className={`h-1.5 w-1.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
+                )}
+                <span className="font-semibold uppercase tracking-[0.14em]">Kommunikáció</span>
+              </div>
               <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
                 Megnyitás →
               </span>
@@ -122,7 +137,12 @@ export function ClientControlCenter({
         >
           <div>
             <div className="flex items-center justify-between text-[11px] text-[var(--adm-text-muted)]">
-              <span className="font-semibold uppercase tracking-[0.14em]">Portál</span>
+              <div className="flex items-center gap-1.5">
+                {colorDef.key && (
+                  <span className={`h-1.5 w-1.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
+                )}
+                <span className="font-semibold uppercase tracking-[0.14em]">Portál</span>
+              </div>
               <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
                 Megnyitás →
               </span>
@@ -152,7 +172,12 @@ export function ClientControlCenter({
           >
             <div>
               <div className="flex items-center justify-between text-[11px] text-[var(--adm-text-muted)]">
-                <span className="font-semibold uppercase tracking-[0.14em]">Szervezet</span>
+                <div className="flex items-center gap-1.5">
+                  {colorDef.key && (
+                    <span className={`h-1.5 w-1.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
+                  )}
+                  <span className="font-semibold uppercase tracking-[0.14em]">Szervezet</span>
+                </div>
                 <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
                   Megnyitás →
                 </span>
@@ -183,7 +208,12 @@ export function ClientControlCenter({
           >
             <div>
               <div className="flex items-center justify-between text-[11px] text-[var(--adm-text-muted)]">
-                <span className="font-semibold uppercase tracking-[0.14em]">Működés</span>
+                <div className="flex items-center gap-1.5">
+                  {colorDef.key && (
+                    <span className={`h-1.5 w-1.5 rounded-full ${colorDef.accentClass}`} aria-hidden="true" />
+                  )}
+                  <span className="font-semibold uppercase tracking-[0.14em]">Működés</span>
+                </div>
                 <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
                   Megnyitás →
                 </span>

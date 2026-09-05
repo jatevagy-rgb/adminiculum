@@ -10,6 +10,7 @@ const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
 
 describe("Client dossier & dedicated portal surface separation", () => {
   const dossierSrc = read("src/app/clients/[clientId]/page.tsx");
+  const controlCenterSrc = read("src/components/clients/ClientControlCenter.tsx");
   const portalSrc = read("src/app/clients/[clientId]/portal/page.tsx");
 
   it("full portal control plane is NOT on the dossier overview page", () => {
@@ -28,14 +29,18 @@ describe("Client dossier & dedicated portal surface separation", () => {
     );
   });
 
-  it("dossier overview provides concise human-facing portal summary and navigation affordance", () => {
-    assert.match(dossierSrc, /Ügyfélportál/);
-    assert.match(dossierSrc, /client\.portalAccessEnabled \? "Előkészítve" : "Nincs előkészítve"/);
-    assert.match(dossierSrc, /href=\{`\/clients\/\$\{clientId\}\/portal`\}/);
-    assert.match(dossierSrc, /Portál megnyitása/);
+  it("dossier overview provides concise human-facing portal summary and navigation affordance via ClientControlCenter", () => {
+    assert.match(controlCenterSrc, /Ügyfélportál/);
+    assert.match(controlCenterSrc, /client\.portalAccessEnabled \? "Előkészítve" : "Nincs előkészítve"/);
+    assert.match(controlCenterSrc, /href=\{`\/clients\/\$\{encodedId\}\/portal`\}/);
+    assert.match(controlCenterSrc, /Portál adatok/);
+    assert.ok(
+      !dossierSrc.includes("Portál megnyitása"),
+      "Dossier overview must NOT duplicate portal action card outside ClientControlCenter",
+    );
   });
 
-  it("hero header maintains responsive layout and all primary actions", () => {
+  it("hero header maintains calm layout with Új ügy and Haladó while preserving actions in dashboard", () => {
     const heroStart = dossierSrc.indexOf('<header className="adm-board-hero');
     const heroEnd = dossierSrc.indexOf("</header>", heroStart);
     assert.ok(heroStart !== -1 && heroEnd !== -1, "Hero header must exist");
@@ -43,13 +48,23 @@ describe("Client dossier & dedicated portal surface separation", () => {
 
     assert.match(heroContent, /flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between/);
     assert.match(heroContent, /break-words/);
-    assert.match(heroContent, /Vállalati működés/);
-    assert.match(heroContent, /Szervezet/);
-    assert.match(heroContent, /Ügyfél szerkesztése/);
     assert.match(heroContent, /Új ügy/);
-    assert.match(heroContent, /Dokumentum hozzáadása/);
-    assert.match(heroContent, /Haladó/);
+    assert.match(heroContent, /••• Haladó/);
     assert.match(heroContent, /dossierStats/);
+
+    // Hero does NOT contain duplicate actions or module entrypoints
+    assert.ok(!heroContent.includes("Vállalati működés"), "Hero must NOT contain Vállalati működés");
+    assert.ok(!heroContent.includes("Szervezet"), "Hero must NOT contain Szervezet");
+    assert.ok(!heroContent.includes("Ügyfél szerkesztése"), "Hero must NOT contain Ügyfél szerkesztése");
+    assert.ok(!heroContent.includes("Dokumentum hozzáadása"), "Hero must NOT contain Dokumentum hozzáadása");
+
+    // These capabilities remain preserved elsewhere in the integrated dashboard
+    assert.match(dossierSrc, /Ügyfél szerkesztése/);
+    assert.match(dossierSrc, /Dokumentum hozzáadása/);
+    assert.match(controlCenterSrc, /Vállalati működés/);
+    assert.match(controlCenterSrc, /Szervezeti felépítés/);
+    assert.match(dossierSrc, /id="vallalati-mukodes"/);
+    assert.match(dossierSrc, /id="szervezet"/);
   });
 
   it("child pages preserve ClientWorkspaceTabs for contextual navigation", () => {
