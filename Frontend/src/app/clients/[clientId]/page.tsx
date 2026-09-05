@@ -72,7 +72,8 @@ function ClientDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [casesLoadError, setCasesLoadError] = useState<string | null>(null);
-  const [isCasesComplete, setIsCasesComplete] = useState(true);
+  const [caseTotalCount, setCaseTotalCount] = useState<number | null>(null);
+  const [isCasesComplete, setIsCasesComplete] = useState(false);
 
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
 
@@ -84,6 +85,8 @@ function ClientDetailContent() {
     if (!clientId) return;
     setIsLoading(true);
     setError(null);
+    setCaseTotalCount(null);
+    setIsCasesComplete(false);
 
     try {
       const [clientData, directClientComms, portalWorkspaces] = await Promise.all([
@@ -98,14 +101,11 @@ function ClientDetailContent() {
       const casesResponse = await getCases(1, 100, undefined, clientId).catch(() => null);
       if (!casesResponse) {
         setCasesLoadError("A kapcsolt ügyek listája jelenleg nem elérhető.");
-        setIsCasesComplete(false);
       } else {
         setCasesLoadError(null);
-        setIsCasesComplete(
-          casesResponse.pagination
-            ? casesResponse.pagination.total <= casesResponse.data.length
-            : true,
-        );
+        const total = casesResponse.pagination?.total ?? null;
+        setCaseTotalCount(total);
+        setIsCasesComplete(total !== null && total <= casesResponse.data.length);
       }
 
       const relatedCases = casesResponse?.data || [];
@@ -273,8 +273,8 @@ function ClientDetailContent() {
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.activeCases}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Aktív ügy</p></div>
-              <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.totalCases}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összes ügy</p></div>
+              <div className="adm-board-strip p-3"><p className="font-serif text-2xl" title={isCasesComplete ? undefined : "Teljes ügylista szükséges a pontos számhoz"}>{isCasesComplete ? dossierStats.activeCases : "—"}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Aktív ügy</p></div>
+              <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{caseTotalCount ?? "—"}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összes ügy</p></div>
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.documents}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss dokumentum</p></div>
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.communications}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
             </div>

@@ -73,12 +73,36 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /isCasesComplete/);
     assert.match(
       pageSrc,
-      /casesResponse\.pagination\s*\?\s*casesResponse\.pagination\.total\s*<=\s*casesResponse\.data\.length\s*:\s*true/,
+      /setIsCasesComplete\(total !== null && total <= casesResponse\.data\.length\)/,
     );
     assert.match(
       controlCenterSrc,
       /\{isCasesComplete \? \([\s\S]*?\{activeCases\}[\s\S]*?\) : \(/,
     );
+  });
+
+  it("6a. Hero case metrics use completeness-aware and authoritative values", () => {
+    assert.match(pageSrc, /const \[caseTotalCount, setCaseTotalCount\] = useState<number \| null>\(null\)/);
+    assert.match(pageSrc, /const total = casesResponse\.pagination\?\.total \?\? null;/);
+    assert.match(pageSrc, /setIsCasesComplete\(total !== null && total <= casesResponse\.data\.length\)/);
+    assert.match(pageSrc, /\{isCasesComplete \? dossierStats\.activeCases : "—"\}/);
+    assert.match(pageSrc, /\{caseTotalCount \?\? "—"\}/);
+    assert.doesNotMatch(pageSrc, /<p className="font-serif text-2xl">\{dossierStats\.totalCases\}<\/p>/);
+  });
+
+  it("6b. Hero case metrics preserve truthfulness for complete, incomplete, and failed case queries", () => {
+    const resolveHeroMetrics = (
+      dataLength: number,
+      total: number | null,
+      activeCases: number,
+    ) => ({
+      active: total !== null && total <= dataLength ? activeCases : "—",
+      total: total ?? "—",
+    });
+
+    assert.deepEqual(resolveHeroMetrics(3, 3, 2), { active: 2, total: 3 });
+    assert.deepEqual(resolveHeroMetrics(100, 143, 80), { active: "—", total: 143 });
+    assert.deepEqual(resolveHeroMetrics(0, null, 0), { active: "—", total: "—" });
   });
 
   it("7. In incomplete-case-set state the card remains usable but uses a non-numeric CTA", () => {
