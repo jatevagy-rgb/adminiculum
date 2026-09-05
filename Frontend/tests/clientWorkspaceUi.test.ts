@@ -17,6 +17,7 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     // Org and Individual tab array definition
     assert.match(src, /\["overview", "Áttekintés", ""\]/);
     assert.match(src, /\["cases", "Ügyek", "\/cases"\]/);
+    assert.match(src, /\["communications", "Kommunikáció", "\/communications"\]/);
     assert.match(src, /\["organization", "Szervezet", "\/szervezet"\]/);
     assert.match(src, /\["company-operations", "Vállalati működés", "\/vallalati-mukodes"\]/);
     assert.match(src, /\["portal", "Portál", "\/portal"\]/);
@@ -27,6 +28,12 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(src, /key !== "company-operations"/);
   });
 
+  it('keeps client-scoped Communications first-class for every client mode', () => {
+    const src = tabs();
+    assert.match(src, /key === "communications"/);
+    assert.match(src, /\/communications\?clientId=\$\{encodeURIComponent\(clientId\)\}/);
+  });
+
   it('renders Company Ops with first-class active tab shell', () => {
     const src = page();
     assert.match(src, /<ClientWorkspaceTabs clientId={client.id} active="company-operations" organizationMode/);
@@ -35,15 +42,15 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(src, /Ez a vállalati működés felület csak szervezeti ügyfélmódban érhető el/);
   });
 
-  it('keeps Workgroups and House Style secondary', () => {
+  it('keeps Haladó universal while preserving capability-aware secondary navigation', () => {
     const src = tabs();
-    // Should be under Haladó
     assert.match(src, /<details/);
     assert.match(src, /Haladó/);
-    assert.match(src, /\/workgroups/);
-    assert.match(src, /Munkacsoportok/);
     assert.match(src, /#house-style/);
     assert.match(src, /Dokumentumstílus/);
+    assert.doesNotMatch(src, /\{organizationMode && <details/);
+    assert.match(src, /\{organizationMode \? <Link[^>]+\/workgroups/);
+    assert.match(src, /Munkacsoportok/);
   });
 
   it('enforces the exact first viewport section order in Company Ops', () => {
