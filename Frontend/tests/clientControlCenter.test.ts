@@ -152,4 +152,41 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /#house-style/);
     assert.match(pageSrc, /Munkacsoportok/);
   });
+
+  it("11. No separate long right-hand sidebar rail exists in dossier overview layout", () => {
+    assert.ok(
+      !pageSrc.includes("<aside"),
+      "Dossier overview must NOT contain a separate <aside> sidebar rail",
+    );
+    assert.ok(
+      !pageSrc.includes("xl:grid-cols-[minmax(0,1fr)_360px]"),
+      "Dossier overview must NOT use split 360px sidebar layout",
+    );
+  });
+
+  it("12. Former sidebar modules are fully integrated into main dashboard content", () => {
+    assert.match(pageSrc, /Ügyfélazonosság és kapcsolódó adatok/);
+    assert.match(pageSrc, /Gyors műveletek/);
+    assert.match(pageSrc, /Ügyfélportál/);
+    assert.match(pageSrc, /House style/);
+    assert.match(pageSrc, /ClientHouseStylePanel/);
+    assert.match(pageSrc, /ClientCompanyFoundation/);
+    assert.match(pageSrc, /ClientContractLibrary/);
+    assert.match(pageSrc, /ClientOrganization/);
+  });
+
+  it("13. Client color visual language is strengthened in dashboard and control center", () => {
+    assert.match(pageSrc, /getClientColorDefinition/);
+    assert.match(pageSrc, /clientColorDef\.accentClass/);
+    assert.match(pageSrc, /clientColorDef\.softBackgroundClass/);
+    assert.match(controlCenterSrc, /colorDef\.accentBorderClass/);
+    assert.match(controlCenterSrc, /colorDef\.softBackgroundClass/);
+    assert.match(controlCenterSrc, /colorDef\.accentClass/);
+  });
+
+  it("14. Connected working lists (cases, documents, communications) remain present and rendered", () => {
+    assert.match(pageSrc, /Kapcsolt ügyek/);
+    assert.match(pageSrc, /Kapcsolt dokumentumok/);
+    assert.match(pageSrc, /Kapcsolt kommunikációk/);
+  });
 });
