@@ -18,7 +18,7 @@ import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePane
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFoundation";
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
-import { ClientOrganization } from "@/components/clients/ClientOrganization";
+import { ClientOrganizationPreview } from "@/components/clients/ClientOrganizationPreview";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { ClientControlCenter } from "@/components/clients/ClientControlCenter";
 import { getClientColorDefinition } from "@/lib/clientColors";
@@ -524,9 +524,11 @@ function ClientDetailContent() {
             </section>
           </div>
 
-          <section id="szervezet" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
-            <ClientOrganization clientId={clientId} />
-          </section>
+          {organizationMode && (
+            <section id="szervezet" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
+              <ClientOrganizationPreview clientId={clientId} clientName={client.name} />
+            </section>
+          )}
         </section>
       </main>
 

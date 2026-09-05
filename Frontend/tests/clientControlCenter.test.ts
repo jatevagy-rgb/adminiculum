@@ -134,7 +134,11 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     );
     assert.match(
       controlCenterSrc,
-      /\{organizationMode\s*&&\s*\(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Vállalati működés/,
+      /\{organizationMode\s*&&\s*\(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode\s*&&\s*\(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
     );
   });
 
@@ -178,7 +182,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /ClientHouseStylePanel/);
     assert.match(pageSrc, /ClientCompanyFoundation/);
     assert.match(pageSrc, /ClientContractLibrary/);
-    assert.match(pageSrc, /ClientOrganization/);
+    assert.match(pageSrc, /ClientOrganizationPreview/);
   });
 
   it("13. Client color visual language is strengthened in dashboard and control center", () => {
@@ -331,12 +335,118 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(controlCenterSrc, /Kommunikációk/);
     assert.match(controlCenterSrc, /Ügyfélportál/);
     assert.match(controlCenterSrc, /Szervezeti felépítés/);
-    assert.match(controlCenterSrc, /Vállalati működés/);
+    assert.match(controlCenterSrc, /Grow with us/);
+    assert.match(controlCenterSrc, /Compliance/);
 
     // Canonical lower panels
     assert.match(pageSrc, /<ClientCompanyFoundation/);
     assert.match(pageSrc, /<ClientContractLibrary/);
-    assert.match(pageSrc, /<ClientOrganization/);
+    assert.match(pageSrc, /<ClientOrganizationPreview/);
     assert.match(pageSrc, /<ClientHouseStylePanel/);
+  });
+
+  it("24. Dossier overview no longer directly renders full ClientOrganization, but renders ClientOrganizationPreview for organizationMode clients", () => {
+    assert.ok(
+      !pageSrc.includes("<ClientOrganization "),
+      "Dossier overview must NOT render full ClientOrganization",
+    );
+    assert.ok(
+      !pageSrc.includes("<ClientOrganization/"),
+      "Dossier overview must NOT render full ClientOrganization",
+    );
+    assert.match(
+      pageSrc,
+      /\{organizationMode && \(\s*<section id="szervezet"[\s\S]*?<ClientOrganizationPreview/,
+      "Dossier overview must render ClientOrganizationPreview guarded by organizationMode",
+    );
+
+    // Dedicated /szervezet page still renders full ClientOrganization
+    const orgPageSrc = read("src/app/clients/[clientId]/szervezet/page.tsx");
+    assert.match(
+      orgPageSrc,
+      /<ClientOrganization clientId=\{client\.id\} clientName=\{client\.name\} \/>/,
+      "Dedicated /szervezet page must still render full ClientOrganization",
+    );
+  });
+
+  it("25. ClientOrganizationPreview remains compact and does NOT contain person search, person editor, or full linked case list", () => {
+    const previewSrc = read("src/components/clients/ClientOrganizationPreview.tsx");
+
+    // No search
+    assert.ok(!previewSrc.includes("setQuery"), "Preview must NOT contain query search state");
+    assert.ok(!previewSrc.includes('type="search"'), "Preview must NOT contain search input");
+
+    // No person editor
+    assert.ok(!previewSrc.includes("updatePerson"), "Preview must NOT contain person editor handler");
+    assert.ok(!previewSrc.includes("setEditTitle"), "Preview must NOT contain person edit title state");
+
+    // No full responsibilities or contracts/cases lists
+    assert.ok(!previewSrc.includes("ownedContracts"), "Preview must NOT contain full ownedContracts list");
+    assert.ok(!previewSrc.includes("ownedObligations"), "Preview must NOT contain full ownedObligations list");
+
+    // Snapshot counts and clear CTA
+    assert.match(previewSrc, /Szervezeti felépítés megnyitása/);
+    assert.match(previewSrc, /\/szervezet/);
+    assert.match(previewSrc, /\{persons\.length\}/);
+    assert.match(previewSrc, /\{groups\.length\}/);
+  });
+
+  it("26. Organization-mode ClientControlCenter contains exact 6-card set with Grow with us and Compliance", () => {
+    // 6 canonical cards
+    assert.match(controlCenterSrc, /Nyitott ügyek/);
+    assert.match(controlCenterSrc, /Kommunikációk/);
+    assert.match(controlCenterSrc, /Ügyfélportál/);
+    assert.match(controlCenterSrc, /Szervezeti felépítés/);
+    assert.match(controlCenterSrc, /Grow with us/);
+    assert.match(controlCenterSrc, /Compliance/);
+
+    // Old generic card title replaced
+    assert.ok(
+      !controlCenterSrc.includes('<h3 className="mt-2 font-serif text-xl text-[var(--adm-text)] group-hover:text-[var(--adm-ochre-600)]">\n                Vállalati működés'),
+      "Old generic Vállalati működés primary card title must be replaced",
+    );
+
+    // Grow with us links to existing company workspace
+    assert.match(
+      controlCenterSrc,
+      /href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+      "Grow with us must link to /vallalati-mukodes",
+    );
+
+    // Grow with us card does NOT present demo-specific numeric data
+    assert.ok(!controlCenterSrc.includes("DEMO_KFT_COMPANY_EMPLOYEE_COUNT"), "Must NOT consume DEMO_KFT_COMPANY_EMPLOYEE_COUNT");
+    assert.ok(!controlCenterSrc.includes("growthNarrative"), "Must NOT consume growth narrative generically");
+
+    // Compliance links to /vallalati-mukodes#compliance
+    assert.match(
+      controlCenterSrc,
+      /href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
+      "Compliance must link to /vallalati-mukodes#compliance",
+    );
+  });
+
+  it("27. ClientCompanyWorkspace has stable id='compliance' on relevant-areas panel", () => {
+    const companyWsSrc = read("src/components/clients/ClientCompanyWorkspace.tsx");
+    assert.match(
+      companyWsSrc,
+      /<Panel id="compliance" title="Releváns területek">/,
+      "Existing compliance panel must have stable id='compliance'",
+    );
+  });
+
+  it("28. Individual mode does not expose organization-only cards", () => {
+    // Cards 4, 5, 6 in ClientControlCenter are all guarded by organizationMode
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/szervezet`\}[\s\S]*?Szervezeti felépítés/,
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
+    );
   });
 });
