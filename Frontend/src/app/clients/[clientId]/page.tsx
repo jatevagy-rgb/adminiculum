@@ -20,6 +20,8 @@ import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFound
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
 import { ClientOrganization } from "@/components/clients/ClientOrganization";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
+import { ClientControlCenter } from "@/components/clients/ClientControlCenter";
+import { getClientColorDefinition } from "@/lib/clientColors";
 import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
@@ -193,6 +195,9 @@ function ClientDetailContent() {
     );
   }
 
+  const organizationMode = Boolean(portalWorkspace?.mode === "ORGANIZATION" || portalWorkspace?.mode === "CASE_RELAY" || (portalWorkspace && portalWorkspace.mode !== "INDIVIDUAL"));
+  const clientColorDef = getClientColorDefinition(client.colorKey);
+
   return (
     <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
       <div className="adm-board-container grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -200,7 +205,7 @@ function ClientDetailContent() {
           <header className="adm-board-hero p-5 lg:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex items-center gap-4 min-w-0">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--adm-radius-md)] bg-[var(--adm-green-800)] text-2xl font-serif text-white shadow-[0_8px_20px_rgba(31,74,51,0.14)]">
+                <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-[var(--adm-radius-md)] ${clientColorDef.key ? clientColorDef.accentClass : "bg-[var(--adm-green-800)]"} text-2xl font-serif text-white shadow-[0_8px_20px_rgba(31,74,51,0.14)]`}>
                   {client.name?.charAt(0)?.toUpperCase() || "?"}
                 </div>
                 <div className="min-w-0">
@@ -229,6 +234,27 @@ function ClientDetailContent() {
                 >
                   Dokumentum hozzáadása
                 </Link>
+                <details className="relative">
+                  <summary className="cursor-pointer list-none rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]">
+                    ••• Haladó
+                  </summary>
+                  <div className="absolute right-0 z-20 mt-1 w-52 rounded border border-[var(--adm-border)] bg-white p-2 shadow-lg">
+                    {organizationMode ? (
+                      <Link
+                        className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]"
+                        href={`/clients/${encodeURIComponent(clientId)}/workgroups`}
+                      >
+                        Munkacsoportok
+                      </Link>
+                    ) : null}
+                    <Link
+                      className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]"
+                      href={`/clients/${encodeURIComponent(clientId)}#house-style`}
+                    >
+                      Dokumentumstílus
+                    </Link>
+                  </div>
+                </details>
               </div>
             </div>
 
@@ -238,14 +264,15 @@ function ClientDetailContent() {
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.documents}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss dokumentum</p></div>
               <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.communications}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
             </div>
-            <div className="mt-5">
-              <ClientWorkspaceTabs
-                clientId={clientId}
-                active="overview"
-                organizationMode={portalWorkspace?.mode === "ORGANIZATION" || portalWorkspace?.mode === "CASE_RELAY"}
-              />
-            </div>
           </header>
+
+          <ClientControlCenter
+            clientId={clientId}
+            client={client}
+            cases={cases}
+            dossierStats={dossierStats}
+            organizationMode={organizationMode}
+          />
 
 
 

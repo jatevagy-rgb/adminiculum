@@ -48,8 +48,20 @@ describe("Client dossier & dedicated portal surface separation", () => {
     assert.match(heroContent, /Ügyfél szerkesztése/);
     assert.match(heroContent, /Új ügy/);
     assert.match(heroContent, /Dokumentum hozzáadása/);
-    assert.match(heroContent, /ClientWorkspaceTabs/);
+    assert.match(heroContent, /Haladó/);
     assert.match(heroContent, /dossierStats/);
+  });
+
+  it("child pages preserve ClientWorkspaceTabs for contextual navigation", () => {
+    const casesPage = read("src/app/clients/[clientId]/cases/page.tsx");
+    const orgPage = read("src/app/clients/[clientId]/szervezet/page.tsx");
+    const opsPage = read("src/app/clients/[clientId]/vallalati-mukodes/page.tsx");
+    const portalPage = read("src/app/clients/[clientId]/portal/page.tsx");
+
+    assert.match(casesPage, /<ClientWorkspaceTabs/);
+    assert.match(orgPage, /<ClientWorkspaceTabs/);
+    assert.match(opsPage, /<ClientWorkspaceTabs/);
+    assert.match(portalPage, /<ClientWorkspaceTabs/);
   });
 
   it("full portal controls are present and functional on dedicated /clients/[clientId]/portal page", () => {
