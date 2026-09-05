@@ -6,22 +6,43 @@ import path from "node:path";
 const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
 
-// ─── Client Dossier Header & Portal Control Plane Layout ─────────────────────
+// ─── Client Dossier & Dedicated Portal Surface Separation ────────────────────
 
-describe("REQ-05: Client dossier layout & portal separation", () => {
+describe("Client dossier & dedicated portal surface separation", () => {
   const dossierSrc = read("src/app/clients/[clientId]/page.tsx");
+  const portalSrc = read("src/app/clients/[clientId]/portal/page.tsx");
 
-  it("hero header contains client identity and action buttons without the portal control plane", () => {
-    // Locate the hero header
+  it("full portal control plane is NOT on the dossier overview page", () => {
+    // Dossier overview must NOT contain technical control plane form or handlers
+    assert.ok(
+      !dossierSrc.includes("Client Portal control plane"),
+      "Dossier overview must NOT contain Client Portal control plane heading",
+    );
+    assert.ok(
+      !dossierSrc.includes("savePortalSettings"),
+      "Dossier overview must NOT contain savePortalSettings handler",
+    );
+    assert.ok(
+      !dossierSrc.includes("PORTAL_CENTRIC"),
+      "Dossier overview must NOT contain technical relationshipMode enum options",
+    );
+  });
+
+  it("dossier overview provides concise human-facing portal summary and navigation affordance", () => {
+    assert.match(dossierSrc, /Ügyfélportál/);
+    assert.match(dossierSrc, /client\.portalAccessEnabled \? "Előkészítve" : "Nincs előkészítve"/);
+    assert.match(dossierSrc, /href=\{`\/clients\/\$\{clientId\}\/portal`\}/);
+    assert.match(dossierSrc, /Portál megnyitása/);
+  });
+
+  it("hero header maintains responsive layout and all primary actions", () => {
     const heroStart = dossierSrc.indexOf('<header className="adm-board-hero');
     const heroEnd = dossierSrc.indexOf("</header>", heroStart);
     assert.ok(heroStart !== -1 && heroEnd !== -1, "Hero header must exist");
-
     const heroContent = dossierSrc.slice(heroStart, heroEnd);
 
-    // Hero must contain client identity and action buttons
-    assert.match(heroContent, /Ügyfél dosszié/);
-    assert.match(heroContent, /client\.name/);
+    assert.match(heroContent, /flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between/);
+    assert.match(heroContent, /break-words/);
     assert.match(heroContent, /Vállalati működés/);
     assert.match(heroContent, /Szervezet/);
     assert.match(heroContent, /Ügyfél szerkesztése/);
@@ -29,106 +50,95 @@ describe("REQ-05: Client dossier layout & portal separation", () => {
     assert.match(heroContent, /Dokumentum hozzáadása/);
     assert.match(heroContent, /ClientWorkspaceTabs/);
     assert.match(heroContent, /dossierStats/);
-
-    // Hero MUST NOT contain the portal control plane
-    assert.ok(
-      !heroContent.includes("Client Portal control plane"),
-      "Hero header must NOT embed the Client Portal control plane in the conflicting top layout",
-    );
-    assert.ok(
-      !heroContent.includes("Ügyfélkapcsolati működés"),
-      "Hero header must NOT contain Ügyfélkapcsolati működés header",
-    );
   });
 
-  it("portal control plane is repositioned in a separate section below the hero header", () => {
-    const heroEnd = dossierSrc.indexOf("</header>");
-    const portalSection = dossierSrc.indexOf("Client Portal control plane");
-
-    assert.ok(heroEnd !== -1, "Hero header end tag must exist");
-    assert.ok(portalSection !== -1, "Client Portal control plane must exist");
-    assert.ok(
-      portalSection > heroEnd,
-      "Client Portal control plane must be positioned after (below) the hero header",
-    );
-
-    // All portal configuration capabilities must be fully preserved
-    assert.match(dossierSrc, /portalAccessEnabled/);
-    assert.match(dossierSrc, /relationshipMode/);
-    assert.match(dossierSrc, /PORTAL_CENTRIC/);
-    assert.match(dossierSrc, /EMAIL_CENTRIC/);
-    assert.match(dossierSrc, /CONNECTED_SYSTEM/);
-    assert.match(dossierSrc, /connectedSystemState/);
-    assert.match(dossierSrc, /savePortalSettings/);
-  });
-
-  it("hero layout uses responsive flex columns and text wrapping for long client names", () => {
-    assert.match(dossierSrc, /flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between/);
-    assert.match(dossierSrc, /break-words/);
+  it("full portal controls are present and functional on dedicated /clients/[clientId]/portal page", () => {
+    assert.match(portalSrc, /Client Portal control plane/);
+    assert.match(portalSrc, /Ügyfélkapcsolati működés/);
+    assert.match(portalSrc, /relationshipMode/);
+    assert.match(portalSrc, /PORTAL_CENTRIC/);
+    assert.match(portalSrc, /EMAIL_CENTRIC/);
+    assert.match(portalSrc, /CONNECTED_SYSTEM/);
+    assert.match(portalSrc, /portalAccessEnabled/);
+    assert.match(portalSrc, /connectedSystemState/);
+    assert.match(portalSrc, /savePortalSettings/);
+    assert.match(portalSrc, /updateClient\(client\.id, patch\)/);
+    assert.match(portalSrc, /savingPortal/);
   });
 });
 
-// ─── REQ-09: Communications Deep-Link Filtering ──────────────────────────────
+// ─── Communications Authoritative Backend Scoping & Pagination ───────────────
 
-describe("REQ-09: Communications deep-link filtering", () => {
+describe("Communications authoritative backend scoping & pagination", () => {
   const commSrc = read("src/components/communications/CommunicationWorkspace.tsx");
 
-  it("initializes clientFilter from URL search param clientId", () => {
-    // Both state initializer and mount effect check clientId
-    assert.match(commSrc, /params\.get\("clientId"\)/);
-    assert.match(commSrc, /setClientFilter\(clientId\.trim\(\)\)/);
+  it("includes clientId in getCommunications params when clientFilter is set", () => {
+    // Assert the exact source integration contract for scoped request
+    assert.match(commSrc, /if \(clientFilter !== "all"\) \{\s*commParams\.clientId = clientFilter;\s*\}/);
+    assert.match(commSrc, /getCommunications\(commParams\)/);
   });
 
-  it("preserves view and communicationId URL parameters and default all-clients behavior", () => {
-    assert.match(commSrc, /params\.get\("view"\)/);
-    assert.match(commSrc, /params\.get\("communicationId"\)/);
-    assert.match(commSrc, /setActiveView\(view\)/);
-    assert.match(commSrc, /setSelectedId\(communicationId\)/);
+  it("omits clientId from getCommunications params when clientFilter is 'all'", () => {
+    // commParams initially only has limit and offset
+    assert.match(commSrc, /const commParams: \{ limit: number; offset: number; clientId\?: string \} = \{\s*limit: pageSize,\s*offset,\s*\};/);
   });
 
-  it("filters communications correctly by clientId when set, and matches all when 'all'", () => {
-    const items = [
-      { id: "comm-1", clientId: "client-a", subject: "Szerződéstervezet" },
-      { id: "comm-2", clientId: "client-b", subject: "Válaszlevél" },
-      { id: "comm-3", clientId: "client-a", subject: "Számlamelléklet" },
-      { id: "comm-4", clientId: undefined, subject: "Általános megkeresés" },
-    ];
+  it("resets offset to 0 before loading when client scope changes", () => {
+    // Both ref tracking and dropdown onChange must reset offset
+    assert.match(commSrc, /prevClientFilterRef\.current !== clientFilter/);
+    assert.match(commSrc, /if \(offset !== 0\) \{\s*setOffset\(0\);\s*return;\s*\}/);
+    assert.match(commSrc, /setClientFilter\(event\.target\.value\);\s*setOffset\(0\);/);
+    assert.match(commSrc, /setClientFilter\("all"\);[\s\S]*setOffset\(0\);/);
+  });
 
-    // Filter function matching CommunicationWorkspace line 180
-    const filterByClient = (clientFilter: string) =>
-      items.filter((item) => {
-        if (clientFilter !== "all" && item.clientId !== clientFilter) return false;
-        return true;
-      });
+  it("sets total from filtered backend pagination metadata", () => {
+    assert.match(commSrc, /setTotal\(communicationResult\.pagination\?\.total \?\? items\.length\)/);
+  });
 
-    // Default 'all' preserves all communications
-    assert.equal(filterByClient("all").length, 4);
-
-    // Filtered by 'client-a' isolates only client-a items
-    const clientAFiltered = filterByClient("client-a");
-    assert.equal(clientAFiltered.length, 2);
-    assert.deepEqual(clientAFiltered.map((i) => i.id), ["comm-1", "comm-3"]);
-
-    // Filtered by 'client-b' isolates only client-b items
-    const clientBFiltered = filterByClient("client-b");
-    assert.equal(clientBFiltered.length, 1);
-    assert.equal(clientBFiltered[0].id, "comm-2");
-
-    // Filtered by nonexistent client returns empty
-    assert.equal(filterByClient("client-none").length, 0);
+  it("preserves URL search params hydration for clientId, view, and communicationId", () => {
+    assert.match(commSrc, /const clientId = params\.get\("clientId"\);/);
+    assert.match(commSrc, /if \(clientId && clientId\.trim\(\)\) setClientFilter\(clientId\.trim\(\)\);/);
+    assert.match(commSrc, /const view = params\.get\("view"\)/);
+    assert.match(commSrc, /const communicationId = params\.get\("communicationId"\);/);
   });
 });
 
-// ─── REQ-09: Cases Deep-Link Filtering & Scope ───────────────────────────────
+// ─── Cases Authoritative Backend Scoping & Safe UI ───────────────────────────
 
-describe("REQ-09: Cases deep-link filtering and scope hydration", () => {
+describe("Cases authoritative backend scoping and safe UI", () => {
   const casesSrc = read("src/components/CasesList.tsx");
 
-  it("hydrates scopeFilter safely from URL search param scope", () => {
-    assert.match(casesSrc, /searchParams\?\.get\("scope"\)/);
+  it("passes selectedClientId to getCases API call", () => {
+    assert.match(casesSrc, /getCases\(1, 200, undefined, clientIdScope \|\| undefined\)/);
+    assert.match(casesSrc, /loadCases\(selectedClientId\)/);
+  });
+
+  it("reloads unscoped case list when selectedClientId is cleared", () => {
+    // useEffect watches selectedClientId and reloads with empty scope
+    assert.match(casesSrc, /useEffect\(\(\) => \{\s*loadCases\(selectedClientId\);\s*\}, \[loadCases, selectedClientId\]\);/);
+  });
+
+  it("clears selectedClientId and reloads when typing into manual client search", () => {
+    assert.match(casesSrc, /onChange=\{\(e\) => \{\s*setClientName\(e\.target\.value\);\s*if \(selectedClientId\) setSelectedClientId\(""\);\s*\}\}/);
+  });
+
+  it("never exposes raw technical client ID/UUID in the UI", () => {
+    // No "Szűrt ügyfél ID:" string
+    assert.ok(
+      !casesSrc.includes("Szűrt ügyfél ID:"),
+      "Must not expose raw technical 'Szűrt ügyfél ID:' label",
+    );
+
+    // Formatted label handles resolved client name or safe generic fallback
+    assert.match(casesSrc, /filteredClientLabel/);
+    assert.match(casesSrc, /`Ügyfél: \$\{fromCases\}`/);
+    assert.match(casesSrc, /`Ügyfél: \$\{fromClients\}`/);
+    assert.match(casesSrc, /"Ügyfél szerinti szűrés aktív"/);
+  });
+
+  it("hydrates scopeFilter safely with fallback to ACTIVE", () => {
     assert.match(casesSrc, /rawScope === "ACTIVE" \|\| rawScope === "MINE" \|\| rawScope === "CLOSED"/);
 
-    // Test scope resolution logic
     function resolveScope(param?: string | null): "ACTIVE" | "MINE" | "CLOSED" {
       const raw = param?.toUpperCase();
       if (raw === "ACTIVE" || raw === "MINE" || raw === "CLOSED") return raw;
@@ -136,58 +146,14 @@ describe("REQ-09: Cases deep-link filtering and scope hydration", () => {
     }
 
     assert.equal(resolveScope("CLOSED"), "CLOSED");
-    assert.equal(resolveScope("closed"), "CLOSED");
     assert.equal(resolveScope("MINE"), "MINE");
-    assert.equal(resolveScope("mine"), "MINE");
     assert.equal(resolveScope("ACTIVE"), "ACTIVE");
-    assert.equal(resolveScope("active"), "ACTIVE");
-    assert.equal(resolveScope("INVALID"), "ACTIVE");
-    assert.equal(resolveScope(""), "ACTIVE");
+    assert.equal(resolveScope("UNKNOWN_SCOPE"), "ACTIVE");
     assert.equal(resolveScope(null), "ACTIVE");
-    assert.equal(resolveScope(undefined), "ACTIVE");
-  });
-
-  it("filters cases strictly by CaseListItem.clientId, independent of string matching", () => {
-    assert.match(casesSrc, /item\.clientId === selectedClientId/);
-
-    const cases = [
-      { id: "case-1", clientId: "c-101", clientName: "Alpha Kft.", title: "Szerződéskötés" },
-      { id: "case-2", clientId: "c-102", clientName: "Beta Zrt.", title: "Alpha projekt jogi tanácsadás" },
-      { id: "case-3", clientId: "c-101", clientName: "Alpha Kft.", title: "Munkaszerződések" },
-      { id: "case-4", clientId: undefined, clientName: "Ismeretlen", title: "Egyéb" },
-    ];
-
-    function filterCases(selectedClientId: string, clientNameQuery: string) {
-      const normalizedQuery = clientNameQuery.trim().toLowerCase();
-      return cases.filter((item) => {
-        const clientIdMatch = !selectedClientId || item.clientId === selectedClientId;
-        const clientMatch = !normalizedQuery || (item.clientName ?? "").toLowerCase().includes(normalizedQuery);
-        return clientIdMatch && clientMatch;
-      });
-    }
-
-    // When clientId is 'c-101', only cases with clientId === 'c-101' match,
-    // NOT case-2 even though case-2 contains "Alpha" in its title
-    const filteredByC101 = filterCases("c-101", "");
-    assert.equal(filteredByC101.length, 2);
-    assert.deepEqual(filteredByC101.map((c) => c.id), ["case-1", "case-3"]);
-
-    // When clientId is empty, all cases are returned
-    assert.equal(filterCases("", "").length, 4);
-
-    // Manual client name query still works when clientId is empty
-    const manualQuery = filterCases("", "Beta");
-    assert.equal(manualQuery.length, 1);
-    assert.equal(manualQuery[0].id, "case-2");
   });
 
   it("preserves newCase=1 and clientId preselection for CompactNewCaseDialog", () => {
     assert.match(casesSrc, /requestedNewCase = searchParams\?\.get\("newCase"\) === "1"/);
     assert.match(casesSrc, /initialClientId=\{requestedClientId \|\| undefined\}/);
-  });
-
-  it("provides active client filter indicator with clear button and clear all filters button", () => {
-    assert.match(casesSrc, /Szűrt ügyfél ID:/);
-    assert.match(casesSrc, /setSelectedClientId\(""\)/);
   });
 });

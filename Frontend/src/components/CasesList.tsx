@@ -270,11 +270,14 @@ export function CasesList() {
     return "Közepes";
   }, []);
 
-  const loadCases = useCallback(async () => {
+  const loadCases = useCallback(async (clientIdScope?: string) => {
     setIsLoadingCases(true);
     setCaseLoadError(null);
     try {
-      const [response, me] = await Promise.all([getCases(1, 200), getCurrentUser()]);
+      const [response, me] = await Promise.all([
+        getCases(1, 200, undefined, clientIdScope || undefined),
+        getCurrentUser(),
+      ]);
       setBackendCases(response.data);
       setCurrentUser(me);
     } catch (err) {
@@ -286,11 +289,11 @@ export function CasesList() {
   }, []);
 
   useEffect(() => {
-    loadCases();
-  }, [loadCases]);
+    loadCases(selectedClientId);
+  }, [loadCases, selectedClientId]);
 
   useEffect(() => {
-    if (showNewCaseModal) {
+    if (showNewCaseModal || selectedClientId) {
       getUsers()
         .then(setAvailableUsers)
         .catch((err) => console.warn("Failed to load users for collaborator selection:", err));
@@ -298,7 +301,7 @@ export function CasesList() {
         .then((result) => setAvailableClients(result.data || []))
         .catch((err) => console.warn("Failed to load clients for case linkage:", err));
     }
-  }, [showNewCaseModal]);
+  }, [showNewCaseModal, selectedClientId]);
 
   // ?newCase=1 opens the intake dialog. Any ?clientId is handed to the dialog as
   // initialClientId — it no longer needs pre-seeding into local wizard state.
@@ -334,6 +337,15 @@ export function CasesList() {
     const highAttentionCases = backendCases.filter((item) => deriveWorkPriorityLabel(item.priority) === "Magas").length;
     return { activeCases, assignedCases, highAttentionCases };
   }, [backendCases, deriveWorkPriorityLabel]);
+
+  const filteredClientLabel = useMemo(() => {
+    if (!selectedClientId) return null;
+    const fromCases = backendCases.find((c) => c.clientId === selectedClientId)?.clientName;
+    if (fromCases) return `Ügyfél: ${fromCases}`;
+    const fromClients = availableClients.find((c) => c.id === selectedClientId)?.name;
+    if (fromClients) return `Ügyfél: ${fromClients}`;
+    return "Ügyfél szerinti szűrés aktív";
+  }, [backendCases, availableClients, selectedClientId]);
 
   return (
     <section className="space-y-3">
@@ -385,10 +397,7 @@ export function CasesList() {
           </label>
           {selectedClientId && (
             <div className="mt-1 flex items-center gap-1 rounded bg-[var(--adm-sand-100)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
-              <span className="font-semibold">Szűrt ügyfél ID:</span>
-              <span className="max-w-[120px] truncate">
-                {backendCases.find((c) => c.clientId === selectedClientId)?.clientName || selectedClientId}
-              </span>
+              <span className="font-semibold">{filteredClientLabel}</span>
               <button
                 type="button"
                 onClick={() => setSelectedClientId("")}
@@ -430,7 +439,7 @@ export function CasesList() {
         {isLoadingCases ? (
           <div className="p-4"><CompactState title="Ügyek betöltése…" /></div>
         ) : caseLoadError ? (
-          <div className="p-4"><SafePanelError onRetry={() => void loadCases()} /></div>
+          <div className="p-4"><SafePanelError onRetry={() => void loadCases(selectedClientId)} /></div>
         ) : (
           <div className="overflow-x-auto">
           <table className="w-full min-w-[1060px] text-left">

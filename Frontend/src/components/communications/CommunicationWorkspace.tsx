@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ClientAccent } from "@/components/clients/ClientAccent";
 import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import {
@@ -106,12 +106,31 @@ export default function CommunicationWorkspace() {
     if (clientId && clientId.trim()) setClientFilter(clientId.trim());
   }, []);
 
+  const prevClientFilterRef = useRef(clientFilter);
+
   useEffect(() => {
+    if (prevClientFilterRef.current !== clientFilter) {
+      prevClientFilterRef.current = clientFilter;
+      if (offset !== 0) {
+        setOffset(0);
+        return;
+      }
+    }
+
     let mounted = true;
     setLoading(true);
     setLoadError(null);
+
+    const commParams: { limit: number; offset: number; clientId?: string } = {
+      limit: pageSize,
+      offset,
+    };
+    if (clientFilter !== "all") {
+      commParams.clientId = clientFilter;
+    }
+
     Promise.all([
-      getCommunications({ limit: pageSize, offset }),
+      getCommunications(commParams),
       getCases(1, 200).catch(() => null),
       getClients().catch(() => null),
     ])
@@ -136,7 +155,7 @@ export default function CommunicationWorkspace() {
     return () => {
       mounted = false;
     };
-  }, [offset, pageSize]);
+  }, [clientFilter, offset, pageSize]);
 
   useEffect(() => {
     let mounted = true;
@@ -262,6 +281,7 @@ export default function CommunicationWorkspace() {
     setRelationFilter("all");
     setDateFilter("all");
     setShowAdvancedFilters(false);
+    setOffset(0);
   };
 
   const updateCommunication = (id: string, patch: Partial<CommunicationItem>) => {
@@ -388,7 +408,7 @@ export default function CommunicationWorkspace() {
         <section className="adm-panel bg-white p-3" aria-label="Kommunikáció szűrése">
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Keresés e-mailben, tárgyban, ügyben" className="adm-board-field px-3 py-2 text-[11px] xl:col-span-2" />
-            <select value={clientFilter} onChange={(event) => setClientFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
+            <select value={clientFilter} onChange={(event) => { setClientFilter(event.target.value); setOffset(0); }} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
             <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}</select>
             <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden irány</option><option value="incoming">Bejövő</option><option value="outgoing">Kimenő</option></select>
             <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden dátum</option><option value="today">Elmúlt 24 óra</option><option value="week">Elmúlt 7 nap</option><option value="month">Elmúlt 31 nap</option></select>
