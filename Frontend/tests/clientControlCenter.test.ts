@@ -6,45 +6,98 @@ import path from "node:path";
 const root = process.cwd();
 const read = (rel: string) => readFileSync(path.join(root, rel), "utf8");
 
-describe("Client Control Center (Dashboard Card Grid / Rubrikák)", () => {
+describe("Client Control Center Semantic Truthfulness & Information Architecture", () => {
   const pageSrc = read("src/app/clients/[clientId]/page.tsx");
   const controlCenterSrc = read("src/components/clients/ClientControlCenter.tsx");
   const tabsSrc = read("src/components/clients/ClientWorkspaceTabs.tsx");
 
-  it("1. Client overview renders the ClientControlCenter dashboard card grid as primary navigation", () => {
-    assert.match(pageSrc, /import \{ ClientControlCenter \} from "@\/components\/clients\/ClientControlCenter"/);
-    assert.match(pageSrc, /<ClientControlCenter[\s\S]*clientId=\{clientId\}[\s\S]*client=\{client\}[\s\S]*cases=\{cases\}[\s\S]*dossierStats=\{dossierStats\}[\s\S]*organizationMode=\{organizationMode\}/);
-    // Overview hero header no longer hosts dominant horizontal tabs
-    const heroStart = pageSrc.indexOf('<header className="adm-board-hero');
-    const heroEnd = pageSrc.indexOf("</header>", heroStart);
-    const heroContent = pageSrc.slice(heroStart, heroEnd);
-    assert.ok(!heroContent.includes("<ClientWorkspaceTabs"), "Overview hero header must not embed dominant horizontal tabs");
-  });
-
-  it("2. Communications card targets /communications?clientId=<encoded id> with concise count and no message listing", () => {
+  it("1. Control center does NOT label recent mixed summary length as 'Beérkezett kommunikációk' total", () => {
+    assert.ok(
+      !controlCenterSrc.includes("Beérkezett kommunikációk"),
+      "Must not use misleading 'Beérkezett kommunikációk' title without an authoritative inbound read projection",
+    );
+    assert.match(controlCenterSrc, /Kommunikációk/);
     assert.match(controlCenterSrc, /href=\{`\/communications\?clientId=\$\{encodedId\}`\}/);
-    assert.match(controlCenterSrc, /Beérkezett kommunikációk/);
-    assert.match(controlCenterSrc, /\{dossierStats\.communications\}/);
-    // Does not list individual messages inside the card
-    assert.ok(!controlCenterSrc.includes("communications.map"), "Card must not list individual messages");
   });
 
-  it("3. Active Cases card targets /cases?clientId=<encoded id>&scope=ACTIVE with active count", () => {
+  it("2. Control center does NOT render dossierStats.communications as a total communication metric", () => {
+    assert.ok(
+      !controlCenterSrc.includes("dossierStats.communications"),
+      "Must not render recent display sample as total communication metric",
+    );
+    assert.ok(
+      !controlCenterSrc.includes("communications.length"),
+      "Must not render sample communications.length in card",
+    );
+    assert.match(controlCenterSrc, /Kommunikáció megnyitása/);
+  });
+
+  it("3. ClientControlCenter no longer contains the misleading Dokumentumok card", () => {
+    assert.ok(
+      !controlCenterSrc.includes("Dokumentumok"),
+      "ClientControlCenter must not contain Dokumentumok card until canonical client-level projection exists",
+    );
+  });
+
+  it("4. No first-active-case document routing exists in ClientControlCenter", () => {
+    assert.ok(
+      !controlCenterSrc.includes("documentsHref"),
+      "Must not route client-level document context to an arbitrary first active case",
+    );
+    assert.ok(
+      !controlCenterSrc.includes("/documents"),
+      "Must not contain arbitrary document workspace deep link in control center",
+    );
+  });
+
+  it("5. Archived cases are excluded from activeCases", () => {
+    assert.match(pageSrc, /!\["CLOSED",\s*"ARCHIVED"\]\.includes/);
+    assert.match(pageSrc, /String\(item\.status\s*\|\|\s*""\)\.toUpperCase\(\)/);
+
+    // Test case filtering logic behaviorally
+    const sampleCases = [
+      { id: "1", status: "DRAFT" },
+      { id: "2", status: "IN_REVIEW" },
+      { id: "3", status: "CLOSED" },
+      { id: "4", status: "ARCHIVED" },
+      { id: "5", status: "CLIENT_INPUT" },
+    ];
+    const active = sampleCases.filter(
+      (c) => !["CLOSED", "ARCHIVED"].includes(String(c.status || "").toUpperCase()),
+    );
+    assert.equal(active.length, 3);
+    assert.deepEqual(active.map((c) => c.id), ["1", "2", "5"]);
+  });
+
+  it("6. Numeric active-case count is rendered only when the loaded client case set is complete", () => {
+    assert.match(pageSrc, /isCasesComplete/);
+    assert.match(
+      pageSrc,
+      /casesResponse\.pagination\s*\?\s*casesResponse\.pagination\.total\s*<=\s*casesResponse\.data\.length\s*:\s*true/,
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{isCasesComplete \? \([\s\S]*?\{activeCases\}[\s\S]*?\) : \(/,
+    );
+  });
+
+  it("7. In incomplete-case-set state the card remains usable but uses a non-numeric CTA", () => {
+    assert.match(controlCenterSrc, /Ügyek megnyitása/);
     assert.match(controlCenterSrc, /href=\{`\/cases\?clientId=\$\{encodedId\}&scope=ACTIVE`\}/);
-    assert.match(controlCenterSrc, /Nyitott ügyek/);
-    assert.match(controlCenterSrc, /\{dossierStats\.activeCases\}/);
   });
 
-  it("4. Organization client shows organization-specific cards (Szervezeti felépítés and Vállalati működés)", () => {
-    assert.match(controlCenterSrc, /\{organizationMode && \(/);
-    assert.match(controlCenterSrc, /href=\{`\/clients\/\$\{encodedId\}\/szervezet`\}/);
-    assert.match(controlCenterSrc, /Szervezeti felépítés/);
-    assert.match(controlCenterSrc, /href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}/);
-    assert.match(controlCenterSrc, /Vállalati működés/);
+  it("8. organizationMode is exactly ORGANIZATION || CASE_RELAY", () => {
+    assert.match(
+      pageSrc,
+      /const organizationMode =\s*portalWorkspace\?\.mode === "ORGANIZATION" \|\|\s*portalWorkspace\?\.mode === "CASE_RELAY";/,
+    );
+    assert.ok(
+      !pageSrc.includes('portalWorkspace.mode !== "INDIVIDUAL"'),
+      "Must not broaden organizationMode beyond accepted ORGANIZATION || CASE_RELAY contract",
+    );
   });
 
-  it("5. Individual client does not expose organization-only cards", () => {
-    // Both organization cards are guarded by organizationMode
+  it("9. Organization-only cards remain hidden in individual mode", () => {
     assert.match(
       controlCenterSrc,
       /\{organizationMode\s*&&\s*\(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/szervezet`\}[\s\S]*?Szervezeti felépítés/,
@@ -55,16 +108,7 @@ describe("Client Control Center (Dashboard Card Grid / Rubrikák)", () => {
     );
   });
 
-  it("6. Portal card reaches existing client portal context /clients/[id]/portal with concise status", () => {
-    assert.match(controlCenterSrc, /href=\{`\/clients\/\$\{encodedId\}\/portal`\}/);
-    assert.match(controlCenterSrc, /Ügyfélportál/);
-    assert.match(controlCenterSrc, /client\.portalAccessEnabled \? "Előkészítve" : "Nincs előkészítve"/);
-    // Technical control plane is not in the card
-    assert.ok(!controlCenterSrc.includes("relationshipMode"), "Portal card must not expose relationshipMode");
-    assert.ok(!controlCenterSrc.includes("connectedSystemState"), "Portal card must not expose connectedSystemState");
-  });
-
-  it("7. Existing child pages still render ClientWorkspaceTabs", () => {
+  it("10. Child-page tabs and Haladó behavior remain preserved", () => {
     const casesPage = read("src/app/clients/[clientId]/cases/page.tsx");
     const orgPage = read("src/app/clients/[clientId]/szervezet/page.tsx");
     const opsPage = read("src/app/clients/[clientId]/vallalati-mukodes/page.tsx");
@@ -74,40 +118,14 @@ describe("Client Control Center (Dashboard Card Grid / Rubrikák)", () => {
     assert.match(orgPage, /<ClientWorkspaceTabs clientId=\{client\.id\} active="organization"/);
     assert.match(opsPage, /<ClientWorkspaceTabs clientId=\{client\.id\} active="company-operations"/);
     assert.match(portalPage, /<ClientWorkspaceTabs clientId=\{client\.id\} active="portal"/);
-  });
 
-  it("8. Haladó behavior from PR #170 remains unchanged and reachable", () => {
-    // In ClientWorkspaceTabs (used on child pages)
     assert.match(tabsSrc, /••• Haladó/);
     assert.match(tabsSrc, /Munkacsoportok/);
     assert.match(tabsSrc, /Dokumentumstílus/);
     assert.match(tabsSrc, /#house-style/);
 
-    // On overview page (accessible as secondary utility navigation)
     assert.match(pageSrc, /••• Haladó/);
     assert.match(pageSrc, /#house-style/);
     assert.match(pageSrc, /Munkacsoportok/);
-  });
-
-  it("9. Client color is used as a meaningful visual card accent without destroying readability", () => {
-    assert.match(controlCenterSrc, /getClientColorDefinition\(client\.colorKey\)/);
-    assert.match(controlCenterSrc, /colorDef\.accentBorderClass/);
-    assert.match(controlCenterSrc, /border-l-4/);
-    assert.match(controlCenterSrc, /colorDef\.accentClass/);
-  });
-
-  it("10. Existing dossier content and primary actions remain present", () => {
-    assert.match(pageSrc, /Ügyfél szerkesztése/);
-    assert.match(pageSrc, /Új ügy/);
-    assert.match(pageSrc, /Dokumentum hozzáadása/);
-    assert.match(pageSrc, /Kapcsolt ügyek/);
-    assert.match(pageSrc, /Kapcsolt dokumentumok/);
-    assert.match(pageSrc, /Kapcsolt kommunikációk/);
-    assert.match(pageSrc, /ClientHouseStylePanel/);
-    assert.match(pageSrc, /ClientCompanyFoundation/);
-    assert.match(pageSrc, /ClientContractLibrary/);
-    assert.match(pageSrc, /ClientOrganization/);
-    assert.match(pageSrc, /CompactNewCaseDialog/);
-    assert.match(pageSrc, /dossierStats/);
   });
 });

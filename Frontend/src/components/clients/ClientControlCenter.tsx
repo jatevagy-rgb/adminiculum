@@ -2,36 +2,25 @@
 
 import Link from "next/link";
 import { getClientColorDefinition } from "@/lib/clientColors";
-import type { Client, CaseListItem } from "@/lib/api";
+import type { Client } from "@/lib/api";
 
 export interface ClientControlCenterProps {
   clientId: string;
   client: Client;
-  cases: CaseListItem[];
-  dossierStats: {
-    activeCases: number;
-    totalCases: number;
-    documents: number;
-    communications: number;
-  };
+  activeCases: number;
+  isCasesComplete: boolean;
   organizationMode: boolean;
 }
 
 export function ClientControlCenter({
   clientId,
   client,
-  cases,
-  dossierStats,
+  activeCases,
+  isCasesComplete,
   organizationMode,
 }: ClientControlCenterProps) {
   const colorDef = getClientColorDefinition(client.colorKey);
   const encodedId = encodeURIComponent(clientId);
-
-  // Determine active case documents link if available
-  const activeCase = cases.find((c) => c.status !== "CLOSED");
-  const documentsHref = activeCase
-    ? `/cases/${encodeURIComponent(activeCase.id)}/documents`
-    : `/cases?clientId=${encodedId}`;
 
   const cardBaseClasses = `group relative flex flex-col justify-between rounded-lg border bg-white p-5 shadow-sm transition hover:shadow-md hover:border-[var(--adm-ochre-500)] ${
     colorDef.key
@@ -79,14 +68,25 @@ export function ClientControlCenter({
             </p>
           </div>
           <div className="mt-4 pt-3 border-t border-[var(--adm-border)] flex items-baseline justify-between">
-            <span className="font-serif text-2xl font-bold text-[var(--adm-text)]">
-              {dossierStats.activeCases}
-            </span>
-            <span className="text-[11px] text-[var(--adm-text-muted)]">aktív ügy</span>
+            {isCasesComplete ? (
+              <>
+                <span className="font-serif text-2xl font-bold text-[var(--adm-text)]">
+                  {activeCases}
+                </span>
+                <span className="text-[11px] text-[var(--adm-text-muted)]">aktív ügy</span>
+              </>
+            ) : (
+              <>
+                <span className="text-xs font-semibold text-[var(--adm-text)]">
+                  Ügyek megnyitása
+                </span>
+                <span className="text-[11px] text-[var(--adm-text-muted)]">teljes ügylista</span>
+              </>
+            )}
           </div>
         </Link>
 
-        {/* 2. Beérkezett kommunikációk */}
+        {/* 2. Kommunikációk */}
         <Link
           href={`/communications?clientId=${encodedId}`}
           className={cardBaseClasses}
@@ -99,48 +99,23 @@ export function ClientControlCenter({
               </span>
             </div>
             <h3 className="mt-2 font-serif text-xl text-[var(--adm-text)] group-hover:text-[var(--adm-ochre-600)]">
-              Beérkezett kommunikációk
+              Kommunikációk
             </h3>
             <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
               Ügyfélszintű és ügyszintű üzenetek
             </p>
           </div>
-          <div className="mt-4 pt-3 border-t border-[var(--adm-border)] flex items-baseline justify-between">
-            <span className="font-serif text-2xl font-bold text-[var(--adm-text)]">
-              {dossierStats.communications}
+          <div className="mt-4 pt-3 border-t border-[var(--adm-border)] flex items-center justify-between">
+            <span className="text-xs font-semibold text-[var(--adm-text)]">
+              Kommunikáció megnyitása
             </span>
-            <span className="text-[11px] text-[var(--adm-text-muted)]">bejegyzés</span>
+            <span className="rounded-full bg-[var(--adm-surface)] px-2 py-0.5 text-[10px] text-[var(--adm-text-muted)]">
+              Üzenetek
+            </span>
           </div>
         </Link>
 
-        {/* 3. Dokumentumok */}
-        <Link
-          href={documentsHref}
-          className={cardBaseClasses}
-        >
-          <div>
-            <div className="flex items-center justify-between text-[11px] text-[var(--adm-text-muted)]">
-              <span className="font-semibold uppercase tracking-[0.14em]">Dokumentumok</span>
-              <span className="text-[var(--adm-ochre-600)] opacity-0 transition group-hover:opacity-100">
-                Megnyitás →
-              </span>
-            </div>
-            <h3 className="mt-2 font-serif text-xl text-[var(--adm-text)] group-hover:text-[var(--adm-ochre-600)]">
-              Dokumentumok
-            </h3>
-            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-              Kapcsolt iratok és tervezetek
-            </p>
-          </div>
-          <div className="mt-4 pt-3 border-t border-[var(--adm-border)] flex items-baseline justify-between">
-            <span className="font-serif text-2xl font-bold text-[var(--adm-text)]">
-              {dossierStats.documents}
-            </span>
-            <span className="text-[11px] text-[var(--adm-text-muted)]">irat</span>
-          </div>
-        </Link>
-
-        {/* 4. Ügyfélportál */}
+        {/* 3. Ügyfélportál */}
         <Link
           href={`/clients/${encodedId}/portal`}
           className={cardBaseClasses}
@@ -169,7 +144,7 @@ export function ClientControlCenter({
           </div>
         </Link>
 
-        {/* 5. Szervezeti felépítés (Only organizationMode) */}
+        {/* 4. Szervezeti felépítés (Only organizationMode) */}
         {organizationMode && (
           <Link
             href={`/clients/${encodedId}/szervezet`}
@@ -200,7 +175,7 @@ export function ClientControlCenter({
           </Link>
         )}
 
-        {/* 6. Vállalati működés (Only organizationMode) */}
+        {/* 5. Vállalati működés (Only organizationMode) */}
         {organizationMode && (
           <Link
             href={`/clients/${encodedId}/vallalati-mukodes`}

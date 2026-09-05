@@ -72,6 +72,7 @@ function ClientDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [casesLoadError, setCasesLoadError] = useState<string | null>(null);
+  const [isCasesComplete, setIsCasesComplete] = useState(true);
 
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
 
@@ -97,8 +98,14 @@ function ClientDetailContent() {
       const casesResponse = await getCases(1, 100, undefined, clientId).catch(() => null);
       if (!casesResponse) {
         setCasesLoadError("A kapcsolt ügyek listája jelenleg nem elérhető.");
+        setIsCasesComplete(false);
       } else {
         setCasesLoadError(null);
+        setIsCasesComplete(
+          casesResponse.pagination
+            ? casesResponse.pagination.total <= casesResponse.data.length
+            : true,
+        );
       }
 
       const relatedCases = casesResponse?.data || [];
@@ -171,7 +178,12 @@ function ClientDetailContent() {
   };
 
   const dossierStats = useMemo(() => {
-    const activeCases = cases.filter((item) => item.status !== "CLOSED").length;
+    const activeCases = cases.filter(
+      (item) =>
+        !["CLOSED", "ARCHIVED"].includes(
+          String(item.status || "").toUpperCase(),
+        ),
+    ).length;
     return {
       activeCases,
       totalCases: cases.length,
@@ -195,7 +207,9 @@ function ClientDetailContent() {
     );
   }
 
-  const organizationMode = Boolean(portalWorkspace?.mode === "ORGANIZATION" || portalWorkspace?.mode === "CASE_RELAY" || (portalWorkspace && portalWorkspace.mode !== "INDIVIDUAL"));
+  const organizationMode =
+    portalWorkspace?.mode === "ORGANIZATION" ||
+    portalWorkspace?.mode === "CASE_RELAY";
   const clientColorDef = getClientColorDefinition(client.colorKey);
 
   return (
@@ -269,8 +283,8 @@ function ClientDetailContent() {
           <ClientControlCenter
             clientId={clientId}
             client={client}
-            cases={cases}
-            dossierStats={dossierStats}
+            activeCases={dossierStats.activeCases}
+            isCasesComplete={isCasesComplete}
             organizationMode={organizationMode}
           />
 
