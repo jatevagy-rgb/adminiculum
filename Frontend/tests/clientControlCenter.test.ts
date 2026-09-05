@@ -449,4 +449,147 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
       /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
     );
   });
+
+  it("29. ClientOrganizationPreview does not swallow API errors and reaches outer error state with truthful copy", () => {
+    const previewSrc = read("src/components/clients/ClientOrganizationPreview.tsx");
+
+    // Must NOT swallow errors with fallback empty array inside Promise.all
+    assert.ok(
+      !previewSrc.includes(".catch(() => ({ items: []"),
+      "Preview must NOT swallow API rejection with fake empty arrays in Promise.all",
+    );
+    assert.match(
+      previewSrc,
+      /Promise\.all\(\[\s*clientOrganizationApi\.listGroups\(clientId\),\s*clientOrganizationApi\.listPersons\(clientId\),?\s*\]\)/,
+      "Preview must pass direct API promises to Promise.all",
+    );
+
+    // Outer error state must be reachable and set the canonical truthful message
+    assert.match(
+      previewSrc,
+      /setError\("A szervezeti pillanatkép jelenleg nem tölthető be\."\)/,
+      "Preview outer catch must set truthful error message",
+    );
+  });
+
+  it("30. ClientOrganizationPreview failure, genuine-empty, and populated states maintain strict truthfulness and reset stale data", () => {
+    const previewSrc = read("src/components/clients/ClientOrganizationPreview.tsx");
+
+    // Stale data reset on reload/new client
+    assert.match(
+      previewSrc,
+      /setLoading\(true\);\s*setError\(null\);\s*setGroups\(\[\]\);\s*setPersons\(\[\]\);/,
+      "Must clear stale groups and persons immediately upon clientId change",
+    );
+
+    // Header counts only rendered when not loading and not in error
+    assert.match(
+      previewSrc,
+      /\{!loading && !error && \(/,
+      "Header counts must only be rendered when !loading && !error",
+    );
+
+    // Error state rendered distinctly
+    assert.match(previewSrc, /: error \? \(\s*<div[^>]*>\s*\{error\}\s*<\/div>/);
+
+    // Genuine empty state rendered only when both authoritative arrays are empty
+    assert.match(previewSrc, /: persons\.length === 0 && groups\.length === 0 \?/);
+    assert.match(previewSrc, /Még nincsenek rögzített szervezeti egységek vagy munkatársak\./);
+
+    // Behavioral simulation of render semantics
+    type State = {
+      loading: boolean;
+      error: string | null;
+      persons: Array<{ id: string }>;
+      groups: Array<{ id: string }>;
+    };
+
+    const renderPreviewSemantics = (state: State) => {
+      const countsAuthoritative = !state.loading && !state.error;
+      const body = state.loading
+        ? "LOADING"
+        : state.error
+          ? `ERROR: ${state.error}`
+          : state.persons.length === 0 && state.groups.length === 0
+            ? "GENUINE_EMPTY"
+            : "POPULATED_PREVIEW";
+      return { countsAuthoritative, body };
+    };
+
+    // 1. Failure state (API rejection): counts NOT authoritative, error shown, empty state NOT shown
+    const failureRes = renderPreviewSemantics({
+      loading: false,
+      error: "A szervezeti pillanatkép jelenleg nem tölthető be.",
+      persons: [],
+      groups: [],
+    });
+    assert.equal(failureRes.countsAuthoritative, false, "Zero counts must not be authoritative on failure");
+    assert.equal(failureRes.body, "ERROR: A szervezeti pillanatkép jelenleg nem tölthető be.");
+    assert.ok(!failureRes.body.includes("GENUINE_EMPTY"));
+
+    // 2. Genuine empty state: counts authoritative (0, 0), empty copy shown
+    const emptyRes = renderPreviewSemantics({
+      loading: false,
+      error: null,
+      persons: [],
+      groups: [],
+    });
+    assert.equal(emptyRes.countsAuthoritative, true);
+    assert.equal(emptyRes.body, "GENUINE_EMPTY");
+
+    // 3. Populated state: counts authoritative, preview shown
+    const populatedRes = renderPreviewSemantics({
+      loading: false,
+      error: null,
+      persons: [{ id: "p1" }],
+      groups: [{ id: "g1" }],
+    });
+    assert.equal(populatedRes.countsAuthoritative, true);
+    assert.equal(populatedRes.body, "POPULATED_PREVIEW");
+  });
+
+  it("31. Dedicated /szervezet page accepts ORGANIZATION and CASE_RELAY, rejecting INDIVIDUAL, unknown modes, and ARCHIVED workspaces", () => {
+    const orgPageSrc = read("src/app/clients/[clientId]/szervezet/page.tsx");
+
+    assert.match(
+      orgPageSrc,
+      /item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\)/,
+      "Dedicated /szervezet page must accept ORGANIZATION and CASE_RELAY while excluding ARCHIVED",
+    );
+    assert.ok(
+      !orgPageSrc.includes('item.mode !== "INDIVIDUAL"'),
+      "Dedicated /szervezet page must NOT use mode !== 'INDIVIDUAL'",
+    );
+
+    // Behavioral test of /szervezet workspace resolution
+    const checkSzervezetAccess = (items: Array<{ mode?: string | null; status?: string }>) =>
+      items.some(
+        (item) =>
+          item.status !== "ARCHIVED" &&
+          (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
+      );
+
+    // Accepts ORGANIZATION
+    assert.equal(checkSzervezetAccess([{ mode: "ORGANIZATION", status: "ACTIVE" }]), true);
+    // Accepts CASE_RELAY
+    assert.equal(checkSzervezetAccess([{ mode: "CASE_RELAY", status: "ACTIVE" }]), true);
+    // Rejects INDIVIDUAL
+    assert.equal(checkSzervezetAccess([{ mode: "INDIVIDUAL", status: "ACTIVE" }]), false);
+    // Rejects unknown/null modes
+    assert.equal(checkSzervezetAccess([{ mode: "CUSTOM", status: "ACTIVE" }]), false);
+    assert.equal(checkSzervezetAccess([{ mode: null, status: "ACTIVE" }]), false);
+    assert.equal(checkSzervezetAccess([{ status: "ACTIVE" }]), false);
+    // Rejects ARCHIVED workspace even if mode is ORGANIZATION or CASE_RELAY
+    assert.equal(checkSzervezetAccess([{ mode: "ORGANIZATION", status: "ARCHIVED" }]), false);
+    assert.equal(checkSzervezetAccess([{ mode: "CASE_RELAY", status: "ARCHIVED" }]), false);
+  });
+
+  it("32. Full ClientOrganization detail workspace remains rendered on dedicated /szervezet page", () => {
+    const orgPageSrc = read("src/app/clients/[clientId]/szervezet/page.tsx");
+    assert.match(
+      orgPageSrc,
+      /<ClientOrganization clientId=\{client\.id\} clientName=\{client\.name\} \/>/,
+      "Dedicated /szervezet page must still render full ClientOrganization component",
+    );
+  });
 });

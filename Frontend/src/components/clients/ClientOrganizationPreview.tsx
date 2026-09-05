@@ -26,10 +26,12 @@ export function ClientOrganizationPreview({
     let active = true;
     setLoading(true);
     setError(null);
+    setGroups([]);
+    setPersons([]);
 
     Promise.all([
-      clientOrganizationApi.listGroups(clientId).catch(() => ({ items: [] as OrgGroupDTO[] })),
-      clientOrganizationApi.listPersons(clientId).catch(() => ({ items: [] as OrgPersonDTO[] })),
+      clientOrganizationApi.listGroups(clientId),
+      clientOrganizationApi.listPersons(clientId),
     ])
       .then(([groupsRes, personsRes]) => {
         if (!active) return;
@@ -38,7 +40,7 @@ export function ClientOrganizationPreview({
       })
       .catch(() => {
         if (!active) return;
-        setError("Nem sikerült betölteni a szervezeti adatokat.");
+        setError("A szervezeti pillanatkép jelenleg nem tölthető be.");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -85,15 +87,17 @@ export function ClientOrganizationPreview({
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3 text-xs text-[var(--adm-text-muted)]">
-            <span>
-              <strong className="text-[var(--adm-text)]">{persons.length}</strong> munkatárs
-            </span>
-            <span>·</span>
-            <span>
-              <strong className="text-[var(--adm-text)]">{groups.length}</strong> szervezeti egység
-            </span>
-          </div>
+          {!loading && !error && (
+            <div className="flex items-center gap-3 text-xs text-[var(--adm-text-muted)]">
+              <span>
+                <strong className="text-[var(--adm-text)]">{persons.length}</strong> munkatárs
+              </span>
+              <span>·</span>
+              <span>
+                <strong className="text-[var(--adm-text)]">{groups.length}</strong> szervezeti egység
+              </span>
+            </div>
+          )}
           <Link
             href={szervezetHref}
             className="adm-link-button inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-[var(--adm-ochre-600)] hover:text-[var(--adm-ochre-700)]"
