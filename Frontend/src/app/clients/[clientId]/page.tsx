@@ -68,6 +68,7 @@ function ClientDetailContent() {
   const [documents, setDocuments] = useState<DossierDocument[]>([]);
   const [communications, setCommunications] = useState<ClientCommunicationSummaryItem[]>([]);
   const [portalWorkspace, setPortalWorkspace] = useState<AdminWorkspaceDTO | null>(null);
+  const [hasOrganizationCapability, setHasOrganizationCapability] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +88,7 @@ function ClientDetailContent() {
     setError(null);
     setCaseTotalCount(null);
     setIsCasesComplete(false);
+    setHasOrganizationCapability(false);
 
     try {
       const [clientData, directClientComms, portalWorkspaces] = await Promise.all([
@@ -111,6 +113,13 @@ function ClientDetailContent() {
       const relatedCases = casesResponse?.data || [];
       setClient(clientData);
       setPortalWorkspace(portalWorkspaces.items.find((item) => item.status !== "ARCHIVED") || portalWorkspaces.items[0] || null);
+      setHasOrganizationCapability(
+        portalWorkspaces.items.some(
+          (item) =>
+            item.status !== "ARCHIVED" &&
+            (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
+        ),
+      );
       setCases(relatedCases);
 
       const documentsByCase = await Promise.all(
@@ -207,9 +216,7 @@ function ClientDetailContent() {
     );
   }
 
-  const organizationMode =
-    portalWorkspace?.mode === "ORGANIZATION" ||
-    portalWorkspace?.mode === "CASE_RELAY";
+  const organizationMode = hasOrganizationCapability;
   const clientColorDef = getClientColorDefinition(client.colorKey);
 
   return (

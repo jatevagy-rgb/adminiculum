@@ -116,14 +116,24 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(controlCenterSrc, /href=\{`\/cases\?clientId=\$\{encodedId\}&scope=ACTIVE`\}/);
   });
 
-  it("8. organizationMode is exactly ORGANIZATION || CASE_RELAY", () => {
-    assert.match(
-      pageSrc,
-      /const organizationMode =\s*portalWorkspace\?\.mode === "ORGANIZATION" \|\|\s*portalWorkspace\?\.mode === "CASE_RELAY";/,
+  it("8. organizationMode is derived authoritatively from full workspace collection and NOT from portalWorkspace?.mode", () => {
+    assert.ok(
+      !pageSrc.includes("portalWorkspace?.mode ==="),
+      "Dossier organization capability must NOT be derived from portalWorkspace?.mode",
     );
     assert.ok(
-      !pageSrc.includes('portalWorkspace.mode !== "INDIVIDUAL"'),
-      "Must not broaden organizationMode beyond accepted ORGANIZATION || CASE_RELAY contract",
+      !pageSrc.includes('portalWorkspace?.mode !== "INDIVIDUAL"'),
+      "Must not use portalWorkspace mode !== INDIVIDUAL",
+    );
+    assert.match(
+      pageSrc,
+      /portalWorkspaces\.items\.some\(\s*\(item\)\s*=>\s*item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\),?\s*\)/,
+      "pageSrc must derive hasOrganizationCapability using items.some with status !== ARCHIVED and ORGANIZATION || CASE_RELAY",
+    );
+    assert.match(
+      pageSrc,
+      /const organizationMode = hasOrganizationCapability;/,
+      "Dossier organizationMode must use hasOrganizationCapability",
     );
   });
 
@@ -657,5 +667,104 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
       /<ClientCompanyWorkspace clientId=\{client\.id\} clientName=\{client\.name\} \/>/,
       "Dedicated /vallalati-mukodes page must render ClientCompanyWorkspace",
     );
+  });
+
+  it("35. Dossier organization capability resolution matrix, stale reset, and archived fallback safety", () => {
+    // Stale capability reset on load start
+    assert.match(
+      pageSrc,
+      /setHasOrganizationCapability\(false\);/,
+      "Must reset hasOrganizationCapability to false at the start of loadClientData",
+    );
+
+    // Canonical dossier capability resolver matching pageSrc implementation:
+    const resolveDossierCapability = (workspaces: { items?: Array<{ mode?: string | null; status?: string }> } | null | undefined) => {
+      const items = workspaces?.items || [];
+      return items.some(
+        (item) =>
+          item.status !== "ARCHIVED" &&
+          (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
+      );
+    };
+
+    // 1. ACTIVE ORGANIZATION => true
+    assert.equal(resolveDossierCapability({ items: [{ mode: "ORGANIZATION", status: "ACTIVE" }] }), true);
+
+    // 2. ACTIVE CASE_RELAY => true
+    assert.equal(resolveDossierCapability({ items: [{ mode: "CASE_RELAY", status: "ACTIVE" }] }), true);
+
+    // 3. ACTIVE INDIVIDUAL only => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "INDIVIDUAL", status: "ACTIVE" }] }), false);
+
+    // 4. ARCHIVED ORGANIZATION only => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "ORGANIZATION", status: "ARCHIVED" }] }), false);
+
+    // 5. ARCHIVED CASE_RELAY only => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "CASE_RELAY", status: "ARCHIVED" }] }), false);
+
+    // 6. ACTIVE INDIVIDUAL + ARCHIVED ORGANIZATION => false
+    assert.equal(
+      resolveDossierCapability({
+        items: [
+          { mode: "INDIVIDUAL", status: "ACTIVE" },
+          { mode: "ORGANIZATION", status: "ARCHIVED" },
+        ],
+      }),
+      false,
+    );
+
+    // 7. ACTIVE INDIVIDUAL + ACTIVE CASE_RELAY => true
+    assert.equal(
+      resolveDossierCapability({
+        items: [
+          { mode: "INDIVIDUAL", status: "ACTIVE" },
+          { mode: "CASE_RELAY", status: "ACTIVE" },
+        ],
+      }),
+      true,
+    );
+
+    // 8. ACTIVE INDIVIDUAL + ACTIVE ORGANIZATION => true
+    assert.equal(
+      resolveDossierCapability({
+        items: [
+          { mode: "INDIVIDUAL", status: "ACTIVE" },
+          { mode: "ORGANIZATION", status: "ACTIVE" },
+        ],
+      }),
+      true,
+    );
+
+    // 9. Unknown/null mode => false
+    assert.equal(resolveDossierCapability({ items: [{ mode: "CUSTOM", status: "ACTIVE" }] }), false);
+    assert.equal(resolveDossierCapability({ items: [{ mode: null, status: "ACTIVE" }] }), false);
+    assert.equal(resolveDossierCapability({ items: [{ status: "ACTIVE" }] }), false);
+
+    // 10. Workspace API failure (catch returns { items: [] } or null) => false
+    assert.equal(resolveDossierCapability({ items: [] }), false);
+    assert.equal(resolveDossierCapability(null), false);
+    assert.equal(resolveDossierCapability(undefined), false);
+
+    // 12 & 13. Archived fallback portalWorkspace cannot expose organization capability
+    const archivedOnlyItems = [{ mode: "ORGANIZATION", status: "ARCHIVED" }];
+    const fallbackDisplayWorkspace =
+      archivedOnlyItems.find((item) => item.status !== "ARCHIVED") || archivedOnlyItems[0] || null;
+    assert.equal(fallbackDisplayWorkspace?.status, "ARCHIVED");
+    // Even though display workspace has mode ORGANIZATION:
+    assert.equal(fallbackDisplayWorkspace?.mode, "ORGANIZATION");
+    // Authoritative capability resolution correctly evaluates to false:
+    assert.equal(resolveDossierCapability({ items: archivedOnlyItems }), false);
+
+    // Multi-workspace order independence:
+    const orderA = [
+      { mode: "INDIVIDUAL", status: "ACTIVE" },
+      { mode: "CASE_RELAY", status: "ACTIVE" },
+    ];
+    const orderB = [
+      { mode: "CASE_RELAY", status: "ACTIVE" },
+      { mode: "INDIVIDUAL", status: "ACTIVE" },
+    ];
+    assert.equal(resolveDossierCapability({ items: orderA }), true);
+    assert.equal(resolveDossierCapability({ items: orderB }), true);
   });
 });
