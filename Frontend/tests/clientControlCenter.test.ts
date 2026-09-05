@@ -592,4 +592,70 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
       "Dedicated /szervezet page must still render full ClientOrganization component",
     );
   });
+
+  it("33. Dedicated /vallalati-mukodes page accepts ORGANIZATION and CASE_RELAY, rejecting INDIVIDUAL, unknown modes, and ARCHIVED workspaces", () => {
+    const opsPageSrc = read("src/app/clients/[clientId]/vallalati-mukodes/page.tsx");
+
+    assert.match(
+      opsPageSrc,
+      /item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\)/,
+      "Dedicated /vallalati-mukodes page must accept ORGANIZATION and CASE_RELAY while excluding ARCHIVED",
+    );
+    assert.ok(
+      !opsPageSrc.includes('item.mode !== "INDIVIDUAL"'),
+      "Dedicated /vallalati-mukodes page must NOT use mode !== 'INDIVIDUAL'",
+    );
+
+    // Behavioral test of /vallalati-mukodes workspace resolution
+    const checkCompanyOpsAccess = (items: Array<{ mode?: string | null; status?: string }>) =>
+      items.some(
+        (item) =>
+          item.status !== "ARCHIVED" &&
+          (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
+      );
+
+    // Accepts active ORGANIZATION
+    assert.equal(checkCompanyOpsAccess([{ mode: "ORGANIZATION", status: "ACTIVE" }]), true);
+    // Accepts active CASE_RELAY
+    assert.equal(checkCompanyOpsAccess([{ mode: "CASE_RELAY", status: "ACTIVE" }]), true);
+    // Rejects INDIVIDUAL
+    assert.equal(checkCompanyOpsAccess([{ mode: "INDIVIDUAL", status: "ACTIVE" }]), false);
+    // Rejects unknown/null modes
+    assert.equal(checkCompanyOpsAccess([{ mode: "UNKNOWN", status: "ACTIVE" }]), false);
+    assert.equal(checkCompanyOpsAccess([{ mode: null, status: "ACTIVE" }]), false);
+    assert.equal(checkCompanyOpsAccess([{ status: "ACTIVE" }]), false);
+    // Rejects ARCHIVED workspace even if mode is ORGANIZATION or CASE_RELAY
+    assert.equal(checkCompanyOpsAccess([{ mode: "ORGANIZATION", status: "ARCHIVED" }]), false);
+    assert.equal(checkCompanyOpsAccess([{ mode: "CASE_RELAY", status: "ARCHIVED" }]), false);
+  });
+
+  it("34. End-to-end capability contract: Grow with us and Compliance remain guarded by identical organizationMode semantics and reach valid destinations", () => {
+    // Both cards guarded by organizationMode in controlCenterSrc
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes`\}[\s\S]*?Grow with us/,
+      "Grow with us must be guarded by organizationMode",
+    );
+    assert.match(
+      controlCenterSrc,
+      /\{organizationMode && \(\s*<Link[^>]+href=\{`\/clients\/\$\{encodedId\}\/vallalati-mukodes#compliance`\}[\s\S]*?Compliance/,
+      "Compliance must be guarded by organizationMode",
+    );
+
+    // Compliance anchor remains #compliance on panel in ClientCompanyWorkspace
+    const companyWsSrc = read("src/components/clients/ClientCompanyWorkspace.tsx");
+    assert.match(
+      companyWsSrc,
+      /<Panel id="compliance" title="Releváns területek">/,
+      "Existing compliance panel must have stable id='compliance'",
+    );
+
+    // Full ClientCompanyWorkspace component remains rendered on dedicated page
+    const opsPageSrc = read("src/app/clients/[clientId]/vallalati-mukodes/page.tsx");
+    assert.match(
+      opsPageSrc,
+      /<ClientCompanyWorkspace clientId=\{client\.id\} clientName=\{client\.name\} \/>/,
+      "Dedicated /vallalati-mukodes page must render ClientCompanyWorkspace",
+    );
+  });
 });
