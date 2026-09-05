@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     branches:
-      - release/editor-ops-workflow-1
+      - master
     paths:
       - 'Backend/scripts/demo-presentation-*.mjs'
       - 'Backend/tests/helpers/presentationDemoFixture.ts'

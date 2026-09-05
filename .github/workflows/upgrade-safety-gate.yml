@@ -3,7 +3,7 @@ name: Upgrade Safety Gate
 on:
   # Run on every dependency update PR from Dependabot
   pull_request:
-    branches: [main]
+    branches: [master]
     types: [opened, synchronize, reopened]
 
   # Optional: also run weekly even without a PR (to catch transitive issues)

@@ -16,7 +16,7 @@ on:
       - '.github/workflows/prisma-migration-replayability.yml'
   push:
     branches:
-      - release/editor-ops-workflow-1
+      - master
       - 'codex/**'
     paths:
       - 'Backend/prisma/schema.prisma'

@@ -19,7 +19,7 @@ jobs:
       - name: Checkout canonical release
         uses: actions/checkout@v4
         with:
-          ref: release/editor-ops-workflow-1
+          ref: master
           fetch-depth: 1
 
       - name: Setup Node.js
