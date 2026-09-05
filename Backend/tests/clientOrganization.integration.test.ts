@@ -288,7 +288,7 @@ d('Organization / responsibility map (Phase 3) (PostgreSQL)', () => {
 
     // 2. createPerson accepts token.smith@example.com
     const tokenPerson = await createPerson(admin, clientA, {
-      name: 'Token Smith',
+      name: 'Smith Tamás',
       jobTitle: 'Developer',
       email: 'token.smith@example.com',
       phone: '+36 30 111 2222',
