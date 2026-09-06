@@ -139,6 +139,41 @@ describe("read-only production schema inspector safety contract", () => {
     expect(script).toContain('client.query("ROLLBACK")');
   });
 
+  test("fails closed when the transaction is not read-only", () => {
+    // The SHOW result must be compared against "on" and gate the proof.
+    expect(script).toMatch(/transaction_read_only\s*===\s*"on"/);
+
+    const showIndex = script.indexOf(
+      'client.query("SHOW transaction_read_only")',
+    );
+    const gateMatch = script.match(
+      /if\s*\(\s*!\s*transactionReadOnly\s*\)\s*\{\s*throw new Error\(/,
+    );
+    expect(showIndex).toBeGreaterThan(-1);
+    expect(gateMatch).not.toBeNull();
+    const gateIndex = script.indexOf(gateMatch![0]);
+    expect(gateIndex).toBeGreaterThan(showIndex);
+
+    // PASS may only be emitted after the fail-closed gate.
+    const passIndex = script.indexOf(
+      'print("READ_ONLY_SCHEMA_PROOF", "PASS")',
+    );
+    expect(passIndex).toBeGreaterThan(gateIndex);
+
+    // A thrown gate error still reaches ROLLBACK before connection close,
+    // and the outer catch turns it into READ_ONLY_SCHEMA_PROOF=FAIL.
+    const rollbackIndex = script.indexOf('client.query("ROLLBACK")');
+    const endIndex = script.indexOf("await client.end()");
+    const catchIndex = script.indexOf("main().catch");
+    expect(rollbackIndex).toBeGreaterThan(gateIndex);
+    expect(endIndex).toBeGreaterThan(rollbackIndex);
+    expect(catchIndex).toBeGreaterThan(endIndex);
+    expect(script.slice(catchIndex)).toContain(
+      'print("READ_ONLY_SCHEMA_PROOF", "FAIL")',
+    );
+    expect(script).toContain("finally");
+  });
+
   test("performs only parameterized metadata SELECTs", () => {
     expect(script).toContain("WHERE migration_name = $1");
     expect(script).toContain('FROM "_prisma_migrations"');

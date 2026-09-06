@@ -116,10 +116,14 @@ const main = async () => {
     const readOnlyRow = (
       await client.query("SHOW transaction_read_only")
     ).rows[0];
-    print(
-      "TRANSACTION_READ_ONLY",
-      yesNo(readOnlyRow?.transaction_read_only === "on"),
-    );
+    const transactionReadOnly =
+      readOnlyRow?.transaction_read_only === "on";
+    print("TRANSACTION_READ_ONLY", yesNo(transactionReadOnly));
+    if (!transactionReadOnly) {
+      throw new Error(
+        "Production schema proof transaction is not read-only.",
+      );
+    }
 
     const migration = await fetchMigrationRecord(client, migrationName);
     print("MIGRATION_NAME", migrationName);
