@@ -32,23 +32,30 @@ export type CaseDeadlineDisplay = {
   overdue: boolean;
 };
 // The displayed deadline must reflect the exact evidence that satisfies the
-// Határidős filter: Case.deadline first, else the earliest dueAt of a KNOWN
+// Határidős filter: the earliest dueAt across Case.deadline and every KNOWN
 // attention signal. UNKNOWN coverage never yields an authoritative label.
 export function caseDeadline(item: Pick<CaseListItem, 'deadline' | 'status'>, state: CaseAttentionState, now = Date.now()): CaseDeadlineDisplay {
   const closed = isClosedCase(item.status);
+  const candidates: { dueAt: Date; sourceLabel?: string }[] = [];
   const caseDueAt = item.deadline ? new Date(item.deadline) : null;
   if (caseDueAt && Number.isFinite(caseDueAt.getTime())) {
-    return { state: 'KNOWN', dueAt: caseDueAt, label: caseDueAt.toLocaleDateString(), sourceLabel: 'Ügyhatáridő', overdue: caseDueAt.getTime() < now && !closed };
+    candidates.push({ dueAt: caseDueAt, sourceLabel: 'Ügyhatáridő' });
   }
   if (state.state === 'KNOWN') {
-    const earliest = state.attention.signals
-      .filter((signal) => Boolean(signal.dueAt))
-      .map((signal) => ({ dueAt: new Date(String(signal.dueAt)), sourceLabel: signal.label }))
-      .filter((entry) => Number.isFinite(entry.dueAt.getTime()))
-      .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())[0];
-    if (earliest) {
-      return { state: 'KNOWN', dueAt: earliest.dueAt, label: earliest.dueAt.toLocaleDateString(), sourceLabel: earliest.sourceLabel || undefined, overdue: earliest.dueAt.getTime() < now && !closed };
+    for (const signal of state.attention.signals) {
+      if (!signal.dueAt) continue;
+      const dueAt = new Date(String(signal.dueAt));
+      if (Number.isFinite(dueAt.getTime())) {
+        candidates.push({ dueAt, sourceLabel: signal.label || undefined });
+      }
     }
+  }
+  candidates.sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
+  const earliest = candidates[0];
+  if (earliest) {
+    return { state: 'KNOWN', dueAt: earliest.dueAt, label: earliest.dueAt.toLocaleDateString(), sourceLabel: earliest.sourceLabel, overdue: earliest.dueAt.getTime() < now && !closed };
+  }
+  if (state.state === 'KNOWN') {
     return { state: 'KNOWN', dueAt: null, label: 'Nincs megjeleníthető határidő', overdue: false };
   }
   return { state: 'UNKNOWN', dueAt: null, label: 'Határidőadat nem érhető el', overdue: false };

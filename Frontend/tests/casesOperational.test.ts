@@ -59,6 +59,32 @@ test('Határidős filter evidence is always observable in the displayed deadline
   assert.equal(caseDeadline(noCaseDeadline, unknown).state, 'UNKNOWN');
   assert.equal(caseDeadline(noCaseDeadline, unknown).label, 'Határidőadat nem érhető el');
 });
+test('displayed deadline selects the earliest due date across case and attention evidence', () => {
+  const now = Date.parse('2026-09-01T00:00:00Z');
+  const signal = (label: string, dueAt: string | null): CaseAttentionItem['attention']['signals'][number] =>
+    ({ type: 'TEST', severity: 'ATTENTION', label, dueAt, sourceType: 'TEST' });
+  const known = (signals: CaseAttentionItem['attention']['signals']): CaseAttentionState =>
+    ({ state: 'KNOWN', attention: { caseId: 'x', urgency: 'ATTENTION', nextAction: null, signals, lastMeaningfulChangeAt: null } });
+  // Case.deadline later than an attention dueAt: the earlier operational date wins.
+  const laterCase = { deadline: '2026-09-20T00:00:00Z', status: 'DRAFT' } as CaseListItem;
+  const earlierSignal = known([signal('Feladat-esedékesség', '2026-09-09T00:00:00Z'), signal('Későbbi review', '2026-09-25T00:00:00Z')]);
+  assert.ok(matchesOperationalFilter(laterCase, earlierSignal, 'deadline'));
+  const earlierShown = caseDeadline(laterCase, earlierSignal, now);
+  assert.equal(earlierShown.dueAt?.toISOString(), '2026-09-09T00:00:00.000Z');
+  assert.equal(earlierShown.sourceLabel, 'Feladat-esedékesség');
+  assert.ok(!earlierShown.overdue);
+  assert.ok(caseDeadline(laterCase, known([signal('Feladat', '2020-01-01T00:00:00Z')]), now).overdue);
+  // Case.deadline earlier than every attention dueAt: the case deadline wins.
+  const earlierCase = { deadline: '2026-09-03T00:00:00Z', status: 'DRAFT' } as CaseListItem;
+  const caseWins = caseDeadline(earlierCase, earlierSignal, now);
+  assert.equal(caseWins.dueAt?.toISOString(), '2026-09-03T00:00:00.000Z');
+  assert.equal(caseWins.sourceLabel, 'Ügyhatáridő');
+  // Case.deadline present with UNKNOWN attention coverage still displays.
+  const unknown = { state: 'UNKNOWN' } as const;
+  const deadlineOnly = caseDeadline(earlierCase, unknown, now);
+  assert.equal(deadlineOnly.state, 'KNOWN');
+  assert.equal(deadlineOnly.sourceLabel, 'Ügyhatáridő');
+});
 test('bounded pagination joins reordered rows by ID and forwards scope', async () => {
   const calls: unknown[] = [];
   const data = await loadCaseAttentionPages(async (...args) => { calls.push(args); return { items: args[2] === 0 ? Array.from({ length: 50 }, (_, i) => attention('id'+(49-i))) : [attention('target', 'URGENT')] }; }, 'client');
