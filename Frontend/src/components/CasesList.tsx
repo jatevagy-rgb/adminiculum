@@ -352,91 +352,98 @@ export function CasesList() {
         primaryAction={<AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy</AdminButton>}
       />
 
-      <div className="flex flex-col gap-3 border border-[var(--adm-border)] bg-white p-3 lg:flex-row lg:items-end">
-        <div className="flex flex-wrap gap-1">
-          {[
-            ["ACTIVE", "Aktív", caseEntrypointStats.activeCases],
-            ["MINE", "Hozzám rendelve", backendCases.filter((item) => matchesCaseScope(item, 'MINE', currentUser?.id)).length],
-            ["CLOSED", "Lezárt", backendCases.filter((item) => matchesCaseScope(item, 'CLOSED')).length],
-          ].map(([value, label, count]) => (
-            <button
-              key={String(value)}
-              type="button"
-              onClick={() => setScopeFilter(value as "ACTIVE" | "MINE" | "CLOSED")}
-              className={`px-3 py-2 text-[11px] font-semibold ${scopeFilter === value ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"}`}
-            >
-              {label} <span className="ml-1 opacity-70">{count}</span>
-            </button>
-          ))}
-        </div>
-        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
-          Szakterület
-          <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="adm-board-field mt-1 block h-9 w-44 px-2 text-xs">
-            <option value="all">Mind</option>
-            {matterTypes.filter((type) => type.value !== "CUSTOM").map((type) => (
-              <option key={type.value} value={type.value}>{type.label}</option>
-            ))}
-          </select>
-        </label>
-        <div className="flex flex-col">
-          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
-            Ügyfél
-            <input
-              value={clientName}
-              onChange={(e) => {
-                setClientName(e.target.value);
-                if (selectedClientId) setSelectedClientId("");
-              }}
-              className="adm-board-field mt-1 block h-9 w-48 px-2 text-xs"
-              placeholder="Ügyfél keresése"
-            />
-          </label>
-          {selectedClientId && (
-            <div className="mt-1 flex items-center gap-1 rounded bg-[var(--adm-sand-100)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
-              <span className="font-semibold">{filteredClientLabel}</span>
-              <button
-                type="button"
-                onClick={() => setSelectedClientId("")}
-                className="ml-auto font-bold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
-                title="Ügyfélszűrő törlése"
-                aria-label="Ügyfélszűrő törlése"
-              >
-                ×
-              </button>
+      <div className="border border-[var(--adm-border)] bg-white px-3 py-3">
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Nézet</span>
+            <div className="flex overflow-hidden rounded-[5px] border border-[var(--adm-border)]">
+              {[
+                ["ACTIVE", "Aktív", caseEntrypointStats.activeCases],
+                ["MINE", "Hozzám rendelve", backendCases.filter((item) => matchesCaseScope(item, 'MINE', currentUser?.id)).length],
+                ["CLOSED", "Lezárt", backendCases.filter((item) => matchesCaseScope(item, 'CLOSED')).length],
+              ].map(([value, label, count]) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  onClick={() => setScopeFilter(value as "ACTIVE" | "MINE" | "CLOSED")}
+                  className={`border-l border-[var(--adm-border)] px-3 py-2 text-[11px] font-semibold first:border-l-0 ${scopeFilter === value ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"}`}
+                >
+                  {label} <span className="ml-1 opacity-70">{count}</span>
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-        <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
-          Munkaprioritás
-          <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="adm-board-field mt-1 block h-9 w-40 px-2 text-xs">
-            <option value="all">Mind</option>
-            <option value="Alacsony">Alacsony</option>
-            <option value="Közepes">Közepes</option>
-            <option value="Magas">Magas</option>
-            <option value="Sürgős">Sürgős</option>
-          </select>
-        </label>
-        <label className="text-xs">Teendők
-          <select aria-label="Teendők szűrése" value={operationalFilter} onChange={e => setOperationalFilter(e.target.value)} className="adm-board-field mt-1 block h-9 px-2 text-xs">
-            <option value="all">Mind</option>
-            <option value="attention">Figyelmet igényel</option>
-            <option value="deadline">Határidős</option>
-          </select>
-        </label>
-        <div className="ml-auto flex flex-wrap gap-2">
-          <AdminButton
-            size="sm"
-            variant="neutral"
-            onClick={() => {
-              setPracticeArea("all");
-              setClientName("");
-              setSelectedClientId("");
-              setWorkPriorityFilter("all");
-              setOperationalFilter('all');
-            }}
-          >
-            Szűrők törlése
-          </AdminButton>
+          </div>
+          <span className="hidden self-stretch border-l border-[var(--adm-border)] lg:block" aria-hidden="true" />
+          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+            Szakterület
+            <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="adm-board-field mt-1 block h-9 w-44 px-2 text-xs">
+              <option value="all">Mind</option>
+              {matterTypes.filter((type) => type.value !== "CUSTOM").map((type) => (
+                <option key={type.value} value={type.value}>{type.label}</option>
+              ))}
+            </select>
+          </label>
+          <div className="flex flex-col">
+            <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+              Ügyfél
+              <input
+                value={clientName}
+                onChange={(e) => {
+                  setClientName(e.target.value);
+                  if (selectedClientId) setSelectedClientId("");
+                }}
+                className="adm-board-field mt-1 block h-9 w-48 px-2 text-xs"
+                placeholder="Ügyfél keresése"
+              />
+            </label>
+            {selectedClientId && (
+              <div className="mt-1 flex items-center gap-1 rounded bg-[var(--adm-sand-100)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
+                <span className="font-semibold">{filteredClientLabel}</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClientId("")}
+                  className="ml-auto font-bold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
+                  title="Ügyfélszűrő törlése"
+                  aria-label="Ügyfélszűrő törlése"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+            Munkaprioritás
+            <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="adm-board-field mt-1 block h-9 w-40 px-2 text-xs">
+              <option value="all">Mind</option>
+              <option value="Alacsony">Alacsony</option>
+              <option value="Közepes">Közepes</option>
+              <option value="Magas">Magas</option>
+              <option value="Sürgős">Sürgős</option>
+            </select>
+          </label>
+          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+            Teendők
+            <select aria-label="Teendők szűrése" value={operationalFilter} onChange={e => setOperationalFilter(e.target.value)} className="adm-board-field mt-1 block h-9 w-40 px-2 text-xs">
+              <option value="all">Mind</option>
+              <option value="attention">Figyelmet igényel</option>
+              <option value="deadline">Határidős</option>
+            </select>
+          </label>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <AdminButton
+              size="sm"
+              variant="neutral"
+              onClick={() => {
+                setPracticeArea("all");
+                setClientName("");
+                setSelectedClientId("");
+                setWorkPriorityFilter("all");
+                setOperationalFilter('all');
+              }}
+            >
+              Szűrők törlése
+            </AdminButton>
+          </div>
         </div>
       </div>
 
@@ -447,18 +454,16 @@ export function CasesList() {
           <div className="p-4"><SafePanelError onRetry={() => void loadCases(selectedClientId)} /></div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[1060px] text-left">
+          <table className="w-full min-w-[980px] text-left">
             <thead>
               <tr className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)] text-[10px] uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
-                <th className="px-3 py-2.5">Ügyszám</th>
-                <th className="px-3 py-2.5">Ügyfél</th>
                 <th className="px-3 py-2.5">Ügy</th>
-                <th className="px-3 py-2.5">Szakterület</th>
+                <th className="px-3 py-2.5">Határidő</th>
+                <th className="px-3 py-2.5">Következő teendő</th>
+                <th className="px-3 py-2.5">Ügyfél</th>
                 <th className="px-3 py-2.5">Státusz</th>
                 <th className="px-3 py-2.5">Felelős</th>
                 <th className="px-3 py-2.5">Prioritás</th>
-                <th className="px-3 py-2.5">Határidő</th>
-                <th className="px-3 py-2.5">Következő teendő</th>
                 <th className="px-3 py-2.5 text-right">Művelet</th>
               </tr>
             </thead>
@@ -467,34 +472,41 @@ export function CasesList() {
                 const attention = attentionForCase(attentionItems, item.id);
                 const deadline = caseDeadline(item, attention);
                 return (
-                <tr key={item.id} className="cursor-pointer hover:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}`)}>
-                  <td className={`border-l-[5px] px-3 py-2.5 text-xs font-semibold text-[var(--adm-text)] ${getClientAccentBorderClass(item.clientColorKey)}`}>{item.caseNumber}</td>
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</span>
-                    </div>
+                <tr key={item.id} className="cursor-pointer hover:bg-[var(--adm-surface)] focus-within:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}`)}>
+                  <td className={`max-w-[300px] border-l-[5px] px-3 py-2.5 align-top ${getClientAccentBorderClass(item.clientColorKey)}`}>
+                    <span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{getCaseDisplayTitle(item)}</span>
+                    <span className="mt-0.5 block truncate text-[10.5px] text-[var(--adm-text-muted)]">{item.caseNumber} · {formatMatterType(item.matterType)}</span>
                   </td>
-                  <td className="max-w-[280px] px-3 py-2.5 text-[13px] text-[#3D4842]"><span className="block truncate">{getCaseDisplayTitle(item)}</span></td>
-                  <td className="px-3 py-2.5 text-[12px] text-[#3D4842]">{formatMatterType(item.matterType)}</td>
-                  <td className="px-3 py-2.5"><AdminStatusPill tone="neutral">{caseStatusLabel(item.status)}</AdminStatusPill></td>
-                  <td className="px-3 py-2.5 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs felelős"}</td>
-                  <td className="px-3 py-2.5"><AdminBadge tone={item.priority === 'URGENT' ? 'burgundy' : item.priority === 'HIGH' ? 'amber' : 'neutral'}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
-                  <td className={`px-3 py-2.5 text-xs ${deadline.overdue ? 'font-semibold text-red-700' : deadline.dueAt ? '' : 'text-[var(--adm-text-muted)]'}`}>
-                    {deadline.label}{deadline.overdue ? ' · Lejárt' : ''}
-                    {deadline.sourceLabel ? <span className="block text-[10px] text-[var(--adm-text-muted)]">{deadline.sourceLabel}</span> : null}
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top">
+                    {deadline.dueAt ? (
+                      <span className={`block text-[13px] font-semibold ${deadline.overdue ? 'text-red-700' : 'text-[var(--adm-text)]'}`}>{deadline.label}</span>
+                    ) : (
+                      <span className={`block text-xs text-[var(--adm-text-muted)]${deadline.state === 'UNKNOWN' ? ' italic' : ''}`}>{deadline.label}</span>
+                    )}
+                    {deadline.overdue ? <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-[0.08em] text-red-700">Lejárt</span> : null}
+                    {deadline.sourceLabel ? <span className="mt-0.5 block text-[10px] text-[var(--adm-text-muted)]">{deadline.sourceLabel}</span> : null}
                   </td>
-                  <td className="max-w-[320px] px-3 py-2.5 text-xs">
-                    {attention.state === 'UNKNOWN' ? <span className="block text-[var(--adm-text-muted)]">Nincs figyelem-adat</span> : attention.attention.urgency === 'URGENT' ? <strong className="block text-red-700">Sürgős</strong> : attention.attention.urgency === 'ATTENTION' ? <strong className="block text-amber-800">Figyelmet igényel</strong> : null}
-                    <span>{nextActionLabel(attention)}</span>
+                  <td className="max-w-[300px] px-3 py-2.5 align-top">
+                    {attention.state === 'KNOWN' && (attention.attention.urgency === 'URGENT' || attention.attention.urgency === 'ATTENTION') ? (
+                      <span className={`mb-0.5 flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.08em] ${attention.attention.urgency === 'URGENT' ? 'text-red-700' : 'text-amber-800'}`}>
+                        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-current" />
+                        {attention.attention.urgency === 'URGENT' ? 'Sürgős' : 'Figyelmet igényel'}
+                      </span>
+                    ) : null}
+                    <span className={`block text-xs leading-5 line-clamp-2 ${attention.state === 'UNKNOWN' ? 'italic text-[var(--adm-text-muted)]' : 'text-[#3D4842]'}`}>{nextActionLabel(attention)}</span>
                   </td>
-                  <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 py-2.5 align-top text-[13px] text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</td>
+                  <td className="px-3 py-2.5 align-top"><AdminStatusPill tone="neutral">{caseStatusLabel(item.status)}</AdminStatusPill></td>
+                  <td className="px-3 py-2.5 align-top text-xs">{item.assignedLawyer?.name ? <span className="text-[#3D4842]">{item.assignedLawyer.name}</span> : <span className="text-[var(--adm-text-muted)]">Nincs felelős</span>}</td>
+                  <td className="px-3 py-2.5 align-top"><AdminBadge tone={item.priority === 'URGENT' ? 'burgundy' : item.priority === 'HIGH' ? 'amber' : 'neutral'}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
+                  <td className="px-3 py-2.5 align-top text-right" onClick={(e) => e.stopPropagation()}>
                     <AdminButton size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Ügy megnyitása</AdminButton>
                   </td>
                 </tr>
               ); })}
               {filteredCases.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="p-4"><CompactState title="Nincs megjeleníthető ügy." detail="Módosítsd a szűrőket, vagy hozz létre új ügyet." /></td>
+                  <td colSpan={8} className="p-4"><CompactState title="Nincs megjeleníthető ügy." detail="Módosítsd a szűrőket, vagy hozz létre új ügyet." /></td>
                 </tr>
               )}
             </tbody>
