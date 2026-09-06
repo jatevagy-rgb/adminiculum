@@ -52,10 +52,9 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('[ "$HEALTH_CODE" = "200" ]');
     expect(workflow).toContain('Recovery backend SHA mismatch: expected');
     expect(workflow).toContain('Recovery backend build time is missing.');
-    expect(workflow).toContain('needs: [resolve, backend, recovery]');
-    expect(workflow).toContain("needs.backend.result == 'skipped'");
+    expect(workflow).toContain('needs: [resolve, recovery_inspection, recovery]');
     expect(workflow).toContain("needs.recovery.result == 'success'");
-    expect(workflow).toContain('inputs.deploy_backend != true');
+    expect(workflow).toContain('!inputs.deploy_backend');
   });
 
   it('keeps recovery input out of shell source and validates it before use', () => {
@@ -220,15 +219,16 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('BACKEND_APP: adminiculumbackend-b1-01');
     expect(workflow).not.toContain('vikoli-app');
     expect(workflow).toContain('concurrency:\n  group: adminiculum-appservice-production-deploy\n  cancel-in-progress: false');
-    expect(workflow).toContain('needs: [resolve, backend, recovery]');
-    expect(workflow).toContain("needs.backend.result == 'success'");
-    expect(workflow).toContain("needs.recovery.result == 'success'");
+    expect(workflow).toContain('needs: [resolve, recovery_inspection, recovery]');
+    expect(workflow).toContain('needs: [resolve, recovery_inspection, migration]');
     expect(workflow).toContain('needs: [resolve, backend, migration]');
-    expect(workflow).toContain("&& (needs.backend.result == 'success' || needs.backend.result == 'skipped')");
+    expect(workflow).toContain("needs.migration.result == 'success'");
+    expect(workflow).toContain("needs.backend.result == 'success'");
     expect(workflow).toContain('(inputs.run_migration && needs.migration.result == \'success\')');
     expect(workflow).toContain('!inputs.run_migration');
+    expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result'));
     expect(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')).toBeLessThan(workflow.indexOf('Backend health gate (/health 200)'));
-    expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(workflow.indexOf('Backend health gate after migration (/health 200)'));
+    expect(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')).toBeLessThan(workflow.indexOf('Deploy frontend (zip, Oryx OFF'));
   });
 
   it('resolves one immutable SHA and propagates release identity to both artifacts', () => {
@@ -247,5 +247,423 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).not.toContain('git rev-parse release/editor-ops-workflow-1');
     expect(workflow).not.toContain('APP_COMMIT_SHA: ${{ secrets.');
     expect(workflow).not.toContain('APP_BUILD_TIME: ${{ secrets.');
+  });
+});
+
+describe('migration-before-backend release order and staging contract', () => {
+  it('does NOT require successful new backend deployment before migration', () => {
+    const migrationDef = workflow.slice(workflow.indexOf('  migration:\n'), workflow.indexOf('  backend:\n'));
+    expect(migrationDef).toContain('needs: [resolve, recovery_inspection, recovery]');
+    expect(migrationDef).not.toContain('needs: [resolve, backend');
+  });
+
+  it('runs migration before backend deployment when deploy_backend=true and run_migration=true', () => {
+    expect(workflow.indexOf('  migration:\n')).toBeLessThan(workflow.indexOf('  backend:\n'));
+    expect(workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)')).toBeLessThan(
+      workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')
+    );
+    expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(
+      workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')
+    );
+  });
+
+  it('makes backend depend on successful migration in migration mode', () => {
+    const backendDef = workflow.slice(workflow.indexOf('  backend:\n'), workflow.indexOf('  frontend:\n'));
+    expect(backendDef).toContain('needs: [resolve, recovery_inspection, migration]');
+    expect(backendDef).toContain("(inputs.run_migration && needs.migration.result == 'success')");
+  });
+
+  it('allows backend to run without migration when run_migration=false', () => {
+    const backendDef = workflow.slice(workflow.indexOf('  backend:\n'), workflow.indexOf('  frontend:\n'));
+    expect(backendDef).toContain('!inputs.run_migration');
+    expect(backendDef).toContain("(needs.migration.result == 'success' || needs.migration.result == 'skipped')");
+  });
+
+  it('makes frontend depend on successful backend and successful migration when requested', () => {
+    const frontendDef = workflow.slice(workflow.indexOf('  frontend:\n'));
+    expect(frontendDef).toContain('needs: [resolve, backend, migration]');
+    expect(frontendDef).toContain("(inputs.run_migration && needs.migration.result == 'success')");
+    expect(frontendDef).toContain("(needs.backend.result == 'success' || needs.backend.result == 'skipped')");
+  });
+
+  it('preserves frontend-only mode when backend is skipped', () => {
+    const frontendDef = workflow.slice(workflow.indexOf('  frontend:\n'));
+    expect(frontendDef).toContain('If backend was not deployed this run, require the current production backend to be healthy');
+    expect(frontendDef).toContain('if: ${{ inputs.deploy_backend != true }}');
+    expect(frontendDef).toContain("needs.backend.result == 'skipped'");
+  });
+
+  it('strictly restricts migration staging from writing runtime paths', () => {
+    const stageStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stageStep).toContain('validate_vfs_path()');
+    expect(stageStep).toContain('site/wwwroot/prisma/(schema\\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\\.sql)?');
+    expect(stageStep).toContain('*dist*|*node_modules*|*package.json*|*package-lock.json*|*release-identity.json*|*templates*|*scripts*');
+    expect(stageStep).toContain('SECURITY FAULT: Staging path');
+    expect(stageStep).toContain('SECURITY FAULT: Attempted to stage into runtime path');
+  });
+
+  it('preserves canonical adminiculum-db-migrate WebJob as the migration execution mechanism', () => {
+    const migStep = stepBlock('Trigger + verify THIS migration WebJob run');
+    expect(migStep).toContain('api/triggeredwebjobs/${MIGRATION_WEBJOB}');
+    expect(workflow).toContain('MIGRATION_WEBJOB: adminiculum-db-migrate');
+  });
+
+  it('contains NO direct SQL, NO prisma db push, and NO DATABASE_URL exposed to GitHub Actions', () => {
+    expect(workflow).not.toContain('prisma db push');
+    expect(workflow).not.toContain('prisma migrate deploy');
+    expect(workflow).not.toContain('${{ secrets.DATABASE_URL }}');
+    expect(workflow).not.toMatch(/DATABASE_URL\s*:/);
+    expect(workflow).not.toMatch(/\bpsql\b/);
+  });
+
+  it('pins the exact release SHA through all release jobs', () => {
+    expect(workflow).toContain('ref: ${{ needs.resolve.outputs.product_sha }}');
+    expect(workflow).toContain('RELEASE_SHA: ${{ needs.resolve.outputs.product_sha }}');
+    expect(workflow).toContain('NEXT_PUBLIC_APP_COMMIT_SHA: ${{ needs.resolve.outputs.product_sha }}');
+  });
+
+  it('enforces current backend health gate, identity capture, and runtime immutability checks', () => {
+    const gateStep = stepBlock('Verify current backend health and capture identity before migration');
+    expect(gateStep).toContain('/health');
+    expect(gateStep).toContain('/health/version');
+    expect(gateStep).toContain('CURRENT_BACKEND_SHA=${CURRENT_SHA}');
+    expect(gateStep).toContain('git cat-file -e "${CURRENT_SHA}^{commit}"');
+
+    const postStageStep = stepBlock('Verify backend runtime unchanged after migration asset staging');
+    expect(postStageStep).toContain('Post-stage /health -> $HEALTH_CODE');
+    expect(postStageStep).toContain('EXPECTED_SHA="${CURRENT_BACKEND_SHA}"');
+    expect(postStageStep).toContain('Backend runtime was modified!');
+
+    const postMigStep = stepBlock('Backend health gate after migration (/health 200)');
+    expect(postMigStep).toContain('EXPECTED_SHA="${CURRENT_BACKEND_SHA}"');
+    expect(postMigStep).toContain('Backend runtime unexpectedly changed after migration!');
+  });
+
+  it('enforces Prisma CLI toolchain compatibility gate between current backend and target release', () => {
+    const compatStep = stepBlock('Prisma CLI compatibility gate');
+    expect(compatStep).toContain('git show "${CURRENT_SHA}:Backend/package.json"');
+    expect(compatStep).toContain('git show "${CURRENT_SHA}:Backend/package-lock.json"');
+    expect(compatStep).toContain('PRISMA_CLI_COMPATIBILITY=PASS');
+    expect(compatStep).toContain('PRISMA_CLI_COMPATIBILITY=FAIL');
+  });
+
+  it('requires CURRENT_BACKEND_SHA to be an ancestor of RELEASE_SHA', () => {
+    const gateStep = stepBlock('Verify current backend health and capture identity before migration');
+    expect(gateStep).toContain('git merge-base --is-ancestor "${CURRENT_SHA}" "${RELEASE_SHA}"');
+    expect(gateStep).toContain('CURRENT_BACKEND_ANCESTOR_OF_RELEASE=YES');
+    expect(gateStep).toContain('CURRENT_BACKEND_ANCESTOR_OF_RELEASE=NO');
+  });
+
+  it('runs migration staging only after the ancestry gate passes', () => {
+    const ancestryIndex = workflow.indexOf('CURRENT_BACKEND_ANCESTOR_OF_RELEASE=YES');
+    const stagingIndex = workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(ancestryIndex).toBeGreaterThan(-1);
+    expect(stagingIndex).toBeGreaterThan(-1);
+    expect(ancestryIndex).toBeLessThan(stagingIndex);
+  });
+
+  it('compares canonical migration WebJob implementation between current backend and release SHA', () => {
+    const webjobGate = stepBlock('Migration WebJob implementation compatibility gate');
+    expect(webjobGate).toContain('git diff --quiet "${CURRENT_SHA}" "${RELEASE_SHA}" -- Backend/App_Data/jobs/triggered/adminiculum-db-migrate');
+    expect(webjobGate).toContain('MIGRATION_WEBJOB_COMPATIBILITY=PASS');
+    expect(webjobGate).toContain('MIGRATION_WEBJOB_COMPATIBILITY=FAIL');
+  });
+
+  it('fails closed when canonical migration WebJob implementation differs', () => {
+    const webjobGate = stepBlock('Migration WebJob implementation compatibility gate');
+    expect(webjobGate).toMatch(/if ! git diff --quiet[^\n]+; then\s+echo "MIGRATION_WEBJOB_COMPATIBILITY=FAIL"/);
+    expect(webjobGate).toContain('exit 1');
+  });
+
+  it('reads remote migration directory inventory before WebJob execution', () => {
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('vfs/site/wwwroot/prisma/migrations/');
+    const driftIndex = workflow.indexOf('Remote migration tree drift guard');
+    const triggerIndex = workflow.indexOf('Trigger + verify THIS migration WebJob run');
+    expect(driftIndex).toBeLessThan(triggerIndex);
+  });
+
+  it('stops immediately if an unexpected remote canonical migration directory is detected', () => {
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=PASS');
+    expect(driftStep).toContain('unexpected.push(dirName)');
+    expect(driftStep).toContain('process.exit(1)');
+  });
+
+  it('validates remote migration assets against recovery_product_sha in recovery mode', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('if: ${{ !inputs.deploy_backend && inputs.run_migration }}');
+    expect(recoveryGate).toContain('RECOVERY_MIGRATION_ASSET_IDENTITY=PASS');
+    expect(recoveryGate).toContain('RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL');
+    expect(recoveryGate).toContain('vfs/site/wwwroot/prisma/schema.prisma');
+    expect(recoveryGate).toContain('LOCAL_SCHEMA_SHA');
+    expect(recoveryGate).toContain('REMOTE_SCHEMA_SHA');
+    expect(recoveryGate).toContain('vfs/${REMOTE_SQL_PATH}');
+  });
+
+  it('ensures recovery migration does not rely only on /health/version identity', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('health/version');
+    expect(recoveryGate).toContain('LOCAL_SCHEMA_SHA');
+    expect(recoveryGate).toContain('REMOTE_SCHEMA_SHA');
+    expect(recoveryGate).toContain('LOCAL_HASH');
+    expect(recoveryGate).toContain('REMOTE_HASH');
+  });
+
+  it('verifies SHA256 hash of every staged migration.sql against remote', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('LOCAL_MIG_SHA');
+    expect(stagingStep).toContain('REMOTE_MIG_SHA');
+    expect(stagingStep).toContain('ALL_STAGED_MIGRATION_HASHES_VERIFIED=YES');
+    expect(stagingStep).toContain('exit 1');
+  });
+
+  it('runs WebJob trigger only after schema and migration hash verifications pass', () => {
+    const hashVerifyIndex = workflow.indexOf('ALL_STAGED_MIGRATION_HASHES_VERIFIED=YES');
+    const triggerIndex = workflow.indexOf('Trigger + verify THIS migration WebJob run');
+    expect(hashVerifyIndex).toBeGreaterThan(-1);
+    expect(triggerIndex).toBeGreaterThan(-1);
+    expect(hashVerifyIndex).toBeLessThan(triggerIndex);
+  });
+
+  it('does not include any automatic DELETE of remote migration directories', () => {
+    expect(workflow).not.toMatch(/DELETE[^\n]+site\/wwwroot\/prisma\/migrations/);
+    expect(workflow).not.toMatch(/rm\s+-rf[^\n]+prisma\/migrations/);
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('Automatic delete of remote migration directories is disabled');
+  });
+
+  it('bypasses all migration staging and gates when run_migration=false', () => {
+    const migrationDef = workflow.slice(workflow.indexOf('  migration:\n'), workflow.indexOf('  backend:\n'));
+    expect(migrationDef).toContain('inputs.run_migration');
+    const backendDef = workflow.slice(workflow.indexOf('  backend:\n'), workflow.indexOf('  frontend:\n'));
+    expect(backendDef).toContain('!inputs.run_migration');
+  });
+
+  // -------------------------------------------------------------------------
+  // 21 explicit migration preflight and staging contract tests
+  // -------------------------------------------------------------------------
+
+  it('1. CURRENT_SET and TARGET_SET are derived BEFORE first Kudu VFS PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('CURRENT_MIGRATION_SET_DERIVED=YES');
+    expect(preflightStep).toContain('TARGET_MIGRATION_SET_DERIVED=YES');
+    expect(preflightStep).toContain('TARGET_MIGRATION_DELTA_DERIVED=YES');
+    expect(preflightStep).toContain('git ls-tree --name-only "${currentSha}:Backend/prisma/migrations"');
+    expect(preflightStep).not.toContain('-X PUT');
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const deriveIndex = workflow.indexOf('CURRENT_MIGRATION_SET_DERIVED=YES');
+    expect(deriveIndex).toBeLessThan(firstPutIndex);
+  });
+
+  it('2. baseline remote identity is verified BEFORE first PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('REMOTE_BASELINE_COMPLETE=YES');
+    expect(preflightStep).toContain('REMOTE_BASELINE_HASH_VERIFIED=YES');
+    expect(preflightStep).toContain('HISTORICAL_MIGRATIONS_REWRITTEN=NO');
+    expect(preflightStep).toContain('REMOTE_BASELINE_MIGRATION_IDENTITY=PASS');
+    expect(preflightStep).toContain('Baseline migration ${DIR_NAME}/migration.sql missing from remote');
+    expect(preflightStep).toMatch(/if \[ "\$HTTP_CODE" != "200" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
+    expect(preflightStep).toMatch(/if \[ "\$LOCAL_BASELINE_SHA" != "\$REMOTE_BASELINE_SHA" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const baselineVerifyIndex = workflow.indexOf('REMOTE_BASELINE_HASH_VERIFIED=YES');
+    expect(baselineVerifyIndex).toBeLessThan(firstPutIndex);
+  });
+
+  it('3. existing target-extra hashes are verified BEFORE first PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \[ "\$CHECK_CODE" = "200" \]; then[\s\S]*if \[ "\$LOCAL_MIG_SHA" = "\$REMOTE_EXISTING_SHA" \]; then[\s\S]*TARGET_EXTRA_EXISTING_IDENTITY=PASS/);
+    expect(preflightStep).toMatch(/TARGET_EXTRA_EXISTING_IDENTITY=FAIL[\s\S]*Refusing overwrite\. STOP\.[\s\S]*exit 1/);
+    expect(preflightStep).toContain('EXISTING_TARGET_EXTRA_PREFLIGHT_HASH_VERIFIED=YES');
+    expect(preflightStep).toContain('EXISTING_TARGET_EXTRA_OVERWRITTEN=NO');
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const targetExtraVerifyIndex = workflow.indexOf('EXISTING_TARGET_EXTRA_PREFLIGHT_HASH_VERIFIED=YES');
+    expect(targetExtraVerifyIndex).toBeLessThan(firstPutIndex);
+  });
+
+  it('4. remote-extra drift guard runs BEFORE first PUT', () => {
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=PASS');
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const driftIndex = workflow.indexOf('Remote migration tree drift guard');
+    expect(driftIndex).toBeLessThan(firstPutIndex);
+  });
+
+  it('5. schema.prisma PUT occurs only after all read-only migration preflight gates', () => {
+    const preflightIndex = workflow.indexOf('Read-only migration release asset preflight');
+    const preflightEndIndex = workflow.indexOf('READ_ONLY_PREFLIGHT_BEFORE_FIRST_WRITE=YES');
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    const schemaPutIndex = stagingStep.indexOf('Staging ${SCHEMA_TARGET}...');
+
+    expect(preflightIndex).toBeGreaterThan(-1);
+    expect(preflightEndIndex).toBeGreaterThan(-1);
+    expect(schemaPutIndex).toBeGreaterThan(-1);
+    expect(stagingStep).toContain('FIRST_PRODUCTION_WRITE_AFTER_ALL_PREFLIGHTS=YES');
+    expect(stagingStep).toContain('FIRST_VFS_PUT_AFTER_PREFLIGHT=YES');
+
+    const stagingBlockIndex = workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(preflightEndIndex).toBeLessThan(stagingBlockIndex);
+  });
+
+  it('6. CURRENT_SET must be subset of TARGET_SET', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('CURRENT_SET_SUBSET_OF_TARGET_SET=YES');
+    expect(preflightStep).toContain('CURRENT_SET_SUBSET_OF_TARGET_SET=NO');
+    expect(preflightStep).toContain('if (!targetSet.has(dirName))');
+  });
+
+  it('7. target deletion of historical migration fails closed', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \(!targetSet\.has\(dirName\)\) \{[\s\S]*HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL[\s\S]*Target deletion of historical migrations is strictly forbidden[\s\S]*process\.exit\(1\)/);
+  });
+
+  it('8. target modification of historical migration.sql fails closed', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \(currentSqlHash !== releaseSqlHash\) \{[\s\S]*HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL[\s\S]*HISTORICAL_MIGRATIONS_UNCHANGED_CURRENT_TO_TARGET=NO[\s\S]*Target modification of historical migrations is strictly forbidden[\s\S]*process\.exit\(1\)/);
+  });
+
+  it('9. historical current-to-target migrations are byte/hash identical', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('HISTORICAL_MIGRATIONS_UNCHANGED_CURRENT_TO_TARGET=YES');
+    expect(preflightStep).toContain('HISTORICAL_MIGRATION_REPO_IMMUTABILITY_GATE=PASS');
+  });
+
+  it('10. migration delta must be non-empty in normal migration mode', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \(deltaSorted\.length === 0\) \{[\s\S]*MIGRATION_RELEASE_DELTA=EMPTY[\s\S]*MIGRATION_DELTA_NONEMPTY=NO[\s\S]*process\.exit\(1\)/);
+    expect(preflightStep).toContain('MIGRATION_DELTA_NONEMPTY=YES');
+  });
+
+  it('11. every delta migration sorts strictly after CURRENT latest migration', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/for \(const d of deltaSorted\) \{[\s\S]*if \(d <= currentLatest\) \{[\s\S]*MIGRATION_HISTORY_APPEND_ONLY=FAIL[\s\S]*ALL_DELTA_MIGRATIONS_AFTER_CURRENT_LATEST=NO/);
+    expect(preflightStep).toContain('ALL_DELTA_MIGRATIONS_AFTER_CURRENT_LATEST=YES');
+  });
+
+  it('12. backdated/new-before-current migration fails closed', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('BACKDATED_DELTA_FAILS_CLOSED=YES');
+    expect(preflightStep).toMatch(/Backdated migration rejected\. STOP\.[\s\S]*process\.exit\(1\)/);
+  });
+
+  it('13. multiple ordered new migrations pass the contract', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/for \(let i = 1; i < deltaSorted\.length; i\+\+\) \{[\s\S]*if \(deltaSorted\[i\] <= deltaSorted\[i - 1\]\) \{[\s\S]*process\.exit\(1\)/);
+    expect(preflightStep).toContain('MIGRATION_HISTORY_APPEND_ONLY=YES');
+  });
+
+  it('14. existing matching target-extra migration is not PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('TARGET_EXTRA_EXISTING_IDENTITY=PASS');
+    expect(preflightStep).toContain('skipping PUT');
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('EXISTING_TARGET_EXTRA_OVERWRITTEN=NO');
+  });
+
+  it('15. missing target-extra migration is PUT only after preflight passes', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('MISSING_TARGET_DELTA_ONLY_STAGED=YES');
+    expect(stagingStep).toContain('while IFS= read -r DIR_NAME; do');
+    expect(stagingStep).toContain('done < "$MISSING_FILE"');
+    expect(stagingStep).toContain('NEWLY_STAGED_SQL_HASH_VERIFIED=YES');
+  });
+
+  it('16. baseline migration is never PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).not.toContain('-X PUT');
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('HISTORICAL_MIGRATIONS_REWRITTEN=NO');
+    expect(stagingStep).not.toContain('CURRENT_SET_FILE');
+  });
+
+  it('17. schema.prisma still gets post-PUT SHA verification', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('SCHEMA_HASH_VERIFIED=YES');
+    expect(stagingStep).toContain('LOCAL_SCHEMA_SHA');
+    expect(stagingStep).toContain('REMOTE_SCHEMA_SHA');
+    expect(stagingStep).toMatch(/if \[ "\$LOCAL_SCHEMA_SHA" != "\$REMOTE_SCHEMA_SHA" \]; then/);
+  });
+
+  it('18. newly staged migration.sql still gets post-PUT SHA verification', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('LOCAL_MIG_SHA');
+    expect(stagingStep).toContain('REMOTE_MIG_SHA');
+    expect(stagingStep).toContain('NEWLY_STAGED_SQL_HASH_VERIFIED=YES');
+    expect(stagingStep).toContain('ALL_STAGED_MIGRATION_HASHES_VERIFIED=YES');
+    expect(stagingStep).toMatch(/if \[ "\$LOCAL_MIG_SHA" != "\$REMOTE_MIG_SHA" \]; then/);
+  });
+
+  it('19. recovery mode remains exact-tree / exact-hash and staging-free', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_EXPECTED_TREE_COMPLETE=YES');
+    expect(recoveryGate).toContain('RECOVERY_REMOTE_TREE_NO_EXTRAS=YES');
+    expect(recoveryGate).toContain('RECOVERY_ALL_SQL_HASHES_MATCH=YES');
+    expect(recoveryGate).toContain('RECOVERY_MIGRATION_ASSET_IDENTITY=PASS');
+    expect(recoveryGate).not.toContain('-X PUT');
+  });
+
+  it('20. no DELETE is added', () => {
+    expect(workflow).not.toMatch(/DELETE[^\n]+site\/wwwroot\/prisma\/migrations/);
+    expect(workflow).not.toMatch(/rm\s+-rf[^\n]+prisma\/migrations/);
+  });
+
+  it('21. no direct SQL/db push/GitHub-side migrate deploy is added', () => {
+    expect(workflow).not.toContain('prisma db push');
+    expect(workflow).not.toContain('prisma migrate deploy');
+    expect(workflow).not.toContain('${{ secrets.DATABASE_URL }}');
+    expect(workflow).not.toMatch(/DATABASE_URL\s*:/);
+    expect(workflow).not.toMatch(/\bpsql\b/);
+  });
+
+  it('fails closed when a remote canonical migration directory is outside TARGET_SET', () => {
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+    expect(driftStep).toContain('Remote migration directory contains canonical migrations not present in target commit');
+    expect(driftStep).toContain('process.exit(1)');
+  });
+
+  it('fails closed with FAIL and never continues when recovery migration file returns non-200 / 404', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_MISSING_EXPECTED_FILE_FAILS=YES');
+    expect(recoveryGate).toMatch(/if \[ "\$CODE" != "200" \]; then[\s\S]*RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL[\s\S]*exit 1/);
+    expect(recoveryGate).not.toMatch(/elif\s*\[\s*"\$CODE"\s*=\s*"404"\s*\];\s*then[\s\S]*continue/);
+  });
+
+  it('requires complete recovery canonical set to exist remotely', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_EXPECTED_TREE_COMPLETE=YES');
+    expect(recoveryGate).toContain('RECOVERY_MIGRATION_ASSET_IDENTITY=PASS');
+  });
+
+  it('guarantees recovery canonical set has no foreign extras on remote', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_REMOTE_TREE_NO_EXTRAS=YES');
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+  });
+
+  it('requires every recovery migration.sql hash to match checkout', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_ALL_SQL_HASHES_MATCH=YES');
+    expect(recoveryGate).toMatch(/if \[ "\$LOCAL_HASH" != "\$REMOTE_HASH" \]; then[\s\S]*echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"[\s\S]*exit 1/);
+  });
+
+  it('triggers WebJob only after all baseline, delta, and recovery identity gates pass', () => {
+    const driftIndex = workflow.indexOf('Remote migration tree drift guard');
+    const recoveryIndex = workflow.indexOf('Recovery migration asset identity gate');
+    const preflightIndex = workflow.indexOf('Read-only migration release asset preflight');
+    const stagingIndex = workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)');
+    const triggerIndex = workflow.indexOf('Trigger + verify THIS migration WebJob run');
+
+    expect(driftIndex).toBeLessThan(triggerIndex);
+    expect(recoveryIndex).toBeLessThan(triggerIndex);
+    expect(preflightIndex).toBeLessThan(triggerIndex);
+    expect(stagingIndex).toBeLessThan(triggerIndex);
   });
 });
