@@ -184,12 +184,16 @@ people, person detail, responsibilities, manager/deputy context, portal-access
 concepts, and responsibility gaps. The dossier preview is intentionally
 compact and does not create a second hierarchy.
 
-### In development: visual Organization Editor
+### In development: Organization Editor data/API foundation
 
-The product direction includes executive hierarchy, units, employee cards,
-editable structure, person contact information, moving people and units, and
-later drag/drop. This visual redesign is not claimed as live current UI. The
-data/API foundation and the visual editor are separate slices.
+Open PR #174 is the Organization Editor data/API foundation. It adds the
+foundation required for future editor work, including OrganizationPerson contact
+data and typed API operations; it does not redesign the Organization UI.
+
+The subsequent UI direction includes a visual hierarchy, leadership and unit
+cards, employee cards, add/edit/move controls, and later drag/drop enhancement.
+Those are future visual-editor slices, not capabilities contained in PR #174 or
+claimed as live current UI.
 
 ## Grow with us and Compliance
 
@@ -395,10 +399,12 @@ owner is missing or inactive.
 The current organization workspace supports hierarchy, people, person detail,
 responsibilities, manager/deputy context, access concepts, and gaps. Protected
 HR-confidential document links have their own role gate. It should not be
-described as a universal HR information system. In particular, the richer visual
-Organization Editor described by open PR #174 is **in development**: executive
-hierarchy editing, person contact editing, moving units or people, and later
-drag-and-drop are not represented here as live `master` behavior.
+described as a universal HR information system. Open PR #174 is **in
+development** as an Organization Editor data/API foundation, including
+OrganizationPerson contact data and typed operations. The subsequent visual
+editor direction—hierarchy and cards, add/edit/move controls, and later
+drag-and-drop—is a separate UI slice and is not represented here as live
+`master` behavior or as content of PR #174.
 
 Grow with us is a current organization-facing entry point into corporate
 operation and next-step context. It should be read as navigation and
@@ -449,10 +455,19 @@ sharing, or publication.
 Time entries, presets, report instances, report artifacts, time attribution,
 and timesheet-report routes exist. Presets can be listed and resolved; report
 persistence mutations are guarded by a timesheet persistence foundation. This
-supports time capture and report preparation in implemented and evolving
-areas. It is not evidence of production-complete billing, invoice issuance,
-payment collection, tax calculation, or automatic client charging. Those
-outcomes require separate commercial, tax, and release contracts.
+supports time capture and report preparation in implemented and evolving areas.
+
+Billing preparation is also implemented and evolving. The workforce-internal
+`/api/v1/billing-preparation/case/:caseId` route prepares attributable and
+billable time for a case, surfaces time needing review, and reports billing
+readiness. Where a rate would be needed, it reports `RATE_NOT_CONFIGURED` and
+returns no fee estimate: the current schema has no rate, fee, or invoice model,
+so the service must not fabricate a monetary amount.
+
+Invoice issuance, payment collection, automatic client charging, rate-engine
+behavior, and tax calculation remain planned. Billing preparation is therefore
+not evidence of production-complete monetary billing; those outcomes require
+separate commercial, tax, and release contracts.
 
 ### Security, tenancy, and data model map
 
@@ -687,7 +702,8 @@ claim of a complete general-purpose product.
 | Client Portal | IMPLEMENTED / EVOLVING | Identity, workspace, membership, invitation, request, intake, publication, and safe-summary models form an explicit external boundary. |
 | Portal visibility | CURRENT CONTROL | Publication and grants are explicit; summary scope is aggregate-only and does not grant case, message, or document access. |
 | Organization | IMPLEMENTED / EVOLVING | Groups, people, hierarchy, manager/deputy links, typed responsibilities, ownership, and gap views are current foundations. |
-| Visual Organization Editor | IN DEVELOPMENT | Open PR #174 contains a richer editor direction; it is not represented as merged live behavior in this README. |
+| Organization Editor data/API foundation | IN DEVELOPMENT | Open PR #174 adds OrganizationPerson contact data and typed API operations; it does not redesign the Organization UI. |
+| Visual Organization Editor UI | SUBSEQUENT UI SLICE | Visual hierarchy, leadership/unit and employee cards, add/edit/move controls, and later drag/drop are future UI direction, not content of PR #174. |
 | Grow with us | IMPLEMENTED / EVOLVING | It is an organization-facing corporate-operation and next-step entry point, not automated business advice. |
 | Compliance | IMPLEMENTED / EVOLVING | Requirement versions, citations, applicability snapshots, explicit outcomes, and proposals support traceable operations and review. |
 | Tax Engine | NOT ACTIVE ROADMAP | The retired Tax Engine is not described as a current or active planned capability. |
@@ -699,7 +715,8 @@ claim of a complete general-purpose product.
 | Anonymization | IMPLEMENTED / EVOLVING | Anonymization modules and related foundations exist; users still need a human disclosure and legal-review decision. |
 | Time attribution | IMPLEMENTED / EVOLVING | Time entries and task-submission time links provide current operational foundations. |
 | Timesheet reporting | IMPLEMENTED / EVOLVING | Presets, report instances, artifacts, resolution, and guarded persistence mutations exist. |
-| Billing and invoicing | PLANNED / EVOLVING | Automatic invoicing, collection, tax calculation, and charging are not claimed production-complete. |
+| Billing preparation | IMPLEMENTED / EVOLVING | The internal case route prepares attributed/billable time and billing readiness; it reports `RATE_NOT_CONFIGURED` and never invents a fee estimate. |
+| Invoice issuance, payment, and rate engine | PLANNED | Production-complete invoicing, payment collection, automatic charging, monetary rate calculation, and tax calculation are not claimed. |
 | Deployment sequencing hardening | IN DEVELOPMENT | Open PR #175 proposes migration-before-backend release ordering; this README describes master rather than treating the proposed sequence as released. |
 
 ## What Adminiculum is not
