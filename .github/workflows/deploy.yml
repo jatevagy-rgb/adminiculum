@@ -717,6 +717,14 @@ jobs:
             echo "Current backend SHA ${CURRENT_SHA} is not a reachable commit in repository history."; exit 1;
           }
 
+          RELEASE_SHA="${{ needs.resolve.outputs.product_sha }}"
+          if ! git merge-base --is-ancestor "${CURRENT_SHA}" "${RELEASE_SHA}"; then
+            echo "CURRENT_BACKEND_ANCESTOR_OF_RELEASE=NO"
+            echo "Current backend SHA ${CURRENT_SHA} is not an ancestor of target release ${RELEASE_SHA}. Divergent current backend cannot be used as migration baseline. STOP."
+            exit 1
+          fi
+          echo "CURRENT_BACKEND_ANCESTOR_OF_RELEASE=YES"
+
       - name: Prisma CLI compatibility gate
         if: ${{ inputs.deploy_backend == true }}
         shell: bash
@@ -760,6 +768,171 @@ jobs:
             exit 1
           fi
           echo "PRISMA_CLI_COMPATIBILITY=PASS"
+
+      - name: Migration WebJob implementation compatibility gate
+        if: ${{ inputs.deploy_backend == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          RELEASE_SHA="${{ needs.resolve.outputs.product_sha }}"
+          CURRENT_SHA="${CURRENT_BACKEND_SHA}"
+          echo "Checking migration WebJob implementation compatibility between current backend (${CURRENT_SHA}) and release (${RELEASE_SHA})"
+
+          if ! git diff --quiet "${CURRENT_SHA}" "${RELEASE_SHA}" -- Backend/App_Data/jobs/triggered/adminiculum-db-migrate; then
+            echo "MIGRATION_WEBJOB_COMPATIBILITY=FAIL"
+            echo "Canonical migration WebJob implementation changed between current backend (${CURRENT_SHA}) and target release (${RELEASE_SHA}). Pre-backend migration would execute new migration assets through the old runner, which is not proven safe. STOP."
+            exit 1
+          fi
+          echo "MIGRATION_WEBJOB_COMPATIBILITY=PASS"
+
+      - name: Remote migration tree drift guard
+        if: ${{ inputs.run_migration }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v az >/dev/null
+          command -v curl >/dev/null
+          command -v node >/dev/null
+
+          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
+          KUDU="https://${BACKEND_APP}.scm.azurewebsites.net/api"
+          CHECKOUT_REF="${{ needs.resolve.outputs.product_sha }}"
+
+          echo "Reading remote migration directory inventory from site/wwwroot/prisma/migrations/..."
+          REMOTE_LIST="$(mktemp)"
+          trap 'rm -f "$REMOTE_LIST"' EXIT
+
+          HTTP_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/site/wwwroot/prisma/migrations/" -o "$REMOTE_LIST" -w '%{http_code}' || echo 000)"
+
+          if [ "$HTTP_CODE" = "404" ]; then
+            echo "Remote migrations directory does not exist yet (0 remote migrations)."
+            echo "REMOTE_MIGRATION_TREE_DRIFT=PASS"
+          elif [ "$HTTP_CODE" = "200" ]; then
+            REMOTE_LIST="$REMOTE_LIST" CHECKOUT_REF="$CHECKOUT_REF" node <<'NODE'
+            const fs = require('fs');
+            const path = require('path');
+            const content = fs.readFileSync(process.env.REMOTE_LIST, 'utf8');
+            let items;
+            try {
+              items = JSON.parse(content);
+            } catch (e) {
+              console.error('Invalid JSON from remote Kudu VFS directory listing:', content);
+              process.exit(1);
+            }
+            if (!Array.isArray(items)) {
+              console.error('Kudu VFS directory response is not an array.');
+              process.exit(1);
+            }
+
+            const remoteCanonicalDirs = items
+              .map(it => String(it.name || '').trim())
+              .filter(name => /^[0-9]{14}_/.test(name));
+
+            console.log(`Found ${remoteCanonicalDirs.length} canonical remote migration directories.`);
+            const unexpected = [];
+            for (const dirName of remoteCanonicalDirs) {
+              const localDir = path.join('Backend', 'prisma', 'migrations', dirName);
+              if (!fs.existsSync(localDir) || !fs.statSync(localDir).isDirectory()) {
+                unexpected.push(dirName);
+              }
+            }
+
+            if (unexpected.length > 0) {
+              console.error('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+              console.error(`Remote migration directory contains canonical migrations not present in target commit (${process.env.CHECKOUT_REF}):`);
+              for (const u of unexpected) {
+                console.error(`  - ${u}`);
+              }
+              console.error('Stale migration assets detected from a prior failed release attempt or divergent branch.');
+              console.error('Automatic delete of remote migration directories is disabled to prevent data loss. Manual or explicit reconciliation is required. STOP.');
+              process.exit(1);
+            }
+            console.log('REMOTE_MIGRATION_TREE_DRIFT=PASS');
+          NODE
+          else
+            echo "Unexpected HTTP status ${HTTP_CODE} reading remote migrations directory. STOP."
+            exit 1
+          fi
+
+      - name: Recovery migration asset identity gate
+        if: ${{ !inputs.deploy_backend && inputs.run_migration }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v az >/dev/null
+          command -v curl >/dev/null
+          command -v node >/dev/null
+
+          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
+          KUDU="https://${BACKEND_APP}.scm.azurewebsites.net/api"
+          RECOVERY_SHA="${{ needs.resolve.outputs.product_sha }}"
+          echo "Verifying remote migration assets against recovery commit: ${RECOVERY_SHA}"
+
+          VERSION_BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
+          CURRENT_SHA="$(VERSION_BODY="$VERSION_BODY" node -e '
+            const v = JSON.parse(process.env.VERSION_BODY);
+            const sha = String(v.commitSha || "").trim();
+            process.stdout.write(sha);
+          ')"
+          if [ "$CURRENT_SHA" != "$RECOVERY_SHA" ]; then
+            echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"
+            echo "Current backend runtime SHA (${CURRENT_SHA}) does not match recovery product SHA (${RECOVERY_SHA}). STOP."
+            exit 1
+          fi
+
+          [ -f "Backend/prisma/schema.prisma" ] || { echo "Recovery checkout missing Backend/prisma/schema.prisma"; exit 1; }
+          LOCAL_SCHEMA_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync("Backend/prisma/schema.prisma")).digest("hex"))')"
+          REMOTE_SCHEMA="$(mktemp)"
+          HTTP_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/site/wwwroot/prisma/schema.prisma" -o "$REMOTE_SCHEMA" -w '%{http_code}' || echo 000)"
+          if [ "$HTTP_CODE" != "200" ]; then
+            rm -f "$REMOTE_SCHEMA"
+            echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"
+            echo "Remote site/wwwroot/prisma/schema.prisma does not exist or returned HTTP ${HTTP_CODE}. STOP."
+            exit 1
+          fi
+          REMOTE_SCHEMA_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_SCHEMA")"
+          rm -f "$REMOTE_SCHEMA"
+          if [ "$LOCAL_SCHEMA_SHA" != "$REMOTE_SCHEMA_SHA" ]; then
+            echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"
+            echo "Remote schema.prisma hash (${REMOTE_SCHEMA_SHA}) differs from recovery checkout hash (${LOCAL_SCHEMA_SHA}). STOP."
+            exit 1
+          fi
+          echo "Recovery schema.prisma identity verified (SHA256: ${LOCAL_SCHEMA_SHA})."
+
+          MIGRATIONS_DIR="Backend/prisma/migrations"
+          CHECK_COUNT=0
+          for mig in "$MIGRATIONS_DIR"/*; do
+            [ -d "$mig" ] || continue
+            DIR_NAME="$(basename "$mig")"
+            [[ "$DIR_NAME" =~ ^[0-9]{14}_ ]] || continue
+            [ -f "$mig/migration.sql" ] || continue
+
+            REMOTE_SQL_PATH="site/wwwroot/prisma/migrations/${DIR_NAME}/migration.sql"
+            REMOTE_FILE="$(mktemp)"
+            CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_SQL_PATH}" -o "$REMOTE_FILE" -w '%{http_code}' || echo 000)"
+            if [ "$CODE" = "200" ]; then
+              LOCAL_HASH="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$mig/migration.sql")"
+              REMOTE_HASH="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_FILE")"
+              rm -f "$REMOTE_FILE"
+              if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
+                echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"
+                echo "Remote migration.sql content mismatch for ${DIR_NAME}. STOP."
+                exit 1
+              fi
+              CHECK_COUNT=$((CHECK_COUNT + 1))
+            elif [ "$CODE" = "404" ]; then
+              rm -f "$REMOTE_FILE"
+              continue
+            else
+              rm -f "$REMOTE_FILE"
+              echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"
+              echo "Failed to check remote migration.sql for ${DIR_NAME} (HTTP ${CODE}). STOP."
+              exit 1
+            fi
+          done
+
+          echo "RECOVERY_MIGRATION_ASSET_IDENTITY=PASS"
+          echo "Verified ${CHECK_COUNT} existing remote migration files match recovery commit ${RECOVERY_SHA}."
 
       - name: Stage release migration assets into backend App Service (targeted VFS)
         if: ${{ inputs.deploy_backend == true }}
@@ -837,7 +1010,20 @@ jobs:
               -H "If-Match: *" \
               --data-binary "@${mig}/migration.sql" \
               "${KUDU}/vfs/${REMOTE_MIG_SQL}"
+
+            LOCAL_MIG_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "${mig}/migration.sql")"
+            REMOTE_SQL_FILE="$(mktemp)"
+            curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_MIG_SQL}" -o "$REMOTE_SQL_FILE"
+            REMOTE_MIG_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_SQL_FILE")"
+            rm -f "$REMOTE_SQL_FILE"
+
+            if [ "$LOCAL_MIG_SHA" != "$REMOTE_MIG_SHA" ]; then
+              echo "Staged ${DIR_NAME}/migration.sql checksum mismatch! Local: ${LOCAL_MIG_SHA}, Remote: ${REMOTE_MIG_SHA}"
+              exit 1
+            fi
+            echo "Staged ${DIR_NAME}/migration.sql verified (SHA256: ${LOCAL_MIG_SHA})."
           done
+          echo "ALL_STAGED_MIGRATION_HASHES_VERIFIED=YES"
           echo "Migration assets staged successfully."
 
       - name: Verify backend runtime unchanged after migration asset staging

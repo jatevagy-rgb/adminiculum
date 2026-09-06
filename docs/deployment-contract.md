@@ -41,12 +41,16 @@ Never touch `vikoli-app`.
 - Run it **only when the release adds a new Prisma migration**.
 - When `deploy_backend=true` and `run_migration=true`, the migration runs **before** backend
   runtime deployment:
-  1. The workflow verifies the **current backend is healthy** (`/health` 200) and captures `CURRENT_BACKEND_SHA`.
+  1. The workflow verifies the **current backend is healthy** (`/health` 200), captures `CURRENT_BACKEND_SHA`, and enforces that the **live backend commit is a direct ancestor of the target release commit**. Divergent backend histories stop immediately.
   2. **Prisma CLI compatibility gate**: compares Prisma package and lockfile dependencies between `CURRENT_BACKEND_SHA` and the target release commit to ensure the existing deployed CLI toolchain can safely deploy the new migration.
-  3. **Targeted migration asset staging**: stages only `schema.prisma` and the release migration directory (`migration.sql`) to `site/wwwroot/prisma/` via targeted Kudu VFS. No runtime code (`dist/`, `node_modules/`, `package.json`, `release-identity.json`) is touched or activated.
-  4. The currently serving backend remains active and unmodified throughout staging (`/health/version` equals `CURRENT_BACKEND_SHA`).
-  5. The canonical `adminiculum-db-migrate` WebJob is triggered and polled to `Success`.
-  6. Backend health is re-verified before proceeding to backend runtime deployment.
+  3. **Migration WebJob implementation compatibility gate**: compares `Backend/App_Data/jobs/triggered/adminiculum-db-migrate` between `CURRENT_BACKEND_SHA` and the target release. The migration runner must be unchanged for pre-backend migration; a release modifying the runner requires a separate rollout path.
+  4. **Remote migration tree drift guard**: reads `site/wwwroot/prisma/migrations/` from Kudu VFS and verifies no foreign or future migration directories exist that are absent from the target commit. If unexpected directories are detected (e.g. from a prior failed attempt), the workflow halts closed without triggering migrations (automatic directory deletion is disabled to prevent accidental data loss).
+  5. **Targeted migration asset staging & hash verification**: stages only `schema.prisma` and canonical release `migration.sql` files to `site/wwwroot/prisma/` via targeted Kudu VFS. Every staged `migration.sql` and `schema.prisma` file is downloaded and verified by comparing local and remote SHA256 checksums. No runtime code (`dist/`, `node_modules/`, `package.json`, `package-lock.json`, `release-identity.json`, `templates/`, `scripts/`) is touched or activated.
+  6. The currently serving backend remains active and unmodified throughout staging (`/health/version` equals `CURRENT_BACKEND_SHA`).
+  7. The canonical `adminiculum-db-migrate` WebJob is triggered and polled to `Success`.
+  8. Backend health is re-verified before proceeding to backend runtime deployment.
+- **Recovery migration contract (`deploy_backend=false && run_migration=true`)**:
+  Because a prior failed staging attempt could leave non-runtime migration assets in `site/wwwroot/prisma/`, recovery migration does not rely only on `/health/version` runtime identity. It explicitly performs asset-identity verification: ensuring the remote migration tree contains no canonical directories absent from `recovery_product_sha`, remote `schema.prisma` SHA256 matches the recovery checkout, and all existing remote `migration.sql` files match the recovery commit before triggering the WebJob.
 
 ## Frontend — Next.js standalone → App Service (Oryx OFF)
 
