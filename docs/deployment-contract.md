@@ -45,14 +45,20 @@ Never touch `vikoli-app`.
   2. **Prisma CLI compatibility gate**: compares Prisma package and lockfile dependencies between `CURRENT_BACKEND_SHA` and the target release commit to ensure the existing deployed CLI toolchain can safely deploy the new migration.
   3. **Migration WebJob implementation compatibility gate**: compares `Backend/App_Data/jobs/triggered/adminiculum-db-migrate` between `CURRENT_BACKEND_SHA` and the target release. The migration runner must be unchanged for pre-backend migration; a release modifying the runner requires a separate rollout path.
   4. **Remote migration tree drift guard**: reads `site/wwwroot/prisma/migrations/` from Kudu VFS and verifies no foreign or future migration directories exist that are absent from the target commit. If unexpected directories are detected (e.g. from a prior failed attempt), the workflow halts closed without triggering migrations (automatic directory deletion is disabled to prevent accidental data loss).
-  5. **Baseline preservation & delta-only migration staging**:
-     - **Historical migrations are immutable**: The current-backend migration baseline (`CURRENT_SET`) is derived from `CURRENT_BACKEND_SHA:Backend/prisma/migrations`. Every baseline migration directory and `migration.sql` file must already exist on remote and match the git baseline SHA256. Baseline migrations are **never rewritten or PUT**.
-     - **Delta staging only**: Only newly introduced migrations (`TARGET_SET - CURRENT_SET`) are staged.
-     - **Retry safety**: If a target-extra migration already exists remotely (e.g. following an earlier failed staging attempt), its remote hash is validated against the release commit first; if identical, PUT is skipped. If content differs, staging stops immediately without overwriting.
-     - `schema.prisma` is staged and hash-verified via download SHA256 comparison. No runtime code (`dist/`, `node_modules/`, `package.json`, `package-lock.json`, `release-identity.json`, `templates/`, `scripts/`) is touched or activated.
-  6. The currently serving backend remains active and unmodified throughout staging (`/health/version` equals `CURRENT_BACKEND_SHA`).
-  7. The canonical `adminiculum-db-migrate` WebJob is triggered and polled to `Success`.
-  8. Backend health is re-verified before proceeding to backend runtime deployment.
+  5. **Read-only migration release asset preflight (fail-before-write)**:
+     - **All migration-tree checks are strictly read-only before the first production write**. Zero VFS PUT operations occur during preflight.
+     - **Historical migrations are immutable across git releases**: `CURRENT_SET` is derived from `CURRENT_BACKEND_SHA` and `TARGET_SET` from `RELEASE_SHA`. `CURRENT_SET` must be a subset of `TARGET_SET` (no deletions), and every historical `migration.sql` in `CURRENT_SET` must be byte/hash-identical between `CURRENT_BACKEND_SHA` and `RELEASE_SHA` (no modifications).
+     - **Migration history is append-only**: Target migration history must begin with the full current baseline sequence, and every migration in the release delta (`TARGET_SET - CURRENT_SET`) must sort lexicographically strictly after the currently deployed latest migration. Backdated migrations fail closed.
+     - **Non-empty delta requirement**: Normal migration release requires at least one new migration in the target delta (`MIGRATION_DELTA_NONEMPTY=YES`).
+     - **Historical remote baseline verification**: Every baseline migration in `CURRENT_SET` must already exist remotely and match git SHA256. Baseline migrations are **never rewritten or PUT**.
+     - **Target-extra remote preflight validation**: Any delta migration already present on remote (e.g. from a prior failed run) is hash-verified against the release commit without being overwritten. If hashes match, PUT is skipped; if hashes differ, execution halts closed immediately. Only missing delta migrations are marked for staging.
+  6. **Targeted migration asset staging (first production write)**:
+     - Runs only after all read-only preflight checks have passed.
+     - Stages `schema.prisma` via Kudu VFS PUT and verifies via download SHA256 comparison. No runtime code (`dist/`, `node_modules/`, `package.json`, `package-lock.json`, `release-identity.json`, `templates/`, `scripts/`) is touched or activated.
+     - Stages **only missing release-delta migrations** (`MISSING_TARGET_DELTA_ONLY_STAGED=YES`) and verifies each newly staged `migration.sql` via download SHA256 comparison.
+  7. The currently serving backend remains active and unmodified throughout staging (`/health/version` equals `CURRENT_BACKEND_SHA`).
+  8. The canonical `adminiculum-db-migrate` WebJob is triggered and polled to `Success`.
+  9. Backend health is re-verified before proceeding to backend runtime deployment.
 - **Recovery migration contract (`deploy_backend=false && run_migration=true`)**:
   Because a prior failed staging attempt could leave non-runtime migration assets in `site/wwwroot/prisma/`, recovery migration does not rely only on `/health/version` runtime identity. It explicitly requires a **complete and exact canonical migration tree**:
   - Remote migration tree contains no canonical directories absent from `recovery_product_sha` (no extras).

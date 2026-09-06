@@ -441,61 +441,184 @@ describe('migration-before-backend release order and staging contract', () => {
     expect(backendDef).toContain('!inputs.run_migration');
   });
 
-  it('derives CURRENT_SET and TARGET_SET and delta in normal migration mode', () => {
-    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toContain('CURRENT_MIGRATION_SET_DERIVED=YES');
-    expect(stagingStep).toContain('TARGET_MIGRATION_SET_DERIVED=YES');
-    expect(stagingStep).toContain('TARGET_MIGRATION_DELTA_DERIVED=YES');
-    expect(stagingStep).toContain('git ls-tree --name-only "${currentSha}:Backend/prisma/migrations"');
+  // -------------------------------------------------------------------------
+  // 21 explicit migration preflight and staging contract tests
+  // -------------------------------------------------------------------------
+
+  it('1. CURRENT_SET and TARGET_SET are derived BEFORE first Kudu VFS PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('CURRENT_MIGRATION_SET_DERIVED=YES');
+    expect(preflightStep).toContain('TARGET_MIGRATION_SET_DERIVED=YES');
+    expect(preflightStep).toContain('TARGET_MIGRATION_DELTA_DERIVED=YES');
+    expect(preflightStep).toContain('git ls-tree --name-only "${currentSha}:Backend/prisma/migrations"');
+    expect(preflightStep).not.toContain('-X PUT');
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const deriveIndex = workflow.indexOf('CURRENT_MIGRATION_SET_DERIVED=YES');
+    expect(deriveIndex).toBeLessThan(firstPutIndex);
   });
 
-  it('requires every CURRENT_SET baseline migration to exist remotely', () => {
-    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toContain('REMOTE_BASELINE_COMPLETE=YES');
-    expect(stagingStep).toContain('Baseline migration ${DIR_NAME}/migration.sql missing from remote');
+  it('2. baseline remote identity is verified BEFORE first PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('REMOTE_BASELINE_COMPLETE=YES');
+    expect(preflightStep).toContain('REMOTE_BASELINE_HASH_VERIFIED=YES');
+    expect(preflightStep).toContain('HISTORICAL_MIGRATIONS_REWRITTEN=NO');
+    expect(preflightStep).toContain('REMOTE_BASELINE_MIGRATION_IDENTITY=PASS');
+    expect(preflightStep).toContain('Baseline migration ${DIR_NAME}/migration.sql missing from remote');
+    expect(preflightStep).toMatch(/if \[ "\$HTTP_CODE" != "200" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
+    expect(preflightStep).toMatch(/if \[ "\$LOCAL_BASELINE_SHA" != "\$REMOTE_BASELINE_SHA" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const baselineVerifyIndex = workflow.indexOf('REMOTE_BASELINE_HASH_VERIFIED=YES');
+    expect(baselineVerifyIndex).toBeLessThan(firstPutIndex);
   });
 
-  it('fails closed when a baseline migration is missing from remote', () => {
-    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toMatch(/if \[ "\$HTTP_CODE" != "200" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
+  it('3. existing target-extra hashes are verified BEFORE first PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \[ "\$CHECK_CODE" = "200" \]; then[\s\S]*if \[ "\$LOCAL_MIG_SHA" = "\$REMOTE_EXISTING_SHA" \]; then[\s\S]*TARGET_EXTRA_EXISTING_IDENTITY=PASS/);
+    expect(preflightStep).toMatch(/TARGET_EXTRA_EXISTING_IDENTITY=FAIL[\s\S]*Refusing overwrite\. STOP\.[\s\S]*exit 1/);
+    expect(preflightStep).toContain('EXISTING_TARGET_EXTRA_PREFLIGHT_HASH_VERIFIED=YES');
+    expect(preflightStep).toContain('EXISTING_TARGET_EXTRA_OVERWRITTEN=NO');
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const targetExtraVerifyIndex = workflow.indexOf('EXISTING_TARGET_EXTRA_PREFLIGHT_HASH_VERIFIED=YES');
+    expect(targetExtraVerifyIndex).toBeLessThan(firstPutIndex);
   });
 
-  it('fails closed when baseline migration content differs from CURRENT_BACKEND_SHA', () => {
-    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toMatch(/if \[ "\$LOCAL_BASELINE_SHA" != "\$REMOTE_BASELINE_SHA" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
-    expect(stagingStep).toContain('REMOTE_BASELINE_HASH_VERIFIED=YES');
+  it('4. remote-extra drift guard runs BEFORE first PUT', () => {
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=PASS');
+
+    const firstPutIndex = workflow.indexOf('-X PUT');
+    const driftIndex = workflow.indexOf('Remote migration tree drift guard');
+    expect(driftIndex).toBeLessThan(firstPutIndex);
   });
 
-  it('never executes PUT for CURRENT_SET historical migrations', () => {
+  it('5. schema.prisma PUT occurs only after all read-only migration preflight gates', () => {
+    const preflightIndex = workflow.indexOf('Read-only migration release asset preflight');
+    const preflightEndIndex = workflow.indexOf('READ_ONLY_PREFLIGHT_BEFORE_FIRST_WRITE=YES');
     const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toContain('HISTORICAL_MIGRATIONS_REWRITTEN=NO');
-    const baselineSection = stagingStep.slice(stagingStep.indexOf('Verifying baseline migration assets on remote'), stagingStep.indexOf('HISTORICAL_MIGRATIONS_REWRITTEN=NO'));
-    expect(baselineSection).not.toContain('-X PUT');
+    const schemaPutIndex = stagingStep.indexOf('Staging ${SCHEMA_TARGET}...');
+
+    expect(preflightIndex).toBeGreaterThan(-1);
+    expect(preflightEndIndex).toBeGreaterThan(-1);
+    expect(schemaPutIndex).toBeGreaterThan(-1);
+    expect(stagingStep).toContain('FIRST_PRODUCTION_WRITE_AFTER_ALL_PREFLIGHTS=YES');
+    expect(stagingStep).toContain('FIRST_VFS_PUT_AFTER_PREFLIGHT=YES');
+
+    const stagingBlockIndex = workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(preflightEndIndex).toBeLessThan(stagingBlockIndex);
   });
 
-  it('stages only newly introduced release migrations in TARGET_SET - CURRENT_SET', () => {
-    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toContain('TARGET_NEW_MIGRATIONS_ONLY_STAGED=YES');
-    expect(stagingStep).toContain('while IFS= read -r DIR_NAME; do');
-    expect(stagingStep).toContain('done < "$DELTA_SET_FILE"');
+  it('6. CURRENT_SET must be subset of TARGET_SET', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('CURRENT_SET_SUBSET_OF_TARGET_SET=YES');
+    expect(preflightStep).toContain('CURRENT_SET_SUBSET_OF_TARGET_SET=NO');
+    expect(preflightStep).toContain('if (!targetSet.has(dirName))');
   });
 
-  it('PUTs and hash verifies missing target-extra release migrations', () => {
-    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toMatch(/elif \[ "\$CHECK_CODE" = "404" \]; then[\s\S]*curl -fsS -m 30 -X PUT[\s\S]*REMOTE_MIG_SHA[\s\S]*Staged \${DIR_NAME}\/migration\.sql verified/);
-    expect(stagingStep).toContain('NEWLY_STAGED_SQL_HASH_VERIFIED=YES');
+  it('7. target deletion of historical migration fails closed', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \(!targetSet\.has\(dirName\)\) \{[\s\S]*HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL[\s\S]*Target deletion of historical migrations is strictly forbidden[\s\S]*process\.exit\(1\)/);
   });
 
-  it('hash-checks existing target-extra migration and skips PUT when equal', () => {
+  it('8. target modification of historical migration.sql fails closed', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \(currentSqlHash !== releaseSqlHash\) \{[\s\S]*HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL[\s\S]*HISTORICAL_MIGRATIONS_UNCHANGED_CURRENT_TO_TARGET=NO[\s\S]*Target modification of historical migrations is strictly forbidden[\s\S]*process\.exit\(1\)/);
+  });
+
+  it('9. historical current-to-target migrations are byte/hash identical', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('HISTORICAL_MIGRATIONS_UNCHANGED_CURRENT_TO_TARGET=YES');
+    expect(preflightStep).toContain('HISTORICAL_MIGRATION_REPO_IMMUTABILITY_GATE=PASS');
+  });
+
+  it('10. migration delta must be non-empty in normal migration mode', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/if \(deltaSorted\.length === 0\) \{[\s\S]*MIGRATION_RELEASE_DELTA=EMPTY[\s\S]*MIGRATION_DELTA_NONEMPTY=NO[\s\S]*process\.exit\(1\)/);
+    expect(preflightStep).toContain('MIGRATION_DELTA_NONEMPTY=YES');
+  });
+
+  it('11. every delta migration sorts strictly after CURRENT latest migration', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/for \(const d of deltaSorted\) \{[\s\S]*if \(d <= currentLatest\) \{[\s\S]*MIGRATION_HISTORY_APPEND_ONLY=FAIL[\s\S]*ALL_DELTA_MIGRATIONS_AFTER_CURRENT_LATEST=NO/);
+    expect(preflightStep).toContain('ALL_DELTA_MIGRATIONS_AFTER_CURRENT_LATEST=YES');
+  });
+
+  it('12. backdated/new-before-current migration fails closed', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('BACKDATED_DELTA_FAILS_CLOSED=YES');
+    expect(preflightStep).toMatch(/Backdated migration rejected\. STOP\.[\s\S]*process\.exit\(1\)/);
+  });
+
+  it('13. multiple ordered new migrations pass the contract', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toMatch(/for \(let i = 1; i < deltaSorted\.length; i\+\+\) \{[\s\S]*if \(deltaSorted\[i\] <= deltaSorted\[i - 1\]\) \{[\s\S]*process\.exit\(1\)/);
+    expect(preflightStep).toContain('MIGRATION_HISTORY_APPEND_ONLY=YES');
+  });
+
+  it('14. existing matching target-extra migration is not PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).toContain('TARGET_EXTRA_EXISTING_IDENTITY=PASS');
+    expect(preflightStep).toContain('skipping PUT');
     const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toMatch(/if \[ "\$CHECK_CODE" = "200" \]; then[\s\S]*if \[ "\$LOCAL_MIG_SHA" = "\$REMOTE_EXISTING_SHA" \]; then[\s\S]*TARGET_EXTRA_EXISTING_IDENTITY=PASS[\s\S]*skipping PUT/);
-    expect(stagingStep).toContain('EXISTING_TARGET_EXTRA_HASH_VERIFIED=YES');
     expect(stagingStep).toContain('EXISTING_TARGET_EXTRA_OVERWRITTEN=NO');
   });
 
-  it('fails closed without overwrite if an existing target-extra migration has a different hash', () => {
+  it('15. missing target-extra migration is PUT only after preflight passes', () => {
     const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toMatch(/TARGET_EXTRA_EXISTING_IDENTITY=FAIL[\s\S]*Refusing overwrite\. STOP\.[\s\S]*exit 1/);
+    expect(stagingStep).toContain('MISSING_TARGET_DELTA_ONLY_STAGED=YES');
+    expect(stagingStep).toContain('while IFS= read -r DIR_NAME; do');
+    expect(stagingStep).toContain('done < "$MISSING_FILE"');
+    expect(stagingStep).toContain('NEWLY_STAGED_SQL_HASH_VERIFIED=YES');
+  });
+
+  it('16. baseline migration is never PUT', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    expect(preflightStep).not.toContain('-X PUT');
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('HISTORICAL_MIGRATIONS_REWRITTEN=NO');
+    expect(stagingStep).not.toContain('CURRENT_SET_FILE');
+  });
+
+  it('17. schema.prisma still gets post-PUT SHA verification', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('SCHEMA_HASH_VERIFIED=YES');
+    expect(stagingStep).toContain('LOCAL_SCHEMA_SHA');
+    expect(stagingStep).toContain('REMOTE_SCHEMA_SHA');
+    expect(stagingStep).toMatch(/if \[ "\$LOCAL_SCHEMA_SHA" != "\$REMOTE_SCHEMA_SHA" \]; then/);
+  });
+
+  it('18. newly staged migration.sql still gets post-PUT SHA verification', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('LOCAL_MIG_SHA');
+    expect(stagingStep).toContain('REMOTE_MIG_SHA');
+    expect(stagingStep).toContain('NEWLY_STAGED_SQL_HASH_VERIFIED=YES');
+    expect(stagingStep).toContain('ALL_STAGED_MIGRATION_HASHES_VERIFIED=YES');
+    expect(stagingStep).toMatch(/if \[ "\$LOCAL_MIG_SHA" != "\$REMOTE_MIG_SHA" \]; then/);
+  });
+
+  it('19. recovery mode remains exact-tree / exact-hash and staging-free', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_EXPECTED_TREE_COMPLETE=YES');
+    expect(recoveryGate).toContain('RECOVERY_REMOTE_TREE_NO_EXTRAS=YES');
+    expect(recoveryGate).toContain('RECOVERY_ALL_SQL_HASHES_MATCH=YES');
+    expect(recoveryGate).toContain('RECOVERY_MIGRATION_ASSET_IDENTITY=PASS');
+    expect(recoveryGate).not.toContain('-X PUT');
+  });
+
+  it('20. no DELETE is added', () => {
+    expect(workflow).not.toMatch(/DELETE[^\n]+site\/wwwroot\/prisma\/migrations/);
+    expect(workflow).not.toMatch(/rm\s+-rf[^\n]+prisma\/migrations/);
+  });
+
+  it('21. no direct SQL/db push/GitHub-side migrate deploy is added', () => {
+    expect(workflow).not.toContain('prisma db push');
+    expect(workflow).not.toContain('prisma migrate deploy');
+    expect(workflow).not.toContain('${{ secrets.DATABASE_URL }}');
+    expect(workflow).not.toMatch(/DATABASE_URL\s*:/);
+    expect(workflow).not.toMatch(/\bpsql\b/);
   });
 
   it('fails closed when a remote canonical migration directory is outside TARGET_SET', () => {
@@ -531,35 +654,16 @@ describe('migration-before-backend release order and staging contract', () => {
     expect(recoveryGate).toMatch(/if \[ "\$LOCAL_HASH" != "\$REMOTE_HASH" \]; then[\s\S]*echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"[\s\S]*exit 1/);
   });
 
-  it('does not add any automatic DELETE of remote migration directories or files', () => {
-    expect(workflow).not.toMatch(/DELETE[^\n]+site\/wwwroot\/prisma\/migrations/);
-    expect(workflow).not.toMatch(/rm\s+-rf[^\n]+prisma\/migrations/);
-  });
-
-  it('verifies schema.prisma hash after staging', () => {
-    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
-    expect(stagingStep).toContain('SCHEMA_HASH_VERIFIED=YES');
-    expect(stagingStep).toContain('LOCAL_SCHEMA_SHA');
-    expect(stagingStep).toContain('REMOTE_SCHEMA_SHA');
-    expect(stagingStep).toMatch(/if \[ "\$LOCAL_SCHEMA_SHA" != "\$REMOTE_SCHEMA_SHA" \]; then/);
-  });
-
   it('triggers WebJob only after all baseline, delta, and recovery identity gates pass', () => {
     const driftIndex = workflow.indexOf('Remote migration tree drift guard');
     const recoveryIndex = workflow.indexOf('Recovery migration asset identity gate');
+    const preflightIndex = workflow.indexOf('Read-only migration release asset preflight');
     const stagingIndex = workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)');
     const triggerIndex = workflow.indexOf('Trigger + verify THIS migration WebJob run');
 
     expect(driftIndex).toBeLessThan(triggerIndex);
     expect(recoveryIndex).toBeLessThan(triggerIndex);
+    expect(preflightIndex).toBeLessThan(triggerIndex);
     expect(stagingIndex).toBeLessThan(triggerIndex);
-  });
-
-  it('strictly forbids direct SQL, db push, and GitHub-side migrate deploy against production', () => {
-    expect(workflow).not.toContain('prisma db push');
-    expect(workflow).not.toContain('prisma migrate deploy');
-    expect(workflow).not.toContain('${{ secrets.DATABASE_URL }}');
-    expect(workflow).not.toMatch(/DATABASE_URL\s*:/);
-    expect(workflow).not.toMatch(/\bpsql\b/);
   });
 });

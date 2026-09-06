@@ -936,7 +936,7 @@ jobs:
           echo "RECOVERY_MIGRATION_ASSET_IDENTITY=PASS"
           echo "Verified ${CHECK_COUNT} recovery migration files match recovery commit ${RECOVERY_SHA}."
 
-      - name: Stage release migration assets into backend App Service (targeted VFS)
+      - name: Read-only migration release asset preflight
         if: ${{ inputs.deploy_backend == true }}
         shell: bash
         run: |
@@ -956,6 +956,255 @@ jobs:
 
           [ -f "Backend/prisma/schema.prisma" ] || { echo "Backend/prisma/schema.prisma missing from release checkout"; exit 1; }
           [ -d "Backend/prisma/migrations" ] || { echo "Backend/prisma/migrations missing from release checkout"; exit 1; }
+
+          validate_vfs_path() {
+            local target_path="$1"
+            if [[ ! "$target_path" =~ ^site/wwwroot/prisma/(schema\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\.sql)?)$ ]]; then
+              echo "SECURITY FAULT: Staging path '${target_path}' violates strict migration-only boundary! STOP."
+              exit 1
+            fi
+            case "$target_path" in
+              *dist*|*node_modules*|*package.json*|*package-lock.json*|*release-identity.json*|*templates*|*scripts*)
+                echo "SECURITY FAULT: Attempted to stage into runtime path: ${target_path}! STOP."
+                exit 1
+                ;;
+            esac
+          }
+
+          CURRENT_SET_FILE="$(mktemp)"
+          TARGET_SET_FILE="$(mktemp)"
+          DELTA_SET_FILE="$(mktemp)"
+          MISSING_DELTA_FILE="${RUNNER_TEMP:-/tmp}/adminiculum-missing-target-delta.txt"
+          rm -f "$MISSING_DELTA_FILE"
+          touch "$MISSING_DELTA_FILE"
+          trap 'rm -f "$CURRENT_SET_FILE" "$TARGET_SET_FILE" "$DELTA_SET_FILE"' EXIT
+
+          CURRENT_SHA="$CURRENT_SHA" RELEASE_SHA="$RELEASE_SHA" CURRENT_SET_FILE="$CURRENT_SET_FILE" TARGET_SET_FILE="$TARGET_SET_FILE" DELTA_SET_FILE="$DELTA_SET_FILE" node <<'NODE'
+          const fs = require('fs');
+          const cp = require('child_process');
+          const crypto = require('crypto');
+
+          const currentSha = process.env.CURRENT_SHA;
+          const releaseSha = process.env.RELEASE_SHA;
+
+          // 1. Derive CURRENT_SET
+          let currentTree = '';
+          try {
+            currentTree = cp.execSync(`git ls-tree --name-only "${currentSha}:Backend/prisma/migrations"`, { encoding: 'utf8' });
+          } catch (e) {
+            currentTree = '';
+          }
+          const currentDirs = currentTree
+            .split(/\r?\n/)
+            .map(s => s.trim())
+            .filter(n => /^[0-9]{14}_/.test(n));
+          const currentSet = new Set(currentDirs);
+          const currentSorted = [...currentSet].sort();
+
+          // 2. Derive TARGET_SET
+          const targetDirs = fs.readdirSync('Backend/prisma/migrations', { withFileTypes: true })
+            .filter(d => d.isDirectory() && /^[0-9]{14}_/.test(d.name))
+            .map(d => d.name.trim());
+          const targetSet = new Set(targetDirs);
+          const targetSorted = [...targetSet].sort();
+
+          console.log('CURRENT_MIGRATION_SET_DERIVED=YES');
+          console.log('TARGET_MIGRATION_SET_DERIVED=YES');
+
+          // 3. DEFECT 2: Validate Repository Historical Migration Immutability
+          for (const dirName of currentSorted) {
+            if (!targetSet.has(dirName)) {
+              console.error('HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL');
+              console.error('CURRENT_SET_SUBSET_OF_TARGET_SET=NO');
+              console.error(`Historical baseline migration ${dirName} is absent from target release commit (${releaseSha})! Target deletion of historical migrations is strictly forbidden. STOP.`);
+              process.exit(1);
+            }
+
+            let currentSqlBuf;
+            try {
+              currentSqlBuf = cp.execSync(`git show "${currentSha}:Backend/prisma/migrations/${dirName}/migration.sql"`);
+            } catch (e) {
+              console.error('HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL');
+              console.error(`Failed to read baseline migration ${dirName}/migration.sql from commit ${currentSha}. STOP.`);
+              process.exit(1);
+            }
+
+            let releaseSqlBuf;
+            try {
+              releaseSqlBuf = cp.execSync(`git show "${releaseSha}:Backend/prisma/migrations/${dirName}/migration.sql"`);
+            } catch (e) {
+              console.error('HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL');
+              console.error(`Failed to read release migration ${dirName}/migration.sql from commit ${releaseSha}. STOP.`);
+              process.exit(1);
+            }
+
+            const currentSqlHash = crypto.createHash('sha256').update(currentSqlBuf).digest('hex');
+            const releaseSqlHash = crypto.createHash('sha256').update(releaseSqlBuf).digest('hex');
+
+            if (currentSqlHash !== releaseSqlHash) {
+              console.error('HISTORICAL_MIGRATION_REPO_IMMUTABILITY=FAIL');
+              console.error('HISTORICAL_MIGRATIONS_UNCHANGED_CURRENT_TO_TARGET=NO');
+              console.error(`Historical migration ${dirName}/migration.sql modified between current baseline (${currentSha}: ${currentSqlHash}) and target release (${releaseSha}: ${releaseSqlHash})! Target modification of historical migrations is strictly forbidden. STOP.`);
+              process.exit(1);
+            }
+          }
+
+          console.log('CURRENT_SET_SUBSET_OF_TARGET_SET=YES');
+          console.log('HISTORICAL_MIGRATIONS_UNCHANGED_CURRENT_TO_TARGET=YES');
+          console.log('HISTORICAL_MIGRATION_REPO_IMMUTABILITY_GATE=PASS');
+
+          // 4. DEFECT 3: Validate Append-Only Migration Ordering
+          const delta = targetDirs.filter(d => !currentSet.has(d));
+          const deltaSorted = [...delta].sort();
+          console.log('TARGET_MIGRATION_DELTA_DERIVED=YES');
+
+          if (deltaSorted.length === 0) {
+            console.error('MIGRATION_RELEASE_DELTA=EMPTY');
+            console.error('MIGRATION_DELTA_NONEMPTY=NO');
+            console.error('Normal migration release requested (deploy_backend=true, run_migration=true) but migration delta is empty! STOP.');
+            process.exit(1);
+          }
+          console.log('MIGRATION_DELTA_NONEMPTY=YES');
+
+          if (currentSorted.length > 0) {
+            const currentLatest = currentSorted[currentSorted.length - 1];
+
+            for (let i = 0; i < currentSorted.length; i++) {
+              if (targetSorted[i] !== currentSorted[i]) {
+                console.error('MIGRATION_HISTORY_APPEND_ONLY=FAIL');
+                console.error(`Target migration history diverged at position ${i}: expected ${currentSorted[i]}, got ${targetSorted[i]}. STOP.`);
+                process.exit(1);
+              }
+            }
+
+            for (const d of deltaSorted) {
+              if (d <= currentLatest) {
+                console.error('MIGRATION_HISTORY_APPEND_ONLY=FAIL');
+                console.error('ALL_DELTA_MIGRATIONS_AFTER_CURRENT_LATEST=NO');
+                console.error('BACKDATED_DELTA_FAILS_CLOSED=YES');
+                console.error(`Delta migration ${d} does not sort strictly after current latest baseline migration ${currentLatest}! Backdated migration rejected. STOP.`);
+                process.exit(1);
+              }
+            }
+          }
+
+          for (let i = 1; i < deltaSorted.length; i++) {
+            if (deltaSorted[i] <= deltaSorted[i - 1]) {
+              console.error('MIGRATION_HISTORY_APPEND_ONLY=FAIL');
+              console.error(`Delta migrations are not strictly ascending: ${deltaSorted[i - 1]} vs ${deltaSorted[i]}. STOP.`);
+              process.exit(1);
+            }
+          }
+
+          console.log('MIGRATION_HISTORY_APPEND_ONLY=YES');
+          console.log('ALL_DELTA_MIGRATIONS_AFTER_CURRENT_LATEST=YES');
+          console.log('BACKDATED_DELTA_FAILS_CLOSED=YES');
+
+          fs.writeFileSync(process.env.CURRENT_SET_FILE, currentSorted.join('\n') + (currentSorted.length ? '\n' : ''));
+          fs.writeFileSync(process.env.TARGET_SET_FILE, targetSorted.join('\n') + (targetSorted.length ? '\n' : ''));
+          fs.writeFileSync(process.env.DELTA_SET_FILE, deltaSorted.join('\n') + (deltaSorted.length ? '\n' : ''));
+          NODE
+
+          echo "Baseline migrations count: $(wc -l < "$CURRENT_SET_FILE")"
+          echo "Target migrations count:   $(wc -l < "$TARGET_SET_FILE")"
+          echo "Release delta count:      $(wc -l < "$DELTA_SET_FILE")"
+
+          # 5. Remote Baseline Completeness and Hash Identity Verification
+          echo "Verifying baseline migration assets on remote..."
+          while IFS= read -r DIR_NAME; do
+            [ -n "$DIR_NAME" ] || continue
+            REMOTE_MIG_SQL="site/wwwroot/prisma/migrations/${DIR_NAME}/migration.sql"
+            validate_vfs_path "$REMOTE_MIG_SQL"
+
+            REMOTE_SQL_FILE="$(mktemp)"
+            HTTP_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_MIG_SQL}" -o "$REMOTE_SQL_FILE" -w '%{http_code}' || echo 000)"
+            if [ "$HTTP_CODE" != "200" ]; then
+              rm -f "$REMOTE_SQL_FILE"
+              echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"
+              echo "REMOTE_BASELINE_COMPLETE=NO"
+              echo "Baseline migration ${DIR_NAME}/migration.sql missing from remote (HTTP ${HTTP_CODE}). STOP."
+              exit 1
+            fi
+
+            LOCAL_BASELINE_SHA="$(git show "${CURRENT_SHA}:Backend/prisma/migrations/${DIR_NAME}/migration.sql" | node -e '
+              let d=""; process.stdin.on("data", c => d += c).on("end", () => {
+                process.stdout.write(require("crypto").createHash("sha256").update(d).digest("hex"));
+              });
+            ')"
+            REMOTE_BASELINE_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_SQL_FILE")"
+            rm -f "$REMOTE_SQL_FILE"
+
+            if [ "$LOCAL_BASELINE_SHA" != "$REMOTE_BASELINE_SHA" ]; then
+              echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"
+              echo "REMOTE_BASELINE_HASH_VERIFIED=NO"
+              echo "Baseline migration ${DIR_NAME}/migration.sql content mismatch! Git: ${LOCAL_BASELINE_SHA}, Remote: ${REMOTE_BASELINE_SHA}. STOP."
+              exit 1
+            fi
+            echo "Baseline migration ${DIR_NAME} verified intact on remote."
+          done < "$CURRENT_SET_FILE"
+
+          echo "REMOTE_BASELINE_COMPLETE=YES"
+          echo "REMOTE_BASELINE_HASH_VERIFIED=YES"
+          echo "HISTORICAL_MIGRATIONS_REWRITTEN=NO"
+          echo "REMOTE_BASELINE_MIGRATION_IDENTITY=PASS"
+
+          # 6. Read-Only Target-Extra Remote Identity & Missing Delta Detection
+          echo "Preflight checking release migration delta against remote..."
+          while IFS= read -r DIR_NAME; do
+            [ -n "$DIR_NAME" ] || continue
+            LOCAL_MIG_PATH="Backend/prisma/migrations/${DIR_NAME}/migration.sql"
+            [ -f "$LOCAL_MIG_PATH" ] || { echo "Local migration file missing: ${LOCAL_MIG_PATH}"; exit 1; }
+
+            REMOTE_MIG_SQL="site/wwwroot/prisma/migrations/${DIR_NAME}/migration.sql"
+            validate_vfs_path "$REMOTE_MIG_SQL"
+
+            LOCAL_MIG_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$LOCAL_MIG_PATH")"
+
+            REMOTE_CHECK="$(mktemp)"
+            CHECK_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_MIG_SQL}" -o "$REMOTE_CHECK" -w '%{http_code}' || echo 000)"
+
+            if [ "$CHECK_CODE" = "200" ]; then
+              REMOTE_EXISTING_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_CHECK")"
+              rm -f "$REMOTE_CHECK"
+              if [ "$LOCAL_MIG_SHA" = "$REMOTE_EXISTING_SHA" ]; then
+                echo "TARGET_EXTRA_EXISTING_IDENTITY=PASS"
+                echo "Target-extra migration ${DIR_NAME} already exists remotely with matching hash (skipping PUT)."
+              else
+                echo "TARGET_EXTRA_EXISTING_IDENTITY=FAIL"
+                echo "Target-extra migration ${DIR_NAME} exists remotely with different hash! Refusing overwrite. STOP."
+                exit 1
+              fi
+            elif [ "$CHECK_CODE" = "404" ]; then
+              rm -f "$REMOTE_CHECK"
+              echo "Target migration ${DIR_NAME} absent on remote — marked for staging."
+              echo "$DIR_NAME" >> "$MISSING_DELTA_FILE"
+            else
+              rm -f "$REMOTE_CHECK"
+              echo "Unexpected HTTP status ${CHECK_CODE} checking ${REMOTE_MIG_SQL}. STOP."
+              exit 1
+            fi
+          done < "$DELTA_SET_FILE"
+
+          echo "EXISTING_TARGET_EXTRA_PREFLIGHT_HASH_VERIFIED=YES"
+          echo "EXISTING_TARGET_EXTRA_OVERWRITTEN=NO"
+          echo "READ_ONLY_PREFLIGHT_BEFORE_FIRST_WRITE=YES"
+          echo "MISSING_DELTA_FILE=${MISSING_DELTA_FILE}" >> "$GITHUB_ENV"
+          echo "Preflight complete: $(wc -l < "$MISSING_DELTA_FILE") migration(s) require staging."
+
+      - name: Stage release migration assets into backend App Service (targeted VFS)
+        if: ${{ inputs.deploy_backend == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v az >/dev/null
+          command -v curl >/dev/null
+          command -v node >/dev/null
+
+          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
+          KUDU="https://${BACKEND_APP}.scm.azurewebsites.net/api"
+
+          echo "FIRST_PRODUCTION_WRITE_AFTER_ALL_PREFLIGHTS=YES"
+          echo "FIRST_VFS_PUT_AFTER_PREFLIGHT=YES"
 
           validate_vfs_path() {
             local target_path="$1"
@@ -994,107 +1243,22 @@ jobs:
           echo "Staged schema.prisma verified (SHA256: ${LOCAL_SCHEMA_SHA})."
           echo "SCHEMA_HASH_VERIFIED=YES"
 
-          # 2. Derive CURRENT_SET, TARGET_SET, and delta
-          CURRENT_SET_FILE="$(mktemp)"
-          TARGET_SET_FILE="$(mktemp)"
-          DELTA_SET_FILE="$(mktemp)"
-          trap 'rm -f "$CURRENT_SET_FILE" "$TARGET_SET_FILE" "$DELTA_SET_FILE"' EXIT
+          # 2. Stage ONLY missing target delta migrations
+          MISSING_FILE="${MISSING_DELTA_FILE:-${RUNNER_TEMP:-/tmp}/adminiculum-missing-target-delta.txt}"
+          if [ -f "$MISSING_FILE" ] && [ -s "$MISSING_FILE" ]; then
+            while IFS= read -r DIR_NAME; do
+              [ -n "$DIR_NAME" ] || continue
+              LOCAL_MIG_PATH="Backend/prisma/migrations/${DIR_NAME}/migration.sql"
+              [ -f "$LOCAL_MIG_PATH" ] || { echo "Local migration file missing: ${LOCAL_MIG_PATH}"; exit 1; }
 
-          CURRENT_SHA="$CURRENT_SHA" CURRENT_SET_FILE="$CURRENT_SET_FILE" TARGET_SET_FILE="$TARGET_SET_FILE" DELTA_SET_FILE="$DELTA_SET_FILE" node <<'NODE'
-          const fs = require('fs');
-          const cp = require('child_process');
+              REMOTE_MIG_DIR="site/wwwroot/prisma/migrations/${DIR_NAME}"
+              REMOTE_MIG_SQL="${REMOTE_MIG_DIR}/migration.sql"
+              validate_vfs_path "$REMOTE_MIG_DIR"
+              validate_vfs_path "$REMOTE_MIG_SQL"
 
-          const currentSha = process.env.CURRENT_SHA;
-          const currentTree = cp.execSync(`git ls-tree --name-only "${currentSha}:Backend/prisma/migrations"`, { encoding: 'utf8' });
-          const currentSet = new Set(currentTree.split(/\r?\n/).map(s => s.trim()).filter(n => /^[0-9]{14}_/.test(n)));
+              LOCAL_MIG_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$LOCAL_MIG_PATH")"
 
-          const targetDirs = fs.readdirSync('Backend/prisma/migrations', { withFileTypes: true })
-            .filter(d => d.isDirectory() && /^[0-9]{14}_/.test(d.name))
-            .map(d => d.name.trim());
-          const targetSet = new Set(targetDirs);
-
-          const delta = targetDirs.filter(d => !currentSet.has(d));
-
-          fs.writeFileSync(process.env.CURRENT_SET_FILE, [...currentSet].sort().join('\n') + (currentSet.size ? '\n' : ''));
-          fs.writeFileSync(process.env.TARGET_SET_FILE, [...targetSet].sort().join('\n') + (targetSet.size ? '\n' : ''));
-          fs.writeFileSync(process.env.DELTA_SET_FILE, delta.sort().join('\n') + (delta.length ? '\n' : ''));
-          NODE
-
-          echo "CURRENT_MIGRATION_SET_DERIVED=YES"
-          echo "TARGET_MIGRATION_SET_DERIVED=YES"
-          echo "TARGET_MIGRATION_DELTA_DERIVED=YES"
-
-          echo "Baseline migrations count: $(wc -l < "$CURRENT_SET_FILE")"
-          echo "Target migrations count:   $(wc -l < "$TARGET_SET_FILE")"
-          echo "Release delta count:      $(wc -l < "$DELTA_SET_FILE")"
-
-          # 3. Verify baseline migrations (CURRENT_SET) without rewriting
-          echo "Verifying baseline migration assets on remote..."
-          while IFS= read -r DIR_NAME; do
-            [ -n "$DIR_NAME" ] || continue
-            REMOTE_MIG_SQL="site/wwwroot/prisma/migrations/${DIR_NAME}/migration.sql"
-            validate_vfs_path "$REMOTE_MIG_SQL"
-
-            REMOTE_SQL_FILE="$(mktemp)"
-            HTTP_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_MIG_SQL}" -o "$REMOTE_SQL_FILE" -w '%{http_code}' || echo 000)"
-            if [ "$HTTP_CODE" != "200" ]; then
-              rm -f "$REMOTE_SQL_FILE"
-              echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"
-              echo "Baseline migration ${DIR_NAME}/migration.sql missing from remote (HTTP ${HTTP_CODE}). STOP."
-              exit 1
-            fi
-
-            LOCAL_BASELINE_SHA="$(git show "${CURRENT_SHA}:Backend/prisma/migrations/${DIR_NAME}/migration.sql" | node -e '
-              let d=""; process.stdin.on("data", c => d += c).on("end", () => {
-                process.stdout.write(require("crypto").createHash("sha256").update(d).digest("hex"));
-              });
-            ')"
-            REMOTE_BASELINE_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_SQL_FILE")"
-            rm -f "$REMOTE_SQL_FILE"
-
-            if [ "$LOCAL_BASELINE_SHA" != "$REMOTE_BASELINE_SHA" ]; then
-              echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"
-              echo "Baseline migration ${DIR_NAME}/migration.sql content mismatch! Git: ${LOCAL_BASELINE_SHA}, Remote: ${REMOTE_BASELINE_SHA}. STOP."
-              exit 1
-            fi
-            echo "Baseline migration ${DIR_NAME} verified intact on remote."
-          done < "$CURRENT_SET_FILE"
-
-          echo "REMOTE_BASELINE_COMPLETE=YES"
-          echo "REMOTE_BASELINE_HASH_VERIFIED=YES"
-          echo "HISTORICAL_MIGRATIONS_REWRITTEN=NO"
-
-          # 4. Handle target additions (TARGET_SET - CURRENT_SET)
-          echo "Processing release migration delta..."
-          while IFS= read -r DIR_NAME; do
-            [ -n "$DIR_NAME" ] || continue
-            LOCAL_MIG_PATH="Backend/prisma/migrations/${DIR_NAME}/migration.sql"
-            [ -f "$LOCAL_MIG_PATH" ] || { echo "Local migration file missing: ${LOCAL_MIG_PATH}"; exit 1; }
-
-            REMOTE_MIG_DIR="site/wwwroot/prisma/migrations/${DIR_NAME}"
-            REMOTE_MIG_SQL="${REMOTE_MIG_DIR}/migration.sql"
-            validate_vfs_path "$REMOTE_MIG_DIR"
-            validate_vfs_path "$REMOTE_MIG_SQL"
-
-            LOCAL_MIG_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$LOCAL_MIG_PATH")"
-
-            REMOTE_CHECK="$(mktemp)"
-            CHECK_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_MIG_SQL}" -o "$REMOTE_CHECK" -w '%{http_code}' || echo 000)"
-
-            if [ "$CHECK_CODE" = "200" ]; then
-              REMOTE_EXISTING_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_CHECK")"
-              rm -f "$REMOTE_CHECK"
-              if [ "$LOCAL_MIG_SHA" = "$REMOTE_EXISTING_SHA" ]; then
-                echo "TARGET_EXTRA_EXISTING_IDENTITY=PASS"
-                echo "Target-extra migration ${DIR_NAME} already exists remotely with matching hash (skipping PUT)."
-              else
-                echo "TARGET_EXTRA_EXISTING_IDENTITY=FAIL"
-                echo "Target-extra migration ${DIR_NAME} exists remotely with different hash! Refusing overwrite. STOP."
-                exit 1
-              fi
-            elif [ "$CHECK_CODE" = "404" ]; then
-              rm -f "$REMOTE_CHECK"
-              echo "Staging new release migration: ${DIR_NAME}..."
+              echo "Staging missing target release migration: ${DIR_NAME}..."
               curl -sS -m 30 -X PUT \
                 -H "Authorization: Bearer ${TOKEN}" \
                 "${KUDU}/vfs/${REMOTE_MIG_DIR}/" >/dev/null || true
@@ -1115,16 +1279,15 @@ jobs:
                 exit 1
               fi
               echo "Staged ${DIR_NAME}/migration.sql verified (SHA256: ${LOCAL_MIG_SHA})."
-            else
-              rm -f "$REMOTE_CHECK"
-              echo "Unexpected HTTP status ${CHECK_CODE} checking ${REMOTE_MIG_SQL}. STOP."
-              exit 1
-            fi
-          done < "$DELTA_SET_FILE"
+            done < "$MISSING_FILE"
+          else
+            echo "No missing target delta migrations to stage (all existing target-extra migrations verified during preflight)."
+          fi
 
           echo "TARGET_NEW_MIGRATIONS_ONLY_STAGED=YES"
-          echo "EXISTING_TARGET_EXTRA_HASH_VERIFIED=YES"
+          echo "MISSING_TARGET_DELTA_ONLY_STAGED=YES"
           echo "EXISTING_TARGET_EXTRA_OVERWRITTEN=NO"
+          echo "HISTORICAL_MIGRATIONS_REWRITTEN=NO"
           echo "NEWLY_STAGED_SQL_HASH_VERIFIED=YES"
           echo "ALL_STAGED_MIGRATION_HASHES_VERIFIED=YES"
           echo "Migration assets staged successfully."
