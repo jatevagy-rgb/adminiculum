@@ -52,10 +52,9 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('[ "$HEALTH_CODE" = "200" ]');
     expect(workflow).toContain('Recovery backend SHA mismatch: expected');
     expect(workflow).toContain('Recovery backend build time is missing.');
-    expect(workflow).toContain('needs: [resolve, backend, recovery]');
-    expect(workflow).toContain("needs.backend.result == 'skipped'");
+    expect(workflow).toContain('needs: [resolve, recovery_inspection, recovery]');
     expect(workflow).toContain("needs.recovery.result == 'success'");
-    expect(workflow).toContain('inputs.deploy_backend != true');
+    expect(workflow).toContain('!inputs.deploy_backend');
   });
 
   it('keeps recovery input out of shell source and validates it before use', () => {
@@ -220,15 +219,16 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).toContain('BACKEND_APP: adminiculumbackend-b1-01');
     expect(workflow).not.toContain('vikoli-app');
     expect(workflow).toContain('concurrency:\n  group: adminiculum-appservice-production-deploy\n  cancel-in-progress: false');
-    expect(workflow).toContain('needs: [resolve, backend, recovery]');
-    expect(workflow).toContain("needs.backend.result == 'success'");
-    expect(workflow).toContain("needs.recovery.result == 'success'");
+    expect(workflow).toContain('needs: [resolve, recovery_inspection, recovery]');
+    expect(workflow).toContain('needs: [resolve, recovery_inspection, migration]');
     expect(workflow).toContain('needs: [resolve, backend, migration]');
-    expect(workflow).toContain("&& (needs.backend.result == 'success' || needs.backend.result == 'skipped')");
+    expect(workflow).toContain("needs.migration.result == 'success'");
+    expect(workflow).toContain("needs.backend.result == 'success'");
     expect(workflow).toContain('(inputs.run_migration && needs.migration.result == \'success\')');
     expect(workflow).toContain('!inputs.run_migration');
+    expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result'));
     expect(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')).toBeLessThan(workflow.indexOf('Backend health gate (/health 200)'));
-    expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(workflow.indexOf('Backend health gate after migration (/health 200)'));
+    expect(workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')).toBeLessThan(workflow.indexOf('Deploy frontend (zip, Oryx OFF'));
   });
 
   it('resolves one immutable SHA and propagates release identity to both artifacts', () => {
@@ -247,5 +247,103 @@ describe('production deploy workflow portability guards', () => {
     expect(workflow).not.toContain('git rev-parse release/editor-ops-workflow-1');
     expect(workflow).not.toContain('APP_COMMIT_SHA: ${{ secrets.');
     expect(workflow).not.toContain('APP_BUILD_TIME: ${{ secrets.');
+  });
+});
+
+describe('migration-before-backend release order and staging contract', () => {
+  it('does NOT require successful new backend deployment before migration', () => {
+    const migrationDef = workflow.slice(workflow.indexOf('  migration:\n'), workflow.indexOf('  backend:\n'));
+    expect(migrationDef).toContain('needs: [resolve, recovery_inspection, recovery]');
+    expect(migrationDef).not.toContain('needs: [resolve, backend');
+  });
+
+  it('runs migration before backend deployment when deploy_backend=true and run_migration=true', () => {
+    expect(workflow.indexOf('  migration:\n')).toBeLessThan(workflow.indexOf('  backend:\n'));
+    expect(workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)')).toBeLessThan(
+      workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')
+    );
+    expect(workflow.indexOf('Trigger + verify THIS migration WebJob run')).toBeLessThan(
+      workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result')
+    );
+  });
+
+  it('makes backend depend on successful migration in migration mode', () => {
+    const backendDef = workflow.slice(workflow.indexOf('  backend:\n'), workflow.indexOf('  frontend:\n'));
+    expect(backendDef).toContain('needs: [resolve, recovery_inspection, migration]');
+    expect(backendDef).toContain("(inputs.run_migration && needs.migration.result == 'success')");
+  });
+
+  it('allows backend to run without migration when run_migration=false', () => {
+    const backendDef = workflow.slice(workflow.indexOf('  backend:\n'), workflow.indexOf('  frontend:\n'));
+    expect(backendDef).toContain('!inputs.run_migration');
+    expect(backendDef).toContain("(needs.migration.result == 'success' || needs.migration.result == 'skipped')");
+  });
+
+  it('makes frontend depend on successful backend and successful migration when requested', () => {
+    const frontendDef = workflow.slice(workflow.indexOf('  frontend:\n'));
+    expect(frontendDef).toContain('needs: [resolve, backend, migration]');
+    expect(frontendDef).toContain("(inputs.run_migration && needs.migration.result == 'success')");
+    expect(frontendDef).toContain("(needs.backend.result == 'success' || needs.backend.result == 'skipped')");
+  });
+
+  it('preserves frontend-only mode when backend is skipped', () => {
+    const frontendDef = workflow.slice(workflow.indexOf('  frontend:\n'));
+    expect(frontendDef).toContain('If backend was not deployed this run, require the current production backend to be healthy');
+    expect(frontendDef).toContain('if: ${{ inputs.deploy_backend != true }}');
+    expect(frontendDef).toContain("needs.backend.result == 'skipped'");
+  });
+
+  it('strictly restricts migration staging from writing runtime paths', () => {
+    const stageStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stageStep).toContain('validate_vfs_path()');
+    expect(stageStep).toContain('site/wwwroot/prisma/(schema\\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\\.sql)?');
+    expect(stageStep).toContain('*dist*|*node_modules*|*package.json*|*package-lock.json*|*release-identity.json*|*templates*|*scripts*');
+    expect(stageStep).toContain('SECURITY FAULT: Staging path');
+    expect(stageStep).toContain('SECURITY FAULT: Attempted to stage into runtime path');
+  });
+
+  it('preserves canonical adminiculum-db-migrate WebJob as the migration execution mechanism', () => {
+    const migStep = stepBlock('Trigger + verify THIS migration WebJob run');
+    expect(migStep).toContain('api/triggeredwebjobs/${MIGRATION_WEBJOB}');
+    expect(workflow).toContain('MIGRATION_WEBJOB: adminiculum-db-migrate');
+  });
+
+  it('contains NO direct SQL, NO prisma db push, and NO DATABASE_URL exposed to GitHub Actions', () => {
+    expect(workflow).not.toContain('prisma db push');
+    expect(workflow).not.toContain('prisma migrate deploy');
+    expect(workflow).not.toContain('${{ secrets.DATABASE_URL }}');
+    expect(workflow).not.toMatch(/DATABASE_URL\s*:/);
+    expect(workflow).not.toMatch(/\bpsql\b/);
+  });
+
+  it('pins the exact release SHA through all release jobs', () => {
+    expect(workflow).toContain('ref: ${{ needs.resolve.outputs.product_sha }}');
+    expect(workflow).toContain('RELEASE_SHA: ${{ needs.resolve.outputs.product_sha }}');
+    expect(workflow).toContain('NEXT_PUBLIC_APP_COMMIT_SHA: ${{ needs.resolve.outputs.product_sha }}');
+  });
+
+  it('enforces current backend health gate, identity capture, and runtime immutability checks', () => {
+    const gateStep = stepBlock('Verify current backend health and capture identity before migration');
+    expect(gateStep).toContain('/health');
+    expect(gateStep).toContain('/health/version');
+    expect(gateStep).toContain('CURRENT_BACKEND_SHA=${CURRENT_SHA}');
+    expect(gateStep).toContain('git cat-file -e "${CURRENT_SHA}^{commit}"');
+
+    const postStageStep = stepBlock('Verify backend runtime unchanged after migration asset staging');
+    expect(postStageStep).toContain('Post-stage /health -> $HEALTH_CODE');
+    expect(postStageStep).toContain('EXPECTED_SHA="${CURRENT_BACKEND_SHA}"');
+    expect(postStageStep).toContain('Backend runtime was modified!');
+
+    const postMigStep = stepBlock('Backend health gate after migration (/health 200)');
+    expect(postMigStep).toContain('EXPECTED_SHA="${CURRENT_BACKEND_SHA}"');
+    expect(postMigStep).toContain('Backend runtime unexpectedly changed after migration!');
+  });
+
+  it('enforces Prisma CLI toolchain compatibility gate between current backend and target release', () => {
+    const compatStep = stepBlock('Prisma CLI compatibility gate');
+    expect(compatStep).toContain('git show "${CURRENT_SHA}:Backend/package.json"');
+    expect(compatStep).toContain('git show "${CURRENT_SHA}:Backend/package-lock.json"');
+    expect(compatStep).toContain('PRISMA_CLI_COMPATIBILITY=PASS');
+    expect(compatStep).toContain('PRISMA_CLI_COMPATIBILITY=FAIL');
   });
 });

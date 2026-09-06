@@ -31,15 +31,22 @@ Never touch `vikoli-app`.
 - Deployment completion is judged by the **server-side** Kudu deployment status (poll it), not
   a local CLI timeout — Kudu can time out the CLI while the build continues.
 
-## Migration — canonical WebJob only
+## Migration — canonical WebJob with pre-backend staging
 
 - The only mechanism allowed to mutate the production schema is the
   **`adminiculum-db-migrate`** triggered WebJob (it runs `prisma migrate deploy` inside the
   deployed wwwroot and verifies the result).
 - **No** direct SQL, **no** `prisma db push`, **no** Prisma CLI against production from the web
   app deploy, **no** production `DATABASE_URL` secret in GitHub Actions.
-- Run it **only when the release adds a new Prisma migration**, and **only after** the new
-  backend is healthy.
+- Run it **only when the release adds a new Prisma migration**.
+- When `deploy_backend=true` and `run_migration=true`, the migration runs **before** backend
+  runtime deployment:
+  1. The workflow verifies the **current backend is healthy** (`/health` 200) and captures `CURRENT_BACKEND_SHA`.
+  2. **Prisma CLI compatibility gate**: compares Prisma package and lockfile dependencies between `CURRENT_BACKEND_SHA` and the target release commit to ensure the existing deployed CLI toolchain can safely deploy the new migration.
+  3. **Targeted migration asset staging**: stages only `schema.prisma` and the release migration directory (`migration.sql`) to `site/wwwroot/prisma/` via targeted Kudu VFS. No runtime code (`dist/`, `node_modules/`, `package.json`, `release-identity.json`) is touched or activated.
+  4. The currently serving backend remains active and unmodified throughout staging (`/health/version` equals `CURRENT_BACKEND_SHA`).
+  5. The canonical `adminiculum-db-migrate` WebJob is triggered and polled to `Success`.
+  6. Backend health is re-verified before proceeding to backend runtime deployment.
 
 ## Frontend — Next.js standalone → App Service (Oryx OFF)
 
@@ -49,11 +56,19 @@ Never touch `vikoli-app`.
 
 ## Sequence (never backend + frontend concurrently)
 
+For migration releases (`run_migration=true` and `deploy_backend=true`):
 ```
-backend deploy → /health 200 → [migration WebJob → /health 200] → frontend deploy → smoke
+migration assets stage → canonical WebJob migration → /health 200 → backend deploy → /health 200 → frontend deploy → smoke
 ```
 
+For non-migration releases (`run_migration=false` and `deploy_backend=true`):
+```
+backend deploy → /health 200 → frontend deploy → smoke
+```
+(No-migration releases remain unchanged: no migration staging occurs).
+
 - If the backend is not healthy, **stop** — do not migrate an unhealthy backend.
+- Backend deployment in migration mode runs **only after** the migration WebJob succeeds.
 - Frontend runs after backend (+ migration, if requested) is healthy. A **frontend-only** run
   (`deploy_backend=false`) first verifies the current production backend `/health` is 200, so a
   frontend fix never forces an unnecessary backend redeploy.
@@ -64,8 +79,8 @@ backend deploy → /health 200 → [migration WebJob → /health 200] → fronte
   exposes it as a job output; the backend, migration, and frontend jobs all use that exact SHA.
   This removes the race where the release branch could advance between jobs and deploy mismatched
   commits. The resolved SHA is reported at the end of each run.
-- `run_migration=true` requires `deploy_backend=true` (no migration against an unverified backend
-  release), enforced in the `resolve` job.
+- When `run_migration=true` and `deploy_backend=false`, the recovery migration path requires an
+  explicit `recovery_product_sha` pointing to an ancestor commit already verified deployed on the backend.
 
 ## Trigger & safety
 

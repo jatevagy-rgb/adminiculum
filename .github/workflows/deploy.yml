@@ -4,7 +4,7 @@ name: Deploy to Azure App Service (manual, sequential)
 #   Backend  : prebuilt runtime artifact (built on Ubuntu / Node 20) -> Kudu ZipDeploy (Oryx OFF, prebuilt dist + node_modules).
 #   Migration: canonical `adminiculum-db-migrate` triggered WebJob ONLY (no direct SQL / db push / DATABASE_URL here).
 #   Frontend : Next.js standalone (.next/standalone + .next/static + public) -> ZIP -> App Service (Oryx OFF, `node server.js`).
-#   Sequence : backend -> health -> (migration -> health) -> frontend -> smoke. Backend and frontend never run concurrently.
+#   Sequence : (migration assets stage -> canonical migration -> health) -> backend -> health -> frontend -> smoke. Backend and frontend never run concurrently.
 #
 # Production source is ALWAYS the canonical release branch, resolved once to an immutable commit SHA that every
 # job reuses, so backend + migration + frontend all belong to the SAME release commit. There is no feature-branch
@@ -20,7 +20,7 @@ on:
         type: boolean
         default: true
       run_migration:
-        description: 'Run the adminiculum-db-migrate WebJob after backend deployment or verified backend recovery.'
+        description: 'Run the adminiculum-db-migrate WebJob before backend deployment or during verified backend recovery.'
         type: boolean
         default: false
       recovery_product_sha:
@@ -617,15 +617,436 @@ jobs:
           echo "Restart did not recover the expected backend release identity."; exit 1
 
   # ---------------------------------------------------------------------------
+  # Recovery: prove the already-running backend is the resolved release before
+  # permitting migration when this run intentionally skips backend deployment.
+  # ---------------------------------------------------------------------------
+  recovery:
+    name: Verify current backend for recovery
+    runs-on: ubuntu-latest
+    needs: resolve
+    if: ${{ !inputs.deploy_backend && inputs.run_migration }}
+    environment: production
+    steps:
+      - name: Verify current backend health and exact release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v curl >/dev/null
+          command -v node >/dev/null
+          HEALTH_CODE="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
+          echo "Recovery backend /health -> $HEALTH_CODE"
+          [ "$HEALTH_CODE" = "200" ] || { echo "Recovery backend health gate failed."; exit 1; }
+          BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
+          EXPECTED_SHA="${{ needs.resolve.outputs.product_sha }}" BODY="$BODY" node <<'NODE'
+          const body = JSON.parse(process.env.BODY);
+          const expected = process.env.EXPECTED_SHA;
+          if (body.commitSha !== expected) {
+            throw new Error(`Recovery backend SHA mismatch: expected ${expected}, got ${body.commitSha ?? '<null>'}`);
+          }
+          if (typeof body.buildTime !== 'string' || !body.buildTime.trim()) {
+            throw new Error('Recovery backend build time is missing.');
+          }
+          console.log(`Recovery backend release identity verified: ${body.commitSha}`);
+          NODE
+
+  # ---------------------------------------------------------------------------
+  # Migration: stages release migration assets (schema.prisma + migration.sql)
+  # via targeted Kudu VFS without activating new backend runtime, then triggers
+  # and polls canonical adminiculum-db-migrate WebJob ONLY. Verifies the EXACT
+  # run created by THIS trigger (a prior Success must never satisfy this run).
+  # ---------------------------------------------------------------------------
+  migration:
+    name: Run canonical migration WebJob
+    runs-on: ubuntu-latest
+    needs: [resolve, recovery_inspection, recovery]
+    if: >-
+      ${{ always()
+          && inputs.run_migration
+          && needs.resolve.result == 'success'
+          && (needs.recovery_inspection.result == 'success' || needs.recovery_inspection.result == 'skipped')
+          && (
+            inputs.deploy_backend
+            || (
+              !inputs.deploy_backend
+              && needs.recovery.result == 'success'
+            )
+          ) }}
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.product_sha }}
+          fetch-depth: 0
+
+      - name: Azure login (OIDC, no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify current backend health and capture identity before migration
+        if: ${{ inputs.deploy_backend == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v curl >/dev/null
+          command -v node >/dev/null
+
+          for i in $(seq 1 12); do
+            HEALTH_CODE="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
+            echo "[$i] Current backend /health -> $HEALTH_CODE"
+            if [ "$HEALTH_CODE" = "200" ]; then break; fi
+            sleep 10
+          done
+          [ "$HEALTH_CODE" = "200" ] || { echo "Current backend is not healthy — STOP (refusing to migrate or stage on an unhealthy backend)."; exit 1; }
+
+          VERSION_BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
+          CURRENT_SHA="$(VERSION_BODY="$VERSION_BODY" node -e '
+            const v = JSON.parse(process.env.VERSION_BODY);
+            const sha = String(v.commitSha || "").trim();
+            if (!/^[0-9a-f]{40}$/.test(sha)) {
+              console.error("Invalid current backend commitSha:", sha);
+              process.exit(1);
+            }
+            process.stdout.write(sha);
+          ')"
+          echo "CURRENT_BACKEND_SHA=${CURRENT_SHA}"
+          echo "CURRENT_BACKEND_SHA=${CURRENT_SHA}" >> "$GITHUB_ENV"
+          git cat-file -e "${CURRENT_SHA}^{commit}" || {
+            echo "Current backend SHA ${CURRENT_SHA} is not a reachable commit in repository history."; exit 1;
+          }
+
+      - name: Prisma CLI compatibility gate
+        if: ${{ inputs.deploy_backend == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v node >/dev/null
+          RELEASE_SHA="${{ needs.resolve.outputs.product_sha }}"
+          CURRENT_SHA="${CURRENT_BACKEND_SHA}"
+          echo "Comparing Prisma CLI toolchain: current backend (${CURRENT_SHA}) vs release (${RELEASE_SHA})"
+
+          CURRENT_PKG_PRISMA="$(git show "${CURRENT_SHA}:Backend/package.json" | node -e '
+            const pkg = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const p = (pkg.dependencies && pkg.dependencies["@prisma/client"]) || "";
+            const d = (pkg.devDependencies && pkg.devDependencies["prisma"]) || "";
+            process.stdout.write(`${p}|${d}`);
+          ')"
+          RELEASE_PKG_PRISMA="$(node -e '
+            const pkg = require("./Backend/package.json");
+            const p = (pkg.dependencies && pkg.dependencies["@prisma/client"]) || "";
+            const d = (pkg.devDependencies && pkg.devDependencies["prisma"]) || "";
+            process.stdout.write(`${p}|${d}`);
+          ')"
+
+          CURRENT_LOCK_PRISMA="$(git show "${CURRENT_SHA}:Backend/package-lock.json" | node -e '
+            const lock = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const v = (lock.packages && lock.packages["node_modules/prisma"] && lock.packages["node_modules/prisma"].version) || (lock.dependencies && lock.dependencies["prisma"] && lock.dependencies["prisma"].version) || "";
+            process.stdout.write(String(v));
+          ')"
+          RELEASE_LOCK_PRISMA="$(node -e '
+            const lock = require("./Backend/package-lock.json");
+            const v = (lock.packages && lock.packages["node_modules/prisma"] && lock.packages["node_modules/prisma"].version) || (lock.dependencies && lock.dependencies["prisma"] && lock.dependencies["prisma"].version) || "";
+            process.stdout.write(String(v));
+          ')"
+
+          echo "Current backend Prisma toolchain: package.json=${CURRENT_PKG_PRISMA} lock=${CURRENT_LOCK_PRISMA}"
+          echo "Target release Prisma toolchain:  package.json=${RELEASE_PKG_PRISMA} lock=${RELEASE_LOCK_PRISMA}"
+
+          if [ -z "$CURRENT_PKG_PRISMA" ] || [ -z "$RELEASE_PKG_PRISMA" ] || [ "$CURRENT_PKG_PRISMA" != "$RELEASE_PKG_PRISMA" ] || [ "$CURRENT_LOCK_PRISMA" != "$RELEASE_LOCK_PRISMA" ]; then
+            echo "PRISMA_CLI_COMPATIBILITY=FAIL"
+            echo "Prisma toolchain mismatch between current deployed backend and release artifact. Pre-backend migration cannot safely run with mismatched CLI. STOP."
+            exit 1
+          fi
+          echo "PRISMA_CLI_COMPATIBILITY=PASS"
+
+      - name: Stage release migration assets into backend App Service (targeted VFS)
+        if: ${{ inputs.deploy_backend == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v az >/dev/null
+          command -v curl >/dev/null
+          command -v node >/dev/null
+
+          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
+          KUDU="https://${BACKEND_APP}.scm.azurewebsites.net/api"
+
+          echo "Target App Service: ${BACKEND_APP}"
+          echo "Target wwwroot area: site/wwwroot/prisma"
+
+          [ -f "Backend/prisma/schema.prisma" ] || { echo "Backend/prisma/schema.prisma missing from release checkout"; exit 1; }
+          [ -d "Backend/prisma/migrations" ] || { echo "Backend/prisma/migrations missing from release checkout"; exit 1; }
+
+          validate_vfs_path() {
+            local target_path="$1"
+            if [[ ! "$target_path" =~ ^site/wwwroot/prisma/(schema\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\.sql)?)$ ]]; then
+              echo "SECURITY FAULT: Staging path '${target_path}' violates strict migration-only boundary! STOP."
+              exit 1
+            fi
+            case "$target_path" in
+              *dist*|*node_modules*|*package.json*|*package-lock.json*|*release-identity.json*|*templates*|*scripts*)
+                echo "SECURITY FAULT: Attempted to stage into runtime path: ${target_path}! STOP."
+                exit 1
+                ;;
+            esac
+          }
+
+          SCHEMA_TARGET="site/wwwroot/prisma/schema.prisma"
+          validate_vfs_path "$SCHEMA_TARGET"
+          echo "Staging ${SCHEMA_TARGET}..."
+          curl -fsS -m 30 -X PUT \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "If-Match: *" \
+            --data-binary "@Backend/prisma/schema.prisma" \
+            "${KUDU}/vfs/${SCHEMA_TARGET}"
+
+          LOCAL_SCHEMA_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync("Backend/prisma/schema.prisma")).digest("hex"))')"
+          REMOTE_SCHEMA="$(mktemp)"
+          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${SCHEMA_TARGET}" -o "$REMOTE_SCHEMA"
+          REMOTE_SCHEMA_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_SCHEMA")"
+          rm -f "$REMOTE_SCHEMA"
+
+          if [ "$LOCAL_SCHEMA_SHA" != "$REMOTE_SCHEMA_SHA" ]; then
+            echo "Staged schema.prisma checksum mismatch! Local: ${LOCAL_SCHEMA_SHA}, Remote: ${REMOTE_SCHEMA_SHA}"
+            exit 1
+          fi
+          echo "Staged schema.prisma verified (SHA256: ${LOCAL_SCHEMA_SHA})."
+
+          MIGRATIONS_DIR="Backend/prisma/migrations"
+          for mig in "$MIGRATIONS_DIR"/*; do
+            [ -d "$mig" ] || continue
+            DIR_NAME="$(basename "$mig")"
+            [[ "$DIR_NAME" =~ ^[0-9]{14}_ ]] || continue
+            [ -f "$mig/migration.sql" ] || continue
+
+            REMOTE_MIG_DIR="site/wwwroot/prisma/migrations/${DIR_NAME}"
+            REMOTE_MIG_SQL="${REMOTE_MIG_DIR}/migration.sql"
+            validate_vfs_path "$REMOTE_MIG_DIR"
+            validate_vfs_path "$REMOTE_MIG_SQL"
+
+            echo "Ensuring remote directory: ${REMOTE_MIG_DIR}"
+            curl -sS -m 30 -X PUT \
+              -H "Authorization: Bearer ${TOKEN}" \
+              "${KUDU}/vfs/${REMOTE_MIG_DIR}/" >/dev/null || true
+
+            echo "Staging ${REMOTE_MIG_SQL}..."
+            curl -fsS -m 30 -X PUT \
+              -H "Authorization: Bearer ${TOKEN}" \
+              -H "If-Match: *" \
+              --data-binary "@${mig}/migration.sql" \
+              "${KUDU}/vfs/${REMOTE_MIG_SQL}"
+          done
+          echo "Migration assets staged successfully."
+
+      - name: Verify backend runtime unchanged after migration asset staging
+        if: ${{ inputs.deploy_backend == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          HEALTH_CODE="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
+          echo "Post-stage /health -> $HEALTH_CODE"
+          [ "$HEALTH_CODE" = "200" ] || { echo "Backend became unhealthy after migration staging! STOP."; exit 1; }
+
+          BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
+          EXPECTED_SHA="${CURRENT_BACKEND_SHA}"
+          BODY="$BODY" EXPECTED_SHA="$EXPECTED_SHA" node -e '
+            const b = JSON.parse(process.env.BODY);
+            const sha = String(b.commitSha || "").trim();
+            if (sha !== process.env.EXPECTED_SHA) {
+              console.error(`Backend runtime was modified! Expected current SHA ${process.env.EXPECTED_SHA}, but got ${sha}`);
+              process.exit(1);
+            }
+          '
+          echo "Verified backend runtime remained active and unmodified on ${CURRENT_BACKEND_SHA}."
+      - name: Trigger + verify THIS migration WebJob run
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Migration release SHA: ${{ needs.resolve.outputs.product_sha }}"
+          command -v az >/dev/null
+          command -v curl >/dev/null
+          command -v node >/dev/null
+
+          API="https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}"
+          HISTORY_API="${API}/history"
+          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
+          BASELINE_ONE="$(mktemp)"
+          BASELINE_TWO="$(mktemp)"
+          HEADERS="$(mktemp)"
+          BODY="$(mktemp)"
+          trap 'rm -f "$BASELINE_ONE" "$BASELINE_TWO" "$HEADERS" "$BODY"' EXIT
+
+          # Establish a complete, stable pre-trigger run set and reject any
+          # already-active migration before this one-shot trigger.
+          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$BASELINE_ONE"
+          if ! BASELINE_FILE="$BASELINE_ONE" node <<'NODE'
+          const fs = require('fs');
+          const value = JSON.parse(fs.readFileSync(process.env.BASELINE_FILE, 'utf8'));
+          const runs = Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
+          if (!Array.isArray(runs)) throw new Error('Migration history response is not a run list.');
+          for (const run of runs) {
+            const status = String(run.status ?? '').toLowerCase();
+            if (['running', 'starting', 'pending', 'in_progress', 'in-progress'].includes(status)) {
+              throw new Error('An active migration execution already exists.');
+            }
+          }
+          NODE
+          then
+            echo "Active migration baseline rejected."; exit 1
+          fi
+          sleep 3
+          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$BASELINE_TWO"
+          BASELINE_ONE="$BASELINE_ONE" BASELINE_TWO="$BASELINE_TWO" node <<'NODE'
+          const fs = require('fs');
+          const readIds = (file) => {
+            const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+            const runs = Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
+            if (!Array.isArray(runs)) throw new Error('Migration history response is not a run list.');
+            return new Set(runs.map((run) => String(run.id ?? run.runId ?? '')).filter(Boolean));
+          };
+          const first = readIds(process.env.BASELINE_ONE);
+          const second = readIds(process.env.BASELINE_TWO);
+          if (first.size !== second.size || [...first].some((id) => !second.has(id))) {
+            throw new Error('Migration history baseline changed before trigger.');
+          }
+          NODE
+          cp "$BASELINE_TWO" "$BASELINE_ONE"
+          TRIGGER_START_UTC="$(date -u +%s%3N)"
+          echo "Migration trigger boundary recorded (UTC)."
+
+          set +e
+          HTTP_CODE="$(curl -sS -m 60 -D "$HEADERS" -o "$BODY" -w '%{http_code}' \
+            -X POST -H "Authorization: Bearer ${TOKEN}" "${API}/run")"
+          CURL_STATUS=$?
+          set -e
+          echo "WebJob trigger HTTP status=${HTTP_CODE:-<none>} curl_status=${CURL_STATUS}"
+          LOCATION="$(HEADERS="$HEADERS" BACKEND_APP="$BACKEND_APP" MIGRATION_WEBJOB="$MIGRATION_WEBJOB" node <<'NODE'
+          const fs = require('fs');
+          const headers = fs.readFileSync(process.env.HEADERS, 'utf8').split(/\r?\n/);
+          const line = headers.find((entry) => /^location:/i.test(entry));
+          if (!line) process.exit(0);
+          const location = line.replace(/^[^:]*:\s*/i, '').trim();
+          try {
+            const url = new URL(location);
+            const expectedHost = `${process.env.BACKEND_APP}.scm.azurewebsites.net`;
+            const expectedPrefix = `/api/triggeredwebjobs/${process.env.MIGRATION_WEBJOB}/history/`;
+            const id = url.pathname.slice(expectedPrefix.length);
+            if (url.protocol !== 'https:' || url.hostname !== expectedHost || !url.pathname.startsWith(expectedPrefix) || !id || id.includes('/')) {
+              process.exit(2);
+            }
+            process.stdout.write(url.toString());
+          } catch {
+            process.exit(2);
+          }
+          NODE
+          )" || { echo "Unexpected WebJob run Location; refusing to poll it."; exit 1; }
+          if [ -z "$LOCATION" ]; then
+            if [ "$HTTP_CODE" != "200" ] || [ "$CURL_STATUS" -ne 0 ]; then
+              echo "WebJob trigger did not meet the HTTP 200 success contract; refusing history fallback."
+              exit 1
+            fi
+            echo "WebJob trigger returned HTTP 200 without Location; using stable history delta."
+            FOUND_RUN=""
+            for i in $(seq 1 40); do
+              CURRENT_HISTORY="$(mktemp)"
+              curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$CURRENT_HISTORY"
+              RESULT="$(BASELINE_FILE="$BASELINE_ONE" HISTORY_FILE="$CURRENT_HISTORY" TRIGGER_START_UTC="$TRIGGER_START_UTC" node <<'NODE'
+          const fs = require('fs');
+          const baseline = JSON.parse(fs.readFileSync(process.env.BASELINE_FILE, 'utf8'));
+          const current = JSON.parse(fs.readFileSync(process.env.HISTORY_FILE, 'utf8'));
+          const list = (value) => Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
+          const baseRuns = list(baseline);
+          const currentRuns = list(current);
+          const baselineIds = new Set(baseRuns.map((run) => String(run.id ?? run.runId ?? '')).filter(Boolean));
+          const boundary = Number(process.env.TRIGGER_START_UTC) - 120000;
+          const candidates = currentRuns.filter((run) => {
+            const id = String(run.id ?? run.runId ?? '');
+            const started = Date.parse(run.start_time ?? run.startTime ?? run.startTimeUtc ?? '') || Number(run.start_time ?? 0);
+            return id && !baselineIds.has(id) && Number.isFinite(started) && started >= boundary;
+          });
+          if (candidates.length > 1) process.exit(3);
+          if (candidates.length === 1) process.stdout.write(String(candidates[0].id ?? candidates[0].runId));
+          NODE
+              )"
+              CODE=$?
+              rm -f "$CURRENT_HISTORY"
+              if [ "$CODE" -eq 3 ]; then echo "Multiple qualifying new migration runs; refusing ambiguity."; exit 1; fi
+              if [ "$CODE" -ne 0 ]; then echo "Unable to identify migration history delta."; exit 1; fi
+              if [ -n "$RESULT" ]; then FOUND_RUN="$RESULT"; break; fi
+              echo "[$i] No unique post-trigger migration run yet."
+              sleep 10
+            done
+            [ -n "$FOUND_RUN" ] || { echo "Timed out identifying a unique new migration run."; exit 1; }
+            NEW_RUN="$FOUND_RUN"
+            LOCATION="${API}/history/${NEW_RUN}"
+          else
+            NEW_RUN="${LOCATION##*/}"
+          fi
+          echo "This run's WebJob execution id: $NEW_RUN"
+
+          # Poll ONLY the run URL returned by THIS trigger; a prior Success
+          # in the history list can never satisfy this job.
+          for i in $(seq 1 40); do
+            ST="$(curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION" \
+              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.status??'?'))}catch(e){process.stdout.write('?')}})")"
+            echo "[$i] WebJob run $NEW_RUN status=$ST"
+            if [ "$ST" = "Success" ]; then echo "Migration WebJob run $NEW_RUN succeeded."; exit 0; fi
+            if [ "$ST" = "Failed" ] || [ "$ST" = "Error" ] || [ "$ST" = "Aborted" ]; then
+              echo "Migration WebJob run $NEW_RUN did not succeed."; exit 1; fi
+            sleep 10
+          done
+          echo "Timed out waiting for WebJob run $NEW_RUN."; exit 1
+
+      - name: Backend health gate after migration (/health 200)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 12); do
+            CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)
+            echo "[$i] /health -> $CODE"
+            if [ "$CODE" = "200" ]; then break; fi
+            sleep 15
+          done
+          [ "$CODE" = "200" ] || { echo "Backend unhealthy after migration."; exit 1; }
+
+          if [ "${{ inputs.deploy_backend }}" = "true" ]; then
+            BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
+            EXPECTED_SHA="${CURRENT_BACKEND_SHA}"
+            BODY="$BODY" EXPECTED_SHA="$EXPECTED_SHA" node -e '
+              const b = JSON.parse(process.env.BODY);
+              const sha = String(b.commitSha || "").trim();
+              if (sha !== process.env.EXPECTED_SHA) {
+                console.error(`Backend runtime unexpectedly changed after migration! Expected ${process.env.EXPECTED_SHA}, got ${sha}`);
+                process.exit(1);
+              }
+            '
+            echo "Post-migration backend identity verified on current SHA ${CURRENT_BACKEND_SHA}."
+          fi
+
+  # ---------------------------------------------------------------------------
   # Backend: prebuilt runtime artifact (built on Ubuntu / Node 20) -> Kudu ZipDeploy.
   # Prebuilds dist, generates Prisma client, and packages Linux-compatible runtime node_modules.
   # SCM_DO_BUILD_DURING_DEPLOYMENT is set to false so production Kudu/Oryx does not rebuild.
+  # When migration is requested, backend deployment executes ONLY after migration succeeds.
   # ---------------------------------------------------------------------------
   backend:
     name: Deploy backend (App Service, prebuilt artifact)
     runs-on: ubuntu-latest
-    needs: [resolve, recovery_inspection]
-    if: ${{ always() && inputs.deploy_backend && needs.resolve.result == 'success' && (needs.recovery_inspection.result == 'success' || needs.recovery_inspection.result == 'skipped') }}
+    needs: [resolve, recovery_inspection, migration]
+    if: >-
+      ${{ always()
+          && inputs.deploy_backend
+          && needs.resolve.result == 'success'
+          && (needs.recovery_inspection.result == 'success' || needs.recovery_inspection.result == 'skipped')
+          && (
+            (inputs.run_migration && needs.migration.result == 'success')
+            || (
+              !inputs.run_migration
+              && (needs.migration.result == 'success' || needs.migration.result == 'skipped')
+            )
+          ) }}
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -784,218 +1205,6 @@ jobs:
           }
           console.log(`Backend release identity verified: ${body.commitSha}`);
           NODE
-
-  # ---------------------------------------------------------------------------
-  # Recovery: prove the already-running backend is the resolved release before
-  # permitting migration when this run intentionally skips backend deployment.
-  # ---------------------------------------------------------------------------
-  recovery:
-    name: Verify current backend for recovery
-    runs-on: ubuntu-latest
-    needs: resolve
-    if: ${{ !inputs.deploy_backend && inputs.run_migration }}
-    environment: production
-    steps:
-      - name: Verify current backend health and exact release identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          command -v curl >/dev/null
-          command -v node >/dev/null
-          HEALTH_CODE="$(curl -sS -m 15 -o /dev/null -w '%{http_code}' "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)"
-          echo "Recovery backend /health -> $HEALTH_CODE"
-          [ "$HEALTH_CODE" = "200" ] || { echo "Recovery backend health gate failed."; exit 1; }
-          BODY="$(curl -fsS -m 15 "https://${BACKEND_APP}.azurewebsites.net/health/version")"
-          EXPECTED_SHA="${{ needs.resolve.outputs.product_sha }}" BODY="$BODY" node <<'NODE'
-          const body = JSON.parse(process.env.BODY);
-          const expected = process.env.EXPECTED_SHA;
-          if (body.commitSha !== expected) {
-            throw new Error(`Recovery backend SHA mismatch: expected ${expected}, got ${body.commitSha ?? '<null>'}`);
-          }
-          if (typeof body.buildTime !== 'string' || !body.buildTime.trim()) {
-            throw new Error('Recovery backend build time is missing.');
-          }
-          console.log(`Recovery backend release identity verified: ${body.commitSha}`);
-          NODE
-
-  # ---------------------------------------------------------------------------
-  # Migration: canonical adminiculum-db-migrate WebJob ONLY. Verifies the EXACT
-  # run created by THIS trigger (a prior Success must never satisfy this run).
-  # ---------------------------------------------------------------------------
-  migration:
-    name: Run canonical migration WebJob
-    runs-on: ubuntu-latest
-    needs: [resolve, backend, recovery]
-    if: >-
-      ${{ always()
-          && inputs.run_migration
-          && needs.resolve.result == 'success'
-          && (
-            needs.backend.result == 'success'
-            || (
-              needs.backend.result == 'skipped'
-              && inputs.deploy_backend != true
-              && needs.recovery.result == 'success'
-            )
-          ) }}
-    environment: production
-    steps:
-      - name: Azure login (OIDC, no client secret)
-        uses: azure/login@v2
-        with:
-          client-id: ${{ vars.AZURE_CLIENT_ID }}
-          tenant-id: ${{ vars.AZURE_TENANT_ID }}
-          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-      - name: Trigger + verify THIS migration WebJob run
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Migration release SHA: ${{ needs.resolve.outputs.product_sha }}"
-          command -v az >/dev/null
-          command -v curl >/dev/null
-          command -v node >/dev/null
-
-          API="https://${BACKEND_APP}.scm.azurewebsites.net/api/triggeredwebjobs/${MIGRATION_WEBJOB}"
-          HISTORY_API="${API}/history"
-          TOKEN="$(az account get-access-token --query accessToken -o tsv)"
-          BASELINE_ONE="$(mktemp)"
-          BASELINE_TWO="$(mktemp)"
-          HEADERS="$(mktemp)"
-          BODY="$(mktemp)"
-          trap 'rm -f "$BASELINE_ONE" "$BASELINE_TWO" "$HEADERS" "$BODY"' EXIT
-
-          # Establish a complete, stable pre-trigger run set and reject any
-          # already-active migration before this one-shot trigger.
-          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$BASELINE_ONE"
-          if ! BASELINE_FILE="$BASELINE_ONE" node <<'NODE'
-          const fs = require('fs');
-          const value = JSON.parse(fs.readFileSync(process.env.BASELINE_FILE, 'utf8'));
-          const runs = Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
-          if (!Array.isArray(runs)) throw new Error('Migration history response is not a run list.');
-          for (const run of runs) {
-            const status = String(run.status ?? '').toLowerCase();
-            if (['running', 'starting', 'pending', 'in_progress', 'in-progress'].includes(status)) {
-              throw new Error('An active migration execution already exists.');
-            }
-          }
-          NODE
-          then
-            echo "Active migration baseline rejected."; exit 1
-          fi
-          sleep 3
-          curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$BASELINE_TWO"
-          BASELINE_ONE="$BASELINE_ONE" BASELINE_TWO="$BASELINE_TWO" node <<'NODE'
-          const fs = require('fs');
-          const readIds = (file) => {
-            const value = JSON.parse(fs.readFileSync(file, 'utf8'));
-            const runs = Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
-            if (!Array.isArray(runs)) throw new Error('Migration history response is not a run list.');
-            return new Set(runs.map((run) => String(run.id ?? run.runId ?? '')).filter(Boolean));
-          };
-          const first = readIds(process.env.BASELINE_ONE);
-          const second = readIds(process.env.BASELINE_TWO);
-          if (first.size !== second.size || [...first].some((id) => !second.has(id))) {
-            throw new Error('Migration history baseline changed before trigger.');
-          }
-          NODE
-          cp "$BASELINE_TWO" "$BASELINE_ONE"
-          TRIGGER_START_UTC="$(date -u +%s%3N)"
-          echo "Migration trigger boundary recorded (UTC)."
-
-          set +e
-          HTTP_CODE="$(curl -sS -m 60 -D "$HEADERS" -o "$BODY" -w '%{http_code}' \
-            -X POST -H "Authorization: Bearer ${TOKEN}" "${API}/run")"
-          CURL_STATUS=$?
-          set -e
-          echo "WebJob trigger HTTP status=${HTTP_CODE:-<none>} curl_status=${CURL_STATUS}"
-          LOCATION="$(HEADERS="$HEADERS" BACKEND_APP="$BACKEND_APP" MIGRATION_WEBJOB="$MIGRATION_WEBJOB" node <<'NODE'
-          const fs = require('fs');
-          const headers = fs.readFileSync(process.env.HEADERS, 'utf8').split(/\r?\n/);
-          const line = headers.find((entry) => /^location:/i.test(entry));
-          if (!line) process.exit(0);
-          const location = line.replace(/^[^:]*:\s*/i, '').trim();
-          try {
-            const url = new URL(location);
-            const expectedHost = `${process.env.BACKEND_APP}.scm.azurewebsites.net`;
-            const expectedPrefix = `/api/triggeredwebjobs/${process.env.MIGRATION_WEBJOB}/history/`;
-            const id = url.pathname.slice(expectedPrefix.length);
-            if (url.protocol !== 'https:' || url.hostname !== expectedHost || !url.pathname.startsWith(expectedPrefix) || !id || id.includes('/')) {
-              process.exit(2);
-            }
-            process.stdout.write(url.toString());
-          } catch {
-            process.exit(2);
-          }
-          NODE
-          )" || { echo "Unexpected WebJob run Location; refusing to poll it."; exit 1; }
-          if [ -z "$LOCATION" ]; then
-            if [ "$HTTP_CODE" != "200" ] || [ "$CURL_STATUS" -ne 0 ]; then
-              echo "WebJob trigger did not meet the HTTP 200 success contract; refusing history fallback."
-              exit 1
-            fi
-            echo "WebJob trigger returned HTTP 200 without Location; using stable history delta."
-            FOUND_RUN=""
-            for i in $(seq 1 40); do
-              CURRENT_HISTORY="$(mktemp)"
-              curl -fsS -m 30 -H "Authorization: Bearer ${TOKEN}" "$HISTORY_API" -o "$CURRENT_HISTORY"
-              RESULT="$(BASELINE_FILE="$BASELINE_ONE" HISTORY_FILE="$CURRENT_HISTORY" TRIGGER_START_UTC="$TRIGGER_START_UTC" node <<'NODE'
-          const fs = require('fs');
-          const baseline = JSON.parse(fs.readFileSync(process.env.BASELINE_FILE, 'utf8'));
-          const current = JSON.parse(fs.readFileSync(process.env.HISTORY_FILE, 'utf8'));
-          const list = (value) => Array.isArray(value) ? value : (value.runs ?? value.value ?? []);
-          const baseRuns = list(baseline);
-          const currentRuns = list(current);
-          const baselineIds = new Set(baseRuns.map((run) => String(run.id ?? run.runId ?? '')).filter(Boolean));
-          const boundary = Number(process.env.TRIGGER_START_UTC) - 120000;
-          const candidates = currentRuns.filter((run) => {
-            const id = String(run.id ?? run.runId ?? '');
-            const started = Date.parse(run.start_time ?? run.startTime ?? run.startTimeUtc ?? '') || Number(run.start_time ?? 0);
-            return id && !baselineIds.has(id) && Number.isFinite(started) && started >= boundary;
-          });
-          if (candidates.length > 1) process.exit(3);
-          if (candidates.length === 1) process.stdout.write(String(candidates[0].id ?? candidates[0].runId));
-          NODE
-              )"
-              CODE=$?
-              rm -f "$CURRENT_HISTORY"
-              if [ "$CODE" -eq 3 ]; then echo "Multiple qualifying new migration runs; refusing ambiguity."; exit 1; fi
-              if [ "$CODE" -ne 0 ]; then echo "Unable to identify migration history delta."; exit 1; fi
-              if [ -n "$RESULT" ]; then FOUND_RUN="$RESULT"; break; fi
-              echo "[$i] No unique post-trigger migration run yet."
-              sleep 10
-            done
-            [ -n "$FOUND_RUN" ] || { echo "Timed out identifying a unique new migration run."; exit 1; }
-            NEW_RUN="$FOUND_RUN"
-            LOCATION="${API}/history/${NEW_RUN}"
-          else
-            NEW_RUN="${LOCATION##*/}"
-          fi
-          echo "This run's WebJob execution id: $NEW_RUN"
-
-          # Poll ONLY the run URL returned by THIS trigger; a prior Success
-          # in the history list can never satisfy this job.
-          for i in $(seq 1 40); do
-            ST="$(curl -sS -m 25 -H "Authorization: Bearer ${TOKEN}" "$LOCATION" \
-              | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(String(j.status??'?'))}catch(e){process.stdout.write('?')}})")"
-            echo "[$i] WebJob run $NEW_RUN status=$ST"
-            if [ "$ST" = "Success" ]; then echo "Migration WebJob run $NEW_RUN succeeded."; exit 0; fi
-            if [ "$ST" = "Failed" ] || [ "$ST" = "Error" ] || [ "$ST" = "Aborted" ]; then
-              echo "Migration WebJob run $NEW_RUN did not succeed."; exit 1; fi
-            sleep 10
-          done
-          echo "Timed out waiting for WebJob run $NEW_RUN."; exit 1
-
-      - name: Backend health gate after migration (/health 200)
-        run: |
-          set -euo pipefail
-          for i in $(seq 1 12); do
-            CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 15 "https://${BACKEND_APP}.azurewebsites.net/health" || echo 000)
-            echo "[$i] /health -> $CODE"
-            if [ "$CODE" = "200" ]; then exit 0; fi
-            sleep 15
-          done
-          echo "Backend unhealthy after migration."; exit 1
 
   # ---------------------------------------------------------------------------
   # Frontend: Next standalone -> ZIP -> App Service (Oryx OFF). Uses the SAME
