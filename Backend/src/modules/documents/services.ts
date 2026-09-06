@@ -149,7 +149,8 @@ export class DocumentStorageUploadError extends Error {
 export type DocumentPersistenceStage =
   | 'DOCUMENT_AND_INITIAL_VERSION'
   | 'TIMELINE_EVENT'
-  | 'CASE_STATUS_UPDATE';
+  | 'CASE_STATUS_UPDATE'
+  | 'TRANSACTION_BOUNDARY';
 
 export function safePrismaCode(error: unknown): string | null {
   if (
@@ -318,7 +319,15 @@ class DocumentsService {
         if (sharePointItemId) {
           await driveService.deleteDocument(sharePointItemId).catch(() => false);
         }
-        throw error;
+
+        if (error instanceof DocumentPersistenceError) {
+          throw error;
+        }
+
+        throw new DocumentPersistenceError(
+          'TRANSACTION_BOUNDARY',
+          safePrismaCode(error),
+        );
       }
 
       if (uploadSource !== 'LAWYER_UPLOAD') {

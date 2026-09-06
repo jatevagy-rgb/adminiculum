@@ -282,6 +282,47 @@ describe('Document Persistence Diagnostic Observability', () => {
 
       expect(mockDeleteDocument).toHaveBeenCalledWith('sp-item-1');
     });
+
+    it('5. TRANSACTION_BOUNDARY start failure (P2028): prisma.$transaction rejects before callback, compensation runs, no writes executed', async () => {
+      const txStartError = Object.assign(new Error('Transaction not started at transaction manager'), {
+        code: 'P2028',
+        meta: { details: 'tx timeout' },
+      });
+      mockPrisma.$transaction.mockRejectedValueOnce(txStartError);
+
+      await expect(documentsService.createDocument(baseInput)).rejects.toMatchObject({
+        name: 'DocumentPersistenceError',
+        stage: 'TRANSACTION_BOUNDARY',
+        prismaCode: 'P2028',
+      });
+
+      expect(mockDeleteDocument).toHaveBeenCalledWith('sp-item-1');
+      expect(mockPrisma.document.create).not.toHaveBeenCalled();
+      expect(mockPrisma.timelineEvent.create).not.toHaveBeenCalled();
+      expect(mockPrisma.case.update).not.toHaveBeenCalled();
+    });
+
+    it('6. TRANSACTION_BOUNDARY commit failure (P2034): callback succeeds then prisma.$transaction rejects, compensation runs', async () => {
+      const txCommitError = Object.assign(new Error('Transaction commit failed due to serialization conflict'), {
+        code: 'P2034',
+        meta: { code: '40001' },
+      });
+      mockPrisma.$transaction.mockImplementationOnce(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
+        await callback(mockPrisma);
+        throw txCommitError;
+      });
+
+      await expect(documentsService.createDocument(baseInput)).rejects.toMatchObject({
+        name: 'DocumentPersistenceError',
+        stage: 'TRANSACTION_BOUNDARY',
+        prismaCode: 'P2034',
+      });
+
+      expect(mockPrisma.document.create).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.timelineEvent.create).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.case.update).toHaveBeenCalledTimes(1);
+      expect(mockDeleteDocument).toHaveBeenCalledWith('sp-item-1');
+    });
   });
 
   describe('Route-level error responses and regression preservation', () => {
@@ -393,6 +434,69 @@ describe('Document Persistence Diagnostic Observability', () => {
       const bodyStr = JSON.stringify(res.body);
       expect(bodyStr).not.toContain('ECONNREFUSED');
       expect(bodyStr).not.toContain('10.0.0.1:5432');
+    });
+
+    it('surfaces TRANSACTION_BOUNDARY and P2028 on transaction startup failure in HTTP 500 without leaking raw message or meta', async () => {
+      const txStartError = Object.assign(new Error('Unable to start transaction at connection pool'), {
+        code: 'P2028',
+        meta: { secret_pool_info: 'pool-exhausted' },
+      });
+      mockPrisma.$transaction.mockRejectedValueOnce(txStartError);
+
+      const res = await requestJson(createApp(), 'POST', '/documents', {
+        body: {
+          caseId: 'case-1',
+          fileName: 'contract.pdf',
+          fileContent: VALID_FILE_CONTENT,
+          mimeType: 'application/pdf',
+          documentType: 'OTHER',
+        },
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({
+        status: 500,
+        code: 'INTERNAL_ERROR',
+        message: 'Dokumentum feltöltése sikertelen.',
+        reason: 'TRANSACTION_BOUNDARY',
+        prismaCode: 'P2028',
+      });
+
+      const bodyStr = JSON.stringify(res.body);
+      expect(bodyStr).not.toMatch(/pool-exhausted|secret_pool_info|Unable to start transaction|connection pool|stack/i);
+    });
+
+    it('surfaces TRANSACTION_BOUNDARY and P2034 on transaction commit failure in HTTP 500 without leaking raw message or meta', async () => {
+      const txCommitError = Object.assign(new Error('Transaction commit failed due to serialization conflict'), {
+        code: 'P2034',
+        meta: { sensitive: 'tx_log_data' },
+      });
+      mockPrisma.$transaction.mockImplementationOnce(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
+        await callback(mockPrisma);
+        throw txCommitError;
+      });
+
+      const res = await requestJson(createApp(), 'POST', '/documents', {
+        body: {
+          caseId: 'case-1',
+          fileName: 'contract.pdf',
+          fileContent: VALID_FILE_CONTENT,
+          mimeType: 'application/pdf',
+          documentType: 'OTHER',
+        },
+      });
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({
+        status: 500,
+        code: 'INTERNAL_ERROR',
+        message: 'Dokumentum feltöltése sikertelen.',
+        reason: 'TRANSACTION_BOUNDARY',
+        prismaCode: 'P2034',
+      });
+
+      const bodyStr = JSON.stringify(res.body);
+      expect(bodyStr).not.toMatch(/serialization conflict|sensitive|tx_log_data|stack/i);
     });
 
     it('5. STORAGE_502_PRESERVED: DocumentStorageUploadError remains 502 DOCUMENT_STORAGE_UNAVAILABLE', async () => {
