@@ -1,7 +1,13 @@
 /**
  * Read-only preview text plan for the immutable-version surface.
  *
- * The annotation surface is DocumentVersion-scoped:
+ * The annotation surface is DocumentVersion-scoped, and eligibility is a
+ * precondition for BOTH plans: a version that has not yet reconciled to the
+ * selected document (the versions list still holds the previous document's
+ * versions during a switch) must never drive any fetch — including the TXT
+ * blob path — or the old document's bytes could flash on the new document's
+ * surface.
+ *
  *   - VERSION_BLOB — TXT versions render their exact stored bytes via
  *     `downloadDocumentVersion(...)` and remain the only TEXT_RANGE anchor
  *     source (offsets/fingerprints are version-true).
@@ -26,13 +32,8 @@ export function resolveVersionTextPlan(input: {
   documentIsUploaded: boolean;
 }): VersionTextPlan {
   if (!input.hasSelectedVersion) return 'NONE';
+  if (!input.versionBelongsToSelectedDocument) return 'NONE';
   if (input.fileType === 'TXT') return 'VERSION_BLOB';
-  if (
-    input.documentIsUploaded &&
-    input.versionIsCurrent &&
-    input.versionBelongsToSelectedDocument
-  ) {
-    return 'DOCUMENT_TEXT';
-  }
+  if (input.documentIsUploaded && input.versionIsCurrent) return 'DOCUMENT_TEXT';
   return 'NONE';
 }

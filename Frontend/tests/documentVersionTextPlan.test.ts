@@ -61,7 +61,22 @@ test('document-level text plan exists only for the current version', () => {
 });
 
 // F. Document switch: a version that has not reconciled to the selected
-// document must not trigger document-level text for the new document.
+// document must not trigger any fetch — including the TXT blob path, whose
+// stored bytes would otherwise render the old document's content on the new
+// document's surface.
+test('unreconciled TXT version during a document switch yields NONE', () => {
+  assert.equal(
+    resolveVersionTextPlan({
+      hasSelectedVersion: true,
+      fileType: 'TXT',
+      versionIsCurrent: true,
+      versionBelongsToSelectedDocument: false,
+      documentIsUploaded: true,
+    }),
+    'NONE',
+  );
+});
+
 test('unreconciled version during a document switch yields NONE', () => {
   assert.equal(
     resolveVersionTextPlan({
