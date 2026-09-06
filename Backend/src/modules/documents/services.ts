@@ -146,6 +146,38 @@ export class DocumentStorageUploadError extends Error {
   }
 }
 
+export type DocumentPersistenceStage =
+  | 'DOCUMENT_AND_INITIAL_VERSION'
+  | 'TIMELINE_EVENT'
+  | 'CASE_STATUS_UPDATE'
+  | 'TRANSACTION_BOUNDARY';
+
+export function safePrismaCode(error: unknown): string | null {
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof (error as { code?: unknown }).code === 'string' &&
+    /^P[0-9]{4}$/.test((error as { code: string }).code)
+  ) {
+    return (error as { code: string }).code;
+  }
+  return null;
+}
+
+export class DocumentPersistenceError extends Error {
+  readonly stage: DocumentPersistenceStage;
+  readonly prismaCode: string | null;
+
+  constructor(stage: DocumentPersistenceStage, prismaCode: string | null = null) {
+    super(`Document persistence failed at stage ${stage}${prismaCode ? ` (${prismaCode})` : ''}`);
+    this.name = 'DocumentPersistenceError';
+    this.stage = stage;
+    this.prismaCode = prismaCode;
+    Object.setPrototypeOf(this, DocumentPersistenceError.prototype);
+  }
+}
+
 class DocumentsService {
   /**
    * Create document with SharePoint upload + TimelineEvent + Case update
@@ -214,56 +246,72 @@ class DocumentsService {
       const documentVersionId = randomUUID();
       try {
         document = await prisma.$transaction(async (tx) => {
-          const createdDocument = await tx.document.create({
-            data: {
-              ...baseDocumentData,
-              versions: {
-                create: {
-                  id: documentVersionId,
-                  version: 1,
-                  name: nameField,
-                  originalFileName: uploadedFileName || storedFileName || null,
-                  mimeType: input.mimeType,
-                  size: input.fileContent.length,
-                  storageReference: sharePointItemId,
-                  isCurrent: true,
-                  reviewStatus: 'NOT_IN_REVIEW' as any,
-                  publicationStatus: 'INTERNAL_ONLY' as any,
-                  uploadSource: uploadSource as any,
-                  versionType: 'ORIGINAL' as any,
-                  spVersionLabel: uploadResult.version || '1',
-                  spVersionId: uploadResult.version || null,
-                  spItemId: sharePointItemId,
-                  spWebUrl: uploadResult.webUrl || null,
-                  uploadedById: input.createdById,
-                  securityScanStatus: 'CLEAN' as any,
+          let createdDocument: any;
+          try {
+            createdDocument = await tx.document.create({
+              data: {
+                ...baseDocumentData,
+                versions: {
+                  create: {
+                    id: documentVersionId,
+                    version: 1,
+                    name: nameField,
+                    originalFileName: uploadedFileName || storedFileName || null,
+                    mimeType: input.mimeType,
+                    size: input.fileContent.length,
+                    storageReference: sharePointItemId,
+                    isCurrent: true,
+                    reviewStatus: 'NOT_IN_REVIEW' as any,
+                    publicationStatus: 'INTERNAL_ONLY' as any,
+                    uploadSource: uploadSource as any,
+                    versionType: 'ORIGINAL' as any,
+                    spVersionLabel: uploadResult.version || '1',
+                    spVersionId: uploadResult.version || null,
+                    spItemId: sharePointItemId,
+                    spWebUrl: uploadResult.webUrl || null,
+                    uploadedById: input.createdById,
+                    securityScanStatus: 'CLEAN' as any,
+                  },
                 },
               },
-            },
-          });
+            });
+          } catch (error) {
+            if (error instanceof DocumentPersistenceError) throw error;
+            throw new DocumentPersistenceError('DOCUMENT_AND_INITIAL_VERSION', safePrismaCode(error));
+          }
 
-          await tx.timelineEvent.create({
-            data: {
-              caseId: input.caseId,
-              userId: input.createdById,
-              eventType: 'DOCUMENT_UPLOADED',
-              type: 'DOCUMENT_UPLOADED' as any,
-              payload: {
-                documentId: createdDocument.id,
-                fileName: input.fileName,
-                documentType: input.documentType,
-                spItemId: sharePointItemId,
-                spPath: uploadResult.webUrl,
-                folder: folderType,
-                version: uploadResult.version,
-              },
-            } as any,
-          });
+          try {
+            await tx.timelineEvent.create({
+              data: {
+                caseId: input.caseId,
+                userId: input.createdById,
+                eventType: 'DOCUMENT_UPLOADED',
+                type: 'DOCUMENT_UPLOADED' as any,
+                payload: {
+                  documentId: createdDocument.id,
+                  fileName: input.fileName,
+                  documentType: input.documentType,
+                  spItemId: sharePointItemId,
+                  spPath: uploadResult.webUrl,
+                  folder: folderType,
+                  version: uploadResult.version,
+                },
+              } as any,
+            });
+          } catch (error) {
+            if (error instanceof DocumentPersistenceError) throw error;
+            throw new DocumentPersistenceError('TIMELINE_EVENT', safePrismaCode(error));
+          }
 
-          await tx.case.update({
-            where: { id: input.caseId },
-            data: { status: 'DRAFT' as any },
-          });
+          try {
+            await tx.case.update({
+              where: { id: input.caseId },
+              data: { status: 'DRAFT' as any },
+            });
+          } catch (error) {
+            if (error instanceof DocumentPersistenceError) throw error;
+            throw new DocumentPersistenceError('CASE_STATUS_UPDATE', safePrismaCode(error));
+          }
 
           return createdDocument;
         });
@@ -271,7 +319,15 @@ class DocumentsService {
         if (sharePointItemId) {
           await driveService.deleteDocument(sharePointItemId).catch(() => false);
         }
-        throw error;
+
+        if (error instanceof DocumentPersistenceError) {
+          throw error;
+        }
+
+        throw new DocumentPersistenceError(
+          'TRANSACTION_BOUNDARY',
+          safePrismaCode(error),
+        );
       }
 
       if (uploadSource !== 'LAWYER_UPLOAD') {
