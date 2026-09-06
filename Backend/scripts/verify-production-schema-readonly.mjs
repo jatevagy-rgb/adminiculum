@@ -192,8 +192,8 @@ const main = async () => {
   }
 };
 
-main().catch((error) => {
-  process.stderr.write(`ERROR: ${error?.message ?? error}\n`);
+main().catch(() => {
+  process.stderr.write("ERROR: Production schema metadata proof failed.\n");
   print("DATABASE_MUTATED", "NO");
   print("READ_ONLY_SCHEMA_PROOF", "FAIL");
   process.exit(1);

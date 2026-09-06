@@ -174,6 +174,38 @@ describe("read-only production schema inspector safety contract", () => {
     expect(script).toContain("finally");
   });
 
+  test("outer runtime catch emits only a fixed sanitized error", () => {
+    const catchIndex = script.indexOf("main().catch");
+    expect(catchIndex).toBeGreaterThan(-1);
+    const catchBlock = script.slice(catchIndex);
+
+    // No raw error surface: no message, stack, cause, or object echo.
+    expect(catchBlock).not.toMatch(
+      /error\.message|error\?\.message|String\(error\)|error\.stack|error\.cause|console\.error\(error|\$\{\s*error|JSON\.stringify\(error/,
+    );
+    expect(catchBlock).toMatch(/main\(\)\.catch\(\(\)\s*=>/);
+    expect(catchBlock).toContain(
+      '"ERROR: Production schema metadata proof failed.\\n"',
+    );
+    expect(catchBlock).toContain('print("DATABASE_MUTATED", "NO")');
+    expect(catchBlock).toContain('print("READ_ONLY_SCHEMA_PROOF", "FAIL")');
+    expect(catchBlock).toContain("process.exit(1)");
+  });
+
+  test("pre-connection validation errors remain fixed safe messages", () => {
+    // Every fail() call site uses a fixed message or echoes only the
+    // caller-supplied identifier entry — never an error object or secret.
+    const failCalls = [...script.matchAll(/fail\(([^;]+?)\);/gs)].map(
+      (m) => m[1],
+    );
+    expect(failCalls.length).toBeGreaterThan(0);
+    for (const args of failCalls) {
+      expect(args).not.toMatch(/\berror\b|\.stack|\.cause|process\.env/);
+      expect(args).not.toContain("DATABASE_URL=");
+      expect(args).not.toMatch(/\$\{?process\.env\.DATABASE_URL/);
+    }
+  });
+
   test("performs only parameterized metadata SELECTs", () => {
     expect(script).toContain("WHERE migration_name = $1");
     expect(script).toContain('FROM "_prisma_migrations"');
