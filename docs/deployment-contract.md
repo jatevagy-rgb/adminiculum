@@ -41,7 +41,7 @@ Never touch `vikoli-app`.
 - Run it **only when the release adds a new Prisma migration**.
 - When `deploy_backend=true` and `run_migration=true`, the migration runs **before** backend
   runtime deployment:
-  1. The workflow verifies the **current backend is healthy** (`/health` 200), captures `CURRENT_BACKEND_SHA`, and enforces that the **live backend commit is a direct ancestor of the target release commit**. Divergent backend histories stop immediately.
+  1. The workflow verifies the **current backend is healthy** (`/health` 200), captures `CURRENT_BACKEND_SHA`, and enforces that the **live backend commit is an ancestor of the target release commit**. Divergent backend histories stop immediately.
   2. **Prisma CLI compatibility gate**: compares Prisma package and lockfile dependencies between `CURRENT_BACKEND_SHA` and the target release commit to ensure the existing deployed CLI toolchain can safely deploy the new migration.
   3. **Migration WebJob implementation compatibility gate**: compares `Backend/App_Data/jobs/triggered/adminiculum-db-migrate` between `CURRENT_BACKEND_SHA` and the target release. The migration runner must be unchanged for pre-backend migration; a release modifying the runner requires a separate rollout path.
   4. **Remote migration tree drift guard**: reads `site/wwwroot/prisma/migrations/` from Kudu VFS and verifies no foreign or future migration directories exist that are absent from the target commit. If unexpected directories are detected (e.g. from a prior failed attempt), the workflow halts closed without triggering migrations (automatic directory deletion is disabled to prevent accidental data loss).
