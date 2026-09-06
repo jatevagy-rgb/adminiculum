@@ -420,6 +420,23 @@ export interface CasesResponse {
   };
 }
 
+export interface CaseAttentionItem {
+  case: { id: string };
+  attention: {
+    caseId: string;
+    urgency: 'NONE' | 'NORMAL' | 'ATTENTION' | 'URGENT';
+    nextAction: { type: string; label: string; dueAt: string | null; actorUserId: string | null; sourceType: string; sourceId?: string } | null;
+    signals: Array<{ type: string; severity: 'NONE' | 'NORMAL' | 'ATTENTION' | 'URGENT'; label: string; dueAt: string | null; sourceType: string; sourceId?: string }>;
+    lastMeaningfulChangeAt: string | null;
+  };
+}
+
+export async function getCaseAttention(clientId?: string, limit = 50, offset = 0): Promise<{ items: CaseAttentionItem[] }> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (clientId) params.set('clientId', clientId);
+  return fetchApi(`/cases/attention?${params}`);
+}
+
 // Case workspace overview read projection (GET /cases/:caseId/workspace).
 export interface CockpitDeadline {
   id: string;

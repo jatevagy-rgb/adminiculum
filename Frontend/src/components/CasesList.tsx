@@ -10,6 +10,8 @@ import {
   createClient,
   createTask,
   getCases,
+  getCaseAttention,
+  type CaseAttentionItem,
   getClients,
   getCurrentUser,
   getUsers,
@@ -25,14 +27,7 @@ import { getClientAccentBorderClass } from "@/lib/clientColors";
 import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 
-const statusLabel: Record<string, string> = {
-  OPEN: "Nyitott",
-  ON_HOLD: "Függőben",
-  CLOSED: "Lezárt",
-  DRAFT: "Piszkozat",
-  ARCHIVED: "Archivált",
-  CLIENT_INPUT: "Ügyféltől érkezett",
-};
+import { matchesCaseScope, caseStatusLabel, casePriorityLabel, caseDeadline, attentionForCase, matchesOperationalFilter, nextActionLabel, loadCaseAttentionPages } from '@/lib/casesOperational';
 
 const matterTypes = [
   { value: "REAL_ESTATE", label: "Ingatlanjog" },
@@ -210,6 +205,17 @@ export function CasesList() {
   const [availableClients, setAvailableClients] = useState<Client[]>([]);
   const [showOtherClients, setShowOtherClients] = useState(false);
   const [backendCases, setBackendCases] = useState<CaseListItem[]>([]);
+  const [operationalFilter, setOperationalFilter] = useState('all');
+  const [attentionCoverage, setAttentionCoverage] = useState<{ clientId: string; items: Map<string, CaseAttentionItem> }>({ clientId: '', items: new Map() });
+  const attentionItems = useMemo(() => attentionCoverage.clientId === selectedClientId ? attentionCoverage.items : new Map<string, CaseAttentionItem>(), [attentionCoverage, selectedClientId]);
+  useEffect(() => {
+    let cancelled = false;
+    setAttentionCoverage({ clientId: selectedClientId, items: new Map() });
+    void loadCaseAttentionPages(getCaseAttention, selectedClientId || undefined).then(items => {
+      if (!cancelled) setAttentionCoverage({ clientId: selectedClientId, items });
+    });
+    return () => { cancelled = true; };
+  }, [selectedClientId]);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [isLoadingCases, setIsLoadingCases] = useState(true);
   const [caseLoadError, setCaseLoadError] = useState<string | null>(null);
@@ -263,11 +269,7 @@ export function CasesList() {
   }, [availableClients, getCoreClientKey, hydrateCoreClient, showOtherClients]);
 
   const deriveWorkPriorityLabel = useCallback((priority?: string) => {
-    if (!priority) return "Közepes";
-    const normalized = priority.toLowerCase();
-    if (normalized.includes("high") || normalized.includes("urgent")) return "Magas";
-    if (normalized.includes("low")) return "Alacsony";
-    return "Közepes";
+    return casePriorityLabel(priority);
   }, []);
 
   const loadCases = useCallback(async (clientIdScope?: string) => {
@@ -314,24 +316,18 @@ export function CasesList() {
   const filteredCases = useMemo(() => {
     const normalizedQuery = clientName.trim().toLowerCase();
     return backendCases.filter((item) => {
-      const status = String(item.status || "").toUpperCase();
-      const scopeMatch =
-        scopeFilter === "ACTIVE"
-          ? !["CLOSED", "ARCHIVED"].includes(status)
-          : scopeFilter === "CLOSED"
-            ? ["CLOSED", "ARCHIVED"].includes(status)
-            : item.assignedLawyer?.id === currentUser?.id && !["CLOSED", "ARCHIVED"].includes(status);
+      const scopeMatch = matchesCaseScope(item, scopeFilter, currentUser?.id);
       const practiceMatch = practiceArea === "all" || item.matterType === practiceArea;
       const clientIdMatch = !selectedClientId || item.clientId === selectedClientId;
       const clientMatch = !normalizedQuery || (item.clientName ?? "").toLowerCase().includes(normalizedQuery);
       const workPriorityMatch = workPriorityFilter === "all" || deriveWorkPriorityLabel(item.priority) === workPriorityFilter;
-      return scopeMatch && practiceMatch && clientIdMatch && clientMatch && workPriorityMatch;
+      return scopeMatch && practiceMatch && clientIdMatch && clientMatch && workPriorityMatch && matchesOperationalFilter(item, attentionForCase(attentionItems, item.id), operationalFilter);
     });
-  }, [backendCases, clientName, currentUser?.id, deriveWorkPriorityLabel, practiceArea, scopeFilter, selectedClientId, workPriorityFilter]);
+  }, [backendCases, clientName, currentUser?.id, deriveWorkPriorityLabel, practiceArea, scopeFilter, selectedClientId, workPriorityFilter, attentionItems, operationalFilter]);
 
   const caseEntrypointStats = useMemo(() => {
     const activeCases = backendCases.filter(
-      (item) => !["CLOSED", "ARCHIVED"].includes(String(item.status || "").toUpperCase()),
+      (item) => matchesCaseScope(item, 'ACTIVE'),
     ).length;
     const assignedCases = backendCases.filter((item) => Boolean(item.assignedLawyer?.name)).length;
     const highAttentionCases = backendCases.filter((item) => deriveWorkPriorityLabel(item.priority) === "Magas").length;
@@ -351,7 +347,7 @@ export function CasesList() {
     <section className="space-y-3">
       <OperationalPageHeader
         title="Ügyek"
-        count={`${filteredCases.length} ügy`}
+        count={`${filteredCases.length} ügy a betöltött ${backendCases.length} közül (legfeljebb 200)`}
         subtitle="Válassz ügyet a következő feladat, dokumentum vagy határidő megnyitásához."
         primaryAction={<AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy</AdminButton>}
       />
@@ -360,8 +356,8 @@ export function CasesList() {
         <div className="flex flex-wrap gap-1">
           {[
             ["ACTIVE", "Aktív", caseEntrypointStats.activeCases],
-            ["MINE", "Rám vár", backendCases.filter((item) => item.assignedLawyer?.id === currentUser?.id && !["CLOSED", "ARCHIVED"].includes(String(item.status || "").toUpperCase())).length],
-            ["CLOSED", "Lezárt", backendCases.filter((item) => ["CLOSED", "ARCHIVED"].includes(String(item.status || "").toUpperCase())).length],
+            ["MINE", "Hozzám rendelve", backendCases.filter((item) => matchesCaseScope(item, 'MINE', currentUser?.id)).length],
+            ["CLOSED", "Lezárt", backendCases.filter((item) => matchesCaseScope(item, 'CLOSED')).length],
           ].map(([value, label, count]) => (
             <button
               key={String(value)}
@@ -417,6 +413,14 @@ export function CasesList() {
             <option value="Alacsony">Alacsony</option>
             <option value="Közepes">Közepes</option>
             <option value="Magas">Magas</option>
+            <option value="Sürgős">Sürgős</option>
+          </select>
+        </label>
+        <label className="text-xs">Teendők
+          <select aria-label="Teendők szűrése" value={operationalFilter} onChange={e => setOperationalFilter(e.target.value)} className="adm-board-field mt-1 block h-9 px-2 text-xs">
+            <option value="all">Mind</option>
+            <option value="attention">Figyelmet igényel</option>
+            <option value="deadline">Határidős</option>
           </select>
         </label>
         <div className="ml-auto flex flex-wrap gap-2">
@@ -428,6 +432,7 @@ export function CasesList() {
               setClientName("");
               setSelectedClientId("");
               setWorkPriorityFilter("all");
+              setOperationalFilter('all');
             }}
           >
             Szűrők törlése
@@ -452,11 +457,16 @@ export function CasesList() {
                 <th className="px-3 py-2.5">Státusz</th>
                 <th className="px-3 py-2.5">Felelős</th>
                 <th className="px-3 py-2.5">Prioritás</th>
-                <th className="px-3 py-2.5 text-right">Következő lépés</th>
+                <th className="px-3 py-2.5">Határidő</th>
+                <th className="px-3 py-2.5">Következő teendő</th>
+                <th className="px-3 py-2.5 text-right">Művelet</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--adm-border)]">
-              {filteredCases.map((item) => (
+              {filteredCases.map((item) => {
+                const attention = attentionForCase(attentionItems, item.id);
+                const deadline = caseDeadline(item);
+                return (
                 <tr key={item.id} className="cursor-pointer hover:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}`)}>
                   <td className={`border-l-[5px] px-3 py-2.5 text-xs font-semibold text-[var(--adm-text)] ${getClientAccentBorderClass(item.clientColorKey)}`}>{item.caseNumber}</td>
                   <td className="px-3 py-2.5">
@@ -466,17 +476,22 @@ export function CasesList() {
                   </td>
                   <td className="max-w-[280px] px-3 py-2.5 text-[13px] text-[#3D4842]"><span className="block truncate">{getCaseDisplayTitle(item)}</span></td>
                   <td className="px-3 py-2.5 text-[12px] text-[#3D4842]">{formatMatterType(item.matterType)}</td>
-                  <td className="px-3 py-2.5"><AdminStatusPill tone={item.status === "OPEN" ? "green" : "neutral"}>{statusLabel[item.status] || item.status}</AdminStatusPill></td>
+                  <td className="px-3 py-2.5"><AdminStatusPill tone="neutral">{caseStatusLabel(item.status)}</AdminStatusPill></td>
                   <td className="px-3 py-2.5 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs felelős"}</td>
-                  <td className="px-3 py-2.5"><AdminBadge tone={deriveWorkPriorityLabel(item.priority) === "Magas" ? "amber" : "neutral"}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
+                  <td className="px-3 py-2.5"><AdminBadge tone={item.priority === 'URGENT' ? 'burgundy' : item.priority === 'HIGH' ? 'amber' : 'neutral'}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
+                  <td className={`px-3 py-2.5 text-xs ${deadline.overdue ? 'font-semibold text-red-700' : ''}`}>{deadline.label}{deadline.overdue ? ' · Lejárt' : ''}</td>
+                  <td className="max-w-[320px] px-3 py-2.5 text-xs">
+                    {attention.state === 'UNKNOWN' ? <span className="block text-[var(--adm-text-muted)]">Nincs figyelem-adat</span> : attention.attention.urgency === 'URGENT' ? <strong className="block text-red-700">Sürgős</strong> : attention.attention.urgency === 'ATTENTION' ? <strong className="block text-amber-800">Figyelmet igényel</strong> : null}
+                    <span>{nextActionLabel(attention)}</span>
+                  </td>
                   <td className="px-3 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <AdminButton size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Ügy megnyitása</AdminButton>
                   </td>
                 </tr>
-              ))}
+              ); })}
               {filteredCases.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-4"><CompactState title="Nincs megjeleníthető ügy." detail="Módosítsd a szűrőket, vagy hozz létre új ügyet." /></td>
+                  <td colSpan={10} className="p-4"><CompactState title="Nincs megjeleníthető ügy." detail="Módosítsd a szűrőket, vagy hozz létre új ügyet." /></td>
                 </tr>
               )}
             </tbody>
