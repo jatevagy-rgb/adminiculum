@@ -45,12 +45,19 @@ Never touch `vikoli-app`.
   2. **Prisma CLI compatibility gate**: compares Prisma package and lockfile dependencies between `CURRENT_BACKEND_SHA` and the target release commit to ensure the existing deployed CLI toolchain can safely deploy the new migration.
   3. **Migration WebJob implementation compatibility gate**: compares `Backend/App_Data/jobs/triggered/adminiculum-db-migrate` between `CURRENT_BACKEND_SHA` and the target release. The migration runner must be unchanged for pre-backend migration; a release modifying the runner requires a separate rollout path.
   4. **Remote migration tree drift guard**: reads `site/wwwroot/prisma/migrations/` from Kudu VFS and verifies no foreign or future migration directories exist that are absent from the target commit. If unexpected directories are detected (e.g. from a prior failed attempt), the workflow halts closed without triggering migrations (automatic directory deletion is disabled to prevent accidental data loss).
-  5. **Targeted migration asset staging & hash verification**: stages only `schema.prisma` and canonical release `migration.sql` files to `site/wwwroot/prisma/` via targeted Kudu VFS. Every staged `migration.sql` and `schema.prisma` file is downloaded and verified by comparing local and remote SHA256 checksums. No runtime code (`dist/`, `node_modules/`, `package.json`, `package-lock.json`, `release-identity.json`, `templates/`, `scripts/`) is touched or activated.
+  5. **Baseline preservation & delta-only migration staging**:
+     - **Historical migrations are immutable**: The current-backend migration baseline (`CURRENT_SET`) is derived from `CURRENT_BACKEND_SHA:Backend/prisma/migrations`. Every baseline migration directory and `migration.sql` file must already exist on remote and match the git baseline SHA256. Baseline migrations are **never rewritten or PUT**.
+     - **Delta staging only**: Only newly introduced migrations (`TARGET_SET - CURRENT_SET`) are staged.
+     - **Retry safety**: If a target-extra migration already exists remotely (e.g. following an earlier failed staging attempt), its remote hash is validated against the release commit first; if identical, PUT is skipped. If content differs, staging stops immediately without overwriting.
+     - `schema.prisma` is staged and hash-verified via download SHA256 comparison. No runtime code (`dist/`, `node_modules/`, `package.json`, `package-lock.json`, `release-identity.json`, `templates/`, `scripts/`) is touched or activated.
   6. The currently serving backend remains active and unmodified throughout staging (`/health/version` equals `CURRENT_BACKEND_SHA`).
   7. The canonical `adminiculum-db-migrate` WebJob is triggered and polled to `Success`.
   8. Backend health is re-verified before proceeding to backend runtime deployment.
 - **Recovery migration contract (`deploy_backend=false && run_migration=true`)**:
-  Because a prior failed staging attempt could leave non-runtime migration assets in `site/wwwroot/prisma/`, recovery migration does not rely only on `/health/version` runtime identity. It explicitly performs asset-identity verification: ensuring the remote migration tree contains no canonical directories absent from `recovery_product_sha`, remote `schema.prisma` SHA256 matches the recovery checkout, and all existing remote `migration.sql` files match the recovery commit before triggering the WebJob.
+  Because a prior failed staging attempt could leave non-runtime migration assets in `site/wwwroot/prisma/`, recovery migration does not rely only on `/health/version` runtime identity. It explicitly requires a **complete and exact canonical migration tree**:
+  - Remote migration tree contains no canonical directories absent from `recovery_product_sha` (no extras).
+  - Every canonical migration in `recovery_product_sha` must exist remotely; any missing file (404) fails closed immediately (never skipped or tolerated).
+  - Remote `schema.prisma` SHA256 and every remote `migration.sql` SHA256 must match the recovery commit exactly before triggering the WebJob.
 
 ## Frontend — Next.js standalone → App Service (Oryx OFF)
 

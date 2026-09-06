@@ -440,4 +440,126 @@ describe('migration-before-backend release order and staging contract', () => {
     const backendDef = workflow.slice(workflow.indexOf('  backend:\n'), workflow.indexOf('  frontend:\n'));
     expect(backendDef).toContain('!inputs.run_migration');
   });
+
+  it('derives CURRENT_SET and TARGET_SET and delta in normal migration mode', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('CURRENT_MIGRATION_SET_DERIVED=YES');
+    expect(stagingStep).toContain('TARGET_MIGRATION_SET_DERIVED=YES');
+    expect(stagingStep).toContain('TARGET_MIGRATION_DELTA_DERIVED=YES');
+    expect(stagingStep).toContain('git ls-tree --name-only "${currentSha}:Backend/prisma/migrations"');
+  });
+
+  it('requires every CURRENT_SET baseline migration to exist remotely', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('REMOTE_BASELINE_COMPLETE=YES');
+    expect(stagingStep).toContain('Baseline migration ${DIR_NAME}/migration.sql missing from remote');
+  });
+
+  it('fails closed when a baseline migration is missing from remote', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toMatch(/if \[ "\$HTTP_CODE" != "200" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
+  });
+
+  it('fails closed when baseline migration content differs from CURRENT_BACKEND_SHA', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toMatch(/if \[ "\$LOCAL_BASELINE_SHA" != "\$REMOTE_BASELINE_SHA" \]; then[\s\S]*echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"[\s\S]*exit 1/);
+    expect(stagingStep).toContain('REMOTE_BASELINE_HASH_VERIFIED=YES');
+  });
+
+  it('never executes PUT for CURRENT_SET historical migrations', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('HISTORICAL_MIGRATIONS_REWRITTEN=NO');
+    const baselineSection = stagingStep.slice(stagingStep.indexOf('Verifying baseline migration assets on remote'), stagingStep.indexOf('HISTORICAL_MIGRATIONS_REWRITTEN=NO'));
+    expect(baselineSection).not.toContain('-X PUT');
+  });
+
+  it('stages only newly introduced release migrations in TARGET_SET - CURRENT_SET', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('TARGET_NEW_MIGRATIONS_ONLY_STAGED=YES');
+    expect(stagingStep).toContain('while IFS= read -r DIR_NAME; do');
+    expect(stagingStep).toContain('done < "$DELTA_SET_FILE"');
+  });
+
+  it('PUTs and hash verifies missing target-extra release migrations', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toMatch(/elif \[ "\$CHECK_CODE" = "404" \]; then[\s\S]*curl -fsS -m 30 -X PUT[\s\S]*REMOTE_MIG_SHA[\s\S]*Staged \${DIR_NAME}\/migration\.sql verified/);
+    expect(stagingStep).toContain('NEWLY_STAGED_SQL_HASH_VERIFIED=YES');
+  });
+
+  it('hash-checks existing target-extra migration and skips PUT when equal', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toMatch(/if \[ "\$CHECK_CODE" = "200" \]; then[\s\S]*if \[ "\$LOCAL_MIG_SHA" = "\$REMOTE_EXISTING_SHA" \]; then[\s\S]*TARGET_EXTRA_EXISTING_IDENTITY=PASS[\s\S]*skipping PUT/);
+    expect(stagingStep).toContain('EXISTING_TARGET_EXTRA_HASH_VERIFIED=YES');
+    expect(stagingStep).toContain('EXISTING_TARGET_EXTRA_OVERWRITTEN=NO');
+  });
+
+  it('fails closed without overwrite if an existing target-extra migration has a different hash', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toMatch(/TARGET_EXTRA_EXISTING_IDENTITY=FAIL[\s\S]*Refusing overwrite\. STOP\.[\s\S]*exit 1/);
+  });
+
+  it('fails closed when a remote canonical migration directory is outside TARGET_SET', () => {
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+    expect(driftStep).toContain('Remote migration directory contains canonical migrations not present in target commit');
+    expect(driftStep).toContain('process.exit(1)');
+  });
+
+  it('fails closed with FAIL and never continues when recovery migration file returns non-200 / 404', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_MISSING_EXPECTED_FILE_FAILS=YES');
+    expect(recoveryGate).toMatch(/if \[ "\$CODE" != "200" \]; then[\s\S]*RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL[\s\S]*exit 1/);
+    expect(recoveryGate).not.toMatch(/elif\s*\[\s*"\$CODE"\s*=\s*"404"\s*\];\s*then[\s\S]*continue/);
+  });
+
+  it('requires complete recovery canonical set to exist remotely', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_EXPECTED_TREE_COMPLETE=YES');
+    expect(recoveryGate).toContain('RECOVERY_MIGRATION_ASSET_IDENTITY=PASS');
+  });
+
+  it('guarantees recovery canonical set has no foreign extras on remote', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_REMOTE_TREE_NO_EXTRAS=YES');
+    const driftStep = stepBlock('Remote migration tree drift guard');
+    expect(driftStep).toContain('REMOTE_MIGRATION_TREE_DRIFT=FAIL');
+  });
+
+  it('requires every recovery migration.sql hash to match checkout', () => {
+    const recoveryGate = stepBlock('Recovery migration asset identity gate');
+    expect(recoveryGate).toContain('RECOVERY_ALL_SQL_HASHES_MATCH=YES');
+    expect(recoveryGate).toMatch(/if \[ "\$LOCAL_HASH" != "\$REMOTE_HASH" \]; then[\s\S]*echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"[\s\S]*exit 1/);
+  });
+
+  it('does not add any automatic DELETE of remote migration directories or files', () => {
+    expect(workflow).not.toMatch(/DELETE[^\n]+site\/wwwroot\/prisma\/migrations/);
+    expect(workflow).not.toMatch(/rm\s+-rf[^\n]+prisma\/migrations/);
+  });
+
+  it('verifies schema.prisma hash after staging', () => {
+    const stagingStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stagingStep).toContain('SCHEMA_HASH_VERIFIED=YES');
+    expect(stagingStep).toContain('LOCAL_SCHEMA_SHA');
+    expect(stagingStep).toContain('REMOTE_SCHEMA_SHA');
+    expect(stagingStep).toMatch(/if \[ "\$LOCAL_SCHEMA_SHA" != "\$REMOTE_SCHEMA_SHA" \]; then/);
+  });
+
+  it('triggers WebJob only after all baseline, delta, and recovery identity gates pass', () => {
+    const driftIndex = workflow.indexOf('Remote migration tree drift guard');
+    const recoveryIndex = workflow.indexOf('Recovery migration asset identity gate');
+    const stagingIndex = workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)');
+    const triggerIndex = workflow.indexOf('Trigger + verify THIS migration WebJob run');
+
+    expect(driftIndex).toBeLessThan(triggerIndex);
+    expect(recoveryIndex).toBeLessThan(triggerIndex);
+    expect(stagingIndex).toBeLessThan(triggerIndex);
+  });
+
+  it('strictly forbids direct SQL, db push, and GitHub-side migrate deploy against production', () => {
+    expect(workflow).not.toContain('prisma db push');
+    expect(workflow).not.toContain('prisma migrate deploy');
+    expect(workflow).not.toContain('${{ secrets.DATABASE_URL }}');
+    expect(workflow).not.toMatch(/DATABASE_URL\s*:/);
+    expect(workflow).not.toMatch(/\bpsql\b/);
+  });
 });
