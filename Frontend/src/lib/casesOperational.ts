@@ -24,9 +24,34 @@ export function matchesOperationalFilter(item: CaseListItem, state: CaseAttentio
 export function nextActionLabel(state: CaseAttentionState) {
   return state.state === 'UNKNOWN' ? 'Teendőadat nem érhető el' : state.attention.nextAction?.label || 'Nincs megjeleníthető következő teendő';
 }
-export function caseDeadline(item: Pick<CaseListItem, 'deadline' | 'status'>, now = Date.now()) {
-  const date = item.deadline ? new Date(item.deadline) : null;
-  return { label: date && Number.isFinite(date.getTime()) ? date.toLocaleDateString() : 'Nincs határidő', overdue: Boolean(date && date.getTime() < now && !isClosedCase(item.status)) };
+export type CaseDeadlineDisplay = {
+  state: 'KNOWN' | 'UNKNOWN';
+  dueAt: Date | null;
+  label: string;
+  sourceLabel?: string;
+  overdue: boolean;
+};
+// The displayed deadline must reflect the exact evidence that satisfies the
+// Határidős filter: Case.deadline first, else the earliest dueAt of a KNOWN
+// attention signal. UNKNOWN coverage never yields an authoritative label.
+export function caseDeadline(item: Pick<CaseListItem, 'deadline' | 'status'>, state: CaseAttentionState, now = Date.now()): CaseDeadlineDisplay {
+  const closed = isClosedCase(item.status);
+  const caseDueAt = item.deadline ? new Date(item.deadline) : null;
+  if (caseDueAt && Number.isFinite(caseDueAt.getTime())) {
+    return { state: 'KNOWN', dueAt: caseDueAt, label: caseDueAt.toLocaleDateString(), sourceLabel: 'Ügyhatáridő', overdue: caseDueAt.getTime() < now && !closed };
+  }
+  if (state.state === 'KNOWN') {
+    const earliest = state.attention.signals
+      .filter((signal) => Boolean(signal.dueAt))
+      .map((signal) => ({ dueAt: new Date(String(signal.dueAt)), sourceLabel: signal.label }))
+      .filter((entry) => Number.isFinite(entry.dueAt.getTime()))
+      .sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime())[0];
+    if (earliest) {
+      return { state: 'KNOWN', dueAt: earliest.dueAt, label: earliest.dueAt.toLocaleDateString(), sourceLabel: earliest.sourceLabel || undefined, overdue: earliest.dueAt.getTime() < now && !closed };
+    }
+    return { state: 'KNOWN', dueAt: null, label: 'Nincs megjeleníthető határidő', overdue: false };
+  }
+  return { state: 'UNKNOWN', dueAt: null, label: 'Határidőadat nem érhető el', overdue: false };
 }
 
 // Coverage is bounded, not a portfolio-wide completeness claim. Preserve successful

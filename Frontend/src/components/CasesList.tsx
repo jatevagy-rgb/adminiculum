@@ -465,7 +465,7 @@ export function CasesList() {
             <tbody className="divide-y divide-[var(--adm-border)]">
               {filteredCases.map((item) => {
                 const attention = attentionForCase(attentionItems, item.id);
-                const deadline = caseDeadline(item);
+                const deadline = caseDeadline(item, attention);
                 return (
                 <tr key={item.id} className="cursor-pointer hover:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}`)}>
                   <td className={`border-l-[5px] px-3 py-2.5 text-xs font-semibold text-[var(--adm-text)] ${getClientAccentBorderClass(item.clientColorKey)}`}>{item.caseNumber}</td>
@@ -479,7 +479,10 @@ export function CasesList() {
                   <td className="px-3 py-2.5"><AdminStatusPill tone="neutral">{caseStatusLabel(item.status)}</AdminStatusPill></td>
                   <td className="px-3 py-2.5 text-xs text-[#3D4842]">{item.assignedLawyer?.name || "Nincs felelős"}</td>
                   <td className="px-3 py-2.5"><AdminBadge tone={item.priority === 'URGENT' ? 'burgundy' : item.priority === 'HIGH' ? 'amber' : 'neutral'}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
-                  <td className={`px-3 py-2.5 text-xs ${deadline.overdue ? 'font-semibold text-red-700' : ''}`}>{deadline.label}{deadline.overdue ? ' · Lejárt' : ''}</td>
+                  <td className={`px-3 py-2.5 text-xs ${deadline.overdue ? 'font-semibold text-red-700' : deadline.dueAt ? '' : 'text-[var(--adm-text-muted)]'}`}>
+                    {deadline.label}{deadline.overdue ? ' · Lejárt' : ''}
+                    {deadline.sourceLabel ? <span className="block text-[10px] text-[var(--adm-text-muted)]">{deadline.sourceLabel}</span> : null}
+                  </td>
                   <td className="max-w-[320px] px-3 py-2.5 text-xs">
                     {attention.state === 'UNKNOWN' ? <span className="block text-[var(--adm-text-muted)]">Nincs figyelem-adat</span> : attention.attention.urgency === 'URGENT' ? <strong className="block text-red-700">Sürgős</strong> : attention.attention.urgency === 'ATTENTION' ? <strong className="block text-amber-800">Figyelmet igényel</strong> : null}
                     <span>{nextActionLabel(attention)}</span>
