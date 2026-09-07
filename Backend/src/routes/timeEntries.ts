@@ -52,18 +52,19 @@ export function buildTimeEntryListWhere(query: Record<string, unknown>, requeste
 }
 
 export function resolveTimeEntryAttribution(entry: any): { attributionKind: 'EXACT_CASE' | 'TASK_DERIVED_CASE' | 'MATTER_ONLY' | 'AMBIGUOUS'; resolvedCaseId: string | null } {
-  if (entry.caseId) return { attributionKind: 'EXACT_CASE', resolvedCaseId: entry.caseId };
   const matterCaseIds = (entry.matter?.cases || []).map((item: any) => item.id);
-  if (!entry.matterId || matterCaseIds.length === 0) return { attributionKind: 'MATTER_ONLY', resolvedCaseId: null };
   if (entry.task) {
+    const targetCaseId = entry.caseId || entry.task.caseId;
     const kind = classifyTimeAttribution({
-      caseId: entry.task.caseId,
+      caseId: targetCaseId,
       matterId: entry.matterId,
       matterCaseIds,
       task: { caseId: entry.task.caseId, matterId: entry.task.matterId, workPackageCaseId: entry.task.workPackageItem?.caseWorkPackage?.caseId || null },
     });
-    return { attributionKind: kind, resolvedCaseId: kind === 'TASK_DERIVED_CASE' ? entry.task.caseId : null };
+    return { attributionKind: kind, resolvedCaseId: kind === 'TASK_DERIVED_CASE' ? targetCaseId : null };
   }
+  if (entry.caseId) return { attributionKind: 'EXACT_CASE', resolvedCaseId: entry.caseId };
+  if (!entry.matterId || matterCaseIds.length === 0) return { attributionKind: 'MATTER_ONLY', resolvedCaseId: null };
   const candidateCaseId = matterCaseIds[0];
   const kind = classifyTimeAttribution({ caseId: candidateCaseId, matterId: entry.matterId, matterCaseIds, task: null });
   return { attributionKind: kind, resolvedCaseId: kind === 'EXACT_CASE' ? candidateCaseId : null };
