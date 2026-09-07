@@ -338,6 +338,13 @@ function ClientDetailContent() {
               </div>
 
               <div className="mt-3 space-y-2">
+                <Link
+                  href={`/time-entries?clientId=${encodeURIComponent(clientId)}`}
+                  className="adm-link-button block w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
+                >
+                  <span>Munkaórák</span>
+                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                </Link>
                 <button
                   onClick={openEditClient}
                   className="adm-link-button w-full px-3 py-2 text-left text-xs flex items-center justify-between group"

@@ -12,6 +12,7 @@ import { requireWorkforceUser } from '../middleware/workforceAuthorization';
 import { parseCanonicalStringId } from '../modules/tasks/canonicalStringId';
 import { canUserActOnTask } from '../modules/tasks/taskAuthorization';
 import { resolveTaskTimeAttribution, TaskTimeAttributionError } from '../modules/time-attribution/service';
+import { classifyTimeAttribution } from '../modules/time-attribution/attribution';
 import { prisma } from '../prisma/prisma.service';
 
 const router = Router();
@@ -31,7 +32,7 @@ function getAuthenticatedUserId(req: Request): string | null {
 
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
-    const { matterId, userId, workType, startDate, endDate } = req.query;
+    const { matterId, userId, workType, startDate, endDate, clientId, caseId, departmentId } = req.query;
     const requesterId = getAuthenticatedUserId(req);
     if (!requesterId) {
       return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
@@ -44,8 +45,13 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     const where: any = {};
 
     if (matterId) where.matterId = matterId;
+    const scopeConditions: any[] = [];
+    if (clientId) scopeConditions.push({ OR: [{ case: { clientId: String(clientId) } }, { matter: { clientId: String(clientId) } }, { task: { case: { clientId: String(clientId) } } }] });
+    if (caseId) scopeConditions.push({ OR: [{ caseId: String(caseId) }, { task: { caseId: String(caseId) } }, { matter: { cases: { some: { id: String(caseId) } } } }] });
+    if (scopeConditions.length) where.AND = scopeConditions;
     where.userId = userId ? String(userId) : requesterId;
     if (workType) where.workType = workType;
+    if (departmentId) where.departmentId = String(departmentId);
     
     if (startDate || endDate) {
       where.workDate = {};
@@ -84,6 +90,12 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
             },
             department: {
               select: { id: true, name: true }
+            },
+            case: {
+              select: { id: true, caseNumber: true, title: true, clientId: true }
+            },
+            task: {
+              select: { id: true, title: true, status: true, caseId: true, matterId: true, workPackageItem: { select: { caseWorkPackage: { select: { caseId: true } } } } }
             }
           },
           orderBy: { workDate: 'desc' }
@@ -109,6 +121,12 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
           },
           department: {
             select: { id: true, name: true }
+          },
+          case: {
+            select: { id: true, caseNumber: true, title: true, clientId: true }
+          },
+          task: {
+            select: { id: true, title: true, status: true, caseId: true, matterId: true }
           }
         },
         orderBy: { workDate: 'desc' }
@@ -139,7 +157,25 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
       }));
     }
 
-    res.json(entries);
+    if (caseId) {
+      const requestedCaseId = String(caseId);
+      const caseRecord = await prisma.case.findUnique({ where: { id: requestedCaseId }, select: { id: true, matterId: true } });
+      const matterCaseIds = caseRecord?.matterId ? (await prisma.case.findMany({ where: { matterId: caseRecord.matterId }, select: { id: true } })).map((row) => row.id) : [];
+      entries = entries.filter((entry: any) => {
+        if (entry.caseId === requestedCaseId) return true;
+        if (!caseRecord?.matterId || entry.matterId !== caseRecord.matterId) return false;
+        const kind = classifyTimeAttribution({ caseId: requestedCaseId, matterId: caseRecord.matterId, matterCaseIds, task: entry.task ? { caseId: entry.task.caseId, matterId: entry.task.matterId, workPackageCaseId: entry.task.workPackageItem?.caseWorkPackage?.caseId || null } : null });
+        return kind === 'EXACT_CASE' || kind === 'TASK_DERIVED_CASE';
+      });
+    }
+    const response = await Promise.all(entries.map(async (entry: any) => {
+      if (entry.task) return { ...entry, attributionKind: 'TASK_DERIVED_CASE', resolvedCaseId: entry.task.caseId };
+      if (entry.caseId) return { ...entry, attributionKind: 'EXACT_CASE', resolvedCaseId: entry.caseId };
+      if (!entry.matterId) return { ...entry, attributionKind: 'MATTER_ONLY', resolvedCaseId: null };
+      const siblingCases = await prisma.case.findMany({ where: { matterId: entry.matterId }, select: { id: true } });
+      return { ...entry, attributionKind: siblingCases.length > 1 ? 'AMBIGUOUS' : 'MATTER_ONLY', resolvedCaseId: siblingCases.length === 1 ? siblingCases[0].id : null };
+    }));
+    res.json(response);
   } catch (error) {
     console.error('Error fetching time entries:', error);
     res.status(500).json({ error: 'Failed to fetch time entries' });
