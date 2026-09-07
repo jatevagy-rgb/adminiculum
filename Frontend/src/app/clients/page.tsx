@@ -137,13 +137,10 @@ function ClientsPageContent() {
 
   const renderClientCard = (client: Client) => {
     const profile = client.houseStyleProfile;
-    const fillStatus = houseStyleFillStatus(profile);
-    const hasHeader = Boolean(profile?.headerAssetPath);
     const color = getClientColorDefinition(client.colorKey);
 
     return (
-      <AdminPanel key={client.id} className={`adm-board-list-row relative overflow-hidden p-4 pl-6 ${color.softBackgroundClass} ${color.borderClass}`}>
-        <span aria-hidden="true" className={`absolute inset-y-0 left-0 w-1.5 ${color.accentClass}`} />
+      <AdminPanel key={client.id} className={`adm-board-list-row relative overflow-hidden border-2 p-4 ${color.softBackgroundClass} ${color.borderClass}`}>
         <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -152,31 +149,17 @@ function ClientsPageContent() {
               <span className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{color.label}</span>
             </div>
             {profile?.shortName ? <p className="mt-1 text-sm text-[#3D4842]">Rövid név: <b>{profile.shortName}</b></p> : null}
-            <div className="mt-3 grid gap-2 text-xs text-[#3D4842] sm:grid-cols-2">
-              {[
-                ["Székhely", profile?.registeredSeat || client.address || "Nincs megadva"],
-                ["Adószám", profile?.taxNumber || client.taxNumber || "Nincs megadva"],
-                ["Nyilvántartás", profile?.registrationNumber || client.companyRegistrationNumber || "Nincs megadva"],
-                ["Kapcsolattartó", profile?.contactPerson || client.contactPerson || client.authorizedRepresentative || "Nincs megadva"],
-              ].map(([label, value]) => (
-                <p key={label} className="rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-white/80 px-3 py-2">
-                  <span className="block text-[9px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">{label}</span>
-                  <b className="mt-1 block font-semibold text-[var(--adm-text)]">{value}</b>
-                </p>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <AdminStatusPill tone={fillStatus === "filled" ? "green" : fillStatus === "partial" ? "gold" : "neutral"}>
-                {fillStatus === "filled" ? "House style kitöltve" : fillStatus === "partial" ? "House style részleges" : "Nincs house style profil"}
-              </AdminStatusPill>
-              <AdminStatusPill tone={hasHeader ? "green" : "neutral"}>Fejlécminta: {hasHeader ? "Van" : "Nincs"}</AdminStatusPill>
-            </div>
           </div>
-          <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-[rgba(22,32,26,0.10)] pt-3 sm:grid-cols-4">
+          <div className="flex flex-wrap items-center gap-2 border-t border-[rgba(22,32,26,0.10)] pt-3">
             <Link href={`/clients/${client.id}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#173824] bg-[var(--adm-green-800)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#173824]">Ügyfél dosszié</Link>
-            <Link href={`/clients/${client.id}#house-style`} className="inline-flex items-center justify-center rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">House style</Link>
             <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex items-center justify-center rounded-[5px] border border-[#8E6A1B] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">+ Új ügy</Link>
-            <AdminButton size="sm" variant="neutral" onClick={() => handleEdit(client)}>Szerkesztés</AdminButton>
+            <details className="relative ml-auto">
+              <summary className="cursor-pointer list-none rounded-[5px] border border-[rgba(22,32,26,0.20)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-ochre-500)]">További műveletek</summary>
+              <div className="absolute right-0 z-10 mt-2 grid min-w-40 gap-1 rounded-[6px] border border-[rgba(22,32,26,0.15)] bg-white p-1.5 shadow-lg">
+                <Link href={`/clients/${client.id}#house-style`} className="rounded-[4px] px-3 py-2 text-left text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">House style</Link>
+                <AdminButton size="sm" variant="ghost" className="justify-start" onClick={() => handleEdit(client)}>Szerkesztés</AdminButton>
+              </div>
+            </details>
           </div>
         </div>
       </AdminPanel>
