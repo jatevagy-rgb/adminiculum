@@ -195,3 +195,62 @@ test("Requirement 15: HandoffPackagePanel compact mode styling support", () => {
   const handoffSrc = handoffPanel();
   assert.match(handoffSrc, /compact\?: boolean/);
 });
+
+test("Requirement 16: Keep-alive visited tabs in canonical right shell preserve unsaved editor state across tab switches", () => {
+  const source = documentPage();
+  const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
+  assert.ok(shellMatch, "Right shell must exist");
+  const shell = shellMatch[0];
+
+  // Visited tabs tracking initialized with review only
+  assert.match(source, /visitedContextualTabs,\s*setVisitedContextualTabs\]\s*=\s*useState<Record<string,\s*boolean>>\(\{\s*review:\s*true\s*\}\)/);
+  // Visited tabs updated on tab switch
+  assert.match(source, /setVisitedContextualTabs\(\(prev\)\s*=>\s*\(prev\[contextualTab\]\s*\?\s*prev\s*:\s*\{\s*\.\.\.prev,\s*\[contextualTab\]:\s*true\s*\}\)\)/);
+  // Tab panels are kept mounted using 'hidden' class once visited
+  assert.match(shell, /className=\{contextualTab === 'review' \? 'space-y-4' : 'hidden'\}/);
+  assert.match(shell, /visitedContextualTabs\['elemzes'\]/);
+  assert.match(shell, /className=\{contextualTab === 'elemzes' \? 'space-y-4' : 'hidden'\}/);
+  assert.match(shell, /visitedContextualTabs\['ugyfel'\]/);
+  assert.match(shell, /className=\{contextualTab === 'ugyfel' \? 'space-y-4' : 'hidden'\}/);
+  assert.match(shell, /visitedContextualTabs\['leadas'\]/);
+  assert.match(shell, /className=\{contextualTab === 'leadas' \? 'space-y-4' : 'hidden'\}/);
+
+  // Document switch resets visited tabs and clears annotation draft
+  assert.match(source, /setVisitedContextualTabs\(\{\s*\[contextualTab\]:\s*true\s*\}\)/);
+  assert.match(source, /resetAnnotationDraft\(\)/);
+});
+
+test("Requirement 17: Text selection anchor supports both canonical reader and detailed review surface", () => {
+  const source = documentPage();
+
+  // Ref defined for detailed annotation surface
+  assert.match(source, /detailedAnnotationSurfaceRef\s*=\s*useRef<HTMLDivElement\s*\|\s*null>\(null\)/);
+  // Detailed surface div attaches ref
+  assert.match(source, /<div[\s\S]*?ref=\{detailedAnnotationSurfaceRef\}[\s\S]*?onMouseUp=\{annotationCapabilities\.canCreateTextRange \? handleTextSelectionAnchor : undefined\}/);
+
+  // handleTextSelectionAnchor verifies containment in currentTarget, canonical reader, or detailed surface
+  assert.match(source, /handleTextSelectionAnchor\s*=\s*\(event\?: React\.MouseEvent<HTMLElement>\)\s*=>/);
+  assert.match(source, /currentTarget\?\.contains\(anchorNode\)/);
+  assert.match(source, /annotationSurfaceRef\.current\?\.contains\(anchorNode\)/);
+  assert.match(source, /detailedAnnotationSurfaceRef\.current\?\.contains\(anchorNode\)/);
+});
+
+test("Requirement 18: Canonical composer displays client-explanation draft field with NotPublishedBadge for CLIENT_EXPLANATION_DRAFT", () => {
+  const source = documentPage();
+  const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
+  assert.ok(shellMatch, "Right shell must exist");
+  const shell = shellMatch[0];
+
+  // Canonical composer checks isClientExplanationDraft
+  assert.match(shell, /isClientExplanationDraft\(annotationDraft\.annotationType\)/);
+  assert.match(shell, /id="canonical-ann-client-draft"/);
+  assert.match(shell, /Ügyfélnek szánt magyarázat/);
+  assert.match(shell, /<NotPublishedBadge \/>/);
+  assert.match(shell, /value=\{annotationDraft\.clientExplanationDraft\}/);
+  assert.match(shell, /onChange=\{\(event\)\s*=>\s*setAnnotationDraft\(\(draft\)\s*=>\s*\(\{\s*\.\.\.draft,\s*clientExplanationDraft:\s*event\.target\.value\s*\}\)\)\}/);
+
+  // In-shell annotation list and detail badges
+  assert.match(shell, /isClientExplanationDraft\(annotation\.annotationType\)\s*\?\s*<NotPublishedBadge \/>/);
+  assert.match(shell, /isClientExplanationDraft\(selectedAnnotation\.annotationType\)\s*\?\s*<NotPublishedBadge \/>/);
+  assert.match(shell, /selectedAnnotation\.clientExplanationDraft/);
+});
