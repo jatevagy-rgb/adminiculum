@@ -51,6 +51,61 @@ test("Document Workspace surfaces existing Legal Analysis only for a real versio
   assert.match(panel, /data-testid="legal-analysis-intake"/);
 });
 
+test("Current TXT versions keep the version-specific blob text path (A)", () => {
+  const source = documentPage();
+  assert.match(source, /versionTextPlan === 'VERSION_BLOB'/);
+  assert.match(source, /downloadDocumentVersion\(selectedVersionDocumentId, selectedVersionStableId\)/);
+  assert.match(source, /\.then\(\(blob\) => blob\.text\(\)\)/);
+  assert.match(source, /setVersionText\(text\)/);
+  // Annotation capability is still derived from the TXT renderer only.
+  assert.match(source, /textRendered: canRenderTextVersion/);
+  assert.match(source, /canRenderTextVersion = selectedVersionFileType === 'TXT'/);
+});
+
+test("Current non-TXT versions load read-only preview via getDocumentText (B + C)", () => {
+  const source = documentPage();
+  assert.match(source, /getDocumentText\(selectedUploadedDocument\.id\)/);
+  assert.match(source, /versionTextPlan === 'DOCUMENT_TEXT'/);
+  assert.match(source, /versionIsCurrent: Boolean\(selectedVersion\?\.isCurrent\)/);
+  assert.match(source, /versionBelongsToSelectedDocument: annotationVersionEligible/);
+  assert.match(source, /documentIsUploaded: Boolean\(\s*selectedUploadedDocument && selectedUploadedDocument\.documentType !== 'MODIFIED_WORKING_COPY',?\s*\)/);
+  assert.match(source, /setDocumentTextPreview\(result\.text\)/);
+  assert.match(source, /data-testid="version-preview-document-text"/);
+  // Truthful states: endpoint-provided reason is shown; request failure is neutral.
+  assert.match(source, /documentTextUnavailableReason \|\| 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg\.'/);
+  assert.match(source, /A kinyert szöveg betöltése nem sikerült/);
+  assert.doesNotMatch(source, /Nincs elérhető szöveg/);
+});
+
+test("Document-level extracted text never becomes a version-scoped anchor source (D + E)", () => {
+  const source = documentPage();
+  // The DOCUMENT_TEXT branch must not touch versionText — anchors, offsets,
+  // contentFingerprint and rendererVersion all derive from versionText only.
+  const documentTextBranch = source.split("versionTextPlan === 'DOCUMENT_TEXT'")[1];
+  assert.ok(documentTextBranch, 'DOCUMENT_TEXT branch exists');
+  const section = documentTextBranch.slice(0, documentTextBranch.indexOf('return () =>'));
+  assert.doesNotMatch(section, /setVersionText|pendingTextAnchor|contentFingerprint|rendererVersion/);
+  // resolveAnnotationCapabilities input is unchanged: textRendered is still
+  // bound to the TXT renderer flag, not to any document-level text state.
+  const capsCall = source.match(/resolveAnnotationCapabilities\(\{[\s\S]*?\}\)/);
+  assert.ok(capsCall);
+  assert.doesNotMatch(capsCall[0], /documentText|DocumentText/);
+});
+
+test("Version/document switch synchronously clears both text channels (F)", () => {
+  const source = documentPage();
+  // All preview state resets happen at the top of the same effect body, before
+  // any async fetch is issued — stale text can never flash or feed an anchor.
+  assert.match(
+    source,
+    /setVersionText\(null\);\s*setVersionTextUnavailable\(false\);\s*setDocumentTextPreview\(null\);\s*setDocumentTextUnavailableReason\(null\);\s*setDocumentTextFailed\(false\);/,
+  );
+  // Async results are cancellation-guarded on selection change.
+  assert.match(source, /if \(cancelled\) return;\s*if \(result\.text/);
+  assert.match(source, /setDocumentTextPreview\(result\.text\)/);
+  assert.match(source, /if \(!cancelled\) setIsLoadingDocumentText\(false\)/);
+});
+
 test("Client context only enters a real client-scoped case document workspace", () => {
   const source = clientPage();
   assert.match(source, /getCases\(1, 100, undefined, clientId\)/);
