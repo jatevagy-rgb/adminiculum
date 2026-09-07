@@ -376,6 +376,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     pageIndex: number;
   } | null>(null);
   const [visualMode, setVisualMode] = useState<Extract<DocumentAnnotationAnchorType, 'PAGE_RECTANGLE' | 'PAGE_ELLIPSE' | 'PAGE_POINT'> | null>(null);
+  const [contextualTab, setContextualTab] = useState<'review' | 'elemzes' | 'ugyfel' | 'leadas'>('review');
   const [annotationDraft, setAnnotationDraft] = useState({
     annotationType: 'INTERNAL_NOTE' as DocumentAnnotationType,
     headline: '',
@@ -1544,92 +1545,416 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             {isInitialLoading ? (
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
-              <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
-                <aside className="min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white">
-                  <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
-                    <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Workspace elemek</h2>
+              <div className="space-y-6">
+                {/* 1. CANONICAL TOP REGION */}
+                <section data-testid="canonical-top-region" className="adm-board-panel overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4 shadow-sm">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">
+                          Kanonikus dokumentum felület
+                        </span>
+                        <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
+                        {selectedVersion ? (
+                          <AdminBadge tone={selectedVersion.isCurrent ? "green" : "neutral"}>
+                            v{selectedVersion.versionNumber} {selectedVersion.isCurrent ? "(Aktuális)" : ""}
+                          </AdminBadge>
+                        ) : null}
+                        <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
+                        {selectedVersion?.securityScanStatus ? (
+                          <AdminBadge tone={selectedVersion.securityScanStatus === "CLEAN" ? "green" : "gold"}>
+                            {scanStatusLabel(selectedVersion.securityScanStatus)}
+                          </AdminBadge>
+                        ) : selectedUploadedDocument?.securityScanStatus ? (
+                          <AdminBadge tone={selectedUploadedDocument.securityScanStatus === "CLEAN" ? "green" : "gold"}>
+                            {scanStatusLabel(selectedUploadedDocument.securityScanStatus)}
+                          </AdminBadge>
+                        ) : null}
+                      </div>
+                      <h2 className="mt-1.5 truncate font-serif text-[22px] font-semibold text-[var(--adm-text)]">
+                        {activeTitle || "Nincs még workspace dokumentum"}
+                      </h2>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#3D4842]">
+                        {selectedVersion?.uploadedBy ? (
+                          <span><b>Feltöltő:</b> {selectedVersion.uploadedBy.name}</span>
+                        ) : null}
+                        {selectedVersion?.uploadedAt ? (
+                          <span><b>Feltöltve:</b> {formatDateTime(selectedVersion.uploadedAt)}</span>
+                        ) : null}
+                        {selectedVersion?.reviewStatus ? (
+                          <span><b>Review státusz:</b> {selectedVersion.reviewStatus}</span>
+                        ) : null}
+                        <span><b>Szerkesztő:</b> Microsoft Word (asztali)</span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedUploadedDocument ? (
+                        <AdminButton
+                          variant="neutral"
+                          onClick={() => handleDownloadUploadedDocument(selectedUploadedDocument)}
+                          disabled={isDownloading === selectedUploadedDocument.id || (selectedUploadedDocument.securityScanStatus && selectedUploadedDocument.securityScanStatus !== 'CLEAN')}
+                        >
+                          {isDownloading === selectedUploadedDocument.id ? "Letöltés..." : "Dokumentum letöltése"}
+                        </AdminButton>
+                      ) : selectedGeneratedContract ? (
+                        <AdminButton
+                          variant="neutral"
+                          onClick={() => handleDownload(selectedGeneratedContract)}
+                          disabled={isDownloading === selectedGeneratedContract.id}
+                        >
+                          {isDownloading === selectedGeneratedContract.id ? "Letöltés..." : "Szerződés letöltése"}
+                        </AdminButton>
+                      ) : null}
+                      {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
+                        <AdminButton
+                          variant="gold"
+                          onClick={() => versionFileInputRef.current?.click()}
+                          disabled={isUploadingVersion || isLoadingVersions}
+                        >
+                          {isUploadingVersion ? 'Feltöltés...' : 'Új verzió feltöltése'}
+                        </AdminButton>
+                      ) : null}
+                      <AdminButton
+                        variant="neutral"
+                        onClick={() => {
+                          const el = document.getElementById('preserved-extended-tools');
+                          if (el) el.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                      >
+                        Eszközök ↓
+                      </AdminButton>
+                    </div>
                   </div>
-                  <div className="max-h-[680px] space-y-4 overflow-y-auto p-3">
-                    <section className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Feltöltött dokumentumok</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{uploadedDocuments.length}</span>
-                      </div>
-                      {uploadedDocuments.length === 0 ? (
-                        <p className="adm-board-empty p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs feltöltött dokumentum.</p>
-                      ) : uploadedDocuments.map((doc) => {
-                        const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
-                        return (
-                          <AdminDocumentRow
-                            key={doc.id}
-                            title={doc.fileName || "Névtelen dokumentum"}
-                            meta={`${getDocumentKindLabel(doc.fileName)} · ${formatShortDate(doc.createdAt)}`}
-                            fileType={getFileType(doc.fileName)}
-                            active={isSelected}
-                            variant="upload"
-                            onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                            status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : scanStatusLabel(doc.securityScanStatus)}</AdminBadge>}
-                          />
-                        );
-                      })}
-                    </section>
+                </section>
 
-                    <section className={modifiedWorkingCopies.length === 0 ? "hidden" : "space-y-2"}>
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Módosított munkapéldányok</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{modifiedWorkingCopyCount}</span>
-                      </div>
-                      {modifiedWorkingCopies.map((doc) => {
-                        const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
-                        return (
-                          <AdminDocumentRow
-                            key={doc.id}
-                            title={doc.fileName || "Névtelen dokumentum"}
-                            meta="Szöveges munkapéldány, nem Word változáskövetés"
-                            active={isSelected}
-                            variant="generated"
-                            onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
-                            status={<AdminBadge tone={isSelected ? "gold" : "green"}>{isSelected ? "Aktív" : "Munkapéldány"}</AdminBadge>}
-                          />
-                        );
-                      })}
-                    </section>
+                {/* 2. CANONICAL 3-COLUMN WORKSPACE: LEFT (LEDGER) | CENTER (READING) | RIGHT (CONTEXTUAL SHELL) */}
+                <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]">
+                  {/* CANONICAL LEFT REGION: Document Ledger */}
+                  <aside data-testid="canonical-left-ledger" className="min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col">
+                    <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
+                      <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Workspace elemek</h2>
+                    </div>
+                    <div className="max-h-[680px] space-y-4 overflow-y-auto p-3">
+                      <section className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Feltöltött dokumentumok</h3>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{uploadedDocuments.length}</span>
+                        </div>
+                        {uploadedDocuments.length === 0 ? (
+                          <p className="adm-board-empty p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs feltöltött dokumentum.</p>
+                        ) : uploadedDocuments.map((doc) => {
+                          const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
+                          return (
+                            <AdminDocumentRow
+                              key={doc.id}
+                              title={doc.fileName || "Névtelen dokumentum"}
+                              meta={`${getDocumentKindLabel(doc.fileName)} · ${formatShortDate(doc.createdAt)}`}
+                              fileType={getFileType(doc.fileName)}
+                              active={isSelected}
+                              variant="upload"
+                              onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
+                              status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : scanStatusLabel(doc.securityScanStatus)}</AdminBadge>}
+                            />
+                          );
+                        })}
+                      </section>
 
-                    <section className={generatedLedgerItems.length === 0 ? "hidden" : "space-y-2"}>
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Generált / módosított</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{generatedDocumentCount}</span>
-                      </div>
-                      {generatedLedgerItems.map((contract) => {
-                        const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
-                        return (
-                          <AdminDocumentRow
-                            key={contract.id}
-                            title={contract.title || contract.fileName || contract.templateName || "Névtelen dokumentum"}
-                            meta={contract.revisionNumber ? `v${contract.revisionNumber}` : "v1"}
-                            fileType="DOCX"
-                            active={isSelected}
-                            variant="generated"
-                            onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
-                            status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : getContractStatusLabel(contract)}</AdminBadge>}
-                          />
-                        );
-                      })}
-                    </section>
+                      <section className={modifiedWorkingCopies.length === 0 ? "hidden" : "space-y-2"}>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Módosított munkapéldányok</h3>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{modifiedWorkingCopyCount}</span>
+                        </div>
+                        {modifiedWorkingCopies.map((doc) => {
+                          const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
+                          return (
+                            <AdminDocumentRow
+                              key={doc.id}
+                              title={doc.fileName || "Névtelen dokumentum"}
+                              meta="Szöveges munkapéldány, nem Word változáskövetés"
+                              active={isSelected}
+                              variant="generated"
+                              onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
+                              status={<AdminBadge tone={isSelected ? "gold" : "green"}>{isSelected ? "Aktív" : "Munkapéldány"}</AdminBadge>}
+                            />
+                          );
+                        })}
+                      </section>
 
-                    <section className="hidden space-y-2 border-t border-[rgba(22,32,26,0.12)] pt-3">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadási csomagok</h3>
-                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{handoffPackageCountLabel}</span>
+                      <section className={generatedLedgerItems.length === 0 ? "hidden" : "space-y-2"}>
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Generált / módosított</h3>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{generatedDocumentCount}</span>
+                        </div>
+                        {generatedLedgerItems.map((contract) => {
+                          const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
+                          return (
+                            <AdminDocumentRow
+                              key={contract.id}
+                              title={contract.title || contract.fileName || contract.templateName || "Névtelen dokumentum"}
+                              meta={contract.revisionNumber ? `v${contract.revisionNumber}` : "v1"}
+                              fileType="DOCX"
+                              active={isSelected}
+                              variant="generated"
+                              onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
+                              status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : getContractStatusLabel(contract)}</AdminBadge>}
+                            />
+                          );
+                        })}
+                      </section>
+                    </div>
+                  </aside>
+
+                  {/* CANONICAL CENTER REGION: Read-Only Document Reading Surface */}
+                  <main data-testid="canonical-center-reading" className="adm-board-panel min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">
+                          Kanonikus olvasófelület
+                        </span>
+                        <span className="rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-[#3D4842] border border-[rgba(22,32,26,0.10)]">
+                          Read-only előnézet · Word a szerkesztő
+                        </span>
                       </div>
-                      <p className="adm-board-empty p-3 text-[12px] text-[var(--adm-text-muted)]">
-                        A leadási csomagok a jobb oldali ügyvédi csomag panelen kezelhetők.
+                      <div className="flex items-center gap-2">
+                        <AdminBadge tone="neutral">{selectedVersionFileType || "Dokumentum"}</AdminBadge>
+                        {selectedVersion ? <AdminBadge tone={selectedVersion.isCurrent ? "gold" : "neutral"}>v{selectedVersion.versionNumber}</AdminBadge> : null}
+                      </div>
+                    </div>
+
+                    <div className="min-h-[460px] flex-1">
+                      {!activeDocument ? (
+                        <div className="adm-board-empty flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                          <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">Nincs kiválasztott dokumentum</h3>
+                          <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Tölts fel egy dokumentumot, vagy válassz az iratlistából a bal oldali panelen.</p>
+                        </div>
+                      ) : (
+                        <div>
+                          {canRenderTextVersion ? (
+                            versionTextUnavailable && !isLoadingVersionText ? (
+                              <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
+                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
+                              </div>
+                            ) : (
+                              <div className="max-h-[680px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
+                                {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
+                              </div>
+                            )
+                          ) : versionTextPlan === 'DOCUMENT_TEXT' ? (
+                            isLoadingDocumentText ? (
+                              <div className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be read-only előnézetként.</p>
+                              </div>
+                            ) : documentTextPreview ? (
+                              <div data-testid="version-preview-document-text" className="max-h-[680px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
+                                {documentTextPreview}
+                              </div>
+                            ) : documentTextFailed ? (
+                              <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
+                              </div>
+                            ) : (
+                              <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg nem érhető el</h5>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{documentTextUnavailableReason || 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg.'}</p>
+                              </div>
+                            )
+                          ) : (
+                            <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType || "Dokumentum"} előnézet</p>
+                              <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Stabil szövegkijelölés még nincs ehhez a formátumhoz</h5>
+                              <p className="mt-2 max-w-lg text-sm text-[#3D4842]">
+                                A megváltoztathatatlan verzió tartalma letöltéssel és Microsoft Wordben érhető el teljes pontossággal. A korábbi nem-szöveges verziókhoz a rendszer szándékosan nem helyettesíti az aktuális szöveget.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </main>
+
+                  {/* CANONICAL RIGHT REGION: Contextual Work-Panel Shell */}
+                  <aside data-testid="canonical-right-shell" className="min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col">
+                    <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">
+                          Kontextus panel
+                        </span>
+                        <span className="text-[11px] text-[var(--adm-text-muted)]">Munkafelületek</span>
+                      </div>
+                      <div className="mt-2 grid grid-cols-4 gap-1 rounded-[8px] bg-white/80 p-1 text-[11px] font-semibold">
+                        <button
+                          type="button"
+                          onClick={() => setContextualTab('review')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'review' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                        >
+                          Review
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setContextualTab('elemzes')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'elemzes' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                        >
+                          Elemzés
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setContextualTab('ugyfel')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'ugyfel' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                        >
+                          Ügyfél
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setContextualTab('leadas')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'leadas' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                        >
+                          Leadás
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 p-4">
+                      {contextualTab === 'review' && (
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
+                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                              {selectedVersion?.reviewStatus || "Nincs aktív review"}
+                            </h4>
+                          </div>
+                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                            <p><b>Nyitott jelölések:</b> {openAnnotationCount} db</p>
+                            <p><b>Összes annotáció:</b> {annotations.length} db</p>
+                            <p><b>Kiválasztott verzió:</b> {selectedVersion ? `v${selectedVersion.versionNumber}` : 'Nincs'}</p>
+                            <p><b>Felelős:</b> {selectedVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <AdminButton
+                              className="w-full justify-start"
+                              variant="primary"
+                              onClick={() => {
+                                const el = document.getElementById('document-review');
+                                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                            >
+                              Részletes review folyamat ↓
+                            </AdminButton>
+                            <AdminButton
+                              className="w-full justify-start"
+                              variant="neutral"
+                              onClick={() => {
+                                const el = document.getElementById('document-changes');
+                                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                            >
+                              Annotációk és jelölések ↓
+                            </AdminButton>
+                          </div>
+                        </div>
+                      )}
+
+                      {contextualTab === 'elemzes' && (
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Jogi elemzés & Kockázatok</p>
+                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                              {selectedUploadedDocument && selectedVersion ? "Elemzés elérhető" : "Nincs elemzés"}
+                            </h4>
+                          </div>
+                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                            <p><b>Dokumentum:</b> {activeTitle || "Nincs"}</p>
+                            <p><b>Intake státusz:</b> {selectedUploadedDocument ? "Beérkeztetve" : "Várakozik"}</p>
+                            <p><b>Forrás:</b> {selectedUploadedDocument?.documentType || "N/A"}</p>
+                          </div>
+                          <AdminButton
+                            className="w-full justify-start"
+                            variant="primary"
+                            onClick={() => {
+                              const el = document.getElementById('document-legal-analysis');
+                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                          >
+                            Jogi elemzés megnyitása ↓
+                          </AdminButton>
+                        </div>
+                      )}
+
+                      {contextualTab === 'ugyfel' && (
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélkapcsolat & Portál</p>
+                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                              {selectedVersion?.publicationStatus || "Nem publikált"}
+                            </h4>
+                          </div>
+                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                            <p><b>Ügyfél:</b> {caseRecord?.clientName || "Nincs megadva"}</p>
+                            <p><b>Portál állapot:</b> {selectedVersion?.publicationStatus === "PUBLISHED" ? "Publikálva az ügyfélnek" : "Belső munkaverzió"}</p>
+                          </div>
+                          <AdminButton
+                            className="w-full justify-start"
+                            variant="primary"
+                            onClick={() => {
+                              const el = document.getElementById('document-publication');
+                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                          >
+                            Portál publikáció panel ↓
+                          </AdminButton>
+                        </div>
+                      )}
+
+                      {contextualTab === 'leadas' && (
+                        <div className="space-y-4">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadás</p>
+                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                              {handoffPackageCountLabel}
+                            </h4>
+                          </div>
+                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                            <p><b>Ügy státusz:</b> {caseRecord?.status || "Aktív"}</p>
+                            <p><b>Dokumentum csomag:</b> ZIP export és átadási jegyzék</p>
+                          </div>
+                          <AdminButton
+                            className="w-full justify-start"
+                            variant="primary"
+                            onClick={() => {
+                              const el = document.getElementById('document-handoff');
+                              if (el) el.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                          >
+                            Leadási csomag megnyitása ↓
+                          </AdminButton>
+                        </div>
+                      )}
+                    </div>
+                  </aside>
+                </div>
+
+                {/* 3. PRESERVED EXTENDED TOOLS SECTION */}
+                <section id="preserved-extended-tools" data-testid="preserved-extended-tools" className="mt-8 space-y-6 border-t-2 border-[rgba(22,32,26,0.12)] pt-6">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">További meglévő dokumentumeszközök</h3>
+                      <p className="text-xs text-[var(--adm-text-muted)]">
+                        Konszolidáció alatt álló munkafelületek · Minden meglévő funkció elérhető és változatlan
                       </p>
-                    </section>
+                    </div>
+                    <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-3 py-1 text-[11px] font-bold text-[#6D5418]">
+                      Megőrzött eszközök
+                    </span>
                   </div>
-                </aside>
 
-                <section className="adm-board-panel min-w-0 overflow-hidden">
+                  {/* Operational work context and existing tool panels */}
+                  <section className="adm-board-panel min-w-0 overflow-hidden">
                   <div className="flex min-w-0 gap-3 border-b border-[rgba(22,32,26,0.12)] bg-white/70 p-3 sm:gap-4 sm:p-5">
                     <div className="mt-1 h-16 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
                     <div className="min-w-0 flex-1">
@@ -2214,7 +2539,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   )}
                   {handoffPackageMessage && <p className="rounded bg-[var(--adm-sage-100)] p-2 text-[12px] font-semibold text-[var(--adm-green-800)]">{handoffPackageMessage}</p>}
                   {handoffPackageError && <p className="rounded bg-[var(--adm-terracotta-100)] p-2 text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{handoffPackageError}</p>}
-                </aside>
+                  </aside>
+                </section>
               </div>
             )}
 
