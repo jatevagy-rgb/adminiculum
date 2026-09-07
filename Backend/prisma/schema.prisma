@@ -1573,6 +1573,8 @@ model Task {
   assignedTo     User?    @relation("AssignedTo", fields: [assignedToId], references: [id])
   assignedById   String? // Who assigned this task
   assignedBy     User?    @relation("AssignedBy", fields: [assignedById], references: [id])
+  requestedByOrganizationPersonId String?
+  requestedByOrganizationPerson   OrganizationPerson? @relation("TaskRequestedByOrganizationPerson", fields: [requestedByOrganizationPersonId], references: [id], onDelete: SetNull)
   skillMatch     Float? // Score of skill matching (0-1)
   skillProfile   Json? // Required skills profile
   requiredSkills String[] // Required skills for this task
@@ -1640,6 +1642,7 @@ model Task {
   @@index([workflowInstanceId])
   @@index([caseId, workflowInstanceId])
   @@index([workPackageItemId])
+  @@index([requestedByOrganizationPersonId])
   @@map("tasks")
 }
 
@@ -4698,6 +4701,7 @@ model OrganizationPerson {
   // linking does not grant Case/Document access. Stored as a plain reference to
   // avoid coupling; validated in the service against the same Client workspace.
   portalMembershipId      String?
+  requestedTasks          Task[]                             @relation("TaskRequestedByOrganizationPerson")
   responsibilities        OrganizationPersonResponsibility[]
   documentLinks           OrganizationPersonDocumentLink[]
   ownedContracts          ContractRecord[]

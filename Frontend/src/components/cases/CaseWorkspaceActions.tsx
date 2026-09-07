@@ -18,10 +18,12 @@ import {
   getDocumentComments,
   createDocumentComment,
   getUsers,
+  getCaseWorkspace,
   safeUploadErrorMessage,
   type CaseWorkspace,
   type User,
 } from "@/lib/api";
+import { clientOrganizationApi, type OrgPersonDTO } from "@/lib/clientOrganizationApi";
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
 import { AdminButton } from "@/components/adminiculum/ui";
 
@@ -42,6 +44,22 @@ function useUsers(open: boolean): User[] {
     return () => { active = false; };
   }, [open]);
   return users;
+}
+
+function useTaskRequesters(caseId: string, open: boolean): OrgPersonDTO[] {
+  const [people, setPeople] = useState<OrgPersonDTO[]>([]);
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    void getCaseWorkspace(caseId)
+      .then((workspace) => workspace.case.client?.id ? clientOrganizationApi.listPersons(workspace.case.client.id) : { items: [] })
+      .then((response) => {
+        if (active) setPeople(response.items.filter((person) => person.employmentStatus === "ACTIVE" || person.employmentStatus === "ON_LEAVE"));
+      })
+      .catch(() => { if (active) setPeople([]); });
+    return () => { active = false; };
+  }, [caseId, open]);
+  return people;
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -105,10 +123,12 @@ export function TaskFormModal({
   onSaved: () => void;
 }) {
   const users = useUsers(true);
+  const requesters = useTaskRequesters(caseId, true);
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<string>(task?.priority ?? "MEDIUM");
   const [assignedToId, setAssignedToId] = useState<string>(task?.assignee?.id ?? "");
+  const [requestedByOrganizationPersonId, setRequestedByOrganizationPersonId] = useState<string>(task?.requestedByOrganizationPerson?.id ?? "");
   const [attentionCategory, setAttentionCategory] = useState<string>(task?.attentionCategory ?? "");
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>(task?.estimatedMinutes != null ? String(task.estimatedMinutes) : "");
   const [dueDate, setDueDate] = useState<string>(task?.dueDate ? task.dueDate.slice(0, 10) : "");
@@ -138,6 +158,7 @@ export function TaskFormModal({
           assignedTo: assignedToId || undefined,
           attentionCategory: (attentionCategory || null) as never,
           estimatedMinutes: est ?? undefined,
+          requestedByOrganizationPersonId: requestedByOrganizationPersonId || undefined,
         });
       } else if (task) {
         await updateTask(task.id, {
@@ -148,6 +169,7 @@ export function TaskFormModal({
           assignedToId: assignedToId || null,
           attentionCategory: attentionCategory || null,
           estimatedMinutes: est,
+          requestedByOrganizationPersonId: requestedByOrganizationPersonId || null,
         });
       }
       onSaved();
@@ -156,7 +178,7 @@ export function TaskFormModal({
       setServerErr(e instanceof Error ? e.message : "A mentés nem sikerült.");
       setBusy(false);
     }
-  }, [busy, title, description, priority, assignedToId, attentionCategory, estimatedMinutes, dueDate, deadlineMode, mode, task, caseId, onSaved, onClose]);
+  }, [busy, title, description, priority, assignedToId, requestedByOrganizationPersonId, attentionCategory, estimatedMinutes, dueDate, deadlineMode, mode, task, caseId, onSaved, onClose]);
 
   const heading = deadlineMode ? (mode === "create" ? "Határidős feladat" : "Feladathatáridő szerkesztése") : (mode === "create" ? "Új feladat" : "Feladat szerkesztése");
 
@@ -184,6 +206,14 @@ export function TaskFormModal({
             <input id="cw-task-due" type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={busy} />
             <FieldError message={fieldErr.dueDate} />
           </div>
+        </div>
+        <div>
+          <label className={labelCls} htmlFor="cw-task-requester">Ügyféloldali kérő</label>
+          <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Az ügyfél szervezetén belül az a személy, akinek a kérésére a feladat készül.</p>
+          <select id="cw-task-requester" className={inputCls} value={requestedByOrganizationPersonId} onChange={(e) => setRequestedByOrganizationPersonId(e.target.value)} disabled={busy}>
+            <option value="">Nincs megadva</option>
+            {requesters.map((person) => <option key={person.id} value={person.id}>{person.name}{person.jobTitle ? ` · ${person.jobTitle}` : ""}{person.organizationGroupName ? ` · ${person.organizationGroupName}` : ""}</option>)}
+          </select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

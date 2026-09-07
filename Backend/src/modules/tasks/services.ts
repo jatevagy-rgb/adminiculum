@@ -98,6 +98,13 @@ const taskRescheduleSelect = {
   caseId: true,
   assignedToId: true,
   assignedById: true,
+  requestedByOrganizationPersonId: true,
+  requestedByOrganizationPerson: {
+    select: {
+      id: true, name: true, jobTitle: true, organizationGroupId: true, employmentStatus: true,
+      organizationGroup: { select: { id: true, name: true } },
+    },
+  },
   attentionCategory: true,
   estimatedMinutes: true,
   updatedAt: true,
@@ -113,6 +120,13 @@ const taskReadSelect = {
   priority: true,
   assignedToId: true,
   assignedById: true,
+  requestedByOrganizationPersonId: true,
+  requestedByOrganizationPerson: {
+    select: {
+      id: true, name: true, jobTitle: true, organizationGroupId: true, employmentStatus: true,
+      organizationGroup: { select: { id: true, name: true } },
+    },
+  },
   attentionCategory: true,
   estimatedMinutes: true,
   documentId: true,
@@ -299,8 +313,10 @@ export async function createTask(data: {
   estimatedMinutes?: number | null;
   workPackageItemId?: string;
   matterId?: string | null;
+  requestedByOrganizationPersonId?: string | null;
 }, db: PrismaClient | Prisma.TransactionClient = prisma) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
+  const requestedByOrganizationPersonId = await validateTaskRequester(data.caseId, data.requestedByOrganizationPersonId, db);
 
   const task = await db.task.create({
     data: {
@@ -313,6 +329,7 @@ export async function createTask(data: {
       status: 'TODO',
       assignedToId: data.assignedTo,
       assignedById: data.assignedBy,
+      requestedByOrganizationPersonId,
       requiredSkills: data.requiredSkills || TASK_TYPE_SKILLS[prismaTaskType] || [],
       dueDate: data.dueDate,
       documentId: data.documentId,
@@ -350,6 +367,29 @@ export async function createTask(data: {
     return (await getTask(task.id)) || task;
   }
   return task;
+}
+
+/** Internal requester provenance; portal membership is deliberately irrelevant. */
+export async function validateTaskRequester(
+  caseId: string,
+  value: string | null | undefined,
+  db: PrismaClient | Prisma.TransactionClient = prisma,
+): Promise<string | null | undefined> {
+  if (value === undefined) return undefined;
+  if (value === null || String(value).trim() === '') return null;
+  const requestedByOrganizationPersonId = String(value).trim();
+  const [caseRecord, person] = await Promise.all([
+    db.case.findUnique({ where: { id: caseId }, select: { clientId: true } }),
+    db.organizationPerson.findUnique({ where: { id: requestedByOrganizationPersonId }, select: { id: true, clientId: true, employmentStatus: true } }),
+  ]);
+  if (!person) throw new WorkflowTransitionError(404, 'ORGANIZATION_PERSON_NOT_FOUND', 'Organization person not found.');
+  if (!caseRecord || person.clientId !== caseRecord.clientId) {
+    throw new WorkflowTransitionError(409, 'CROSS_CLIENT_REQUESTER', 'Requester must belong to the Task case client.');
+  }
+  if (!['ACTIVE', 'ON_LEAVE'].includes(String(person.employmentStatus))) {
+    throw new WorkflowTransitionError(409, 'ORGANIZATION_PERSON_NOT_ELIGIBLE', 'Organization person is not eligible to be selected as requester.');
+  }
+  return requestedByOrganizationPersonId;
 }
 
 /**
@@ -534,7 +574,7 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
     throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
   }
   const payload = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-  const allowed = new Set(['title', 'description', 'priority', 'dueDate', 'assignedToId', 'attentionCategory', 'estimatedMinutes']);
+  const allowed = new Set(['title', 'description', 'priority', 'dueDate', 'assignedToId', 'attentionCategory', 'estimatedMinutes', 'requestedByOrganizationPersonId']);
   for (const key of Object.keys(payload)) {
     if (!allowed.has(key)) {
       throw new WorkflowTransitionError(400, 'UNSUPPORTED_TASK_FIELD', `Field ${key} is not accepted for task update.`);
@@ -614,6 +654,9 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
   }
   if ('estimatedMinutes' in payload) {
     data.estimatedMinutes = parseNullableEstimatedMinutes(payload.estimatedMinutes) ?? null;
+  }
+  if ('requestedByOrganizationPersonId' in payload) {
+    data.requestedByOrganizationPersonId = await validateTaskRequester(existing.caseId, payload.requestedByOrganizationPersonId as string | null | undefined);
   }
 
   if (Object.keys(data).length === 0) {

@@ -11,6 +11,7 @@
  */
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
+import { validateTaskRequester } from '../tasks/services';
 import { instantiateCaseWorkflow, WORKFLOW_TEMPLATES } from './caseWorkflowOrchestration';
 import casesService from './services';
 import { CaseWorkPackageError } from './caseWorkPackage.service';
@@ -199,6 +200,7 @@ function normalizeTasks(value: unknown) {
       title: str(t.title, MAX_TITLE, 'initialTask.title', true) as string,
       description: str(t.description, MAX_CONTEXT, 'initialTask.description'),
       assignedToId: str(t.assignedToId, 64, 'initialTask.assignedToId'),
+      requestedByOrganizationPersonId: str(t.requestedByOrganizationPersonId, 64, 'initialTask.requestedByOrganizationPersonId'),
       dueDate: t.dueDate ? isoDate(t.dueDate, 'initialTask.dueDate') : null,
       priority,
     };
@@ -408,6 +410,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
 
     const taskRows = [];
     for (const t of tasks) {
+      const requestedByOrganizationPersonId = await validateTaskRequester(caseRow.id, t.requestedByOrganizationPersonId, tx);
       taskRows.push(await tx.task.create({
         data: {
           caseId: caseRow.id,
@@ -419,6 +422,7 @@ export async function createCaseIntake(actorId: string, input: CaseIntakeInput):
           priority: t.priority as never,
           assignedToId: t.assignedToId,
           assignedById: actorId,
+          requestedByOrganizationPersonId,
           dueDate: t.dueDate,
         } as never,
         select: { id: true, title: true, status: true, priority: true, dueDate: true, assignedToId: true },
