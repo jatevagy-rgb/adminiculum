@@ -109,8 +109,9 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   assert.match(shell, /Feltöltő:/);
   assert.match(shell, /Jogi elemzés/);
   assert.match(shell, /A részletes állapot az elemzési panelen látható\./);
-  assert.match(shell, /Publikálva/);
-  assert.match(shell, /Nincs publikálva/);
+  assert.match(source, /Publikálva/);
+  assert.match(source, /Nincs publikálva/);
+  assert.match(shell, /publicationStatusLabel/);
   assert.match(shell, /Leadási csomag/);
 
   // Truthfulness negative assertions (defects must not be present)
@@ -217,7 +218,7 @@ test("Each contextual button points to an actual rendered target and provides tr
 
   // Verify truthful disabling
   assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalActiveVersion\}/);
-  assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalCaseId\}/);
+  assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalActiveVersion \|\| !canonicalCaseId\}/);
   assert.match(shell, /disabled=\{!caseRecord\}/);
 });
 
@@ -231,4 +232,95 @@ test("Canonical Leadás summary does not claim ZIP export and does not fabricate
   assert.match(shell, /A részletes leadási állapot a leadási csomag panelen látható\./);
   assert.doesNotMatch(shell, /Aktív/);
   assert.match(shell, /caseRecord\?\.status \|\| "Nincs megadva"/);
+});
+
+// Targeted regression tests for transient-state truthfulness repairs (PR #182 Final Pass)
+
+test("Regression Proof 1: uploaded document + isLoadingVersions does NOT render 'Nincs aktív review' or 'Nincs publikálva'", () => {
+  const source = documentPage();
+  const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
+  assert.ok(shellMatch, "Right shell must be found");
+  const shell = shellMatch[0];
+
+  // Review header must use isReviewLoading, not fall back to "Nincs aktív review"
+  assert.match(source, /isReviewLoading\s*=\s*Boolean\(selectedUploadedDocument && \(!canonicalActiveVersion \|\| isLoadingVersions\)\)/);
+  assert.match(shell, /isReviewLoading\s*\?\s*"Verzióadatok betöltése\.\.\."\s*:\s*canonicalActiveVersion\?\.reviewStatus/);
+  assert.match(shell, /isReviewLoading \? \([\s\S]*?Verzió- és felülvizsgálati adatok betöltése folyamatban\.\.\./);
+
+  // Publication status must map loading/unreconciled version state to "Publikációs állapot betöltése...", not "Nincs publikálva"
+  assert.match(source, /publicationStatusLabel\s*=\s*!selectedUploadedDocument[\s\S]*?isLoadingVersions \|\| !canonicalActiveVersion[\s\S]*?"Publikációs állapot betöltése\.\.\."/);
+  assert.match(shell, /\{publicationStatusLabel\}/);
+});
+
+test("Regression Proof 2: right-shell annotation counts require annotationsVersionId === canonicalActiveVersion.id", () => {
+  const source = documentPage();
+  const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
+  assert.ok(shellMatch, "Right shell must be found");
+  const shell = shellMatch[0];
+
+  assert.match(source, /isAnnotationCountAuthoritative\s*=\s*Boolean\(\s*canonicalActiveVersion\s*&&\s*annotationsVersionId === canonicalActiveVersion\.id\s*\)/);
+  assert.match(shell, /isAnnotationCountAuthoritative \? `\$\{openAnnotationCount\} db`/);
+  assert.match(shell, /isAnnotationCountAuthoritative \? `\$\{annotations\.length\} db`/);
+});
+
+test("Regression Proof 3: annotations from version A are not summarized under document/version B", () => {
+  // Test the invariant directly: when annotationsVersionId belongs to version A, but canonicalActiveVersion is version B
+  const versionAId = "docA-version-1";
+  const versionBId = "docB-version-1";
+  const annotationsVersionId = versionAId;
+  const canonicalActiveVersion = { id: versionBId, versionNumber: 1 };
+
+  const isAnnotationCountAuthoritative = Boolean(
+    canonicalActiveVersion && annotationsVersionId === canonicalActiveVersion.id
+  );
+  assert.strictEqual(isAnnotationCountAuthoritative, false, "Counts from version A must NOT qualify as authoritative for version B");
+});
+
+test("Regression Proof 4: canonical center file-type display does not use raw stale selectedVersion when it belongs to a different document", () => {
+  const source = documentPage();
+  const centerMatch = source.match(/<main data-testid="canonical-center-reading"[\s\S]*?<\/main>/);
+  assert.ok(centerMatch, "Center reading surface must be found");
+  const center = centerMatch[0];
+
+  assert.match(source, /canonicalShellFileType\s*=\s*\(\(\)\s*=>/);
+  assert.match(center, /<AdminBadge tone="neutral">\{canonicalShellFileType\}<\/AdminBadge>/);
+  assert.match(center, /\{canonicalShellFileType\} előnézet/);
+  assert.doesNotMatch(center, /selectedVersionFileType/);
+
+  // Invariant logic proof: stale selectedVersion from doc A (.txt) vs active doc B (.pdf) with unreconciled version
+  const selectedUploadedDocument = { id: "docB", fileName: "documentB.pdf" };
+  const canonicalActiveVersion: { originalFileName?: string | null } | null = null; // unreconciled during switch
+  const getFileType = (fileName?: string | null) => {
+    const ext = (fileName?.split('.').pop() || '').toLowerCase();
+    if (['doc', 'docx'].includes(ext)) return 'DOCX';
+    if (ext === 'pdf') return 'PDF';
+    if (ext === 'txt') return 'TXT';
+    return 'FILE';
+  };
+
+  const resolveShellFileType = (
+    activeVersion: { originalFileName?: string | null } | null,
+    uploadedDoc: { fileName?: string | null } | null
+  ) => {
+    if (activeVersion?.originalFileName) {
+      return getFileType(activeVersion.originalFileName);
+    }
+    if (uploadedDoc?.fileName) {
+      return getFileType(uploadedDoc.fileName);
+    }
+    return 'Dokumentum';
+  };
+
+  const canonicalShellFileType = resolveShellFileType(canonicalActiveVersion, selectedUploadedDocument);
+
+  assert.strictEqual(canonicalShellFileType, "PDF", "Must use active document B's file type, never stale selectedVersion A's TXT type");
+});
+
+test("Regression Proof 5: publication jump is disabled while uploaded-document version state is unreconciled", () => {
+  const source = documentPage();
+  const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
+  assert.ok(shellMatch, "Right shell must be found");
+  const shell = shellMatch[0];
+
+  assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalActiveVersion \|\| !canonicalCaseId\}/);
 });

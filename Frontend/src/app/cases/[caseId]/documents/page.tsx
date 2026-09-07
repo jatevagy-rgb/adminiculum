@@ -1217,6 +1217,48 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // Safe active version for canonical shell rendering
   const canonicalActiveVersion = selectedVersionBelongsToActiveDocument ? selectedVersion : null;
 
+  // Canonical shell-safe active file type: derived strictly from the active document / version,
+  // preventing a stale selectedVersion from another document from leaking its file type.
+  const canonicalShellFileType = (() => {
+    if (canonicalActiveVersion?.originalFileName) {
+      return getFileType(canonicalActiveVersion.originalFileName);
+    }
+    if (selectedUploadedDocument?.fileName) {
+      return getFileType(selectedUploadedDocument.fileName);
+    }
+    if (selectedGeneratedContract?.fileName) {
+      return getFileType(selectedGeneratedContract.fileName);
+    }
+    if (selectedGeneratedContract) {
+      return 'DOCX';
+    }
+    return 'Dokumentum';
+  })();
+
+  // Right-shell annotation count safety: counts are only authoritative when
+  // annotationsVersionId matches canonicalActiveVersion.id. During document/version
+  // switch, this prevents annotations from version A showing under version B.
+  const isAnnotationCountAuthoritative = Boolean(
+    canonicalActiveVersion && annotationsVersionId === canonicalActiveVersion.id
+  );
+
+  // Review transient truthfulness: when an uploaded document is active but its version
+  // list is loading or unreconciled, we render a neutral loading state rather than false negatives.
+  const isReviewLoading = Boolean(selectedUploadedDocument && (!canonicalActiveVersion || isLoadingVersions));
+
+  // Publication status truth table:
+  // - no publishable uploaded document => "Nem publikálható"
+  // - uploaded document + version loading/unreconciled => "Publikációs állapot betöltése..."
+  // - canonical active version + PUBLISHED => "Publikálva"
+  // - canonical active version + non-PUBLISHED => "Nincs publikálva"
+  const publicationStatusLabel = !selectedUploadedDocument
+    ? "Nem publikálható"
+    : isLoadingVersions || !canonicalActiveVersion
+      ? "Publikációs állapot betöltése..."
+      : canonicalActiveVersion.publicationStatus === 'PUBLISHED'
+        ? "Publikálva"
+        : "Nincs publikálva";
+
   // Version-truthful text plan: TXT always reads its own stored bytes; the
   // document-level extracted text is a read-only preview that is only valid
   // while the selected version is the document's current version.
@@ -1717,7 +1759,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <AdminBadge tone="neutral">{selectedVersionFileType || "Dokumentum"}</AdminBadge>
+                        <AdminBadge tone="neutral">{canonicalShellFileType}</AdminBadge>
                         {canonicalActiveVersion ? <AdminBadge tone={canonicalActiveVersion.isCurrent ? "gold" : "neutral"}>v{canonicalActiveVersion.versionNumber}</AdminBadge> : null}
                       </div>
                     </div>
@@ -1745,7 +1787,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           ) : versionTextPlan === 'DOCUMENT_TEXT' ? (
                             isLoadingDocumentText ? (
                               <div className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
                                 <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be read-only előnézetként.</p>
                               </div>
@@ -1755,13 +1797,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </div>
                             ) : documentTextFailed ? (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
                                 <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
                               </div>
                             ) : (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
-                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
                                 <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg nem érhető el</h5>
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{documentTextUnavailableReason || 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg.'}</p>
                               </div>
@@ -1774,7 +1816,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             </div>
                           ) : (
                             <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
-                              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType || "Dokumentum"} előnézet</p>
+                              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
                               <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Stabil szövegkijelölés még nincs ehhez a formátumhoz</h5>
                               <p className="mt-2 max-w-lg text-sm text-[#3D4842]">
                                 A megváltoztathatatlan verzió tartalma letöltéssel és Microsoft Wordben érhető el teljes pontossággal. A korábbi nem-szöveges verziókhoz a rendszer szándékosan nem helyettesíti az aktuális szöveget.
@@ -1833,15 +1875,23 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {canonicalActiveVersion?.reviewStatus || "Nincs aktív review"}
+                              {isReviewLoading
+                                ? "Verzióadatok betöltése..."
+                                : canonicalActiveVersion?.reviewStatus || (selectedUploadedDocument ? "Nincs felülvizsgálati állapot" : "Nincs aktív review")}
                             </h4>
                           </div>
-                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                            <p><b>Nyitott jelölések:</b> {openAnnotationCount} db</p>
-                            <p><b>Összes annotáció:</b> {annotations.length} db</p>
-                            <p><b>Kiválasztott verzió:</b> {canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
-                            <p><b>Feltöltő:</b> {canonicalActiveVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
-                          </div>
+                          {isReviewLoading ? (
+                            <div className="rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                              <p className="text-[11px] text-[var(--adm-text-muted)]">Verzió- és felülvizsgálati adatok betöltése folyamatban...</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                              <p><b>Nyitott jelölések:</b> {isAnnotationCountAuthoritative ? `${openAnnotationCount} db` : isLoadingAnnotations ? "Betöltés..." : "—"}</p>
+                              <p><b>Összes annotáció:</b> {isAnnotationCountAuthoritative ? `${annotations.length} db` : isLoadingAnnotations ? "Betöltés..." : "—"}</p>
+                              <p><b>Kiválasztott verzió:</b> {canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
+                              <p><b>Feltöltő:</b> {canonicalActiveVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
+                            </div>
+                          )}
                           <div className="space-y-2">
                             <AdminButton
                               className="w-full justify-start"
@@ -1900,17 +1950,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélkapcsolat & Portál</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {canonicalActiveVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}
+                              {publicationStatusLabel}
                             </h4>
                           </div>
                           <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
                             <p><b>Ügyfél:</b> {caseRecord?.clientName || "Nincs megadva"}</p>
-                            <p><b>Portál állapot:</b> {canonicalActiveVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}</p>
+                            <p><b>Portál állapot:</b> {publicationStatusLabel}</p>
                           </div>
                           <AdminButton
                             className="w-full justify-start"
                             variant="primary"
-                            disabled={!selectedUploadedDocument || !canonicalCaseId}
+                            disabled={!selectedUploadedDocument || !canonicalActiveVersion || !canonicalCaseId}
                             onClick={() => {
                               const el = document.getElementById('document-publication');
                               if (el) el.scrollIntoView({ behavior: 'smooth' });
