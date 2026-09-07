@@ -15,7 +15,8 @@ test('T1 preserves authoritative client/case scopes and existing time wiring', (
   assert.match(route, /classifyTimeAttribution/);
   assert.match(route, /TASK_DERIVED_CASE/);
   assert.match(route, /AMBIGUOUS/);
-  assert.match(route, /where\.userId = userId \? String\(userId\) : requesterId/);
+  assert.match(route, /if \(userId\) where\.userId = String\(userId\);/);
+  assert.match(route, /else if \(!\(privileged && \(clientId \|\| caseId\)\)\) where\.userId = requesterId;/);
   for (const value of ['createTimeEntry', 'updateTimeEntry', 'deleteTimeEntry', 'timesheet']) assert.match(page + route, new RegExp(value));
 });
 
