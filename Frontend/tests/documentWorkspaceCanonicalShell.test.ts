@@ -50,6 +50,15 @@ test("Canonical left ledger preserves all document categories and upload trigger
   assert.match(ledger, /setSelectedLedgerItem/);
 });
 
+test("Initial-upload control exists and is wired to fileInputRef and uploadCaseDocument", () => {
+  const source = documentPage();
+  assert.match(source, /fileInputRef\s*=\s*useRef<HTMLInputElement\s*\|\s*null>\(null\)/);
+  assert.match(source, /<input\s+ref=\{fileInputRef\}\s+type="file"\s+accept="\.pdf,\.doc,\.docx,\.txt"/);
+  assert.match(source, /fileInputRef\.current\?\.click\(\)/);
+  assert.match(source, /Dokumentum hozzáadása/);
+  assert.match(source, /uploadCaseDocument/);
+});
+
 test("Canonical center region provides read-only extracted text preview with Word guidance", () => {
   const source = documentPage();
   const centerMatch = source.match(/<main data-testid="canonical-center-reading"[\s\S]*?<\/main>/);
@@ -77,7 +86,7 @@ test("Canonical center region preserves truthful fallback for historical non-TXT
   assert.match(center, /A megváltoztathatatlan verzió tartalma letöltéssel és Microsoft Wordben érhető el/);
 });
 
-test("Contextual work-panel shell exposes the frozen future four-group structure", () => {
+test("Contextual work-panel shell exposes truthful four-group structure and neutral statuses", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must be found");
@@ -95,6 +104,24 @@ test("Contextual work-panel shell exposes the frozen future four-group structure
   assert.match(shell, /document-legal-analysis/);
   assert.match(shell, /document-publication/);
   assert.match(shell, /document-handoff/);
+
+  // Truthfulness positive assertions
+  assert.match(shell, /Feltöltő:/);
+  assert.match(shell, /Jogi elemzés/);
+  assert.match(shell, /A részletes állapot az elemzési panelen látható\./);
+  assert.match(shell, /Publikálva/);
+  assert.match(shell, /Nincs publikálva/);
+  assert.match(shell, /Leadási csomag/);
+
+  // Truthfulness negative assertions (defects must not be present)
+  assert.doesNotMatch(shell, /Elemzés elérhető/, "Must not fabricate legal analysis availability");
+  assert.doesNotMatch(shell, /Nincs elemzés/);
+  assert.doesNotMatch(shell, /Beérkeztetve/, "Must not display ungrounded intake status");
+  assert.doesNotMatch(shell, /Várakozik/);
+  assert.doesNotMatch(shell, /Felelős:[\s\S]*?uploadedBy/, "Uploader must not be labeled as Felelős");
+  assert.doesNotMatch(shell, /handoffPackageCountLabel/, "Must not use invalid handoff package count");
+  assert.doesNotMatch(shell, /Belső munkaverzió/, "Must not infer ungrounded publication status");
+  assert.doesNotMatch(source, /handoffPackageCountLabel/, "handoffPackageCountLabel must be completely removed");
 });
 
 test("Preserved extended tools section keeps all existing workspaces and actions reachable", () => {

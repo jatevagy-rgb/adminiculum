@@ -1135,7 +1135,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     : null;
   const modifiedWorkingCopyCount = modifiedWorkingCopies.length;
   const generatedDocumentCount = generatedLedgerItems.length;
-  const handoffPackageCountLabel = caseRecord ? 'panel' : '0';
   const selectedDocumentTypeLabel = selectedUploadedDocument
     ? selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY'
       ? 'Módosított munkapéldány'
@@ -1833,7 +1832,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             <p><b>Nyitott jelölések:</b> {openAnnotationCount} db</p>
                             <p><b>Összes annotáció:</b> {annotations.length} db</p>
                             <p><b>Kiválasztott verzió:</b> {selectedVersion ? `v${selectedVersion.versionNumber}` : 'Nincs'}</p>
-                            <p><b>Felelős:</b> {selectedVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
+                            <p><b>Feltöltő:</b> {selectedVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
                           </div>
                           <div className="space-y-2">
                             <AdminButton
@@ -1863,15 +1862,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       {contextualTab === 'elemzes' && (
                         <div className="space-y-4">
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Jogi elemzés & Kockázatok</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Jogi elemzés</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {selectedUploadedDocument && selectedVersion ? "Elemzés elérhető" : "Nincs elemzés"}
+                              {activeTitle || "Nincs kiválasztott dokumentum"}
                             </h4>
                           </div>
                           <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                            <p><b>Dokumentum:</b> {activeTitle || "Nincs"}</p>
-                            <p><b>Intake státusz:</b> {selectedUploadedDocument ? "Beérkeztetve" : "Várakozik"}</p>
-                            <p><b>Forrás:</b> {selectedUploadedDocument?.documentType || "N/A"}</p>
+                            <p><b>Dokumentum:</b> {activeTitle || "Nincs kiválasztva"}</p>
+                            <p className="text-[11px] text-[var(--adm-text-muted)]">A részletes állapot az elemzési panelen látható.</p>
                           </div>
                           <AdminButton
                             className="w-full justify-start"
@@ -1891,12 +1889,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélkapcsolat & Portál</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {selectedVersion?.publicationStatus || "Nem publikált"}
+                              {selectedVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}
                             </h4>
                           </div>
                           <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
                             <p><b>Ügyfél:</b> {caseRecord?.clientName || "Nincs megadva"}</p>
-                            <p><b>Portál állapot:</b> {selectedVersion?.publicationStatus === "PUBLISHED" ? "Publikálva az ügyfélnek" : "Belső munkaverzió"}</p>
+                            <p><b>Portál állapot:</b> {selectedVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}</p>
                           </div>
                           <AdminButton
                             className="w-full justify-start"
@@ -1916,7 +1914,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadás</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {handoffPackageCountLabel}
+                              Leadási csomag
                             </h4>
                           </div>
                           <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
