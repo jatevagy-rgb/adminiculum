@@ -37,6 +37,12 @@ const viewOptions = [
 
 type Feedback = { tone: "success" | "error" | "info"; message: string };
 
+const readScopeParam = (name: string) => {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get(name);
+  return value && value.trim() ? value.trim() : null;
+};
+
 export default function CommunicationWorkspace() {
   const [activeView, setActiveView] = useState("all");
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
@@ -55,15 +61,8 @@ export default function CommunicationWorkspace() {
   const [contactFilter, setContactFilter] = useState("");
   const [emailFilter, setEmailFilter] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
-  const [clientFilter, setClientFilter] = useState(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const clientId = params.get("clientId");
-      if (clientId && clientId.trim()) return clientId.trim();
-    }
-    return "all";
-  });
-  const [caseFilter, setCaseFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState(() => readScopeParam("clientId") || "all");
+  const [caseFilter, setCaseFilter] = useState(() => readScopeParam("caseId") || "all");
   const [directionFilter, setDirectionFilter] = useState("all");
   const [audienceFilter, setAudienceFilter] = useState("all");
   const [relationFilter, setRelationFilter] = useState("all");
@@ -104,13 +103,16 @@ export default function CommunicationWorkspace() {
     if (communicationId) setSelectedId(communicationId);
     const clientId = params.get("clientId");
     if (clientId && clientId.trim()) setClientFilter(clientId.trim());
+    const caseId = params.get("caseId");
+    if (caseId && caseId.trim()) setCaseFilter(caseId.trim());
   }, []);
 
-  const prevClientFilterRef = useRef(clientFilter);
+  const prevScopeRef = useRef({ client: clientFilter, case: caseFilter });
 
   useEffect(() => {
-    if (prevClientFilterRef.current !== clientFilter) {
-      prevClientFilterRef.current = clientFilter;
+    const prevScope = prevScopeRef.current;
+    if (prevScope.client !== clientFilter || prevScope.case !== caseFilter) {
+      prevScopeRef.current = { client: clientFilter, case: caseFilter };
       if (offset !== 0) {
         setOffset(0);
         return;
@@ -121,12 +123,15 @@ export default function CommunicationWorkspace() {
     setLoading(true);
     setLoadError(null);
 
-    const commParams: { limit: number; offset: number; clientId?: string } = {
+    const commParams: { limit: number; offset: number; clientId?: string; caseId?: string } = {
       limit: pageSize,
       offset,
     };
     if (clientFilter !== "all") {
       commParams.clientId = clientFilter;
+    }
+    if (caseFilter !== "all") {
+      commParams.caseId = caseFilter;
     }
 
     Promise.all([
@@ -155,7 +160,18 @@ export default function CommunicationWorkspace() {
     return () => {
       mounted = false;
     };
-  }, [clientFilter, offset, pageSize]);
+  }, [clientFilter, caseFilter, offset, pageSize]);
+
+  // The URL is the scope of record: clientId/caseId deep links survive refresh,
+  // while unrelated supported query state (view, communicationId, ...) is left
+  // untouched.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (clientFilter !== "all") params.set("clientId", clientFilter); else params.delete("clientId");
+    if (caseFilter !== "all") params.set("caseId", caseFilter); else params.delete("caseId");
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `/communications?${query}` : "/communications");
+  }, [clientFilter, caseFilter]);
 
   useEffect(() => {
     let mounted = true;
@@ -187,6 +203,19 @@ export default function CommunicationWorkspace() {
 
   const caseById = useMemo(() => new Map(cases.map((item) => [item.id, item])), [cases]);
   const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
+
+  // Scope labels never expose raw ids: unresolved names fall back to neutral
+  // wording while the URL scope remains authoritative server-side. The accent
+  // color comes only from already-resolved client data — never invented.
+  const scopedClient = clientFilter !== "all" ? clientById.get(clientFilter) : undefined;
+  const scopedCase = caseFilter !== "all" ? caseById.get(caseFilter) : undefined;
+  const scopedCaseLabel = scopedCase ? `${scopedCase.caseNumber} · ${scopedCase.title}` : undefined;
+  const scopeAccentColorKey = scopedClient?.colorKey ?? scopedCase?.clientColorKey ?? null;
+  const scopeUnresolved = (clientFilter !== "all" && !scopedClient) || (caseFilter !== "all" && !scopedCaseLabel);
+  const scopeTitle = [
+    clientFilter !== "all" ? (scopedClient?.name || "Ügyfél szerinti szűrés") : null,
+    caseFilter !== "all" ? (scopedCaseLabel || "Ügy szerinti szűrés") : null,
+  ].filter(Boolean).join(" · ") + (scopeUnresolved ? " aktív" : " kommunikációi");
 
   const filtered = useMemo(() => {
     const globalQuery = search.trim().toLocaleLowerCase("hu-HU");
@@ -265,8 +294,16 @@ export default function CommunicationWorkspace() {
 
   const selectView = (view: string) => {
     setActiveView(view);
-    const url = view === "all" ? "/communications" : `/communications?view=${view}`;
-    window.history.replaceState(null, "", url);
+    const params = new URLSearchParams(window.location.search);
+    if (view === "all") params.delete("view"); else params.set("view", view);
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `/communications?${query}` : "/communications");
+  };
+
+  const clearScope = () => {
+    setClientFilter("all");
+    setCaseFilter("all");
+    setOffset(0);
   };
 
   const clearFilters = () => {
@@ -395,6 +432,16 @@ export default function CommunicationWorkspace() {
               {outlookMessage ? <span role="status">{outlookMessage}</span> : null}
             </div>
           </div>
+          {clientFilter !== "all" || caseFilter !== "all" ? (
+            <div data-testid="communication-scope-banner" role="status" className="relative flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2 pl-5 lg:px-5 lg:pl-6">
+              <ClientAccent colorKey={scopeAccentColorKey} className="absolute inset-y-0 left-0 w-1" />
+              <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Aktív kör</span>
+              <p className="min-w-0 flex-1 text-[12px] font-semibold leading-snug text-[var(--adm-text)]">{scopeTitle}</p>
+              <button type="button" onClick={clearScope} aria-label="Aktív ügyfél- és ügyszűrés törlése" className="inline-flex shrink-0 items-center gap-1 border border-[var(--adm-border)] bg-white px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-text-muted)] hover:border-[var(--adm-green-800)] hover:text-[var(--adm-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-blue-700)]">
+                <span aria-hidden="true" className="text-[13px] leading-none">×</span>Szűrés törlése
+              </button>
+            </div>
+          ) : null}
           <nav className="flex items-center gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2 lg:px-5" aria-label="Kommunikációs gyorsnézetek">
             <span className="mr-1 shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Gyorsnézetek</span>
             {viewOptions.map((option) => (
@@ -408,8 +455,8 @@ export default function CommunicationWorkspace() {
         <section className="adm-panel bg-white p-3" aria-label="Kommunikáció szűrése">
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Keresés e-mailben, tárgyban, ügyben" className="adm-board-field px-3 py-2 text-[11px] xl:col-span-2" />
-            <select value={clientFilter} onChange={(event) => { setClientFilter(event.target.value); setOffset(0); }} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
-            <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}</select>
+            <select value={clientFilter} onChange={(event) => { setClientFilter(event.target.value); setOffset(0); }} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clientFilter !== "all" && !clientById.has(clientFilter) ? <option value={clientFilter}>Ügyfél szerinti szűrés</option> : null}{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
+            <select value={caseFilter} onChange={(event) => { setCaseFilter(event.target.value); setOffset(0); }} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügy</option>{caseFilter !== "all" && !caseById.has(caseFilter) ? <option value={caseFilter}>Ügy szerinti szűrés</option> : null}{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}</select>
             <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden irány</option><option value="incoming">Bejövő</option><option value="outgoing">Kimenő</option></select>
             <select value={dateFilter} onChange={(event) => setDateFilter(event.target.value)} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden dátum</option><option value="today">Elmúlt 24 óra</option><option value="week">Elmúlt 7 nap</option><option value="month">Elmúlt 31 nap</option></select>
           </div>
