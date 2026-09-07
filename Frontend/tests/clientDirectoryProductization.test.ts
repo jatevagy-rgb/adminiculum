@@ -19,6 +19,7 @@ test('client directory cards keep a quick-scan information hierarchy', () => {
   assert.match(card, /border-2/);
   assert.match(card, /color\.borderClass/);
   assert.match(card, /\+ Új ügy/);
+  assert.doesNotMatch(card, /AdminPanel[^>]*overflow-hidden[\s\S]*<details[^>]*>[\s\S]*absolute/);
 });
 
 test('client master data, search, loading/error/empty states and routes remain wired', () => {

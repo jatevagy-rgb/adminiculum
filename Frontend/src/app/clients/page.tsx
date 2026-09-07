@@ -140,7 +140,7 @@ function ClientsPageContent() {
     const color = getClientColorDefinition(client.colorKey);
 
     return (
-      <AdminPanel key={client.id} className={`adm-board-list-row relative overflow-hidden border-2 p-4 ${color.softBackgroundClass} ${color.borderClass}`}>
+      <AdminPanel key={client.id} className={`adm-board-list-row relative border-2 p-4 ${color.softBackgroundClass} ${color.borderClass}`}>
         <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
