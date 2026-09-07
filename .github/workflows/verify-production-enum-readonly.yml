@@ -1,0 +1,76 @@
+name: Verify Production Enum (read-only, generic)
+
+on:
+  workflow_dispatch:
+    inputs:
+      enum_name:
+        description: "PostgreSQL enum type name to prove (e.g. LegalAnalysisStatus)"
+        required: true
+        type: string
+      expected_values_json:
+        description: 'Required JSON array of expected enum labels in exact expected order (e.g. ["DRAFT","APPROVED"])'
+        required: true
+        type: string
+      schema_name:
+        description: "PostgreSQL schema that owns the enum type"
+        required: false
+        type: string
+        default: "public"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify-production-enum-readonly:
+    name: Read-only production enum metadata proof
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Azure login (OIDC, no client secret)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install database client dependency
+        working-directory: Backend
+        run: npm ci --ignore-scripts
+
+      # Inputs are data only: they reach the script exclusively through the
+      # process environment (env: above), never through shell interpolation.
+      # The script validates every identifier before opening any connection.
+      - name: Execute read-only production enum metadata proof
+        working-directory: Backend
+        shell: bash
+        env:
+          ENUM_PROOF_ENUM_NAME: ${{ inputs.enum_name }}
+          ENUM_PROOF_EXPECTED_VALUES_JSON: ${{ inputs.expected_values_json }}
+          ENUM_PROOF_SCHEMA_NAME: ${{ inputs.schema_name }}
+        run: |
+          set -euo pipefail
+          set +x
+          export AZURE_CORE_OUTPUT=none
+          DATABASE_URL="$(az webapp config appsettings list \
+            --resource-group Adminiculum \
+            --name adminiculumbackend-b1-01 \
+            --query "[?name=='DATABASE_URL'].value | [0]" \
+            --output tsv)"
+          test -n "${DATABASE_URL:-}" || { echo "DATABASE_URL is required." >&2; exit 1; }
+          echo "::add-mask::${DATABASE_URL}"
+          export DATABASE_URL
+          proof_status=0
+          node scripts/verify-production-enum-readonly.mjs || proof_status=$?
+          unset DATABASE_URL
+          exit "${proof_status}"
