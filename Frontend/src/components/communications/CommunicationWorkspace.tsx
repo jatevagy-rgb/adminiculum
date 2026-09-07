@@ -205,13 +205,15 @@ export default function CommunicationWorkspace() {
   const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
 
   // Scope labels never expose raw ids: unresolved names fall back to neutral
-  // wording while the URL scope remains authoritative server-side.
-  const scopedClientName = clientFilter !== "all" ? clientById.get(clientFilter)?.name : undefined;
+  // wording while the URL scope remains authoritative server-side. The accent
+  // color comes only from already-resolved client data — never invented.
+  const scopedClient = clientFilter !== "all" ? clientById.get(clientFilter) : undefined;
   const scopedCase = caseFilter !== "all" ? caseById.get(caseFilter) : undefined;
   const scopedCaseLabel = scopedCase ? `${scopedCase.caseNumber} · ${scopedCase.title}` : undefined;
-  const scopeUnresolved = (clientFilter !== "all" && !scopedClientName) || (caseFilter !== "all" && !scopedCaseLabel);
+  const scopeAccentColorKey = scopedClient?.colorKey ?? scopedCase?.clientColorKey ?? null;
+  const scopeUnresolved = (clientFilter !== "all" && !scopedClient) || (caseFilter !== "all" && !scopedCaseLabel);
   const scopeTitle = [
-    clientFilter !== "all" ? (scopedClientName || "Ügyfél szerinti szűrés") : null,
+    clientFilter !== "all" ? (scopedClient?.name || "Ügyfél szerinti szűrés") : null,
     caseFilter !== "all" ? (scopedCaseLabel || "Ügy szerinti szűrés") : null,
   ].filter(Boolean).join(" · ") + (scopeUnresolved ? " aktív" : " kommunikációi");
 
@@ -430,6 +432,16 @@ export default function CommunicationWorkspace() {
               {outlookMessage ? <span role="status">{outlookMessage}</span> : null}
             </div>
           </div>
+          {clientFilter !== "all" || caseFilter !== "all" ? (
+            <div data-testid="communication-scope-banner" role="status" className="relative flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2 pl-5 lg:px-5 lg:pl-6">
+              <ClientAccent colorKey={scopeAccentColorKey} className="absolute inset-y-0 left-0 w-1" />
+              <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Aktív kör</span>
+              <p className="min-w-0 flex-1 text-[12px] font-semibold leading-snug text-[var(--adm-text)]">{scopeTitle}</p>
+              <button type="button" onClick={clearScope} aria-label="Aktív ügyfél- és ügyszűrés törlése" className="inline-flex shrink-0 items-center gap-1 border border-[var(--adm-border)] bg-white px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-text-muted)] hover:border-[var(--adm-green-800)] hover:text-[var(--adm-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-blue-700)]">
+                <span aria-hidden="true" className="text-[13px] leading-none">×</span>Szűrés törlése
+              </button>
+            </div>
+          ) : null}
           <nav className="flex items-center gap-1 overflow-x-auto bg-[var(--adm-surface)] px-4 py-2 lg:px-5" aria-label="Kommunikációs gyorsnézetek">
             <span className="mr-1 shrink-0 text-[9px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Gyorsnézetek</span>
             {viewOptions.map((option) => (
@@ -441,12 +453,6 @@ export default function CommunicationWorkspace() {
         </header>
 
         <section className="adm-panel bg-white p-3" aria-label="Kommunikáció szűrése">
-          {clientFilter !== "all" || caseFilter !== "all" ? (
-            <div data-testid="communication-scope-banner" className="mb-2 flex flex-wrap items-center justify-between gap-2 border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2">
-              <p className="text-[11px] font-semibold text-[var(--adm-text)]">{scopeTitle}</p>
-              <button type="button" onClick={clearScope} className="text-[10px] font-semibold text-[var(--adm-blue-700)] hover:underline">Szűrés törlése</button>
-            </div>
-          ) : null}
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-6">
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Keresés e-mailben, tárgyban, ügyben" className="adm-board-field px-3 py-2 text-[11px] xl:col-span-2" />
             <select value={clientFilter} onChange={(event) => { setClientFilter(event.target.value); setOffset(0); }} className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügyfél</option>{clientFilter !== "all" && !clientById.has(clientFilter) ? <option value={clientFilter}>Ügyfél szerinti szűrés</option> : null}{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select>
