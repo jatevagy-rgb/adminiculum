@@ -254,3 +254,61 @@ test("Requirement 18: Canonical composer displays client-explanation draft field
   assert.match(shell, /isClientExplanationDraft\(selectedAnnotation\.annotationType\)\s*\?\s*<NotPublishedBadge \/>/);
   assert.match(shell, /selectedAnnotation\.clientExplanationDraft/);
 });
+
+test("Requirement 19: Client explanation to publication preparation bridge (A, B, C, F, G, I, J)", () => {
+  const source = documentPage();
+  const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
+  assert.ok(shellMatch, "Right shell must exist");
+  const shell = shellMatch[0];
+
+  // A. Selected CLIENT_EXPLANATION_DRAFT exposes publication-preparation action
+  assert.match(shell, /isClientExplanationDraft\(selectedAnnotation\.annotationType\)\s*\?\s*\(\s*<AdminButton[\s\S]*?Közzététel előkészítése/);
+
+  // I. Non-client annotation types do not expose this publication-preparation action (guarded by isClientExplanationDraft)
+  assert.doesNotMatch(shell, /<AdminButton[^>]*>Közzététel előkészítése<\/AdminButton>\s*<AdminButton size="sm" variant="gold"/, "Must be gated by isClientExplanationDraft");
+
+  // B. Action seeds: headline -> client-facing title, clientExplanationDraft -> client-facing explanation
+  assert.match(source, /handlePreparePublicationFromAnnotation\s*=\s*\(annotation:\s*DocumentAnnotationItem\)\s*=>/);
+  assert.match(source, /annotation\.headline\?\.trim\(\)\s*\|\|\s*activeTitle/);
+  assert.match(source, /annotation\.clientExplanationDraft\?\.trim\(\)\s*\|\|\s*''/);
+  assert.match(source, /setPublicationPrefill\(\{\s*key:\s*`\$\{annotation\.id\}:\$\{Date\.now\(\)\}`,\s*title,\s*explanation,?\s*\}\)/);
+
+  // C. Action switches to contextualTab='ugyfel'
+  assert.match(source, /setContextualTab\('ugyfel'\)/);
+
+  // F & G. No createDocumentPublicationDraft or transitionDocumentPublication call in preparation action
+  const prepareFnMatch = source.match(/const handlePreparePublicationFromAnnotation\s*=\s*\([\s\S]*?\n  \};/);
+  assert.ok(prepareFnMatch);
+  assert.doesNotMatch(prepareFnMatch[0], /createDocumentPublicationDraft/);
+  assert.doesNotMatch(prepareFnMatch[0], /transitionDocumentPublication/);
+  assert.doesNotMatch(prepareFnMatch[0], /publish/i);
+
+  // J. Document switch resets publicationPrefill to prevent leakage
+  const docSwitchEffectMatch = source.match(/useEffect\(\(\)\s*=>\s*\{[\s\S]*?setPublicationPrefill\(null\);[\s\S]*?\},\s*\[selectedUploadedDocument\?\.id\]\);/);
+  assert.ok(docSwitchEffectMatch, "Document switch effect must reset publicationPrefill");
+
+  // Prefill passed to ClientPublicationPanel in canonical right shell
+  assert.match(shell, /<ClientPublicationPanel[\s\S]*?prefillDraft=\{publicationPrefill\}/);
+});
+
+test("Requirement 20: ClientPublicationPanel prefill lifecycle semantics (D, E, H)", () => {
+  const pubSrc = publicationPanel();
+
+  // D. Accepts prefillDraft prop with explicit key tracking
+  assert.match(pubSrc, /prefillDraft\?:\s*ClientPublicationPrefillDraft\s*\|\s*null/);
+  assert.match(pubSrc, /lastAppliedPrefillKeyRef\s*=\s*useRef<string\s*\|\s*null>\(null\)/);
+  assert.match(pubSrc, /if\s*\(!prefillDraft\)\s*\{\s*lastAppliedPrefillKeyRef\.current\s*=\s*null;\s*return;\s*\}/);
+  assert.match(pubSrc, /if\s*\(prefillDraft\.key === lastAppliedPrefillKeyRef\.current\)\s*return;/);
+  assert.match(pubSrc, /lastAppliedPrefillKeyRef\.current\s*=\s*prefillDraft\.key;/);
+  assert.match(pubSrc, /setDocumentTitle\(prefillDraft\.title\)/);
+  assert.match(pubSrc, /setDocumentExplanation\(prefillDraft\.explanation\)/);
+
+  // E. Normal rerender without new key does not overwrite user edits (guarded by key check)
+
+  // H. Publication still requires the existing explicit ActionRow lifecycle
+  assert.match(pubSrc, /<ActionRow/);
+  assert.match(pubSrc, /createLabel="Dokumentum-tervezet létrehozása"/);
+  assert.match(pubSrc, /onCreate=\{\(\)\s*=>\s*selectedVersion\s*&&\s*documentId\s*\?\s*run\(\(\)\s*=>\s*createDocumentPublicationDraft/);
+  assert.match(pubSrc, /onTransition=\{\(action\)\s*=>\s*documentPublication\s*\?\s*run\(\(\)\s*=>\s*transitionDocumentPublication/);
+  assert.match(pubSrc, /disabled=\{busy\s*\|\|\s*!activeGrant\s*\|\|\s*!selectedVersion\}/);
+});

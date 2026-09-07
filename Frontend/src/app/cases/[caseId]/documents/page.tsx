@@ -63,7 +63,7 @@ import { DocumentWorkspaceHeader } from "@/components/documents/workContext/Docu
 import { DocumentWorkspaceTabs } from "@/components/documents/workContext/DocumentWorkspaceTabs";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
-import { ClientPublicationPanel } from "@/components/documents/publication/ClientPublicationPanel";
+import { ClientPublicationPanel, type ClientPublicationPrefillDraft } from "@/components/documents/publication/ClientPublicationPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import { useUiPack } from "@/lib/uiPack";
 
@@ -379,6 +379,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [visualMode, setVisualMode] = useState<Extract<DocumentAnnotationAnchorType, 'PAGE_RECTANGLE' | 'PAGE_ELLIPSE' | 'PAGE_POINT'> | null>(null);
   const [contextualTab, setContextualTab] = useState<'review' | 'elemzes' | 'ugyfel' | 'leadas'>('review');
   const [visitedContextualTabs, setVisitedContextualTabs] = useState<Record<string, boolean>>({ review: true });
+  const [publicationPrefill, setPublicationPrefill] = useState<ClientPublicationPrefillDraft | null>(null);
 
   useEffect(() => {
     setVisitedContextualTabs((prev) => (prev[contextualTab] ? prev : { ...prev, [contextualTab]: true }));
@@ -1453,8 +1454,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   useEffect(() => {
     setVisitedContextualTabs({ [contextualTab]: true });
     resetAnnotationDraft();
+    setPublicationPrefill(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUploadedDocument?.id]);
+
+  const handlePreparePublicationFromAnnotation = (annotation: DocumentAnnotationItem) => {
+    const title = annotation.headline?.trim() || activeTitle || 'Ügyfélnek megosztható dokumentum';
+    const explanation = annotation.clientExplanationDraft?.trim() || '';
+    setPublicationPrefill({
+      key: `${annotation.id}:${Date.now()}`,
+      title,
+      explanation,
+    });
+    setContextualTab('ugyfel');
+  };
 
   const handleCreateAnnotation = async () => {
     if (!selectedUploadedDocument?.id || !selectedVersion?.id) return;
@@ -2030,6 +2043,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             {selectedAnnotation.reviewComment ? <p className="text-xs"><b>Review:</b> {selectedAnnotation.reviewComment}</p> : null}
                             {selectedAnnotation.clientExplanationDraft ? <p className="text-xs"><b>Ügyfél magyarázat:</b> {selectedAnnotation.clientExplanationDraft}</p> : null}
                             <div className="flex flex-wrap gap-2 pt-1">
+                              {isClientExplanationDraft(selectedAnnotation.annotationType) ? (
+                                <AdminButton size="sm" variant="primary" onClick={() => handlePreparePublicationFromAnnotation(selectedAnnotation)}>
+                                  Közzététel előkészítése
+                                </AdminButton>
+                              ) : null}
                               {selectedAnnotation.status === 'RESOLVED' ? (
                                 <AdminButton size="sm" variant="gold" onClick={() => handleReopenAnnotation(selectedAnnotation)}>Újranyitás</AdminButton>
                               ) : (
@@ -2107,6 +2125,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               selectedVersionId={canonicalActiveVersion.id}
                               versions={versions}
                               viewMode="document-only"
+                              prefillDraft={publicationPrefill}
                             />
                           ) : (
                             <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
@@ -2645,6 +2664,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         </div>
                                       ) : null}
                                       <div className="flex flex-wrap gap-2">
+                                        {isClientExplanationDraft(selectedAnnotation.annotationType) ? (
+                                          <AdminButton size="sm" variant="primary" onClick={() => handlePreparePublicationFromAnnotation(selectedAnnotation)}>
+                                            Közzététel előkészítése
+                                          </AdminButton>
+                                        ) : null}
                                         {selectedAnnotation.status === 'RESOLVED' ? (
                                           <AdminButton size="sm" variant="gold" onClick={() => handleReopenAnnotation(selectedAnnotation)}>Újranyitás</AdminButton>
                                         ) : (

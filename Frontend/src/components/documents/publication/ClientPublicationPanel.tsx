@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
 import { CasePortalIdentityGrant } from "@/components/documents/publication/CasePortalIdentityGrant";
 import { MilestonePublicationPanel } from "@/components/documents/publication/MilestonePublicationPanel";
@@ -27,6 +27,12 @@ import {
 import { workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 
 type VersionOption = { id: string; versionNumber: number; isCurrent: boolean; originalFileName?: string | null; size?: number | null };
+
+export type ClientPublicationPrefillDraft = {
+  key: string;
+  title?: string;
+  explanation?: string;
+};
 
 const STATUS_LABELS: Record<PublicationStatus | string, string> = {
   DRAFT: "Tervezet",
@@ -71,6 +77,7 @@ export function ClientPublicationPanel({
   selectedVersionId = null,
   versions = [],
   viewMode = "full",
+  prefillDraft,
 }: {
   caseId: string;
   clientId: string | null;
@@ -83,6 +90,7 @@ export function ClientPublicationPanel({
   selectedVersionId?: string | null;
   versions?: VersionOption[];
   viewMode?: "full" | "document-only" | "case-only";
+  prefillDraft?: ClientPublicationPrefillDraft | null;
 }) {
   const [overview, setOverview] = useState<ClientPublicationOverviewDTO | null>(null);
   const [clientUserId, setClientUserId] = useState("");
@@ -94,6 +102,22 @@ export function ClientPublicationPanel({
   const [responsibleLawyer, setResponsibleLawyer] = useState("Felelős ügyvéd");
   const [documentTitle, setDocumentTitle] = useState("Ügyfélnek megosztható dokumentum");
   const [documentExplanation, setDocumentExplanation] = useState("Ez a dokumentum pontos, jóváhagyott verzióhoz kötött ügyfélpéldány.");
+  const lastAppliedPrefillKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!prefillDraft) {
+      lastAppliedPrefillKeyRef.current = null;
+      return;
+    }
+    if (prefillDraft.key === lastAppliedPrefillKeyRef.current) return;
+    lastAppliedPrefillKeyRef.current = prefillDraft.key;
+    if (prefillDraft.title !== undefined) {
+      setDocumentTitle(prefillDraft.title);
+    }
+    if (prefillDraft.explanation !== undefined) {
+      setDocumentExplanation(prefillDraft.explanation);
+    }
+  }, [prefillDraft]);
   const [actionTitle, setActionTitle] = useState("Kérjük az adatok megerősítését");
   const [safeUpdateTitle, setSafeUpdateTitle] = useState("Biztonságos ügyfélfrissítés");
   const [busy, setBusy] = useState(false);
