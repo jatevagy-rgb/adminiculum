@@ -20,6 +20,8 @@ export type OrgPersonDTO = {
   deputyPersonId: string | null;
   name: string;
   jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
   employmentStatus: string;
   startDate: string | null;
   endDate: string | null;
@@ -35,6 +37,48 @@ export type OrgPersonDTO = {
   ownedInitiatives?: { id: string; title: string; status: string }[];
 };
 
+export interface CreateOrgGroupInput {
+  name: string;
+  descriptionSafe?: string | null;
+  parentGroupId?: string | null;
+  workspaceId?: string | null;
+}
+
+export interface UpdateOrgGroupInput {
+  name?: string;
+  descriptionSafe?: string | null;
+  parentGroupId?: string | null;
+}
+
+export interface CreateOrgPersonInput {
+  name: string;
+  jobTitle?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  organizationGroupId?: string | null;
+  managerPersonId?: string | null;
+  deputyPersonId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  responsibilitiesSummary?: string | null;
+  portalMembershipId?: string | null;
+  employmentStatus?: string;
+}
+
+export interface UpdateOrgPersonInput {
+  name?: string;
+  jobTitle?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  organizationGroupId?: string | null;
+  managerPersonId?: string | null;
+  deputyPersonId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  responsibilitiesSummary?: string | null;
+  portalMembershipId?: string | null;
+}
+
 export type ResponsibilityGaps = {
   contractsWithoutOwner: { id: string; title: string }[];
   obligationsWithoutOwner: { id: string; title: string }[];
@@ -49,16 +93,40 @@ export const clientOrganizationApi = {
   listGroups(clientId: string) {
     return fetchApi<{ items: OrgGroupDTO[] }>(url(clientId, '/groups'));
   },
+  createGroup(clientId: string, data: CreateOrgGroupInput) {
+    return fetchApi<OrgGroupDTO>(url(clientId, '/groups'), {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  updateGroup(groupId: string, data: UpdateOrgGroupInput) {
+    return fetchApi<OrgGroupDTO>(`/client-organization/groups/${encodeURIComponent(groupId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
   listPersons(clientId: string) {
     return fetchApi<{ items: OrgPersonDTO[] }>(url(clientId, '/persons'));
   },
   getPerson(personId: string) {
     return fetchApi<OrgPersonDTO>(`/client-organization/persons/${encodeURIComponent(personId)}`);
   },
-  updatePerson(personId: string, data: Partial<Pick<OrgPersonDTO, "jobTitle" | "organizationGroupId" | "managerPersonId" | "deputyPersonId">>) {
+  createPerson(clientId: string, data: CreateOrgPersonInput) {
+    return fetchApi<OrgPersonDTO>(url(clientId, '/persons'), {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  updatePerson(personId: string, data: UpdateOrgPersonInput) {
     return fetchApi<OrgPersonDTO>(`/client-organization/persons/${encodeURIComponent(personId)}`, {
       method: "PATCH",
       body: JSON.stringify(data),
+    });
+  },
+  transitionPerson(personId: string, employmentStatus: string) {
+    return fetchApi<OrgPersonDTO>(`/client-organization/persons/${encodeURIComponent(personId)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ employmentStatus }),
     });
   },
   responsibilityGaps(clientId: string) {

@@ -4688,6 +4688,8 @@ model OrganizationPerson {
   isDeputyFor             OrganizationPerson[]               @relation("PersonDeputy")
   name                    String
   jobTitle                String?
+  email                   String?
+  phone                   String?
   employmentStatus        OrganizationPersonStatus           @default(ACTIVE)
   startDate               DateTime?
   endDate                 DateTime?

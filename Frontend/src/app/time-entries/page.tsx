@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   getTimeEntries,
@@ -107,6 +107,11 @@ function TimeEntriesPageContent() {
   const [entrySearch, setEntrySearch] = useState("");
   const [entryPeriod, setEntryPeriod] = useState<string>(new Date().toISOString().slice(0, 7));
   const [entryMatterFilter, setEntryMatterFilter] = useState("");
+  const [entryCaseFilter, setEntryCaseFilter] = useState("");
+  const [entryDepartmentFilter, setEntryDepartmentFilter] = useState("");
+  const [entryBillableFilter, setEntryBillableFilter] = useState<"" | "billable" | "nonbillable">("");
+  const [entryAttributionFilter, setEntryAttributionFilter] = useState("");
+  const [entryUserFilter, setEntryUserFilter] = useState("");
 
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
@@ -162,8 +167,11 @@ function TimeEntriesPageContent() {
 
   // Optional deep-link context: /time-entries?matterId=... or ?caseId=...
   const searchParams = useSearchParams();
+  const router = useRouter();
   const deepLinkedMatterId = searchParams?.get("matterId") ?? null;
   const deepLinkedCaseId = searchParams?.get("caseId") ?? null;
+  const deepLinkedClientId = searchParams?.get("clientId") ?? null;
+  const [clientScopeLabel, setClientScopeLabel] = useState<string | null>(null);
   const [prefilledMatterId, setPrefilledMatterId] = useState<string | null>(null);
   const [caseResolutionState, setCaseResolutionState] = useState<{
     status: "idle" | "loading" | "found" | "not_found";
@@ -178,7 +186,7 @@ function TimeEntriesPageContent() {
     setLoadWarning(null);
     try {
       const [entriesResult, mattersResult, clientsResult] = await Promise.allSettled([
-        getTimeEntries(),
+        getTimeEntries({ clientId: deepLinkedClientId || undefined, caseId: deepLinkedCaseId || undefined }),
         getMatters(),
         getClients(),
       ]);
@@ -211,7 +219,16 @@ function TimeEntriesPageContent() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [deepLinkedCaseId, deepLinkedClientId]);
+
+  useEffect(() => {
+    if (!deepLinkedClientId) {
+      setClientScopeLabel(null);
+      return;
+    }
+    const match = clients.find((client) => client.id === deepLinkedClientId);
+    setClientScopeLabel(match?.name || "Ügyfél szerinti munkaóra-szűrés aktív");
+  }, [clients, deepLinkedClientId]);
 
   useEffect(() => {
     loadEntries();
@@ -390,6 +407,12 @@ function TimeEntriesPageContent() {
       if (entryMatterFilter && entry.matterId !== entryMatterFilter) {
         return false;
       }
+      if (entryCaseFilter && entry.resolvedCaseId !== entryCaseFilter && entry.caseId !== entryCaseFilter) return false;
+      if (entryDepartmentFilter && entry.departmentId !== entryDepartmentFilter) return false;
+      if (entryUserFilter && entry.userId !== entryUserFilter) return false;
+      if (entryBillableFilter === "billable" && !entry.billable) return false;
+      if (entryBillableFilter === "nonbillable" && entry.billable) return false;
+      if (entryAttributionFilter && entry.attributionKind !== entryAttributionFilter) return false;
       if (!normalizedSearch) {
         return true;
       }
@@ -408,7 +431,18 @@ function TimeEntriesPageContent() {
 
       return haystack.includes(normalizedSearch);
     });
-  }, [entries, entryMatterFilter, entryPeriod, entrySearch, matterById]);
+  }, [entries, entryAttributionFilter, entryBillableFilter, entryCaseFilter, entryDepartmentFilter, entryMatterFilter, entryPeriod, entrySearch, entryUserFilter, matterById]);
+
+  const resolvedCaseOptions = useMemo(() => {
+    const options = new Map<string, { id: string; caseNumber: string; title: string }>();
+    for (const entry of entries) {
+      if (entry.case) options.set(entry.case.id, entry.case);
+      const resolvedId = entry.resolvedCaseId || entry.task?.caseId;
+      const resolvedCase = resolvedId ? entry.matter?.cases?.find((caseItem) => caseItem.id === resolvedId) : null;
+      if (resolvedCase) options.set(resolvedCase.id, resolvedCase);
+    }
+    return Array.from(options.values()).sort((left, right) => `${left.caseNumber} ${left.title}`.localeCompare(`${right.caseNumber} ${right.title}`, "hu-HU"));
+  }, [entries]);
 
   const groupedByClient: GroupedClient[] = useMemo(() => {
     const clientsMap = new Map<string, GroupedClient>();
@@ -417,7 +451,7 @@ function TimeEntriesPageContent() {
       const sourceMatter = matterById.get(entry.matterId);
       const entryMatter = entry.matter || sourceMatter || null;
       const linkedCases = entry.matter?.cases || [];
-      const resolvedCase = linkedCases.length === 1 ? linkedCases[0] : null;
+      const resolvedCase = entry.case || (entry.resolvedCaseId ? linkedCases.find((caseItem) => caseItem.id === entry.resolvedCaseId) || null : linkedCases.length === 1 ? linkedCases[0] : null);
 
       const resolvedClientId = entryMatter?.clientId || resolvedCase?.clientId || "unassigned";
       const resolvedClientName =
@@ -551,6 +585,7 @@ function TimeEntriesPageContent() {
       totalClients: groupedByClient.length,
       billableMinutes,
       nonBillableMinutes,
+      reviewMinutes: filteredEntries.reduce((sum, entry) => sum + (entry.attributionKind === "AMBIGUOUS" || entry.attributionKind === "MATTER_ONLY" ? entry.minutes : 0), 0),
     };
   }, [filteredEntries, groupedByClient.length]);
 
@@ -1090,6 +1125,16 @@ function TimeEntriesPageContent() {
             </button>
           </div>
 
+          {(deepLinkedClientId || deepLinkedCaseId) && (
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--adm-border)] bg-white px-3 py-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--adm-text)]">{deepLinkedClientId ? (clientScopeLabel || "Ügyfél szerinti munkaóra-szűrés aktív") : "Ügy szerinti munkaóra-szűrés aktív"}</p>
+                <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">A lista szerveroldali ügyfél- és ügykapcsolat alapján töltődött be.</p>
+              </div>
+              <button type="button" onClick={() => router.push("/time-entries")} className="min-h-10 rounded border border-[var(--adm-border)] px-3 py-2 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-800)]">Szűrés törlése</button>
+            </div>
+          )}
+
           {deepLinkedCaseId && caseResolutionState.status !== "idle" && (
             <div className="mb-3 rounded-lg border border-[var(--adm-ochre-500)] bg-[var(--adm-surface)] px-3 py-2">
               <div className="flex items-start justify-between gap-3">
@@ -1160,7 +1205,7 @@ function TimeEntriesPageContent() {
                 ))}
               </div>
               {activeTab === "entries" && (
-                <div className="grid flex-1 gap-2 sm:grid-cols-[160px_minmax(0,1fr)_220px] lg:max-w-3xl">
+                <div className="grid flex-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 lg:max-w-5xl">
                   <input
                     type="month"
                     value={entryPeriod}
@@ -1186,6 +1231,24 @@ function TimeEntriesPageContent() {
                         {matter.title}
                       </option>
                     ))}
+                  </select>
+                  <select value={entryCaseFilter} onChange={(event) => setEntryCaseFilter(event.target.value)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]" aria-label="Ügy szűrő">
+                    <option value="">Minden ügy</option>
+                    {resolvedCaseOptions.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}
+                  </select>
+                  <select value={entryDepartmentFilter} onChange={(event) => setEntryDepartmentFilter(event.target.value)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]" aria-label="Szervezeti egység szűrő">
+                    <option value="">Minden szervezeti egység</option>
+                    {[...new Map(entries.filter((entry) => entry.department).map((entry) => [entry.department!.id, entry.department!])).values()].map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                  </select>
+                  <select value={entryBillableFilter} onChange={(event) => setEntryBillableFilter(event.target.value as "" | "billable" | "nonbillable")} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]" aria-label="Elszámolhatóság szűrő">
+                    <option value="">Minden elszámolhatóság</option><option value="billable">Elszámolható</option><option value="nonbillable">Nem elszámolható</option>
+                  </select>
+                  <select value={entryUserFilter} onChange={(event) => setEntryUserFilter(event.target.value)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]" aria-label="Ügyvéd szűrő">
+                    <option value="">Minden ügyvéd</option>
+                    {[...new Map(entries.filter((entry) => entry.user).map((entry) => [entry.user!.id, entry.user!])).values()].map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+                  </select>
+                  <select value={entryAttributionFilter} onChange={(event) => setEntryAttributionFilter(event.target.value)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]" aria-label="Attribúció szűrő">
+                    <option value="">Minden attribúció</option><option value="EXACT_CASE">Ügyhöz rendelve</option><option value="TASK_DERIVED_CASE">Feladat alapján ügyhöz rendelve</option><option value="AMBIGUOUS">Ellenőrizendő</option><option value="MATTER_ONLY">Ellenőrizendő</option>
                   </select>
                 </div>
               )}
@@ -1637,10 +1700,10 @@ function TimeEntriesPageContent() {
 
           {activeTab === "entries" && (
           <>
-          <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-[var(--adm-border)] bg-white px-4 py-2 md:grid-cols-4">
+          <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-lg border border-[var(--adm-border)] bg-white px-4 py-2 md:grid-cols-5">
             <div>
               <p className="text-lg font-serif text-[var(--adm-text)]">{formatMinutes(totals.totalMinutes)}</p>
-              <p className="text-[10px] text-[var(--adm-text-muted)]">Munkaóra</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Összes idő</p>
             </div>
             <div>
               <p className="text-lg font-serif text-[var(--adm-text)]">{totals.totalEntries}</p>
@@ -1648,11 +1711,15 @@ function TimeEntriesPageContent() {
             </div>
             <div>
               <p className="text-lg font-serif text-[var(--adm-green-800)]">{formatMinutes(totals.billableMinutes)}</p>
-              <p className="text-[10px] text-[#315442]">Számlázható idő</p>
+              <p className="text-[10px] text-[#315442]">Elszámolható idő</p>
             </div>
             <div>
-              <p className="text-lg font-serif text-[var(--adm-text)]">{totals.totalClients}</p>
-              <p className="text-[10px] text-[var(--adm-text-muted)]">Ügyfél · nem számlázható {formatMinutes(totals.nonBillableMinutes)}</p>
+              <p className="text-lg font-serif text-[var(--adm-text)]">{formatMinutes(totals.nonBillableMinutes)}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Nem elszámolható idő</p>
+            </div>
+            <div>
+              <p className="text-lg font-serif text-[var(--adm-ochre-700)]">{formatMinutes(totals.reviewMinutes)}</p>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">Ellenőrizendő idő</p>
             </div>
           </div>
 
@@ -1669,7 +1736,7 @@ function TimeEntriesPageContent() {
             <div className="rounded-lg border border-dashed border-[var(--adm-border)] bg-white p-4 text-center">
               <p className="text-sm font-semibold text-[var(--adm-text)]">Nincs találat ebben a nézetben.</p>
               <div className="mt-3 flex flex-wrap justify-center gap-2">
-                <button onClick={() => { setEntrySearch(""); setEntryMatterFilter(""); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">
+                <button onClick={() => { setEntrySearch(""); setEntryMatterFilter(""); setEntryCaseFilter(""); setEntryDepartmentFilter(""); setEntryUserFilter(""); setEntryBillableFilter(""); setEntryAttributionFilter(""); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]">
                   Szűrők törlése
                 </button>
                 <button onClick={handleCreate} className="rounded bg-[var(--adm-green-800)] px-3 py-2 text-xs text-[var(--adm-ivory-50)]">
@@ -1759,9 +1826,12 @@ function TimeEntriesPageContent() {
                                       </div>
                                       <p className="text-xs text-[var(--adm-text-muted)]"><span className="font-semibold text-[var(--adm-text)]">Leírás:</span> {entry.description}</p>
                                       <div className="flex items-center gap-4 mt-2">
-                                        {entry.department && <span className="text-[10px] text-[var(--adm-text-muted)]">{entry.department.name}</span>}
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyvéd: {entry.user?.name || "Ismeretlen"}</span>
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">Szervezeti egység: {entry.department?.name || "Nincs szervezeti egység"}</span>
+                                        {entry.task ? <span className="text-[10px] text-[var(--adm-text-muted)]">Feladat: {entry.task.title} · {entry.task.status}</span> : <span className="text-[10px] text-[var(--adm-text-muted)]">Nincs feladathoz kötve</span>}
                                         <span className="text-[10px] text-[var(--adm-text-soft)]">Dátum: {formatDate(entry.workDate)}</span>
-                                        <span className="text-[10px] text-[var(--adm-text-muted)]">{entry.billable ? "Számlázható" : "Nem számlázható"}</span>
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">{entry.billable ? "Elszámolható" : "Nem elszámolható"}</span>
+                                        <span className={`text-[10px] font-semibold ${entry.attributionKind === "AMBIGUOUS" || entry.attributionKind === "MATTER_ONLY" ? "text-[var(--adm-ochre-700)]" : "text-[var(--adm-text-muted)]"}`}>{entry.attributionKind === "TASK_DERIVED_CASE" ? "Feladat alapján ügyhöz rendelve" : entry.attributionKind === "EXACT_CASE" ? "Ügyhöz rendelve" : "Ellenőrizendő"}</span>
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Munkacsomag: {caseGroup.caseTitle}</span>
                                         {caseGroup.caseId && (
                                           <Link href={`/cases/${caseGroup.caseId}`} className="text-[10px] text-[var(--adm-ochre-500)] hover:underline">
