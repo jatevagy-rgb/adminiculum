@@ -108,12 +108,12 @@ describe("Communications authoritative backend scoping & pagination", () => {
 
   it("omits clientId from getCommunications params when clientFilter is 'all'", () => {
     // commParams initially only has limit and offset
-    assert.match(commSrc, /const commParams: \{ limit: number; offset: number; clientId\?: string \} = \{\s*limit: pageSize,\s*offset,\s*\};/);
+    assert.match(commSrc, /const commParams: \{ limit: number; offset: number; clientId\?: string; caseId\?: string \} = \{\s*limit: pageSize,\s*offset,\s*\};/);
   });
 
   it("resets offset to 0 before loading when client scope changes", () => {
     // Both ref tracking and dropdown onChange must reset offset
-    assert.match(commSrc, /prevClientFilterRef\.current !== clientFilter/);
+    assert.match(commSrc, /prevScope\.client !== clientFilter \|\| prevScope\.case !== caseFilter/);
     assert.match(commSrc, /if \(offset !== 0\) \{\s*setOffset\(0\);\s*return;\s*\}/);
     assert.match(commSrc, /setClientFilter\(event\.target\.value\);\s*setOffset\(0\);/);
     assert.match(commSrc, /setClientFilter\("all"\);[\s\S]*setOffset\(0\);/);
