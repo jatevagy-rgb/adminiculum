@@ -433,6 +433,17 @@ function TimeEntriesPageContent() {
     });
   }, [entries, entryAttributionFilter, entryBillableFilter, entryCaseFilter, entryDepartmentFilter, entryMatterFilter, entryPeriod, entrySearch, entryUserFilter, matterById]);
 
+  const resolvedCaseOptions = useMemo(() => {
+    const options = new Map<string, { id: string; caseNumber: string; title: string }>();
+    for (const entry of entries) {
+      if (entry.case) options.set(entry.case.id, entry.case);
+      const resolvedId = entry.resolvedCaseId || entry.task?.caseId;
+      const resolvedCase = resolvedId ? entry.matter?.cases?.find((caseItem) => caseItem.id === resolvedId) : null;
+      if (resolvedCase) options.set(resolvedCase.id, resolvedCase);
+    }
+    return Array.from(options.values()).sort((left, right) => `${left.caseNumber} ${left.title}`.localeCompare(`${right.caseNumber} ${right.title}`, "hu-HU"));
+  }, [entries]);
+
   const groupedByClient: GroupedClient[] = useMemo(() => {
     const clientsMap = new Map<string, GroupedClient>();
 
@@ -1223,7 +1234,7 @@ function TimeEntriesPageContent() {
                   </select>
                   <select value={entryCaseFilter} onChange={(event) => setEntryCaseFilter(event.target.value)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]" aria-label="Ügy szűrő">
                     <option value="">Minden ügy</option>
-                    {[...new Map(entries.filter((entry) => entry.case).map((entry) => [entry.case!.id, entry.case!])).values()].map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}
+                    {resolvedCaseOptions.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.title}</option>)}
                   </select>
                   <select value={entryDepartmentFilter} onChange={(event) => setEntryDepartmentFilter(event.target.value)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]" aria-label="Szervezeti egység szűrő">
                     <option value="">Minden szervezeti egység</option>

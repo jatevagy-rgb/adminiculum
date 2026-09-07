@@ -26,38 +26,66 @@ function getAuthenticatedUserId(req: Request): string | null {
   return req.user?.userId || null;
 }
 
+export function buildTimeEntryListWhere(query: Record<string, unknown>, requesterId: string, privileged: boolean): any {
+  const { matterId, userId, workType, startDate, endDate, clientId, caseId, departmentId } = query;
+  if (userId && String(userId) !== requesterId && !privileged) {
+    return { forbidden: true };
+  }
+  const where: any = {};
+  if (matterId) where.matterId = String(matterId);
+  const scopeConditions: any[] = [];
+  if (clientId) scopeConditions.push({ OR: [{ case: { clientId: String(clientId) } }, { matter: { clientId: String(clientId) } }, { task: { case: { clientId: String(clientId) } } }] });
+  if (caseId) scopeConditions.push({ OR: [{ caseId: String(caseId) }, { task: { caseId: String(caseId) } }, { matter: { cases: { some: { id: String(caseId) } } } }] });
+  if (scopeConditions.length) where.AND = scopeConditions;
+  // Global reads remain self-only. Privileged team views exist only inside an
+  // explicit authoritative client/case scope.
+  if (userId) where.userId = String(userId);
+  else if (!(privileged && (clientId || caseId))) where.userId = requesterId;
+  if (workType) where.workType = String(workType);
+  if (departmentId) where.departmentId = String(departmentId);
+  if (startDate || endDate) {
+    where.workDate = {};
+    if (startDate) where.workDate.gte = new Date(String(startDate));
+    if (endDate) where.workDate.lte = new Date(String(endDate));
+  }
+  return { forbidden: false, where };
+}
+
+export function resolveTimeEntryAttribution(entry: any): { attributionKind: 'EXACT_CASE' | 'TASK_DERIVED_CASE' | 'MATTER_ONLY' | 'AMBIGUOUS'; resolvedCaseId: string | null } {
+  if (entry.caseId) return { attributionKind: 'EXACT_CASE', resolvedCaseId: entry.caseId };
+  const matterCaseIds = (entry.matter?.cases || []).map((item: any) => item.id);
+  if (!entry.matterId || matterCaseIds.length === 0) return { attributionKind: 'MATTER_ONLY', resolvedCaseId: null };
+  if (entry.task) {
+    const kind = classifyTimeAttribution({
+      caseId: entry.task.caseId,
+      matterId: entry.matterId,
+      matterCaseIds,
+      task: { caseId: entry.task.caseId, matterId: entry.task.matterId, workPackageCaseId: entry.task.workPackageItem?.caseWorkPackage?.caseId || null },
+    });
+    return { attributionKind: kind, resolvedCaseId: kind === 'TASK_DERIVED_CASE' ? entry.task.caseId : null };
+  }
+  const candidateCaseId = matterCaseIds[0];
+  const kind = classifyTimeAttribution({ caseId: candidateCaseId, matterId: entry.matterId, matterCaseIds, task: null });
+  return { attributionKind: kind, resolvedCaseId: kind === 'EXACT_CASE' ? candidateCaseId : null };
+}
+
 // ============================================================================
 // GET /api/v1/time-entries - List time entries
 // ============================================================================
 
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
-    const { matterId, userId, workType, startDate, endDate, clientId, caseId, departmentId } = req.query;
+    const { caseId } = req.query;
     const requesterId = getAuthenticatedUserId(req);
     if (!requesterId) {
       return res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated user is required' });
     }
 
-    if (userId && String(userId) !== requesterId && !isPrivileged(req)) {
+    const scope = buildTimeEntryListWhere(req.query as Record<string, unknown>, requesterId, isPrivileged(req));
+    if (scope.forbidden) {
       return res.status(403).json({ status: 403, code: 'TIME_ENTRY_USER_SCOPE_FORBIDDEN', message: 'Time entry user filter is restricted.' });
     }
-
-    const where: any = {};
-
-    if (matterId) where.matterId = matterId;
-    const scopeConditions: any[] = [];
-    if (clientId) scopeConditions.push({ OR: [{ case: { clientId: String(clientId) } }, { matter: { clientId: String(clientId) } }, { task: { case: { clientId: String(clientId) } } }] });
-    if (caseId) scopeConditions.push({ OR: [{ caseId: String(caseId) }, { task: { caseId: String(caseId) } }, { matter: { cases: { some: { id: String(caseId) } } } }] });
-    if (scopeConditions.length) where.AND = scopeConditions;
-    where.userId = userId ? String(userId) : requesterId;
-    if (workType) where.workType = workType;
-    if (departmentId) where.departmentId = String(departmentId);
-    
-    if (startDate || endDate) {
-      where.workDate = {};
-      if (startDate) where.workDate.gte = new Date(startDate as string);
-      if (endDate) where.workDate.lte = new Date(endDate as string);
-    }
+    const where = scope.where;
 
     const loadEntries = async (withCases: boolean) => {
       if (withCases) {
@@ -160,21 +188,13 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     if (caseId) {
       const requestedCaseId = String(caseId);
       const caseRecord = await prisma.case.findUnique({ where: { id: requestedCaseId }, select: { id: true, matterId: true } });
-      const matterCaseIds = caseRecord?.matterId ? (await prisma.case.findMany({ where: { matterId: caseRecord.matterId }, select: { id: true } })).map((row) => row.id) : [];
       entries = entries.filter((entry: any) => {
-        if (entry.caseId === requestedCaseId) return true;
-        if (!caseRecord?.matterId || entry.matterId !== caseRecord.matterId) return false;
-        const kind = classifyTimeAttribution({ caseId: requestedCaseId, matterId: caseRecord.matterId, matterCaseIds, task: entry.task ? { caseId: entry.task.caseId, matterId: entry.task.matterId, workPackageCaseId: entry.task.workPackageItem?.caseWorkPackage?.caseId || null } : null });
-        return kind === 'EXACT_CASE' || kind === 'TASK_DERIVED_CASE';
+        if (!caseRecord?.matterId || entry.matterId !== caseRecord.matterId) return entry.caseId === requestedCaseId;
+        const resolved = resolveTimeEntryAttribution(entry);
+        return resolved.resolvedCaseId === requestedCaseId && (resolved.attributionKind === 'EXACT_CASE' || resolved.attributionKind === 'TASK_DERIVED_CASE');
       });
     }
-    const response = await Promise.all(entries.map(async (entry: any) => {
-      if (entry.task) return { ...entry, attributionKind: 'TASK_DERIVED_CASE', resolvedCaseId: entry.task.caseId };
-      if (entry.caseId) return { ...entry, attributionKind: 'EXACT_CASE', resolvedCaseId: entry.caseId };
-      if (!entry.matterId) return { ...entry, attributionKind: 'MATTER_ONLY', resolvedCaseId: null };
-      const siblingCases = await prisma.case.findMany({ where: { matterId: entry.matterId }, select: { id: true } });
-      return { ...entry, attributionKind: siblingCases.length > 1 ? 'AMBIGUOUS' : 'MATTER_ONLY', resolvedCaseId: siblingCases.length === 1 ? siblingCases[0].id : null };
-    }));
+    const response = entries.map((entry: any) => ({ ...entry, ...resolveTimeEntryAttribution(entry) }));
     res.json(response);
   } catch (error) {
     console.error('Error fetching time entries:', error);

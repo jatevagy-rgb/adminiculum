@@ -26,5 +26,7 @@ test('T1 exposes the client dossier entry point and hours-only review state', ()
   assert.match(page, /Szűrés törlése/);
   assert.match(page, /Ellenőrizendő idő/);
   assert.match(page, /Elszámolható idő/);
+  assert.match(page, /resolvedCaseOptions/);
+  assert.match(page, /entry\.resolvedCaseId \|\| entry\.task\?\.caseId/);
   assert.match(page, /Kimutatás/);
 });
