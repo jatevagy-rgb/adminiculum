@@ -23,6 +23,8 @@ const print = (name, value) => process.stdout.write(`${name}=${value}\n`);
 
 const fail = (message) => {
   process.stderr.write(`ERROR: ${message}\n`);
+  // Pre-connection validation cannot have touched the database.
+  print("DATABASE_MUTATED", "NO");
   print("READ_ONLY_ENUM_PROOF", "FAIL");
   process.exit(1);
 };

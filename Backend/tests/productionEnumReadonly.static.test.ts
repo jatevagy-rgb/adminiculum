@@ -180,6 +180,23 @@ describe("read-only production enum inspector safety contract", () => {
     expect(catchBlock).toContain("process.exit(1)");
   });
 
+  test("pre-connection fail() emits DATABASE_MUTATED=NO then PROOF=FAIL", () => {
+    const failDeclIndex = script.indexOf("const fail = (message) =>");
+    expect(failDeclIndex).toBeGreaterThan(-1);
+    const failBody = script.slice(
+      failDeclIndex,
+      script.indexOf("};", failDeclIndex),
+    );
+    const mutatedIndex = failBody.indexOf('print("DATABASE_MUTATED", "NO")');
+    const failMarkerIndex = failBody.indexOf(
+      'print("READ_ONLY_ENUM_PROOF", "FAIL")',
+    );
+    const exitIndex = failBody.indexOf("process.exit(1)");
+    expect(mutatedIndex).toBeGreaterThan(-1);
+    expect(failMarkerIndex).toBeGreaterThan(mutatedIndex);
+    expect(exitIndex).toBeGreaterThan(failMarkerIndex);
+  });
+
   test("pre-connection validation errors remain fixed safe messages", () => {
     const failCalls = [...script.matchAll(/fail\(([^;]+?)\);/gs)].map(
       (m) => m[1],
