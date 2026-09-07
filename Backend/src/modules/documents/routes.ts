@@ -6,7 +6,7 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import documentsService from './services';
-import { DocumentDeleteError, DocumentStorageUploadError } from './services';
+import { DocumentDeleteError, DocumentStorageUploadError, DocumentPersistenceError } from './services';
 import { extractText } from './textExtractor';
 import annotationRoutes from './annotations.routes';
 import {
@@ -291,11 +291,24 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       });
       return;
     }
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (
+      (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') ||
+      (error instanceof DocumentPersistenceError && error.prismaCode === 'P2002')
+    ) {
       res.status(409).json({
         status: 409,
         code: 'DOCUMENT_UPLOAD_CONFLICT',
         message: 'Dokumentum feltöltése sikertelen. Ütköző dokumentumazonosító keletkezett.'
+      });
+      return;
+    }
+    if (error instanceof DocumentPersistenceError) {
+      res.status(500).json({
+        status: 500,
+        code: 'INTERNAL_ERROR',
+        message: 'Dokumentum feltöltése sikertelen.',
+        reason: error.stage,
+        prismaCode: error.prismaCode,
       });
       return;
     }

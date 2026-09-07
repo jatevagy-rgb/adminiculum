@@ -25,7 +25,7 @@ jest.mock('../src/modules/documents/securityScan.service', () => ({
   securityScanBlock: () => null,
 }));
 
-import documentsService, { DocumentStorageUploadError } from '../src/modules/documents/services';
+import documentsService, { DocumentStorageUploadError, DocumentPersistenceError } from '../src/modules/documents/services';
 
 const input = {
   caseId: 'case-1',
@@ -137,7 +137,10 @@ describe('canonical document upload persistence', () => {
   it('removes SharePoint content and persists no document when canonical persistence fails', async () => {
     mockPrisma.document.create.mockRejectedValueOnce(new Error('database unavailable'));
 
-    await expect(documentsService.createDocument(input)).rejects.toThrow('database unavailable');
+    await expect(documentsService.createDocument(input)).rejects.toMatchObject({
+      stage: 'DOCUMENT_AND_INITIAL_VERSION',
+      prismaCode: null,
+    });
 
     expect(mockPrisma.document.create).toHaveBeenCalledTimes(1);
     expect(mockPrisma.timelineEvent.create).not.toHaveBeenCalled();
@@ -152,7 +155,10 @@ describe('canonical document upload persistence', () => {
     });
     mockPrisma.document.create.mockRejectedValueOnce(conflict);
 
-    await expect(documentsService.createDocument(input)).rejects.toBe(conflict);
+    await expect(documentsService.createDocument(input)).rejects.toMatchObject({
+      stage: 'DOCUMENT_AND_INITIAL_VERSION',
+      prismaCode: 'P2002',
+    });
 
     expect(mockPrisma.document.create).toHaveBeenCalledTimes(1);
     expect(mockDeleteDocument).toHaveBeenCalledWith('sp-item-1');
