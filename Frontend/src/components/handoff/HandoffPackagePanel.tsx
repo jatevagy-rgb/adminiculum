@@ -18,6 +18,7 @@ type HandoffPackagePanelProps = {
   generatedContractId?: string | null;
   initialSummary?: string;
   contextLabel?: string;
+  compact?: boolean;
 };
 
 const STATUS_LABELS: Record<LawyerHandoffStatus, string> = {
@@ -110,6 +111,7 @@ export function HandoffPackagePanel({
   generatedContractId,
   initialSummary,
   contextLabel,
+  compact = false,
 }: HandoffPackagePanelProps) {
   const [packages, setPackages] = useState<LawyerHandoffPackageRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -269,7 +271,7 @@ export function HandoffPackagePanel({
 
   return (
     <section
-      className="adm-board-panel p-4"
+      className={compact ? "min-w-0 w-full space-y-3" : "adm-board-panel p-4"}
       aria-label="Leadások"
     >
       <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-3">

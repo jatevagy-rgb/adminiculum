@@ -100,15 +100,18 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   assert.match(shell, /Elemzés/);
   assert.match(shell, /Ügyfél/);
   assert.match(shell, /Leadás/);
-  assert.match(shell, /document-review/);
-  assert.match(shell, /document-legal-analysis/);
-  assert.match(shell, /document-publication/);
-  assert.match(shell, /document-handoff/);
+  assert.match(source, /id="document-review"/);
+  assert.match(source, /id="document-legal-analysis"/);
+  assert.match(source, /id="document-publication"/);
+  assert.match(source, /id="document-handoff"/);
+
+  // In-shell working panels (Slice 2)
+  assert.match(shell, /LegalAnalysisIntakePanel/);
+  assert.match(shell, /ClientPublicationPanel/);
+  assert.match(shell, /HandoffPackagePanel/);
 
   // Truthfulness positive assertions
   assert.match(shell, /Feltöltő:/);
-  assert.match(shell, /Jogi elemzés/);
-  assert.match(shell, /A részletes állapot az elemzési panelen látható\./);
   assert.match(source, /Publikálva/);
   assert.match(source, /Nincs publikálva/);
   assert.match(shell, /publicationStatusLabel/);
@@ -191,19 +194,26 @@ test("Actual DOM wrappers exist with document-legal-analysis, document-publicati
   // Must NOT count getElementById string references as proof
   const withoutGetElementById = source.replace(/getElementById\(['"][^'"]+['"]\)/g, '');
 
-  assert.match(withoutGetElementById, /<div[^>]*id="document-legal-analysis"[^>]*>[\s\S]*?<LegalAnalysisIntakePanel/);
-  assert.match(withoutGetElementById, /<div[^>]*id="document-publication"[^>]*>[\s\S]*?<ClientPublicationPanel/);
-  assert.match(withoutGetElementById, /<div[^>]*id="document-handoff"[^>]*>[\s\S]*?<HandoffPackagePanel/);
+  assert.match(withoutGetElementById, /<div[^>]*id="document-legal-analysis"/);
+  assert.match(withoutGetElementById, /<div[^>]*id="document-publication"/);
+  assert.match(withoutGetElementById, /<div[^>]*id="document-handoff"/);
+  // Lower publication section uses case-only mode to avoid double-mount writer
+  assert.match(withoutGetElementById, /<ClientPublicationPanel[\s\S]*?viewMode="case-only"/);
 });
 
-test("Each contextual button points to an actual rendered target and provides truthful disabled states", () => {
+test("Contextual right shell hosts actual working panels without downward scroll jumps", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must be found");
   const shell = shellMatch[0];
 
-  // Verify each target exists as a DOM element id outside getElementById
-  const withoutGetElementById = source.replace(/getElementById\(['"][^'"]+['"]\)/g, '');
+  // In Slice 2, right shell actions do NOT scroll down to anchor ids
+  assert.doesNotMatch(shell, /document\.getElementById\(['"]document-legal-analysis['"]\)/);
+  assert.doesNotMatch(shell, /document\.getElementById\(['"]document-publication['"]\)/);
+  assert.doesNotMatch(shell, /document\.getElementById\(['"]document-handoff['"]\)/);
+  assert.doesNotMatch(shell, /scrollIntoView/);
+
+  // Lower section anchors still exist in source
   const targets = [
     'document-review',
     'document-changes',
@@ -212,14 +222,13 @@ test("Each contextual button points to an actual rendered target and provides tr
     'document-handoff',
   ];
   for (const target of targets) {
-    assert.match(withoutGetElementById, new RegExp(`id="${target}"`));
-    assert.match(shell, new RegExp(`document\\.getElementById\\('${target}'\\)`));
+    assert.match(source, new RegExp(`id="${target}"`));
   }
 
-  // Verify truthful disabling
-  assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalActiveVersion\}/);
-  assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalActiveVersion \|\| !canonicalCaseId\}/);
-  assert.match(shell, /disabled=\{!caseRecord\}/);
+  // Working panels are mounted in the right shell
+  assert.match(shell, /<LegalAnalysisIntakePanel/);
+  assert.match(shell, /<ClientPublicationPanel/);
+  assert.match(shell, /<HandoffPackagePanel/);
 });
 
 test("Canonical Leadás summary does not claim ZIP export and does not fabricate Aktív fallback", () => {
@@ -229,9 +238,8 @@ test("Canonical Leadás summary does not claim ZIP export and does not fabricate
   const shell = shellMatch[0];
 
   assert.doesNotMatch(source, /ZIP export és átadási jegyzék/);
-  assert.match(shell, /A részletes leadási állapot a leadási csomag panelen látható\./);
   assert.doesNotMatch(shell, /Aktív/);
-  assert.match(shell, /caseRecord\?\.status \|\| "Nincs megadva"/);
+  assert.match(shell, /HandoffPackagePanel/);
 });
 
 // Targeted regression tests for transient-state truthfulness repairs (PR #182 Final Pass)
