@@ -4,6 +4,7 @@ import { useState, use, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
+import { resolveVersionTextPlan } from "@/lib/documents/versionTextPlan";
 import { AnnotationCapabilityToolbar } from "@/components/documents/annotations/AnnotationCapabilityToolbar";
 import { NotPublishedBadge, isClientExplanationDraft } from "@/components/documents/annotations/NotPublishedBadge";
 import {
@@ -15,6 +16,7 @@ import {
   downloadContract,
   downloadDocument,
   downloadDocumentVersion,
+  getDocumentText,
   createDocumentAnnotation,
   createDocumentAnnotationComment,
   deleteDocumentAnnotation,
@@ -351,6 +353,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // cannot be fetched (e.g. an invalid/synthetic storage reference). Truthful
   // domain state — never a raw provider error surfaced to the console/UI.
   const [versionTextUnavailable, setVersionTextUnavailable] = useState(false);
+  // Read-only document-level preview for the CURRENT version of an uploaded
+  // non-TXT document (extracted server-side via `GET /documents/:id/text`).
+  // Kept separate from `versionText` on purpose: annotations persist
+  // version-scoped offsets/fingerprints, so this text is display-only and must
+  // never feed anchor creation, contentFingerprint, or rendererVersion.
+  const [documentTextPreview, setDocumentTextPreview] = useState<string | null>(null);
+  const [documentTextUnavailableReason, setDocumentTextUnavailableReason] = useState<string | null>(null);
+  const [documentTextFailed, setDocumentTextFailed] = useState(false);
+  const [isLoadingDocumentText, setIsLoadingDocumentText] = useState(false);
   const [pendingTextAnchor, setPendingTextAnchor] = useState<{
     selectedText: string;
     startOffset: number | null;
@@ -1204,6 +1215,19 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedVersion.documentId === selectedUploadedDocument.id &&
     versions.some((v) => v.id === selectedVersion.id);
 
+  // Version-truthful text plan: TXT always reads its own stored bytes; the
+  // document-level extracted text is a read-only preview that is only valid
+  // while the selected version is the document's current version.
+  const versionTextPlan = resolveVersionTextPlan({
+    hasSelectedVersion: Boolean(selectedVersionStableId && selectedVersionDocumentId),
+    fileType: selectedVersionFileType,
+    versionIsCurrent: Boolean(selectedVersion?.isCurrent),
+    versionBelongsToSelectedDocument: annotationVersionEligible,
+    documentIsUploaded: Boolean(
+      selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY',
+    ),
+  });
+
   useEffect(() => {
     // Annotations are version-scoped, so a selection never survives a version
     // switch. Clearing it first prevents the comments effect from re-firing with
@@ -1223,30 +1247,58 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     let cancelled = false;
     setVersionText(null);
     setVersionTextUnavailable(false);
+    setDocumentTextPreview(null);
+    setDocumentTextUnavailableReason(null);
+    setDocumentTextFailed(false);
+    setIsLoadingDocumentText(false);
     setPendingTextAnchor(null);
     setPendingVisualAnchor(null);
     setVisualMode(null);
-    if (!selectedVersionStableId || !selectedVersionDocumentId || !canRenderTextVersion) return;
-    setIsLoadingVersionText(true);
-    downloadDocumentVersion(selectedVersionDocumentId, selectedVersionStableId)
-      .then((blob) => blob.text())
-      .then((text) => {
-        if (!cancelled) setVersionText(text);
-      })
-      .catch(() => {
-        // The version's stored content could not be retrieved (e.g. an invalid
-        // storage reference). Show a controlled, truthful state — never log the
-        // provider's error body or surface a storage identifier. Runs once per
-        // version, so there is no retry loop.
-        if (!cancelled) setVersionTextUnavailable(true);
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingVersionText(false);
-      });
+    if (versionTextPlan === 'VERSION_BLOB' && selectedVersionDocumentId && selectedVersionStableId) {
+      setIsLoadingVersionText(true);
+      downloadDocumentVersion(selectedVersionDocumentId, selectedVersionStableId)
+        .then((blob) => blob.text())
+        .then((text) => {
+          if (!cancelled) setVersionText(text);
+        })
+        .catch(() => {
+          // The version's stored content could not be retrieved (e.g. an invalid
+          // storage reference). Show a controlled, truthful state — never log the
+          // provider's error body or surface a storage identifier. Runs once per
+          // version, so there is no retry loop.
+          if (!cancelled) setVersionTextUnavailable(true);
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoadingVersionText(false);
+        });
+    } else if (versionTextPlan === 'DOCUMENT_TEXT' && selectedUploadedDocument?.id) {
+      // Read-only preview only: document-level extracted text is display text
+      // for the current version and never an annotation anchor source.
+      setIsLoadingDocumentText(true);
+      getDocumentText(selectedUploadedDocument.id)
+        .then((result) => {
+          if (cancelled) return;
+          if (result.text && result.text.trim().length > 0) {
+            setDocumentTextPreview(result.text);
+          } else {
+            setDocumentTextUnavailableReason(
+              result.unavailableReason || 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg.',
+            );
+          }
+        })
+        .catch(() => {
+          // Request-level failure: neutral state, never a claim that the
+          // document has no text — only the authoritative endpoint may say so.
+          if (!cancelled) setDocumentTextFailed(true);
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoadingDocumentText(false);
+        });
+    }
     return () => {
       cancelled = true;
     };
-  }, [selectedVersionDocumentId, selectedVersionStableId, canRenderTextVersion]);
+  }, [versionTextPlan, selectedVersionDocumentId, selectedVersionStableId, selectedUploadedDocument?.id]);
 
   useEffect(() => {
     // The selected annotation must belong to the currently selected version.
@@ -1801,6 +1853,30 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       ) : (
                                         <div className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
                                           {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
+                                        </div>
+                                      )
+                                    ) : versionTextPlan === 'DOCUMENT_TEXT' ? (
+                                      isLoadingDocumentText ? (
+                                        <div className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
+                                          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be read-only előnézetként.</p>
+                                        </div>
+                                      ) : documentTextPreview ? (
+                                        <div data-testid="version-preview-document-text" className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
+                                          {documentTextPreview}
+                                        </div>
+                                      ) : documentTextFailed ? (
+                                        <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
+                                          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
+                                        </div>
+                                      ) : (
+                                        <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
+                                          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
+                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg nem érhető el</h5>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{documentTextUnavailableReason || 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg.'}</p>
                                         </div>
                                       )
                                     ) : (
