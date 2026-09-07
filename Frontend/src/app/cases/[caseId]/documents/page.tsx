@@ -1201,19 +1201,21 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   }, []);
 
-  // The selected version is authoritative for the annotation request only when it
-  // actually belongs to the selected document AND the version list has finished
-  // loading. On a document switch `versions` briefly still holds the previous
-  // document's versions, so `selectedVersion` can resolve to a version whose
-  // documentId is the OLD document — firing (newDoc, oldVersion), which the API
-  // (correctly) rejects as "Document version not found". This invariant closes
-  // that race without any arbitrary timeout.
-  const annotationVersionEligible =
+  // Canonical shell safety invariant: prove the selected version actually belongs
+  // to the active uploaded document and was resolved from the current loaded versions list.
+  // During document switch (A -> B), this prevents stale metadata and old TXT previews of doc A
+  // from briefly flashing or qualifying for rendering under doc B.
+  const selectedVersionBelongsToActiveDocument =
     !isLoadingVersions &&
-    !!selectedUploadedDocument?.id &&
-    !!selectedVersion?.id &&
-    selectedVersion.documentId === selectedUploadedDocument.id &&
-    versions.some((v) => v.id === selectedVersion.id);
+    Boolean(selectedUploadedDocument?.id) &&
+    Boolean(selectedVersion?.id) &&
+    selectedVersion?.documentId === selectedUploadedDocument?.id &&
+    versions.some((v) => v.id === selectedVersion?.id);
+
+  const annotationVersionEligible = selectedVersionBelongsToActiveDocument;
+
+  // Safe active version for canonical shell rendering
+  const canonicalActiveVersion = selectedVersionBelongsToActiveDocument ? selectedVersion : null;
 
   // Version-truthful text plan: TXT always reads its own stored bytes; the
   // document-level extracted text is a read-only preview that is only valid
@@ -1554,15 +1556,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           Kanonikus dokumentum felület
                         </span>
                         <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
-                        {selectedVersion ? (
-                          <AdminBadge tone={selectedVersion.isCurrent ? "green" : "neutral"}>
-                            v{selectedVersion.versionNumber} {selectedVersion.isCurrent ? "(Aktuális)" : ""}
+                        {canonicalActiveVersion ? (
+                          <AdminBadge tone={canonicalActiveVersion.isCurrent ? "green" : "neutral"}>
+                            v{canonicalActiveVersion.versionNumber} {canonicalActiveVersion.isCurrent ? "(Aktuális)" : ""}
                           </AdminBadge>
                         ) : null}
                         <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
-                        {selectedVersion?.securityScanStatus ? (
-                          <AdminBadge tone={selectedVersion.securityScanStatus === "CLEAN" ? "green" : "gold"}>
-                            {scanStatusLabel(selectedVersion.securityScanStatus)}
+                        {canonicalActiveVersion?.securityScanStatus ? (
+                          <AdminBadge tone={canonicalActiveVersion.securityScanStatus === "CLEAN" ? "green" : "gold"}>
+                            {scanStatusLabel(canonicalActiveVersion.securityScanStatus)}
                           </AdminBadge>
                         ) : selectedUploadedDocument?.securityScanStatus ? (
                           <AdminBadge tone={selectedUploadedDocument.securityScanStatus === "CLEAN" ? "green" : "gold"}>
@@ -1574,14 +1576,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         {activeTitle || "Nincs még workspace dokumentum"}
                       </h2>
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#3D4842]">
-                        {selectedVersion?.uploadedBy ? (
-                          <span><b>Feltöltő:</b> {selectedVersion.uploadedBy.name}</span>
+                        {canonicalActiveVersion?.uploadedBy ? (
+                          <span><b>Feltöltő:</b> {canonicalActiveVersion.uploadedBy.name}</span>
                         ) : null}
-                        {selectedVersion?.uploadedAt ? (
-                          <span><b>Feltöltve:</b> {formatDateTime(selectedVersion.uploadedAt)}</span>
+                        {canonicalActiveVersion?.uploadedAt ? (
+                          <span><b>Feltöltve:</b> {formatDateTime(canonicalActiveVersion.uploadedAt)}</span>
                         ) : null}
-                        {selectedVersion?.reviewStatus ? (
-                          <span><b>Review státusz:</b> {selectedVersion.reviewStatus}</span>
+                        {canonicalActiveVersion?.reviewStatus ? (
+                          <span><b>Review státusz:</b> {canonicalActiveVersion.reviewStatus}</span>
                         ) : null}
                         <span><b>Szerkesztő:</b> Microsoft Word (asztali)</span>
                       </div>
@@ -1716,7 +1718,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </div>
                       <div className="flex items-center gap-2">
                         <AdminBadge tone="neutral">{selectedVersionFileType || "Dokumentum"}</AdminBadge>
-                        {selectedVersion ? <AdminBadge tone={selectedVersion.isCurrent ? "gold" : "neutral"}>v{selectedVersion.versionNumber}</AdminBadge> : null}
+                        {canonicalActiveVersion ? <AdminBadge tone={canonicalActiveVersion.isCurrent ? "gold" : "neutral"}>v{canonicalActiveVersion.versionNumber}</AdminBadge> : null}
                       </div>
                     </div>
 
@@ -1728,7 +1730,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
                       ) : (
                         <div>
-                          {canRenderTextVersion ? (
+                          {canRenderTextVersion && selectedVersionBelongsToActiveDocument ? (
                             versionTextUnavailable && !isLoadingVersionText ? (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
@@ -1764,6 +1766,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{documentTextUnavailableReason || 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg.'}</p>
                               </div>
                             )
+                          ) : isLoadingVersions ? (
+                            <div className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Verziók betöltése</p>
+                              <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Dokumentum verziók betöltése...</h5>
+                              <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Az aktív irat verzióinak és szöveges előnézetének betöltése folyamatban van.</p>
+                            </div>
                           ) : (
                             <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType || "Dokumentum"} előnézet</p>
@@ -1825,19 +1833,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {selectedVersion?.reviewStatus || "Nincs aktív review"}
+                              {canonicalActiveVersion?.reviewStatus || "Nincs aktív review"}
                             </h4>
                           </div>
                           <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
                             <p><b>Nyitott jelölések:</b> {openAnnotationCount} db</p>
                             <p><b>Összes annotáció:</b> {annotations.length} db</p>
-                            <p><b>Kiválasztott verzió:</b> {selectedVersion ? `v${selectedVersion.versionNumber}` : 'Nincs'}</p>
-                            <p><b>Feltöltő:</b> {selectedVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
+                            <p><b>Kiválasztott verzió:</b> {canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
+                            <p><b>Feltöltő:</b> {canonicalActiveVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
                           </div>
                           <div className="space-y-2">
                             <AdminButton
                               className="w-full justify-start"
                               variant="primary"
+                              disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                               onClick={() => {
                                 const el = document.getElementById('document-review');
                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -1848,6 +1857,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             <AdminButton
                               className="w-full justify-start"
                               variant="neutral"
+                              disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                               onClick={() => {
                                 const el = document.getElementById('document-changes');
                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -1874,6 +1884,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <AdminButton
                             className="w-full justify-start"
                             variant="primary"
+                            disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                             onClick={() => {
                               const el = document.getElementById('document-legal-analysis');
                               if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -1889,16 +1900,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélkapcsolat & Portál</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {selectedVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}
+                              {canonicalActiveVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}
                             </h4>
                           </div>
                           <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
                             <p><b>Ügyfél:</b> {caseRecord?.clientName || "Nincs megadva"}</p>
-                            <p><b>Portál állapot:</b> {selectedVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}</p>
+                            <p><b>Portál állapot:</b> {canonicalActiveVersion?.publicationStatus === 'PUBLISHED' ? "Publikálva" : "Nincs publikálva"}</p>
                           </div>
                           <AdminButton
                             className="w-full justify-start"
                             variant="primary"
+                            disabled={!selectedUploadedDocument || !canonicalCaseId}
                             onClick={() => {
                               const el = document.getElementById('document-publication');
                               if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -1918,12 +1930,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             </h4>
                           </div>
                           <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                            <p><b>Ügy státusz:</b> {caseRecord?.status || "Aktív"}</p>
-                            <p><b>Dokumentum csomag:</b> ZIP export és átadási jegyzék</p>
+                            <p><b>Ügy státusz:</b> {caseRecord?.status || "Nincs megadva"}</p>
+                            <p className="text-[11px] text-[var(--adm-text-muted)]">A részletes leadási állapot a leadási csomag panelen látható.</p>
                           </div>
                           <AdminButton
                             className="w-full justify-start"
                             variant="primary"
+                            disabled={!caseRecord}
                             onClick={() => {
                               const el = document.getElementById('document-handoff');
                               if (el) el.scrollIntoView({ behavior: 'smooth' });
@@ -2023,16 +2036,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                         </div>
 
-                        {selectedUploadedDocument && canonicalCaseId && selectedVersion ? (
-                          <div className="mt-4">
+                        <div id="document-legal-analysis" className="mt-4 scroll-mt-24">
+                          {selectedUploadedDocument && canonicalCaseId && selectedVersion ? (
                             <LegalAnalysisIntakePanel
                               caseId={canonicalCaseId}
                               documentId={selectedUploadedDocument.id}
                               documentSourceType="DOCUMENT"
                               documentTitle={activeTitle || undefined}
                             />
-                          </div>
-                        ) : null}
+                          ) : null}
+                        </div>
 
                         {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
                           <div id="document-versions" className="scroll-mt-24 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
@@ -2125,8 +2138,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </div>
                             ) : null}
 
-                            {selectedUploadedDocument && canonicalCaseId ? (
-                              <div className="mt-4">
+                            <div id="document-publication" className="mt-4 scroll-mt-24">
+                              {selectedUploadedDocument && canonicalCaseId ? (
                                 <ClientPublicationPanel
                                   caseId={canonicalCaseId}
                                   clientId={caseRecord?.clientId || null}
@@ -2134,8 +2147,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   selectedVersionId={selectedVersion?.id || null}
                                   versions={versions}
                                 />
-                              </div>
-                            ) : null}
+                              ) : null}
+                            </div>
 
                             {selectedVersion ? (
                               <div id="document-changes" className="mt-4 scroll-mt-24 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
@@ -2526,15 +2539,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       />
                     </div>
                   ) : null}
-                  {caseRecord && (
-                    <HandoffPackagePanel
-                      caseId={caseRecord.id}
-                      refreshKey={handoffPanelRefreshKey}
-                      sourceDocumentId={selectedUploadedDocument?.id || null}
-                      generatedContractId={!selectedUploadedDocument ? selectedGeneratedContract?.id || null : null}
-                      contextLabel={activeTitle || undefined}
-                    />
-                  )}
+                  <div id="document-handoff" className="scroll-mt-24">
+                    {caseRecord && (
+                      <HandoffPackagePanel
+                        caseId={caseRecord.id}
+                        refreshKey={handoffPanelRefreshKey}
+                        sourceDocumentId={selectedUploadedDocument?.id || null}
+                        generatedContractId={!selectedUploadedDocument ? selectedGeneratedContract?.id || null : null}
+                        contextLabel={activeTitle || undefined}
+                      />
+                    )}
+                  </div>
                   {handoffPackageMessage && <p className="rounded bg-[var(--adm-sage-100)] p-2 text-[12px] font-semibold text-[var(--adm-green-800)]">{handoffPackageMessage}</p>}
                   {handoffPackageError && <p className="rounded bg-[var(--adm-terracotta-100)] p-2 text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{handoffPackageError}</p>}
                   </aside>
