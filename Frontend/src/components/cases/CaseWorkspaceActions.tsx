@@ -34,6 +34,7 @@ const MAX_UPLOAD_BYTES = 25 * 1024 * 1024; // 25 MB
 const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 
 type WorkspaceTask = CaseWorkspace["tasks"][number];
+type RequesterOption = Pick<OrgPersonDTO, "id" | "name" | "jobTitle" | "organizationGroupName" | "employmentStatus">;
 
 function useUsers(open: boolean): User[] {
   const [users, setUsers] = useState<User[]>([]);
@@ -124,6 +125,16 @@ export function TaskFormModal({
 }) {
   const users = useUsers(true);
   const requesters = useTaskRequesters(caseId, true);
+  const historicalRequester = task?.requestedByOrganizationPerson;
+  const requesterOptions: RequesterOption[] = historicalRequester && !requesters.some((person) => person.id === historicalRequester.id)
+    ? [{
+        id: historicalRequester.id,
+        name: historicalRequester.name,
+        jobTitle: historicalRequester.jobTitle,
+        organizationGroupName: historicalRequester.organizationGroupName,
+        employmentStatus: historicalRequester.employmentStatus,
+      }, ...requesters]
+    : requesters;
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<string>(task?.priority ?? "MEDIUM");
@@ -169,7 +180,9 @@ export function TaskFormModal({
           assignedToId: assignedToId || null,
           attentionCategory: attentionCategory || null,
           estimatedMinutes: est,
-          requestedByOrganizationPersonId: requestedByOrganizationPersonId || null,
+          ...(requestedByOrganizationPersonId === (task.requestedByOrganizationPerson?.id ?? "")
+            ? {}
+            : { requestedByOrganizationPersonId: requestedByOrganizationPersonId || null }),
         });
       }
       onSaved();
@@ -212,7 +225,7 @@ export function TaskFormModal({
           <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Az ügyfél szervezetén belül az a személy, akinek a kérésére a feladat készül.</p>
           <select id="cw-task-requester" className={inputCls} value={requestedByOrganizationPersonId} onChange={(e) => setRequestedByOrganizationPersonId(e.target.value)} disabled={busy}>
             <option value="">Nincs megadva</option>
-            {requesters.map((person) => <option key={person.id} value={person.id}>{person.name}{person.jobTitle ? ` · ${person.jobTitle}` : ""}{person.organizationGroupName ? ` · ${person.organizationGroupName}` : ""}</option>)}
+            {requesterOptions.map((person) => <option key={person.id} value={person.id}>{person.name}{person.jobTitle ? ` · ${person.jobTitle}` : ""}{person.organizationGroupName ? ` · ${person.organizationGroupName}` : ""}{person.employmentStatus === "INACTIVE" || person.employmentStatus === "ENDED" ? " · korábbi kérő" : ""}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-2 gap-3">

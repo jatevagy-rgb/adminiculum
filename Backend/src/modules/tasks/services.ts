@@ -374,6 +374,7 @@ export async function validateTaskRequester(
   caseId: string,
   value: string | null | undefined,
   db: PrismaClient | Prisma.TransactionClient = prisma,
+  options: { preserveHistoricalRequesterId?: string | null } = {},
 ): Promise<string | null | undefined> {
   if (value === undefined) return undefined;
   if (value === null || String(value).trim() === '') return null;
@@ -386,7 +387,8 @@ export async function validateTaskRequester(
   if (!caseRecord || person.clientId !== caseRecord.clientId) {
     throw new WorkflowTransitionError(409, 'CROSS_CLIENT_REQUESTER', 'Requester must belong to the Task case client.');
   }
-  if (!['ACTIVE', 'ON_LEAVE'].includes(String(person.employmentStatus))) {
+  const preservesExistingRequester = options.preserveHistoricalRequesterId === requestedByOrganizationPersonId;
+  if (!preservesExistingRequester && !['ACTIVE', 'ON_LEAVE'].includes(String(person.employmentStatus))) {
     throw new WorkflowTransitionError(409, 'ORGANIZATION_PERSON_NOT_ELIGIBLE', 'Organization person is not eligible to be selected as requester.');
   }
   return requestedByOrganizationPersonId;
@@ -586,7 +588,7 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
 
   const existing = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { id: true, title: true, caseId: true, assignedToId: true, assignedById: true },
+    select: { id: true, title: true, caseId: true, assignedToId: true, assignedById: true, requestedByOrganizationPersonId: true },
   });
   if (!existing) {
     throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
@@ -656,7 +658,12 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
     data.estimatedMinutes = parseNullableEstimatedMinutes(payload.estimatedMinutes) ?? null;
   }
   if ('requestedByOrganizationPersonId' in payload) {
-    data.requestedByOrganizationPersonId = await validateTaskRequester(existing.caseId, payload.requestedByOrganizationPersonId as string | null | undefined);
+    data.requestedByOrganizationPersonId = await validateTaskRequester(
+      existing.caseId,
+      payload.requestedByOrganizationPersonId as string | null | undefined,
+      prisma,
+      { preserveHistoricalRequesterId: existing.requestedByOrganizationPersonId },
+    );
   }
 
   if (Object.keys(data).length === 0) {
