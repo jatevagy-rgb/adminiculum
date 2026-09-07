@@ -4092,6 +4092,7 @@ export async function deleteGenerationDraft(caseId: string, templateId?: string)
 export interface TimeEntry {
   id: string;
   matterId: string;
+  caseId?: string | null;
   taskId?: string | null;
   userId: string | null;
   departmentId: string | null;
@@ -4118,6 +4119,10 @@ export interface TimeEntry {
   } | null;
   user?: { id: string; name: string } | null;
   department?: { id: string; name: string } | null;
+  case?: { id: string; caseNumber: string; title: string; clientId: string; clientName?: string | null } | null;
+  task?: { id: string; title: string; status: string; caseId: string; matterId: string | null } | null;
+  attributionKind?: 'EXACT_CASE' | 'TASK_DERIVED_CASE' | 'MATTER_ONLY' | 'AMBIGUOUS';
+  resolvedCaseId?: string | null;
 }
 
 export interface TimeEntrySummary {
@@ -4134,6 +4139,8 @@ export interface TimeEntrySummary {
 }
 
 export interface TimeEntryFilters {
+  clientId?: string;
+  caseId?: string;
   matterId?: string;
   userId?: string;
   workType?: string;
@@ -4377,6 +4384,9 @@ export interface TimesheetReportArtifactPayload {
 export async function getTimeEntries(filters?: TimeEntryFilters): Promise<TimeEntry[]> {
   const queryParams = new URLSearchParams();
   if (filters?.matterId) queryParams.set('matterId', filters.matterId);
+  if (filters?.clientId) queryParams.set('clientId', filters.clientId);
+  if (filters?.caseId) queryParams.set('caseId', filters.caseId);
+  if (filters?.departmentId) queryParams.set('departmentId', filters.departmentId);
   if (filters?.userId) queryParams.set('userId', filters.userId);
   if (filters?.workType) queryParams.set('workType', filters.workType);
   if (filters?.startDate) queryParams.set('startDate', filters.startDate);
