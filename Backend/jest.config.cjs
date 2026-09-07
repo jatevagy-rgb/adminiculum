@@ -1,7 +1,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  testMatch: ['**/tests/**/*.test.ts'],
+  testMatch: ['<rootDir>/tests/**/*.test.ts'],
   clearMocks: true,
   // Frontend-source interop tests (documentEditorDocxInterop, documentEditorReviewQuality)
   // import Frontend/src/lib/editor modules that `require('jszip')`. The backend job
