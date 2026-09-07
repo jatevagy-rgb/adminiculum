@@ -41,3 +41,13 @@ test('directory does not introduce backend or client-data cleanup behavior', () 
   assert.equal(source.includes('archiveClient'), false);
   assert.equal(source.includes('Backend/'), false);
 });
+
+test('directory visual polish preserves disclosure stacking and accessible compact actions', () => {
+  assert.match(card, /has-\[details\[open\]\]:z-20/);
+  assert.doesNotMatch(card, /adm-board-list-row|shadow-lg/);
+  assert.match(card, /\[overflow-wrap:anywhere\]/);
+  assert.match(card, /<details className="relative ml-auto w-full sm:w-auto"/);
+  assert.match(card, /min-h-11/);
+  assert.match(card, /focus-visible:outline-2/);
+  assert.match(source, /grid gap-3 xl:grid-cols-2/);
+});
