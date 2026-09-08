@@ -98,14 +98,16 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
     }
     const defaultKeys = new Set(selectedOption.template.items.map((item) => item.moduleKey));
     setSelectedModuleKeys(defaultKeys);
+    setTypeName(selectedOption.caseTypeDefinition.name);
   }, [selectedOption]);
 
   const canSubmit = Boolean(clientId && title.trim() && selectedOption?.template && !submitting && !savingType);
+  const matchingTypes = creationOptions.filter((option) => option.caseTypeDefinition.name.toLocaleLowerCase("hu-HU") === typeName.trim().toLocaleLowerCase("hu-HU"));
 
   function changeTypeName(value: string) {
     setTypeName(value);
-    const match = creationOptions.find((option) => option.caseTypeDefinition.name.toLocaleLowerCase("hu-HU") === value.trim().toLocaleLowerCase("hu-HU"));
-    setCaseTypeDefinitionId(match?.caseTypeDefinition.id || "");
+    const matches = creationOptions.filter((option) => option.caseTypeDefinition.name.toLocaleLowerCase("hu-HU") === value.trim().toLocaleLowerCase("hu-HU"));
+    setCaseTypeDefinitionId(matches.length === 1 ? matches[0].caseTypeDefinition.id : "");
   }
 
   async function saveType() {
@@ -246,7 +248,11 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                     {canManageTypes ? <>
                       <input id="new-case-type" list="case-type-suggestions" value={typeName} onChange={(e) => changeTypeName(e.target.value)} disabled={savingType} className={intake.field} placeholder="Válassz vagy írj új ügytípust…" autoComplete="off" required />
                       <datalist id="case-type-suggestions">{creationOptions.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.name} />)}</datalist>
-                      {typeName.trim() && !selectedOption && <button type="button" onClick={saveType} disabled={savingType} className={`${intake.secondaryAction} mt-2`}>
+                      {matchingTypes.length > 1 && <select aria-label="Azonos nevű ügytípusok" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
+                        <option value="">Válassz a mentett ügytípusok közül…</option>
+                        {matchingTypes.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name} · {option.caseTypeDefinition.description || option.template?.name}</option>)}
+                      </select>}
+                      {typeName.trim() && matchingTypes.length === 0 && !selectedOption && <button type="button" onClick={saveType} disabled={savingType} className={`${intake.secondaryAction} mt-2`}>
                         {savingType ? "Mentés…" : `+ „${typeName.trim()}” mentése új ügytípusként`}
                       </button>}
                     </> : <select id="new-case-type" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>

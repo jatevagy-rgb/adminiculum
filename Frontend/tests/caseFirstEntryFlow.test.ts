@@ -7,9 +7,10 @@ import { loadTimeEntryCases, timeEntryCaseLabel } from '../src/lib/timeEntryCase
 const option = (id = 'type-1', name = 'Szerződés', items: any[] = []) => ({ caseTypeDefinition: { id, name, slug: id }, template: { id: 'template-1', name: 'Sablon', version: 1, items } });
 const change = (node: any, value: string) => node.props.onChange({ target: { value } });
 
-function dialog(role = 'ADMIN', fail = false) {
+function dialog(role = 'ADMIN', fail = false, duplicates = false) {
   const options = [option('type-1', 'Szerződés', [{ moduleKey: 'required', label: 'Kötelező', isOptional: false, order: 0 }, { moduleKey: 'optional', label: 'Kutatás', isOptional: true, order: 1 }])];
   const calls: any[] = [], cases: any[] = [];
+  if (duplicates) options.push(option('type-2', 'Szerződés'));
   const h = componentHarness('src/components/cases/CompactNewCaseDialog.tsx', 'CompactNewCaseDialog', {
     'next/navigation': { useRouter: () => ({ push() {} }) },
     './intake/intakeStyles': { intake: {}, ACCENT_BG: {}, ACCENT_TEXT: {} },
@@ -71,6 +72,20 @@ test('failed type creation preserves typed name/form and leaves submit unavailab
   tree = h.render(props);
   assert.equal(flatten(tree).find((node) => node.props?.id === 'new-case-type').props.value, 'Új típus');
   assert.equal(flatten(tree).find((node) => node.type === 'button' && node.props.type === 'submit').props.disabled, true);
+});
+
+test('previously configured duplicate names remain individually selectable by persisted ID', async () => {
+  const { h, cases, calls } = dialog('ADMIN', false, true);
+  const props = { open: true, onClose() {}, initialClientId: 'client-1', initialTitle: 'Ügy' };
+  h.render(props); h.effects(); await tick(); let tree = h.render(props); h.effects();
+  change(flatten(tree).find((node) => node.props?.id === 'new-case-type'), 'Szerződés');
+  tree = h.render(props); h.effects();
+  const select = flatten(tree).find((node) => node.props?.['aria-label'] === 'Azonos nevű ügytípusok');
+  assert.ok(flatten(select).some((node) => node.props?.value === 'type-2'));
+  change(select, 'type-2'); tree = h.render(props); h.effects(); tree = h.render(props);
+  await flatten(tree).find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.equal(cases[0].caseTypeDefinitionId, 'type-2');
+  assert.deepEqual(calls, []);
 });
 
 const caseRow: any = { id: 'case-empty', clientId: 'client-1', clientName: 'Ügyfél', caseNumber: 'Ü-1', title: 'Idő nélküli ügy' };
