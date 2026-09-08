@@ -136,30 +136,20 @@ function ClientsPageContent() {
   };
 
   const renderClientCard = (client: Client) => {
-    const profile = client.houseStyleProfile;
     const color = getClientColorDefinition(client.colorKey);
 
     return (
-      <AdminPanel key={client.id} className={`relative min-w-0 border-2 p-4 sm:p-5 has-[details[open]]:z-20 ${color.borderClass}`}>
+      <AdminPanel key={client.id} className={`relative min-w-0 border-2 p-4 sm:p-5 ${color.borderClass}`}>
         <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1">
-            <h2 className="break-words font-serif text-2xl font-medium leading-snug text-[var(--adm-text)] [overflow-wrap:anywhere]">{profile?.officialName || client.name}</h2>
-            {profile?.shortName ? <p className="mt-1 break-words text-sm leading-5 text-[#3D4842] [overflow-wrap:anywhere]">{profile.shortName}</p> : null}
+            <h2 className="break-words font-serif text-2xl font-medium leading-snug text-[var(--adm-text)] [overflow-wrap:anywhere]">{client.name}</h2>
             <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#3D4842]">
-              <span>Ügyfél</span>
-              <span className="inline-flex items-center gap-2"><span aria-hidden="true" className={`h-2.5 w-2.5 rounded-sm border-2 ${color.borderClass}`} />{color.label}</span>
+              <span>{client.relationshipMode === "PORTAL_CENTRIC" ? "Portál ügyfél" : "Ügyfél"}</span>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-[rgba(22,32,26,0.10)] pt-3">
             <Link href={`/clients/${client.id}`} className="inline-flex min-h-11 items-center justify-center rounded-[5px] bg-[var(--adm-green-800)] px-4 py-2 text-[13px] font-semibold text-white hover:bg-[#173824] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#173824]">Ügyfél dosszié</Link>
             <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex min-h-11 items-center justify-center rounded-[5px] px-3 py-2 text-[13px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#173824]">+ Új ügy</Link>
-            <details className="relative ml-auto w-full sm:w-auto">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-2 rounded-[5px] px-2 py-2 text-xs text-[#3D4842] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#173824]">További műveletek <span aria-hidden="true">⌄</span></summary>
-              <div className="absolute right-0 z-30 mt-1 grid w-full min-w-40 gap-1 rounded-[6px] border border-[rgba(22,32,26,0.20)] bg-white p-1.5 sm:w-44">
-                <Link href={`/clients/${client.id}#house-style`} className="flex min-h-11 items-center rounded-[4px] px-3 py-2 text-left text-[13px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#173824]">House style</Link>
-                <AdminButton size="sm" variant="ghost" className="min-h-11 justify-start focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#173824]" onClick={() => handleEdit(client)}>Szerkesztés</AdminButton>
-              </div>
-            </details>
           </div>
         </div>
       </AdminPanel>
