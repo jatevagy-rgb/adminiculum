@@ -26,14 +26,15 @@ datasource db {
 // ============================================================================
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String?
-  name         String
-  role         UserRole   @default(LEGAL_ASSISTANT)
-  status       UserStatus @default(ACTIVE)
-  department   String?
-  skills       String[] // JSON array of skills
+  createdHourlyRateVersions HourlyRateVersion[]
+  id                        String              @id @default(uuid())
+  email                     String              @unique
+  passwordHash              String?
+  name                      String
+  role                      UserRole            @default(LEGAL_ASSISTANT)
+  status                    UserStatus          @default(ACTIVE)
+  department                String?
+  skills                    String[] // JSON array of skills
 
   isActive    Boolean   @default(true)
   lastLoginAt DateTime?
@@ -145,6 +146,7 @@ enum ClientColorKey {
 }
 
 model Client {
+  hourlyRateVersions        HourlyRateVersion[]
   id                        String                 @id @default(uuid())
   name                      String
   email                     String?
@@ -733,14 +735,15 @@ enum AutomationSuppressionType {
 // ============================================================================
 
 model Case {
-  id                   String     @id @default(uuid())
-  caseNumber           String     @unique
+  hourlyRateVersions   HourlyRateVersion[]
+  id                   String              @id @default(uuid())
+  caseNumber           String              @unique
   title                String
   description          String?
   caseType             CaseType
   caseTypeDefinitionId String?
-  status               CaseStatus @default(CLIENT_INPUT)
-  priority             Priority   @default(MEDIUM)
+  status               CaseStatus          @default(CLIENT_INPUT)
+  priority             Priority            @default(MEDIUM)
 
   // Additional fields for code compatibility
   clientName     String? // Computed from client relation
@@ -804,6 +807,30 @@ model Case {
   caseTimeEntries           TimeEntry[]                @relation("CaseTimeEntries")
 
   @@map("cases")
+}
+
+enum HourlyRateMode {
+  EXPLICIT_RATE
+  INHERIT_CLIENT
+}
+
+/// Append-only configuration. Partial unique indexes and state checks live in SQL.
+model HourlyRateVersion {
+  id            String         @id @default(uuid())
+  clientId      String
+  caseId        String?
+  effectiveFrom DateTime       @db.Date
+  currency      String         @db.VarChar(3)
+  hourlyRate    Decimal?       @db.Decimal(19, 4)
+  mode          HourlyRateMode
+  createdAt     DateTime       @default(now())
+  createdById   String
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  case          Case?          @relation(fields: [caseId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy     User           @relation(fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([clientId, caseId, effectiveFrom])
+  @@map("hourly_rate_versions")
 }
 
 /// Non-user participants captured at intake: client contacts, opposing party and
