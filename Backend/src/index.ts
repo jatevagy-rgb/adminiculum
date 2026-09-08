@@ -251,6 +251,8 @@ import timeAttributionRoutes from './modules/time-attribution/routes';
 app.use('/api/v1/time-attribution', timeAttributionRoutes);
 
 import billingPreparationRoutes from './modules/billing-preparation/routes';
+import hourlyRateRoutes from './modules/hourly-rates/routes';
+app.use('/api/v1/hourly-rates', hourlyRateRoutes);
 app.use('/api/v1/billing-preparation', billingPreparationRoutes);
 
 import clientSafeComplianceRoutes from './modules/compliance/clientSafeComplianceRoutes';

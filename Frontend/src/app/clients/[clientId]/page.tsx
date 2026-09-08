@@ -15,6 +15,7 @@ import {
   type ClientCommunicationSummaryItem,
 } from "@/lib/api";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
+import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFoundation";
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
@@ -373,6 +374,7 @@ function ClientDetailContent() {
           </div>
 
           {/* Card 3: House Style */}
+          <HourlyRateCard clientId={clientId} />
           <section
             id="house-style"
             className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}

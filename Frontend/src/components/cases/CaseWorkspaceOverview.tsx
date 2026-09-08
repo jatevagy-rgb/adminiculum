@@ -25,6 +25,7 @@ import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
 import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummary";
+import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
@@ -427,6 +428,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             onRecordTime={() => setTimeDialogOpen(true)}
             onGenerateReport={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)}
           />
+          {c.client && <HourlyRateCard clientId={c.client.id} caseId={caseId} />}
         </CockpitSection>
       </div>
 
