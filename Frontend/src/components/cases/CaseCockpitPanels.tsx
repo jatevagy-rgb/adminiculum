@@ -167,6 +167,11 @@ export function TaskCard({
           <span aria-hidden="true">·</span><span>{task.dueDate ? fmtDate(task.dueDate) : "Nincs határidő"}</span>
           {task.documentId ? <><span aria-hidden="true">·</span><span className={ACCENT.ochre.text}>Dokumentumhoz kötve</span></> : null}
         </p>
+        <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">
+          Ügyféloldali kérő: {task.requestedByOrganizationPerson
+            ? `${task.requestedByOrganizationPerson.name}${task.requestedByOrganizationPerson.jobTitle ? ` · ${task.requestedByOrganizationPerson.jobTitle}` : ''}${task.requestedByOrganizationPerson.organizationGroupName ? ` · ${task.requestedByOrganizationPerson.organizationGroupName}` : ''}`
+            : "Nincs ügyféloldali kérő megadva"}
+        </p>
       </div>
       {onEdit ? (
         <button type="button" onClick={onEdit} className="shrink-0 text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">

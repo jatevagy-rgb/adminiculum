@@ -37,6 +37,7 @@ type TaskInput = {
   description?: unknown;
   assignedToId?: unknown;
   dueDate?: unknown;
+  requestedByOrganizationPersonId?: unknown;
 };
 
 function snapshotRequiredness(config: unknown): boolean | null {
@@ -117,17 +118,18 @@ function parseMutation(input: ItemMutationInput) {
 }
 
 function parseTaskInput(input: TaskInput) {
-  const body = allowedKeys(input, ['title', 'description', 'assignedToId', 'dueDate']);
+  const body = allowedKeys(input, ['title', 'description', 'assignedToId', 'dueDate', 'requestedByOrganizationPersonId']);
   const title = text(body.title, 'title', MAX_TITLE_LENGTH, true) as string;
   const description = body.description === undefined ? null : text(body.description, 'description', MAX_DESCRIPTION_LENGTH);
   const assignedToId = body.assignedToId === undefined ? null : canonicalId(body.assignedToId, 'assignedToId');
+  const requestedByOrganizationPersonId = body.requestedByOrganizationPersonId === undefined ? undefined : canonicalId(body.requestedByOrganizationPersonId, 'requestedByOrganizationPersonId');
   let dueDate: Date | null = null;
   if (body.dueDate !== undefined && body.dueDate !== null && body.dueDate !== '') {
     if (typeof body.dueDate !== 'string') throw new CaseWorkPackageOperationalError('INVALID_DATE', 'dueDate must be an ISO date string.');
     dueDate = new Date(body.dueDate);
     if (Number.isNaN(dueDate.getTime())) throw new CaseWorkPackageOperationalError('INVALID_DATE', 'dueDate is invalid.');
   }
-  return { title, description, assignedToId, dueDate };
+  return { title, description, assignedToId, dueDate, requestedByOrganizationPersonId };
 }
 
 async function caseWorkforceEligible(tx: Db, caseRow: { id: string; assignedLawyerId: string | null; createdById: string }, userId: string): Promise<boolean> {
@@ -316,6 +318,7 @@ export async function createTaskFromCaseWorkPackageItem(caseIdInput: unknown, it
           assignedBy: actorId,
           dueDate: taskInput.dueDate ?? undefined,
           workPackageItemId: item.id,
+          requestedByOrganizationPersonId: taskInput.requestedByOrganizationPersonId,
         }, tx);
         return {
           created: true,

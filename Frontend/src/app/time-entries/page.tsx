@@ -1827,7 +1827,9 @@ function TimeEntriesPageContent() {
                                       <p className="text-xs text-[var(--adm-text-muted)]"><span className="font-semibold text-[var(--adm-text)]">Leírás:</span> {entry.description}</p>
                                       <div className="flex items-center gap-4 mt-2">
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyvéd: {entry.user?.name || "Ismeretlen"}</span>
-                                        <span className="text-[10px] text-[var(--adm-text-muted)]">Szervezeti egység: {entry.department?.name || "Nincs szervezeti egység"}</span>
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">Osztály: {entry.department?.name || "Nincs osztály"}</span>
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyféloldali kérő: {entry.requester?.name || "Nincs megadva"}</span>
+                                        <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyféloldali szervezeti egység: {entry.requester?.organizationGroup?.name || "Nincs megadva"}</span>
                                         {entry.task ? <span className="text-[10px] text-[var(--adm-text-muted)]">Feladat: {entry.task.title} · {entry.task.status}</span> : <span className="text-[10px] text-[var(--adm-text-muted)]">Nincs feladathoz kötve</span>}
                                         <span className="text-[10px] text-[var(--adm-text-soft)]">Dátum: {formatDate(entry.workDate)}</span>
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">{entry.billable ? "Elszámolható" : "Nem elszámolható"}</span>
