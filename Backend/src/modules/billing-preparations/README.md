@@ -22,6 +22,14 @@ the preserved hours-only `/api/v1/billing-preparation/case/:caseId`).
 - Inclusion gates: `MATTER_ONLY`/`AMBIGUOUS` and non-billable rows require
   review acknowledgment (`markReviewed`); `NO_RATE`, `ZERO_MINUTES`, `STALE`,
   `SOURCE_MISSING` rows cannot be included.
+- Write-downs (`billingMinutes < sourceMinutes`) require a non-blank
+  `adjustmentReason` — enforced both in the service and by the
+  `billing_prep_item_minutes_writedown` CHECK, so raw-SQL writes are rejected
+  too. Restoring `billingMinutes = sourceMinutes` keeps any recorded reason.
+- `CLOSE` re-derives live source status: any included row that is not `OK`
+  (STALE, SOURCE_MISSING, REVIEW_REQUIRED, NO_RATE, NON_BILLABLE, ZERO_MINUTES)
+  blocks closing with 409. Excluded rows never block — exclusion is an
+  explicit billing decision.
 - One `OPEN` preparation per client+period (partial unique index);
   `OPEN`/`CLOSED` status only — no invoice lifecycle.
 - Access: `authenticate` + `requireRole(ADMIN, PARTNER)` plus a DB-side

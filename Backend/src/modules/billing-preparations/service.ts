@@ -464,10 +464,14 @@ export async function patchItem(actor: InternalActor, preparationId: string, ite
     if (value > item.sourceMinutes) {
       return fail(400, 'BILLING_MINUTES_UPWARD_FORBIDDEN', 'A számlázott idő nem haladhatja meg a rögzített időt. Javítsa a munkaóra-tételt.');
     }
-    if (value < item.sourceMinutes && !(next.adjustmentReason || item.adjustmentReason)) {
-      return fail(400, 'BILLING_MINUTES_REASON_REQUIRED', 'Az idő csökkentéséhez indoklás szükséges.');
-    }
     next.billingMinutes = value;
+  }
+
+  // Post-merge invariant (mirrors billing_prep_item_minutes_writedown):
+  // any write-down — whether by minutes change or by clearing an existing
+  // reason — must carry a non-blank adjustment reason.
+  if (next.billingMinutes < item.sourceMinutes && !(next.adjustmentReason && next.adjustmentReason.trim().length > 0)) {
+    return fail(400, 'BILLING_MINUTES_REASON_REQUIRED', 'Az idő csökkentéséhez indoklás szükséges.');
   }
 
   if (input.rateOverride !== undefined) {
@@ -540,6 +544,11 @@ export async function resyncItem(actor: InternalActor, preparationId: string, it
   }
   const rebuilt = await buildItemData(source, prep.clientId, preparationId, db);
   const clampedMinutes = Math.min(item.billingMinutes, rebuilt.sourceMinutes);
+  // Resync may leave billingMinutes < sourceMinutes: the DB write-down CHECK
+  // requires a non-blank reason, so keep the existing one or record the sync.
+  const resyncedReason = clampedMinutes < rebuilt.sourceMinutes && !(item.adjustmentReason && item.adjustmentReason.trim())
+    ? 'A forrás munkaóra megváltozott — korábbi számlázási beállítás megőrizve.'
+    : item.adjustmentReason;
   const merged = { ...item, rateOverride: item.rateOverride, hourlyRate: rebuilt.hourlyRate };
   const net = netAmountForMinutes(clampedMinutes, effectiveRate(merged));
   const statusAfter = deriveReviewStatus(
@@ -575,6 +584,7 @@ export async function resyncItem(actor: InternalActor, preparationId: string, it
       hourlyRate: rebuilt.hourlyRate,
       rateCurrency: rebuilt.rateCurrency,
       billingMinutes: clampedMinutes,
+      adjustmentReason: resyncedReason,
       reviewedAt: null,
       reviewedById: null,
       included: item.included && statusAfter === 'OK',
@@ -617,6 +627,20 @@ export async function setPreparationStatus(actor: InternalActor, preparationId: 
   await requireBillingReviewer(actor, db);
   const prep = await requirePreparation(preparationId, db);
   if (prep.status === status) return { preparation: preparationDto(prep) };
+  if (status === 'CLOSED') {
+    // Close must re-derive live source status: an included row that went STALE
+    // or SOURCE_MISSING since review must block closing. Excluded rows are an
+    // explicit billing decision and never block. Nothing is refreshed here.
+    const sources = await loadSources(prep.items.map((item) => item.sourceTimeEntryId), db);
+    const blockers = prep.items.filter((item) => {
+      if (!item.included) return false;
+      const source = sources.get(item.sourceTimeEntryId);
+      return deriveReviewStatus(item, { exists: Boolean(source), fingerprint: source ? sourceFingerprint(source) : null }) !== 'OK';
+    });
+    if (blockers.length > 0) {
+      return fail(409, 'BILLING_PREP_CLOSE_BLOCKED', `${blockers.length} szerepelt sor forrása megváltozott vagy felülvizsgálatra vár. Frissítse vagy zárja ki a sort.`);
+    }
+  }
   try {
     const updated = await db.billingPreparation.update({
       where: { id: preparationId },

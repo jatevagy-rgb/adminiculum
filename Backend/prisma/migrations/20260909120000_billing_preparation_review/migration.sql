@@ -77,8 +77,17 @@ CREATE TABLE "billing_preparation_items" (
 
     CONSTRAINT "billing_preparation_items_pkey" PRIMARY KEY ("id"),
     -- V1 write-down rule: billing minutes may only be reduced, never exceed
-    -- the recorded source minutes. Correct the TimeEntry instead.
-    CONSTRAINT "billing_prep_item_minutes_writedown" CHECK ("billingMinutes" >= 0 AND "billingMinutes" <= "sourceMinutes"),
+    -- the recorded source minutes, and every reduction REQUIRES a non-blank
+    -- reason at the database level (the service rule mirrored as integrity).
+    -- Restoring billingMinutes == sourceMinutes may retain an existing reason.
+    CONSTRAINT "billing_prep_item_minutes_writedown" CHECK (
+        "billingMinutes" >= 0
+        AND "billingMinutes" <= "sourceMinutes"
+        AND (
+            "billingMinutes" = "sourceMinutes"
+            OR ("adjustmentReason" IS NOT NULL AND length(btrim("adjustmentReason")) > 0)
+        )
+    ),
     -- A billing-row rate override must always carry reason + author + timestamp,
     -- and must be a positive finite decimal (NaN/Infinity rejected here too).
     CONSTRAINT "billing_prep_item_override_integrity" CHECK (

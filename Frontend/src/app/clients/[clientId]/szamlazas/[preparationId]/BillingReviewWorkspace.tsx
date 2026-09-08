@@ -50,10 +50,6 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
 
   useEffect(() => { void load(); }, [load]);
 
-  function replaceItem(updated: BillingItem) {
-    setWorkspace(ws => ws ? { ...ws, items: ws.items.map(item => item.id === updated.id ? updated : item) } : ws);
-  }
-
   async function refresh() {
     if (refreshing) return;
     setRefreshing(true);
@@ -142,7 +138,7 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
             </thead>
             <tbody className="divide-y divide-[var(--adm-border)]">
               {group.items.map(item => (
-                <ItemRow key={item.id} item={item} preparationId={preparationId} open={open} onChange={replaceItem} />
+                <ItemRow key={item.id} item={item} preparationId={preparationId} open={open} onChanged={load} />
               ))}
             </tbody>
           </table>
@@ -152,11 +148,12 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
   );
 }
 
-function ItemRow({ item, preparationId, open, onChange }: {
+function ItemRow({ item, preparationId, open, onChanged }: {
   item: BillingItem;
   preparationId: string;
   open: boolean;
-  onChange: (item: BillingItem) => void;
+  /** Re-fetch the authoritative workspace so the summary never goes stale. */
+  onChanged: () => Promise<void>;
 }) {
   const prefix = useId();
   const [saving, setSaving] = useState(false);
@@ -176,7 +173,8 @@ function ItemRow({ item, preparationId, open, onChange }: {
     setSaving(true);
     setError(null);
     try {
-      onChange(await patchBillingItem(preparationId, item.id, patch));
+      await patchBillingItem(preparationId, item.id, patch);
+      await onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'A sor mentése nem sikerült.');
     } finally {
@@ -251,11 +249,11 @@ function ItemRow({ item, preparationId, open, onChange }: {
                         onChange={e => setOverrideRate(e.target.value)} className={input} />
                     </label>
                   </div>
-                  <label className="block">Indoklás (időcsökkentéshez / egyedi díjhoz kötelező)
+                  <label className="block">Igazolás / indoklás (időcsökkentésnél kötelező)
                     <input value={reason} disabled={saving} onChange={e => setReason(e.target.value)} className={input} />
                   </label>
                   {overrideRate.trim() !== '' && (
-                    <label className="block">Egyedi díj indoklása
+                    <label className="block">Egyedi óradíj indoklása (külön kötelező)
                       <input value={overrideReason} disabled={saving} onChange={e => setOverrideReason(e.target.value)} className={input} />
                     </label>
                   )}
@@ -267,8 +265,8 @@ function ItemRow({ item, preparationId, open, onChange }: {
                         onClick={async () => {
                           setSaving(true); setError(null);
                           try {
-                            const result = await resyncBillingItem(preparationId, item.id);
-                            onChange(result.item);
+                            await resyncBillingItem(preparationId, item.id);
+                            await onChanged();
                           } catch (e) {
                             setError(e instanceof Error ? e.message : 'A frissítés nem sikerült.');
                           } finally { setSaving(false); }

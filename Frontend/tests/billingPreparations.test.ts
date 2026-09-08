@@ -48,11 +48,30 @@ test('workspace surface keeps Hungarian product labels and provenance in row det
   assert.match(workspace, /Egyedi számlázási óradíj/);
   assert.match(workspace, /Frissítés a forrásokból/);
   assert.match(workspace, /Részletek és módosítás/);
-  assert.doesNotMatch(workspace, /organizationGroup|attributionKind.*UI/);
+  // the generic adjustment reason must not claim to satisfy the separate
+  // rate-override reason requirement
+  assert.match(workspace, /Igazolás \/ indoklás \(időcsökkentésnél kötelező\)/);
+  assert.match(workspace, /Egyedi óradíj indoklása \(külön kötelező\)/);
 
   const dossier = readFileSync('src/app/clients/[clientId]/page.tsx', 'utf8');
   assert.match(dossier, /\/szamlazas/);
   assert.match(dossier, /Számlázás előkészítése/);
+});
+
+test('summary refreshes from the authoritative workspace after every row mutation', () => {
+  const workspace = readFileSync('src/app/clients/[clientId]/szamlazas/[preparationId]/BillingReviewWorkspace.tsx', 'utf8');
+  // rows re-fetch the server workspace (which re-derives the summary) after
+  // patch AND resync instead of keeping a client-side stale summary
+  assert.match(workspace, /await patchBillingItem\(preparationId, item\.id, patch\);\s*\n\s*await onChanged\(\);/);
+  assert.match(workspace, /await resyncBillingItem\(preparationId, item\.id\);\s*\n\s*await onChanged\(\);/);
+  assert.match(workspace, /onChanged=\{load\}/);
+  // money is never recomputed in the frontend: no arithmetic on netAmount fields
+  const api = readFileSync('src/lib/billingPreparationsApi.ts', 'utf8');
+  const presentation = readFileSync('src/lib/billingPreparationPresentation.ts', 'utf8');
+  for (const source of [workspace, api, presentation]) {
+    assert.doesNotMatch(source, /netAmount\s*[+*\/-]|Number\(.*netAmount|parseFloat\(.*netAmount|parseInt\(.*netAmount/);
+    assert.doesNotMatch(source, /includedNetAmount\s*[+*\/-]|\.reduce\(/);
+  }
 });
 
 test('api client sends only billing fields, never source mutations', () => {

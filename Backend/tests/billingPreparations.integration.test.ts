@@ -74,6 +74,12 @@ describeDb('billing preparation review against canonical PostgreSQL schema', () 
       { id: `${prefix}-foreign-case`, caseNumber: `${prefix}-UX`, title: 'Más ügyfél ügye', caseType: 'OTHER', clientId: otherClientId, createdById: admin.userId },
     ] });
     await db.task.create({ data: { id: taskId, title: 'Feladat', taskType: 'OTHER', caseId, matterId, requestedByOrganizationPersonId: personId } });
+    // Work-package provenance path: Task → CaseWorkPackageItem → CaseWorkPackage → Case.
+    const workPackageId = `${prefix}-wp`;
+    const workPackageItemId = `${prefix}-wpi`;
+    await db.caseWorkPackage.create({ data: { id: workPackageId, caseId, createdById: admin.userId } });
+    await db.caseWorkPackageItem.create({ data: { id: workPackageItemId, caseWorkPackageId: workPackageId, moduleType: 'TASK_GROUP', moduleKey: 'munka', label: 'Munkacsomag elem', createdById: admin.userId } });
+    await db.task.create({ data: { id: `${prefix}-wp-task`, title: 'Csomagfeladat', taskType: 'OTHER', caseId, matterId, workPackageItemId } });
     await db.hourlyRateVersion.create({ data: { id: randomUUID(), clientId, caseId: null, effectiveFrom: new Date('2026-01-01T00:00:00Z'), currency: 'HUF', hourlyRate: '40000', mode: 'EXPLICIT_RATE', createdById: admin.userId } });
     await db.hourlyRateVersion.create({ data: { id: randomUUID(), clientId, caseId, effectiveFrom: new Date('2026-08-01T00:00:00Z'), currency: 'HUF', hourlyRate: '50000', mode: 'EXPLICIT_RATE', createdById: admin.userId } });
 
@@ -87,6 +93,7 @@ describeDb('billing preparation review against canonical PostgreSQL schema', () 
       entry('norating', { caseId, matterId, workDate: new Date('2025-08-10T12:00:00Z') }), // outside period
       entry('foreign', { caseId: `${prefix}-foreign-case` }),                  // cross-client
       entry('dept', { caseId, matterId, departmentId }),                       // department
+      entry('wp', { taskId: `${prefix}-wp-task`, matterId }),                  // Task→WorkPackageItem provenance
     ] });
   });
 
@@ -122,6 +129,23 @@ describeDb('billing preparation review against canonical PostgreSQL schema', () 
     expect(statusById.get(`${prefix}-ambiguous`)).toBe('REVIEW_REQUIRED');
     expect(statusById.get(`${prefix}-nonbillable`)).toBe('NON_BILLABLE');
     expect(statusById.get(`${prefix}-zero`)).toBe('ZERO_MINUTES');
+  });
+
+  it('Task → CaseWorkPackageItem → CaseWorkPackage provenance resolves to the canonical case', async () => {
+    const { preparation } = await createPreparation(admin, { clientId, periodStart: '2026-08-01', periodEnd: '2026-08-31' }, db);
+    const workspace = await getPreparation(admin, preparation.id, db);
+    const row = workspace.items.find((item) => item.sourceTimeEntryId === `${prefix}-wp`)!;
+    // Billing must not diverge from the canonical attribution engine: the
+    // work-package task path resolves the same case, passes the client guard,
+    // receives the case-scoped rate, and is never matter-only.
+    expect(row.attributionKind).toBe('TASK_DERIVED_CASE');
+    expect(row.reviewStatus).toBe('OK');
+    expect(row.source.case?.id).toBe(caseId);
+    expect(row.source.case?.caseNumber).toBe(`${prefix}-U1`);
+    expect(row.rate.scope).toBe('CASE');
+    expect(row.billing.effectiveHourlyRate).toBe('50000.0000');
+    expect(row.billing.netAmount).toBe('50000.00');
+    expect(row.billing.included).toBe(true);
   });
 
   it('reopening the same client+period returns the persistent preparation (no regeneration)', async () => {
@@ -213,13 +237,67 @@ describeDb('billing preparation review against canonical PostgreSQL schema', () 
     await expect(createPreparation(lawyer, { clientId, periodStart: '2026-10-01', periodEnd: '2026-10-31' }, db)).rejects.toMatchObject({ status: 403 });
   });
 
-  it('close locks edits and reopen is guarded by the one-open-per-period rule', async () => {
+  it('DB write-down CHECK bypasses the service: reason required when billingMinutes < sourceMinutes', async () => {
     const { preparation } = await createPreparation(admin, { clientId, periodStart: '2026-08-01', periodEnd: '2026-08-31' }, db);
-    const closed = await setPreparationStatus(admin, preparation.id, 'CLOSED', db);
-    expect(closed.preparation.status).toBe('CLOSED');
+    const item = await db.billingPreparationItem.findFirstOrThrow({ where: { preparationId: preparation.id, sourceTimeEntryId: `${prefix}-exact` } });
+    // Raw SQL, no service layer: a write-down without reason must fail.
+    await expect(db.$executeRaw`
+      UPDATE "billing_preparation_items"
+      SET "billingMinutes" = "sourceMinutes" - 1, "adjustmentReason" = NULL, "updatedAt" = now()
+      WHERE "id" = ${item.id}`).rejects.toThrow();
+    await expect(db.$executeRaw`
+      UPDATE "billing_preparation_items"
+      SET "billingMinutes" = "sourceMinutes" - 1, "adjustmentReason" = '   ', "updatedAt" = now()
+      WHERE "id" = ${item.id}`).rejects.toThrow();
+    // With a non-blank reason the same write-down is accepted.
+    await expect(db.$executeRaw`
+      UPDATE "billing_preparation_items"
+      SET "billingMinutes" = "sourceMinutes" - 1, "adjustmentReason" = 'Engedmény', "updatedAt" = now()
+      WHERE "id" = ${item.id}`).resolves.toBe(1);
+    // Restoring the full amount may retain the recorded reason.
+    await expect(db.$executeRaw`
+      UPDATE "billing_preparation_items"
+      SET "billingMinutes" = "sourceMinutes", "updatedAt" = now()
+      WHERE "id" = ${item.id}`).resolves.toBe(1);
+  });
+
+  it('close re-derives live status: STALE included rows block, excluded stale rows do not', async () => {
+    // fresh client so this close matrix is independent of earlier mutations
+    const cid = `${prefix}-close-client`;
+    const mid = `${prefix}-close-matter`;
+    const kase = `${prefix}-close-case`;
+    await db.client.create({ data: { id: cid, name: 'Close client' } });
+    await db.matter.create({ data: { id: mid, title: 'Close matter', matterType: 'OTHER', clientId: cid } });
+    await db.case.create({ data: { id: kase, caseNumber: `${prefix}-UC`, title: 'Close case', caseType: 'OTHER', clientId: cid, matterId: mid, createdById: admin.userId } });
+    await db.hourlyRateVersion.create({ data: { id: randomUUID(), clientId: cid, caseId: null, effectiveFrom: new Date('2026-01-01T00:00:00Z'), currency: 'HUF', hourlyRate: '30000', mode: 'EXPLICIT_RATE', createdById: admin.userId } });
+    await db.timeEntry.createMany({ data: [
+      { id: `${prefix}-keep`, userId: lawyer.userId, minutes: 60, billable: true, workType: 'DRAFTING', description: 'marad', workDate: new Date('2026-08-10T12:00:00Z'), caseId: kase, matterId: mid },
+      { id: `${prefix}-willstale`, userId: lawyer.userId, minutes: 30, billable: true, workType: 'REVIEW', description: 'megváltozik', workDate: new Date('2026-08-11T12:00:00Z'), caseId: kase, matterId: mid },
+      { id: `${prefix}-excludedstale`, userId: lawyer.userId, minutes: 10, billable: false, workType: 'ADMIN', description: 'kizárt', workDate: new Date('2026-08-12T12:00:00Z'), caseId: kase, matterId: mid },
+    ] });
+
+    const { preparation } = await createPreparation(admin, { clientId: cid, periodStart: '2026-08-01', periodEnd: '2026-08-31' }, db);
     const workspace = await getPreparation(admin, preparation.id, db);
-    const row = workspace.items[0];
-    await expect(patchItem(admin, preparation.id, row.id, { included: true }, db)).rejects.toMatchObject({ code: 'BILLING_PREP_CLOSED' });
+    const willStale = workspace.items.find((item) => item.sourceTimeEntryId === `${prefix}-willstale`)!;
+    expect(willStale.billing.included).toBe(true); // included + OK at creation
+
+    // 1) included OK rows → close succeeds
+    await expect(setPreparationStatus(admin, preparation.id, 'CLOSED', db)).resolves.toMatchObject({ preparation: { status: 'CLOSED' } });
+    await setPreparationStatus(admin, preparation.id, 'OPEN', db);
+
+    // 2) an included row becomes STALE → close is rejected
+    await db.timeEntry.update({ where: { id: `${prefix}-willstale` }, data: { minutes: 45 } });
+    // and the excluded row also changes — exclusion must not block closing
+    await db.timeEntry.update({ where: { id: `${prefix}-excludedstale` }, data: { minutes: 20 } });
+    await expect(setPreparationStatus(admin, preparation.id, 'CLOSED', db)).rejects.toMatchObject({ status: 409, code: 'BILLING_PREP_CLOSE_BLOCKED' });
+
+    // 3) explicit resync restores validity → close succeeds
+    const resynced = await resyncItem(admin, preparation.id, willStale.id, db);
+    expect(resynced.item.reviewStatus).toBe('OK');
+    await expect(setPreparationStatus(admin, preparation.id, 'CLOSED', db)).resolves.toMatchObject({ preparation: { status: 'CLOSED' } });
+
+    // 4) closed preparation rejects edits; reopen guarded by unique open-per-period
+    await expect(patchItem(admin, preparation.id, willStale.id, { included: false }, db)).rejects.toMatchObject({ code: 'BILLING_PREP_CLOSED' });
     const reopened = await setPreparationStatus(admin, preparation.id, 'OPEN', db);
     expect(reopened.preparation.status).toBe('OPEN');
   });
