@@ -148,7 +148,7 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
   );
 }
 
-function ItemRow({ item, preparationId, open, onChanged }: {
+export function ItemRow({ item, preparationId, open, onChanged }: {
   item: BillingItem;
   preparationId: string;
   open: boolean;
@@ -163,6 +163,16 @@ function ItemRow({ item, preparationId, open, onChanged }: {
   const [overrideRate, setOverrideRate] = useState(item.billing.rateOverride ?? '');
   const [overrideReason, setOverrideReason] = useState(item.billing.rateOverrideReason ?? '');
   const [reason, setReason] = useState(item.billing.adjustmentReason ?? '');
+
+  // Rows are keyed by item.id, so an authoritative reload updates props without
+  // remounting — resync local form state only when the billing values change.
+  useEffect(() => {
+    setMinutes(String(item.billing.billingMinutes));
+    setInvoiceText(item.billing.invoiceDescription ?? '');
+    setOverrideRate(item.billing.rateOverride ?? '');
+    setOverrideReason(item.billing.rateOverrideReason ?? '');
+    setReason(item.billing.adjustmentReason ?? '');
+  }, [item.billing.billingMinutes, item.billing.invoiceDescription, item.billing.rateOverride, item.billing.rateOverrideReason, item.billing.adjustmentReason]);
 
   const mutable = open && item.reviewStatus !== 'SOURCE_MISSING';
   const needsAck = item.reviewStatus === 'REVIEW_REQUIRED' || item.reviewStatus === 'NON_BILLABLE';
