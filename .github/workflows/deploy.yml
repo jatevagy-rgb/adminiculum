@@ -1551,7 +1551,7 @@ jobs:
           # Zip from INSIDE Backend/ so package.json and dist are at the archive root.
           # Prebuilt artifact contains compiled dist/, complete Linux node_modules/,
           # prisma schema/migrations, templates, scripts, WebJob, and OpenAPI specs.
-          ( cd Backend && zip -r -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
+          ( cd Backend && zip -r -y -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
               package.json package-lock.json tsconfig.json .deployment release-identity.json \
               dist node_modules prisma templates scripts App_Data )
           for spec in swagger2.yaml swagger.yaml; do
@@ -1572,6 +1572,7 @@ jobs:
           grep -qxF 'dist/index.js'       ziplist.txt || fail "compiled dist/index.js missing"
           grep -qxF 'prisma/schema.prisma' ziplist.txt || fail "prisma/schema.prisma missing"
           grep -qxF 'App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs' ziplist.txt || fail "migration WebJob missing"
+          grep -qxF 'node_modules/.bin/prisma' ziplist.txt || fail "node_modules/.bin/prisma missing"
           grep -q '^node_modules/express/' ziplist.txt || fail "runtime node_modules/express missing"
           grep -q '^node_modules/@prisma/client/' ziplist.txt || fail "generated @prisma/client missing"
           grep -q '^node_modules/\.prisma/client/' ziplist.txt || fail "generated .prisma/client engine missing"
@@ -1604,6 +1605,23 @@ jobs:
           ( cd "$TMP_DIR" && node -e "require('bcrypt'); console.log('bcrypt loaded');" )
           ( cd "$TMP_DIR" && node -e "require('@prisma/client'); console.log('prisma client loaded');" )
           ( cd "$TMP_DIR" && node -e "require('./dist/releaseIdentity.js'); console.log('releaseIdentity loaded');" )
+          # Assert Prisma CLI symlink preservation and executable startup
+          test -L "$TMP_DIR/node_modules/.bin/prisma" || {
+            echo "ERROR: node_modules/.bin/prisma is not a symlink; zip packaging broke symlink semantics"
+            exit 1
+          }
+          node -e '
+            const fs = require("fs");
+            const binPrisma = process.argv[1] + "/node_modules/.bin/prisma";
+            const stat = fs.lstatSync(binPrisma);
+            console.log("node_modules/.bin/prisma isSymbolicLink:", stat.isSymbolicLink());
+            if (!stat.isSymbolicLink()) {
+              throw new Error("node_modules/.bin/prisma is not a symlink; zip packaging broke symlink semantics");
+            }
+            const target = fs.readlinkSync(binPrisma);
+            console.log("node_modules/.bin/prisma symlink target:", target);
+          ' "$TMP_DIR"
+          ( cd "$TMP_DIR" && ./node_modules/.bin/prisma --version )
           rm -rf "$TMP_DIR"
           echo "Offline module loading checks PASS."
 

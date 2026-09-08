@@ -1,9 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import child_process from 'node:child_process';
 
 const repoRoot = path.resolve(__dirname, '..', '..');
 const workflow = fs
   .readFileSync(path.join(repoRoot, '.github', 'workflows', 'deploy.yml'), 'utf8')
+  .replace(/\r\n/g, '\n');
+const preflightWorkflow = fs
+  .readFileSync(path.join(repoRoot, '.github', 'workflows', 'preflight.yml'), 'utf8')
   .replace(/\r\n/g, '\n');
 
 function stepBlock(name: string): string {
@@ -751,5 +756,89 @@ describe('migration-before-backend release order and staging contract', () => {
     expect(recoveryIndex).toBeLessThan(triggerIndex);
     expect(preflightIndex).toBeLessThan(triggerIndex);
     expect(stagingIndex).toBeLessThan(triggerIndex);
+  });
+});
+
+describe('backend release artifact packaging and symlink preservation', () => {
+  it('deploy.yml uses zip -r -y -q for backend runtime artifact packaging', () => {
+    const step = stepBlock('Package prebuilt backend runtime artifact');
+    expect(step).toContain('zip -r -y -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
+  });
+
+  it('preflight.yml uses zip -r -y -q for backend runtime artifact packaging', () => {
+    expect(preflightWorkflow).toContain('zip -r -y -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
+  });
+
+  it('deploy.yml validates node_modules/.bin/prisma in ziplist.txt', () => {
+    const step = stepBlock('Validate prebuilt backend artifact (fail fast)');
+    expect(step).toContain("grep -qxF 'node_modules/.bin/prisma' ziplist.txt");
+  });
+
+  it('preflight.yml validates node_modules/.bin/prisma in ziplist.txt', () => {
+    expect(preflightWorkflow).toContain("grep -qxF 'node_modules/.bin/prisma' ziplist.txt");
+  });
+
+  it('deploy.yml asserts node_modules/.bin/prisma is a symlink and starts prisma --version in offline extraction', () => {
+    const step = stepBlock('Assert prebuilt artifact module loading (offline sanity)');
+    expect(step).toContain('test -L "$TMP_DIR/node_modules/.bin/prisma"');
+    expect(step).toContain('stat.isSymbolicLink()');
+    expect(step).toContain('./node_modules/.bin/prisma --version');
+  });
+
+  it('preflight.yml asserts node_modules/.bin/prisma is a symlink and starts prisma --version in offline extraction', () => {
+    expect(preflightWorkflow).toContain('test -L "$TMP_DIR/node_modules/.bin/prisma"');
+    expect(preflightWorkflow).toContain('stat.isSymbolicLink()');
+    expect(preflightWorkflow).toContain('./node_modules/.bin/prisma --version');
+  });
+
+  it('behavioral proof: dereferencing prisma CLI to .bin fails with ENOENT wasm, while executing from package dir succeeds', () => {
+    const realPrisma = path.resolve(repoRoot, 'Backend', 'node_modules', 'prisma', 'build', 'index.js');
+    if (!fs.existsSync(realPrisma)) {
+      return;
+    }
+
+    const nodeModulesDir = path.resolve(repoRoot, 'Backend', 'node_modules');
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'prisma-symlink-test-'));
+    try {
+      const binDir = path.join(tmpDir, 'node_modules', '.bin');
+      fs.mkdirSync(binDir, { recursive: true });
+
+      const dereferencedPrisma = path.join(binDir, 'prisma.js');
+      // Simulate zip without -y: copying dereferenced file into .bin without adjacent wasm
+      fs.copyFileSync(realPrisma, dereferencedPrisma);
+
+      const brokenResult = child_process.spawnSync(process.execPath, [dereferencedPrisma, '--version'], {
+        encoding: 'utf8',
+        env: { ...process.env, NODE_PATH: nodeModulesDir },
+      });
+      expect(brokenResult.status).not.toBe(0);
+      expect(brokenResult.stderr).toContain('ENOENT');
+      expect(brokenResult.stderr).toContain('prisma_schema_build_bg.wasm');
+
+      // Verify that executing from the real package location (where __dirname contains wasm) succeeds
+      const workingResult = child_process.spawnSync(process.execPath, [realPrisma, '--version'], {
+        encoding: 'utf8',
+      });
+      expect(workingResult.status).toBe(0);
+      expect(workingResult.stdout.toLowerCase()).toContain('prisma');
+
+      // If the platform permits symlink creation, verify that symlinked execution resolves __dirname and succeeds
+      const symlinkPrisma = path.join(binDir, 'prisma-symlink.js');
+      try {
+        fs.symlinkSync(realPrisma, symlinkPrisma, 'file');
+        const symlinkResult = child_process.spawnSync(process.execPath, [symlinkPrisma, '--version'], {
+          encoding: 'utf8',
+          env: { ...process.env, NODE_PATH: nodeModulesDir },
+        });
+        expect(symlinkResult.status).toBe(0);
+        expect(symlinkResult.stdout.toLowerCase()).toContain('prisma');
+      } catch (symlinkErr: any) {
+        if (symlinkErr.code !== 'EPERM') {
+          throw symlinkErr;
+        }
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
