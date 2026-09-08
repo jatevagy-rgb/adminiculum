@@ -10,10 +10,10 @@ function line(overrides: Record<string, unknown> = {}) {
     draftId: 'draft-1',
     billingItemId: 'item-1',
     sortOrder: 0,
-    description: 'Szerződés előkészítése – őűáé unicode',
-    quantity: D('1.5000'),
-    unit: 'óra',
-    netUnitPrice: D('50000'),
+    description: 'Szerződés előkészítése – őűáé unicode — 1:30 óra · 50 000 Ft/óra',
+    quantity: D('1'),
+    unit: 'tétel',
+    netUnitPrice: D('75000'),
     netAmount: D('75000'),
     vatTreatment: 'NORMAL_VAT',
     vatRate: D('27'),
@@ -45,6 +45,7 @@ function draft(overrides: Record<string, unknown> = {}) {
     issuerEmail: null,
     issuerPhone: null,
     issuerLogoPath: null,
+    customerTaxNumberRequirement: 'REQUIRED',
     customerName: 'Őrült Ügyfél Kft.',
     customerAddress: '1052 Budapest, Példa utca 4.',
     customerTaxNumber: '12345678-2-42',
@@ -108,6 +109,7 @@ describe('T6A invoice-draft PDF (SZÁMLATERVEZET — NEM SZÁMLA)', () => {
     expect(text).toContain('ELSZÁMOLÁSI MELLÉKLET');
     expect(text).toContain('Ügyvéd Éva');
     expect(text).toContain('1:30');
+    expect(text).toContain('tétel');
 
     // Legal safety: no official invoice identity, no NAV wording.
     expect(text).not.toContain('Számlaszám'); // exact-case: "Bankszámlaszám" is legitimate
@@ -132,6 +134,12 @@ describe('T6A invoice-draft PDF (SZÁMLATERVEZET — NEM SZÁMLA)', () => {
         code: 'INVOICE_DRAFT_INCOMPLETE',
         missing: expect.arrayContaining(['Ügyfél adószáma', 'Teljesítés dátuma']),
       });
+    // private individual: tax number legitimately not applicable
+    const individual = draft({ customerTaxNumber: null, customerTaxNumberRequirement: 'NOT_APPLICABLE' });
+    expect((await getDraftPdf(admin, 'draft-1', dbFor(individual))).subarray(0, 4).toString()).toBe('%PDF');
+    // unconfirmed applicability blocks until a reviewer resolves it
+    await expect(getDraftPdf(admin, 'draft-1', dbFor(draft({ customerTaxNumberRequirement: 'UNCONFIRMED' }))))
+      .rejects.toMatchObject({ status: 422, code: 'INVOICE_DRAFT_INCOMPLETE', missing: expect.arrayContaining(['Vevő adószámának alkalmazhatósága']) });
   });
 
   it('renders correctly without a logo and marks non-normal VAT treatments explicitly', async () => {

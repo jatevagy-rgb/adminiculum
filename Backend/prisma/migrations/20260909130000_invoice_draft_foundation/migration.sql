@@ -2,6 +2,7 @@
 -- derived from CLOSED billing preparations; they are never legal invoices
 -- (no numbering, no issuance, no NAV integration).
 
+CREATE TYPE "InvoiceCustomerTaxNumberRequirement" AS ENUM ('UNCONFIRMED', 'REQUIRED', 'NOT_APPLICABLE');
 CREATE TYPE "InvoiceDraftStatus" AS ENUM ('DRAFT');
 CREATE TYPE "InvoiceVatTreatment" AS ENUM ('NORMAL_VAT', 'TAX_EXEMPT', 'REVERSE_CHARGE', 'OUT_OF_SCOPE');
 
@@ -24,6 +25,7 @@ CREATE TABLE "invoice_drafts" (
     "issuerLogoPath" TEXT,
 
     -- Customer billing identity snapshot.
+    "customerTaxNumberRequirement" "InvoiceCustomerTaxNumberRequirement" NOT NULL DEFAULT 'UNCONFIRMED',
     "customerName" TEXT,
     "customerAddress" TEXT,
     "customerTaxNumber" TEXT,
@@ -47,6 +49,8 @@ CREATE TABLE "invoice_drafts" (
     CONSTRAINT "invoice_drafts_vat_rate_check" CHECK (
         "vatRate" IS NULL OR ("vatRate" >= 0 AND "vatRate" <= 100 AND "vatRate" NOT IN ('NaN'::numeric, 'Infinity'::numeric))
     ),
+    -- Defense in depth only; the service validates VAT combinations first and
+    -- returns a controlled 4xx instead of ever reaching this CHECK.
     CONSTRAINT "invoice_drafts_normal_vat_rate_check" CHECK (
         "vatTreatment" <> 'NORMAL_VAT' OR "vatRate" IS NOT NULL
     )
@@ -65,6 +69,8 @@ CREATE TABLE "invoice_draft_lines" (
     "billingItemId" TEXT NOT NULL,
     "sortOrder" INTEGER NOT NULL,
 
+    -- Invoice face is exactly reconcilable: quantity 1 tétel at the
+    -- authoritative persisted net; per-minute basis lives in the annex fields.
     "description" TEXT NOT NULL,
     "quantity" DECIMAL(12,4) NOT NULL,
     "unit" VARCHAR(16) NOT NULL,

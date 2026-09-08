@@ -30,6 +30,15 @@ test('draft workspace renders Hungarian draft markers, the missing-field list, a
   assert.match(draftWorkspace, /downloadInvoiceDraftPdf\(draft\.id\)/);
   assert.match(draftWorkspace, /patchInvoiceDraft\(draft\.id,/);
   assert.match(draftWorkspace, /patchInvoiceDraftLine\(draft\.id, lineId, lineText\)/);
+  // Explicit tax-number applicability selector + discard action.
+  assert.match(draftWorkspace, /Adószám szükséges/);
+  assert.match(draftWorkspace, /Nem alkalmazandó/);
+  assert.match(draftWorkspace, /customerTaxNumberRequirement/);
+  assert.match(draftWorkspace, /Tervezet elvetése/);
+  assert.match(draftWorkspace, /discardInvoiceDraft\(draft\.id\)/);
+  // Issuer snapshot wording: profile edits only affect future drafts.
+  assert.match(draftWorkspace, /Számlázói adatok beállítása/);
+  assert.match(draftWorkspace, /INVOICE_ISSUER_PROFILE_INCOMPLETE/);
 });
 
 test('no frontend authoritative money arithmetic and no invoice identity wording', () => {
@@ -47,6 +56,8 @@ test('api client covers issuer profile, draft lifecycle, line patch, and blob PD
   assert.match(api, /method: 'PUT'/);
   assert.match(api, /method: 'POST'/);
   assert.match(api, /method: 'PATCH'/);
+  assert.match(api, /method: 'DELETE'/);
+  assert.match(api, /TaxNumberRequirement/);
   // Draft status model: DRAFT only — no issued/issued-equivalent state anywhere.
   assert.doesNotMatch(api, /ISSUED|invoiceNumber/);
 });

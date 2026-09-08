@@ -6,6 +6,7 @@ import { fetchApi, fetchApiBlob } from './api';
  */
 
 export type VatTreatment = 'NORMAL_VAT' | 'TAX_EXEMPT' | 'REVERSE_CHARGE' | 'OUT_OF_SCOPE';
+export type TaxNumberRequirement = 'UNCONFIRMED' | 'REQUIRED' | 'NOT_APPLICABLE';
 
 export type IssuerProfile = {
   legalName: string | null;
@@ -69,6 +70,7 @@ export type InvoiceDraft = {
     address: string | null;
     taxNumber: string | null;
     vatNumber: string | null;
+    taxNumberRequirement: TaxNumberRequirement;
   };
   performanceDate: string | null;
   draftDate: string | null;
@@ -120,6 +122,7 @@ export type InvoiceDraftPatch = {
   customerAddress?: string | null;
   customerTaxNumber?: string | null;
   customerVatNumber?: string | null;
+  customerTaxNumberRequirement?: TaxNumberRequirement;
 };
 
 export function patchInvoiceDraft(draftId: string, body: InvoiceDraftPatch) {
@@ -138,4 +141,10 @@ export function patchInvoiceDraftLine(draftId: string, lineId: string, descripti
 
 export function downloadInvoiceDraftPdf(draftId: string) {
   return fetchApiBlob(`${base}/drafts/${encodeURIComponent(draftId)}/pdf`);
+}
+
+export function discardInvoiceDraft(draftId: string) {
+  return fetchApi<{ discarded: boolean; billingPreparationId: string }>(`${base}/drafts/${encodeURIComponent(draftId)}`, {
+    method: 'DELETE',
+  });
 }

@@ -170,7 +170,7 @@ export async function renderInvoiceDraftPdf(draft: DraftWithLines): Promise<Buff
   for (const line of draft.lines) {
     const values = {
       description: line.description,
-      quantity: line.quantity.toString(),
+      quantity: line.quantity.isInteger() ? line.quantity.toFixed(0) : line.quantity.toString(),
       unit: line.unit,
       netUnitPrice: huf(line.netUnitPrice),
       netAmount: huf(line.netAmount),

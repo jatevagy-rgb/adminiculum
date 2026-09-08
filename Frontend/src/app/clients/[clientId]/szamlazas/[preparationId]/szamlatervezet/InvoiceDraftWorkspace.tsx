@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ApiError, getCurrentUser } from '@/lib/api';
+import { useRouter } from 'next/navigation';
 import {
   createInvoiceDraft,
+  discardInvoiceDraft,
   downloadInvoiceDraftPdf,
   patchInvoiceDraft,
   patchInvoiceDraftLine,
   type InvoiceDraft,
+  type TaxNumberRequirement,
   type VatTreatment,
 } from '@/lib/invoiceDraftsApi';
 
@@ -20,6 +23,12 @@ const VAT_OPTIONS: { value: VatTreatment; label: string }[] = [
   { value: 'TAX_EXEMPT', label: 'Adómentes' },
   { value: 'REVERSE_CHARGE', label: 'Fordított adózás' },
   { value: 'OUT_OF_SCOPE', label: 'ÁFA hatályán kívül' },
+];
+
+const TAX_REQUIREMENT_OPTIONS: { value: TaxNumberRequirement; label: string }[] = [
+  { value: 'UNCONFIRMED', label: 'Megerősítésre vár' },
+  { value: 'REQUIRED', label: 'Adószám szükséges' },
+  { value: 'NOT_APPLICABLE', label: 'Nem alkalmazandó (magánszemély)' },
 ];
 
 function huf(value: string | null): string {
@@ -42,10 +51,14 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
   const [notice, setNotice] = useState('');
   const [editingLine, setEditingLine] = useState<string | null>(null);
   const [lineText, setLineText] = useState('');
+  const [discarding, setDiscarding] = useState(false);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const router = useRouter();
   const [form, setForm] = useState({
     performanceDate: '', paymentDueDate: '', paymentMethod: '',
     vatTreatment: 'NORMAL_VAT' as VatTreatment, vatRate: '', note: '',
     customerName: '', customerAddress: '', customerTaxNumber: '', customerVatNumber: '',
+    customerTaxNumberRequirement: 'UNCONFIRMED' as TaxNumberRequirement,
   });
 
   const applyDraft = useCallback((next: InvoiceDraft) => {
@@ -61,6 +74,7 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
       customerAddress: next.customer.address ?? '',
       customerTaxNumber: next.customer.taxNumber ?? '',
       customerVatNumber: next.customer.vatNumber ?? '',
+      customerTaxNumberRequirement: next.customer.taxNumberRequirement,
     });
   }, []);
 
@@ -75,7 +89,10 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
     } catch (e) {
       if (e instanceof ApiError && (e.status === 403 || e.status === 401)) setForbidden(true);
       else if (e instanceof ApiError && (e.status === 404 || e.status === 409)) { setNotFound(true); setError(e.message); }
-      else setError(e instanceof ApiError ? e.message : 'A számlatervezet most nem tölthető be.');
+      else {
+        setError(e instanceof ApiError ? e.message : 'A számlatervezet most nem tölthető be.');
+        if (e instanceof ApiError) setErrorCode(e.code ?? null);
+      }
     } finally {
       setLoading(false);
     }
@@ -100,6 +117,7 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
         customerAddress: form.customerAddress || null,
         customerTaxNumber: form.customerTaxNumber || null,
         customerVatNumber: form.customerVatNumber || null,
+        customerTaxNumberRequirement: form.customerTaxNumberRequirement,
       });
       applyDraft(result.draft);
       setNotice('Tervezet mentve.');
@@ -145,7 +163,30 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
 
   if (loading) return <main className="p-6 text-sm text-[var(--adm-text-muted)]">Betöltés…</main>;
   if (forbidden) return <main className="p-6 text-sm">A számlatervezet megtekintéséhez adminisztrátor vagy partner jogosultság szükséges.</main>;
-  if (notFound || !draft) return <main className="p-6 text-sm" role="alert">{error ?? 'A számlatervezet nem készíthető el ehhez az előkészítéshez.'} <Link className="text-[var(--adm-ochre-600)]" href={`/clients/${encodeURIComponent(clientId)}/szamlazas/${encodeURIComponent(preparationId)}`}>Vissza az előkészítéshez</Link></main>;
+  async function discard() {
+    if (!draft || discarding) return;
+    if (!window.confirm('Elveti a számlatervezetet? Az előkészítés ezután újranyitható.')) return;
+    setDiscarding(true);
+    setError(null);
+    try {
+      await discardInvoiceDraft(draft.id);
+      router.push(`/clients/${encodeURIComponent(clientId)}/szamlazas/${encodeURIComponent(preparationId)}`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'A tervezet elvetése nem sikerült.');
+    } finally {
+      setDiscarding(false);
+    }
+  }
+
+  if (notFound || !draft) return (
+    <main className="p-6 text-sm space-y-2" role="alert">
+      <p>{error ?? 'A számlatervezet nem készíthető el ehhez az előkészítéshez.'}</p>
+      {errorCode === 'INVOICE_ISSUER_PROFILE_INCOMPLETE' && (
+        <p><Link className="text-[var(--adm-ochre-600)] underline" href="/settings/szamlazas">Számlázói adatok beállítása</Link></p>
+      )}
+      <p><Link className="text-[var(--adm-ochre-600)]" href={`/clients/${encodeURIComponent(clientId)}/szamlazas/${encodeURIComponent(preparationId)}`}>Vissza az előkészítéshez</Link></p>
+    </main>
+  );
 
   return (
     <main className="mx-auto max-w-6xl p-6 space-y-4">
@@ -174,7 +215,8 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
         <p className="text-xs text-[var(--adm-text-muted)]">
           {[draft.issuer.address, draft.issuer.taxNumber ? `Adószám: ${draft.issuer.taxNumber}` : null, draft.issuer.bankAccountNumber ? `Bankszámla: ${draft.issuer.bankAccountNumber}` : null].filter(Boolean).join(' · ') || '—'}
         </p>
-        <Link href="/settings/szamlazas" className="mt-1 inline-block text-xs text-[var(--adm-ochre-600)]">Számlázói profil módosítása a beállításokban</Link>
+        <Link href="/settings/szamlazas" className="mt-1 inline-block text-xs text-[var(--adm-ochre-600)]">Számlázói adatok beállítása</Link>
+        <p className="text-xs text-[var(--adm-text-muted)]">A profil módosítása csak az új tervezetekre vonatkozik — ez a tervezet már rögzített.</p>
       </section>
 
       <section className="rounded-lg border border-[var(--adm-border)] bg-white p-4 space-y-3">
@@ -191,6 +233,12 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
           </label>
           <label className="text-xs">Közösségi adószám
             <input className={input} value={form.customerVatNumber} onChange={(e) => setForm({ ...form, customerVatNumber: e.target.value })} />
+          </label>
+          <label className="text-xs">Vevő adószámának alkalmazhatósága
+            <select className={input} value={form.customerTaxNumberRequirement}
+              onChange={(e) => setForm({ ...form, customerTaxNumberRequirement: e.target.value as TaxNumberRequirement })}>
+              {TAX_REQUIREMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </label>
         </div>
       </section>
@@ -278,6 +326,7 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
       <div className="flex gap-2">
         <button type="button" className={button} disabled={saving} onClick={save}>{saving ? 'Mentés…' : 'Tervezet mentése'}</button>
         <button type="button" className={button} disabled={downloading} onClick={downloadPdf}>{downloading ? 'PDF készítése…' : 'Számlatervezet PDF'}</button>
+        <button type="button" className={`${button} text-red-700`} disabled={discarding} onClick={discard}>{discarding ? 'Elvetés…' : 'Tervezet elvetése'}</button>
       </div>
       {notice && <p role="status" className="text-xs text-[var(--adm-text-muted)]">{notice}</p>}
       {error && <div role="alert" className="text-sm text-red-700">{error}</div>}

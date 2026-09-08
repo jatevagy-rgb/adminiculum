@@ -662,6 +662,13 @@ export async function setPreparationStatus(actor: InternalActor, preparationId: 
     if (blockers.length > 0) {
       return fail(409, 'BILLING_PREP_CLOSE_BLOCKED', `${blockers.length} szerepelt sor forrása megváltozott vagy felülvizsgálatra vár. Frissítse vagy zárja ki a sort.`);
     }
+  } else {
+    // A closed preparation that already produced an invoice-draft snapshot must
+    // not be reopened underneath it — the user must discard the draft first.
+    const draft = await db.invoiceDraft.findUnique({ where: { billingPreparationId: preparationId }, select: { id: true } });
+    if (draft) {
+      return fail(409, 'BILLING_PREP_INVOICE_DRAFT_EXISTS', 'Az előkészítéshez már tartozik számlatervezet. Az újranyitás előtt vesse el a számlatervezetet.');
+    }
   }
   try {
     const updated = await db.billingPreparation.update({

@@ -2,9 +2,11 @@ import { Prisma } from '@prisma/client';
 import {
   ISSUER_PROFILE_KEY,
   createDraft,
+  discardDraft,
   getDraftPdf,
   invoiceDraftMissing,
-  quantityHours,
+  patchDraft,
+  patchDraftLine,
   vatAmountFor,
 } from '../src/modules/invoice-drafts/service';
 
@@ -70,8 +72,8 @@ const ISSUER = {
   defaultPaymentTermDays: 8,
 };
 
-/** Fake Prisma surface. `timeEntry` and `client` accessors throw on ANY read —
- *  draft creation must only use the persisted preparation snapshot. */
+/** Fake Prisma surface. `timeEntry`/`client`/`hourlyRateVersion` accessors throw
+ *  on ANY read — draft logic must only use the persisted snapshots. */
 function dbFor(overrides: Record<string, unknown> = {}) {
   const captured: Record<string, unknown> = {};
   const db = {
@@ -80,6 +82,7 @@ function dbFor(overrides: Record<string, unknown> = {}) {
       findUnique: async ({ where }: any) => (where.key === ISSUER_PROFILE_KEY ? { value: ISSUER, updatedAt: new Date('2026-09-10T00:00:00Z') } : null),
       upsert: async () => ({}),
     },
+    clientPortalWorkspace: { findMany: async () => [] },
     billingPreparation: { findUnique: async () => preparation() },
     invoiceDraft: {
       findUnique: async () => null,
@@ -102,6 +105,14 @@ function dbFor(overrides: Record<string, unknown> = {}) {
   return { db, captured };
 }
 
+const baseDraft = {
+  issuerLegalName: 'X', issuerAddress: 'Y', issuerTaxNumber: '1',
+  customerName: 'A', customerAddress: 'B', customerTaxNumber: '2',
+  customerTaxNumberRequirement: 'REQUIRED' as const,
+  performanceDate: new Date(), paymentDueDate: new Date(), paymentMethod: 'átutalás',
+  vatTreatment: 'NORMAL_VAT' as const, vatRate: D('27'),
+};
+
 describe('T6A invoice draft — snapshot-only creation', () => {
   const admin = { userId: 'admin-1', role: 'ADMIN' } as any;
 
@@ -115,9 +126,25 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     await expect(createDraft({ userId: 'lawyer-1', role: 'LAWYER' } as any, { billingPreparationId: 'prep-1' }, db)).rejects.toMatchObject({ status: 403, code: 'BILLING_ACCESS_FORBIDDEN' });
   });
 
+  it('refuses creation with an incomplete issuer profile and creates NO row', async () => {
+    let created = false;
+    const { db } = dbFor({
+      systemSetting: {
+        findUnique: async () => ({ value: { ...ISSUER, taxNumber: null }, updatedAt: new Date() }),
+        upsert: async () => ({}),
+      },
+      invoiceDraft: { findUnique: async () => null, create: async () => { created = true; throw new Error('must not create'); } },
+    });
+    const err = await createDraft(admin, { billingPreparationId: 'prep-1' }, db).then(() => null).catch((e: any) => e);
+    expect(err).toMatchObject({ status: 422, code: 'INVOICE_ISSUER_PROFILE_INCOMPLETE' });
+    expect(err.missing).toContain('Szállító adószáma');
+    expect(created).toBe(false);
+  });
+
   it('snapshots issuer + customer identity and copies only included persisted rows', async () => {
     const excluded = billingItem({ id: 'item-2', included: false, sourceDescription: 'KIZÁRT', netAmount: D('40000') });
     const { db, captured } = dbFor({
+      clientPortalWorkspace: { findMany: async () => [{ mode: 'ORGANIZATION', status: 'ACTIVE' }] },
       billingPreparation: { findUnique: async () => preparation({ items: [billingItem(), excluded] }) },
     });
     const { created, draft } = await createDraft(admin, { billingPreparationId: 'prep-1' }, db);
@@ -126,9 +153,9 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     const data = captured.createData as any;
     expect(data.issuerLegalName).toBe('Bálintfy és Társai Ügyvédi Iroda');
     expect(data.issuerTaxNumber).toBe('87654321-1-41');
+    expect(data.customerTaxNumberRequirement).toBe('REQUIRED'); // canonical ORGANIZATION workspace
     expect(data.customerName).toBe('Demo Kft.');
     expect(data.customerTaxNumber).toBe('12345678-2-42');
-    expect(data.customerVatNumber).toBe('HU12345678');
     expect(data.currency).toBe('HUF');
     expect(data.status).toBeUndefined(); // schema default DRAFT
     expect(data.performanceDate).toEqual(preparation().periodEnd);
@@ -141,14 +168,35 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     expect(data.lines.create).toHaveLength(1); // excluded row omitted
     const line = data.lines.create[0];
     expect(line.billingItemId).toBe('item-1');
-    expect(line.quantity.toFixed(4)).toBe('1.5000');
-    expect(line.unit).toBe('óra');
+    // Invoice face: quantity 1 tétel at authoritative net — always reconcilable.
+    expect(line.quantity.toFixed(4)).toBe('1.0000');
+    expect(line.unit).toBe('tétel');
+    expect(line.netUnitPrice.toFixed(4)).toBe('75000.0000');
     expect(line.netAmount.toFixed(2)).toBe('75000.00');
     expect(line.vatAmount.toFixed(2)).toBe('20250.00');
     expect(line.grossAmount.toFixed(2)).toBe('95250.00');
-    expect(line.sourceWorkDate).toEqual(billingItem().sourceWorkDate);
+    // Billing basis stays visible in the description + annex provenance.
+    expect(line.description).toBe('Élő módosítás előtti leírás – őűáé — 1:30 óra · 50 000 Ft/óra');
     expect(line.billingMinutes).toBe(90);
+    expect(line.hourlyRate.toString()).toBe('50000');
     expect(draft.totals).toEqual({ netAmount: '75000.00', vatAmount: '20250.00', grossAmount: '95250.00' });
+  });
+
+  it('reconciles the invoice face for arbitrary minute counts (61 min @ 50 000 Ft/óra)', async () => {
+    const { db, captured } = dbFor({
+      billingPreparation: {
+        findUnique: async () => preparation({
+          items: [billingItem({ billingMinutes: 61, netAmount: D('50833.33') })],
+        }),
+      },
+    });
+    await createDraft(admin, { billingPreparationId: 'prep-1' }, db);
+    const line = (captured.createData as any).lines.create[0];
+    // Face: 1 × 50 833,33 = 50 833,33 — exactly the persisted billing net.
+    expect(line.quantity.mul(line.netUnitPrice).toFixed(2)).toBe('50833.33');
+    expect(line.netAmount.toFixed(2)).toBe('50833.33');
+    expect(line.description).toContain('1:01 óra');
+    expect(line.description).toContain('50 000 Ft/óra');
   });
 
   it('keeps the draft frozen when live TimeEntry and Client mutate afterwards', async () => {
@@ -157,6 +205,7 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     const db = {
       user: { findUnique: async () => ({ role: 'ADMIN', status: 'ACTIVE', isActive: true }) },
       systemSetting: { findUnique: async () => ({ value: ISSUER }) },
+      clientPortalWorkspace: { findMany: async () => [{ mode: 'ORGANIZATION', status: 'ACTIVE' }] },
       billingPreparation: {
         findUnique: async () => (mutated
           ? preparation({
@@ -186,8 +235,7 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     expect(again.created).toBe(false);
     expect(again.draft.customer.name).toBe('Demo Kft.');
     expect(again.draft.customer.taxNumber).toBe('12345678-2-42');
-    expect(again.draft.lines[0].description).toBe('Élő módosítás előtti leírás – őűáé');
-    expect(again.draft.lines[0].quantity).toBe('1.5000');
+    expect(again.draft.lines[0].description).toContain('Élő módosítás előtti leírás – őűáé');
     expect(again.draft.totals.netAmount).toBe('75000.00');
     expect(again.draft).toEqual(frozen);
   });
@@ -199,24 +247,40 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     expect(vatAmountFor(D('75000'), 'TAX_EXEMPT', null).toFixed(2)).toBe('0.00');
     expect(vatAmountFor(D('75000'), 'REVERSE_CHARGE', null).toFixed(2)).toBe('0.00');
     expect(vatAmountFor(D('75000'), 'OUT_OF_SCOPE', null).toFixed(2)).toBe('0.00');
-    expect(quantityHours(90).toFixed(4)).toBe('1.5000');
-    expect(quantityHours(60).toFixed(4)).toBe('1.0000');
   });
 
-  it('reports Hungarian missing-field list before PDF generation', () => {
-    const complete = {
-      issuerLegalName: 'X', issuerAddress: 'Y', issuerTaxNumber: '1',
-      customerName: 'A', customerAddress: 'B', customerTaxNumber: '2',
-      performanceDate: new Date(), paymentDueDate: new Date(), paymentMethod: 'átutalás',
-      vatTreatment: 'NORMAL_VAT' as const, vatRate: D('27'),
-    };
-    expect(invoiceDraftMissing(complete, [{ description: 'Munka' } as any])).toEqual([]);
-    const missing = invoiceDraftMissing(
-      { ...complete, customerTaxNumber: null, performanceDate: null, vatRate: null },
-      [{ description: 'Munka' } as any],
-    );
-    expect(missing).toEqual(expect.arrayContaining(['Ügyfél adószáma', 'Teljesítés dátuma', 'ÁFA kulcs']));
-    expect(missing).not.toContain('Fizetési határidő');
+  it('NORMAL_VAT without a rate is a controlled 422 — never a DB-level 500', async () => {
+    const { db } = dbFor({
+      systemSetting: {
+        findUnique: async () => ({ value: { ...ISSUER, defaultVatRate: null }, updatedAt: new Date() }),
+        upsert: async () => ({}),
+      },
+    });
+    await expect(createDraft(admin, { billingPreparationId: 'prep-1' }, db))
+      .rejects.toMatchObject({ status: 422, code: 'INVOICE_VAT_RATE_REQUIRED' });
+    await expect(createDraft(admin, { billingPreparationId: 'prep-1', vatTreatment: 'NORMAL_VAT', vatRate: null }, db))
+      .rejects.toMatchObject({ status: 422, code: 'INVOICE_VAT_RATE_REQUIRED' });
+  });
+
+  it('non-normal treatments normalize the rate to null and VAT to zero', async () => {
+    const { db, captured } = dbFor();
+    // even if a stale rate is supplied alongside a non-normal treatment:
+    await createDraft(admin, { billingPreparationId: 'prep-1', vatTreatment: 'TAX_EXEMPT', vatRate: '27' }, db);
+    const data = captured.createData as any;
+    expect(data.vatTreatment).toBe('TAX_EXEMPT');
+    expect(data.vatRate).toBeNull();
+    expect(data.lines.create[0].vatRate).toBeNull();
+    expect(data.lines.create[0].vatAmount.toFixed(2)).toBe('0.00');
+    expect(data.lines.create[0].grossAmount.toFixed(2)).toBe('75000.00');
+  });
+
+  it('reports Hungarian missing-field list incl. tax-number applicability', () => {
+    expect(invoiceDraftMissing(baseDraft, [{ description: 'Munka' } as any])).toEqual([]);
+    expect(invoiceDraftMissing({ ...baseDraft, customerTaxNumber: null }, [{ description: 'M' } as any])).toContain('Ügyfél adószáma');
+    expect(invoiceDraftMissing({ ...baseDraft, customerTaxNumber: null, customerTaxNumberRequirement: 'NOT_APPLICABLE' }, [{ description: 'M' } as any])).toEqual([]);
+    expect(invoiceDraftMissing({ ...baseDraft, customerTaxNumberRequirement: 'UNCONFIRMED' }, [{ description: 'M' } as any])).toContain('Vevő adószámának alkalmazhatósága');
+    const missing = invoiceDraftMissing({ ...baseDraft, performanceDate: null, vatRate: null }, [{ description: 'M' } as any]);
+    expect(missing).toEqual(expect.arrayContaining(['Teljesítés dátuma', 'ÁFA kulcs']));
   });
 
   it('fails PDF generation with a clear 422 while fields are missing', async () => {
@@ -225,12 +289,65 @@ describe('T6A invoice draft — snapshot-only creation', () => {
       issuerLegalName: null, issuerAddress: null, issuerTaxNumber: null,
       issuerEuVatNumber: null, issuerRegistrationNumber: null, issuerBankName: null,
       issuerBankAccountNumber: null, issuerEmail: null, issuerPhone: null, issuerLogoPath: null,
+      customerTaxNumberRequirement: 'UNCONFIRMED',
       customerName: 'Demo Kft.', customerAddress: null, customerTaxNumber: null, customerVatNumber: null,
       performanceDate: null, draftDate: new Date(), paymentDueDate: null, paymentMethod: null,
-      note: null, vatTreatment: 'NORMAL_VAT', vatRate: null,
+      note: null, vatTreatment: 'NORMAL_VAT', vatRate: D('27'),
       lines: [{ description: 'Munka' }],
     };
     const db = dbFor({ invoiceDraft: { findUnique: async () => draft, create: async () => { throw new Error('unreachable'); } } });
-    await expect(getDraftPdf(admin, 'draft-1', db.db)).rejects.toMatchObject({ status: 422, code: 'INVOICE_DRAFT_INCOMPLETE' });
+    const err = await getDraftPdf(admin, 'draft-1', db.db).then(() => null).catch((e: any) => e);
+    expect(err).toMatchObject({ status: 422, code: 'INVOICE_DRAFT_INCOMPLETE' });
+    expect(err.missing).toEqual(expect.arrayContaining(['Szállító neve', 'Ügyfél címe', 'Vevő adószámának alkalmazhatósága', 'Teljesítés dátuma', 'Fizetési határidő', 'Fizetési mód']));
+  });
+
+  it('patchDraft applies the same VAT combination rules', async () => {
+    const stored = {
+      id: 'draft-1', billingPreparationId: 'prep-1', currency: 'HUF', status: 'DRAFT',
+      customerTaxNumberRequirement: 'REQUIRED', vatTreatment: 'TAX_EXEMPT', vatRate: null,
+      lines: [{ id: 'line-1', netAmount: D('75000'), vatTreatment: 'TAX_EXEMPT', vatRate: null, vatAmount: D('0'), grossAmount: D('75000') }],
+    };
+    const db = {
+      user: { findUnique: async () => ({ role: 'ADMIN', status: 'ACTIVE', isActive: true }) },
+      invoiceDraft: {
+        findUnique: async () => stored,
+        update: async ({ data }: any) => ({ ...stored, ...data }),
+      },
+      invoiceDraftLine: { update: async () => ({}) },
+    } as any;
+    // switching to NORMAL_VAT without a rate → controlled 422
+    await expect(patchDraft(admin, 'draft-1', { vatTreatment: 'NORMAL_VAT' }, db))
+      .rejects.toMatchObject({ status: 422, code: 'INVOICE_VAT_RATE_REQUIRED' });
+  });
+
+  it('patchDraftLine rejects blank descriptions with a controlled 400', async () => {
+    const stored = {
+      id: 'draft-1', billingPreparationId: 'prep-1', currency: 'HUF', status: 'DRAFT',
+      customerTaxNumberRequirement: 'REQUIRED', vatTreatment: 'NORMAL_VAT', vatRate: D('27'),
+      lines: [{ id: 'line-1', description: 'Eredeti', netAmount: D('1'), vatAmount: D('0'), grossAmount: D('1') }],
+    };
+    const db = {
+      user: { findUnique: async () => ({ role: 'ADMIN', status: 'ACTIVE', isActive: true }) },
+      invoiceDraft: { findUnique: async () => stored },
+      invoiceDraftLine: { update: async () => { throw new Error('must not persist null'); } },
+    } as any;
+    await expect(patchDraftLine(admin, 'draft-1', 'line-1', { description: '   ' }, db))
+      .rejects.toMatchObject({ status: 400, code: 'INVOICE_DRAFT_INPUT_INVALID' });
+  });
+
+  it('discardDraft only removes DRAFT rows', async () => {
+    let deleted = false;
+    const db = {
+      user: { findUnique: async () => ({ role: 'ADMIN', status: 'ACTIVE', isActive: true }) },
+      invoiceDraft: {
+        findUnique: async () => ({ id: 'draft-1', status: 'DRAFT', billingPreparationId: 'prep-1', lines: [] }),
+        delete: async () => { deleted = true; },
+      },
+    } as any;
+    const result = await discardDraft(admin, 'draft-1', db);
+    expect(result).toEqual({ discarded: true, billingPreparationId: 'prep-1' });
+    expect(deleted).toBe(true);
+    await expect(discardDraft(admin, 'draft-1', dbFor({ invoiceDraft: { findUnique: async () => null } }).db))
+      .rejects.toMatchObject({ status: 404, code: 'INVOICE_DRAFT_NOT_FOUND' });
   });
 });

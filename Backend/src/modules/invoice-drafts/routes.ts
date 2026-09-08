@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { authenticate, requireRole, ROLES } from '../../middleware/auth';
 import { InteractionError } from '../client-interaction/base';
-import { createDraft, getDraft, getDraftPdf, getIssuerProfile, patchDraft, patchDraftLine, putIssuerProfile } from './service';
+import { createDraft, discardDraft, getDraft, getDraftPdf, getIssuerProfile, patchDraft, patchDraftLine, putIssuerProfile } from './service';
 
 const router = Router();
 
@@ -39,6 +39,10 @@ router.patch('/drafts/:draftId/lines/:lineId', (req, res) => {
   patchDraftLine(actor(req), String(req.params.draftId), String(req.params.lineId), req.body)
     .then((result) => res.json(result))
     .catch((error) => respond(error, res));
+});
+
+router.delete('/drafts/:draftId', (req, res) => {
+  discardDraft(actor(req), String(req.params.draftId)).then((result) => res.json(result)).catch((error) => respond(error, res));
 });
 
 router.get('/drafts/:draftId/pdf', (req, res) => {

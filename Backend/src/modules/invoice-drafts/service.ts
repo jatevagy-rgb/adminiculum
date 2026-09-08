@@ -30,10 +30,12 @@ const fail = (status: number, code: string, message: string, details?: Record<st
  * hardcoded — the rate comes from the configured issuer profile / draft input.
  */
 export const ISSUER_PROFILE_KEY = 'billing.issuerProfile';
-export const HOUR_UNIT = 'óra';
+export const ITEM_UNIT = 'tétel';
 
 export type VatTreatment = 'NORMAL_VAT' | 'TAX_EXEMPT' | 'REVERSE_CHARGE' | 'OUT_OF_SCOPE';
 const VAT_TREATMENTS: readonly VatTreatment[] = ['NORMAL_VAT', 'TAX_EXEMPT', 'REVERSE_CHARGE', 'OUT_OF_SCOPE'];
+export type TaxNumberRequirement = 'UNCONFIRMED' | 'REQUIRED' | 'NOT_APPLICABLE';
+const TAX_NUMBER_REQUIREMENTS: readonly TaxNumberRequirement[] = ['UNCONFIRMED', 'REQUIRED', 'NOT_APPLICABLE'];
 
 export type IssuerProfile = {
   legalName: string | null;
@@ -71,6 +73,37 @@ const parseVatRate = (value: unknown): Prisma.Decimal | null | undefined => {
   if (rate.gt(100)) return fail(400, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen áfa-kulcs.');
   return rate;
 };
+
+/** Authoritative VAT-combination validation: NORMAL_VAT requires a rate (4xx,
+ * never a DB CHECK crash); every other treatment normalizes rate to null so no
+ * stale value survives next to e.g. TAX_EXEMPT. */
+function resolveVatCombination(vatTreatment: VatTreatment, vatRate: Prisma.Decimal | null): { vatTreatment: VatTreatment; vatRate: Prisma.Decimal | null } {
+  if (vatTreatment === 'NORMAL_VAT') {
+    if (vatRate === null) {
+      return fail(422, 'INVOICE_VAT_RATE_REQUIRED', 'Normál áfa-kezeléshez áfa-kulcs megadása kötelező.');
+    }
+    return { vatTreatment, vatRate };
+  }
+  return { vatTreatment, vatRate: null };
+}
+
+function parseVatTreatment(value: unknown): VatTreatment | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !VAT_TREATMENTS.includes(value as VatTreatment)) {
+    return fail(400, 'INVOICE_DRAFT_INPUT_INVALID', 'Ismeretlen áfa-kezelés.');
+  }
+  return value as VatTreatment;
+}
+
+/** Minimum issuer prerequisites for ANY draft row. Without them the immutable
+ * snapshot would be permanently unrepairable — creation must fail clearly. */
+function issuerProfileMissing(profile: IssuerProfile): string[] {
+  const missing: string[] = [];
+  if (!profile.legalName?.trim()) missing.push('Szállító neve');
+  if (!profile.address?.trim()) missing.push('Szállító címe');
+  if (!profile.taxNumber?.trim()) missing.push('Szállító adószáma');
+  return missing;
+}
 const PROFILE_TEXT_KEYS = ['legalName', 'address', 'taxNumber', 'euVatNumber', 'registrationNumber', 'bankName', 'bankAccountNumber', 'email', 'phone', 'logoPath', 'defaultVatRate', 'defaultPaymentMethod'] as const;
 
 const isoDate = (value: Date | null | undefined): string | null => (value ? value.toISOString().slice(0, 10) : null);
@@ -96,20 +129,35 @@ export function vatAmountFor(netAmount: Prisma.Decimal, treatment: VatTreatment,
   return netAmount.mul(vatRate).div(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
 }
 
-/** billingMinutes → decimal hours (display quantity only; money stays per-minute). */
-export function quantityHours(billingMinutes: number): Prisma.Decimal {
-  return new Prisma.Decimal(billingMinutes).div(60).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
+const minutesHMM = (value: number): string => `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`;
+
+function ftPerHour(rate: Prisma.Decimal): string {
+  const [whole, fraction = '00'] = rate.toFixed(2).split('.');
+  const grouped = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return fraction === '00' ? `${grouped} Ft/óra` : `${grouped},${fraction} Ft/óra`;
+}
+
+/** Invoice-face line description keeps the billing basis visibly
+ * understandable; the face itself uses quantity=1 tétel × authoritative net. */
+function lineDescription(item: { sourceDescription?: string | null; invoiceDescription?: string | null; sourceWorkType: string; billingMinutes: number; hourlyRate: Prisma.Decimal | null; rateOverride?: Prisma.Decimal | null }): string {
+  const base = item.invoiceDescription?.trim() || item.sourceDescription?.trim() || item.sourceWorkType;
+  const rate = item.rateOverride ?? item.hourlyRate;
+  const basis = rate !== null && rate !== undefined
+    ? `${minutesHMM(item.billingMinutes)} óra · ${ftPerHour(rate)}`
+    : `${minutesHMM(item.billingMinutes)} óra`;
+  return `${base} — ${basis}`;
 }
 
 /** Hungarian missing-field list for the PDF gate. Empty array = ready to render. */
-export function invoiceDraftMissing(draft: Pick<InvoiceDraft, 'issuerLegalName' | 'issuerAddress' | 'issuerTaxNumber' | 'customerName' | 'customerAddress' | 'customerTaxNumber' | 'performanceDate' | 'paymentDueDate' | 'paymentMethod' | 'vatTreatment' | 'vatRate'>, lines: Pick<InvoiceDraftLine, 'description'>[]): string[] {
+export function invoiceDraftMissing(draft: Pick<InvoiceDraft, 'issuerLegalName' | 'issuerAddress' | 'issuerTaxNumber' | 'customerName' | 'customerAddress' | 'customerTaxNumber' | 'customerTaxNumberRequirement' | 'performanceDate' | 'paymentDueDate' | 'paymentMethod' | 'vatTreatment' | 'vatRate'>, lines: Pick<InvoiceDraftLine, 'description'>[]): string[] {
   const missing: string[] = [];
   if (!draft.issuerLegalName?.trim()) missing.push('Szállító neve');
   if (!draft.issuerAddress?.trim()) missing.push('Szállító címe');
   if (!draft.issuerTaxNumber?.trim()) missing.push('Szállító adószáma');
   if (!draft.customerName?.trim()) missing.push('Ügyfél neve');
   if (!draft.customerAddress?.trim()) missing.push('Ügyfél címe');
-  if (!draft.customerTaxNumber?.trim()) missing.push('Ügyfél adószáma');
+  if (draft.customerTaxNumberRequirement === 'UNCONFIRMED') missing.push('Vevő adószámának alkalmazhatósága');
+  else if (draft.customerTaxNumberRequirement === 'REQUIRED' && !draft.customerTaxNumber?.trim()) missing.push('Ügyfél adószáma');
   if (!draft.performanceDate) missing.push('Teljesítés dátuma');
   if (!draft.paymentDueDate) missing.push('Fizetési határidő');
   if (!draft.paymentMethod?.trim()) missing.push('Fizetési mód');
@@ -205,6 +253,7 @@ function draftDto(draft: DraftWithLines) {
     customer: {
       name: draft.customerName, address: draft.customerAddress,
       taxNumber: draft.customerTaxNumber, vatNumber: draft.customerVatNumber,
+      taxNumberRequirement: draft.customerTaxNumberRequirement,
     },
     performanceDate: isoDate(draft.performanceDate),
     draftDate: isoDate(draft.draftDate),
@@ -263,12 +312,30 @@ export async function createDraft(actor: InternalActor, body: unknown, db: Db = 
   if (existing) return { created: false, draft: draftDto(existing) };
 
   const profile = await readIssuerProfile(db);
-  const vatTreatment = (typeof input.vatTreatment === 'string' && VAT_TREATMENTS.includes(input.vatTreatment as VatTreatment))
-    ? (input.vatTreatment as VatTreatment) : profile.defaultVatTreatment;
+  // Issuer identity is immutable once snapshotted — an incomplete profile must
+  // never produce a draft row the user cannot repair later.
+  const issuerMissing = issuerProfileMissing(profile);
+  if (issuerMissing.length > 0) {
+    return fail(422, 'INVOICE_ISSUER_PROFILE_INCOMPLETE',
+      `A számlázói profil hiányos: ${issuerMissing.join(', ')}. Állítsa be a Beállítások → Számlázói profil felületen.`,
+      { missing: issuerMissing });
+  }
+  const vatTreatmentInput = parseVatTreatment(input.vatTreatment) ?? profile.defaultVatTreatment;
   const vatRateInput = input.vatRate !== undefined ? input.vatRate : profile.defaultVatRate;
-  const vatRate = parseVatRate(vatRateInput) ?? null;
+  const { vatTreatment, vatRate } = resolveVatCombination(vatTreatmentInput, parseVatRate(vatRateInput) ?? null);
 
   const client = preparation.client;
+
+  // Whether a customer tax number applies is explicit domain state — inferred
+  // only from canonical portal-workspace modes, never from names or filled
+  // fields. Unresolvable cases stay UNCONFIRMED until a reviewer decides.
+  const workspaces = client
+    ? await db.clientPortalWorkspace.findMany({ where: { clientId: client.id }, select: { mode: true, status: true } })
+    : [];
+  const activeModes = new Set(workspaces.filter((w) => w.status === 'ACTIVE').map((w) => w.mode));
+  let customerTaxNumberRequirement: TaxNumberRequirement = 'UNCONFIRMED';
+  if (activeModes.has('ORGANIZATION')) customerTaxNumberRequirement = 'REQUIRED';
+  else if (activeModes.size === 1 && activeModes.has('INDIVIDUAL')) customerTaxNumberRequirement = 'NOT_APPLICABLE';
   const performanceDate = parseDraftDate(input.performanceDate, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen teljesítési dátum.') ?? preparation.periodEnd;
   const paymentDueDate = parseDraftDate(input.paymentDueDate, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen fizetési határidő.')
     ?? (profile.defaultPaymentTermDays !== null ? new Date(performanceDate.getTime() + profile.defaultPaymentTermDays * 24 * 60 * 60 * 1000) : null);
@@ -278,60 +345,73 @@ export async function createDraft(actor: InternalActor, body: unknown, db: Db = 
 
   const billable = preparation.items.filter((item) => item.included && item.netAmount !== null);
 
-  const created = await db.invoiceDraft.create({
-    data: {
-      billingPreparationId,
-      currency: preparation.currency,
-      issuerLegalName: profile.legalName,
-      issuerAddress: profile.address,
-      issuerTaxNumber: profile.taxNumber,
-      issuerEuVatNumber: profile.euVatNumber,
-      issuerRegistrationNumber: profile.registrationNumber,
-      issuerBankName: profile.bankName,
-      issuerBankAccountNumber: profile.bankAccountNumber,
-      issuerEmail: profile.email,
-      issuerPhone: profile.phone,
-      issuerLogoPath: profile.logoPath,
-      customerName: client?.name ?? null,
-      customerAddress: client?.address ?? null,
-      customerTaxNumber: client?.taxNumber ?? null,
-      customerVatNumber: client?.vatNumber ?? null,
-      performanceDate,
-      draftDate,
-      paymentDueDate,
-      paymentMethod,
-      note,
-      vatTreatment,
-      vatRate,
-      createdById: actor.userId,
-      lines: {
-        create: billable.map((item, index) => {
-          const vatAmount = vatAmountFor(item.netAmount!, vatTreatment, vatRate);
-          return {
-            billingItemId: item.id,
-            sortOrder: index,
-            description: item.invoiceDescription?.trim() || item.sourceDescription?.trim() || item.sourceWorkType,
-            quantity: quantityHours(item.billingMinutes),
-            unit: HOUR_UNIT,
-            netUnitPrice: item.rateOverride ?? item.hourlyRate,
-            netAmount: item.netAmount!,
-            vatTreatment,
-            vatRate,
-            vatAmount,
-            grossAmount: item.netAmount!.plus(vatAmount),
-            sourceWorkDate: item.sourceWorkDate,
-            caseNumber: item.caseNumber,
-            caseTitle: item.caseTitle,
-            workerName: item.workerName,
-            billingMinutes: item.billingMinutes,
-            hourlyRate: item.rateOverride ?? item.hourlyRate,
-          };
-        }),
-      },
+  const createData: Prisma.InvoiceDraftCreateInput = {
+    preparation: { connect: { id: billingPreparationId } },
+    currency: preparation.currency,
+    issuerLegalName: profile.legalName,
+    issuerAddress: profile.address,
+    issuerTaxNumber: profile.taxNumber,
+    issuerEuVatNumber: profile.euVatNumber,
+    issuerRegistrationNumber: profile.registrationNumber,
+    issuerBankName: profile.bankName,
+    issuerBankAccountNumber: profile.bankAccountNumber,
+    issuerEmail: profile.email,
+    issuerPhone: profile.phone,
+    issuerLogoPath: profile.logoPath,
+    customerTaxNumberRequirement,
+    customerName: client?.name ?? null,
+    customerAddress: client?.address ?? null,
+    customerTaxNumber: client?.taxNumber ?? null,
+    customerVatNumber: client?.vatNumber ?? null,
+    performanceDate,
+    draftDate,
+    paymentDueDate,
+    paymentMethod,
+    note,
+    vatTreatment,
+    vatRate,
+    createdBy: { connect: { id: actor.userId } },
+    lines: {
+      create: billable.map((item, index) => {
+        const netAmount = item.netAmount!;
+        const vatAmount = vatAmountFor(netAmount, vatTreatment, vatRate);
+        return {
+          billingItemId: item.id,
+          sortOrder: index,
+          description: lineDescription(item),
+          // quantity=1 tétel at the authoritative net: the face always
+          // reconciles exactly (net stays the persisted billing amount).
+          quantity: new Prisma.Decimal(1),
+          unit: ITEM_UNIT,
+          netUnitPrice: netAmount,
+          netAmount,
+          vatTreatment,
+          vatRate,
+          vatAmount,
+          grossAmount: netAmount.plus(vatAmount),
+          sourceWorkDate: item.sourceWorkDate,
+          caseNumber: item.caseNumber,
+          caseTitle: item.caseTitle,
+          workerName: item.workerName,
+          billingMinutes: item.billingMinutes,
+          hourlyRate: item.rateOverride ?? item.hourlyRate,
+        };
+      }),
     },
-    include: { lines: { orderBy: { sortOrder: 'asc' } } },
-  });
-  return { created: true, draft: draftDto(created) };
+  };
+  try {
+    const created = await db.invoiceDraft.create({ data: createData, include: { lines: { orderBy: { sortOrder: 'asc' } } } });
+    return { created: true, draft: draftDto(created) };
+  } catch (error) {
+    // Concurrent creates race on the unique billingPreparationId — the loser
+    // may surface P2002 (unique) or P2003/P2014 (relation) depending on timing;
+    // whichever, a re-read returning the winner's draft keeps this idempotent.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2003', 'P2014'].includes(error.code)) {
+      const raced = await db.invoiceDraft.findUnique({ where: { billingPreparationId }, include: { lines: { orderBy: { sortOrder: 'asc' } } } });
+      if (raced) return { created: false, draft: draftDto(raced) };
+    }
+    throw error;
+  }
 }
 
 export async function getDraft(actor: InternalActor, id: string, db: Db = prisma) {
@@ -339,7 +419,7 @@ export async function getDraft(actor: InternalActor, id: string, db: Db = prisma
   return { draft: draftDto(await requireDraft(id, db)) };
 }
 
-const DRAFT_PATCH_ALLOWED = ['performanceDate', 'draftDate', 'paymentDueDate', 'paymentMethod', 'note', 'vatTreatment', 'vatRate', 'customerName', 'customerAddress', 'customerTaxNumber', 'customerVatNumber'];
+const DRAFT_PATCH_ALLOWED = ['performanceDate', 'draftDate', 'paymentDueDate', 'paymentMethod', 'note', 'vatTreatment', 'vatRate', 'customerName', 'customerAddress', 'customerTaxNumber', 'customerVatNumber', 'customerTaxNumberRequirement'];
 
 export async function patchDraft(actor: InternalActor, id: string, body: unknown, db: Db = prisma) {
   await requireBillingReviewer(actor, db);
@@ -357,17 +437,26 @@ export async function patchDraft(actor: InternalActor, id: string, body: unknown
     const value = optionalText(input[key], 'INVOICE_DRAFT_INPUT_INVALID', 'Szöveges mező várható.');
     if (value !== undefined) data[key] = value;
   }
-  if (input.vatTreatment !== undefined) {
-    if (typeof input.vatTreatment !== 'string' || !VAT_TREATMENTS.includes(input.vatTreatment as VatTreatment)) {
-      return fail(400, 'INVOICE_DRAFT_INPUT_INVALID', 'Ismeretlen áfa-kezelés.');
+  if (input.customerTaxNumberRequirement !== undefined) {
+    if (typeof input.customerTaxNumberRequirement !== 'string' || !TAX_NUMBER_REQUIREMENTS.includes(input.customerTaxNumberRequirement as TaxNumberRequirement)) {
+      return fail(400, 'INVOICE_DRAFT_INPUT_INVALID', 'Ismeretlen adószám-kötelezettség.');
     }
-    data.vatTreatment = input.vatTreatment;
+    data.customerTaxNumberRequirement = input.customerTaxNumberRequirement;
   }
-  const vatRate = parseVatRate(input.vatRate);
-  if (vatRate !== undefined) data.vatRate = vatRate;
+  const vatTreatmentPatch = parseVatTreatment(input.vatTreatment);
+  if (vatTreatmentPatch !== undefined) data.vatTreatment = vatTreatmentPatch;
+  const vatRatePatch = parseVatRate(input.vatRate);
+  if (vatRatePatch !== undefined) data.vatRate = vatRatePatch;
 
-  const nextTreatment = (data.vatTreatment ?? draft.vatTreatment) as InvoiceVatTreatment;
-  const nextRate = ('vatRate' in data ? (data.vatRate as Prisma.Decimal | null) : draft.vatRate);
+  // One authoritative combination check for create and patch alike: throws a
+  // controlled 422 on NORMAL_VAT+null long before the DB CHECK could fire, and
+  // normalizes the rate away beside non-normal treatments.
+  const { vatTreatment: nextTreatment, vatRate: nextRate } = resolveVatCombination(
+    (data.vatTreatment ?? draft.vatTreatment) as InvoiceVatTreatment,
+    'vatRate' in data ? (data.vatRate as Prisma.Decimal | null) : draft.vatRate,
+  );
+  data.vatTreatment = nextTreatment;
+  data.vatRate = nextRate;
 
   const updated = await withTransaction(db, async (tx) => {
     for (const line of draft.lines) {
@@ -382,6 +471,16 @@ export async function patchDraft(actor: InternalActor, id: string, body: unknown
   return { draft: draftDto(updated) };
 }
 
+/** Explicit user discard of a DRAFT — required before its preparation may be
+ * reopened. Never touches TimeEntry or BillingPreparationItem rows. */
+export async function discardDraft(actor: InternalActor, id: string, db: Db = prisma) {
+  await requireBillingReviewer(actor, db);
+  const draft = await requireDraft(id, db);
+  if (draft.status !== 'DRAFT') return fail(409, 'INVOICE_DRAFT_NOT_DRAFT', 'Csak piszkozat állapotú számlatervezet vethető el.');
+  await db.invoiceDraft.delete({ where: { id: draft.id } });
+  return { discarded: true, billingPreparationId: draft.billingPreparationId };
+}
+
 export async function patchDraftLine(actor: InternalActor, draftId: string, lineId: string, body: unknown, db: Db = prisma) {
   await requireBillingReviewer(actor, db);
   const draft = await requireDraft(draftId, db);
@@ -392,6 +491,7 @@ export async function patchDraftLine(actor: InternalActor, draftId: string, line
   if (Object.keys(input).some((key) => key !== 'description')) return fail(400, 'INVOICE_DRAFT_INPUT_INVALID', 'Csak a megnevezés módosítható.');
   const description = optionalText(input.description, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen megnevezés.');
   if (description === undefined) return { draft: draftDto(draft) };
+  if (description === null) return fail(400, 'INVOICE_DRAFT_INPUT_INVALID', 'A megnevezés nem lehet üres.');
   await db.invoiceDraftLine.update({ where: { id: line.id }, data: { description } });
   return { draft: draftDto(await requireDraft(draftId, db)) };
 }

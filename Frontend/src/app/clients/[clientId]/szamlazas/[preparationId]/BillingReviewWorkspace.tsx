@@ -36,6 +36,7 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
   const [refreshing, setRefreshing] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [drafting, setDrafting] = useState(false);
+  const [issuerProfileError, setIssuerProfileError] = useState(false);
   const [notice, setNotice] = useState('');
   const router = useRouter();
 
@@ -111,6 +112,7 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
       await createInvoiceDraft({ billingPreparationId: preparationId });
       router.push(`/clients/${encodeURIComponent(clientId)}/szamlazas/${encodeURIComponent(preparationId)}/szamlatervezet`);
     } catch (e) {
+      setIssuerProfileError(e instanceof ApiError && e.code === 'INVOICE_ISSUER_PROFILE_INCOMPLETE');
       setError(e instanceof ApiError ? e.message : 'A számlatervezet létrehozása nem sikerült.');
     } finally {
       setDrafting(false);
@@ -158,7 +160,7 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
         </span>
       </section>
       {notice && <p role="status" className="text-xs">{notice}</p>}
-      {error && <div role="alert" className="text-sm text-red-700">{error}</div>}
+      {error && <div role="alert" className="text-sm text-red-700">{error} {issuerProfileError && <Link className="underline" href="/settings/szamlazas">Számlázói adatok beállítása</Link>}</div>}
 
       {workspace.items.length === 0 && (
         <p className="rounded-lg border border-[var(--adm-border)] bg-white p-4 text-sm text-[var(--adm-text-muted)]">
