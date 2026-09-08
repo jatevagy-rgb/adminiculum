@@ -227,6 +227,7 @@ jobs:
           grep -qxF 'prisma/schema.prisma' ziplist.txt || fail "prisma/schema.prisma missing"
           grep -qxF 'App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs' ziplist.txt || fail "migration WebJob missing"
           grep -qxF 'node_modules/.bin/prisma' ziplist.txt || fail "node_modules/.bin/prisma missing"
+          grep -qxF 'node_modules/prisma/build/index.js' ziplist.txt || fail "node_modules/prisma/build/index.js missing"
           grep -q '^node_modules/express/' ziplist.txt || fail "runtime node_modules/express missing"
           grep -q '^node_modules/@prisma/client/' ziplist.txt || fail "generated @prisma/client missing"
           grep -q '^node_modules/\.prisma/client/' ziplist.txt || fail "generated .prisma/client engine missing"
@@ -251,6 +252,7 @@ jobs:
           test -f "$TMP_DIR/App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs" || { echo "WebJob runner missing"; exit 1; }
           test -d "$TMP_DIR/templates" || { echo "templates dir missing"; exit 1; }
           test -f "$TMP_DIR/swagger.yaml" || test -f "$TMP_DIR/swagger2.yaml" || { echo "swagger files missing"; exit 1; }
+          test -f "$TMP_DIR/node_modules/prisma/build/index.js" || { echo "node_modules/prisma/build/index.js missing"; exit 1; }
           node -e '
             const fs = require("fs");
             const files = fs.readdirSync(process.argv[1] + "/node_modules/.prisma/client");

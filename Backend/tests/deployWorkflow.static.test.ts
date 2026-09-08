@@ -769,13 +769,15 @@ describe('backend release artifact packaging and symlink preservation', () => {
     expect(preflightWorkflow).toContain('zip -y -r -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
   });
 
-  it('deploy.yml validates node_modules/.bin/prisma in ziplist.txt', () => {
+  it('deploy.yml validates node_modules/.bin/prisma and node_modules/prisma/build/index.js in ziplist.txt', () => {
     const step = stepBlock('Validate prebuilt backend artifact (fail fast)');
     expect(step).toContain("grep -qxF 'node_modules/.bin/prisma' ziplist.txt");
+    expect(step).toContain("grep -qxF 'node_modules/prisma/build/index.js' ziplist.txt");
   });
 
-  it('preflight.yml validates node_modules/.bin/prisma in ziplist.txt', () => {
+  it('preflight.yml validates node_modules/.bin/prisma and node_modules/prisma/build/index.js in ziplist.txt', () => {
     expect(preflightWorkflow).toContain("grep -qxF 'node_modules/.bin/prisma' ziplist.txt");
+    expect(preflightWorkflow).toContain("grep -qxF 'node_modules/prisma/build/index.js' ziplist.txt");
   });
 
   it('deploy.yml asserts node_modules/.bin/prisma is a symlink, checks readlink target, and starts prisma --version in offline extraction', () => {
@@ -784,6 +786,7 @@ describe('backend release artifact packaging and symlink preservation', () => {
     expect(step).toContain('test "$(readlink "$TMP_DIR/node_modules/.bin/prisma")" = "../prisma/build/index.js"');
     expect(step).toContain('stat.isSymbolicLink()');
     expect(step).toContain('./node_modules/.bin/prisma --version');
+    expect(step).toContain('test -f "$TMP_DIR/node_modules/prisma/build/index.js"');
   });
 
   it('preflight.yml asserts node_modules/.bin/prisma is a symlink, checks readlink target, and starts prisma --version in offline extraction', () => {
@@ -791,6 +794,7 @@ describe('backend release artifact packaging and symlink preservation', () => {
     expect(preflightWorkflow).toContain('test "$(readlink "$TMP_DIR/node_modules/.bin/prisma")" = "../prisma/build/index.js"');
     expect(preflightWorkflow).toContain('stat.isSymbolicLink()');
     expect(preflightWorkflow).toContain('./node_modules/.bin/prisma --version');
+    expect(preflightWorkflow).toContain('test -f "$TMP_DIR/node_modules/prisma/build/index.js"');
   });
 
   it('preserves all required extracted artifact sanity checks in deploy.yml and preflight.yml', () => {
@@ -856,5 +860,95 @@ describe('backend release artifact packaging and symlink preservation', () => {
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe('migration WebJob Prisma CLI bootstrap environment and release preservation', () => {
+  it('defines Ensure migration WebJob Prisma CLI bootstrap environment step before WebJob staging and trigger', () => {
+    const step = stepBlock('Ensure migration WebJob Prisma CLI bootstrap environment');
+    expect(step).toBeDefined();
+    expect(step).toContain('PRISMA_ENTRYPOINT="/home/site/wwwroot/node_modules/prisma/build/index.js"');
+    expect(step).toContain('az webapp config appsettings list');
+    expect(step).toContain("query \"[?name=='MIGRATION_WEBJOB_PRISMA_BIN'].value | [0]\"");
+    expect(step).toContain('az webapp config appsettings set');
+    expect(step).toContain('--settings "MIGRATION_WEBJOB_PRISMA_BIN=${PRISMA_ENTRYPOINT}"');
+    expect(step).toContain('PRISMA_BOOTSTRAP_READY=YES');
+
+    const bootstrapIndex = workflow.indexOf('Ensure migration WebJob Prisma CLI bootstrap environment');
+    const stageIndex = workflow.indexOf('Stage release migration assets into backend App Service (targeted VFS)');
+    const triggerIndex = workflow.indexOf('Trigger + verify THIS migration WebJob run');
+    const deployBackendIndex = workflow.indexOf('Deploy backend via Azure CLI and wait for terminal result');
+
+    expect(bootstrapIndex).toBeGreaterThan(-1);
+    expect(stageIndex).toBeGreaterThan(-1);
+    expect(triggerIndex).toBeGreaterThan(-1);
+    expect(deployBackendIndex).toBeGreaterThan(-1);
+
+    expect(bootstrapIndex).toBeLessThan(stageIndex);
+    expect(bootstrapIndex).toBeLessThan(triggerIndex);
+    expect(triggerIndex).toBeLessThan(deployBackendIndex);
+  });
+
+  it('runs canonical migration before backend and frontend deployment in release pipeline', () => {
+    const migrationIndex = workflow.indexOf('  migration:\n');
+    const backendIndex = workflow.indexOf('  backend:\n');
+    const frontendIndex = workflow.indexOf('  frontend:\n');
+
+    expect(migrationIndex).toBeGreaterThan(-1);
+    expect(backendIndex).toBeGreaterThan(-1);
+    expect(frontendIndex).toBeGreaterThan(-1);
+
+    expect(migrationIndex).toBeLessThan(backendIndex);
+    expect(backendIndex).toBeLessThan(frontendIndex);
+
+    const backendDef = workflow.slice(backendIndex, frontendIndex);
+    expect(backendDef).toContain('needs: [resolve, recovery_inspection, migration]');
+    expect(backendDef).toContain("(inputs.run_migration && needs.migration.result == 'success')");
+
+    const frontendDef = workflow.slice(frontendIndex);
+    expect(frontendDef).toContain('needs: [resolve, backend, migration]');
+  });
+
+  it('never touches or exposes DATABASE_URL in the bootstrap step or release workflow', () => {
+    const step = stepBlock('Ensure migration WebJob Prisma CLI bootstrap environment');
+    expect(step).not.toContain('DATABASE_URL');
+    expect(workflow).not.toContain('${{ secrets.DATABASE_URL }}');
+    expect(workflow).not.toMatch(/DATABASE_URL\s*:/);
+    expect(workflow).not.toMatch(/\bpsql\b/);
+  });
+
+  it('preserves migration schema path, target derivation, and WebJob name', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    const stageStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    const triggerStep = stepBlock('Trigger + verify THIS migration WebJob run');
+
+    expect(preflightStep).toContain('git ls-tree --name-only "${currentSha}:Backend/prisma/migrations"');
+    expect(preflightStep).toContain("fs.readdirSync('Backend/prisma/migrations'");
+    expect(preflightStep).toContain('git show "${releaseSha}:Backend/prisma/migrations/${dirName}/migration.sql"');
+    expect(preflightStep).toContain('Backend/prisma/schema.prisma');
+    expect(stageStep).toContain('SCHEMA_TARGET="site/wwwroot/prisma/schema.prisma"');
+    expect(triggerStep).toContain('api/triggeredwebjobs/${MIGRATION_WEBJOB}');
+    expect(workflow).toContain('MIGRATION_WEBJOB: adminiculum-db-migrate');
+  });
+
+  it('strictly preserves targeted VFS allowlist regex and forbids arbitrary executable staging', () => {
+    const stageStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+    expect(stageStep).toContain('site/wwwroot/prisma/(schema\\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\\.sql)?');
+    expect(stageStep).toContain('site/wwwroot/dist*|site/wwwroot/node_modules*|site/wwwroot/package.json*|site/wwwroot/package-lock.json*|site/wwwroot/release-identity.json*|site/wwwroot/templates*|site/wwwroot/scripts*');
+  });
+
+  it('polls backend /health for 200 after setting MIGRATION_WEBJOB_PRISMA_BIN', () => {
+    const step = stepBlock('Ensure migration WebJob Prisma CLI bootstrap environment');
+    expect(step).toContain('https://${BACKEND_APP}.azurewebsites.net/health');
+    expect(step).toContain('[ "$HEALTH_CODE" = "200" ]');
+  });
+
+  it('ensures both deploy.yml and preflight.yml use zip -y -r -q and assert node_modules/prisma/build/index.js', () => {
+    expect(workflow).toContain('zip -y -r -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
+    expect(preflightWorkflow).toContain('zip -y -r -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
+    expect(workflow).toContain("grep -qxF 'node_modules/prisma/build/index.js' ziplist.txt");
+    expect(preflightWorkflow).toContain("grep -qxF 'node_modules/prisma/build/index.js' ziplist.txt");
+    expect(workflow).toContain('test -f "$TMP_DIR/node_modules/prisma/build/index.js"');
+    expect(preflightWorkflow).toContain('test -f "$TMP_DIR/node_modules/prisma/build/index.js"');
   });
 });
