@@ -367,7 +367,6 @@ export function DashboardFocused() {
   const [availability, setAvailability] = useState<DashboardAvailability>(UNAVAILABLE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => toLocalDateKey(new Date()));
   const [signalsExpanded, setSignalsExpanded] = useState(false);
 
@@ -495,15 +494,20 @@ export function DashboardFocused() {
     ? `${calendarDays[0].date.toLocaleDateString("hu-HU", { month: "short", day: "numeric" })} – ${calendarDays[calendarDays.length - 1].date.toLocaleDateString("hu-HU", { month: "short", day: "numeric" })}`
     : "Következő 7 nap";
   const nextSevenDayDeadlines = useMemo(() => getNextSevenDayDeadlines(deadlines), [deadlines]);
-  const clientCommunicationOptions = useMemo(() => {
-    const referencedClientIds = new Set(communications.map((item) => item.clientId).filter(Boolean));
-    return clients.filter((client) => referencedClientIds.has(client.id));
-  }, [clients, communications]);
-  const dashboardCommunications = communications
-    .filter((item) => !selectedClientId || item.clientId === selectedClientId)
-    .slice(0, 6);
   const caseById = useMemo(() => new Map(cases.map((item) => [item.id, item])), [cases]);
   const clientById = useMemo(() => new Map(clients.map((item) => [item.id, item])), [clients]);
+  const clientCommunicationSummaries = useMemo(() => {
+    const counts = new Map<string, { name: string; count: number }>();
+    for (const item of communications) {
+      if (!item.clientId) continue;
+      const client = clientById.get(item.clientId);
+      if (!client) continue;
+      const current = counts.get(item.clientId) || { name: client.name, count: 0 };
+      current.count += 1;
+      counts.set(item.clientId, current);
+    }
+    return [...counts.entries()].sort((left, right) => right[1].count - left[1].count).slice(0, 8);
+  }, [clientById, communications]);
   const focusDataComplete = availability.operational;
   const criticalLoadFailed = error;
   const hasSectionFailure = getDashboardSectionFailure(availability, criticalLoadFailed, loading);
@@ -511,12 +515,6 @@ export function DashboardFocused() {
     () => operational ? buildDashboardOperationalPresentation(operational) : null,
     [operational],
   );
-
-  useEffect(() => {
-    if (selectedClientId && !clientCommunicationOptions.some((client) => client.id === selectedClientId)) {
-      setSelectedClientId("");
-    }
-  }, [clientCommunicationOptions, selectedClientId]);
 
   const primaryActions = getDashboardPrimaryActions(activeCase?.id);
 
@@ -598,132 +596,6 @@ export function DashboardFocused() {
           unavailable={!loading && !availability.operational}
         />
 
-        <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_10px_28px_rgba(0,42,35,0.035)]" aria-labelledby="dashboard-operational-cases-heading">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
-            <div>
-              <h2 id="dashboard-operational-cases-heading" className="font-serif text-[22px] font-medium text-[var(--adm-text)]">Ügyek, ahol lépés szükséges</h2>
-              <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Rögzített állapot, felelős, feladat és határidő alapján.</p>
-            </div>
-            <DashboardTextLink href="/cases" className="no-underline hover:no-underline">
-              <span className="text-[var(--adm-text-muted)]">Nyitott ügyek:</span><span className="font-serif text-[20px] text-[var(--adm-text)]">{caseCount ?? "—"}</span>
-            </DashboardTextLink>
-          </div>
-          {operational && operationalPresentation ? (
-            <>
-              <div className="flex flex-wrap gap-x-4 gap-y-2 border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2.5" aria-label="Operatív ügycsoportok">
-                {operational.groups.map((group) => (
-                  <span key={group.code} className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[var(--adm-text-muted)]"><span>{group.label}</span><span className="rounded-full bg-white px-1.5 py-0.5 text-[var(--adm-text)]">{group.count}</span></span>
-                ))}
-              </div>
-              {operationalPresentation.unspecifiedCount > 0 ? (
-                <div className="border-b border-[var(--adm-border)] bg-[var(--adm-ivory-100)] px-4 py-3">
-                  <p className="text-[12px] font-semibold text-[var(--adm-text)]">{operationalPresentation.unspecifiedCount} ügyhöz nincs következő lépés rendelve.</p>
-                  <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Ezek az ügyek könnyen kieshetnek a napi munkából.</p>
-                </div>
-              ) : null}
-              {operationalPresentation.visibleCount ? (
-                <div className="px-4 py-1">
-                  {operationalPresentation.groups.map((group) => (
-                    <section key={group.code} className="border-b border-[var(--adm-border)] py-3 last:border-b-0" aria-labelledby={`dashboard-case-group-${group.code}`}>
-                      <div className="mb-2 flex items-center gap-2">
-                        <h3 id={`dashboard-case-group-${group.code}`} className="text-[12px] font-semibold text-[var(--adm-text)]">{group.label}</h3>
-                        <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${workflowTone(group.code)}`}>{group.count}</span>
-                      </div>
-                      <div className="divide-y divide-[var(--adm-border)]">
-                        {group.items.map((item) => (
-                          <article key={item.id} className="relative grid gap-3 py-3 pl-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
-                            <ClientAccent colorKey={item.client.clientColorKey} className="absolute inset-y-3 left-0 w-1 rounded-full" />
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Link href={item.openHref} className="truncate text-[14px] font-semibold text-[var(--adm-text)] hover:text-[var(--adm-green-800)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] focus-visible:ring-offset-2">{getDashboardCaseTitle(item.title)}</Link>
-                                {item.overdue ? <span className="text-[10px] font-bold text-[var(--adm-terracotta-700)]">Lejárt határidő</span> : null}
-                              </div>
-                              <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{item.client.displayName} · {item.caseNumber}</p>
-                              <p className="mt-1 flex flex-wrap gap-x-2 gap-y-1 text-[11px] text-[var(--adm-text-muted)]">
-                                <span>{getCaseStatusLabel(item.status)}</span><span aria-hidden="true">·</span>
-                                <span>{item.responsible?.displayName || "Felelős nincs kijelölve"}</span><span aria-hidden="true">·</span>
-                                <span>{item.waitingLabel}</span>
-                                {item.nearestDeadline ? <><span aria-hidden="true">·</span><span className={item.overdue ? "font-semibold text-[var(--adm-terracotta-700)]" : ""}>{item.overdue ? "Lejárt" : "Határidő"}: {formatDate(item.nearestDeadline)}</span></> : null}
-                              </p>
-                            </div>
-                            <DashboardTextLink href={item.nextAction.href} className="md:justify-self-end">{item.nextAction.label}</DashboardTextLink>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                  <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-                    <span className="text-[10px] text-[var(--adm-text-muted)]">Legfeljebb 6 ügy jelenik meg ezen az áttekintésen.</span>
-                    <DashboardTextLink href="/cases">{operationalPresentation.hiddenCount > 0 ? `További ${operationalPresentation.hiddenCount} ügy megtekintése` : "Összes érintett ügy megnyitása"}</DashboardTextLink>
-                  </div>
-                </div>
-              ) : <DashboardEmptyState title="Nincs nyitott, jogosultsági körébe tartozó ügy." />}
-            </>
-          ) : <DashboardEmptyState title="Az operatív ügyáttekintés most nem érhető el." />}
-        </section>
-
-        <section aria-labelledby="dashboard-daily-work-heading">
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 id="dashboard-daily-work-heading" className="font-serif text-[22px] font-medium text-[var(--adm-text)]">Mai munkám</h2>
-              <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Konkrét feladatok, review-k és a következő hét határidői.</p>
-            </div>
-          </div>
-          <div className="grid gap-3 lg:grid-cols-3">
-          <DashboardPanel title="Mai feladataim" action={<DashboardTextLink href="/tasks">Minden feladat</DashboardTextLink>} labelledBy="dashboard-work-heading">
-            {!availability.tasks ? (
-              <DashboardEmptyState title="Mai feladatok most nem érhetők el." />
-            ) : openTasks.length > 0 ? (
-              <div className="divide-y divide-[var(--adm-border)]">
-                {openTasks.slice(0, 3).map((task) => (
-                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)]">
-                    <ClientAccent colorKey={task.case?.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
-                    <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{task.title}</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{task.case?.caseNumber || "Feladat"} · {formatDate(task.dueDate)}</p>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <DashboardEmptyState title="Nincs mára kijelölt feladata." />
-            )}
-          </DashboardPanel>
-
-          <DashboardPanel title="Nekem kijelölt Review-k" action={<DashboardTextLink href="/reviews">Review sor</DashboardTextLink>} labelledBy="dashboard-review-heading">
-            {!availability.tasks ? (
-              <DashboardEmptyState title="Review adatok most nem érhetők el." />
-            ) : reviewTasks.length > 0 ? (
-              <div className="divide-y divide-[var(--adm-border)]">
-                {reviewTasks.slice(0, 3).map((task) => (
-                  <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)]">
-                    <ClientAccent colorKey={task.case?.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
-                    <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{task.title}</p>
-                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{task.case?.caseNumber || "Review tétel"} · {formatDate(task.dueDate)}</p>
-                  </Link>
-                ))}
-              </div>
-            ) : (
-              <DashboardEmptyState title="Nincs review-ra váró munkája." detail="A leadott dokumentumok itt jelennek meg." />
-            )}
-          </DashboardPanel>
-
-          <DashboardPanel title="Következő 7 nap határidői" action={<DashboardTextLink href="/deadlines">Határidők</DashboardTextLink>} labelledBy="dashboard-deadline-heading">
-            {!availability.agenda ? (
-              <DashboardEmptyState title="Határidő adatok most nem érhetők el." />
-            ) : (
-            <div className="divide-y divide-[var(--adm-border)]">
-              {nextSevenDayDeadlines.slice(0, 3).map((item) => (
-                <Link key={item.id} href={item.href || item.source.href || "/deadlines"} className="relative block px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)]">
-                  <ClientAccent colorKey={caseById.get(item.caseId)?.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
-                  <p className="truncate text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</p>
-                  <p className={`mt-1 text-[11px] ${item.urgency === "OVERDUE" ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{item.urgency === "OVERDUE" ? "Lejárt · " : ""}{formatDate(item.dueAt)} · {item.source.displayName || item.sourceType}</p>
-                </Link>
-              ))}
-              {!loading && nextSevenDayDeadlines.length === 0 ? <DashboardEmptyState title="Nincs közelgő határidő." icon="calendar" /> : null}
-            </div>
-            )}
-          </DashboardPanel>
-          </div>
-        </section>
 
         <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white shadow-[0_8px_24px_rgba(0,42,35,0.025)]" aria-labelledby="dashboard-calendar-heading">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
@@ -786,38 +658,24 @@ export function DashboardFocused() {
         <section className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white" aria-labelledby="dashboard-communications-heading">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] px-4 py-3">
             <div>
-              <h2 id="dashboard-communications-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Kommunikáció</h2>
-              <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Legutóbbi tételek, opcionális ügyfélszűréssel.</p>
+          <h2 id="dashboard-communications-heading" className="font-serif text-[20px] font-medium text-[var(--adm-text)]">Legutóbbi kommunikációk ügyfelenként</h2>
+              <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">A betöltött legutóbbi kommunikációk ügyfelenként összesítve.</p>
             </div>
             <nav aria-label="Kommunikációs nézetek" className="flex flex-wrap gap-x-4 gap-y-2"><DashboardTextLink href="/communications">Összes</DashboardTextLink><DashboardTextLink href="/communications?view=external">Külső ({externalCommunicationCount ?? "—"})</DashboardTextLink><DashboardTextLink href="/communications?view=internal">Belső ({internalCommunicationCount ?? "—"})</DashboardTextLink></nav>
           </div>
-          {clientCommunicationOptions.length ? (
-            <div className="flex gap-1 overflow-x-auto border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2" aria-label="Kommunikáció szűrése ügyfél szerint">
-              <button type="button" onClick={() => setSelectedClientId("")} className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold ${!selectedClientId ? "bg-[var(--adm-green-800)] text-white" : "border border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Minden ügyfél</button>
-              {clientCommunicationOptions.map((client) => <button key={client.id} type="button" onClick={() => setSelectedClientId(client.id)} className={`shrink-0 px-3 py-1.5 text-[11px] font-semibold ${selectedClientId === client.id ? "bg-[var(--adm-green-800)] text-white" : "border border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>{client.name}</button>)}
-            </div>
-          ) : null}
           {!availability.communications ? (
             <DashboardEmptyState title="A kommunikációs adatok most nem érhetők el." />
-          ) : dashboardCommunications.length ? (
-            <div className="divide-y divide-[var(--adm-border)]">
-              {dashboardCommunications.map((item) => {
-                const relatedCase = item.caseId ? caseById.get(item.caseId) : null;
-                const relatedClient = item.clientId ? clientById.get(item.clientId) : null;
-                const audience = classifyAudience(item);
-                return (
-                  <Link key={item.id} href={`/communications?communicationId=${encodeURIComponent(item.id)}`} className="relative grid gap-1 px-4 py-3 pl-5 hover:bg-[var(--adm-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-green-800)] sm:grid-cols-[minmax(150px,0.7fr)_minmax(0,1.4fr)_minmax(180px,0.8fr)_auto] sm:items-center">
-                    <ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" />
-                    <span className="truncate text-[11px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || item.recipientName || "Nincs forrásadat"}</span>
-                    <span className="truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span>
-                    <span className="truncate text-[10px] text-[var(--adm-text-muted)]">{relatedClient?.name || "Nincs ügyfél"}{relatedCase ? ` · ${relatedCase.caseNumber}` : ""}</span>
-                    <span className="flex items-center justify-between gap-3 sm:justify-end"><span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[9px] font-semibold text-[var(--adm-text-muted)]">{audience === "external" ? "Külső" : "Belső"}</span><time className="text-[10px] text-[var(--adm-text-muted)]">{formatDateTime(item.createdAt)}</time></span>
-                  </Link>
-                );
-              })}
+          ) : clientCommunicationSummaries.length ? (
+            <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-3" aria-label="Kommunikáció ügyfelenként">
+              {clientCommunicationSummaries.map(([clientId, summary]) => (
+                <Link key={clientId} href={`/communications?clientId=${encodeURIComponent(clientId)}`} className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-3 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] focus-visible:ring-offset-2">
+                  <span className="block truncate text-[12px] font-semibold text-[var(--adm-text)]">{summary.name}</span>
+                  <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">{summary.count} kommunikáció</span>
+                </Link>
+              ))}
             </div>
           ) : (
-            <DashboardEmptyState title={selectedClientId ? "Ehhez az ügyfélhez nincs kommunikáció." : "Nincs megjeleníthető kommunikáció."} />
+            <DashboardEmptyState title="Nincs ügyfélhez sorolt kommunikáció." />
           )}
         </section>
 
@@ -837,8 +695,8 @@ export function DashboardFocused() {
                   ))}
                 </div>
               </div>
-              <div>
-                <p className="mb-2 text-[11px] font-semibold text-[var(--adm-text)]">Jogi hírek</p>
+              <div className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3" aria-labelledby="dashboard-legal-news-heading">
+                <p id="dashboard-legal-news-heading" className="mb-2 text-[11px] font-semibold text-[var(--adm-text)]">Jogi hírek</p>
                 <div className="space-y-2">
                   {news.map((article) => (
                     article.url ? (
