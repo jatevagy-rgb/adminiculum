@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intake/intakeStyles";
@@ -9,6 +9,8 @@ import {
   getCaseCreationOptions,
   getClientList,
   getUsers,
+  getCurrentUser,
+  createUsableCaseType,
   type CaseCreationOption,
   type Client,
   type User,
@@ -38,6 +40,10 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [creationOptions, setCreationOptions] = useState<CaseCreationOption[]>([]);
+  const [canManageTypes, setCanManageTypes] = useState(false);
+  const [typeName, setTypeName] = useState("");
+  const [savingType, setSavingType] = useState(false);
+  const openSession = useRef(0);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,16 +58,21 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
 
   useEffect(() => {
     if (!open) return;
+    const session = ++openSession.current;
     setLoading(true);
     setError(null);
-    Promise.all([getClientList(), getCaseCreationOptions(), getUsers().catch(() => [])])
-      .then(([c, o, u]) => {
+    setSavingType(false);
+    Promise.all([getClientList(), getCaseCreationOptions(), getUsers().catch(() => []), getCurrentUser().catch(() => null)])
+      .then(([c, o, u, actor]) => {
+        if (session !== openSession.current) return;
         setClients(c);
         setCreationOptions(o.items || []);
+        setCanManageTypes(actor?.role === "ADMIN" || actor?.role === "PARTNER");
         setUsers(u.filter((user) => ELIGIBLE_WORKFORCE_ROLES.has(String(user.role || "").toUpperCase()) && user.status !== "INACTIVE"));
       })
-      .catch(() => setError("Adatok betöltése sikertelen."))
-      .finally(() => setLoading(false));
+      .catch(() => { if (session === openSession.current) setError("Adatok betöltése sikertelen."); })
+      .finally(() => { if (session === openSession.current) setLoading(false); });
+    return () => { openSession.current += 1; };
   }, [open]);
 
   useEffect(() => {
@@ -87,9 +98,38 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
     }
     const defaultKeys = new Set(selectedOption.template.items.map((item) => item.moduleKey));
     setSelectedModuleKeys(defaultKeys);
+    setTypeName(selectedOption.caseTypeDefinition.name);
   }, [selectedOption]);
 
-  const canSubmit = Boolean(clientId && title.trim() && caseTypeDefinitionId && !submitting);
+  const canSubmit = Boolean(clientId && title.trim() && selectedOption?.template && !submitting && !savingType);
+  const matchingTypes = creationOptions.filter((option) => option.caseTypeDefinition.name.toLocaleLowerCase("hu-HU") === typeName.trim().toLocaleLowerCase("hu-HU"));
+
+  function changeTypeName(value: string) {
+    setTypeName(value);
+    const matches = creationOptions.filter((option) => option.caseTypeDefinition.name.toLocaleLowerCase("hu-HU") === value.trim().toLocaleLowerCase("hu-HU"));
+    setCaseTypeDefinitionId(matches.length === 1 ? matches[0].caseTypeDefinition.id : "");
+  }
+
+  async function saveType() {
+    if (!canManageTypes || savingType || !typeName.trim()) return;
+    const session = openSession.current;
+    setSavingType(true);
+    setError(null);
+    try {
+      const option = await createUsableCaseType(typeName.trim());
+      if (session !== openSession.current) return;
+      setCreationOptions((current) => [...current.filter((item) => item.caseTypeDefinition.id !== option.caseTypeDefinition.id), option]);
+      setCaseTypeDefinitionId(option.caseTypeDefinition.id);
+      setTypeName(option.caseTypeDefinition.name);
+    } catch (err) {
+      if (session !== openSession.current) return;
+      setError(err && typeof err === "object" && "code" in err && err.code === "CASE_TYPE_NAME_EXISTS"
+        ? "Ez az ügytípus már létezik. Válaszd ki, vagy ellenőrizd az aktiválását a Beállításokban."
+        : "Az ügytípus mentése sikertelen. Próbáld újra.");
+    } finally {
+      if (session === openSession.current) setSavingType(false);
+    }
+  }
 
   function toggleModule(key: string, isOptional: boolean) {
     if (!isOptional) return;
@@ -168,11 +208,11 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
 
           {!loading && (
             <>
-              {creationOptions.length === 0 && (
+              {creationOptions.length === 0 && !canManageTypes && (
                 <div role="alert" className="mb-3 rounded-md border border-[#DCCCA6] bg-[#FFF9E9] px-3 py-3 text-[12px] text-[var(--adm-text)]">
-                  Nincs aktív ügytípus-konfiguráció.
+                  Még nincs választható ügytípus.
                   <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
-                    Az ügy indításához egy adminisztrátornak aktív ügytípust és munkacsomagot kell beállítania.
+                    Kérj egy ügytípust az iroda adminisztrátorától vagy partnerétől.
                   </span>
                 </div>
               )}
@@ -203,17 +243,27 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
               {/* Case Type + Responsible Lawyer */}
               <div className={`${intake.area} mb-3`}>
                 <div className={intake.grid}>
-                  <label className={intake.label}>
-                    Ügytípus <span className={intake.required}>*</span>
-                    <select value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
+                  <div className={intake.label}>
+                    <label htmlFor="new-case-type">Ügytípus <span className={intake.required}>*</span></label>
+                    {canManageTypes ? <>
+                      <input id="new-case-type" list="case-type-suggestions" value={typeName} onChange={(e) => changeTypeName(e.target.value)} disabled={savingType} className={intake.field} placeholder="Válassz vagy írj új ügytípust…" autoComplete="off" required />
+                      <datalist id="case-type-suggestions">{creationOptions.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.name} />)}</datalist>
+                      {matchingTypes.length > 1 && <select aria-label="Azonos nevű ügytípusok" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
+                        <option value="">Válassz a mentett ügytípusok közül…</option>
+                        {matchingTypes.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name} · {option.caseTypeDefinition.description || option.template?.name}</option>)}
+                      </select>}
+                      {typeName.trim() && matchingTypes.length === 0 && !selectedOption && <button type="button" onClick={saveType} disabled={savingType} className={`${intake.secondaryAction} mt-2`}>
+                        {savingType ? "Mentés…" : `+ „${typeName.trim()}” mentése új ügytípusként`}
+                      </button>}
+                    </> : <select id="new-case-type" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
                       <option value="">Válassz ügytípust…</option>
                       {creationOptions.map((o) => (
                         <option key={o.caseTypeDefinition.id} value={o.caseTypeDefinition.id}>
                           {o.caseTypeDefinition.name}
                         </option>
                       ))}
-                    </select>
-                  </label>
+                    </select>}
+                  </div>
                   <label className={intake.label}>
                     Felelős ügyvéd
                     <select value={assignedLawyerId} onChange={(e) => setAssignedLawyerId(e.target.value)} className={intake.field}>
@@ -237,7 +287,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
               </div>
 
               {/* Work Package Modules */}
-              {selectedOption?.template && (
+              {selectedOption?.template && templateItems.length > 0 && (
                 <div className={`${intake.area} mb-3`}>
                   <div className="mb-2 flex items-center gap-2">
                     <span className={`${intake.sectionTitle} ${ACCENT_TEXT.petrol || "text-[#1F5A66]"}`}>
@@ -245,7 +295,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                       Munkacsomag
                     </span>
                     <span className="text-[11px] text-[var(--adm-text-muted)]">
-                      {selectedOption.template.name} v{selectedOption.template.version}
+                      {selectedOption.template.name}
                     </span>
                   </div>
                   <p className="mb-2 text-[11px] text-[var(--adm-text-muted)]">

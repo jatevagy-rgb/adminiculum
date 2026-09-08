@@ -289,7 +289,11 @@ export async function updateTemplate(actor: Actor, id: string, input: Record<str
 
 export async function activateTemplate(actor: Actor, id: string, db: PrismaClient = defaultPrisma) {
   manager(actor);
-  const result = await withSerializableRetry(db, async (tx) => {
+  const result = await withSerializableRetry(db, (tx) => activateTemplateRow(tx, id));
+  return dto(result);
+}
+
+async function activateTemplateRow(tx: Prisma.TransactionClient, id: string) {
     const row = await tx.workPackageTemplate.findUnique({ where: { id }, include: { items: true } });
     if (!row) throw new WorkPackageAdminError(404, 'WORK_PACKAGE_TEMPLATE_NOT_FOUND', 'Work package template not found.');
     if (row.status === 'ACTIVE') return row;
@@ -297,8 +301,31 @@ export async function activateTemplate(actor: Actor, id: string, db: PrismaClien
     await validateWorkflowBinding(row.defaultWorkflowTemplateId, tx);
     await tx.workPackageTemplate.updateMany({ where: { caseTypeDefinitionId: row.caseTypeDefinitionId, status: 'ACTIVE', id: { not: id } }, data: { status: 'ARCHIVED' } });
     return tx.workPackageTemplate.update({ where: { id }, data: { status: 'ACTIVE' }, include: templateInclude });
+}
+
+// Name-only creation is atomic: a failed template operation rolls back the type too.
+// Existing technical create/version/activate endpoints retain their contracts.
+export async function createUsableCaseType(actor: Actor, input: Record<string, unknown>, db: PrismaClient = defaultPrisma) {
+  manager(actor);
+  const name = text(input.name, 'name', 200, true)!;
+  const base = name.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60).replace(/-$/g, '') || 'ugytipus';
+  return withSerializableRetry(db, async (tx) => {
+    const existing = await tx.caseTypeDefinition.findMany({ select: { name: true, slug: true } });
+    if (existing.some((row) => row.name.normalize('NFC').toLocaleLowerCase('hu-HU') === name.normalize('NFC').toLocaleLowerCase('hu-HU'))) {
+      throw new WorkPackageAdminError(409, 'CASE_TYPE_NAME_EXISTS', 'An existing case type has this name. Select it or manage its activation in Settings.');
+    }
+    const used = new Set(existing.map((row) => row.slug));
+    let candidate = base;
+    for (let suffix = 2; used.has(candidate); suffix += 1) candidate = `${base}-${suffix}`;
+    const type = await createCaseType(actor, { name, slug: candidate }, tx);
+    const draft = await createTemplateRow(tx, actor, type.id, { name: 'Alap munkacsomag', items: [] }, 1);
+    const active = await activateTemplateRow(tx, draft.id);
+    return {
+      caseTypeDefinition: { id: type.id, slug: type.slug, name: type.name, description: type.description, icon: type.icon },
+      template: dto(active),
+    };
   });
-  return dto(result);
 }
 
 export const moduleLabels = MODULE_LABELS;

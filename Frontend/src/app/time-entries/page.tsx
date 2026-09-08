@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   getTimeEntries,
-  getMatters,
+  getCases,
+  type CaseListItem,
   getClients,
   createTimeEntry,
   updateTimeEntry,
   deleteTimeEntry,
   type TimeEntry,
-  type Matter,
   type Client,
   type CreateTimeEntryData,
   type UpdateTimeEntryData,
@@ -38,10 +38,11 @@ import {
   type TimesheetReportInstancePayload,
   type TimesheetReportArtifactPayload,
   type SaveTimesheetReportInstanceInput,
-  getCaseSummary,
   getCurrentUser,
   type CurrentUser,
 } from "@/lib/api";
+
+import { loadTimeEntryCases, timeEntryCaseLabel } from "@/lib/timeEntryCaseSelection";
 
 const WORK_TYPES = ["TANÁCSADÁS", "IRATELENÉS", "FELÜLVIZSGÁLAT", "KOMMUNIKÁCIÓ", "KUTATÁS", "EGYÉB"];
 
@@ -97,7 +98,10 @@ export default function TimeEntriesPage() {
 
 function TimeEntriesPageContent() {
   const [entries, setEntries] = useState<TimeEntry[]>([]);
-  const [matters, setMatters] = useState<Matter[]>([]);
+  const [cases, setCases] = useState<CaseListItem[]>([]);
+  const [caseSearch, setCaseSearch] = useState("");
+  const loadRequest = useRef(0);
+  const matters = useMemo(() => Array.from(new Map(entries.flatMap((entry) => entry.matter ? [[entry.matter.id, entry.matter] as const] : [])).values()), [entries]);
   const [clients, setClients] = useState<Client[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +161,7 @@ function TimeEntriesPageContent() {
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [expandedCaseKeys, setExpandedCaseKeys] = useState<Record<string, boolean>>({});
   const [formData, setFormData] = useState<CreateTimeEntryData>({
-    matterId: "",
+    caseId: "",
     workType: "TANÁCSADÁS",
     description: "",
     minutes: 60,
@@ -172,24 +176,18 @@ function TimeEntriesPageContent() {
   const deepLinkedCaseId = searchParams?.get("caseId") ?? null;
   const deepLinkedClientId = searchParams?.get("clientId") ?? null;
   const [clientScopeLabel, setClientScopeLabel] = useState<string | null>(null);
-  const [prefilledMatterId, setPrefilledMatterId] = useState<string | null>(null);
-  const [caseResolutionState, setCaseResolutionState] = useState<{
-    status: "idle" | "loading" | "found" | "not_found";
-    caseLabel: string | null;
-    matterId: string | null;
-    matterLabel: string | null;
-  }>({ status: "idle", caseLabel: null, matterId: null, matterLabel: null });
-
   const loadEntries = useCallback(async () => {
+    const request = ++loadRequest.current;
     setIsLoading(true);
     setError(null);
     setLoadWarning(null);
     try {
-      const [entriesResult, mattersResult, clientsResult] = await Promise.allSettled([
+      const [entriesResult, casesResult, clientsResult] = await Promise.allSettled([
         getTimeEntries({ clientId: deepLinkedClientId || undefined, caseId: deepLinkedCaseId || undefined }),
-        getMatters(),
+        loadTimeEntryCases(getCases, deepLinkedClientId || undefined),
         getClients(),
       ]);
+      if (request !== loadRequest.current) return;
 
       const nextWarnings: string[] = [];
 
@@ -198,11 +196,11 @@ function TimeEntriesPageContent() {
       }
       setEntries(entriesResult.value);
 
-      if (mattersResult.status === "fulfilled") {
-        setMatters(mattersResult.value);
+      if (casesResult.status === "fulfilled") {
+        setCases(casesResult.value);
       } else {
-        setMatters([]);
-        nextWarnings.push("A munkacsomag adatok betöltése részlegesen sikertelen.");
+        setCases([]);
+        nextWarnings.push("Az ügyek betöltése sikertelen. Próbáld újra.");
       }
 
       if (clientsResult.status === "fulfilled") {
@@ -214,10 +212,11 @@ function TimeEntriesPageContent() {
 
       setLoadWarning(nextWarnings[0] || null);
     } catch (err) {
+      if (request !== loadRequest.current) return;
       console.error("Failed to load work hours:", err);
       setError("Nem sikerült betölteni a munkaórákat.");
     } finally {
-      setIsLoading(false);
+      if (request === loadRequest.current) setIsLoading(false);
     }
   }, [deepLinkedCaseId, deepLinkedClientId]);
 
@@ -231,7 +230,10 @@ function TimeEntriesPageContent() {
   }, [clients, deepLinkedClientId]);
 
   useEffect(() => {
+    setCases([]);
+    setShowModal(false);
     loadEntries();
+    return () => { loadRequest.current += 1; };
   }, [loadEntries]);
 
   useEffect(() => {
@@ -299,49 +301,9 @@ function TimeEntriesPageContent() {
     loadReportArtifacts(selectedReportInstanceId);
   }, [selectedReportInstanceId, loadReportArtifacts]);
 
-  // Once matters are loaded, resolve deep-linked matterId or caseId to a real matter
-  useEffect(() => {
-    if (prefilledMatterId) return; // already resolved
-    if (!matters.length) return;
-
-    if (deepLinkedMatterId) {
-      const hasMatch = matters.some((m) => m.id === deepLinkedMatterId);
-      if (hasMatch) {
-        setPrefilledMatterId(deepLinkedMatterId);
-      }
-      return;
-    }
-
-    if (deepLinkedCaseId) {
-      // First try: find a time entry already linked to this case
-      const entryWithCase = entries.find((e) => e.matter?.cases?.some((c) => c.id === deepLinkedCaseId));
-      if (entryWithCase?.matterId) {
-        setPrefilledMatterId(entryWithCase.matterId);
-        setCaseResolutionState((s) => ({ ...s, status: "found", matterId: entryWithCase.matterId, matterLabel: null }));
-        return;
-      }
-
-      // Second try: fetch case summary to get matterId directly
-      setCaseResolutionState((s) => s.status === "idle" ? { ...s, status: "loading" } : s);
-      getCaseSummary(deepLinkedCaseId)
-        .then((summary) => {
-          const caseLabel = summary.case.caseNumber
-            ? `${summary.case.caseNumber} · ${summary.case.title}`
-            : summary.case.title;
-          const matterId = summary.case.matterId || null;
-          const matterLabel = matterId ? (matters.find((m) => m.id === matterId)?.title || null) : null;
-          if (matterId) {
-            setPrefilledMatterId(matterId);
-            setCaseResolutionState({ status: "found", caseLabel, matterId, matterLabel });
-          } else {
-            setCaseResolutionState({ status: "not_found", caseLabel, matterId: null, matterLabel: null });
-          }
-        })
-        .catch(() => {
-          setCaseResolutionState({ status: "not_found", caseLabel: null, matterId: null, matterLabel: null });
-        });
-    }
-  }, [deepLinkedMatterId, deepLinkedCaseId, prefilledMatterId, matters, entries]);
+  const deepLinkedCase = cases.find((row) => row.id === deepLinkedCaseId);
+  // Historical Matter deep links keep their list filter; new entries always select a Case.
+  useEffect(() => { setEntryMatterFilter(deepLinkedMatterId || ""); }, [deepLinkedMatterId]);
 
   const formatMinutes = (minutes: number) => {
     const h = Math.floor(minutes / 60);
@@ -358,7 +320,7 @@ function TimeEntriesPageContent() {
   };
 
   const matterById = useMemo(() => {
-    const map = new Map<string, Matter>();
+    const map = new Map<string, NonNullable<TimeEntry["matter"]>>();
     for (const matter of matters) {
       map.set(matter.id, matter);
     }
@@ -373,29 +335,6 @@ function TimeEntriesPageContent() {
     return map;
   }, [clients]);
 
-  const matterCaseHintByMatterId = useMemo(() => {
-    const map = new Map<string, { caseId: string; label: string }>();
-
-    for (const entry of entries) {
-      const linkedCases = entry.matter?.cases || [];
-      if (!linkedCases.length) continue;
-
-      const sortedCases = [...linkedCases].sort((a, b) => {
-        const aTs = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
-        const bTs = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
-        return bTs - aTs;
-      });
-      const best = sortedCases[0];
-      if (!best) continue;
-
-      map.set(entry.matterId, {
-        caseId: best.id,
-        label: best.caseNumber ? `${best.caseNumber} · ${best.title}` : best.title,
-      });
-    }
-
-    return map;
-  }, [entries]);
 
   const filteredEntries = useMemo(() => {
     const normalizedSearch = entrySearch.trim().toLocaleLowerCase("hu-HU");
@@ -589,20 +528,10 @@ function TimeEntriesPageContent() {
     };
   }, [filteredEntries, groupedByClient.length]);
 
-  const modalCaseOptions = useMemo(
-    () =>
-      matters
-        .map((matter) => {
-          const clientName = matter.client?.name || clientNameById.get(matter.clientId) || "Ismeretlen ügyfél";
-          const caseHint = matterCaseHintByMatterId.get(matter.id);
-          return {
-            matterId: matter.id,
-            label: `${caseHint ? `${caseHint.label} · ` : ""}${matter.title} · ${clientName}`,
-          };
-        })
-        .sort((a, b) => a.label.localeCompare(b.label, "hu")),
-    [matters, clientNameById, matterCaseHintByMatterId]
-  );
+  const modalCaseOptions = useMemo(() => cases
+    .map((row) => ({ caseId: row.id, label: timeEntryCaseLabel(row) }))
+    .filter((option) => option.caseId === formData.caseId || option.label.toLocaleLowerCase("hu-HU").includes(caseSearch.trim().toLocaleLowerCase("hu-HU")))
+    .sort((a, b) => a.label.localeCompare(b.label, "hu")), [cases, caseSearch, formData.caseId]);
 
   const reportClientOptions = useMemo(
     () =>
@@ -620,7 +549,7 @@ function TimeEntriesPageContent() {
           id: matter.id,
           name: matter.title,
           clientId: matter.clientId,
-          clientName: matter.client?.name || clientNameById.get(matter.clientId) || "",
+          clientName: matter.client?.name || clientNameById.get(matter.clientId || "") || "",
         }))
         .sort((a, b) => a.name.localeCompare(b.name, "hu")),
     [matters, autofillClientId, clientNameById]
@@ -660,8 +589,9 @@ function TimeEntriesPageContent() {
 
   const handleCreate = () => {
     setEditingEntry(null);
+    setCaseSearch("");
     setFormData({
-      matterId: prefilledMatterId ?? "",
+      caseId: deepLinkedCase?.id ?? "",
       workType: "TANÁCSADÁS",
       description: "",
       minutes: 60,
@@ -676,7 +606,7 @@ function TimeEntriesPageContent() {
     // Map Prisma enum value back to Hungarian label for the form select
     const displayWorkType = WORK_TYPE_LABEL_MAP[entry.workType] ?? entry.workType;
     setFormData({
-      matterId: entry.matterId,
+      caseId: entry.caseId || entry.resolvedCaseId || "",
       workType: displayWorkType,
       description: entry.description,
       minutes: entry.minutes,
@@ -687,8 +617,8 @@ function TimeEntriesPageContent() {
   };
 
   const handleSave = async () => {
-    if (!formData.matterId?.trim()) {
-      alert("Ügyhöz kapcsolt munkacsomag kiválasztása kötelező");
+    if (!editingEntry && !cases.some((row) => row.id === formData.caseId)) {
+      alert("Ügy kiválasztása kötelező");
       return;
     }
     if (!formData.description?.trim()) {
@@ -713,7 +643,7 @@ function TimeEntriesPageContent() {
         await updateTimeEntry(editingEntry.id, updateData);
       } else {
         await createTimeEntry({
-          matterId: formData.matterId,
+          caseId: formData.caseId,
           workType: WORK_TYPE_VALUE_MAP[formData.workType] ?? formData.workType,
           description: formData.description,
           minutes: formData.minutes,
@@ -1119,6 +1049,7 @@ function TimeEntriesPageContent() {
             </div>
             <button
               onClick={handleCreate}
+              disabled={isLoading}
               className="px-4 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs uppercase tracking-[0.2em] hover:bg-[#173824] transition-colors rounded self-start"
             >
               Munkaóra rögzítése
@@ -1135,36 +1066,10 @@ function TimeEntriesPageContent() {
             </div>
           )}
 
-          {deepLinkedCaseId && caseResolutionState.status !== "idle" && (
-            <div className="mb-3 rounded-lg border border-[var(--adm-ochre-500)] bg-[var(--adm-surface)] px-3 py-2">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[10px] px-2 py-0.5 bg-[var(--adm-ochre-500)] text-white uppercase tracking-wide">Ügyhöz kapcsolt munkaóra</span>
-                {caseResolutionState.status === "loading" ? (
-                  <span className="text-xs text-[var(--adm-text-muted)]">Ügy betöltése...</span>
-                ) : caseResolutionState.caseLabel ? (
-                  <span className="text-xs text-[var(--adm-text)] font-semibold">{caseResolutionState.caseLabel}</span>
-                ) : (
-                  <span className="text-xs text-[var(--adm-text)]">Munkaóra-rögzítés ebben az ügyben</span>
-                )}
-                {caseResolutionState.matterLabel && (
-                  <span className="text-[10px] text-[var(--adm-text-muted)]">· Munkacsomag: {caseResolutionState.matterLabel}</span>
-                )}
-                {caseResolutionState.status === "not_found" && (
-                  <span className="text-[10px] text-[var(--adm-text-soft)] italic">
-                    Az ügyhöz tartozó munkacsomag nem található. Válassz munkacsomagot kézzel.
-                  </span>
-                )}
-                </div>
-                <Link
-                  href={`/cases/${deepLinkedCaseId}`}
-                  className="px-3 py-1 text-[10px] border border-[#1F4A33] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:bg-[#173824] rounded shrink-0"
-                >
-                  Ügy megnyitása
-                </Link>
-              </div>
-            </div>
-          )}
+          {deepLinkedCaseId && <div className="mb-3 rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm">
+            {isLoading ? "Ügy betöltése…" : deepLinkedCase ? timeEntryCaseLabel(deepLinkedCase) : "Az ügy nem érhető el a jelenlegi szűrésben."}
+            <Link href={`/cases/${deepLinkedCaseId}`} className="ml-3 underline">Ügy megnyitása</Link>
+          </div>}
 
           {error && (
             <div className="mb-6 rounded border border-[var(--adm-terracotta-100)] bg-[#fef2f2] p-4 text-xs text-[#8b3a3a]">
@@ -1893,32 +1798,22 @@ function TimeEntriesPageContent() {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-[var(--adm-border)]">
               <h2 className="text-lg font-serif text-[var(--adm-text)]">{editingEntry ? "Munkaóra bejegyzés szerkesztése" : "Munkaóra rögzítése"}</h2>
             </div>
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs uppercase tracking-[0.2em] text-[var(--adm-text-muted)] mb-2">
-                  Ügyhöz kapcsolt munkacsomag <span className="text-[var(--adm-terracotta-700)]">*</span>
-                </label>
-                <select
-                  value={formData.matterId}
-                  onChange={(e) => setFormData({ ...formData, matterId: e.target.value })}
-                  className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm focus:outline-none focus:border-[var(--adm-ochre-500)]"
-                  disabled={!!editingEntry}
-                >
-                  <option value="">Válassz ügyhöz kapcsolt munkacsomagot...</option>
-                  {modalCaseOptions.map((option) => (
-                    <option key={option.matterId} value={option.matterId}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                {!editingEntry && (
-                  <p className="text-[10px] text-[var(--adm-text-soft)] mt-1">Azonosító mező nincs kitéve; ügy és ügyfél címkével választhatsz.</p>
-                )}
+                {editingEntry ? <div><p className="text-xs text-[var(--adm-text-muted)]">Ügy / korábbi munka kapcsolata</p><p className="text-sm">{editingEntry.case?.title || editingEntry.matter?.title || "Korábbi bejegyzés"}</p><p className="text-xs text-[var(--adm-text-muted)]">A bejegyzés ügykapcsolata itt nem módosítható.</p></div> : <>
+                  <label htmlFor="time-entry-case" className="block text-xs text-[var(--adm-text-muted)] mb-2">Ügy *</label>
+                  <input aria-label="Ügy keresése" value={caseSearch} onChange={(e) => setCaseSearch(e.target.value)} placeholder="Ügyfél, ügyszám vagy ügy neve…" className="w-full px-3 py-2 mb-2 border border-[var(--adm-border)] rounded text-sm" />
+                  <select id="time-entry-case" value={formData.caseId || ""} onChange={(e) => setFormData({ ...formData, caseId: e.target.value })} className="w-full px-3 py-2 border border-[var(--adm-border)] rounded text-sm" required>
+                    <option value="">Válassz ügyet…</option>
+                    {modalCaseOptions.map((option) => <option key={option.caseId} value={option.caseId}>{option.label}</option>)}
+                  </select>
+                  {!cases.length && <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Nincs választható ügy. Előbb hozz létre egy ügyet.</p>}
+                </>}
               </div>
 
               <div>
@@ -2017,7 +1912,7 @@ function TimeEntriesPageContent() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving || !formData.matterId?.trim() || !formData.description?.trim()}
+                disabled={isSaving || (!editingEntry && !cases.some((row) => row.id === formData.caseId)) || !formData.description?.trim()}
                 className="px-4 py-2 text-xs uppercase tracking-[0.2em] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:bg-[#173824] rounded disabled:opacity-50"
               >
                 {isSaving ? "Mentés..." : "Mentés"}
