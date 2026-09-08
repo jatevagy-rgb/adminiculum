@@ -952,3 +952,111 @@ describe('migration WebJob Prisma CLI bootstrap environment and release preserva
     expect(preflightWorkflow).toContain('test -f "$TMP_DIR/node_modules/prisma/build/index.js"');
   });
 });
+
+describe('Kudu read-only VFS retry hardening', () => {
+  const helper = fs.readFileSync(
+    path.join(repoRoot, 'Backend', 'scripts', 'kudu-vfs-readonly-get.sh'), 'utf8',
+  );
+  const preflight = stepBlock('Read-only migration release asset preflight');
+  const drift = stepBlock('Remote migration tree drift guard');
+  const recovery = stepBlock('Recovery migration asset identity gate');
+  const staging = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+  const trigger = stepBlock('Trigger + verify THIS migration WebJob run');
+
+  it('1. read-only Kudu asset GETs use the bounded retry helper', () => {
+    expect(drift).toContain('kudu-vfs-readonly-get.sh');
+    expect(recovery.match(/kudu-vfs-readonly-get\.sh/g)).toHaveLength(2);
+    expect(preflight.match(/kudu-vfs-readonly-get\.sh/g)).toHaveLength(2);
+    expect(helper).toContain('KUDU_VFS_MAX_ATTEMPTS:-4');
+    expect(helper).toContain('KUDU_VFS_BACKOFF_SECONDS:-2 4 8');
+    expect(helper).toContain('KUDU_VFS_TRANSPORT_RETRY');
+    expect(helper).toContain('KUDU_VFS_TRANSIENT_HTTP_RETRY');
+    expect(helper).toContain('KUDU_VFS_READ_ATTEMPTS');
+  });
+
+  it('2. curl transport status is captured separately from HTTP status', () => {
+    expect(helper).toContain('curl_rc=$?');
+    expect(helper).toContain("-w '%{http_code}'");
+    expect(helper).toMatch(/http_code="\$\(curl [^\n]*-w '%\{http_code\}'\)"\n\s*curl_rc=\$\?/);
+    expect(helper).not.toContain('|| echo 000');
+  });
+
+  it('3. repaired read paths no longer contain the broken echo-000 construction', () => {
+    for (const step of [drift, recovery, preflight]) {
+      expect(step).not.toContain('|| echo 000');
+    }
+    expect(workflow).not.toContain('000000');
+  });
+
+  it('4. persistent transport failure fails closed', () => {
+    expect(helper).toMatch(/KUDU_VFS_TRANSPORT_EXHAUSTED=YES[\s\S]*STOP\.[\s\S]*exit 1/);
+  });
+
+  it('5. baseline HTTP 404 still fails as confirmed-missing', () => {
+    expect(preflight).toMatch(/if \[ "\$HTTP_CODE" = "404" \]; then[\s\S]*missing from remote \(HTTP 404[\s\S]*exit 1/);
+    // the missing-asset claim may only be emitted on a confirmed 404
+    const failBranch = preflight.slice(
+      preflight.indexOf('if [ "$HTTP_CODE" != "200" ]; then'),
+      preflight.indexOf('LOCAL_BASELINE_SHA'),
+    );
+    expect(failBranch).toContain('REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL');
+    expect(failBranch.indexOf('"$HTTP_CODE" = "404"')).toBeLessThan(failBranch.indexOf('missing from remote'));
+  });
+
+  it('6. target-extra HTTP 404 still means requires staging', () => {
+    expect(preflight).toMatch(/elif \[ "\$CHECK_CODE" = "404" \]; then[\s\S]*marked for staging[\s\S]*MISSING_DELTA_FILE/);
+  });
+
+  it('7. HTTP 200 still requires hash identity', () => {
+    expect(preflight).toMatch(/if \[ "\$HTTP_CODE" != "200" \]; then[\s\S]*REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL[\s\S]*exit 1/);
+    expect(preflight).toContain('REMOTE_BASELINE_HASH_VERIFIED=YES');
+    expect(preflight).toMatch(/"\$CHECK_CODE" = "200"[\s\S]*REMOTE_EXISTING_SHA/);
+  });
+
+  it('8. hash mismatch still fails', () => {
+    expect(preflight).toMatch(/if \[ "\$LOCAL_BASELINE_SHA" != "\$REMOTE_BASELINE_SHA" \]; then[\s\S]*REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL[\s\S]*content mismatch[\s\S]*exit 1/);
+    expect(preflight).toMatch(/else[\s\S]*exists remotely with different hash! Refusing overwrite\. STOP\.[\s\S]*exit 1/);
+  });
+
+  it('9. authorization failures are classified, never reported as missing', () => {
+    expect(helper).toContain('KUDU_VFS_AUTH_FAILURE=YES');
+    expect(helper).toContain('401|403');
+    for (const step of [drift, recovery, preflight]) {
+      expect(step).toContain('KUDU_VFS_AUTH_FAILURE=YES');
+      expect(step).toContain('NOT proof');
+    }
+  });
+
+  it('10. retry helper is not used for PUT/staging', () => {
+    expect(staging).not.toContain('kudu-vfs-readonly-get.sh');
+    expect(staging).toContain('-X PUT');
+  });
+
+  it('11. retry helper is not used for the WebJob trigger', () => {
+    expect(trigger).not.toContain('kudu-vfs-readonly-get.sh');
+    expect(trigger).toContain('/api/triggeredwebjobs/');
+    expect(trigger).toContain('-X POST');
+  });
+
+  it('12. no production write occurs before the read-only preflight succeeds', () => {
+    const preflightEnd = workflow.indexOf('READ_ONLY_PREFLIGHT_BEFORE_FIRST_WRITE=YES');
+    const firstPut = workflow.indexOf('-X PUT');
+    const triggerIndex = workflow.indexOf('Trigger + verify THIS migration WebJob run');
+    expect(preflightEnd).toBeGreaterThan(-1);
+    expect(firstPut).toBeGreaterThan(preflightEnd);
+    expect(triggerIndex).toBeGreaterThan(firstPut);
+    expect(preflight).not.toContain('-X PUT');
+    expect(preflight).not.toContain('triggeredwebjobs');
+  });
+
+  it('helper preserves only the final attempt body and retries only transient reads', () => {
+    expect(helper).toContain('attempt_file="$(mktemp)"');
+    expect(helper).toMatch(/rm -f "\$attempt_file"[\s\S]*continue/);
+    expect(helper).toContain('mv -f "$attempt_file" "$OUT"');
+    expect(helper).toMatch(/408\|429\|5\?\?\)/);
+    expect(helper).not.toContain('-X PUT');
+    expect(helper).not.toContain('-X POST');
+    expect(helper).not.toContain('DELETE');
+  });
+});
+

@@ -837,7 +837,7 @@ jobs:
           REMOTE_LIST="$(mktemp)"
           trap 'rm -f "$REMOTE_LIST"' EXIT
 
-          HTTP_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/site/wwwroot/prisma/migrations/" -o "$REMOTE_LIST" -w '%{http_code}' || echo 000)"
+          HTTP_CODE="$(KUDU_READ_TOKEN="$TOKEN" bash Backend/scripts/kudu-vfs-readonly-get.sh "${KUDU}/vfs/site/wwwroot/prisma/migrations/" "$REMOTE_LIST")"
 
           if [ "$HTTP_CODE" = "404" ]; then
             echo "Remote migrations directory does not exist yet (0 remote migrations)."
@@ -884,8 +884,12 @@ jobs:
             }
             console.log('REMOTE_MIGRATION_TREE_DRIFT=PASS');
           NODE
+          elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+            echo "KUDU_VFS_AUTH_FAILURE=YES"
+            echo "Kudu authorization failed (HTTP ${HTTP_CODE}) reading remote migrations directory — NOT proof the directory is absent. STOP."
+            exit 1
           else
-            echo "Unexpected HTTP status ${HTTP_CODE} reading remote migrations directory. STOP."
+            echo "Unexpected HTTP status ${HTTP_CODE} reading remote migrations directory — NOT proof the directory is absent. STOP."
             exit 1
           fi
 
@@ -918,11 +922,18 @@ jobs:
           [ -f "Backend/prisma/schema.prisma" ] || { echo "Recovery checkout missing Backend/prisma/schema.prisma"; exit 1; }
           LOCAL_SCHEMA_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync("Backend/prisma/schema.prisma")).digest("hex"))')"
           REMOTE_SCHEMA="$(mktemp)"
-          HTTP_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/site/wwwroot/prisma/schema.prisma" -o "$REMOTE_SCHEMA" -w '%{http_code}' || echo 000)"
+          HTTP_CODE="$(KUDU_READ_TOKEN="$TOKEN" bash Backend/scripts/kudu-vfs-readonly-get.sh "${KUDU}/vfs/site/wwwroot/prisma/schema.prisma" "$REMOTE_SCHEMA")"
           if [ "$HTTP_CODE" != "200" ]; then
             rm -f "$REMOTE_SCHEMA"
             echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"
-            echo "Remote site/wwwroot/prisma/schema.prisma does not exist or returned HTTP ${HTTP_CODE}. STOP."
+            if [ "$HTTP_CODE" = "404" ]; then
+              echo "Remote site/wwwroot/prisma/schema.prisma confirmed absent (HTTP 404). STOP."
+            elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+              echo "KUDU_VFS_AUTH_FAILURE=YES"
+              echo "Kudu authorization failed (HTTP ${HTTP_CODE}) reading remote schema.prisma — NOT proof of absence. STOP."
+            else
+              echo "Remote site/wwwroot/prisma/schema.prisma read failed (HTTP ${HTTP_CODE}) — NOT proof of absence. STOP."
+            fi
             exit 1
           fi
           REMOTE_SCHEMA_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_SCHEMA")"
@@ -944,12 +955,19 @@ jobs:
 
             REMOTE_SQL_PATH="site/wwwroot/prisma/migrations/${DIR_NAME}/migration.sql"
             REMOTE_FILE="$(mktemp)"
-            CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_SQL_PATH}" -o "$REMOTE_FILE" -w '%{http_code}' || echo 000)"
+            CODE="$(KUDU_READ_TOKEN="$TOKEN" bash Backend/scripts/kudu-vfs-readonly-get.sh "${KUDU}/vfs/${REMOTE_SQL_PATH}" "$REMOTE_FILE")"
             if [ "$CODE" != "200" ]; then
               rm -f "$REMOTE_FILE"
               echo "RECOVERY_MIGRATION_ASSET_IDENTITY=FAIL"
               echo "RECOVERY_MISSING_EXPECTED_FILE_FAILS=YES"
-              echo "Expected recovery migration file missing on remote: ${DIR_NAME}/migration.sql (HTTP ${CODE}). STOP."
+              if [ "$CODE" = "404" ]; then
+                echo "Expected recovery migration file missing on remote: ${DIR_NAME}/migration.sql (HTTP 404 — confirmed absent). STOP."
+              elif [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+                echo "KUDU_VFS_AUTH_FAILURE=YES"
+                echo "Kudu authorization failed (HTTP ${CODE}) reading ${DIR_NAME}/migration.sql — NOT proof of absence. STOP."
+              else
+                echo "Remote read of recovery migration ${DIR_NAME}/migration.sql failed (HTTP ${CODE}) — NOT proof of absence. STOP."
+              fi
               exit 1
             fi
 
@@ -1152,12 +1170,19 @@ jobs:
             validate_vfs_path "$REMOTE_MIG_SQL"
 
             REMOTE_SQL_FILE="$(mktemp)"
-            HTTP_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_MIG_SQL}" -o "$REMOTE_SQL_FILE" -w '%{http_code}' || echo 000)"
+            HTTP_CODE="$(KUDU_READ_TOKEN="$TOKEN" bash Backend/scripts/kudu-vfs-readonly-get.sh "${KUDU}/vfs/${REMOTE_MIG_SQL}" "$REMOTE_SQL_FILE")"
             if [ "$HTTP_CODE" != "200" ]; then
               rm -f "$REMOTE_SQL_FILE"
               echo "REMOTE_BASELINE_MIGRATION_IDENTITY=FAIL"
               echo "REMOTE_BASELINE_COMPLETE=NO"
-              echo "Baseline migration ${DIR_NAME}/migration.sql missing from remote (HTTP ${HTTP_CODE}). STOP."
+              if [ "$HTTP_CODE" = "404" ]; then
+                echo "Baseline migration ${DIR_NAME}/migration.sql missing from remote (HTTP 404 — confirmed absent, not retried). STOP."
+              elif [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+                echo "KUDU_VFS_AUTH_FAILURE=YES"
+                echo "Kudu authorization failed (HTTP ${HTTP_CODE}) reading baseline migration ${DIR_NAME}/migration.sql — NOT proof of absence. STOP."
+              else
+                echo "Remote read of baseline migration ${DIR_NAME}/migration.sql failed (HTTP ${HTTP_CODE}) — NOT proof of absence. STOP."
+              fi
               exit 1
             fi
 
@@ -1196,7 +1221,7 @@ jobs:
             LOCAL_MIG_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$LOCAL_MIG_PATH")"
 
             REMOTE_CHECK="$(mktemp)"
-            CHECK_CODE="$(curl -sS -m 30 -H "Authorization: Bearer ${TOKEN}" "${KUDU}/vfs/${REMOTE_MIG_SQL}" -o "$REMOTE_CHECK" -w '%{http_code}' || echo 000)"
+            CHECK_CODE="$(KUDU_READ_TOKEN="$TOKEN" bash Backend/scripts/kudu-vfs-readonly-get.sh "${KUDU}/vfs/${REMOTE_MIG_SQL}" "$REMOTE_CHECK")"
 
             if [ "$CHECK_CODE" = "200" ]; then
               REMOTE_EXISTING_SHA="$(node -e 'console.log(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1])).digest("hex"))' "$REMOTE_CHECK")"
