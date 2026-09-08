@@ -3,6 +3,7 @@ import { authenticate, requireRole, ROLES } from '../../middleware/auth';
 import { InteractionError } from '../client-interaction/base';
 import {
   createPreparation,
+  getPreparationPdf,
   getPreparation,
   listPreparations,
   patchItem,
@@ -32,6 +33,17 @@ router.get('/', async (req, res) => {
   try {
     const result = await listPreparations(actor(req), String(req.query.clientId || ''));
     res.json(result);
+  } catch (error) { respond(error, res); }
+});
+
+router.get('/:preparationId/pdf', async (req, res) => {
+  try {
+    const preparationId = String(req.params.preparationId);
+    const pdf = await getPreparationPdf(actor(req), preparationId);
+    const filename = `szamlazasi-osszesito-${preparationId.replace(/[^a-zA-Z0-9_-]/g, '') || 'elokeszites'}.pdf`;
+    res.type('application/pdf');
+    res.attachment(filename);
+    res.send(pdf);
   } catch (error) { respond(error, res); }
 });
 

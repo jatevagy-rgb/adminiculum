@@ -1596,7 +1596,7 @@ jobs:
         working-directory: Backend
         run: |
           set -euo pipefail
-          npx tsc
+          npm run build
 
       - name: Configure .deployment for zero server-side build
         working-directory: Backend
