@@ -205,7 +205,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f backend-deploy.zip
-          ( cd Backend && zip -r -y -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
+          ( cd Backend && zip -y -r -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
               package.json package-lock.json tsconfig.json .deployment release-identity.json \
               dist node_modules prisma templates scripts App_Data )
           for spec in swagger2.yaml swagger.yaml; do
@@ -267,6 +267,10 @@ jobs:
           # Assert Prisma CLI symlink preservation and executable startup
           test -L "$TMP_DIR/node_modules/.bin/prisma" || {
             echo "ERROR: node_modules/.bin/prisma is not a symlink; zip packaging broke symlink semantics"
+            exit 1
+          }
+          test "$(readlink "$TMP_DIR/node_modules/.bin/prisma")" = "../prisma/build/index.js" || {
+            echo "ERROR: node_modules/.bin/prisma target is not ../prisma/build/index.js"
             exit 1
           }
           node -e '

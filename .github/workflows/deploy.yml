@@ -1551,7 +1551,7 @@ jobs:
           # Zip from INSIDE Backend/ so package.json and dist are at the archive root.
           # Prebuilt artifact contains compiled dist/, complete Linux node_modules/,
           # prisma schema/migrations, templates, scripts, WebJob, and OpenAPI specs.
-          ( cd Backend && zip -r -y -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
+          ( cd Backend && zip -y -r -q "$GITHUB_WORKSPACE/backend-deploy.zip" \
               package.json package-lock.json tsconfig.json .deployment release-identity.json \
               dist node_modules prisma templates scripts App_Data )
           for spec in swagger2.yaml swagger.yaml; do
@@ -1592,6 +1592,11 @@ jobs:
             echo "ERROR: .deployment missing SCM_DO_BUILD_DURING_DEPLOYMENT = false"
             exit 1
           }
+          test -f "$TMP_DIR/dist/index.js" || { echo "dist/index.js missing"; exit 1; }
+          test -f "$TMP_DIR/release-identity.json" || { echo "release-identity.json missing"; exit 1; }
+          test -f "$TMP_DIR/App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs" || { echo "WebJob runner missing"; exit 1; }
+          test -d "$TMP_DIR/templates" || { echo "templates dir missing"; exit 1; }
+          test -f "$TMP_DIR/swagger.yaml" || test -f "$TMP_DIR/swagger2.yaml" || { echo "swagger files missing"; exit 1; }
           node -e '
             const fs = require("fs");
             const files = fs.readdirSync(process.argv[1] + "/node_modules/.prisma/client");
@@ -1608,6 +1613,10 @@ jobs:
           # Assert Prisma CLI symlink preservation and executable startup
           test -L "$TMP_DIR/node_modules/.bin/prisma" || {
             echo "ERROR: node_modules/.bin/prisma is not a symlink; zip packaging broke symlink semantics"
+            exit 1
+          }
+          test "$(readlink "$TMP_DIR/node_modules/.bin/prisma")" = "../prisma/build/index.js" || {
+            echo "ERROR: node_modules/.bin/prisma target is not ../prisma/build/index.js"
             exit 1
           }
           node -e '

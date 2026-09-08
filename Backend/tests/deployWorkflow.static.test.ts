@@ -760,13 +760,13 @@ describe('migration-before-backend release order and staging contract', () => {
 });
 
 describe('backend release artifact packaging and symlink preservation', () => {
-  it('deploy.yml uses zip -r -y -q for backend runtime artifact packaging', () => {
+  it('deploy.yml uses zip -y -r -q for backend runtime artifact packaging', () => {
     const step = stepBlock('Package prebuilt backend runtime artifact');
-    expect(step).toContain('zip -r -y -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
+    expect(step).toContain('zip -y -r -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
   });
 
-  it('preflight.yml uses zip -r -y -q for backend runtime artifact packaging', () => {
-    expect(preflightWorkflow).toContain('zip -r -y -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
+  it('preflight.yml uses zip -y -r -q for backend runtime artifact packaging', () => {
+    expect(preflightWorkflow).toContain('zip -y -r -q "$GITHUB_WORKSPACE/backend-deploy.zip"');
   });
 
   it('deploy.yml validates node_modules/.bin/prisma in ziplist.txt', () => {
@@ -778,17 +778,33 @@ describe('backend release artifact packaging and symlink preservation', () => {
     expect(preflightWorkflow).toContain("grep -qxF 'node_modules/.bin/prisma' ziplist.txt");
   });
 
-  it('deploy.yml asserts node_modules/.bin/prisma is a symlink and starts prisma --version in offline extraction', () => {
+  it('deploy.yml asserts node_modules/.bin/prisma is a symlink, checks readlink target, and starts prisma --version in offline extraction', () => {
     const step = stepBlock('Assert prebuilt artifact module loading (offline sanity)');
     expect(step).toContain('test -L "$TMP_DIR/node_modules/.bin/prisma"');
+    expect(step).toContain('test "$(readlink "$TMP_DIR/node_modules/.bin/prisma")" = "../prisma/build/index.js"');
     expect(step).toContain('stat.isSymbolicLink()');
     expect(step).toContain('./node_modules/.bin/prisma --version');
   });
 
-  it('preflight.yml asserts node_modules/.bin/prisma is a symlink and starts prisma --version in offline extraction', () => {
+  it('preflight.yml asserts node_modules/.bin/prisma is a symlink, checks readlink target, and starts prisma --version in offline extraction', () => {
     expect(preflightWorkflow).toContain('test -L "$TMP_DIR/node_modules/.bin/prisma"');
+    expect(preflightWorkflow).toContain('test "$(readlink "$TMP_DIR/node_modules/.bin/prisma")" = "../prisma/build/index.js"');
     expect(preflightWorkflow).toContain('stat.isSymbolicLink()');
     expect(preflightWorkflow).toContain('./node_modules/.bin/prisma --version');
+  });
+
+  it('preserves all required extracted artifact sanity checks in deploy.yml and preflight.yml', () => {
+    const deploySanity = stepBlock('Assert prebuilt artifact module loading (offline sanity)');
+    for (const block of [deploySanity, preflightWorkflow]) {
+      expect(block).toContain("require('express')");
+      expect(block).toContain("require('bcrypt')");
+      expect(block).toContain("require('@prisma/client')");
+      expect(block).toContain('libquery_engine');
+      expect(block).toContain('release-identity.json');
+      expect(block).toContain('runner.cjs');
+      expect(block).toContain('templates');
+      expect(block).toContain('swagger');
+    }
   });
 
   it('behavioral proof: dereferencing prisma CLI to .bin fails with ENOENT wasm, while executing from package dir succeeds', () => {
