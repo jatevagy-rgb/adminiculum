@@ -8,12 +8,14 @@ const source = fs.readFileSync(path.join(process.cwd(), "src/components/Dashboar
 test("dashboard orientation surface uses category cards and hides redundant detail walls", () => {
     assert.match(source, /Milyen munkák várnak rám\?/);
     assert.match(source, /attentionCategory=/);
-    assert.match(source, /operational && operationalPresentation && false \? <>/);
+    assert.doesNotMatch(source, /dashboard-operational-cases-heading|dashboard-daily-work-heading|Ügyek, ahol lépés szükséges|Mai munkám/);
 });
 
 test("dashboard communications aggregate by client and scope the canonical workspace", () => {
     assert.match(source, /clientCommunicationSummaries/);
     assert.match(source, /communications\?clientId=/);
+    assert.match(source, /kommunikáció/);
+    assert.doesNotMatch(source, /summary\.count} új/);
     assert.doesNotMatch(source, /dashboardCommunications\.map/);
 });
 
