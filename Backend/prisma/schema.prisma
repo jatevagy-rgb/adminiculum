@@ -26,15 +26,17 @@ datasource db {
 // ============================================================================
 
 model User {
-  createdHourlyRateVersions HourlyRateVersion[]
-  id                        String              @id @default(uuid())
-  email                     String              @unique
-  passwordHash              String?
-  name                      String
-  role                      UserRole            @default(LEGAL_ASSISTANT)
-  status                    UserStatus          @default(ACTIVE)
-  department                String?
-  skills                    String[] // JSON array of skills
+  createdHourlyRateVersions  HourlyRateVersion[]
+  createdBillingPreparations BillingPreparation[] @relation("BillingPreparationCreatedBy")
+  closedBillingPreparations  BillingPreparation[] @relation("BillingPreparationClosedBy")
+  id                         String               @id @default(uuid())
+  email                      String               @unique
+  passwordHash               String?
+  name                       String
+  role                       UserRole             @default(LEGAL_ASSISTANT)
+  status                     UserStatus           @default(ACTIVE)
+  department                 String?
+  skills                     String[] // JSON array of skills
 
   isActive    Boolean   @default(true)
   lastLoginAt DateTime?
@@ -147,6 +149,7 @@ enum ClientColorKey {
 
 model Client {
   hourlyRateVersions        HourlyRateVersion[]
+  billingPreparations       BillingPreparation[]
   id                        String                 @id @default(uuid())
   name                      String
   email                     String?
@@ -833,6 +836,102 @@ model HourlyRateVersion {
   @@map("hourly_rate_versions")
 }
 
+enum BillingPreparationStatus {
+  OPEN
+  CLOSED
+}
+
+/// Persistent billing review workspace ("Számlázás előkészítése") for one client
+/// and one inclusive work-date period. It never mutates TimeEntries: items are
+/// captured snapshots plus billing-only adjustments. One OPEN preparation per
+/// client+period is enforced by a partial unique index in SQL.
+/// Not an invoice: no numbering, no issuance, no VAT computation.
+model BillingPreparation {
+  id                       String                   @id @default(uuid())
+  clientId                 String
+  periodStart              DateTime                 @db.Date
+  periodEnd                DateTime                 @db.Date
+  currency                 String                   @db.VarChar(3)
+  calculationPolicyVersion String                   @db.VarChar(64)
+  status                   BillingPreparationStatus @default(OPEN)
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  createdById              String
+  closedAt                 DateTime?
+  closedById               String?
+
+  client    Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User                     @relation("BillingPreparationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  closedBy  User?                    @relation("BillingPreparationClosedBy", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  items     BillingPreparationItem[]
+
+  @@index([clientId, periodStart, periodEnd])
+  @@map("billing_preparations")
+}
+
+/// One reviewed row of a preparation. Source facts are captured at snapshot time
+/// together with a deterministic fingerprint of every financially relevant
+/// source field and relation; divergence is surfaced as STALE, never silently
+/// overwritten. The source TimeEntry is deliberately referenced by plain id (no
+/// FK) so existing TimeEntry CRUD — including deletion — stays unchanged and is
+/// detected as a missing source instead of being blocked.
+model BillingPreparationItem {
+  id                String @id @default(uuid())
+  preparationId     String
+  sourceTimeEntryId String
+  sourceFingerprint String @db.VarChar(64)
+
+  // Captured source facts (never written back to the TimeEntry).
+  sourceWorkDate        DateTime @db.Date
+  sourceMinutes         Int
+  sourceBillable        Boolean
+  sourceDescription     String?  @db.Text
+  sourceWorkType        WorkType
+  workerId              String
+  workerName            String?
+  caseId                String?
+  caseNumber            String?
+  caseTitle             String?
+  taskId                String?
+  taskTitle             String?
+  requesterId           String?
+  requesterName         String?
+  requesterJobTitle     String?
+  organizationGroupId   String?
+  organizationGroupName String?
+  departmentId          String?
+  departmentName        String?
+  attributionKind       String   @db.VarChar(20)
+
+  // Captured rate at snapshot time (T3A resolver output).
+  rateVersionId String?
+  rateScope     String?  @db.VarChar(20)
+  hourlyRate    Decimal? @db.Decimal(19, 4)
+  rateCurrency  String?  @db.VarChar(3)
+
+  // Billing-only adjustments — never mutate the source TimeEntry.
+  included           Boolean   @default(false)
+  billingMinutes     Int
+  invoiceDescription String?   @db.Text
+  rateOverride       Decimal?  @db.Decimal(19, 4)
+  rateOverrideReason String?   @db.Text
+  rateOverrideById   String?
+  rateOverrideAt     DateTime?
+  adjustmentReason   String?   @db.Text
+  reviewedAt         DateTime?
+  reviewedById       String?
+  netAmount          Decimal?  @db.Decimal(19, 2)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  updatedById        String?
+
+  preparation BillingPreparation @relation(fields: [preparationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([preparationId, sourceTimeEntryId])
+  @@index([sourceTimeEntryId])
+  @@map("billing_preparation_items")
+}
+
 /// Non-user participants captured at intake: client contacts, opposing party and
 /// other externals. A participant is never just a name — the role is required and
 /// persisted, and `side` makes the adversarial position explicit.
@@ -1112,20 +1211,20 @@ enum DocumentCategory {
 // ============================================================================
 
 model DocumentVersion {
-  id                String                           @id @default(uuid())
-  version           Int
-  securityScanStatus DocumentSecurityScanStatus     @default(CLEAN)
-  name              String
-  description       String?
-  originalFileName  String?
-  mimeType          String?
-  size              Int?
-  storageReference  String?
-  isCurrent         Boolean                          @default(false) @map("currentVersion")
-  reviewStatus      DocumentVersionReviewStatus      @default(NOT_IN_REVIEW)
-  publicationStatus DocumentVersionPublicationStatus @default(INTERNAL_ONLY)
-  uploadSource      DocumentVersionUploadSource      @default(LAWYER_UPLOAD)
-  versionType       DocumentVersionType              @default(WORKING_COPY)
+  id                 String                           @id @default(uuid())
+  version            Int
+  securityScanStatus DocumentSecurityScanStatus       @default(CLEAN)
+  name               String
+  description        String?
+  originalFileName   String?
+  mimeType           String?
+  size               Int?
+  storageReference   String?
+  isCurrent          Boolean                          @default(false) @map("currentVersion")
+  reviewStatus       DocumentVersionReviewStatus      @default(NOT_IN_REVIEW)
+  publicationStatus  DocumentVersionPublicationStatus @default(INTERNAL_ONLY)
+  uploadSource       DocumentVersionUploadSource      @default(LAWYER_UPLOAD)
+  versionType        DocumentVersionType              @default(WORKING_COPY)
 
   // SharePoint Version Info
   spVersionLabel String? // e.g., "1.0", "2.0"
@@ -1596,15 +1695,15 @@ model Task {
   priority    Priority   @default(MEDIUM)
 
   // Assignment
-  assignedToId   String?
-  assignedTo     User?    @relation("AssignedTo", fields: [assignedToId], references: [id])
-  assignedById   String? // Who assigned this task
-  assignedBy     User?    @relation("AssignedBy", fields: [assignedById], references: [id])
+  assignedToId                    String?
+  assignedTo                      User?               @relation("AssignedTo", fields: [assignedToId], references: [id])
+  assignedById                    String? // Who assigned this task
+  assignedBy                      User?               @relation("AssignedBy", fields: [assignedById], references: [id])
   requestedByOrganizationPersonId String?
   requestedByOrganizationPerson   OrganizationPerson? @relation("TaskRequestedByOrganizationPerson", fields: [requestedByOrganizationPersonId], references: [id], onDelete: SetNull)
-  skillMatch     Float? // Score of skill matching (0-1)
-  skillProfile   Json? // Required skills profile
-  requiredSkills String[] // Required skills for this task
+  skillMatch                      Float? // Score of skill matching (0-1)
+  skillProfile                    Json? // Required skills profile
+  requiredSkills                  String[] // Required skills for this task
 
   // Document reference (if task is related to a document)
   documentId String?

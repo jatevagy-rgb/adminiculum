@@ -251,9 +251,11 @@ import timeAttributionRoutes from './modules/time-attribution/routes';
 app.use('/api/v1/time-attribution', timeAttributionRoutes);
 
 import billingPreparationRoutes from './modules/billing-preparation/routes';
+import billingPreparationsRoutes from './modules/billing-preparations/routes';
 import hourlyRateRoutes from './modules/hourly-rates/routes';
 app.use('/api/v1/hourly-rates', hourlyRateRoutes);
 app.use('/api/v1/billing-preparation', billingPreparationRoutes);
+app.use('/api/v1/billing-preparations', billingPreparationsRoutes);
 
 import clientSafeComplianceRoutes from './modules/compliance/clientSafeComplianceRoutes';
 app.use('/api/v1/client-portal/compliance', clientSafeComplianceRoutes);
