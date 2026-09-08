@@ -13,9 +13,7 @@ test('client directory cards keep a quick-scan information hierarchy', () => {
     assert.equal(card.includes(hiddenLabel), false, `${hiddenLabel} must remain inside the dossier/form, not the primary card`);
   }
   assert.match(card, /Ügyfél dosszié/);
-  assert.match(card, /További műveletek/);
-  assert.match(card, /#house-style/);
-  assert.match(card, /handleEdit\(client\)/);
+  assert.doesNotMatch(card, /További műveletek|#house-style|handleEdit\(client\)/);
   assert.match(card, /border-2/);
   assert.match(card, /color\.borderClass/);
   assert.match(card, /\+ Új ügy/);
@@ -42,11 +40,11 @@ test('directory does not introduce backend or client-data cleanup behavior', () 
   assert.equal(source.includes('Backend/'), false);
 });
 
-test('directory visual polish preserves disclosure stacking and accessible compact actions', () => {
-  assert.match(card, /has-\[details\[open\]\]:z-20/);
+test('directory visual polish keeps compact accessible cards', () => {
+  assert.match(card, /border-2/);
   assert.doesNotMatch(card, /adm-board-list-row|shadow-lg/);
   assert.match(card, /\[overflow-wrap:anywhere\]/);
-  assert.match(card, /<details className="relative ml-auto w-full sm:w-auto"/);
+  assert.doesNotMatch(card, /<details/);
   assert.match(card, /min-h-11/);
   assert.match(card, /focus-visible:outline-2/);
   assert.match(source, /grid gap-3 xl:grid-cols-2/);
