@@ -111,7 +111,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
   try {
     const {
       caseId, title, description, priority,
-      assignedTo, requiredSkills, dueDate, documentId
+      assignedTo, requiredSkills, dueDate, documentId, requestedByOrganizationPersonId
     } = req.body;
     const rawType = req.body?.type ?? req.body?.taskType;
     
@@ -165,6 +165,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       documentId,
       attentionCategory: attentionInput.attentionCategory,
       estimatedMinutes: attentionInput.estimatedMinutes,
+      requestedByOrganizationPersonId,
     });
 
     res.status(201).json(task);

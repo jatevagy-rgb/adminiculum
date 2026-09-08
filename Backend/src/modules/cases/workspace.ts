@@ -91,6 +91,7 @@ export interface CaseWorkspaceDto {
     documentId: string | null;
     workflowStepKey: string | null;
     blockedPredecessors: { total: number; done: number } | null;
+    requestedByOrganizationPerson: { id: string; name: string; jobTitle: string | null; organizationGroupId: string | null; organizationGroupName: string | null; employmentStatus: string } | null;
   }>;
   documents: Array<{
     id: string;
@@ -206,6 +207,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
           workflowStepKey: true, workflowDependsOnKeys: true, workflowInstanceId: true,
           assignedTo: { select: { id: true, name: true } },
           assignedBy: { select: { id: true, name: true } },
+          requestedByOrganizationPerson: { select: { id: true, name: true, jobTitle: true, organizationGroupId: true, employmentStatus: true, organizationGroup: { select: { name: true } } } },
         },
         orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
         take: 200,
@@ -339,6 +341,14 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
       dueDate: iso(t.dueDate),
       assignee: t.assignedTo ? { id: t.assignedTo.id, name: t.assignedTo.name } : null,
       documentId: t.documentId ?? null,
+      requestedByOrganizationPerson: t.requestedByOrganizationPerson ? {
+        id: t.requestedByOrganizationPerson.id,
+        name: t.requestedByOrganizationPerson.name,
+        jobTitle: t.requestedByOrganizationPerson.jobTitle ?? null,
+        organizationGroupId: t.requestedByOrganizationPerson.organizationGroupId ?? null,
+        organizationGroupName: t.requestedByOrganizationPerson.organizationGroup?.name ?? null,
+        employmentStatus: String(t.requestedByOrganizationPerson.employmentStatus),
+      } : null,
       workflowStepKey: (t as any).workflowStepKey ?? null,
       blockedPredecessors,
     };

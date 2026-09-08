@@ -124,7 +124,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
               select: { id: true, caseNumber: true, title: true, clientId: true }
             },
             task: {
-              select: { id: true, title: true, status: true, caseId: true, matterId: true, workPackageItem: { select: { caseWorkPackage: { select: { caseId: true } } } } }
+              select: { id: true, title: true, status: true, caseId: true, matterId: true, workPackageItem: { select: { caseWorkPackage: { select: { caseId: true } } } }, requestedByOrganizationPerson: { select: { id: true, name: true, jobTitle: true, organizationGroup: { select: { id: true, name: true } } } } }
             }
           },
           orderBy: { workDate: 'desc' }
@@ -155,7 +155,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
             select: { id: true, caseNumber: true, title: true, clientId: true }
           },
           task: {
-            select: { id: true, title: true, status: true, caseId: true, matterId: true }
+            select: { id: true, title: true, status: true, caseId: true, matterId: true, requestedByOrganizationPerson: { select: { id: true, name: true, jobTitle: true, organizationGroup: { select: { id: true, name: true } } } } }
           }
         },
         orderBy: { workDate: 'desc' }
@@ -195,7 +195,18 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
         return resolved.resolvedCaseId === requestedCaseId && (resolved.attributionKind === 'EXACT_CASE' || resolved.attributionKind === 'TASK_DERIVED_CASE');
       });
     }
-    const response = entries.map((entry: any) => ({ ...entry, ...resolveTimeEntryAttribution(entry) }));
+    const response = entries.map((entry: any) => ({
+      ...entry,
+      requester: entry.task?.requestedByOrganizationPerson
+        ? {
+            id: entry.task.requestedByOrganizationPerson.id,
+            name: entry.task.requestedByOrganizationPerson.name,
+            jobTitle: entry.task.requestedByOrganizationPerson.jobTitle ?? null,
+            organizationGroup: entry.task.requestedByOrganizationPerson.organizationGroup ?? null,
+          }
+        : null,
+      ...resolveTimeEntryAttribution(entry),
+    }));
     res.json(response);
   } catch (error) {
     console.error('Error fetching time entries:', error);
