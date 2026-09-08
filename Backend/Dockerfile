@@ -15,6 +15,7 @@ RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY prisma/ prisma/
 COPY src/ src/
+COPY scripts/ scripts/
 
 # Generate Prisma client (native binaries needed at build time)
 RUN npx prisma generate
