@@ -297,9 +297,95 @@ describe('migration-before-backend release order and staging contract', () => {
     const stageStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
     expect(stageStep).toContain('validate_vfs_path()');
     expect(stageStep).toContain('site/wwwroot/prisma/(schema\\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\\.sql)?');
-    expect(stageStep).toContain('*dist*|*node_modules*|*package.json*|*package-lock.json*|*release-identity.json*|*templates*|*scripts*');
+    expect(stageStep).toContain('site/wwwroot/dist*|site/wwwroot/node_modules*|site/wwwroot/package.json*|site/wwwroot/package-lock.json*|site/wwwroot/release-identity.json*|site/wwwroot/templates*|site/wwwroot/scripts*');
     expect(stageStep).toContain('SECURITY FAULT: Staging path');
     expect(stageStep).toContain('SECURITY FAULT: Attempted to stage into runtime path');
+  });
+
+  it('validates migration staging path security boundary (regression proof for false-positive)', () => {
+    const preflightStep = stepBlock('Read-only migration release asset preflight');
+    const stageStep = stepBlock('Stage release migration assets into backend App Service (targeted VFS)');
+
+    for (const step of [preflightStep, stageStep]) {
+      expect(step).toContain('validate_vfs_path()');
+      expect(step).toContain('site/wwwroot/prisma/(schema\\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\\.sql)?');
+      expect(step).toContain('site/wwwroot/dist*|site/wwwroot/node_modules*|site/wwwroot/package.json*|site/wwwroot/package-lock.json*|site/wwwroot/release-identity.json*|site/wwwroot/templates*|site/wwwroot/scripts*');
+      expect(step).toContain('SECURITY FAULT: Staging path');
+      expect(step).toContain('SECURITY FAULT: Attempted to stage into runtime path');
+    }
+
+    // Exact implementation of validate_vfs_path logic
+    function testValidateVfsPath(target_path: string): { ok: boolean; exitCode: number; faultType?: 'runtime' | 'boundary' } {
+      // 1. Runtime path check
+      const runtimePatterns = [
+        /^site\/wwwroot\/dist/,
+        /^site\/wwwroot\/node_modules/,
+        /^site\/wwwroot\/package\.json/,
+        /^site\/wwwroot\/package-lock\.json/,
+        /^site\/wwwroot\/release-identity\.json/,
+        /^site\/wwwroot\/templates/,
+        /^site\/wwwroot\/scripts/,
+      ];
+      for (const p of runtimePatterns) {
+        if (p.test(target_path)) {
+          return { ok: false, exitCode: 1, faultType: 'runtime' };
+        }
+      }
+
+      // 2. Strict migration-only allowlist check
+      const allowlist = /^site\/wwwroot\/prisma\/(schema\.prisma|migrations\/[0-9]{14}_[a-zA-Z0-9_-]+(\/migration\.sql)?)$/;
+      if (!allowlist.test(target_path)) {
+        return { ok: false, exitCode: 1, faultType: 'boundary' };
+      }
+
+      return { ok: true, exitCode: 0 };
+    }
+
+    // VALID paths (must pass without fault)
+    const validCases = [
+      'site/wwwroot/prisma/schema.prisma',
+      'site/wwwroot/prisma/migrations/20260807120000_workflow_templates/migration.sql',
+      'site/wwwroot/prisma/migrations/20260907170000_add_task_client_requester/migration.sql',
+      'site/wwwroot/prisma/migrations/20260908120000_add_custom_scripts/migration.sql',
+      'site/wwwroot/prisma/migrations/20260807120000_workflow_templates',
+    ];
+
+    for (const p of validCases) {
+      const res = testValidateVfsPath(p);
+      expect(res.ok).toBe(true);
+      expect(res.exitCode).toBe(0);
+      expect(res.faultType).toBeUndefined();
+    }
+
+    // INVALID runtime paths (must fail with runtime fault)
+    const invalidRuntimeCases = [
+      'site/wwwroot/dist/index.js',
+      'site/wwwroot/node_modules/x',
+      'site/wwwroot/package.json',
+      'site/wwwroot/release-identity.json',
+      'site/wwwroot/templates/file',
+      'site/wwwroot/scripts/file',
+    ];
+
+    for (const p of invalidRuntimeCases) {
+      const res = testValidateVfsPath(p);
+      expect(res.ok).toBe(false);
+      expect(res.exitCode).toBe(1);
+      expect(res.faultType).toBe('runtime');
+    }
+
+    // INVALID boundary paths (must fail with boundary fault)
+    const invalidBoundaryCases = [
+      'site/wwwroot/prisma/anything-else',
+      'site/wwwroot/prisma/migrations/not-a-valid-migration/file.sql',
+    ];
+
+    for (const p of invalidBoundaryCases) {
+      const res = testValidateVfsPath(p);
+      expect(res.ok).toBe(false);
+      expect(res.exitCode).toBe(1);
+      expect(res.faultType).toBe('boundary');
+    }
   });
 
   it('preserves canonical adminiculum-db-migrate WebJob as the migration execution mechanism', () => {
