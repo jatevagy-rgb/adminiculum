@@ -4415,7 +4415,7 @@ export async function getTimeEntryById(id: string): Promise<TimeEntry> {
 }
 
 export interface CreateTimeEntryData {
-  matterId: string;
+  matterId?: string;
   workType: string;
   description: string;
   minutes: number;
@@ -5750,6 +5750,7 @@ export type CaseCreationOption = {
   } | null;
 };
 export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[] }>('/work-package-admin/case-types/creation-options'); }
+export async function createUsableCaseType(name: string) { return fetchApi<CaseCreationOption>('/work-package-admin/case-types/usable', { method: 'POST', body: JSON.stringify({ name }) }); }
 
 export interface CaseWorkPackageOperationalItem {
   id: string;
