@@ -63,7 +63,7 @@ import { DocumentWorkspaceHeader } from "@/components/documents/workContext/Docu
 import { DocumentWorkspaceTabs } from "@/components/documents/workContext/DocumentWorkspaceTabs";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
-import { ClientPublicationPanel } from "@/components/documents/publication/ClientPublicationPanel";
+import { ClientPublicationPanel, type ClientPublicationPrefillDraft } from "@/components/documents/publication/ClientPublicationPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import { useUiPack } from "@/lib/uiPack";
 
@@ -335,6 +335,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [showHouseStylePanel, setShowHouseStylePanel] = useState(false);
   const versionFileInputRef = useRef<HTMLInputElement | null>(null);
   const annotationSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const detailedAnnotationSurfaceRef = useRef<HTMLDivElement | null>(null);
   const visualAnchorStartRef = useRef<{ x: number; y: number } | null>(null);
   const [annotations, setAnnotations] = useState<DocumentAnnotationItem[]>([]);
   // Which document version the loaded `annotations` actually belong to. Annotations
@@ -377,6 +378,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   } | null>(null);
   const [visualMode, setVisualMode] = useState<Extract<DocumentAnnotationAnchorType, 'PAGE_RECTANGLE' | 'PAGE_ELLIPSE' | 'PAGE_POINT'> | null>(null);
   const [contextualTab, setContextualTab] = useState<'review' | 'elemzes' | 'ugyfel' | 'leadas'>('review');
+  const [visitedContextualTabs, setVisitedContextualTabs] = useState<Record<string, boolean>>({ review: true });
+  const [publicationPrefill, setPublicationPrefill] = useState<ClientPublicationPrefillDraft | null>(null);
+
+  useEffect(() => {
+    setVisitedContextualTabs((prev) => (prev[contextualTab] ? prev : { ...prev, [contextualTab]: true }));
+  }, [contextualTab]);
   const [annotationDraft, setAnnotationDraft] = useState({
     annotationType: 'INTERNAL_NOTE' as DocumentAnnotationType,
     headline: '',
@@ -1371,11 +1378,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     };
   }, [selectedUploadedDocument?.id, selectedVersion?.id, selectedAnnotationId, annotations, annotationsVersionId]);
 
-  const handleTextSelectionAnchor = () => {
-    if (!versionText || !annotationSurfaceRef.current) return;
+  const handleTextSelectionAnchor = (event?: React.MouseEvent<HTMLElement>) => {
+    if (!versionText) return;
     const selection = globalThis.getSelection?.();
     const selectedText = selection?.toString().trim() || '';
-    if (!selectedText || !annotationSurfaceRef.current.contains(selection?.anchorNode || null)) return;
+    if (!selectedText) return;
+    const anchorNode = selection?.anchorNode || null;
+    const currentTarget = (event?.currentTarget as HTMLElement | null) || null;
+    const isContained =
+      Boolean(currentTarget?.contains(anchorNode)) ||
+      Boolean(annotationSurfaceRef.current?.contains(anchorNode)) ||
+      Boolean(detailedAnnotationSurfaceRef.current?.contains(anchorNode));
+    if (!isContained) return;
     const startOffset = versionText.indexOf(selectedText);
     const endOffset = startOffset >= 0 ? startOffset + selectedText.length : null;
     setPendingTextAnchor({
@@ -1435,6 +1449,24 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       reviewComment: '',
       clientExplanationDraft: '',
     });
+  };
+
+  useEffect(() => {
+    setVisitedContextualTabs({ [contextualTab]: true });
+    resetAnnotationDraft();
+    setPublicationPrefill(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUploadedDocument?.id]);
+
+  const handlePreparePublicationFromAnnotation = (annotation: DocumentAnnotationItem) => {
+    const title = annotation.headline?.trim() || activeTitle || 'Ügyfélnek megosztható dokumentum';
+    const explanation = annotation.clientExplanationDraft?.trim() || '';
+    setPublicationPrefill({
+      key: `${annotation.id}:${Date.now()}`,
+      title,
+      explanation,
+    });
+    setContextualTab('ugyfel');
   };
 
   const handleCreateAnnotation = async () => {
@@ -1780,7 +1812,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
                               </div>
                             ) : (
-                              <div className="max-h-[680px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
+                              <div
+                                ref={annotationSurfaceRef}
+                                onMouseUp={annotationCapabilities.canCreateTextRange ? handleTextSelectionAnchor : undefined}
+                                className="max-h-[680px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]"
+                              >
                                 {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
                               </div>
                             )
@@ -1869,133 +1905,270 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </div>
                     </div>
 
-                    <div className="flex-1 p-4">
-                      {contextualTab === 'review' && (
-                        <div className="space-y-4">
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
-                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
-                              {isReviewLoading
-                                ? "Verzióadatok betöltése..."
-                                : canonicalActiveVersion?.reviewStatus || (selectedUploadedDocument ? "Nincs felülvizsgálati állapot" : "Nincs aktív review")}
-                            </h4>
+                    <div className="flex-1 max-h-[720px] overflow-y-auto p-4">
+                      <div className={contextualTab === 'review' ? 'space-y-4' : 'hidden'}>
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
+                          <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                            {isReviewLoading
+                              ? "Verzióadatok betöltése..."
+                              : canonicalActiveVersion?.reviewStatus || (selectedUploadedDocument ? "Nincs felülvizsgálati állapot" : "Nincs aktív review")}
+                          </h4>
+                        </div>
+                        {isReviewLoading ? (
+                          <div className="rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                            <p className="text-[11px] text-[var(--adm-text-muted)]">Verzió- és felülvizsgálati adatok betöltése folyamatban...</p>
                           </div>
-                          {isReviewLoading ? (
-                            <div className="rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                              <p className="text-[11px] text-[var(--adm-text-muted)]">Verzió- és felülvizsgálati adatok betöltése folyamatban...</p>
+                        ) : (
+                          <div className="space-y-1.5 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                            <p><b>Nyitott jelölések:</b> {isAnnotationCountAuthoritative ? `${openAnnotationCount} db` : isLoadingAnnotations ? "Betöltés..." : "—"}</p>
+                            <p><b>Összes annotáció:</b> {isAnnotationCountAuthoritative ? `${annotations.length} db` : isLoadingAnnotations ? "Betöltés..." : "—"}</p>
+                            <p><b>Kiválasztott verzió:</b> {canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
+                            <p><b>Feltöltő:</b> {canonicalActiveVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
+                          </div>
+                        )}
+
+                        {/* In-Panel Annotation Composer */}
+                        {selectedUploadedDocument && canonicalActiveVersion ? (
+                          <div className="space-y-2.5 rounded-[10px] border border-[#E7DECB] bg-[var(--adm-surface)] p-3">
+                            <p className="text-xs font-bold text-[var(--adm-green-800)]">
+                              {pendingTextAnchor ? 'Szövegkijelölés aktív' : pendingVisualAnchor ? 'Vizuális horgony aktív' : 'Új annotáció / megjegyzés'}
+                            </p>
+                            {pendingTextAnchor ? (
+                              <p className="line-clamp-2 text-xs italic text-[#3D4842]">“{pendingTextAnchor.selectedText}”</p>
+                            ) : (
+                              <p className="text-[11px] text-[var(--adm-text-muted)]">Jelölj ki szöveget a középső olvasófelületen az annotáció rögzítéséhez.</p>
+                            )}
+                            <div className="space-y-2">
+                              <select
+                                value={annotationDraft.annotationType}
+                                onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, annotationType: event.target.value as DocumentAnnotationType }))}
+                                className="w-full rounded border border-[rgba(22,32,26,0.16)] bg-white px-2.5 py-1.5 text-xs"
+                              >
+                                {TEXT_ANNOTATION_TYPES.map((type) => <option key={type} value={type}>{ANNOTATION_TYPE_LABELS[type]}</option>)}
+                              </select>
+                              <input
+                                value={annotationDraft.headline}
+                                onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, headline: event.target.value }))}
+                                placeholder="Rövid cím / téma"
+                                className="w-full rounded border border-[rgba(22,32,26,0.16)] px-2.5 py-1.5 text-xs"
+                              />
+                              <textarea
+                                value={annotationDraft.internalNote}
+                                onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, internalNote: event.target.value }))}
+                                placeholder="Belső megjegyzés"
+                                rows={2}
+                                className="w-full rounded border border-[rgba(22,32,26,0.16)] px-2.5 py-1.5 text-xs"
+                              />
+                              <textarea
+                                value={annotationDraft.reviewComment}
+                                onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, reviewComment: event.target.value }))}
+                                placeholder="Review komment"
+                                rows={2}
+                                className="w-full rounded border border-[rgba(22,32,26,0.16)] px-2.5 py-1.5 text-xs"
+                              />
+                              {isClientExplanationDraft(annotationDraft.annotationType) ? (
+                                <div className="flex min-w-0 flex-col gap-1">
+                                  <span className="flex min-w-0 flex-wrap items-center justify-between gap-2">
+                                    <label htmlFor="canonical-ann-client-draft" className="min-w-0 break-words text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">
+                                      Ügyfélnek szánt magyarázat
+                                    </label>
+                                    <NotPublishedBadge />
+                                  </span>
+                                  <textarea
+                                    id="canonical-ann-client-draft"
+                                    value={annotationDraft.clientExplanationDraft}
+                                    onChange={(event) => setAnnotationDraft((draft) => ({ ...draft, clientExplanationDraft: event.target.value }))}
+                                    placeholder="Ügyfélnek szánt magyarázat-tervezet (csak explicit publikációval válik láthatóvá)"
+                                    rows={2}
+                                    className="w-full rounded border border-[rgba(22,32,26,0.16)] px-2.5 py-1.5 text-xs"
+                                  />
+                                </div>
+                              ) : null}
+                              <AdminButton
+                                className="w-full"
+                                variant="primary"
+                                onClick={handleCreateAnnotation}
+                                disabled={!selectedUploadedDocument || !canonicalActiveVersion || isCreatingAnnotation || (!pendingTextAnchor && !pendingVisualAnchor)}
+                              >
+                                {isCreatingAnnotation ? 'Mentés...' : 'Annotáció rögzítése'}
+                              </AdminButton>
                             </div>
+                          </div>
+                        ) : null}
+
+                        {/* In-Panel Annotations List */}
+                        <div className="space-y-2">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Verzió annotációk ({annotations.length})</p>
+                          {isLoadingAnnotations ? (
+                            <p className="text-xs text-[var(--adm-text-muted)]">Annotációk betöltése...</p>
+                          ) : annotations.length === 0 ? (
+                            <p className="rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Még nincs annotáció ezen a verzión.</p>
                           ) : (
-                            <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                              <p><b>Nyitott jelölések:</b> {isAnnotationCountAuthoritative ? `${openAnnotationCount} db` : isLoadingAnnotations ? "Betöltés..." : "—"}</p>
-                              <p><b>Összes annotáció:</b> {isAnnotationCountAuthoritative ? `${annotations.length} db` : isLoadingAnnotations ? "Betöltés..." : "—"}</p>
-                              <p><b>Kiválasztott verzió:</b> {canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
-                              <p><b>Feltöltő:</b> {canonicalActiveVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
+                            <div className="max-h-[220px] space-y-1.5 overflow-y-auto">
+                              {annotations.map((annotation) => (
+                                <button
+                                  key={annotation.id}
+                                  type="button"
+                                  onClick={() => setSelectedAnnotationId(annotation.id)}
+                                  className={`w-full rounded-[8px] border p-2 text-left transition ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.10)] bg-white hover:bg-[var(--adm-surface)]'}`}
+                                >
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="text-[11px] font-bold text-[var(--adm-green-800)]">{ANNOTATION_TYPE_LABELS[annotation.annotationType]}</span>
+                                    <div className="flex items-center gap-1">
+                                      {isClientExplanationDraft(annotation.annotationType) ? <NotPublishedBadge /> : null}
+                                      <AdminBadge tone={annotation.status === 'RESOLVED' ? 'green' : 'gold'}>{annotation.status}</AdminBadge>
+                                    </div>
+                                  </div>
+                                  <p className="mt-1 line-clamp-1 text-xs font-semibold text-[var(--adm-text)]">{annotation.headline || annotation.selectedText || 'Annotáció'}</p>
+                                  <p className="text-[10px] text-[var(--adm-text-muted)]">{annotation.createdBy?.name || 'Ismeretlen'} · {formatDateTime(annotation.createdAt)}</p>
+                                </button>
+                              ))}
                             </div>
                           )}
-                          <div className="space-y-2">
-                            <AdminButton
-                              className="w-full justify-start"
-                              variant="primary"
-                              disabled={!selectedUploadedDocument || !canonicalActiveVersion}
-                              onClick={() => {
-                                const el = document.getElementById('document-review');
-                                if (el) el.scrollIntoView({ behavior: 'smooth' });
-                              }}
-                            >
-                              Részletes review folyamat ↓
-                            </AdminButton>
-                            <AdminButton
-                              className="w-full justify-start"
-                              variant="neutral"
-                              disabled={!selectedUploadedDocument || !canonicalActiveVersion}
-                              onClick={() => {
-                                const el = document.getElementById('document-changes');
-                                if (el) el.scrollIntoView({ behavior: 'smooth' });
-                              }}
-                            >
-                              Annotációk és jelölések ↓
-                            </AdminButton>
-                          </div>
                         </div>
-                      )}
 
-                      {contextualTab === 'elemzes' && (
-                        <div className="space-y-4">
+                        {/* Selected Annotation Details */}
+                        {selectedAnnotation && (
+                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <h5 className="font-serif text-sm font-semibold text-[var(--adm-text)]">{selectedAnnotation.headline || ANNOTATION_TYPE_LABELS[selectedAnnotation.annotationType]}</h5>
+                              <div className="flex items-center gap-1.5">
+                                {isClientExplanationDraft(selectedAnnotation.annotationType) ? <NotPublishedBadge /> : null}
+                                <AdminBadge tone={selectedAnnotation.status === 'RESOLVED' ? 'green' : 'gold'}>{selectedAnnotation.status}</AdminBadge>
+                              </div>
+                            </div>
+                            {selectedAnnotation.selectedText ? <p className="rounded bg-white p-2 text-xs italic text-[#3D4842]">“{selectedAnnotation.selectedText}”</p> : null}
+                            {selectedAnnotation.internalNote ? <p className="text-xs"><b>Belső:</b> {selectedAnnotation.internalNote}</p> : null}
+                            {selectedAnnotation.reviewComment ? <p className="text-xs"><b>Review:</b> {selectedAnnotation.reviewComment}</p> : null}
+                            {selectedAnnotation.clientExplanationDraft ? <p className="text-xs"><b>Ügyfél magyarázat:</b> {selectedAnnotation.clientExplanationDraft}</p> : null}
+                            <div className="flex flex-wrap gap-2 pt-1">
+                              {isClientExplanationDraft(selectedAnnotation.annotationType) ? (
+                                <AdminButton size="sm" variant="primary" onClick={() => handlePreparePublicationFromAnnotation(selectedAnnotation)}>
+                                  Közzététel előkészítése
+                                </AdminButton>
+                              ) : null}
+                              {selectedAnnotation.status === 'RESOLVED' ? (
+                                <AdminButton size="sm" variant="gold" onClick={() => handleReopenAnnotation(selectedAnnotation)}>Újranyitás</AdminButton>
+                              ) : (
+                                <AdminButton size="sm" variant="gold" onClick={() => handleResolveAnnotation(selectedAnnotation)}>Megoldva</AdminButton>
+                              )}
+                              <AdminButton size="sm" variant="muted" onClick={() => handleDeleteAnnotation(selectedAnnotation)}>Törlés</AdminButton>
+                            </div>
+                            <div className="space-y-1.5 border-t border-[rgba(22,32,26,0.08)] pt-2">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kommentek</p>
+                              {annotationComments.map((comment) => (
+                                <p key={comment.id} className="rounded bg-white p-1.5 text-xs text-[#3D4842]">{comment.body}</p>
+                              ))}
+                              <div className="flex gap-1">
+                                <input
+                                  value={commentDraft}
+                                  onChange={(event) => setCommentDraft(event.target.value)}
+                                  placeholder="Komment írása..."
+                                  className="flex-1 rounded border border-[rgba(22,32,26,0.16)] px-2 py-1 text-xs"
+                                />
+                                <AdminButton size="sm" variant="primary" onClick={handleAddAnnotationComment} disabled={!commentDraft.trim()}>
+                                  Küldés
+                                </AdminButton>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {visitedContextualTabs['elemzes'] ? (
+                        <div className={contextualTab === 'elemzes' ? 'space-y-4' : 'hidden'}>
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Jogi elemzés</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
                               {activeTitle || "Nincs kiválasztott dokumentum"}
                             </h4>
                           </div>
-                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                            <p><b>Dokumentum:</b> {activeTitle || "Nincs kiválasztva"}</p>
-                            <p className="text-[11px] text-[var(--adm-text-muted)]">A részletes állapot az elemzési panelen látható.</p>
-                          </div>
-                          <AdminButton
-                            className="w-full justify-start"
-                            variant="primary"
-                            disabled={!selectedUploadedDocument || !canonicalActiveVersion}
-                            onClick={() => {
-                              const el = document.getElementById('document-legal-analysis');
-                              if (el) el.scrollIntoView({ behavior: 'smooth' });
-                            }}
-                          >
-                            Jogi elemzés megnyitása ↓
-                          </AdminButton>
+                          {selectedUploadedDocument && canonicalCaseId && canonicalActiveVersion ? (
+                            <LegalAnalysisIntakePanel
+                              key={selectedUploadedDocument.id}
+                              caseId={canonicalCaseId}
+                              documentId={selectedUploadedDocument.id}
+                              documentSourceType="DOCUMENT"
+                              documentTitle={activeTitle || undefined}
+                            />
+                          ) : (
+                            <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                              <p><b>Dokumentum:</b> {activeTitle || "Nincs kiválasztva"}</p>
+                              <p className="text-[11px] text-[var(--adm-text-muted)]">A részletes állapot az elemzési panelen látható.</p>
+                              <AdminButton
+                                className="w-full justify-start"
+                                variant="primary"
+                                disabled={!selectedUploadedDocument || !canonicalActiveVersion}
+                              >
+                                Jogi elemzés megnyitása
+                              </AdminButton>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ) : null}
 
-                      {contextualTab === 'ugyfel' && (
-                        <div className="space-y-4">
+                      {visitedContextualTabs['ugyfel'] ? (
+                        <div className={contextualTab === 'ugyfel' ? 'space-y-4' : 'hidden'}>
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélkapcsolat & Portál</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
                               {publicationStatusLabel}
                             </h4>
                           </div>
-                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                            <p><b>Ügyfél:</b> {caseRecord?.clientName || "Nincs megadva"}</p>
-                            <p><b>Portál állapot:</b> {publicationStatusLabel}</p>
-                          </div>
-                          <AdminButton
-                            className="w-full justify-start"
-                            variant="primary"
-                            disabled={!selectedUploadedDocument || !canonicalActiveVersion || !canonicalCaseId}
-                            onClick={() => {
-                              const el = document.getElementById('document-publication');
-                              if (el) el.scrollIntoView({ behavior: 'smooth' });
-                            }}
-                          >
-                            Portál publikáció panel ↓
-                          </AdminButton>
+                          {selectedUploadedDocument && canonicalCaseId && canonicalActiveVersion ? (
+                            <ClientPublicationPanel
+                              key={selectedUploadedDocument.id}
+                              caseId={canonicalCaseId}
+                              clientId={caseRecord?.clientId || null}
+                              documentId={selectedUploadedDocument.id}
+                              selectedVersionId={canonicalActiveVersion.id}
+                              versions={versions}
+                              viewMode="document-only"
+                              prefillDraft={publicationPrefill}
+                            />
+                          ) : (
+                            <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                              <p><b>Ügyfél:</b> {caseRecord?.clientName || "Nincs megadva"}</p>
+                              <p><b>Portál állapot:</b> {publicationStatusLabel}</p>
+                              <AdminButton
+                                className="w-full justify-start"
+                                variant="primary"
+                                disabled={!selectedUploadedDocument || !canonicalActiveVersion || !canonicalCaseId}
+                              >
+                                Portál publikáció panel
+                              </AdminButton>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ) : null}
 
-                      {contextualTab === 'leadas' && (
-                        <div className="space-y-4">
+                      {visitedContextualTabs['leadas'] ? (
+                        <div className={contextualTab === 'leadas' ? 'space-y-4' : 'hidden'}>
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadás</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
                               Leadási csomag
                             </h4>
                           </div>
-                          <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                            <p><b>Ügy státusz:</b> {caseRecord?.status || "Nincs megadva"}</p>
-                            <p className="text-[11px] text-[var(--adm-text-muted)]">A részletes leadási állapot a leadási csomag panelen látható.</p>
-                          </div>
-                          <AdminButton
-                            className="w-full justify-start"
-                            variant="primary"
-                            disabled={!caseRecord}
-                            onClick={() => {
-                              const el = document.getElementById('document-handoff');
-                              if (el) el.scrollIntoView({ behavior: 'smooth' });
-                            }}
-                          >
-                            Leadási csomag megnyitása ↓
-                          </AdminButton>
+                          {caseRecord ? (
+                            <HandoffPackagePanel
+                              key={`${caseRecord.id}-${selectedUploadedDocument?.id || 'none'}`}
+                              caseId={caseRecord.id}
+                              refreshKey={handoffPanelRefreshKey}
+                              sourceDocumentId={selectedUploadedDocument?.id || null}
+                              generatedContractId={!selectedUploadedDocument ? selectedGeneratedContract?.id || null : null}
+                              contextLabel={activeTitle || undefined}
+                              compact
+                            />
+                          ) : (
+                            <div className="space-y-2 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                              <p><b>Ügy státusz:</b> Nincs kiválasztott ügy</p>
+                              <p className="text-[11px] text-[var(--adm-text-muted)]">A leadási csomag panel csak érvényes ügykontextusban érhető el.</p>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </aside>
                 </div>
@@ -2087,14 +2260,24 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
 
                         <div id="document-legal-analysis" className="mt-4 scroll-mt-24">
-                          {selectedUploadedDocument && canonicalCaseId && selectedVersion ? (
-                            <LegalAnalysisIntakePanel
-                              caseId={canonicalCaseId}
-                              documentId={selectedUploadedDocument.id}
-                              documentSourceType="DOCUMENT"
-                              documentTitle={activeTitle || undefined}
-                            />
-                          ) : null}
+                          <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Jogi elemzés integráció</p>
+                                <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Kontextuális elemzési munkafelület</h4>
+                                <p className="mt-1 text-sm text-[#3D4842]">
+                                  A jogi elemzés beillesztése és szerkesztése közvetlenül a fenti jobb oldali kontextus panelen („Elemzés” fül) érhető el. A felület szándékosan egyetlen aktív szerkesztőt tart fenn.
+                                </p>
+                              </div>
+                              <AdminButton
+                                variant="primary"
+                                onClick={() => setContextualTab('elemzes')}
+                                disabled={!selectedUploadedDocument || !canonicalActiveVersion}
+                              >
+                                Megnyitás az Elemzés fülön
+                              </AdminButton>
+                            </div>
+                          </div>
                         </div>
 
                         {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
@@ -2178,57 +2361,105 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </div>
                             )}
 
-                            {selectedUploadedDocument && versions.length > 0 ? (
                             <div id="document-review" className="mt-4 scroll-mt-24">
-                              <DocumentReviewWorkflowPanel
-                                  documentId={selectedUploadedDocument.id}
-                                  selectedVersionId={selectedVersion?.id || null}
-                                  versions={versions}
-                                />
+                              <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                  <div>
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Belső felülvizsgálat</p>
+                                    <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Review munkafolyamat</h4>
+                                    <p className="mt-1 text-sm text-[#3D4842]">
+                                      A felülvizsgálati állapot és az annotációk kezelése közvetlenül a fenti jobb oldali kontextus panelen („Review” fül) érhető el.
+                                    </p>
+                                  </div>
+                                  <AdminButton
+                                    variant="primary"
+                                    onClick={() => setContextualTab('review')}
+                                    disabled={!selectedUploadedDocument || !canonicalActiveVersion}
+                                  >
+                                    Megnyitás a Review fülön
+                                  </AdminButton>
+                                </div>
                               </div>
-                            ) : null}
+                              {selectedUploadedDocument && versions.length > 0 ? (
+                                <details className="mt-3 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-3">
+                                  <summary className="cursor-pointer text-xs font-semibold text-[var(--adm-text)]">Részletes review döntések és pontok</summary>
+                                  <div className="mt-3">
+                                    <DocumentReviewWorkflowPanel
+                                      documentId={selectedUploadedDocument.id}
+                                      selectedVersionId={selectedVersion?.id || null}
+                                      versions={versions}
+                                    />
+                                  </div>
+                                </details>
+                              ) : null}
+                            </div>
 
                             <div id="document-publication" className="mt-4 scroll-mt-24">
-                              {selectedUploadedDocument && canonicalCaseId ? (
+                              {canonicalCaseId ? (
                                 <ClientPublicationPanel
                                   caseId={canonicalCaseId}
                                   clientId={caseRecord?.clientId || null}
-                                  documentId={selectedUploadedDocument.id}
-                                  selectedVersionId={selectedVersion?.id || null}
+                                  documentId={undefined}
+                                  selectedVersionId={null}
                                   versions={versions}
+                                  viewMode="case-only"
                                 />
                               ) : null}
                             </div>
 
                             {selectedVersion ? (
-                              <div id="document-changes" className="mt-4 scroll-mt-24 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
-                                <div className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
-                                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="min-w-0">
-                                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Anchored annotations · v{selectedVersion.versionNumber}</p>
-                                      <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Read-only review surface</h4>
-                                      <p className="mt-1 text-xs text-[#3D4842]">
-                                        Az annotációk ehhez az immutable verzióhoz kötődnek. Nincs szerkesztés, nincs automatikus migráció verziók között.
+                              <div id="document-changes" className="mt-4 scroll-mt-24">
+                                <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div>
+                                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Változáskövetés & Annotációk</p>
+                                      <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Szövegannotációs felület</h4>
+                                      <p className="mt-1 text-sm text-[#3D4842]">
+                                        Az annotációk és megjegyzések rögzítése közvetlenül a fenti kanonikus olvasófelületen és a jobb oldali Review panelen történik.
                                       </p>
                                     </div>
-                                    <AnnotationCapabilityToolbar
-                                      capabilities={annotationCapabilities}
-                                      visualMode={visualMode}
-                                      onVisualModeChange={setVisualMode}
-                                    />
+                                    <AdminButton
+                                      variant="neutral"
+                                      onClick={() => setContextualTab('review')}
+                                      disabled={!selectedUploadedDocument || !canonicalActiveVersion}
+                                    >
+                                      Ugrás a Review felületre
+                                    </AdminButton>
                                   </div>
+                                </div>
 
-                                  {annotationError ? (
-                                    <p className="mt-3 rounded-[10px] border border-[#F2DAD6] bg-[var(--adm-terracotta-100)] p-3 text-xs font-semibold text-[var(--adm-terracotta-700)]">{annotationError}</p>
-                                  ) : null}
+                                <details className="mt-3 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                                  <summary className="cursor-pointer font-serif text-base font-semibold text-[var(--adm-text)]">
+                                    Részletes vizuális annotációk és alakzathorgonyok
+                                  </summary>
+                                  <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+                                    <div className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
+                                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="min-w-0">
+                                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Anchored annotations · v{selectedVersion.versionNumber}</p>
+                                          <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Read-only review surface</h4>
+                                          <p className="mt-1 text-xs text-[#3D4842]">
+                                            Az annotációk ehhez az immutable verzióhoz kötődnek. Nincs szerkesztés, nincs automatikus migráció verziók között.
+                                          </p>
+                                        </div>
+                                        <AnnotationCapabilityToolbar
+                                          capabilities={annotationCapabilities}
+                                          visualMode={visualMode}
+                                          onVisualModeChange={setVisualMode}
+                                        />
+                                      </div>
 
-                                  <div
-                                    ref={annotationSurfaceRef}
-                                    onMouseUp={annotationCapabilities.canCreateTextRange ? handleTextSelectionAnchor : undefined}
-                                    onPointerDown={canCreateGeometry ? handleVisualPointerDown : undefined}
-                                    onPointerUp={canCreateGeometry ? handleVisualPointerUp : undefined}
-                                    className={`relative mt-4 min-h-[420px] overflow-hidden rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white ${visualMode ? 'cursor-crosshair' : ''}`}
-                                  >
+                                      {annotationError ? (
+                                        <p className="mt-3 rounded-[10px] border border-[#F2DAD6] bg-[var(--adm-terracotta-100)] p-3 text-xs font-semibold text-[var(--adm-terracotta-700)]">{annotationError}</p>
+                                      ) : null}
+
+                                      <div
+                                        ref={detailedAnnotationSurfaceRef}
+                                        onMouseUp={annotationCapabilities.canCreateTextRange ? handleTextSelectionAnchor : undefined}
+                                        onPointerDown={canCreateGeometry ? handleVisualPointerDown : undefined}
+                                        onPointerUp={canCreateGeometry ? handleVisualPointerUp : undefined}
+                                        className={`relative mt-4 min-h-[420px] overflow-hidden rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white ${visualMode ? 'cursor-crosshair' : ''}`}
+                                      >
                                     {canRenderTextVersion ? (
                                       versionTextUnavailable && !isLoadingVersionText ? (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
@@ -2433,6 +2664,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         </div>
                                       ) : null}
                                       <div className="flex flex-wrap gap-2">
+                                        {isClientExplanationDraft(selectedAnnotation.annotationType) ? (
+                                          <AdminButton size="sm" variant="primary" onClick={() => handlePreparePublicationFromAnnotation(selectedAnnotation)}>
+                                            Közzététel előkészítése
+                                          </AdminButton>
+                                        ) : null}
                                         {selectedAnnotation.status === 'RESOLVED' ? (
                                           <AdminButton size="sm" variant="gold" onClick={() => handleReopenAnnotation(selectedAnnotation)}>Újranyitás</AdminButton>
                                         ) : (
@@ -2458,11 +2694,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   ) : null}
                                 </aside>
                               </div>
-                            ) : null}
+                            </details>
                           </div>
                         ) : null}
-                      </>
-                    )}
+                      </div>
+                    ) : null}
+                  </>
+                )}
                   </div>
                 </section>
 
@@ -2590,15 +2828,24 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     </div>
                   ) : null}
                   <div id="document-handoff" className="scroll-mt-24">
-                    {caseRecord && (
-                      <HandoffPackagePanel
-                        caseId={caseRecord.id}
-                        refreshKey={handoffPanelRefreshKey}
-                        sourceDocumentId={selectedUploadedDocument?.id || null}
-                        generatedContractId={!selectedUploadedDocument ? selectedGeneratedContract?.id || null : null}
-                        contextLabel={activeTitle || undefined}
-                      />
-                    )}
+                    <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyvédi leadás</p>
+                          <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Leadási csomagok felülete</h4>
+                          <p className="mt-1 text-sm text-[#3D4842]">
+                            A leadási csomagok kezelése, előkészítése és ügyvédi beküldése közvetlenül a fenti jobb oldali kontextus panelen („Leadás” fül) érhető el.
+                          </p>
+                        </div>
+                        <AdminButton
+                          variant="primary"
+                          onClick={() => setContextualTab('leadas')}
+                          disabled={!caseRecord}
+                        >
+                          Megnyitás a Leadás fülön
+                        </AdminButton>
+                      </div>
+                    </div>
                   </div>
                   {handoffPackageMessage && <p className="rounded bg-[var(--adm-sage-100)] p-2 text-[12px] font-semibold text-[var(--adm-green-800)]">{handoffPackageMessage}</p>}
                   {handoffPackageError && <p className="rounded bg-[var(--adm-terracotta-100)] p-2 text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{handoffPackageError}</p>}

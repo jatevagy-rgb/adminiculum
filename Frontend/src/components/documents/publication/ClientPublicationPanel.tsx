@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
 import { CasePortalIdentityGrant } from "@/components/documents/publication/CasePortalIdentityGrant";
 import { MilestonePublicationPanel } from "@/components/documents/publication/MilestonePublicationPanel";
@@ -27,6 +27,12 @@ import {
 import { workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
 
 type VersionOption = { id: string; versionNumber: number; isCurrent: boolean; originalFileName?: string | null; size?: number | null };
+
+export type ClientPublicationPrefillDraft = {
+  key: string;
+  title?: string;
+  explanation?: string;
+};
 
 const STATUS_LABELS: Record<PublicationStatus | string, string> = {
   DRAFT: "Tervezet",
@@ -70,6 +76,8 @@ export function ClientPublicationPanel({
   documentId,
   selectedVersionId = null,
   versions = [],
+  viewMode = "full",
+  prefillDraft,
 }: {
   caseId: string;
   clientId: string | null;
@@ -81,6 +89,8 @@ export function ClientPublicationPanel({
   documentId?: string;
   selectedVersionId?: string | null;
   versions?: VersionOption[];
+  viewMode?: "full" | "document-only" | "case-only";
+  prefillDraft?: ClientPublicationPrefillDraft | null;
 }) {
   const [overview, setOverview] = useState<ClientPublicationOverviewDTO | null>(null);
   const [clientUserId, setClientUserId] = useState("");
@@ -92,6 +102,22 @@ export function ClientPublicationPanel({
   const [responsibleLawyer, setResponsibleLawyer] = useState("Felelős ügyvéd");
   const [documentTitle, setDocumentTitle] = useState("Ügyfélnek megosztható dokumentum");
   const [documentExplanation, setDocumentExplanation] = useState("Ez a dokumentum pontos, jóváhagyott verzióhoz kötött ügyfélpéldány.");
+  const lastAppliedPrefillKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!prefillDraft) {
+      lastAppliedPrefillKeyRef.current = null;
+      return;
+    }
+    if (prefillDraft.key === lastAppliedPrefillKeyRef.current) return;
+    lastAppliedPrefillKeyRef.current = prefillDraft.key;
+    if (prefillDraft.title !== undefined) {
+      setDocumentTitle(prefillDraft.title);
+    }
+    if (prefillDraft.explanation !== undefined) {
+      setDocumentExplanation(prefillDraft.explanation);
+    }
+  }, [prefillDraft]);
   const [actionTitle, setActionTitle] = useState("Kérjük az adatok megerősítését");
   const [safeUpdateTitle, setSafeUpdateTitle] = useState("Biztonságos ügyfélfrissítés");
   const [busy, setBusy] = useState(false);
@@ -148,6 +174,69 @@ export function ClientPublicationPanel({
 
   const nextMatterAction = matterPublication ? nextAction(matterPublication.status) : null;
   const nextDocumentAction = documentPublication ? nextAction(documentPublication.status) : null;
+
+  if (viewMode === "document-only") {
+    return (
+      <section data-testid="client-publication-panel" className="min-w-0 w-full space-y-3.5 [overflow-wrap:anywhere]">
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Dokumentum megosztása</h4>
+            <AdminBadge tone={documentPublication?.status === "PUBLISHED" ? "green" : "neutral"}>{publicationStatusLabel(documentPublication?.status)}</AdminBadge>
+          </div>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+            Kiválasztott változat: {selectedVersion ? `v${selectedVersion.versionNumber} · ${selectedVersion.originalFileName || selectedVersion.id.slice(0, 8)}` : "nincs"}
+          </p>
+        </div>
+
+        {error ? <p className="rounded-[10px] border border-[#F2DAD6] bg-[var(--adm-terracotta-100)] p-2.5 text-xs font-semibold text-[var(--adm-terracotta-700)]">{error}</p> : null}
+
+        {historicalWarning ? (
+          <div className="rounded-[10px] border border-[#E7D7A0] bg-[#FFF8E1] p-2.5">
+            <AdminBadge tone="gold">ACK_REQUIRED</AdminBadge>
+            <p className="mt-1 text-xs font-semibold text-[#3D4842]">A kiválasztott v{selectedVersion?.versionNumber} nem a legújabb v{latestVersion?.versionNumber}; publikáció csak explicit elfogadással.</p>
+          </div>
+        ) : null}
+
+        {!activeGrant && (
+          <div className="rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-2.5 text-xs text-[#3D4842]">
+            <p className="font-semibold text-[var(--adm-text)]">Nincs aktív ügyfélhozzáférés</p>
+            <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">A publikációhoz a portálbeállításokban hozzáférést kell biztosítani az ügyfélnek.</p>
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <input
+            value={documentTitle}
+            onChange={(event) => setDocumentTitle(event.target.value)}
+            className="w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-1.5 text-xs"
+            placeholder="Ügyfélnek látható cím"
+          />
+          <textarea
+            value={documentExplanation}
+            onChange={(event) => setDocumentExplanation(event.target.value)}
+            className="w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-1.5 text-xs"
+            rows={2}
+            placeholder="Ügyfélnek látható magyarázat"
+          />
+        </div>
+
+        <div className="rounded-[10px] bg-[var(--adm-surface)] p-2.5 text-xs text-[#3D4842]">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ezt látja az ügyfél</p>
+          <p className="mt-1 font-semibold text-[var(--adm-text)]">{documentPublication?.clientFacingTitle || documentTitle}</p>
+          <p className="mt-0.5 text-[11px]">{documentPublication?.clientFacingExplanation || documentExplanation}</p>
+        </div>
+
+        <ActionRow
+          disabled={busy || !activeGrant || !selectedVersion}
+          createLabel="Dokumentum-tervezet létrehozása"
+          onCreate={() => selectedVersion && documentId ? run(() => createDocumentPublicationDraft({ documentId, documentVersionId: selectedVersion.id, clientFacingTitle: documentTitle, clientFacingExplanation: documentExplanation })) : undefined}
+          current={documentPublication}
+          nextAction={nextDocumentAction}
+          onTransition={(action) => documentPublication ? run(() => transitionDocumentPublication(documentPublication.id, action, documentPublication.revision)) : undefined}
+        />
+      </section>
+    );
+  }
 
   return (
     <section data-testid="client-publication-panel" className="min-w-0 w-full space-y-4 overflow-hidden rounded-[18px] border border-[rgba(22,32,26,0.12)] bg-white p-3 shadow-sm [overflow-wrap:anywhere] sm:p-4">
@@ -239,23 +328,25 @@ export function ClientPublicationPanel({
           </div>
 
           {documentId ? (
-            <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Dokumentum megosztása</h4>
-                <AdminBadge tone={documentPublication?.status === "PUBLISHED" ? "green" : "neutral"}>{publicationStatusLabel(documentPublication?.status)}</AdminBadge>
+            viewMode === "case-only" ? null : (
+              <div className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Dokumentum megosztása</h4>
+                  <AdminBadge tone={documentPublication?.status === "PUBLISHED" ? "green" : "neutral"}>{publicationStatusLabel(documentPublication?.status)}</AdminBadge>
+                </div>
+                <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Kiválasztott változat: {selectedVersion ? `v${selectedVersion.versionNumber} · ${selectedVersion.originalFileName || selectedVersion.id.slice(0, 8)}` : "nincs"}</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Ügyfélnek látható cím" />
+                  <input value={documentExplanation} onChange={(event) => setDocumentExplanation(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Ügyfélnek látható magyarázat" />
+                </div>
+                <div className="mt-3 rounded-[12px] bg-[var(--adm-surface)] p-3 text-sm text-[#3D4842]">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ezt látja az ügyfél</p>
+                  <p className="mt-2 font-semibold text-[var(--adm-text)]">{documentPublication?.clientFacingTitle || documentTitle}</p>
+                  <p className="mt-1">{documentPublication?.clientFacingExplanation || documentExplanation}</p>
+                </div>
+                <ActionRow disabled={busy || !activeGrant || !selectedVersion} createLabel="Dokumentum-tervezet létrehozása" onCreate={() => selectedVersion ? run(() => createDocumentPublicationDraft({ documentId, documentVersionId: selectedVersion.id, clientFacingTitle: documentTitle, clientFacingExplanation: documentExplanation })) : undefined} current={documentPublication} nextAction={nextDocumentAction} onTransition={(action) => documentPublication ? run(() => transitionDocumentPublication(documentPublication.id, action, documentPublication.revision)) : undefined} />
               </div>
-              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Kiválasztott változat: {selectedVersion ? `v${selectedVersion.versionNumber} · ${selectedVersion.originalFileName || selectedVersion.id.slice(0, 8)}` : "nincs"}</p>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <input value={documentTitle} onChange={(event) => setDocumentTitle(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Ügyfélnek látható cím" />
-                <input value={documentExplanation} onChange={(event) => setDocumentExplanation(event.target.value)} className="min-w-0 w-full rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" placeholder="Ügyfélnek látható magyarázat" />
-              </div>
-              <div className="mt-3 rounded-[12px] bg-[var(--adm-surface)] p-3 text-sm text-[#3D4842]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Ezt látja az ügyfél</p>
-                <p className="mt-2 font-semibold text-[var(--adm-text)]">{documentPublication?.clientFacingTitle || documentTitle}</p>
-                <p className="mt-1">{documentPublication?.clientFacingExplanation || documentExplanation}</p>
-              </div>
-              <ActionRow disabled={busy || !activeGrant || !selectedVersion} createLabel="Dokumentum-tervezet létrehozása" onCreate={() => selectedVersion ? run(() => createDocumentPublicationDraft({ documentId, documentVersionId: selectedVersion.id, clientFacingTitle: documentTitle, clientFacingExplanation: documentExplanation })) : undefined} current={documentPublication} nextAction={nextDocumentAction} onTransition={(action) => documentPublication ? run(() => transitionDocumentPublication(documentPublication.id, action, documentPublication.revision)) : undefined} />
-            </div>
+            )
           ) : (
             <div className="min-w-0 rounded-[14px] border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)] sm:p-4" data-testid="publication-documents-module-hint">
               A megosztott dokumentumok külön modul. Dokumentum publikálásához nyisd meg a Dokumentumok felületet; az ügyfélbiztos ügyállapot és mérföldkövek dokumentum nélkül is publikálhatók.
