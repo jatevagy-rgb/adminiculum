@@ -959,16 +959,16 @@ jobs:
 
           validate_vfs_path() {
             local target_path="$1"
-            if [[ ! "$target_path" =~ ^site/wwwroot/prisma/(schema\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\.sql)?)$ ]]; then
-              echo "SECURITY FAULT: Staging path '${target_path}' violates strict migration-only boundary! STOP."
-              exit 1
-            fi
             case "$target_path" in
-              *dist*|*node_modules*|*package.json*|*package-lock.json*|*release-identity.json*|*templates*|*scripts*)
+              site/wwwroot/dist*|site/wwwroot/node_modules*|site/wwwroot/package.json*|site/wwwroot/package-lock.json*|site/wwwroot/release-identity.json*|site/wwwroot/templates*|site/wwwroot/scripts*)
                 echo "SECURITY FAULT: Attempted to stage into runtime path: ${target_path}! STOP."
                 exit 1
                 ;;
             esac
+            if [[ ! "$target_path" =~ ^site/wwwroot/prisma/(schema\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\.sql)?)$ ]]; then
+              echo "SECURITY FAULT: Staging path '${target_path}' violates strict migration-only boundary! STOP."
+              exit 1
+            fi
           }
 
           CURRENT_SET_FILE="$(mktemp)"
@@ -1208,16 +1208,16 @@ jobs:
 
           validate_vfs_path() {
             local target_path="$1"
-            if [[ ! "$target_path" =~ ^site/wwwroot/prisma/(schema\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\.sql)?)$ ]]; then
-              echo "SECURITY FAULT: Staging path '${target_path}' violates strict migration-only boundary! STOP."
-              exit 1
-            fi
             case "$target_path" in
-              *dist*|*node_modules*|*package.json*|*package-lock.json*|*release-identity.json*|*templates*|*scripts*)
+              site/wwwroot/dist*|site/wwwroot/node_modules*|site/wwwroot/package.json*|site/wwwroot/package-lock.json*|site/wwwroot/release-identity.json*|site/wwwroot/templates*|site/wwwroot/scripts*)
                 echo "SECURITY FAULT: Attempted to stage into runtime path: ${target_path}! STOP."
                 exit 1
                 ;;
             esac
+            if [[ ! "$target_path" =~ ^site/wwwroot/prisma/(schema\.prisma|migrations/[0-9]{14}_[a-zA-Z0-9_-]+(/migration\.sql)?)$ ]]; then
+              echo "SECURITY FAULT: Staging path '${target_path}' violates strict migration-only boundary! STOP."
+              exit 1
+            fi
           }
 
           # 1. Stage schema.prisma
