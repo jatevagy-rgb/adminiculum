@@ -1,4 +1,4 @@
-import { fetchApi } from './api';
+import { fetchApi, fetchApiBlob } from './api';
 
 /** Backend contract: all monetary values are decimal strings; the frontend never computes money. */
 export type BillingReviewStatus =
@@ -94,6 +94,10 @@ export function listBillingPreparations(clientId: string) {
 
 export function getBillingPreparation(preparationId: string) {
   return fetchApi<BillingWorkspace>(`${base}/${encodeURIComponent(preparationId)}`, { cache: 'no-store' });
+}
+
+export function downloadBillingPreparationPdf(preparationId: string) {
+  return fetchApiBlob(`${base}/${encodeURIComponent(preparationId)}/pdf`);
 }
 
 export type BillingItemPatch = {

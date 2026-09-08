@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ApiError, getCurrentUser } from '@/lib/api';
 import {
   getBillingPreparation,
+  downloadBillingPreparationPdf,
   patchBillingItem,
   refreshBillingPreparation,
   resyncBillingItem,
@@ -31,6 +32,7 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
@@ -74,6 +76,29 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
     }
   }
 
+  async function downloadPdf() {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    setError(null);
+    try {
+      const { blob, filename } = await downloadBillingPreparationPdf(preparationId);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename || 'szamlazasi-osszesito.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof ApiError && e.code === 'BILLING_PREP_PDF_REQUIRES_CLOSED'
+        ? 'PDF csak lezárt számlázási előkészítéshez tölthető le.'
+        : 'A PDF letöltése nem sikerült.');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
   if (loading) return <main className="p-6 text-sm text-[var(--adm-text-muted)]">Betöltés…</main>;
   if (forbidden) return <main className="p-6 text-sm">A számlázási előkészítés megtekintéséhez adminisztrátor vagy partner jogosultság szükséges.</main>;
   if (notFound) return <main className="p-6 text-sm">A számlázási előkészítés nem található. <Link className="text-[var(--adm-ochre-600)]" href={`/clients/${encodeURIComponent(clientId)}/szamlazas`}>Vissza a számlázáshoz</Link></main>;
@@ -107,7 +132,10 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
             <button type="button" className={button} disabled={refreshing} onClick={refresh}>{refreshing ? 'Frissítés…' : 'Frissítés a forrásokból'}</button>
             <button type="button" className={button} onClick={() => toggleStatus('CLOSED')}>Előkészítés lezárása</button>
           </>}
-          {!open && <button type="button" className={button} onClick={() => toggleStatus('OPEN')}>Újranyitás</button>}
+          {!open && <>
+            <button type="button" className={button} disabled={downloadingPdf} onClick={downloadPdf}>{downloadingPdf ? 'PDF készítése…' : 'PDF letöltése'}</button>
+            <button type="button" className={button} onClick={() => toggleStatus('OPEN')}>Újranyitás</button>
+          </>}
         </span>
       </section>
       {notice && <p role="status" className="text-xs">{notice}</p>}

@@ -188,7 +188,7 @@ jobs:
         working-directory: Backend
         run: |
           set -euo pipefail
-          npx tsc
+          npm run build
 
       - name: Write release identity fixture
         run: |

@@ -5,6 +5,7 @@ import { ROLES } from '../../middleware/auth';
 import { InteractionError, InternalActor } from '../client-interaction/base';
 import { billingDate, parseRateDate, resolveHourlyRate } from '../hourly-rates/service';
 import { resolveTimeEntryAttribution } from '../../routes/timeEntries';
+import { renderBillingPreparationPdf } from './pdf';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -364,6 +365,27 @@ async function requirePreparation(id: string, db: Db) {
   });
   if (!prep) return fail(404, 'BILLING_PREP_NOT_FOUND', 'A számlázási előkészítés nem található.');
   return prep;
+}
+
+function persistedIncludedSummary(items: BillingPreparationItem[]) {
+  let includedMinutes = 0;
+  let includedNetAmount = new Prisma.Decimal(0);
+  for (const item of items) {
+    if (!item.included) continue;
+    includedMinutes += item.billingMinutes;
+    if (item.netAmount !== null) includedNetAmount = includedNetAmount.plus(item.netAmount);
+  }
+  return { includedMinutes, includedNetAmount: includedNetAmount.toFixed(2) };
+}
+
+/** PDF export is intentionally a closed, immutable representation of stored preparation snapshots. */
+export async function getPreparationPdf(actor: InternalActor, id: string, db: Db = prisma): Promise<Buffer> {
+  await requireBillingReviewer(actor, db);
+  const preparation = await requirePreparation(id, db);
+  if (preparation.status !== 'CLOSED') {
+    return fail(409, 'BILLING_PREP_PDF_REQUIRES_CLOSED', 'PDF csak lezárt számlázási előkészítéshez tölthető le.');
+  }
+  return renderBillingPreparationPdf(preparation, persistedIncludedSummary(preparation.items));
 }
 
 export async function getPreparation(actor: InternalActor, id: string, db: Db = prisma) {

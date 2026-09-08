@@ -35,8 +35,9 @@ Archive
 *.tar.gz
 *.bak
 
-# Scripts (local dev only)
-scripts/
+# Scripts are local-only, except the build-time PDF font asset copier.
+scripts/*
+!scripts/copy-billing-pdf-assets.mjs
 tmp/
 
 # Docs

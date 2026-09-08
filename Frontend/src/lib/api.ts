@@ -277,6 +277,35 @@ export async function fetchApi<T>(endpoint: string, options: FetchOptions = {}):
   return (text as unknown) as T;
 }
 
+/** Authenticated binary download for workforce endpoints that return a Blob. */
+export async function fetchApiBlob(endpoint: string): Promise<{ blob: Blob; filename: string | null }> {
+  const token = await waitForAuthToken(DEFAULT_AUTH_WAIT_MS, 'workforce');
+  if (!token) throw new ApiError(401, 'Authentication token unavailable', endpoint);
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'GET',
+      headers: { Accept: 'application/pdf', Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+  } catch {
+    throw new ApiError(0, 'A művelet nem érhető el. Ellenőrizd a kapcsolatot vagy próbáld újra.', endpoint);
+  }
+  if (!response.ok) {
+    let message = `HTTP error ${response.status}`;
+    let code: string | undefined;
+    try {
+      const payload = asErrorPayload(await response.json());
+      message = payload.message || payload.error || message;
+      code = payload.code;
+    } catch { /* a concise status message is enough for binary downloads */ }
+    throw new ApiError(response.status, message, endpoint, code);
+  }
+  const disposition = response.headers.get('content-disposition') || '';
+  const filename = /filename="?([^";]+)"?/i.exec(disposition)?.[1] ?? null;
+  return { blob: await response.blob(), filename };
+}
+
 // Dashboard Stats
 export interface DashboardStats {
   stats: {

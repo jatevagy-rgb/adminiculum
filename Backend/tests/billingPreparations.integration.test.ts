@@ -8,6 +8,7 @@ const describeDb = databaseUrl ? describe : describe.skip;
 import {
   CALCULATION_POLICY_VERSION,
   createPreparation,
+  getPreparationPdf,
   getPreparation,
   listPreparations,
   patchItem,
@@ -300,5 +301,30 @@ describeDb('billing preparation review against canonical PostgreSQL schema', () 
     await expect(patchItem(admin, preparation.id, willStale.id, { included: false }, db)).rejects.toMatchObject({ code: 'BILLING_PREP_CLOSED' });
     const reopened = await setPreparationStatus(admin, preparation.id, 'OPEN', db);
     expect(reopened.preparation.status).toBe('OPEN');
+  });
+
+  it('exports the CLOSED captured snapshot after its original TimeEntry has changed', async () => {
+    const cid = `${prefix}-pdf-client`;
+    const mid = `${prefix}-pdf-matter`;
+    const kase = `${prefix}-pdf-case`;
+    const entryId = `${prefix}-pdf-entry`;
+    await db.client.create({ data: { id: cid, name: 'PDF Őrült ügyfél Kft.' } });
+    await db.matter.create({ data: { id: mid, title: 'PDF matter', matterType: 'OTHER', clientId: cid } });
+    await db.case.create({ data: { id: kase, caseNumber: `${prefix}-PDF`, title: 'PDF ügy', caseType: 'OTHER', clientId: cid, matterId: mid, createdById: admin.userId } });
+    await db.hourlyRateVersion.create({ data: { id: randomUUID(), clientId: cid, caseId: null, effectiveFrom: new Date('2026-01-01T00:00:00Z'), currency: 'HUF', hourlyRate: '50000', mode: 'EXPLICIT_RATE', createdById: admin.userId } });
+    await db.timeEntry.create({ data: { id: entryId, userId: lawyer.userId, minutes: 60, billable: true, workType: 'DRAFTING', description: 'Szerződés felülvizsgálata', workDate: new Date('2026-08-10T12:00:00Z'), caseId: kase, matterId: mid } });
+    const { preparation } = await createPreparation(admin, { clientId: cid, periodStart: '2026-08-01', periodEnd: '2026-08-31' }, db);
+    await setPreparationStatus(admin, preparation.id, 'CLOSED', db);
+    await db.timeEntry.update({ where: { id: entryId }, data: { minutes: 180, description: 'KÉSŐBB MÓDOSÍTOTT ÉLŐ FORRÁS' } });
+
+    const before = await db.billingPreparation.findUniqueOrThrow({ where: { id: preparation.id } });
+    const pdf = await getPreparationPdf(admin, preparation.id, db);
+    const after = await db.billingPreparation.findUniqueOrThrow({ where: { id: preparation.id } });
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    expect(after).toEqual(before); // export has no preparation mutation
+    const captured = await db.billingPreparationItem.findFirstOrThrow({ where: { preparationId: preparation.id, sourceTimeEntryId: entryId } });
+    expect(captured.sourceDescription).toBe('Szerződés felülvizsgálata');
+    expect(captured.sourceMinutes).toBe(60);
+    expect(captured.netAmount?.toFixed(2)).toBe('50000.00');
   });
 });
