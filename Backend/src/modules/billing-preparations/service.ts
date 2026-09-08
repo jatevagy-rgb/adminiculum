@@ -32,7 +32,7 @@ export type BillingReviewStatus =
   | 'SOURCE_MISSING' | 'STALE' | 'REVIEW_REQUIRED' | 'NO_RATE' | 'NON_BILLABLE' | 'ZERO_MINUTES' | 'OK';
 
 /** Interactive transaction when the caller passes a PrismaClient; run inline inside an existing transaction. */
-function withTransaction<T>(db: Db, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+export function withTransaction<T>(db: Db, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   return '$transaction' in db ? (db as PrismaClient).$transaction(work) : work(db as Prisma.TransactionClient);
 }
 
