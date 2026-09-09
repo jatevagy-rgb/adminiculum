@@ -88,6 +88,18 @@ test("month view is a compact grid and day detail has truthful empty state", () 
   assert.match(src, /itemsByDay/);
 });
 
+test("a failed calendar load never renders as a truthful empty state", () => {
+  const src = page();
+  // Dedicated error state — a 4xx/5xx/network failure is not "no events".
+  assert.match(src, /setCalendarError\("A naptáradatok most nem érhetők el\."\)/);
+  assert.doesNotMatch(src, /\.catch\(\(\) => setItems\(\[\]\)\)/);
+  // Empty-state copy is gated behind the absence of a load error.
+  assert.match(src, /calendarError \?/);
+  assert.match(src, /Nincs rögzített esemény ezen a napon\./);
+  // Day view renders only the selected day's items, never the whole range.
+  assert.match(src, /dayItems\.length \? dayItems\.map\(renderItemRow\)/);
+});
+
 test("deep-links only to proven existing surfaces", () => {
   const src = page();
   assert.match(src, /\/cases\/\$\{encodeURIComponent\(item\.caseId\)\}/);

@@ -122,6 +122,7 @@ function ClientCalendarContent() {
   const [items, setItems] = useState<ClientCalendarItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [calendarError, setCalendarError] = useState<string | null>(null);
 
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
 
@@ -148,8 +149,9 @@ function ClientCalendarContent() {
     const range = rangeForView(view, anchor);
     setLoading(true);
     void getClientCalendar(clientId, range)
-      .then((result) => setItems(result.items || []))
-      .catch(() => setItems([]))
+      .then((result) => { setItems(result.items || []); setCalendarError(null); })
+      // A failed load must never render as a truthful "no events" state.
+      .catch(() => setCalendarError("A naptáradatok most nem érhetők el."))
       .finally(() => setLoading(false));
   }, [clientId, view, anchor]);
 
@@ -203,7 +205,9 @@ function ClientCalendarContent() {
         {anchor.getFullYear()}. {MONTH_NAMES[anchor.getMonth()].toLowerCase()} {anchor.getDate()}.
       </h2>
       <div className="mt-4 grid gap-2">
-        {items.length ? items.map(renderItemRow) : (
+        {dayItems.length ? dayItems.map(renderItemRow) : calendarError ? (
+          <p className="text-sm text-[var(--adm-text-muted)]">{calendarError}</p>
+        ) : (
           <p className="text-sm text-[var(--adm-text-muted)]">Nincs rögzített esemény ezen a napon.</p>
         )}
       </div>
@@ -257,7 +261,9 @@ function ClientCalendarContent() {
         <div className="mt-5 border-t border-[var(--adm-border)] pt-4">
           <h3 className="text-sm font-semibold text-[var(--adm-text)]">{selectedDay} — események</h3>
           <div className="mt-3 grid gap-2">
-            {dayItems.length ? dayItems.map(renderItemRow) : (
+            {dayItems.length ? dayItems.map(renderItemRow) : calendarError ? (
+              <p className="text-sm text-[var(--adm-text-muted)]">{calendarError}</p>
+            ) : (
               <p className="text-sm text-[var(--adm-text-muted)]">Nincs rögzített esemény ezen a napon.</p>
             )}
           </div>
@@ -342,6 +348,8 @@ function ClientCalendarContent() {
                       );
                     })}
                   </div>
+                ) : calendarError ? (
+                  <p className="mt-2 text-xs text-[var(--adm-text-muted)]">{calendarError}</p>
                 ) : (
                   <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Nincs rögzített esemény.</p>
                 )}
@@ -401,6 +409,7 @@ function ClientCalendarContent() {
               </section>
 
               {loading ? <p className="text-xs text-[var(--adm-text-muted)]">Naptár betöltése…</p> : null}
+              {calendarError ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{calendarError}</div> : null}
               {view === "day" ? renderDayView() : null}
               {view === "month" ? renderMonthView() : null}
               {view === "year" ? renderYearView() : null}

@@ -103,8 +103,10 @@ function formatDateParam(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** Resolves and validates the [from, to] UTC range (inclusive day bounds). */
-export function resolveCalendarRange(query: ClientCalendarQuery): { from: Date; to: Date } {
+/** Resolves and validates the [from, to] UTC range. `to` is the inclusive
+ * end-of-day bound used for queries; `toDay` is the requested calendar day
+ * reported back in response metadata. */
+export function resolveCalendarRange(query: ClientCalendarQuery): { from: Date; to: Date; toDay: Date } {
   const today = new Date();
   const defaultFrom = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
   const defaultTo = new Date(defaultFrom.getTime() + 365 * 24 * 60 * 60 * 1000);
@@ -121,7 +123,7 @@ export function resolveCalendarRange(query: ClientCalendarQuery): { from: Date; 
   if (spanDays > MAX_RANGE_DAYS) {
     throw new InteractionError(400, 'CALENDAR_RANGE_TOO_LARGE', 'The requested range exceeds the supported five-year window.');
   }
-  return { from, to };
+  return { from, to, toDay: toBase };
 }
 
 export async function getClientCalendar(
@@ -130,7 +132,7 @@ export async function getClientCalendar(
   query: ClientCalendarQuery = {},
   prisma: Prisma = defaultPrisma,
 ): Promise<ClientCalendarResponse> {
-  const { from, to } = resolveCalendarRange(query);
+  const { from, to, toDay } = resolveCalendarRange(query);
   const client = await assertClientReadAccess(actor, clientId, prisma);
   const caseScope = await internalCaseScope(actor, prisma);
   // null scope = ADMIN/PARTNER global read; otherwise intersect with the
@@ -301,7 +303,9 @@ export async function getClientCalendar(
   return {
     clientId: client.id,
     from: formatDateParam(from),
-    to: formatDateParam(new Date(to.getTime() + 1)),
+    // `to` is the inclusive end-of-day query bound (requested day +23:59:59.999);
+    // response metadata echoes the requested calendar day itself.
+    to: formatDateParam(toDay),
     items,
   };
 }

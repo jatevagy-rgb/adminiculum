@@ -231,6 +231,16 @@ describe('client calendar projection', () => {
     expect(result.items.some((i) => i.dateKind === 'EXPIRY')).toBe(false); // 2030 — out of range
   });
 
+  it('echoes the exact requested from/to days in response metadata', async () => {
+    const fx = fixture();
+    const res = await getClientCalendar({ userId: ADMIN, role: 'ADMIN' }, CLIENT_A, { from: '2026-01-01', to: '2030-12-31' }, fakePrisma(fx));
+    expect(res.from).toBe('2026-01-01');
+    expect(res.to).toBe('2030-12-31'); // requested inclusive day, not +1
+    const single = await getClientCalendar({ userId: ADMIN, role: 'ADMIN' }, CLIENT_A, { from: '2027-03-05', to: '2027-03-05' }, fakePrisma(fx));
+    expect(single.from).toBe('2027-03-05');
+    expect(single.to).toBe('2027-03-05');
+  });
+
   it('sorts deterministically by date, then sourceType, then identity', async () => {
     const fx = fixture();
     const result = await getClientCalendar({ userId: ADMIN, role: 'ADMIN' }, CLIENT_A, FULL_RANGE, fakePrisma(fx));
