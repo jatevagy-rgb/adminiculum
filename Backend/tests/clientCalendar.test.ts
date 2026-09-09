@@ -239,6 +239,9 @@ describe('client calendar projection', () => {
     const single = await getClientCalendar({ userId: ADMIN, role: 'ADMIN' }, CLIENT_A, { from: '2027-03-05', to: '2027-03-05' }, fakePrisma(fx));
     expect(single.from).toBe('2027-03-05');
     expect(single.to).toBe('2027-03-05');
+    const year = await getClientCalendar({ userId: ADMIN, role: 'ADMIN' }, CLIENT_A, { from: '2027-01-01', to: '2027-12-31' }, fakePrisma(fx));
+    expect(year.from).toBe('2027-01-01');
+    expect(year.to).toBe('2027-12-31');
   });
 
   it('sorts deterministically by date, then sourceType, then identity', async () => {

@@ -148,6 +148,7 @@ function ClientCalendarContent() {
     if (!clientId) return;
     const range = rangeForView(view, anchor);
     setLoading(true);
+    setCalendarError(null);
     void getClientCalendar(clientId, range)
       .then((result) => { setItems(result.items || []); setCalendarError(null); })
       // A failed load must never render as a truthful "no events" state.
