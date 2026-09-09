@@ -56,59 +56,24 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     );
   });
 
-  it("5. Archived cases are excluded from activeCases", () => {
-    assert.match(pageSrc, /!\["CLOSED",\s*"ARCHIVED"\]\.includes/);
-    assert.match(pageSrc, /String\(item\.status\s*\|\|\s*""\)\.toUpperCase\(\)/);
-
-    // Test case filtering logic behaviorally
-    const sampleCases = [
-      { id: "1", status: "DRAFT" },
-      { id: "2", status: "IN_REVIEW" },
-      { id: "3", status: "CLOSED" },
-      { id: "4", status: "ARCHIVED" },
-      { id: "5", status: "CLIENT_INPUT" },
-    ];
-    const active = sampleCases.filter(
-      (c) => !["CLOSED", "ARCHIVED"].includes(String(c.status || "").toUpperCase()),
-    );
-    assert.equal(active.length, 3);
-    assert.deepEqual(active.map((c) => c.id), ["1", "2", "5"]);
+  it("5. The hero KPI strip and its completeness-derived presentation state are fully removed from the dossier page", () => {
+    // The hero KPI metrics existed only for the removed strip — the page must
+    // not keep dead presentation state for them.
+    assert.ok(!pageSrc.includes("dossierStats"), "dossierStats must be gone from the dossier page");
+    assert.ok(!pageSrc.includes("caseTotalCount"), "caseTotalCount must be gone from the dossier page");
+    assert.ok(!pageSrc.includes("isCasesComplete"), "isCasesComplete must be gone from the dossier page");
+    assert.ok(!pageSrc.includes("Aktív ügy"), "the Aktív ügy KPI cell must be gone");
+    // The working client-scoped case fetch itself is preserved.
+    assert.match(pageSrc, /getCases\(1, 100, undefined, clientId\)/);
   });
 
-  it("6. Numeric active-case count is rendered only when the loaded client case set is complete", () => {
-    assert.match(pageSrc, /isCasesComplete/);
-    assert.match(
-      pageSrc,
-      /setIsCasesComplete\(total !== null && total <= casesResponse\.data\.length\)/,
-    );
+  it("6. ClientControlCenter retains its own completeness-aware active-case rendering (component source preserved)", () => {
+    // The component is intentionally preserved even though the overview no
+    // longer renders it — its internal truthfulness contract stays intact.
     assert.match(
       controlCenterSrc,
       /\{isCasesComplete \? \([\s\S]*?\{activeCases\}[\s\S]*?\) : \(/,
     );
-  });
-
-  it("6a. Hero case metrics use completeness-aware and authoritative values", () => {
-    assert.match(pageSrc, /const \[caseTotalCount, setCaseTotalCount\] = useState<number \| null>\(null\)/);
-    assert.match(pageSrc, /const total = casesResponse\.pagination\?\.total \?\? null;/);
-    assert.match(pageSrc, /setIsCasesComplete\(total !== null && total <= casesResponse\.data\.length\)/);
-    assert.doesNotMatch(pageSrc, /\{isCasesComplete \? dossierStats\.activeCases : "—"\}/);
-    assert.match(pageSrc, /\{caseTotalCount \?\? "—"\}/);
-    assert.doesNotMatch(pageSrc, /<p className="font-serif text-2xl">\{dossierStats\.totalCases\}<\/p>/);
-  });
-
-  it("6b. Hero case metrics preserve truthfulness for complete, incomplete, and failed case queries", () => {
-    const resolveHeroMetrics = (
-      dataLength: number,
-      total: number | null,
-      activeCases: number,
-    ) => ({
-      active: total !== null && total <= dataLength ? activeCases : "—",
-      total: total ?? "—",
-    });
-
-    assert.deepEqual(resolveHeroMetrics(3, 3, 2), { active: 2, total: 3 });
-    assert.deepEqual(resolveHeroMetrics(100, 143, 80), { active: "—", total: 143 });
-    assert.deepEqual(resolveHeroMetrics(0, null, 0), { active: "—", total: "—" });
   });
 
   it("7. In incomplete-case-set state the card remains usable but uses a non-numeric CTA", () => {
@@ -186,7 +151,10 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
 
   it("12. Former sidebar modules are fully integrated into main dashboard content", () => {
     assert.match(pageSrc, /Ügyfélazonosság és kapcsolódó adatok/);
-    assert.match(pageSrc, /Gyors műveletek/);
+    // The large "Gyors műveletek" card was removed; its non-duplicated working
+    // actions live on in the compact "További eszközök" secondary section.
+    assert.match(pageSrc, /További eszközök/);
+    assert.ok(!pageSrc.includes("Gyors műveletek"), "the removed Gyors műveletek card must not return");
     assert.match(controlCenterSrc, /Ügyfélportál/);
     assert.match(pageSrc, /House style/);
     assert.match(pageSrc, /ClientHouseStylePanel/);
@@ -314,9 +282,9 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
 
   it("22. Gyors műveletek contains actions only, without duplicate Új ügy or Ügyfél kommunikációk", () => {
     const qmStart = pageSrc.indexOf("Gyors műveletek");
-    const qmEnd = pageSrc.indexOf("House style", qmStart);
-    assert.ok(qmStart === -1 && qmEnd === -1, "Duplicate Gyors műveletek section is removed from dossier");
-    const qmContent = pageSrc.slice(qmStart, qmEnd);
+    const qmEnd = pageSrc.indexOf("House style");
+    assert.ok(qmStart === -1, "Duplicate Gyors műveletek section is removed from dossier");
+    const qmContent = qmStart === -1 ? "" : pageSrc.slice(qmStart, qmEnd === -1 ? undefined : qmEnd);
 
     // Kept in Gyors műveletek:
     assert.match(pageSrc, /Ügyfél szerkesztése/);

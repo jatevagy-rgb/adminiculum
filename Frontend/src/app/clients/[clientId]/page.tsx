@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -72,8 +72,6 @@ function ClientDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [casesLoadError, setCasesLoadError] = useState<string | null>(null);
-  const [caseTotalCount, setCaseTotalCount] = useState<number | null>(null);
-  const [isCasesComplete, setIsCasesComplete] = useState(false);
 
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
 
@@ -85,8 +83,6 @@ function ClientDetailContent() {
     if (!clientId) return;
     setIsLoading(true);
     setError(null);
-    setCaseTotalCount(null);
-    setIsCasesComplete(false);
     setHasOrganizationCapability(false);
 
     try {
@@ -104,9 +100,6 @@ function ClientDetailContent() {
         setCasesLoadError("A kapcsolt ügyek listája jelenleg nem elérhető.");
       } else {
         setCasesLoadError(null);
-        const total = casesResponse.pagination?.total ?? null;
-        setCaseTotalCount(total);
-        setIsCasesComplete(total !== null && total <= casesResponse.data.length);
       }
 
       const relatedCases = casesResponse?.data || [];
@@ -185,21 +178,6 @@ function ClientDetailContent() {
     }
   };
 
-  const dossierStats = useMemo(() => {
-    const activeCases = cases.filter(
-      (item) =>
-        !["CLOSED", "ARCHIVED"].includes(
-          String(item.status || "").toUpperCase(),
-        ),
-    ).length;
-    return {
-      activeCases,
-      totalCases: cases.length,
-      documents: documents.length,
-      communications: communications.length,
-    };
-  }, [cases, documents.length, communications.length]);
-
   if (isLoading) {
     return <div className="flex-1 adm-board-page p-6"><div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">Ügyfél dosszié betöltése...</div></div>;
   }
@@ -217,6 +195,7 @@ function ClientDetailContent() {
 
   const organizationMode = hasOrganizationCapability;
   const clientColorDef = getClientColorDefinition(client.colorKey);
+
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
@@ -309,8 +288,6 @@ function ClientDetailContent() {
               </div>
             </div>
           </div>
-
-          {/* Card 3: House Style */}
         </section>
 
         {/* 3. Connected Working Lists */}
@@ -369,6 +346,25 @@ function ClientDetailContent() {
               </table>
             </div>
           )}
+        </section>
+
+        {/* Compact secondary tools — non-duplicated working destinations
+            recovered from the removed quick-actions card. */}
+        <section aria-label="További eszközök" className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
+          <div className="flex items-center gap-2 mb-3">
+            {clientColorDef.key && (
+              <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
+            )}
+            <h2 className="text-sm font-semibold text-[var(--adm-text)]">További eszközök</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/time-entries?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button px-3 py-2 text-xs">Munkaórák</Link>
+            <Link href={`/clients/${encodeURIComponent(clientId)}/szamlazas`} className="adm-link-button px-3 py-2 text-xs">Számlázás előkészítése</Link>
+            <Link href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button px-3 py-2 text-xs">Dokumentum hozzáadása</Link>
+            {organizationMode && (
+              <Link href={`/clients/${encodeURIComponent(clientId)}/workgroups`} className="adm-link-button px-3 py-2 text-xs">Munkacsoportok</Link>
+            )}
+          </div>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-2">
