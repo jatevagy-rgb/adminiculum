@@ -100,6 +100,20 @@ test("a failed calendar load never renders as a truthful empty state", () => {
   assert.match(src, /dayItems\.length \? dayItems\.map\(renderItemRow\)/);
 });
 
+test("anchor and selectedDay stay synchronized across navigation and view switches", () => {
+  const src = page();
+  // Prev/next moves the selected day together with the navigated period.
+  assert.match(src, /const stepPeriod = \(direction: -1 \| 1\) => \{\s*const next = stepAnchor\(view, anchor, direction\);\s*setAnchor\(next\);\s*setSelectedDay\(dateKey\(next\)\);\s*\};/);
+  assert.match(src, /onClick=\{\(\) => stepPeriod\(-1\)\}/);
+  assert.match(src, /onClick=\{\(\) => stepPeriod\(1\)\}/);
+  // Switching to Day view anchors on the selected grid day — never a stale day.
+  assert.match(src, /key === "day"[\s\S]*?setAnchor\(selected\)/);
+  assert.match(src, /onClick=\{\(\) => selectView\(key\)\}/);
+  // No raw setView/setAnchor bypass paths on the navigation controls.
+  assert.doesNotMatch(src, /onClick=\{\(\) => setView\(key\)\}/);
+  assert.doesNotMatch(src, /onClick=\{\(\) => setAnchor\(stepAnchor/);
+});
+
 test("deep-links only to proven existing surfaces", () => {
   const src = page();
   assert.match(src, /\/cases\/\$\{encodeURIComponent\(item\.caseId\)\}/);

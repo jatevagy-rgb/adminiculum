@@ -126,6 +126,23 @@ function ClientCalendarContent() {
 
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
 
+  // anchor and selectedDay must never diverge: prev/next moves the selected
+  // day with the period, and switching to Day view moves the anchor to the
+  // day selected in the grid — otherwise the day list could render a false
+  // empty state for a day the calendar never fetched.
+  const stepPeriod = (direction: -1 | 1) => {
+    const next = stepAnchor(view, anchor, direction);
+    setAnchor(next);
+    setSelectedDay(dateKey(next));
+  };
+  const selectView = (key: ViewKey) => {
+    if (key === "day") {
+      const selected = parseKey(selectedDay);
+      if (selected && dateKey(selected) !== dateKey(anchor)) setAnchor(selected);
+    }
+    setView(key);
+  };
+
   // Deep-link/query state: ?view=&date= survives refresh and can be shared.
   useEffect(() => {
     const paramsNext = new URLSearchParams();
@@ -383,7 +400,7 @@ function ClientCalendarContent() {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => setView(key)}
+                        onClick={() => selectView(key)}
                         aria-current={view === key ? "page" : undefined}
                         className={`rounded px-3 py-1.5 text-xs font-semibold transition-colors ${
                           view === key ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"
@@ -394,9 +411,9 @@ function ClientCalendarContent() {
                     ))}
                   </div>
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => setAnchor(stepAnchor(view, anchor, -1))} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]" aria-label="Előző időszak">←</button>
+                    <button type="button" onClick={() => stepPeriod(-1)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]" aria-label="Előző időszak">←</button>
                     <button type="button" onClick={() => { const t = new Date(); setAnchor(t); setSelectedDay(dateKey(t)); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ma</button>
-                    <button type="button" onClick={() => setAnchor(stepAnchor(view, anchor, 1))} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]" aria-label="Következő időszak">→</button>
+                    <button type="button" onClick={() => stepPeriod(1)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]" aria-label="Következő időszak">→</button>
                   </div>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 border-t border-[var(--adm-border)] pt-3" aria-label="Kategória jelmagyarázat">
