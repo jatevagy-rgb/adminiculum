@@ -255,6 +255,18 @@ function ClientDetailContent() {
         </header>
         <ClientWorkspaceTabs clientId={clientId} active="overview" organizationMode={organizationMode} />
 
+        <section aria-labelledby="client-overview-heading" className="adm-board-panel p-5">
+          <h2 id="client-overview-heading" className="font-serif text-xl text-[var(--adm-text)]">Ügyfél áttekintés</h2>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button p-4 text-sm font-semibold">Szervezeti felépítés →</Link> : null}
+            <div className="adm-board-strip p-4"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Naptár</p><p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Ügyfélnaptár kialakítás alatt</p></div>
+            <Link href={`/communications?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button p-4 text-sm font-semibold">Kommunikáció →</Link>
+            <Link href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=ACTIVE`} className="adm-link-button p-4 text-sm font-semibold">Nyitott ügyek →</Link>
+            <Link href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=CLOSED`} className="adm-link-button p-4 text-sm font-semibold">Lezárt ügyek megnyitása →</Link>
+            <Link href={`/time-entries?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button p-4 text-sm font-semibold">Munkaórák →</Link>
+          </div>
+        </section>
+
         {/* 2. Integrated Client Basics & Operational Hub */}
         <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 gap-5">
           {/* Card 1: Identity & Contact */}
