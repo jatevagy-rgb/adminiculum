@@ -1,9 +1,4 @@
 "use client";
-}
-  );
-}
-"use client";
-
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -315,83 +310,7 @@ function ClientDetailContent() {
             </div>
           </div>
 
-          {/* Card 2: Gyors műveletek */}
-          <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
-            <div>
-              <div className="flex items-center justify-between pb-3 border-b border-[var(--adm-border)]">
-                <div className="flex items-center gap-2">
-                  {clientColorDef.key && (
-                    <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
-                  )}
-                  <h2 className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[var(--adm-text-muted)]">
-                    Gyors műveletek
-                  </h2>
-                </div>
-                <span className="text-[10px] text-[var(--adm-text-muted)]">Műveleti központ</span>
-              </div>
-
-              <div className="mt-3 space-y-2">
-                <Link
-                  href={`/time-entries?clientId=${encodeURIComponent(clientId)}`}
-                  className="adm-link-button block w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
-                >
-                  <span>Munkaórák</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
-                <Link
-                  href={`/clients/${encodeURIComponent(clientId)}/szamlazas`}
-                  className="adm-link-button block w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
-                >
-                  <span>Számlázás előkészítése</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
-                <button
-                  onClick={openEditClient}
-                  className="adm-link-button w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
-                >
-                  <span>Ügyfél szerkesztése</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </button>
-                <Link
-                  href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`}
-                  className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
-                >
-                  <span>Dokumentum hozzáadása</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
-                {organizationMode && (
-                  <Link
-                    href={`/clients/${encodeURIComponent(clientId)}/workgroups`}
-                    className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
-                  >
-                    <span>Munkacsoportok</span>
-                    <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                  </Link>
-                )}
-              </div>
-            </div>
-          </div>
-
           {/* Card 3: House Style */}
-          <HourlyRateCard clientId={clientId} />
-          <details
-            id="house-style"
-            className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-          >
-            <summary className="cursor-pointer font-semibold text-sm">Dokumentumstílus</summary>
-            <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3 mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                {clientColorDef.key && (
-                  <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
-                )}
-                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">House style</h3>
-              </div>
-              <p className="text-[10px] text-[var(--adm-text-muted)]">
-                Ügyfél-specifikus dokumentumstílus és külső prompt-copy instrukciós kontextus.
-              </p>
-            </div>
-            <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
-          </details>
         </section>
 
         {/* 3. Connected Working Lists */}
@@ -514,6 +433,25 @@ function ClientDetailContent() {
           </div>
         </section>
 
+          <HourlyRateCard clientId={clientId} />
+          <details
+            id="house-style"
+            className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
+          >
+            <summary className="cursor-pointer font-semibold text-sm">Dokumentumstílus</summary>
+            <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3 mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                {clientColorDef.key && (
+                  <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
+                )}
+                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">House style</h3>
+              </div>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">
+                Ügyfél-specifikus dokumentumstílus és külső prompt-copy instrukciós kontextus.
+              </p>
+            </div>
+            <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
+          </details>
         {/* 4. Corporate Governance & Organizational Snapshots */}
         <section aria-label="Vállalati és szervezeti modulok" className="space-y-5">
           <div className="flex items-center justify-between border-b border-[var(--adm-border)] pb-2">
