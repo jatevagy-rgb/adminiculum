@@ -4,7 +4,7 @@ import Link from "next/link";
 
 type ClientWorkspaceTabsProps = {
   clientId: string;
-  active?: "overview" | "cases" | "communications" | "organization" | "company-operations" | "portal" | "advanced";
+  active?: "overview" | "cases" | "communications" | "organization" | "company-operations" | "calendar" | "portal" | "advanced";
   organizationMode?: boolean;
 };
 
@@ -14,6 +14,7 @@ const tabs = [
   ["communications", "Kommunikáció", "/communications"],
   ["organization", "Szervezet", "/szervezet"],
   ["company-operations", "Vállalati működés", "/vallalati-mukodes"],
+  ["calendar", "Naptár", "/calendar"],
   ["portal", "Portál", "/portal"],
 ] as const;
 
