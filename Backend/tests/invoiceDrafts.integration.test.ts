@@ -96,7 +96,7 @@ describeDb('T6A invoice draft against canonical PostgreSQL schema', () => {
     await expect(createDraft(lawyer, { billingPreparationId: preparation.id }, db))
       .rejects.toMatchObject({ status: 403, code: 'BILLING_ACCESS_FORBIDDEN' });
 
-    const result = await createDraft(partner, { billingPreparationId: preparation.id }, db);
+    const result = await createDraft(partner, { billingPreparationId: preparation.id, performanceDate: '2026-09-30' }, db);
     expect(result.created).toBe(true);
     const draft = result.draft;
     expect(draft.status).toBe('DRAFT');
@@ -105,6 +105,9 @@ describeDb('T6A invoice draft against canonical PostgreSQL schema', () => {
     expect(draft.customer.name).toBe('main Kft.');
     expect(draft.customer.taxNumber).toBe('12345678-2-42');
     expect(draft.customer.taxNumberRequirement).toBe('REQUIRED');
+    expect(draft.customer.taxNumberCanonical).toBe(true);
+    expect(draft.performanceDate).toBe('2026-09-30');
+    expect(draft.paymentDueDate).toBe('2026-10-08'); // derived only from the explicit performance date
     expect(draft.lines).toHaveLength(1);
     expect(draft.lines[0].quantity).toBe('1.0000');
     expect(draft.lines[0].unit).toBe('tétel');
@@ -135,6 +138,10 @@ describeDb('T6A invoice draft against canonical PostgreSQL schema', () => {
 
     const pdf = await getDraftPdf(admin, draft.id, db);
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+
+    // Canonical applicability is locked: a reviewer cannot bypass it to NOT_APPLICABLE.
+    await expect(patchDraft(admin, draft.id, { customerTaxNumberRequirement: 'NOT_APPLICABLE' }, db))
+      .rejects.toMatchObject({ status: 409, code: 'INVOICE_TAX_APPLICABILITY_CANONICAL' });
   });
 
   it('61 minutes @ 40 000 Ft/óra reconciles exactly on the invoice face', async () => {
@@ -175,21 +182,35 @@ describeDb('T6A invoice draft against canonical PostgreSQL schema', () => {
     expect(ok.created).toBe(true);
   });
 
-  it('models customer tax-number applicability: organization REQUIRED, individual NOT_APPLICABLE, unknown UNCONFIRMED', async () => {
+  it('models customer tax-number applicability: organization/CASE_RELAY REQUIRED, individual NOT_APPLICABLE, unknown UNCONFIRMED', async () => {
     const { clientId: ind } = await seedClient('indi', { workspaceMode: 'INDIVIDUAL', withIdentity: false });
     const indPrep = await closedPreparation(ind);
-    const indDraft = await createDraft(admin, { billingPreparationId: indPrep, paymentMethod: 'készpénz' }, db);
+    const indDraft = await createDraft(admin, { billingPreparationId: indPrep, paymentMethod: 'készpénz', performanceDate: '2026-09-30' }, db);
     expect(indDraft.draft.customer.taxNumberRequirement).toBe('NOT_APPLICABLE');
+    expect(indDraft.draft.customer.taxNumberCanonical).toBe(true);
     expect(indDraft.draft.missing).toEqual(expect.arrayContaining(['Ügyfél címe'])); // address still required
     expect(indDraft.draft.missing).not.toContain('Ügyfél adószáma');
     await patchDraft(admin, indDraft.draft.id, { customerAddress: '1053 Budapest, Magyar utca 2.' }, db);
     const pdf = await getDraftPdf(admin, indDraft.draft.id, db);
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF'); // individual: valid without tax number
+    // …but a canonical NOT_APPLICABLE cannot be flipped to REQUIRED either.
+    await expect(patchDraft(admin, indDraft.draft.id, { customerTaxNumberRequirement: 'REQUIRED' }, db))
+      .rejects.toMatchObject({ status: 409, code: 'INVOICE_TAX_APPLICABILITY_CANONICAL' });
+
+    // CASE_RELAY is a canonical organizational mode in the product UI.
+    const { clientId: relay } = await seedClient('relay', { workspaceMode: 'CASE_RELAY', withIdentity: true });
+    const relayPrep = await closedPreparation(relay);
+    const relayDraft = await createDraft(admin, { billingPreparationId: relayPrep }, db);
+    expect(relayDraft.draft.customer.taxNumberRequirement).toBe('REQUIRED');
+    expect(relayDraft.draft.customer.taxNumberCanonical).toBe(true);
+    await expect(patchDraft(admin, relayDraft.draft.id, { customerTaxNumberRequirement: 'NOT_APPLICABLE' }, db))
+      .rejects.toMatchObject({ status: 409, code: 'INVOICE_TAX_APPLICABILITY_CANONICAL' });
 
     const { clientId: unk } = await seedClient('unk', { withIdentity: true }); // no workspace evidence
     const unkPrep = await closedPreparation(unk);
     const unkDraft = await createDraft(admin, { billingPreparationId: unkPrep }, db);
     expect(unkDraft.draft.customer.taxNumberRequirement).toBe('UNCONFIRMED');
+    expect(unkDraft.draft.customer.taxNumberCanonical).toBe(false);
     expect(unkDraft.draft.missing).toContain('Vevő adószámának alkalmazhatósága');
     await expect(getDraftPdf(admin, unkDraft.draft.id, db)).rejects.toMatchObject({ status: 422, code: 'INVOICE_DRAFT_INCOMPLETE' });
     const resolved = await patchDraft(admin, unkDraft.draft.id, { customerTaxNumberRequirement: 'REQUIRED' }, db);

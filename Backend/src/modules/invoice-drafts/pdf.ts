@@ -1,6 +1,5 @@
 import PDFDocument from 'pdfkit';
 import { InvoiceDraft, InvoiceDraftLine, Prisma } from '@prisma/client';
-import fs from 'node:fs';
 import path from 'node:path';
 
 type DraftWithLines = InvoiceDraft & { lines: InvoiceDraftLine[] };
@@ -116,14 +115,10 @@ export async function renderInvoiceDraftPdf(draft: DraftWithLines): Promise<Buff
     doc.on('error', reject);
   });
 
-  // --- Header: optional configured logo, then the compulsory draft markings.
+  // --- Header: no logo in T6A — no safe asset infrastructure exists, and an
+  // arbitrary filesystem path would expose local-file reads. Deferred to a
+  // safe asset reference/upload hook in a later slice.
   let y = margin;
-  if (draft.issuerLogoPath) {
-    const logoPath = path.resolve(draft.issuerLogoPath);
-    if (fs.existsSync(logoPath)) {
-      try { doc.image(logoPath, margin, y, { fit: [110, 54] }); } catch { /* logo must never break the draft */ }
-    }
-  }
   doc.fillColor('#193557').fontSize(20).text('SZÁMLATERVEZET', margin, y + 58, { align: 'center' });
   doc.fillColor('#8c1d18').fontSize(13).text('NEM SZÁMLA', margin, y + 84, { align: 'center' });
   doc.fillColor('#454545').fontSize(7.5).text('Ez a dokumentum számlatervezet — nem minősül kiállított számlának.', margin, y + 102, { align: 'center' });

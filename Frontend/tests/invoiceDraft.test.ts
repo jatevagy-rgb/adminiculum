@@ -36,6 +36,8 @@ test('draft workspace renders Hungarian draft markers, the missing-field list, a
   assert.match(draftWorkspace, /customerTaxNumberRequirement/);
   assert.match(draftWorkspace, /Tervezet elvetése/);
   assert.match(draftWorkspace, /discardInvoiceDraft\(draft\.id\)/);
+  // Canonical applicability is not reviewer-overridable in the UI either.
+  assert.match(draftWorkspace, /taxNumberCanonical/);
   // Issuer snapshot wording: profile edits only affect future drafts.
   assert.match(draftWorkspace, /Számlázói adatok beállítása/);
   assert.match(draftWorkspace, /INVOICE_ISSUER_PROFILE_INCOMPLETE/);

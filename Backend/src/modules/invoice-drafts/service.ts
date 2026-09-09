@@ -47,7 +47,6 @@ export type IssuerProfile = {
   bankAccountNumber: string | null;
   email: string | null;
   phone: string | null;
-  logoPath: string | null;
   defaultVatTreatment: VatTreatment;
   defaultVatRate: string | null;
   defaultPaymentMethod: string | null;
@@ -57,7 +56,7 @@ export type IssuerProfile = {
 const EMPTY_PROFILE: IssuerProfile = {
   legalName: null, address: null, taxNumber: null, euVatNumber: null,
   registrationNumber: null, bankName: null, bankAccountNumber: null,
-  email: null, phone: null, logoPath: null,
+  email: null, phone: null,
   defaultVatTreatment: 'NORMAL_VAT', defaultVatRate: null,
   defaultPaymentMethod: null, defaultPaymentTermDays: null,
 };
@@ -104,7 +103,7 @@ function issuerProfileMissing(profile: IssuerProfile): string[] {
   if (!profile.taxNumber?.trim()) missing.push('Szállító adószáma');
   return missing;
 }
-const PROFILE_TEXT_KEYS = ['legalName', 'address', 'taxNumber', 'euVatNumber', 'registrationNumber', 'bankName', 'bankAccountNumber', 'email', 'phone', 'logoPath', 'defaultVatRate', 'defaultPaymentMethod'] as const;
+const PROFILE_TEXT_KEYS = ['legalName', 'address', 'taxNumber', 'euVatNumber', 'registrationNumber', 'bankName', 'bankAccountNumber', 'email', 'phone', 'defaultVatRate', 'defaultPaymentMethod'] as const;
 
 const isoDate = (value: Date | null | undefined): string | null => (value ? value.toISOString().slice(0, 10) : null);
 const parseDraftDate = (value: unknown, code: string, message: string): Date | null | undefined => {
@@ -248,12 +247,13 @@ function draftDto(draft: DraftWithLines) {
       legalName: draft.issuerLegalName, address: draft.issuerAddress, taxNumber: draft.issuerTaxNumber,
       euVatNumber: draft.issuerEuVatNumber, registrationNumber: draft.issuerRegistrationNumber,
       bankName: draft.issuerBankName, bankAccountNumber: draft.issuerBankAccountNumber,
-      email: draft.issuerEmail, phone: draft.issuerPhone, logoPath: draft.issuerLogoPath,
+      email: draft.issuerEmail, phone: draft.issuerPhone,
     },
     customer: {
       name: draft.customerName, address: draft.customerAddress,
       taxNumber: draft.customerTaxNumber, vatNumber: draft.customerVatNumber,
       taxNumberRequirement: draft.customerTaxNumberRequirement,
+      taxNumberCanonical: draft.customerTaxNumberCanonical,
     },
     performanceDate: isoDate(draft.performanceDate),
     draftDate: isoDate(draft.draftDate),
@@ -333,12 +333,23 @@ export async function createDraft(actor: InternalActor, body: unknown, db: Db = 
     ? await db.clientPortalWorkspace.findMany({ where: { clientId: client.id }, select: { mode: true, status: true } })
     : [];
   const activeModes = new Set(workspaces.filter((w) => w.status === 'ACTIVE').map((w) => w.mode));
-  let customerTaxNumberRequirement: TaxNumberRequirement = 'UNCONFIRMED';
-  if (activeModes.has('ORGANIZATION')) customerTaxNumberRequirement = 'REQUIRED';
-  else if (activeModes.size === 1 && activeModes.has('INDIVIDUAL')) customerTaxNumberRequirement = 'NOT_APPLICABLE';
-  const performanceDate = parseDraftDate(input.performanceDate, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen teljesítési dátum.') ?? preparation.periodEnd;
+  // ORGANIZATION and CASE_RELAY are both canonical organizational modes. A
+  // canonically resolved applicability is locked on the draft (only
+  // UNCONFIRMED accepts a later reviewer decision in patchDraft).
+  const canonicallyOrganizational = activeModes.has('ORGANIZATION') || activeModes.has('CASE_RELAY');
+  const canonicallyIndividual = !canonicallyOrganizational && activeModes.size === 1 && activeModes.has('INDIVIDUAL');
+  const customerTaxNumberCanonical = canonicallyOrganizational || canonicallyIndividual;
+  const customerTaxNumberRequirement: TaxNumberRequirement = canonicallyOrganizational
+    ? 'REQUIRED' : canonicallyIndividual ? 'NOT_APPLICABLE' : 'UNCONFIRMED';
+  // Teljesítés dátuma is legally material — never invented from the billing
+  // period. Only an explicit input fills it; otherwise the missing-field gate
+  // demands it. The payment-term default derives only from an explicitly
+  // supplied performance date, never from a guessed one.
+  const performanceDate = parseDraftDate(input.performanceDate, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen teljesítési dátum.') ?? null;
   const paymentDueDate = parseDraftDate(input.paymentDueDate, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen fizetési határidő.')
-    ?? (profile.defaultPaymentTermDays !== null ? new Date(performanceDate.getTime() + profile.defaultPaymentTermDays * 24 * 60 * 60 * 1000) : null);
+    ?? (performanceDate !== null && profile.defaultPaymentTermDays !== null
+      ? new Date(performanceDate.getTime() + profile.defaultPaymentTermDays * 24 * 60 * 60 * 1000)
+      : null);
   const paymentMethod = optionalText(input.paymentMethod, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen fizetési mód.') ?? profile.defaultPaymentMethod;
   const note = optionalText(input.note, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen megjegyzés.') ?? null;
   const draftDate = parseDraftDate(input.draftDate, 'INVOICE_DRAFT_INPUT_INVALID', 'Érvénytelen tervezet dátum.') ?? new Date();
@@ -357,8 +368,8 @@ export async function createDraft(actor: InternalActor, body: unknown, db: Db = 
     issuerBankAccountNumber: profile.bankAccountNumber,
     issuerEmail: profile.email,
     issuerPhone: profile.phone,
-    issuerLogoPath: profile.logoPath,
     customerTaxNumberRequirement,
+    customerTaxNumberCanonical,
     customerName: client?.name ?? null,
     customerAddress: client?.address ?? null,
     customerTaxNumber: client?.taxNumber ?? null,
@@ -440,6 +451,11 @@ export async function patchDraft(actor: InternalActor, id: string, body: unknown
   if (input.customerTaxNumberRequirement !== undefined) {
     if (typeof input.customerTaxNumberRequirement !== 'string' || !TAX_NUMBER_REQUIREMENTS.includes(input.customerTaxNumberRequirement as TaxNumberRequirement)) {
       return fail(400, 'INVOICE_DRAFT_INPUT_INVALID', 'Ismeretlen adószám-kötelezettség.');
+    }
+    // Canonically resolved applicability (from ClientPortalWorkspace evidence)
+    // is not reviewer-overridable — only UNCONFIRMED drafts accept a decision.
+    if (draft.customerTaxNumberCanonical && input.customerTaxNumberRequirement !== draft.customerTaxNumberRequirement) {
+      return fail(409, 'INVOICE_TAX_APPLICABILITY_CANONICAL', 'A vevő adószám-kötelezettségét a hivatkozott ügyféladat már meghatározta — nem módosítható.');
     }
     data.customerTaxNumberRequirement = input.customerTaxNumberRequirement;
   }

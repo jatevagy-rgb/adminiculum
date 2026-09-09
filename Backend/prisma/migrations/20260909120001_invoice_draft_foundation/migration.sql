@@ -22,10 +22,12 @@ CREATE TABLE "invoice_drafts" (
     "issuerBankAccountNumber" TEXT,
     "issuerEmail" TEXT,
     "issuerPhone" TEXT,
-    "issuerLogoPath" TEXT,
+    -- No issuerLogoPath: would expose arbitrary server file reads in the PDF
+    -- renderer. Logo support is deferred to a safe asset reference hook.
 
     -- Customer billing identity snapshot.
     "customerTaxNumberRequirement" "InvoiceCustomerTaxNumberRequirement" NOT NULL DEFAULT 'UNCONFIRMED',
+    "customerTaxNumberCanonical" BOOLEAN NOT NULL DEFAULT false,
     "customerName" TEXT,
     "customerAddress" TEXT,
     "customerTaxNumber" TEXT,

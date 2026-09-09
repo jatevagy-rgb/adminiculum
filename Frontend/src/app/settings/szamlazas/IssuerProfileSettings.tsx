@@ -25,7 +25,8 @@ const TEXT_FIELDS: { key: keyof IssuerProfile; label: string }[] = [
   { key: 'bankAccountNumber', label: 'Bankszámlaszám' },
   { key: 'email', label: 'E-mail' },
   { key: 'phone', label: 'Telefon' },
-  { key: 'logoPath', label: 'Logó fájl elérési útja (opcionális)' },
+  // No logo field in T6A: a free-form server path would be an arbitrary file
+  // read. A later safe asset reference/upload hook will add it back.
 ];
 
 /** Számlázó (kiállító) profil — a számlatervezetek szállítói pillanatképének forrása. ADMIN csak. */

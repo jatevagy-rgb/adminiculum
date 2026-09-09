@@ -44,8 +44,8 @@ function draft(overrides: Record<string, unknown> = {}) {
     issuerBankAccountNumber: '11111111-22222222',
     issuerEmail: null,
     issuerPhone: null,
-    issuerLogoPath: null,
     customerTaxNumberRequirement: 'REQUIRED',
+    customerTaxNumberCanonical: true,
     customerName: 'Őrült Ügyfél Kft.',
     customerAddress: '1052 Budapest, Példa utca 4.',
     customerTaxNumber: '12345678-2-42',
@@ -144,7 +144,6 @@ describe('T6A invoice-draft PDF (SZÁMLATERVEZET — NEM SZÁMLA)', () => {
 
   it('renders correctly without a logo and marks non-normal VAT treatments explicitly', async () => {
     const pdf = await getDraftPdf(admin, 'draft-1', dbFor(draft({
-      issuerLogoPath: '/nonexistent/logo.png',
       vatTreatment: 'TAX_EXEMPT', vatRate: null,
       lines: [line({ vatTreatment: 'TAX_EXEMPT', vatRate: null, vatAmount: D('0'), grossAmount: D('75000') })],
     })));

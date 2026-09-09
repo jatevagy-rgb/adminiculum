@@ -236,9 +236,13 @@ export default function InvoiceDraftWorkspace({ clientId, preparationId }: { cli
           </label>
           <label className="text-xs">Vevő adószámának alkalmazhatósága
             <select className={input} value={form.customerTaxNumberRequirement}
+              disabled={draft.customer.taxNumberCanonical}
               onChange={(e) => setForm({ ...form, customerTaxNumberRequirement: e.target.value as TaxNumberRequirement })}>
               {TAX_REQUIREMENT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
+            {draft.customer.taxNumberCanonical && (
+              <span className="text-[var(--adm-text-muted)]">Az ügyfél munkatér-adatai alapján már meghatározott — nem módosítható.</span>
+            )}
           </label>
         </div>
       </section>

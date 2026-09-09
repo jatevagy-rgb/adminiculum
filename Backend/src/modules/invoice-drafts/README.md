@@ -15,8 +15,15 @@ never retroactively change a draft.
 - `InvoiceVatTreatment` already models `NORMAL_VAT | TAX_EXEMPT |
   REVERSE_CHARGE | OUT_OF_SCOPE` so alternate legal treatments stay possible.
 - PDF: `SZÁMLATERVEZET` / `NEM SZÁMLA` face + `Elszámolási melléklet` annex.
-  Renders without a logo; `issuerLogoPath` is the config hook for a later
-  approved asset (top-left branding area).
+  No logo rendering in T6A — an arbitrary configured filesystem path would be
+  a local-file read; a future safe asset reference/upload hook goes in the
+  top-left branding area.
+- `performanceDate` is never invented from the billing period — it stays null
+  until explicitly supplied, and the missing-field gate demands it.
+- `customerTaxNumberRequirement` is canonically resolved from
+  `ClientPortalWorkspace.mode` (ORGANIZATION/CASE_RELAY ⇒ REQUIRED,
+  INDIVIDUAL-only ⇒ NOT_APPLICABLE, else UNCONFIRMED). Canonically resolved
+  drafts cannot be overridden; only UNCONFIRMED accepts a reviewer decision.
 
 ## T6B extension points (not implemented here)
 

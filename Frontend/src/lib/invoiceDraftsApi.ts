@@ -18,7 +18,6 @@ export type IssuerProfile = {
   bankAccountNumber: string | null;
   email: string | null;
   phone: string | null;
-  logoPath: string | null;
   defaultVatTreatment: VatTreatment;
   defaultVatRate: string | null;
   defaultPaymentMethod: string | null;
@@ -63,7 +62,6 @@ export type InvoiceDraft = {
     bankAccountNumber: string | null;
     email: string | null;
     phone: string | null;
-    logoPath: string | null;
   };
   customer: {
     name: string | null;
@@ -71,6 +69,7 @@ export type InvoiceDraft = {
     taxNumber: string | null;
     vatNumber: string | null;
     taxNumberRequirement: TaxNumberRequirement;
+    taxNumberCanonical: boolean;
   };
   performanceDate: string | null;
   draftDate: string | null;

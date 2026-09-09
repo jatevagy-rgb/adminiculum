@@ -65,7 +65,6 @@ const ISSUER = {
   bankAccountNumber: '11111111-22222222',
   email: null,
   phone: null,
-  logoPath: null,
   defaultVatTreatment: 'NORMAL_VAT',
   defaultVatRate: '27',
   defaultPaymentMethod: 'átutalás',
@@ -109,6 +108,7 @@ const baseDraft = {
   issuerLegalName: 'X', issuerAddress: 'Y', issuerTaxNumber: '1',
   customerName: 'A', customerAddress: 'B', customerTaxNumber: '2',
   customerTaxNumberRequirement: 'REQUIRED' as const,
+  customerTaxNumberCanonical: true,
   performanceDate: new Date(), paymentDueDate: new Date(), paymentMethod: 'átutalás',
   vatTreatment: 'NORMAL_VAT' as const, vatRate: D('27'),
 };
@@ -154,12 +154,15 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     expect(data.issuerLegalName).toBe('Bálintfy és Társai Ügyvédi Iroda');
     expect(data.issuerTaxNumber).toBe('87654321-1-41');
     expect(data.customerTaxNumberRequirement).toBe('REQUIRED'); // canonical ORGANIZATION workspace
+    expect(data.customerTaxNumberCanonical).toBe(true);
     expect(data.customerName).toBe('Demo Kft.');
     expect(data.customerTaxNumber).toBe('12345678-2-42');
     expect(data.currency).toBe('HUF');
     expect(data.status).toBeUndefined(); // schema default DRAFT
-    expect(data.performanceDate).toEqual(preparation().periodEnd);
-    expect(data.paymentDueDate).toEqual(new Date('2026-10-08T00:00:00.000Z'));
+    // Teljesítés dátuma is legally material — never guessed from the period.
+    expect(data.performanceDate).toBeNull();
+    // …and the payment-term default must not derive from that guessed date.
+    expect(data.paymentDueDate).toBeNull();
     expect(data.paymentMethod).toBe('átutalás');
     expect(data.vatTreatment).toBe('NORMAL_VAT');
     expect(data.vatRate?.toString()).toBe('27');
@@ -180,6 +183,54 @@ describe('T6A invoice draft — snapshot-only creation', () => {
     expect(line.billingMinutes).toBe(90);
     expect(line.hourlyRate.toString()).toBe('50000');
     expect(draft.totals).toEqual({ netAmount: '75000.00', vatAmount: '20250.00', grossAmount: '95250.00' });
+    // Missing-field gate now demands the legal dates from the reviewer.
+    expect(draft.missing).toEqual(expect.arrayContaining(['Teljesítés dátuma', 'Fizetési határidő']));
+  });
+
+  it('derives the payment-term default only from an explicitly supplied performance date', async () => {
+    const { db, captured } = dbFor();
+    await createDraft(admin, { billingPreparationId: 'prep-1', performanceDate: '2026-09-30' }, db);
+    const data = captured.createData as any;
+    expect(data.performanceDate).toEqual(new Date('2026-09-30T00:00:00.000Z'));
+    expect(data.paymentDueDate).toEqual(new Date('2026-10-08T00:00:00.000Z')); // +8 nap
+  });
+
+  it('treats CASE_RELAY workspaces as canonical organizational evidence', async () => {
+    const { db, captured } = dbFor({
+      clientPortalWorkspace: { findMany: async () => [{ mode: 'CASE_RELAY', status: 'ACTIVE' }] },
+    });
+    await createDraft(admin, { billingPreparationId: 'prep-1' }, db);
+    expect((captured.createData as any).customerTaxNumberRequirement).toBe('REQUIRED');
+    expect((captured.createData as any).customerTaxNumberCanonical).toBe(true);
+  });
+
+  it('a canonically resolved tax applicability cannot be overridden by a reviewer', async () => {
+    const stored = {
+      id: 'draft-1', billingPreparationId: 'prep-1', currency: 'HUF', status: 'DRAFT',
+      customerTaxNumberRequirement: 'REQUIRED', customerTaxNumberCanonical: true,
+      vatTreatment: 'TAX_EXEMPT', vatRate: null,
+      createdAt: new Date('2026-09-10T00:00:00Z'), updatedAt: new Date('2026-09-10T00:00:00Z'),
+      lines: [{ id: 'line-1', description: 'Tétel', quantity: D('1'), unit: 'tétel', netUnitPrice: D('1'), netAmount: D('1'), vatTreatment: 'TAX_EXEMPT', vatRate: null, vatAmount: D('0'), grossAmount: D('1'), sortOrder: 0, sourceWorkDate: null, caseNumber: null, caseTitle: null, workerName: null, billingMinutes: 0, hourlyRate: null, billingItemId: 'item-1' }],
+    };
+    const db = {
+      user: { findUnique: async () => ({ role: 'ADMIN', status: 'ACTIVE', isActive: true }) },
+      invoiceDraft: { findUnique: async () => stored, update: async ({ data }: any) => ({ ...stored, ...data }) },
+      invoiceDraftLine: { update: async () => ({}) },
+    } as any;
+    await expect(patchDraft(admin, 'draft-1', { customerTaxNumberRequirement: 'NOT_APPLICABLE' }, db))
+      .rejects.toMatchObject({ status: 409, code: 'INVOICE_TAX_APPLICABILITY_CANONICAL' });
+    // resubmitting the same canonical value stays a no-op
+    const same = await patchDraft(admin, 'draft-1', { customerTaxNumberRequirement: 'REQUIRED' }, db);
+    expect(same.draft.customer.taxNumberRequirement).toBe('REQUIRED');
+    // UNCONFIRMED (non-canonical) drafts still accept a reviewer decision
+    const unresolved = { ...stored, customerTaxNumberRequirement: 'UNCONFIRMED', customerTaxNumberCanonical: false };
+    const db2 = {
+      user: { findUnique: async () => ({ role: 'ADMIN', status: 'ACTIVE', isActive: true }) },
+      invoiceDraft: { findUnique: async () => unresolved, update: async ({ data }: any) => ({ ...unresolved, ...data }) },
+      invoiceDraftLine: { update: async () => ({}) },
+    } as any;
+    const decided = await patchDraft(admin, 'draft-1', { customerTaxNumberRequirement: 'NOT_APPLICABLE' }, db2);
+    expect(decided.draft.customer.taxNumberRequirement).toBe('NOT_APPLICABLE');
   });
 
   it('reconciles the invoice face for arbitrary minute counts (61 min @ 50 000 Ft/óra)', async () => {
@@ -304,7 +355,8 @@ describe('T6A invoice draft — snapshot-only creation', () => {
   it('patchDraft applies the same VAT combination rules', async () => {
     const stored = {
       id: 'draft-1', billingPreparationId: 'prep-1', currency: 'HUF', status: 'DRAFT',
-      customerTaxNumberRequirement: 'REQUIRED', vatTreatment: 'TAX_EXEMPT', vatRate: null,
+      customerTaxNumberRequirement: 'REQUIRED', customerTaxNumberCanonical: true,
+      vatTreatment: 'TAX_EXEMPT', vatRate: null,
       lines: [{ id: 'line-1', netAmount: D('75000'), vatTreatment: 'TAX_EXEMPT', vatRate: null, vatAmount: D('0'), grossAmount: D('75000') }],
     };
     const db = {

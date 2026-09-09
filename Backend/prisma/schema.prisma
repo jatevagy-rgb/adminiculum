@@ -981,13 +981,18 @@ model InvoiceDraft {
   issuerBankAccountNumber  String?
   issuerEmail              String?
   issuerPhone              String?
-  issuerLogoPath           String?
+  // Deliberately no issuerLogoPath: an arbitrary filesystem path would let a
+  // profile field drive a server-side file read in the PDF renderer. Logo
+  // support is deferred to a safe asset reference/upload hook.
 
   // Customer billing identity snapshot — later Client edits never rewrite it.
   // Tax-number applicability is explicit: UNCONFIRMED blocks PDF readiness
   // until a reviewer resolves it; REQUIRED enforces customerTaxNumber;
   // NOT_APPLICABLE covers private individuals legitimately without one.
   customerTaxNumberRequirement InvoiceCustomerTaxNumberRequirement @default(UNCONFIRMED)
+  // true when ClientPortalWorkspace evidence canonically resolved the
+  // applicability — such drafts are not reviewer-overridable.
+  customerTaxNumberCanonical   Boolean                          @default(false)
   customerName                 String?
   customerAddress              String?
   customerTaxNumber            String?
