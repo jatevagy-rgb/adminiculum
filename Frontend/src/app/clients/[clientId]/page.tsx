@@ -1,6 +1,5 @@
 "use client";
-
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
@@ -21,7 +20,6 @@ import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFound
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
 import { ClientOrganizationPreview } from "@/components/clients/ClientOrganizationPreview";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
-import { ClientControlCenter } from "@/components/clients/ClientControlCenter";
 import { getClientColorDefinition } from "@/lib/clientColors";
 import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
@@ -74,8 +72,6 @@ function ClientDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [casesLoadError, setCasesLoadError] = useState<string | null>(null);
-  const [caseTotalCount, setCaseTotalCount] = useState<number | null>(null);
-  const [isCasesComplete, setIsCasesComplete] = useState(false);
 
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
 
@@ -87,8 +83,6 @@ function ClientDetailContent() {
     if (!clientId) return;
     setIsLoading(true);
     setError(null);
-    setCaseTotalCount(null);
-    setIsCasesComplete(false);
     setHasOrganizationCapability(false);
 
     try {
@@ -106,9 +100,6 @@ function ClientDetailContent() {
         setCasesLoadError("A kapcsolt ügyek listája jelenleg nem elérhető.");
       } else {
         setCasesLoadError(null);
-        const total = casesResponse.pagination?.total ?? null;
-        setCaseTotalCount(total);
-        setIsCasesComplete(total !== null && total <= casesResponse.data.length);
       }
 
       const relatedCases = casesResponse?.data || [];
@@ -187,21 +178,6 @@ function ClientDetailContent() {
     }
   };
 
-  const dossierStats = useMemo(() => {
-    const activeCases = cases.filter(
-      (item) =>
-        !["CLOSED", "ARCHIVED"].includes(
-          String(item.status || "").toUpperCase(),
-        ),
-    ).length;
-    return {
-      activeCases,
-      totalCases: cases.length,
-      documents: documents.length,
-      communications: communications.length,
-    };
-  }, [cases, documents.length, communications.length]);
-
   if (isLoading) {
     return <div className="flex-1 adm-board-page p-6"><div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">Ügyfél dosszié betöltése...</div></div>;
   }
@@ -219,6 +195,7 @@ function ClientDetailContent() {
 
   const organizationMode = hasOrganizationCapability;
   const clientColorDef = getClientColorDefinition(client.colorKey);
+
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
@@ -248,6 +225,9 @@ function ClientDetailContent() {
               <button onClick={() => setShowNewCaseModal(true)} className="adm-link-button adm-link-button-primary px-4 py-2 text-xs">
                 Új ügy
               </button>
+              <Link href={`/clients/${encodeURIComponent(clientId)}/portal`} className="adm-link-button px-4 py-2 text-xs font-semibold">
+                Ügyfélportál kezelése
+              </Link>
               <details className="relative">
                 <summary className="cursor-pointer list-none rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]">
                   ••• Haladó
@@ -272,25 +252,11 @@ function ClientDetailContent() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className={`adm-board-strip p-3 ${clientColorDef.key ? `border-l-2 ${clientColorDef.accentBorderClass}` : ""}`}><p className="font-serif text-2xl" title={isCasesComplete ? undefined : "Teljes ügylista szükséges a pontos számhoz"}>{isCasesComplete ? dossierStats.activeCases : "—"}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Aktív ügy</p></div>
-            <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{caseTotalCount ?? "—"}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összes ügy</p></div>
-            <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.documents}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss dokumentum</p></div>
-            <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.communications}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
-          </div>
         </header>
-
-        {/* 1. Primary Control Center */}
-        <ClientControlCenter
-          clientId={clientId}
-          client={client}
-          activeCases={dossierStats.activeCases}
-          isCasesComplete={isCasesComplete}
-          organizationMode={organizationMode}
-        />
+        <ClientWorkspaceTabs clientId={clientId} active="overview" organizationMode={organizationMode} />
 
         {/* 2. Integrated Client Basics & Operational Hub */}
-        <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 gap-5">
           {/* Card 1: Identity & Contact */}
           <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
             <div>
@@ -315,90 +281,13 @@ function ClientDetailContent() {
                 <p><span className="text-[var(--adm-text-muted)]">Email:</span> {client.email || "—"}</p>
                 <p><span className="text-[var(--adm-text-muted)]">Telefon:</span> {client.phone || "—"}</p>
                 <p><span className="text-[var(--adm-text-muted)]">Cím:</span> {client.address || "—"}</p>
-                <p><span className="text-[var(--adm-text-muted)]">Adószám:</span> {client.taxNumber || "—"}</p>
-                <p><span className="text-[var(--adm-text-muted)]">Cégjegyzékszám:</span> {client.companyRegistrationNumber || "—"}</p>
-                <p><span className="text-[var(--adm-text-muted)]">Képviselő:</span> {client.authorizedRepresentative || "—"}</p>
+                {(organizationMode || client.taxNumber) ? <p><span className="text-[var(--adm-text-muted)]">Adószám:</span> {client.taxNumber || "—"}</p> : null}
+                {(organizationMode || client.companyRegistrationNumber) ? <p><span className="text-[var(--adm-text-muted)]">Cégjegyzékszám:</span> {client.companyRegistrationNumber || "—"}</p> : null}
+                {(organizationMode || client.authorizedRepresentative) ? <p><span className="text-[var(--adm-text-muted)]">Képviselő:</span> {client.authorizedRepresentative || "—"}</p> : null}
                 <p><span className="text-[var(--adm-text-muted)]">Kapcsolattartó:</span> {client.contactPerson || "—"}</p>
               </div>
             </div>
           </div>
-
-          {/* Card 2: Gyors műveletek */}
-          <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
-            <div>
-              <div className="flex items-center justify-between pb-3 border-b border-[var(--adm-border)]">
-                <div className="flex items-center gap-2">
-                  {clientColorDef.key && (
-                    <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
-                  )}
-                  <h2 className="text-[10px] uppercase tracking-[0.2em] font-semibold text-[var(--adm-text-muted)]">
-                    Gyors műveletek
-                  </h2>
-                </div>
-                <span className="text-[10px] text-[var(--adm-text-muted)]">Műveleti központ</span>
-              </div>
-
-              <div className="mt-3 space-y-2">
-                <Link
-                  href={`/time-entries?clientId=${encodeURIComponent(clientId)}`}
-                  className="adm-link-button block w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
-                >
-                  <span>Munkaórák</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
-                <Link
-                  href={`/clients/${encodeURIComponent(clientId)}/szamlazas`}
-                  className="adm-link-button block w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
-                >
-                  <span>Számlázás előkészítése</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
-                <button
-                  onClick={openEditClient}
-                  className="adm-link-button w-full px-3 py-2 text-left text-xs flex items-center justify-between group"
-                >
-                  <span>Ügyfél szerkesztése</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </button>
-                <Link
-                  href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`}
-                  className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
-                >
-                  <span>Dokumentum hozzáadása</span>
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                </Link>
-                {organizationMode && (
-                  <Link
-                    href={`/clients/${encodeURIComponent(clientId)}/workgroups`}
-                    className="adm-link-button block px-3 py-2 text-xs flex items-center justify-between group"
-                  >
-                    <span>Munkacsoportok</span>
-                    <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-                  </Link>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: House Style */}
-          <HourlyRateCard clientId={clientId} />
-          <section
-            id="house-style"
-            className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-          >
-            <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3 mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                {clientColorDef.key && (
-                  <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
-                )}
-                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">House style</h3>
-              </div>
-              <p className="text-[10px] text-[var(--adm-text-muted)]">
-                Ügyfél-specifikus dokumentumstílus és külső prompt-copy instrukciós kontextus.
-              </p>
-            </div>
-            <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
-          </section>
         </section>
 
         {/* 3. Connected Working Lists */}
@@ -457,6 +346,25 @@ function ClientDetailContent() {
               </table>
             </div>
           )}
+        </section>
+
+        {/* Compact secondary tools — non-duplicated working destinations
+            recovered from the removed quick-actions card. */}
+        <section aria-label="További eszközök" className={`adm-board-panel p-5 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
+          <div className="flex items-center gap-2 mb-3">
+            {clientColorDef.key && (
+              <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
+            )}
+            <h2 className="text-sm font-semibold text-[var(--adm-text)]">További eszközök</h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Link href={`/time-entries?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button px-3 py-2 text-xs">Munkaórák</Link>
+            <Link href={`/clients/${encodeURIComponent(clientId)}/szamlazas`} className="adm-link-button px-3 py-2 text-xs">Számlázás előkészítése</Link>
+            <Link href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button px-3 py-2 text-xs">Dokumentum hozzáadása</Link>
+            {organizationMode && (
+              <Link href={`/clients/${encodeURIComponent(clientId)}/workgroups`} className="adm-link-button px-3 py-2 text-xs">Munkacsoportok</Link>
+            )}
+          </div>
         </section>
 
         <section className="grid gap-5 lg:grid-cols-2">
@@ -521,6 +429,25 @@ function ClientDetailContent() {
           </div>
         </section>
 
+          <HourlyRateCard clientId={clientId} />
+          <details
+            id="house-style"
+            className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
+          >
+            <summary className="cursor-pointer font-semibold text-sm">Dokumentumstílus</summary>
+            <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3 mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                {clientColorDef.key && (
+                  <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
+                )}
+                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">House style</h3>
+              </div>
+              <p className="text-[10px] text-[var(--adm-text-muted)]">
+                Ügyfél-specifikus dokumentumstílus és külső prompt-copy instrukciós kontextus.
+              </p>
+            </div>
+            <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
+          </details>
         {/* 4. Corporate Governance & Organizational Snapshots */}
         <section aria-label="Vállalati és szervezeti modulok" className="space-y-5">
           <div className="flex items-center justify-between border-b border-[var(--adm-border)] pb-2">

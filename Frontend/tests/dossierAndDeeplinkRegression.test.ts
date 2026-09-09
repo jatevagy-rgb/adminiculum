@@ -50,7 +50,7 @@ describe("Client dossier & dedicated portal surface separation", () => {
     assert.match(heroContent, /break-words/);
     assert.match(heroContent, /Új ügy/);
     assert.match(heroContent, /••• Haladó/);
-    assert.match(heroContent, /dossierStats/);
+    assert.doesNotMatch(heroContent, /dossierStats/);
 
     // Hero does NOT contain duplicate actions or module entrypoints
     assert.ok(!heroContent.includes("Vállalati működés"), "Hero must NOT contain Vállalati működés");
