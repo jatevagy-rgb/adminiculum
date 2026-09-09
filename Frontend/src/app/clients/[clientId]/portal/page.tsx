@@ -97,58 +97,6 @@ export default function ClientPortalContextPage() {
                 <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A portál státusza és ügyfélnek szánt kapcsolódó felület egy helyen.</p>
               </header>
 
-              <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {organizationMode ? (
-                  <Link
-                    href={`/clients/${encodeURIComponent(clientId)}/szervezet`}
-                    className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Szervezeti felépítés</p>
-                    <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Szervezeti térkép megnyitása →</p>
-                  </Link>
-                ) : null}
-                <Link
-                  href="/deadlines"
-                  className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Naptár</p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Határidő agenda megnyitása →</p>
-                </Link>
-                <Link
-                  href={`/communications?clientId=${encodeURIComponent(clientId)}`}
-                  className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Kommunikáció</p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Ügyfél kommunikáció megnyitása →</p>
-                </Link>
-                <Link
-                  href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=ACTIVE`}
-                  className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Nyitott ügyek</p>
-                  {openCasesCount !== null ? (
-                    <p className="mt-2 font-serif text-2xl text-[var(--adm-text)]">{openCasesCount}</p>
-                  ) : (
-                    <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Nyitott ügyek megnyitása →</p>
-                  )}
-                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Kapcsolt ügyek megnyitása →</p>
-                </Link>
-                <Link
-                  href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=CLOSED`}
-                  className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Lezárt ebben a hónapban</p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Lezárt ügyek megnyitása →</p>
-                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Nincs hiteles lezárási időpont-forrás.</p>
-                </Link>
-                <Link
-                  href={`/time-entries?clientId=${encodeURIComponent(clientId)}`}
-                  className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Munkaórák</p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Munkaórák megnyitása →</p>
-                </Link>
-              </section>
 
               <section className="adm-board-panel p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
