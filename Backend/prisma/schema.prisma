@@ -29,6 +29,7 @@ model User {
   createdHourlyRateVersions  HourlyRateVersion[]
   createdBillingPreparations BillingPreparation[] @relation("BillingPreparationCreatedBy")
   closedBillingPreparations  BillingPreparation[] @relation("BillingPreparationClosedBy")
+  createdInvoiceDrafts       InvoiceDraft[]       @relation("InvoiceDraftCreatedBy")
   id                         String               @id @default(uuid())
   email                      String               @unique
   passwordHash               String?
@@ -860,10 +861,11 @@ model BillingPreparation {
   closedAt                 DateTime?
   closedById               String?
 
-  client    Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  createdBy User                     @relation("BillingPreparationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  closedBy  User?                    @relation("BillingPreparationClosedBy", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  items     BillingPreparationItem[]
+  client       Client                   @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy    User                     @relation("BillingPreparationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  closedBy     User?                    @relation("BillingPreparationClosedBy", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  items        BillingPreparationItem[]
+  invoiceDraft InvoiceDraft?
 
   @@index([clientId, periodStart, periodEnd])
   @@map("billing_preparations")
@@ -930,6 +932,129 @@ model BillingPreparationItem {
   @@unique([preparationId, sourceTimeEntryId])
   @@index([sourceTimeEntryId])
   @@map("billing_preparation_items")
+}
+
+/// T6A — invoice draft foundation. A draft is NEVER a legal invoice: there is
+/// deliberately no invoiceNumber, no issuance state, and no NAV integration.
+/// Every issuer/customer/financial value is a snapshot taken at draft creation
+/// so later TimeEntry/Client/profile edits cannot retroactively change it.
+/// T6B extension points: sequential numbering + issuance event on
+/// InvoiceDraft, NAV transmission record, and correction/cancellation lines
+/// that reference InvoiceDraftLine ids.
+
+/// Whether the customer's tax number is required on the draft — explicit
+/// domain state, never inferred from the client name or filled fields.
+/// Canonical evidence: ClientPortalWorkspace.mode (ORGANIZATION ⇒ REQUIRED,
+/// only-INDIVIDUAL ⇒ NOT_APPLICABLE, otherwise UNCONFIRMED).
+enum InvoiceCustomerTaxNumberRequirement {
+  UNCONFIRMED
+  REQUIRED
+  NOT_APPLICABLE
+}
+
+enum InvoiceDraftStatus {
+  DRAFT
+}
+
+/// VAT treatment per invoice line. The schema supports the legally required
+/// non-standard treatments; T6A only exposes the configured ordinary path.
+enum InvoiceVatTreatment {
+  NORMAL_VAT
+  TAX_EXEMPT
+  REVERSE_CHARGE
+  OUT_OF_SCOPE
+}
+
+model InvoiceDraft {
+  id                   String             @id @default(uuid())
+  billingPreparationId String             @unique
+  currency             String             @db.VarChar(3)
+  status               InvoiceDraftStatus @default(DRAFT)
+
+  // Issuer identity snapshot — captured from configured issuer profile at creation.
+  issuerLegalName          String?
+  issuerAddress            String?
+  issuerTaxNumber          String?
+  issuerEuVatNumber        String?
+  issuerRegistrationNumber String?
+  issuerBankName           String?
+  issuerBankAccountNumber  String?
+  issuerEmail              String?
+  issuerPhone              String?
+  // Deliberately no issuerLogoPath: an arbitrary filesystem path would let a
+  // profile field drive a server-side file read in the PDF renderer. Logo
+  // support is deferred to a safe asset reference/upload hook.
+
+  // Customer billing identity snapshot — later Client edits never rewrite it.
+  // Tax-number applicability is explicit: UNCONFIRMED blocks PDF readiness
+  // until a reviewer resolves it; REQUIRED enforces customerTaxNumber;
+  // NOT_APPLICABLE covers private individuals legitimately without one.
+  customerTaxNumberRequirement InvoiceCustomerTaxNumberRequirement @default(UNCONFIRMED)
+  // true when ClientPortalWorkspace evidence canonically resolved the
+  // applicability — such drafts are not reviewer-overridable.
+  customerTaxNumberCanonical   Boolean                          @default(false)
+  customerName                 String?
+  customerAddress              String?
+  customerTaxNumber            String?
+  customerVatNumber            String?
+
+  performanceDate DateTime? @db.Date
+  draftDate       DateTime  @default(now()) @db.Date
+  paymentDueDate  DateTime? @db.Date
+  paymentMethod   String?   @db.VarChar(40)
+  note            String?   @db.Text
+
+  // Draft-level default tax treatment copied onto each line; lines may later
+  // diverge when alternate treatments are needed.
+  vatTreatment InvoiceVatTreatment @default(NORMAL_VAT)
+  vatRate      Decimal?            @db.Decimal(7, 4)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  preparation BillingPreparation @relation(fields: [billingPreparationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy   User               @relation("InvoiceDraftCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines       InvoiceDraftLine[]
+
+  @@map("invoice_drafts")
+}
+
+/// One draft line derived from an included BillingPreparationItem snapshot.
+/// billingItemId is a plain reference (no FK) — the preparation snapshot is
+/// already immutable after close, and this mirrors the deliberate no-FK
+/// sourceTimeEntryId convention.
+model InvoiceDraftLine {
+  id            String @id @default(uuid())
+  draftId       String
+  billingItemId String
+  sortOrder     Int
+
+  // Invoice face is always exactly reconcilable: quantity = 1 tétel at
+  // netUnitPrice = netAmount (the authoritative persisted billing net). The
+  // per-minute basis stays visible in description + annex provenance.
+  description  String              @db.Text
+  quantity     Decimal             @db.Decimal(12, 4) // always 1
+  unit         String              @db.VarChar(16)    // 'tétel'
+  netUnitPrice Decimal?            @db.Decimal(19, 4) // = netAmount
+  netAmount    Decimal             @db.Decimal(19, 2)
+  vatTreatment InvoiceVatTreatment @default(NORMAL_VAT)
+  vatRate      Decimal?            @db.Decimal(7, 4)
+  vatAmount    Decimal             @db.Decimal(19, 2)
+  grossAmount  Decimal             @db.Decimal(19, 2)
+
+  // Provenance captured for the "Elszámolási melléklet" annex.
+  sourceWorkDate DateTime @db.Date
+  caseNumber     String?
+  caseTitle      String?
+  workerName     String?
+  billingMinutes Int
+  hourlyRate     Decimal? @db.Decimal(19, 4)
+
+  draft InvoiceDraft @relation(fields: [draftId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([draftId, billingItemId])
+  @@map("invoice_draft_lines")
 }
 
 /// Non-user participants captured at intake: client contacts, opposing party and

@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useId, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ApiError, getCurrentUser } from '@/lib/api';
+import { createInvoiceDraft } from '@/lib/invoiceDraftsApi';
 import {
   getBillingPreparation,
   downloadBillingPreparationPdf,
@@ -33,7 +35,10 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [issuerProfileError, setIssuerProfileError] = useState(false);
   const [notice, setNotice] = useState('');
+  const router = useRouter();
 
   const load = useCallback(async () => {
     setError(null);
@@ -99,6 +104,21 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
     }
   }
 
+  async function openInvoiceDraft() {
+    if (drafting) return;
+    setDrafting(true);
+    setError(null);
+    try {
+      await createInvoiceDraft({ billingPreparationId: preparationId });
+      router.push(`/clients/${encodeURIComponent(clientId)}/szamlazas/${encodeURIComponent(preparationId)}/szamlatervezet`);
+    } catch (e) {
+      setIssuerProfileError(e instanceof ApiError && e.code === 'INVOICE_ISSUER_PROFILE_INCOMPLETE');
+      setError(e instanceof ApiError ? e.message : 'A számlatervezet létrehozása nem sikerült.');
+    } finally {
+      setDrafting(false);
+    }
+  }
+
   if (loading) return <main className="p-6 text-sm text-[var(--adm-text-muted)]">Betöltés…</main>;
   if (forbidden) return <main className="p-6 text-sm">A számlázási előkészítés megtekintéséhez adminisztrátor vagy partner jogosultság szükséges.</main>;
   if (notFound) return <main className="p-6 text-sm">A számlázási előkészítés nem található. <Link className="text-[var(--adm-ochre-600)]" href={`/clients/${encodeURIComponent(clientId)}/szamlazas`}>Vissza a számlázáshoz</Link></main>;
@@ -134,12 +154,13 @@ export default function BillingReviewWorkspace({ clientId, preparationId }: { cl
           </>}
           {!open && <>
             <button type="button" className={button} disabled={downloadingPdf} onClick={downloadPdf}>{downloadingPdf ? 'PDF készítése…' : 'PDF letöltése'}</button>
+            <button type="button" className={button} disabled={drafting} onClick={openInvoiceDraft}>{drafting ? 'Tervezet…' : 'Számlatervezet'}</button>
             <button type="button" className={button} onClick={() => toggleStatus('OPEN')}>Újranyitás</button>
           </>}
         </span>
       </section>
       {notice && <p role="status" className="text-xs">{notice}</p>}
-      {error && <div role="alert" className="text-sm text-red-700">{error}</div>}
+      {error && <div role="alert" className="text-sm text-red-700">{error} {issuerProfileError && <Link className="underline" href="/settings/szamlazas">Számlázói adatok beállítása</Link>}</div>}
 
       {workspace.items.length === 0 && (
         <p className="rounded-lg border border-[var(--adm-border)] bg-white p-4 text-sm text-[var(--adm-text-muted)]">

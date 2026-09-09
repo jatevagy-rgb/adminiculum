@@ -32,7 +32,7 @@ export type BillingReviewStatus =
   | 'SOURCE_MISSING' | 'STALE' | 'REVIEW_REQUIRED' | 'NO_RATE' | 'NON_BILLABLE' | 'ZERO_MINUTES' | 'OK';
 
 /** Interactive transaction when the caller passes a PrismaClient; run inline inside an existing transaction. */
-function withTransaction<T>(db: Db, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+export function withTransaction<T>(db: Db, work: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
   return '$transaction' in db ? (db as PrismaClient).$transaction(work) : work(db as Prisma.TransactionClient);
 }
 
@@ -661,6 +661,13 @@ export async function setPreparationStatus(actor: InternalActor, preparationId: 
     });
     if (blockers.length > 0) {
       return fail(409, 'BILLING_PREP_CLOSE_BLOCKED', `${blockers.length} szerepelt sor forrása megváltozott vagy felülvizsgálatra vár. Frissítse vagy zárja ki a sort.`);
+    }
+  } else {
+    // A closed preparation that already produced an invoice-draft snapshot must
+    // not be reopened underneath it — the user must discard the draft first.
+    const draft = await db.invoiceDraft.findUnique({ where: { billingPreparationId: preparationId }, select: { id: true } });
+    if (draft) {
+      return fail(409, 'BILLING_PREP_INVOICE_DRAFT_EXISTS', 'Az előkészítéshez már tartozik számlatervezet. Az újranyitás előtt vesse el a számlatervezetet.');
     }
   }
   try {
