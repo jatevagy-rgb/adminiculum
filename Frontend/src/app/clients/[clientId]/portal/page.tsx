@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { getClient, getCases, updateClient, type CaseListItem, type Client } from "@/lib/api";
+import { isClosedCase } from "@/lib/casesOperational";
 import { getClientColorDefinition } from "@/lib/clientColors";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
 
@@ -26,7 +27,8 @@ export default function ClientPortalContextPage() {
   const clientId = String(params?.clientId || "");
   const [client, setClient] = useState<Client | null>(null);
   const [workspace, setWorkspace] = useState<AdminWorkspaceDTO | null>(null);
-  const [cases, setCases] = useState<CaseListItem[]>([]);
+  const [caseScope, setCaseScope] = useState<{ items: CaseListItem[]; total: number } | null>(null);
+  const [caseScopeFailed, setCaseScopeFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingPortal, setSavingPortal] = useState(false);
 
@@ -45,18 +47,24 @@ export default function ClientPortalContextPage() {
 
   useEffect(() => {
     if (!clientId) return;
-    void Promise.all([getClient(clientId), listAdminWorkspaces(clientId), getCases(1, 100, undefined, clientId)])
-      .then(([clientResult, workspaces, casesResult]) => {
+    void Promise.all([getClient(clientId), listAdminWorkspaces(clientId)])
+      .then(([clientResult, workspaces]) => {
         setClient(clientResult);
         setWorkspace(workspaces.items.find((item) => item.status !== "ARCHIVED") || workspaces.items[0] || null);
-        setCases(casesResult.data || []);
       })
       .catch(() => setError("A portál adatai jelenleg nem érhetők el."));
+    void getCases(1, 100, undefined, clientId)
+      .then((result) => setCaseScope({ items: result.data || [], total: result.pagination?.total ?? (result.data?.length ?? 0) }))
+      .catch(() => setCaseScopeFailed(true));
   }, [clientId]);
 
   const organizationMode = workspace?.mode === "ORGANIZATION" || workspace?.mode === "CASE_RELAY";
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
-  const openCasesCount = cases.filter((item) => item.status !== "CLOSED").length;
+  // A numeric count is shown only when the client-scoped case set is complete
+  // (pagination.total covered by fetched items) and terminal statuses are
+  // excluded via the canonical isClosedCase semantics.
+  const caseScopeComplete = Boolean(caseScope && !caseScopeFailed && caseScope.total <= caseScope.items.length);
+  const openCasesCount = caseScopeComplete ? caseScope!.items.filter((item) => !isClosedCase(item.status)).length : null;
 
   return (
     <AuthenticatedApp section="clients">
@@ -114,15 +122,19 @@ export default function ClientPortalContextPage() {
                   <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Ügyfél kommunikáció megnyitása →</p>
                 </Link>
                 <Link
-                  href={`/clients/${encodeURIComponent(clientId)}/cases`}
+                  href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=ACTIVE`}
                   className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Nyitott ügyek</p>
-                  <p className="mt-2 font-serif text-2xl text-[var(--adm-text)]">{openCasesCount}</p>
+                  {openCasesCount !== null ? (
+                    <p className="mt-2 font-serif text-2xl text-[var(--adm-text)]">{openCasesCount}</p>
+                  ) : (
+                    <p className="mt-2 text-sm font-semibold text-[var(--adm-text)]">Nyitott ügyek megnyitása →</p>
+                  )}
                   <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Kapcsolt ügyek megnyitása →</p>
                 </Link>
                 <Link
-                  href={`/clients/${encodeURIComponent(clientId)}/cases`}
+                  href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=CLOSED`}
                   className={`adm-board-panel p-4 transition-colors hover:border-[var(--adm-ochre-500)] ${clientColorDef?.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Lezárt ebben a hónapban</p>

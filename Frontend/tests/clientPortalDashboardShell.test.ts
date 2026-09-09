@@ -18,18 +18,35 @@ test("dashboard is client-scoped: all fetches and tiles carry client context", (
   assert.match(source, /listAdminWorkspaces\(clientId\)/);
   assert.match(source, /getCases\(1, 100, undefined, clientId\)/);
   assert.match(source, /getClient\(clientId\)/);
-  // Cases tile goes to the dedicated client-scoped cases surface.
-  assert.match(source, /\/clients\/\$\{encodeURIComponent\(clientId\)\}\/cases/);
+  // Case tiles land on the proven scope-filtered, client-scoped Cases surface.
+  assert.match(source, /\/cases\?clientId=\$\{encodeURIComponent\(clientId\)\}&scope=ACTIVE/);
+  assert.match(source, /\/cases\?clientId=\$\{encodeURIComponent\(clientId\)\}&scope=CLOSED/);
   // Communications tile preserves the existing clientId scope param.
   assert.match(source, /\/communications\?clientId=\$\{encodeURIComponent\(clientId\)\}/);
   // Work hours tile preserves the existing clientId deep-link param.
   assert.match(source, /\/time-entries\?clientId=\$\{encodeURIComponent\(clientId\)\}/);
-  // No cross-client bare /cases or /communications or /time-entries links.
-  const hrefs = [...source.matchAll(/href="(\/[^"]+)"/g)].map((m) => m[1]);
-  for (const bare of ["/cases", "/communications", "/time-entries", "/client-portal-admin"]) {
-    if (bare === "/client-portal-admin") continue; // global admin entry point is intentional
-    assert.ok(!hrefs.includes(bare), `unscoped destination ${bare} must not be linked`);
+  // No cross-client bare /cases, /communications, or /time-entries links.
+  const literalHrefs = [...source.matchAll(/href="(\/[^"]+)"/g)].map((m) => m[1]);
+  for (const bare of ["/cases", "/communications", "/time-entries"]) {
+    assert.ok(!literalHrefs.includes(bare), `unscoped destination ${bare} must not be linked`);
   }
+  const templateHrefs = [...source.matchAll(/href=\{`([^`]+)`\}/g)].map((m) => m[1]);
+  for (const href of templateHrefs) {
+    if (href.startsWith("/cases") || href.startsWith("/communications") || href.startsWith("/time-entries")) {
+      assert.ok(href.includes("clientId"), `case/comms/time destination must carry clientId: ${href}`);
+    }
+  }
+});
+
+test("case KPI fetch soft-fails — portal control plane never depends on it", () => {
+  // The portal-critical loads must not share a Promise.all with the optional
+  // case fetch: a cases failure may not blank the settings/status UI.
+  assert.match(source, /Promise\.all\(\[getClient\(clientId\), listAdminWorkspaces\(clientId\)\]\)/);
+  assert.ok(
+    !source.includes("Promise.all([getClient(clientId), listAdminWorkspaces(clientId), getCases"),
+    "getCases must not be a hard dependency of the portal control plane load",
+  );
+  assert.match(source, /void getCases\(1, 100, undefined, clientId\)[\s\S]*?\.catch\(\(\) => setCaseScopeFailed\(true\)\)/);
 });
 
 test("ClientWorkspaceTabs and client name remain visible", () => {
@@ -77,8 +94,15 @@ test("closed-this-month tile is non-numeric — no fabricated closure metric", (
   assert.doesNotMatch(source, /updatedAt.*month|month.*updatedAt/i);
 });
 
-test("open-cases count is derived only from the authoritative status field", () => {
-  assert.match(source, /cases\.filter\(\(item\) => item\.status !== "CLOSED"\)\.length/);
+test("open-cases count uses canonical scope semantics and only renders when complete", () => {
+  // Terminal statuses (FINAL/CANCELLED/ARCHIVED) excluded via isClosedCase.
+  assert.match(source, /import \{ isClosedCase \} from "@\/lib\/casesOperational"/);
+  assert.match(source, /!isClosedCase\(item\.status\)/);
+  // Numeric count gated on pagination completeness.
+  assert.match(source, /caseScope\.total <= caseScope\.items\.length/);
+  assert.match(source, /openCasesCount !== null \?/);
+  // Incomplete/unavailable → non-numeric CTA fallback.
+  assert.match(source, /Nyitott ügyek megnyitása →/);
   assert.match(source, /Nyitott ügyek/);
 });
 
