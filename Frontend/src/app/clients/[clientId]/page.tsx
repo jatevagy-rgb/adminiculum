@@ -21,7 +21,6 @@ import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFound
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
 import { ClientOrganizationPreview } from "@/components/clients/ClientOrganizationPreview";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
-import { ClientControlCenter } from "@/components/clients/ClientControlCenter";
 import { getClientColorDefinition } from "@/lib/clientColors";
 import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
@@ -275,22 +274,8 @@ function ClientDetailContent() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-            <div className={`adm-board-strip p-3 ${clientColorDef.key ? `border-l-2 ${clientColorDef.accentBorderClass}` : ""}`}><p className="font-serif text-2xl" title={isCasesComplete ? undefined : "Teljes ügylista szükséges a pontos számhoz"}>{isCasesComplete ? dossierStats.activeCases : "—"}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Aktív ügy</p></div>
-            <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{caseTotalCount ?? "—"}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Összes ügy</p></div>
-            <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.documents}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss dokumentum</p></div>
-            <div className="adm-board-strip p-3"><p className="font-serif text-2xl">{dossierStats.communications}</p><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Friss kommunikáció</p></div>
-          </div>
         </header>
-
-        {/* 1. Primary Control Center */}
-        <ClientControlCenter
-          clientId={clientId}
-          client={client}
-          activeCases={dossierStats.activeCases}
-          isCasesComplete={isCasesComplete}
-          organizationMode={organizationMode}
-        />
+        <ClientWorkspaceTabs clientId={clientId} active="overview" organizationMode={organizationMode} />
 
         {/* 2. Integrated Client Basics & Operational Hub */}
         <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -318,9 +303,9 @@ function ClientDetailContent() {
                 <p><span className="text-[var(--adm-text-muted)]">Email:</span> {client.email || "—"}</p>
                 <p><span className="text-[var(--adm-text-muted)]">Telefon:</span> {client.phone || "—"}</p>
                 <p><span className="text-[var(--adm-text-muted)]">Cím:</span> {client.address || "—"}</p>
-                <p><span className="text-[var(--adm-text-muted)]">Adószám:</span> {client.taxNumber || "—"}</p>
-                <p><span className="text-[var(--adm-text-muted)]">Cégjegyzékszám:</span> {client.companyRegistrationNumber || "—"}</p>
-                <p><span className="text-[var(--adm-text-muted)]">Képviselő:</span> {client.authorizedRepresentative || "—"}</p>
+                {(organizationMode || client.taxNumber) ? <p><span className="text-[var(--adm-text-muted)]">Adószám:</span> {client.taxNumber || "—"}</p> : null}
+                {(organizationMode || client.companyRegistrationNumber) ? <p><span className="text-[var(--adm-text-muted)]">Cégjegyzékszám:</span> {client.companyRegistrationNumber || "—"}</p> : null}
+                {(organizationMode || client.authorizedRepresentative) ? <p><span className="text-[var(--adm-text-muted)]">Képviselő:</span> {client.authorizedRepresentative || "—"}</p> : null}
                 <p><span className="text-[var(--adm-text-muted)]">Kapcsolattartó:</span> {client.contactPerson || "—"}</p>
               </div>
             </div>
@@ -385,10 +370,11 @@ function ClientDetailContent() {
 
           {/* Card 3: House Style */}
           <HourlyRateCard clientId={clientId} />
-          <section
+          <details
             id="house-style"
             className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
           >
+            <summary className="cursor-pointer font-semibold text-sm">Dokumentumstílus</summary>
             <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3 mb-3">
               <div className="flex items-center gap-2 mb-1">
                 {clientColorDef.key && (
@@ -401,7 +387,7 @@ function ClientDetailContent() {
               </p>
             </div>
             <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
-          </section>
+          </details>
         </section>
 
         {/* 3. Connected Working Lists */}

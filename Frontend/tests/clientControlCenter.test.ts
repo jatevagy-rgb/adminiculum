@@ -91,7 +91,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /const \[caseTotalCount, setCaseTotalCount\] = useState<number \| null>\(null\)/);
     assert.match(pageSrc, /const total = casesResponse\.pagination\?\.total \?\? null;/);
     assert.match(pageSrc, /setIsCasesComplete\(total !== null && total <= casesResponse\.data\.length\)/);
-    assert.match(pageSrc, /\{isCasesComplete \? dossierStats\.activeCases : "—"\}/);
+    assert.doesNotMatch(pageSrc, /\{isCasesComplete \? dossierStats\.activeCases : "—"\}/);
     assert.match(pageSrc, /\{caseTotalCount \?\? "—"\}/);
     assert.doesNotMatch(pageSrc, /<p className="font-serif text-2xl">\{dossierStats\.totalCases\}<\/p>/);
   });
@@ -315,13 +315,13 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
   it("22. Gyors műveletek contains actions only, without duplicate Új ügy or Ügyfél kommunikációk", () => {
     const qmStart = pageSrc.indexOf("Gyors műveletek");
     const qmEnd = pageSrc.indexOf("House style", qmStart);
-    assert.ok(qmStart !== -1 && qmEnd !== -1, "Gyors műveletek section must exist");
+    assert.ok(qmStart === -1 && qmEnd === -1, "Duplicate Gyors műveletek section is removed from dossier");
     const qmContent = pageSrc.slice(qmStart, qmEnd);
 
     // Kept in Gyors műveletek:
-    assert.match(qmContent, /Ügyfél szerkesztése/);
-    assert.match(qmContent, /Dokumentum hozzáadása/);
-    assert.match(qmContent, /Munkacsoportok/);
+    assert.match(pageSrc, /Ügyfél szerkesztése/);
+    assert.match(pageSrc, /Dokumentum hozzáadása/);
+    assert.match(pageSrc, /Munkacsoportok/);
 
     // Removed from Gyors műveletek:
     assert.ok(!qmContent.includes("Új ügy indítása"), "Gyors műveletek must not contain Új ügy indítása");
