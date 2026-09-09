@@ -14,28 +14,10 @@ const order = (label: string, index: number) => {
   return index;
 };
 
-test("dashboard is client-scoped: all fetches and tiles carry client context", () => {
+test("portal shell is admin-scoped and contains no operational dashboard tiles", () => {
   assert.match(source, /listAdminWorkspaces\(clientId\)/);
-  assert.doesNotMatch(source, /getCases|caseScope|openCasesCount/);
   assert.match(source, /getClient\(clientId\)/);
-  // Case tiles land on the proven scope-filtered, client-scoped Cases surface.
-  assert.match(source, /\/cases\?clientId=\$\{encodeURIComponent\(clientId\)\}&scope=ACTIVE/);
-  assert.match(source, /\/cases\?clientId=\$\{encodeURIComponent\(clientId\)\}&scope=CLOSED/);
-  // Communications tile preserves the existing clientId scope param.
-  assert.match(source, /\/communications\?clientId=\$\{encodeURIComponent\(clientId\)\}/);
-  // Work hours tile preserves the existing clientId deep-link param.
-  assert.match(source, /\/time-entries\?clientId=\$\{encodeURIComponent\(clientId\)\}/);
-  // No cross-client bare /cases, /communications, or /time-entries links.
-  const literalHrefs = [...source.matchAll(/href="(\/[^"]+)"/g)].map((m) => m[1]);
-  for (const bare of ["/cases", "/communications", "/time-entries"]) {
-    assert.ok(!literalHrefs.includes(bare), `unscoped destination ${bare} must not be linked`);
-  }
-  const templateHrefs = [...source.matchAll(/href=\{`([^`]+)`\}/g)].map((m) => m[1]);
-  for (const href of templateHrefs) {
-    if (href.startsWith("/cases") || href.startsWith("/communications") || href.startsWith("/time-entries")) {
-      assert.ok(href.includes("clientId"), `case/comms/time destination must carry clientId: ${href}`);
-    }
-  }
+  assert.doesNotMatch(source, /getCases|caseScope|openCasesCount|Naptár|\/deadlines|scope=ACTIVE|scope=CLOSED|communications\?clientId|time-entries\?clientId/);
 });
 
 test("portal control plane has no case KPI dependency", () => {
