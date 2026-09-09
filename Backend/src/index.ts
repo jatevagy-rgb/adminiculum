@@ -283,6 +283,9 @@ app.use('/api/v1/client-company', clientCompanyRouter);
 import { clientContractsRouter } from './modules/client-contracts/routes';
 app.use('/api/v1/client-contracts', clientContractsRouter);
 
+import { clientCalendarRouter } from './modules/client-calendar/routes';
+app.use('/api/v1/client-calendar', clientCalendarRouter);
+
 import { clientOrganizationRouter } from './modules/client-organization/routes';
 app.use('/api/v1/client-organization', clientOrganizationRouter);
 

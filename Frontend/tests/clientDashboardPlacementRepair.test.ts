@@ -11,10 +11,9 @@ test("operational links live on overview and remain client scoped", () => {
   assert.match(overview, /cases\?clientId=.*scope=ACTIVE/);
   assert.match(overview, /cases\?clientId=.*scope=CLOSED/);
   assert.match(overview, /time-entries\?clientId=/);
-  assert.match(overview, /Ügyfélnaptár kialakítás alatt/);
-  const calendarStart = overview.indexOf("Naptár");
-  const calendar = overview.slice(calendarStart, overview.indexOf("<Link", calendarStart));
-  assert.doesNotMatch(calendar, /href/);
+  // The calendar placeholder was replaced by the real client-scoped calendar route.
+  assert.match(overview, /\/clients\/\$\{encodeURIComponent\(clientId\)\}\/calendar/);
+  assert.match(overview, />Naptár →</);
   assert.match(overview, /organizationMode \? <Link[\s\S]*szervezet/);
 });
 
