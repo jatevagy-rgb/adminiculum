@@ -5,8 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
-import { getClient, getCases, updateClient, type CaseListItem, type Client } from "@/lib/api";
-import { isClosedCase } from "@/lib/casesOperational";
+import { getClient, updateClient, type Client } from "@/lib/api";
 import { getClientColorDefinition } from "@/lib/clientColors";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
 
@@ -27,8 +26,6 @@ export default function ClientPortalContextPage() {
   const clientId = String(params?.clientId || "");
   const [client, setClient] = useState<Client | null>(null);
   const [workspace, setWorkspace] = useState<AdminWorkspaceDTO | null>(null);
-  const [caseScope, setCaseScope] = useState<{ items: CaseListItem[]; total: number } | null>(null);
-  const [caseScopeFailed, setCaseScopeFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingPortal, setSavingPortal] = useState(false);
 
@@ -53,18 +50,12 @@ export default function ClientPortalContextPage() {
         setWorkspace(workspaces.items.find((item) => item.status !== "ARCHIVED") || workspaces.items[0] || null);
       })
       .catch(() => setError("A portál adatai jelenleg nem érhetők el."));
-    void getCases(1, 100, undefined, clientId)
-      .then((result) => setCaseScope({ items: result.data || [], total: result.pagination?.total ?? (result.data?.length ?? 0) }))
-      .catch(() => setCaseScopeFailed(true));
   }, [clientId]);
 
   const organizationMode = workspace?.mode === "ORGANIZATION" || workspace?.mode === "CASE_RELAY";
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
   // A numeric count is shown only when the client-scoped case set is complete
   // (pagination.total covered by fetched items) and terminal statuses are
-  // excluded via the canonical isClosedCase semantics.
-  const caseScopeComplete = Boolean(caseScope && !caseScopeFailed && caseScope.total <= caseScope.items.length);
-  const openCasesCount = caseScopeComplete ? caseScope!.items.filter((item) => !isClosedCase(item.status)).length : null;
 
   return (
     <AuthenticatedApp section="clients">

@@ -16,7 +16,7 @@ const order = (label: string, index: number) => {
 
 test("dashboard is client-scoped: all fetches and tiles carry client context", () => {
   assert.match(source, /listAdminWorkspaces\(clientId\)/);
-  assert.match(source, /getCases\(1, 100, undefined, clientId\)/);
+  assert.doesNotMatch(source, /getCases|caseScope|openCasesCount/);
   assert.match(source, /getClient\(clientId\)/);
   // Case tiles land on the proven scope-filtered, client-scoped Cases surface.
   assert.match(source, /\/cases\?clientId=\$\{encodeURIComponent\(clientId\)\}&scope=ACTIVE/);
@@ -38,7 +38,7 @@ test("dashboard is client-scoped: all fetches and tiles carry client context", (
   }
 });
 
-test("case KPI fetch soft-fails — portal control plane never depends on it", () => {
+test("portal control plane has no case KPI dependency", () => {
   // The portal-critical loads must not share a Promise.all with the optional
   // case fetch: a cases failure may not blank the settings/status UI.
   assert.match(source, /Promise\.all\(\[getClient\(clientId\), listAdminWorkspaces\(clientId\)\]\)/);
@@ -46,7 +46,7 @@ test("case KPI fetch soft-fails — portal control plane never depends on it", (
     !source.includes("Promise.all([getClient(clientId), listAdminWorkspaces(clientId), getCases"),
     "getCases must not be a hard dependency of the portal control plane load",
   );
-  assert.match(source, /void getCases\(1, 100, undefined, clientId\)[\s\S]*?\.catch\(\(\) => setCaseScopeFailed\(true\)\)/);
+  assert.doesNotMatch(source, /getCases|caseScopeFailed|caseScopeComplete/);
 });
 
 test("ClientWorkspaceTabs and client name remain visible", () => {
@@ -73,37 +73,17 @@ test("organizationMode derivation covers ORGANIZATION and CASE_RELAY", () => {
   assert.match(source, /workspace\?\.mode === "ORGANIZATION" \|\| workspace\?\.mode === "CASE_RELAY"/);
 });
 
-test("calendar tile is a truthful deep-link with no fabricated count", () => {
-  // No client-filtered calendar API exists; /deadlines is the proven surface.
-  assert.match(source, /href="\/deadlines"/);
-  assert.match(source, /Naptár/);
-  const tileStart = order("Naptár tile", source.indexOf("Naptár"));
-  const tileEnd = source.indexOf("</Link>", tileStart);
-  const tile = source.slice(tileStart, tileEnd);
-  assert.doesNotMatch(tile, /\{[^}]*Count[^}]*\}|\d{4,}/, "calendar tile must not render a fabricated numeric count");
+test("portal page has no operational calendar tile", () => {
+  assert.doesNotMatch(source, /Naptár|\/deadlines/);
 });
 
-test("closed-this-month tile is non-numeric — no fabricated closure metric", () => {
-  const tileStart = order("Lezárt ebben a hónapban tile", source.indexOf("Lezárt ebben a hónapban"));
-  const tileEnd = source.indexOf("</Link>", tileStart);
-  const tile = source.slice(tileStart, tileEnd);
-  assert.match(tile, /Lezárt ügyek megnyitása/);
-  assert.doesNotMatch(tile, /\{[^}]*[Cc]ount[^}]*\}|\{[^}]*\.length[^}]*\}/, "closed-this-month must not render a numeric metric");
-  // No closure-timestamp invention: updatedAt must not stand in for closedAt.
-  assert.ok(!source.includes("closedAt"), "case list has no authoritative closedAt — do not fabricate it");
-  assert.doesNotMatch(source, /updatedAt.*month|month.*updatedAt/i);
+test("portal page has no closed-case operational tile", () => {
+  assert.doesNotMatch(source, /Lezárt ebben a hónapban|Lezárt ügyek megnyitása/);
 });
 
-test("open-cases count uses canonical scope semantics and only renders when complete", () => {
+test("portal page has no open-case count machinery", () => {
   // Terminal statuses (FINAL/CANCELLED/ARCHIVED) excluded via isClosedCase.
-  assert.match(source, /import \{ isClosedCase \} from "@\/lib\/casesOperational"/);
-  assert.match(source, /!isClosedCase\(item\.status\)/);
-  // Numeric count gated on pagination completeness.
-  assert.match(source, /caseScope\.total <= caseScope\.items\.length/);
-  assert.match(source, /openCasesCount !== null \?/);
-  // Incomplete/unavailable → non-numeric CTA fallback.
-  assert.match(source, /Nyitott ügyek megnyitása →/);
-  assert.match(source, /Nyitott ügyek/);
+  assert.doesNotMatch(source, /isClosedCase|caseScope|openCasesCount|Nyitott ügyek/);
 });
 
 test("existing portal controls remain reachable under a secondary settings section", () => {
