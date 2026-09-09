@@ -6,6 +6,7 @@ const page = () => fs.readFileSync("src/app/clients/[clientId]/calendar/page.tsx
 const tabs = () => fs.readFileSync("src/components/clients/ClientWorkspaceTabs.tsx", "utf8");
 const overview = () => fs.readFileSync("src/app/clients/[clientId]/page.tsx", "utf8");
 const api = () => fs.readFileSync("src/lib/clientCalendarApi.ts", "utf8");
+const rangeLib = () => fs.readFileSync("src/lib/calendarRange.ts", "utf8");
 
 test("/clients/[clientId]/calendar exists and is a client-scoped workforce page", () => {
   const src = page();
@@ -73,7 +74,12 @@ test("calendar fetches only the dedicated client-scoped endpoint", () => {
 
 test("five-year view spans five calendar years with a grouped timeline", () => {
   const src = page();
-  assert.match(src, /`\$\{y \+ 4\}-12-31`/); // Jan 1 y → Dec 31 y+4
+  const lib = rangeLib();
+  assert.match(lib, /`\$\{y \+ 4\}-12-31`/); // Jan 1 y → Dec 31 y+4
+  // Period stepping is clamped — never raw setMonth/setFullYear day overflow.
+  assert.match(lib, /shiftClamped/);
+  assert.doesNotMatch(lib, /\.setMonth\(|\.setFullYear\(/);
+  assert.match(lib, /new Date\(shifted\.getFullYear\(\), shifted\.getMonth\(\) \+ 1, 0\)\.getDate\(\)/);
   assert.match(src, /itemsByMonth/);
   assert.match(src, /view === "five-year"/);
   // Long-range timeline grouped by year then month — not 60 grids.

@@ -14,8 +14,15 @@ import {
   type ClientCalendarDateKind,
 } from "@/lib/clientCalendarApi";
 import { getClientColorDefinition } from "@/lib/clientColors";
-
-type ViewKey = "day" | "month" | "year" | "five-year";
+import {
+  dateKey,
+  itemDayKey,
+  pad2,
+  parseKey,
+  rangeForView,
+  stepAnchor,
+  type ViewKey,
+} from "@/lib/calendarRange";
 
 const VIEWS: Array<[ViewKey, string]> = [
   ["day", "Nap"],
@@ -63,43 +70,6 @@ const sourceDotClass: Record<ClientCalendarSourceType, string> = {
   CASE_INTAKE_DEADLINE: "bg-slate-500",
 };
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
-const dateKey = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
-const parseKey = (key: string): Date | null => {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
-  if (!m) return null;
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return Number.isNaN(d.getTime()) ? null : d;
-};
-
-/** Item dates are ISO-8601 instants; the calendar groups by their UTC day. */
-const itemDayKey = (item: ClientCalendarItem) => item.date.slice(0, 10);
-
-function rangeForView(view: ViewKey, anchor: Date): { from: string; to: string } {
-  const y = anchor.getFullYear();
-  if (view === "day") {
-    const key = dateKey(anchor);
-    return { from: key, to: key };
-  }
-  if (view === "month") {
-    const from = new Date(y, anchor.getMonth(), 1);
-    const to = new Date(y, anchor.getMonth() + 1, 0);
-    return { from: dateKey(from), to: dateKey(to) };
-  }
-  if (view === "year") {
-    return { from: `${y}-01-01`, to: `${y}-12-31` };
-  }
-  return { from: `${y}-01-01`, to: `${y + 4}-12-31` };
-}
-
-function stepAnchor(view: ViewKey, anchor: Date, direction: -1 | 1): Date {
-  const d = new Date(anchor);
-  if (view === "day") d.setDate(d.getDate() + direction);
-  else if (view === "month") d.setMonth(d.getMonth() + direction);
-  else if (view === "year") d.setFullYear(d.getFullYear() + direction);
-  else d.setFullYear(d.getFullYear() + 5 * direction);
-  return d;
-}
 
 function ClientCalendarContent() {
   const params = useParams();
