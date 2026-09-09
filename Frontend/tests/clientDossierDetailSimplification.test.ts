@@ -54,6 +54,16 @@ test("primary order: identity → Kapcsolt ügyek → További eszközök → se
   assert.ok(iCases < iRate && iCases < iHouse, "House Style and HourlyRateCard must appear after related cases");
 });
 
+test("primary identity wrapper is single-column full-width — no empty md/lg grid columns", () => {
+  const sectionStart = order("identity wrapper", source.indexOf('<section aria-label="Ügyfél alapadatok és környezet"'));
+  const classStart = source.indexOf('className="', sectionStart);
+  const classEnd = source.indexOf('"', classStart + 11);
+  const classes = source.slice(classStart + 11, classEnd);
+  assert.ok(!classes.includes("md:grid-cols-2"), "identity wrapper must not be 2-column at md");
+  assert.ok(!classes.includes("lg:grid-cols-3"), "identity wrapper must not be 3-column at lg");
+  assert.ok(classes.includes("grid-cols-1"), "identity wrapper must stay single-column");
+});
+
 test("the removed large Gyors műveletek card stays removed — no dashboard/card wall returns", () => {
   assert.ok(!source.includes("Gyors műveletek"), "the large 'Gyors műveletek' card must not be reintroduced");
   assert.ok(!source.includes("Műveleti központ"), "the old quick-actions container styling must not return");

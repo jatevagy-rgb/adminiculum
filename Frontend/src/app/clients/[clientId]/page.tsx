@@ -256,7 +256,7 @@ function ClientDetailContent() {
         <ClientWorkspaceTabs clientId={clientId} active="overview" organizationMode={organizationMode} />
 
         {/* 2. Integrated Client Basics & Operational Hub */}
-        <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 gap-5">
           {/* Card 1: Identity & Contact */}
           <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
             <div>
