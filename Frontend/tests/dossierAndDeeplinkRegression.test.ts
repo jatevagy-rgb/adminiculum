@@ -82,7 +82,7 @@ describe("Client dossier & dedicated portal surface separation", () => {
 
   it("full portal controls are present and functional on dedicated /clients/[clientId]/portal page", () => {
     assert.match(portalSrc, /Client Portal control plane/);
-    assert.match(portalSrc, /Ügyfélkapcsolati működés/);
+    assert.match(portalSrc, /Portál beállításai/);
     assert.match(portalSrc, /relationshipMode/);
     assert.match(portalSrc, /PORTAL_CENTRIC/);
     assert.match(portalSrc, /EMAIL_CENTRIC/);
