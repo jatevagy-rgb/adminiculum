@@ -155,7 +155,7 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(grow.currentEmployeeCount).toBe(52);
     expect(grow.newTopicSafeCount).toBeGreaterThanOrEqual(1);
     expect(grow.safeFeedback).toContain('új terület');
-    expect(grow.safeMeaningText).toContain('szükséges');
+    expect(grow.safeNowText).toContain('szükséges');
   });
 
   it('proposal is human-gated: NO Task before confirm; Task created only after confirm', async () => {
@@ -176,12 +176,15 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(proposal.taskId).toBeNull();
     expect(proposal.task).toBeNull();
 
-    const confirmed = await confirmProposal(admin, String(proposal.id), db);
-    expect(String(confirmed.status)).toBe('CONFIRMED');
-    expect(confirmed.taskId).not.toBeNull();
-    expect(confirmed.confirmedById).toBe(IDS.adminUserId);
-    const task = await db.task.findUnique({ where: { id: String(confirmed.taskId) } });
-    expect(task).not.toBeNull();
+    // confirmProposal returns the created compliance Task; the CONFIRMED
+    // transition lives on the proposal row.
+    const task = await confirmProposal(admin, String(proposal.id), db);
+    expect(String(task.type)).toBe('COMPLIANCE_PROPOSAL');
+    expect(String(task.caseId)).toBe(IDS.caseComplianceId);
+    const stored = await db.complianceProposal.findUniqueOrThrow({ where: { id: String(proposal.id) } });
+    expect(String(stored.status)).toBe('CONFIRMED');
+    expect(String(stored.taskId)).toBe(String(task.id));
+    expect(String(stored.confirmedById)).toBe(IDS.adminUserId);
   });
 
   it('reset restores 47 and removes the demo 52-derived finding truthfully', async () => {
