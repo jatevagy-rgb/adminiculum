@@ -26,7 +26,7 @@ export type ComplianceFindingView = {
   subjectLabel?: string | null;
 };
 
-const statusLabels: Record<ComplianceApplicabilityStatus, string> = {
+export const complianceOutcomeLabels: Record<ComplianceApplicabilityStatus, string> = {
   APPLIES: "Belső értékelés szerint releváns",
   DOES_NOT_APPLY: "Nem releváns",
   INSUFFICIENT_FACTS: "Nincs elég adat",
@@ -35,7 +35,7 @@ const statusLabels: Record<ComplianceApplicabilityStatus, string> = {
   SOURCE_SUPPORT_INSUFFICIENT: "Nem elégséges forrástámogatás",
 };
 
-const statusClass: Record<ComplianceApplicabilityStatus, string> = {
+export const complianceOutcomeClass: Record<ComplianceApplicabilityStatus, string> = {
   APPLIES: "border-[#DCCCA6] bg-[var(--adm-sand-100)] text-[var(--adm-text)]",
   DOES_NOT_APPLY: "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]",
   INSUFFICIENT_FACTS: "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]",
@@ -44,7 +44,7 @@ const statusClass: Record<ComplianceApplicabilityStatus, string> = {
   SOURCE_SUPPORT_INSUFFICIENT: "border-[#DCCCA6] bg-[#FFF3D8] text-[#735D16]",
 };
 
-const scopeLabels: Record<string, string> = {
+export const complianceScopeLabels: Record<string, string> = {
   COMPANY: "Vállalat",
   EMPLOYEE: "Munkavállaló",
   CONTRACT: "Szerződés",
@@ -66,7 +66,7 @@ const proposalStatusLabels: Record<ComplianceProposal['status'], string> = {
 
 export function getComplianceScopeLabel(finding: ComplianceFindingView): string {
   if (finding.subjectLabel?.trim()) return finding.subjectLabel;
-  return scopeLabels[finding.scopeType || ""] || "Nem azonosított hatókör";
+  return complianceScopeLabels[finding.scopeType || ""] || "Nem azonosított hatókör";
 }
 
 export function getComplianceFindingStatus(finding: ComplianceFindingView): ComplianceApplicabilityStatus | null {
@@ -135,7 +135,7 @@ export function ComplianceAttentionSummary({ findings }: { findings: ComplianceF
   return (
     <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
       <p className="text-sm text-[var(--adm-text)]">{attention.length} belső értékelési megállapítás igényel áttekintést.</p>
-      {highest ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Legmagasabb figyelem: {statusLabels[getComplianceFindingStatus(highest) as ComplianceApplicabilityStatus]}</p> : null}
+      {highest ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Legmagasabb figyelem: {complianceOutcomeLabels[getComplianceFindingStatus(highest) as ComplianceApplicabilityStatus]}</p> : null}
     </div>
   );
 }
@@ -149,7 +149,7 @@ export function ComplianceFindingRow({ finding }: { finding: ComplianceFindingVi
           <p className="font-medium text-[var(--adm-text)]">{finding.title}</p>
           <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Hatókör: {getComplianceScopeLabel(finding)}</p>
         </div>
-        {status ? <span className={`rounded border px-2 py-1 text-xs ${statusClass[status]}`}>{statusLabels[status]}</span> : null}
+        {status ? <span className={`rounded border px-2 py-1 text-xs ${complianceOutcomeClass[status]}`}>{complianceOutcomeLabels[status]}</span> : null}
       </div>
       {finding.description ? <p className="mt-2 text-sm text-[var(--adm-text)]">{finding.description}</p> : null}
       {finding.operationalStatus ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Belső állapot: {finding.operationalStatus}</p> : null}

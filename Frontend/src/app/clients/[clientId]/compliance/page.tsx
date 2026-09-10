@@ -1,15 +1,158 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
-import { ComplianceOverviewPanel, ComplianceProposalPanel } from "@/components/clients/compliance/ComplianceOverview";
-import type { ComplianceFindingView } from "@/components/clients/compliance/ComplianceOverview";
+import {
+  ComplianceOverviewPanel,
+  ComplianceProposalPanel,
+  complianceOutcomeClass,
+  complianceOutcomeLabels,
+  complianceScopeLabels,
+} from "@/components/clients/compliance/ComplianceOverview";
+import type { ComplianceFindingView, ComplianceApplicabilityStatus } from "@/components/clients/compliance/ComplianceOverview";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
+import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
 import { getClient, type Client } from "@/lib/api";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
+
+const outcomeKeys: ComplianceApplicabilityStatus[] = [
+  "APPLIES",
+  "DOES_NOT_APPLY",
+  "INSUFFICIENT_FACTS",
+  "LEGAL_REVIEW_REQUIRED",
+  "TECHNICAL_REVIEW_REQUIRED",
+  "SOURCE_SUPPORT_INSUFFICIENT",
+];
+
+const summaryCountKey: Record<ComplianceApplicabilityStatus, keyof ComplianceWorkspace["summary"]> = {
+  APPLIES: "applies",
+  DOES_NOT_APPLY: "doesNotApply",
+  INSUFFICIENT_FACTS: "insufficientFacts",
+  LEGAL_REVIEW_REQUIRED: "legalReviewRequired",
+  TECHNICAL_REVIEW_REQUIRED: "technicalReviewRequired",
+  SOURCE_SUPPORT_INSUFFICIENT: "sourceSupportInsufficient",
+};
+
+const citationRoleLabels: Record<string, string> = {
+  PRIMARY: "Elsődleges forrás",
+  SUPPORTING: "Támogató forrás",
+  CONTEXT: "Kontextus",
+};
+
+const sourceSupportLabels: Record<string, string> = {
+  SUFFICIENT: "Megfelelő forrástámogatás",
+  INCOMPLETE: "Részleges forrástámogatás",
+  AMBIGUOUS: "Nem egyértelmű forrástámogatás",
+  MISSING: "Hiányzó forrástámogatás",
+  LEGAL_REVIEW_REQUIRED: "Jogi felülvizsgálat szükséges",
+};
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleDateString("hu-HU");
+  } catch {
+    return value;
+  }
+}
+
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5">
+      <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">{title}</h2>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function WorkspaceAreaRow({ area }: { area: ComplianceWorkspaceArea }) {
+  const [open, setOpen] = useState(false);
+  const outcome = area.outcome as ComplianceApplicabilityStatus;
+  const citations = area.citations;
+  const locatorText = (c: ComplianceWorkspaceArea["citations"][number]) =>
+    [c.article, c.section, c.paragraph, c.locator, c.versionLabel].filter(Boolean).join(" · ");
+  return (
+    <li className="rounded border border-[var(--adm-border)] bg-white p-3">
+      <button
+        type="button"
+        className="flex w-full items-start justify-between gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="min-w-0">
+          <span className="block font-medium text-[var(--adm-text)]">{area.title}</span>
+          <span className="mt-1 block text-xs text-[var(--adm-text-muted)]">
+            {[
+              area.domainLabel,
+              area.subjectLabel || complianceScopeLabels[area.scopeType || ""] || "Nem azonosított hatókör",
+              `Értékelve: ${formatDate(area.evaluationAt)}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+        </span>
+        <span className={`shrink-0 rounded border px-2 py-1 text-xs ${complianceOutcomeClass[outcome] || ""}`}>
+          {complianceOutcomeLabels[outcome] || area.outcome}
+        </span>
+      </button>
+      {open ? (
+        <div className="mt-3 space-y-3 border-t border-[var(--adm-border)] pt-3 text-sm">
+          {sourceSupportLabels[area.sourceSupportState] ? (
+            <p className="text-xs text-[var(--adm-text-muted)]">Forrástámogatás: {sourceSupportLabels[area.sourceSupportState]}</p>
+          ) : null}
+          {area.usedFacts.length ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Értékeléshez használt adatok</p>
+              <ul className="mt-1 space-y-1">
+                {area.usedFacts.map((fact) => (
+                  <li key={fact.factKey} className="text-xs text-[var(--adm-text)]">
+                    {fact.label || "Rögzített vállalati adat"}: <b>{fact.value ?? "—"}</b>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {area.missingFacts.length ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Hiányzó adatok</p>
+              <ul className="mt-1 space-y-1">
+                {area.missingFacts.map((fact) => (
+                  <li key={fact.factKey} className="text-xs text-[var(--adm-text)]">
+                    {fact.label || "További vállalati adat szükséges"}
+                    {fact.profileAnswerable ? (
+                      <span className="ml-1 text-[var(--adm-text-muted)]">— a meglévő vállalati profil felületen adható meg.</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {citations.length ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Jogi források</p>
+              <ul className="mt-1 space-y-1">
+                {citations.map((citation, index) => (
+                  <li key={index} className="text-xs text-[var(--adm-text)]">
+                    <b>{citation.canonicalCitation || citation.sourceTitle || "Jogi forrás"}</b>
+                    {citation.sourceTitle && citation.canonicalCitation ? ` — ${citation.sourceTitle}` : null}
+                    {locatorText(citation) ? <span className="text-[var(--adm-text-muted)]"> · {locatorText(citation)}</span> : null}
+                    <span className="ml-1 text-[var(--adm-text-muted)]">({citationRoleLabels[citation.supportRole] || citation.supportRole})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {area.activeFindingId ? (
+            <p className="text-xs text-[var(--adm-text-muted)]">Ehhez a területhez aktív megállapítás tartozik — lásd lentebb.</p>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  );
+}
 
 export default function ClientCompliancePage() {
   const params = useParams();
@@ -20,6 +163,9 @@ export default function ClientCompliancePage() {
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(true);
+  const [workspace, setWorkspace] = useState<ComplianceWorkspace | null>(null);
+  const [workspaceError, setWorkspaceError] = useState<string | null>(null);
+  const [workspaceLoading, setWorkspaceLoading] = useState(true);
 
   useEffect(() => {
     if (!clientId) return;
@@ -39,11 +185,35 @@ export default function ClientCompliancePage() {
     setComplianceLoading(true);
     setComplianceError(null);
     try { setComplianceFindings((await complianceOverviewApi.getOverview(clientId)).findings); }
-    catch { setComplianceError("A compliance adatai jelenleg nem tölthetők be."); }
+    catch { setComplianceError("A compliance áttekintés jelenleg nem tölthető be."); }
     finally { setComplianceLoading(false); }
   }, [clientId]);
 
+  const loadWorkspace = useCallback(async () => {
+    setWorkspaceLoading(true);
+    setWorkspaceError(null);
+    try { setWorkspace(await complianceWorkspaceApi.getWorkspace(clientId)); }
+    catch { setWorkspaceError("A compliance munkaterület adatai jelenleg nem tölthetők be."); }
+    finally { setWorkspaceLoading(false); }
+  }, [clientId]);
+
   useEffect(() => { void loadCompliance(); }, [loadCompliance]);
+  useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
+
+  const missingInformation = useMemo(() => {
+    if (!workspace) return [] as Array<{ factKey: string; label: string | null; profileAnswerable: boolean; genericOnly: boolean }>;
+    const seen = new Map<string, { factKey: string; label: string | null; profileAnswerable: boolean; genericOnly: boolean }>();
+    for (const area of workspace.areas) {
+      for (const fact of area.missingFacts) {
+        if (!seen.has(fact.factKey)) seen.set(fact.factKey, { ...fact, genericOnly: false });
+      }
+      if (area.outcome === "INSUFFICIENT_FACTS" && !area.missingFacts.length) {
+        const key = `generic:${area.applicabilityId}`;
+        if (!seen.has(key)) seen.set(key, { factKey: key, label: area.title, profileAnswerable: false, genericOnly: true });
+      }
+    }
+    return [...seen.values()];
+  }, [workspace]);
 
   return (
     <AuthenticatedApp section="clients">
@@ -70,12 +240,94 @@ export default function ClientCompliancePage() {
                     </div>
                   </header>
                   <ClientWorkspaceTabs clientId={client.id} active="compliance" organizationMode={organizationMode} />
+
+                  {/* 1. Állapotkép */}
+                  <Section title="Állapotkép">
+                    {workspaceLoading ? <p className="text-sm text-[var(--adm-text-muted)]">Értékelési állapot betöltése…</p> : null}
+                    {!workspaceLoading && workspaceError ? (
+                      <div role="alert" className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                        {workspaceError}
+                        <button type="button" onClick={() => { void loadWorkspace(); }} className="ml-3 rounded border border-[var(--adm-border)] bg-white px-3 py-1 text-xs text-[var(--adm-text)]">Újrapróbálás</button>
+                      </div>
+                    ) : null}
+                    {!workspaceLoading && !workspaceError && workspace ? (
+                      <>
+                        {workspace.summary.enrollment === "NOT_ENROLLED" ? (
+                          <p className="mb-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">
+                            Az ügyfél jelenleg nincs bekapcsolva a megfelelőségi értékelésbe.
+                          </p>
+                        ) : null}
+                        {workspace.summary.evaluatedCount === 0 ? (
+                          <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+                            <p className="text-sm text-[var(--adm-text)]">Ehhez az ügyfélhez még nem készült megfelelőségi értékelés.</p>
+                            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A vállalati profilban rögzített adatok alapján a rendszer automatikusan értékeli a releváns követelményeket.</p>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                              Értékelt terület: <b>{workspace.summary.evaluatedCount}</b>
+                            </span>
+                            {outcomeKeys.map((key) => {
+                              const count = Number(workspace.summary[summaryCountKey[key]] || 0);
+                              if (!count) return null;
+                              return (
+                                <span key={key} className={`rounded border px-3 py-2 text-xs ${complianceOutcomeClass[key]}`}>
+                                  {complianceOutcomeLabels[key]}: <b>{count}</b>
+                                </span>
+                              );
+                            })}
+                            <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                              Nyitott megállapítás: <b>{workspace.summary.openFindings}</b>
+                            </span>
+                            <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                              Javaslat alatt: <b>{workspace.summary.openProposals}</b>
+                            </span>
+                          </div>
+                        )}
+                        {workspace.evaluatedAt ? (
+                          <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Utolsó értékelés: {formatDate(workspace.evaluatedAt)}</p>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </Section>
+
+                  {/* 2. Megfelelőségi területek */}
+                  {!workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
+                    <Section title="Megfelelőségi területek">
+                      <ul className="space-y-2">
+                        {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} />)}
+                      </ul>
+                    </Section>
+                  ) : null}
+
+                  {/* 3. Tisztázandó / hiányzó információ */}
+                  {!workspaceLoading && !workspaceError && missingInformation.length ? (
+                    <Section title="Tisztázandó / hiányzó információ">
+                      <ul className="space-y-2">
+                        {missingInformation.map((item) => (
+                          <li key={item.factKey} className="rounded border border-[#DCCCA6] bg-[#FFF9E9] p-3 text-sm text-[#735D16]">
+                            {item.genericOnly
+                              ? `${item.label}: a követelmény értékeléséhez további adat szükséges.`
+                              : `${item.label || "További vállalati adat"}: az értékeléshez hiányzik.`}
+                            {!item.genericOnly && item.profileAnswerable ? (
+                              <span className="ml-1 text-xs">A vállalati profil meglévő kérdés-felületén adható meg.</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </Section>
+                  ) : null}
+
+                  {/* 4. Megállapítások */}
                   <ComplianceOverviewPanel
+                    title="Megállapítások"
                     findings={complianceFindings}
                     loading={complianceLoading}
                     error={complianceError}
                     onRetry={() => { void loadCompliance(); }}
                   />
+
+                  {/* 5. Javasolt műveletek */}
                   <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />
                 </>
               ) : (
