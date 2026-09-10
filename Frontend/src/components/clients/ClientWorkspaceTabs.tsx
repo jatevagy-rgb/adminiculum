@@ -4,7 +4,7 @@ import Link from "next/link";
 
 type ClientWorkspaceTabsProps = {
   clientId: string;
-  active?: "overview" | "cases" | "communications" | "organization" | "company-operations" | "calendar" | "portal" | "advanced";
+  active?: "overview" | "cases" | "communications" | "organization" | "company-operations" | "calendar" | "portal" | "compliance" | "advanced";
   organizationMode?: boolean;
 };
 
