@@ -35,6 +35,7 @@ const IDS = {
   factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
   requirementId: stableId('requirement'),
   requirementVersionId: stableId('requirementVersion'),
+  caseComplianceId: stableId('caseCompliance'),
 };
 
 d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
@@ -76,7 +77,8 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     await reset();
     expect(await findingCount()).toBe(0);
     const grow = await getClientSafeGrowthNarrative(IDS.clientId, db);
-    expect(grow.beforeEmployeeCount).toBe(47);
+    // Baseline has one current fact and no superseded predecessor yet.
+    expect(grow.beforeEmployeeCount).toBeNull();
     expect(grow.currentEmployeeCount).toBe(47);
     expect(grow.changed).toBe(false);
     expect(grow.newTopicSafeCount).toBe(0);
@@ -121,6 +123,12 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
 
   it('real portal-equivalent typed-fact mutation (valid observedAt) -> 52 -> one engine finding', async () => {
     const now = new Date();
+    // Mirror the canonical company-profile answer path: it supersedes the
+    // active company fact for the definition before writing the new truth.
+    await db.clientFact.updateMany({
+      where: { clientId: IDS.clientId, factDefinitionId: IDS.factDefinitionId, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null },
+      data: { supersededAt: now },
+    });
     const { evaluations } = await createTypedFactAndEvaluate(
       {
         clientId: IDS.clientId,
@@ -156,6 +164,9 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
 
     const proposal = await createProposal(admin, {
       findingId: (finding as { id: string }).id,
+      // Proposal confirmation requires a linked Case (canonical binding since
+      // the Work-Package-spine convergence); the fixture seeds one.
+      caseId: IDS.caseComplianceId,
       proposalKind: 'REVIEW',
       title: 'Megfelelőségi áttekintés megindítása',
       suggestedAction: 'Jogi áttekintés a Szervezeti növekedési áttekintés témában.',
