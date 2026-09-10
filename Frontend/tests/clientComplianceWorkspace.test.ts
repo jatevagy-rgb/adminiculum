@@ -84,4 +84,38 @@ describe('Dedicated client compliance workspace (structural)', () => {
     assert.match(workspace, /ComplianceOverviewPanel/);
     assert.match(workspace, /ComplianceProposalPanel/);
   });
+
+  it('surfaces engine applicability state separately from findings via the workspace read model', () => {
+    const src = page();
+    assert.match(src, /complianceWorkspaceApi/);
+    assert.match(src, /getWorkspace\(clientId\)/);
+    assert.match(src, /Állapotkép/);
+    assert.match(src, /Megfelelőségi területek/);
+    assert.match(src, /Tisztázandó \/ hiányzó információ/);
+  });
+
+  it('renders an informative zero-evaluation and zero-finding state', () => {
+    const src = page();
+    assert.match(src, /még nem készült megfelelőségi értékelés/);
+    // DOES_NOT_APPLY reuses the existing neutral outcome label — no warning styling invention.
+    assert.match(src, /complianceOutcomeLabels/);
+    assert.match(src, /complianceOutcomeClass/);
+  });
+
+  it('contains no demo constants, thresholds or frontend rule evaluation', () => {
+    const src = page();
+    const api = read('src/lib/complianceWorkspaceApi.ts');
+    for (const text of [src, api]) {
+      assert.doesNotMatch(text, /DEMO_KFT|employee_count|employeeCount|\b47\b|\b52\b|> 50|>= 50/);
+      assert.doesNotMatch(text, /evaluator|ruleEngine|ruleAst|threshold/i);
+    }
+  });
+
+  it('uses a read-only workspace API client and does not duplicate the profile write UI', () => {
+    const api = read('src/lib/complianceWorkspaceApi.ts');
+    assert.match(api, /fetchApi<ComplianceWorkspace>\(`\/compliance\/clients\/\$\{encodeURIComponent\(clientId\)\}\/workspace`\)/);
+    assert.doesNotMatch(api, /method: ['"](?:POST|PUT|PATCH|DELETE)['"]/);
+    const src = page();
+    assert.doesNotMatch(src, /answerCompanyProfileQuestion|getCompanyProfileDiscovery/);
+  });
 });
