@@ -27,14 +27,25 @@ describe('compliance workspace read model (static)', () => {
     }
   });
 
-  it('never exposes rule internals or evaluation snapshots', () => {
-    expect(service).not.toMatch(/ruleAst|astJson|snapshotJson|snapshotDigest|ruleDigest/);
+  it('never exposes rule internals or raw snapshots in the DTO', () => {
+    expect(service).not.toMatch(/ruleAst|astJson|snapshotDigest|ruleDigest/);
+    // snapshotJson is read internally only as the authoritative source of
+    // missingFactKeys — it is never returned in the projected DTO.
+    expect(service).toContain('snapshotMissingFactKeys(row.snapshotJson)');
+    expect(service).not.toMatch(/snapshotJson\s*[,}]|snapshotJson:\s*row\./);
   });
 
-  it('derives missing information only from stored rule fact dependencies', () => {
-    expect(service).toContain('row.ruleVersion?.dependencies');
+  it('projects missing information only from the persisted snapshot missingFactKeys', () => {
+    expect(service).toContain('snapshotMissingFactKeys');
     expect(service).toContain('resolvedFactDefinition');
     expect(service).toContain('isCompanyProfileQuestion');
+    // Unconsumed dependencies must not be treated as proof of a gap.
+    expect(service).not.toMatch(/if \(usedKeys\.has/);
+  });
+
+  it('mirrors the canonical currentness filter (approved + effective + non-superseded)', () => {
+    expect(service).toMatch(/requirementVersion:\s*\{[\s\S]*status: 'APPROVED'/);
+    expect(service).toContain("ruleVersion: { status: 'APPROVED', supersededById: null }");
   });
 
   it('projects legal-source metadata from stored citations only', () => {

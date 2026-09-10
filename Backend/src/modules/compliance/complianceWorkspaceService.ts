@@ -114,6 +114,20 @@ function profileLabel(questionKey: string | null | undefined): string | null {
   return getCompanyProfileQuestion(questionKey).label;
 }
 
+/**
+ * The persisted snapshot is the authoritative record of which facts the
+ * evaluator found missing. An unconsumed rule dependency is NOT proof of a
+ * gap — the fact may exist but be malformed/conflicting, or evaluation may
+ * have stopped earlier for review/source-support reasons. Returns null when
+ * the snapshot does not carry a usable list (nothing may be guessed).
+ */
+function snapshotMissingFactKeys(snapshotJson: unknown): string[] | null {
+  if (!snapshotJson || typeof snapshotJson !== 'object') return null;
+  const keys = (snapshotJson as { missingFactKeys?: unknown }).missingFactKeys;
+  if (!Array.isArray(keys)) return null;
+  return keys.filter((key): key is string => typeof key === 'string');
+}
+
 export async function getComplianceWorkspace(
   actor: InternalActor,
   clientId: string,
@@ -121,13 +135,26 @@ export async function getComplianceWorkspace(
 ): Promise<ComplianceWorkspaceDto> {
   await assertClientReadAccess(actor, clientId, prisma);
 
+  // Mirror the canonical resolver (resolveEffectiveRequirementRuleVersion):
+  // only snapshots produced by the currently authoritative lifecycle count as
+  // current state — an APPROVED requirement version inside its effective
+  // window and its current APPROVED, non-superseded rule version.
+  const now = new Date();
   const [profile, snapshots, openFindings, openProposals] = await Promise.all([
     prisma.clientOperatingProfile.findUnique({
       where: { clientId },
       select: { complianceEnrollmentStatus: true },
     }),
     prisma.requirementApplicability.findMany({
-      where: { clientId },
+      where: {
+        clientId,
+        requirementVersion: {
+          status: 'APPROVED',
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+        },
+        ruleVersion: { status: 'APPROVED', supersededById: null },
+      },
       orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
       select: {
         id: true,
@@ -139,6 +166,9 @@ export async function getComplianceWorkspace(
         evaluationAt: true,
         sourceSupportState: true,
         specialistRequirement: true,
+        // Internal read only: the persisted snapshot is the sole authority
+        // for missingFactKeys; it is never projected into the DTO.
+        snapshotJson: true,
         requirementVersion: {
           select: {
             title: true,
@@ -221,17 +251,18 @@ export async function getComplianceWorkspace(
   const factById = new Map(clientFacts.map((fact) => [fact.id, fact]));
 
   const areas: ComplianceWorkspaceArea[] = [...current.values()].map((row) => {
-    const usedKeys = new Set(row.facts.map((fact) => fact.factKey));
-    const missingFacts: ComplianceWorkspaceMissingFact[] = [];
-    for (const dependency of row.ruleVersion?.dependencies ?? []) {
-      if (usedKeys.has(dependency.factKey)) continue;
-      const questionKey = dependency.resolvedFactDefinition?.questionKey ?? null;
-      missingFacts.push({
-        factKey: dependency.factKey,
+    const dependencies = new Map(
+      (row.ruleVersion?.dependencies ?? []).map((dependency) => [dependency.factKey, dependency]),
+    );
+    const persistedMissingKeys = snapshotMissingFactKeys(row.snapshotJson);
+    const missingFacts: ComplianceWorkspaceMissingFact[] = (persistedMissingKeys ?? []).map((factKey) => {
+      const questionKey = dependencies.get(factKey)?.resolvedFactDefinition?.questionKey ?? null;
+      return {
+        factKey,
         label: profileLabel(questionKey),
         profileAnswerable: isCompanyProfileQuestion(questionKey),
-      });
-    }
+      };
+    });
 
     return {
       applicabilityId: row.id,

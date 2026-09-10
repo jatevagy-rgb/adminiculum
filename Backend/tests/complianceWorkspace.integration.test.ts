@@ -17,7 +17,9 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
   const clientB = crypto.randomUUID();
   const requirementId = crypto.randomUUID();
   const versionId = crypto.randomUUID();
+  const supersededVersionId = crypto.randomUUID();
   const ruleId = crypto.randomUUID();
+  const extraRuleIds: string[] = [];
   const subjectA = crypto.randomUUID();
   const factDefId = crypto.randomUUID();
   const missingFactDefId = crypto.randomUUID();
@@ -28,15 +30,17 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
   const findingIds: string[] = [];
   const admin = { userId: adminId, role: 'ADMIN' };
 
-  async function applicability(outcome: 'APPLIES' | 'DOES_NOT_APPLY' | 'INSUFFICIENT_FACTS', input: { clientId?: string; subjectId?: string | null; evaluationAt?: Date; specialist?: 'NONE' | 'LEGAL_ONLY'; sourceSupport?: 'SUFFICIENT' | 'MISSING' } = {}) {
+  async function applicability(outcome: 'APPLIES' | 'DOES_NOT_APPLY' | 'INSUFFICIENT_FACTS', input: { clientId?: string; subjectId?: string | null; evaluationAt?: Date; specialist?: 'NONE' | 'LEGAL_ONLY'; sourceSupport?: 'SUFFICIENT' | 'MISSING'; missingFactKeys?: string[]; requirementVersionId?: string; ruleVersionId?: string; snapshotJson?: Prisma.InputJsonValue } = {}) {
     const id = crypto.randomUUID();
     applicabilityIds.push(id);
     await db.requirementApplicability.create({ data: {
-      id, clientId: input.clientId || clientA, requirementVersionId: versionId, ruleVersionId: ruleId,
+      id, clientId: input.clientId || clientA, requirementVersionId: input.requirementVersionId || versionId, ruleVersionId: input.ruleVersionId || ruleId,
       ruleDigest: 'a'.repeat(64), outcome, scopeType: 'EMPLOYEE', factSubjectId: input.subjectId ?? subjectA,
       evaluationAt: input.evaluationAt || new Date(), sourceSupportState: input.sourceSupport || 'SUFFICIENT',
       specialistRequirement: input.specialist || 'NONE',
-      schemaVersion: 'phase6-requirement-applicability/v1', snapshotJson: { internal: true }, snapshotDigest: 'b'.repeat(64),
+      schemaVersion: 'phase6-requirement-applicability/v1',
+      snapshotJson: input.snapshotJson ?? { schemaVersion: 'phase6-requirement-applicability/v1', missingFactKeys: input.missingFactKeys ?? [] },
+      snapshotDigest: 'b'.repeat(64),
     } });
     return id;
   }
@@ -80,8 +84,11 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
       factDefinitionId: factDefId, scopeType: 'EMPLOYEE', factSubjectId: subjectA, numberValue: new Prisma.Decimal(9),
     } });
     await db.requirement.create({ data: { id: requirementId, key: `REQ_WS_${suffix}`, jurisdictionCode: 'HU', domainCode } });
-    await db.requirementVersion.create({ data: { id: versionId, requirementId, versionKey: 'V1', title: 'Követelmény cím', normativeStatement: 'Pinned wording', effectiveFrom: new Date('2026-01-01T00:00:00Z') } });
-    await db.applicabilityRuleVersion.create({ data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: 'c'.repeat(64) } });
+    await db.requirementVersion.createMany({ data: [
+      { id: versionId, requirementId, versionKey: 'V1', title: 'Követelmény cím', normativeStatement: 'Pinned wording', effectiveFrom: new Date('2026-01-01T00:00:00Z'), status: 'APPROVED' },
+      { id: supersededVersionId, requirementId, versionKey: 'V0', title: 'Korábbi követelmény cím', normativeStatement: 'Old wording', effectiveFrom: new Date('2025-01-01T00:00:00Z'), effectiveTo: new Date('2026-01-01T00:00:00Z'), status: 'SUPERSEDED', supersededById: versionId },
+    ] });
+    await db.applicabilityRuleVersion.create({ data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: 'c'.repeat(64), status: 'APPROVED' } });
     for (const [factKey, resolvedFactDefinitionId] of [[`fact_used_${suffix}`, factDefId], [`fact_missing_${suffix}`, missingFactDefId]] as const) {
       const id = crypto.randomUUID();
       dependencyIds.push(id);
@@ -93,6 +100,8 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
     await db.requirementApplicabilityFact.deleteMany({ where: { applicabilityId: { in: applicabilityIds } } });
     await db.assessmentFinding.deleteMany({ where: { id: { in: findingIds } } });
     await db.requirementApplicability.deleteMany({ where: { id: { in: applicabilityIds } } });
+    await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: extraRuleIds } } });
+    extraRuleIds.length = 0;
     applicabilityIds.length = 0;
     applicabilityFactIds.length = 0;
     findingIds.length = 0;
@@ -103,8 +112,8 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
     await db.assessmentFinding.deleteMany({ where: { id: { in: findingIds } } });
     await db.requirementApplicability.deleteMany({ where: { id: { in: applicabilityIds } } });
     await db.applicabilityRuleFactDependency.deleteMany({ where: { id: { in: dependencyIds } } });
-    await db.applicabilityRuleVersion.deleteMany({ where: { id: ruleId } });
-    await db.requirementVersion.deleteMany({ where: { id: versionId } });
+    await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: [ruleId, ...extraRuleIds] } } });
+    await db.requirementVersion.deleteMany({ where: { id: { in: [versionId, supersededVersionId] } } });
     await db.requirement.deleteMany({ where: { id: requirementId } });
     await db.clientFact.deleteMany({ where: { id: clientFactId } });
     await db.factSubject.deleteMany({ where: { id: subjectA } });
@@ -117,7 +126,7 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
   });
 
   it('surfaces a zero-finding evaluated DOES_NOT_APPLY state with the fact the engine used', async () => {
-    const appId = await applicability('DOES_NOT_APPLY');
+    const appId = await applicability('DOES_NOT_APPLY', { missingFactKeys: [`fact_missing_${suffix}`] });
     await applicabilityFact(appId, `fact_used_${suffix}`);
     const workspace = await getComplianceWorkspace(admin, clientA, db);
     expect(workspace.summary.enrollment).toBe('ENROLLED');
@@ -146,14 +155,41 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
   });
 
   it('reports insufficient-facts and review-required outcomes truthfully', async () => {
-    const id = await applicability('INSUFFICIENT_FACTS', { sourceSupport: 'MISSING', specialist: 'LEGAL_ONLY' });
+    const id = await applicability('INSUFFICIENT_FACTS', { sourceSupport: 'MISSING', specialist: 'LEGAL_ONLY', missingFactKeys: [`fact_missing_${suffix}`] });
     const workspace = await getComplianceWorkspace(admin, clientA, db);
     const area = workspace.areas.find((item) => item.applicabilityId === id)!;
     expect(area.outcome).toBe('INSUFFICIENT_FACTS');
     expect(area.sourceSupportState).toBe('MISSING');
     expect(area.specialistRequirement).toBe('LEGAL_ONLY');
     expect(area.usedFacts).toEqual([]);
-    expect(area.missingFacts).toHaveLength(2);
+    expect(area.missingFacts).toEqual([{ factKey: `fact_missing_${suffix}`, label: 'Number of employees', profileAnswerable: true }]);
+  });
+
+  it('never labels an unconsumed dependency as missing when the persisted missingFactKeys is empty', async () => {
+    // Malformed/conflicting or early-stopped evaluation: the fact exists but was
+    // not consumed — the persisted snapshot (not the dependency list) decides.
+    const id = await applicability('INSUFFICIENT_FACTS', { missingFactKeys: [] });
+    const workspace = await getComplianceWorkspace(admin, clientA, db);
+    const area = workspace.areas.find((item) => item.applicabilityId === id)!;
+    expect(area.outcome).toBe('INSUFFICIENT_FACTS');
+    expect(area.missingFacts).toEqual([]);
+  });
+
+  it('excludes snapshots from superseded requirement versions and superseded rules', async () => {
+    const staleVersionRow = await applicability('APPLIES', { requirementVersionId: supersededVersionId });
+    const supersededRule = crypto.randomUUID();
+    extraRuleIds.push(supersededRule);
+    await db.applicabilityRuleVersion.create({ data: {
+      id: supersededRule, requirementVersionId: versionId, ruleVersionKey: 'R0', schemaVersion: 'rule-ast/v1',
+      astJson: { node: 'old' }, canonicalDigest: 'f'.repeat(64), status: 'APPROVED', supersededById: ruleId,
+    } });
+    const staleRuleRow = await applicability('APPLIES', { ruleVersionId: supersededRule });
+    const current = await applicability('APPLIES', { missingFactKeys: [] });
+    const workspace = await getComplianceWorkspace(admin, clientA, db);
+    expect(workspace.areas.map((area) => area.applicabilityId)).toEqual([current]);
+    expect(workspace.summary.evaluatedCount).toBe(1);
+    expect(workspace.areas.find((area) => area.applicabilityId === staleVersionRow)).toBeUndefined();
+    expect(workspace.areas.find((area) => area.applicabilityId === staleRuleRow)).toBeUndefined();
   });
 
   it('enforces client isolation and read access', async () => {
