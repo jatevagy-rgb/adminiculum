@@ -8,6 +8,8 @@ import {
   createApplicabilityRuleVersion,
   approveRequirementVersion,
   approveApplicabilityRuleVersion,
+  supersedeRequirementVersion,
+  supersedeApplicabilityRuleVersion,
 } from '../src/modules/compliance/requirementRuleService';
 
 const databaseUrl = process.env.RECONCILE_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
@@ -199,18 +201,36 @@ describeWithDatabase('Compliance reconciliation — initial/backfill evaluation 
   });
 
   it('F: superseded requirement versions and superseded rules are not evaluated as current', async () => {
-    const first = await approvedRule('superseded', `rc_bool_${suffix}`, { expected: true });
-    const second = await approvedRule('current', `rc_number_${suffix}`, { expected: 10, valueType: 'number' });
-    await db.requirementVersion.update({ where: { id: first.version.id }, data: { status: 'SUPERSEDED', supersededById: second.version.id, effectiveTo: new Date('2026-02-01T00:00:00Z') } });
-    const supersededRule = await createApplicabilityRuleVersion({ requirementVersionId: second.version.id, ruleVersionKey: 'R0', astJson: ast(`rc_number_${suffix}`, 5, 'number'), evaluationScopeType: 'COMPANY' as never, db });
-    ruleIds.push(supersededRule.id);
-    await db.applicabilityRuleVersion.update({ where: { id: supersededRule.id }, data: { status: 'APPROVED', supersededById: second.rule.id } });
+    // Supersession is constrained to the same requirement/rule family by a
+    // composite FK — use the canonical supersession services.
+    const requirement = await createRequirement({ key: `REQ_RC_sup_${suffix}`, jurisdictionCode: 'HU', domainCode, db });
+    requirementIds.push(requirement.id);
+    const oldVersion = await createRequirementVersion({
+      requirementId: requirement.id, versionKey: 'V1', title: 'RC sup old', normativeStatement: 'old wording',
+      effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db,
+    });
+    const newVersion = await createRequirementVersion({
+      requirementId: requirement.id, versionKey: 'V2', title: 'RC sup new', normativeStatement: 'new wording',
+      effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db,
+    });
+    versionIds.push(oldVersion.id, newVersion.id);
+    await addRequirementCitation({ requirementVersionId: oldVersion.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
+    await addRequirementCitation({ requirementVersionId: newVersion.id, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
+    await approveRequirementVersion(oldVersion.id, adminId, db);
+    await supersedeRequirementVersion(oldVersion.id, newVersion.id, db);
+    await approveRequirementVersion(newVersion.id, adminId, db);
+    const supersededRule = await createApplicabilityRuleVersion({ requirementVersionId: newVersion.id, ruleVersionKey: 'R0', astJson: ast(`rc_number_${suffix}`, 5, 'number'), evaluationScopeType: 'COMPANY' as never, db });
+    const currentRule = await createApplicabilityRuleVersion({ requirementVersionId: newVersion.id, ruleVersionKey: 'R1', astJson: ast(`rc_number_${suffix}`, 10, 'number'), evaluationScopeType: 'COMPANY' as never, db });
+    ruleIds.push(supersededRule.id, currentRule.id);
+    await approveApplicabilityRuleVersion(supersededRule.id, adminId, db);
+    await approveApplicabilityRuleVersion(currentRule.id, adminId, db);
+    await supersedeApplicabilityRuleVersion(supersededRule.id, currentRule.id, db);
     await seedCompanyFact(clientA, numberDefId, `rc_number_${suffix}`, { numberValue: 10 });
     await reconcileClientCompliance(admin, clientA, db);
-    const rows = await applicabilitiesFor(clientA, [first.version.id, second.version.id]);
+    const rows = await applicabilitiesFor(clientA, [oldVersion.id, newVersion.id]);
     expect(rows).toHaveLength(1);
-    expect(rows[0].requirementVersionId).toBe(second.version.id);
-    expect(rows[0].ruleVersionId).toBe(second.rule.id);
+    expect(rows[0].requirementVersionId).toBe(newVersion.id);
+    expect(rows[0].ruleVersionId).toBe(currentRule.id);
   });
 
   it('G: reconciliation is strictly scoped to the requested client', async () => {
