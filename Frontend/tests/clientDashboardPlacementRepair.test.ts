@@ -15,6 +15,9 @@ test("operational links live on overview and remain client scoped", () => {
   assert.match(overview, /\/clients\/\$\{encodeURIComponent\(clientId\)\}\/calendar/);
   assert.match(overview, />Naptár →</);
   assert.match(overview, /organizationMode \? <Link[\s\S]*szervezet/);
+  assert.match(overview, /organizationMode \? <Link[^>]+vallalati-mukodes[^>]*>[\s\S]*?Grow with us/);
+  assert.match(overview, /organizationMode \? <Link[^>]+vallalati-mukodes#compliance[^>]*>[\s\S]*?Compliance/);
+  assert.doesNotMatch(overview, /<ClientControlCenter/);
 });
 
 test("portal contains settings only and no orphaned case KPI machinery", () => {
