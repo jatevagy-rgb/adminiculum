@@ -166,6 +166,8 @@ export default function ClientCompliancePage() {
   const [workspace, setWorkspace] = useState<ComplianceWorkspace | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileError, setReconcileError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!clientId) return;
@@ -199,6 +201,20 @@ export default function ClientCompliancePage() {
 
   useEffect(() => { void loadCompliance(); }, [loadCompliance]);
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
+
+  const handleReconcile = useCallback(async () => {
+    if (reconciling) return;
+    setReconciling(true);
+    setReconcileError(null);
+    try {
+      await complianceWorkspaceApi.reconcile(clientId);
+      await Promise.all([loadWorkspace(), loadCompliance()]);
+    } catch {
+      setReconcileError("Az értékelés indítása jelenleg nem sikerült.");
+    } finally {
+      setReconciling(false);
+    }
+  }, [clientId, reconciling, loadWorkspace, loadCompliance]);
 
   const missingInformation = useMemo(() => {
     if (!workspace) return [] as Array<{ factKey: string; label: string | null; profileAnswerable: boolean; genericOnly: boolean }>;
@@ -256,6 +272,25 @@ export default function ClientCompliancePage() {
                           <p className="mb-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">
                             Az ügyfél jelenleg nincs bekapcsolva a megfelelőségi értékelésbe.
                           </p>
+                        ) : null}
+                        {workspace.summary.enrollment === "ENROLLED" ? (
+                          <div className="mb-3">
+                            <button
+                              type="button"
+                              disabled={reconciling}
+                              onClick={() => { void handleReconcile(); }}
+                              className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-2 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-60"
+                            >
+                              {reconciling
+                                ? "Értékelés folyamatban…"
+                                : workspace.summary.evaluatedCount === 0
+                                  ? "Első megfelelőségi értékelés indítása"
+                                  : "Értékelés frissítése"}
+                            </button>
+                            {reconcileError ? (
+                              <span role="alert" className="ml-3 text-xs text-red-800">{reconcileError}</span>
+                            ) : null}
+                          </div>
                         ) : null}
                         {workspace.summary.evaluatedCount === 0 ? (
                           <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">

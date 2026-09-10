@@ -15,6 +15,8 @@ import { PrismaClient } from '@prisma/client';
 import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactMutationService';
 import { createProposal, confirmProposal } from '../src/modules/compliance/complianceProposalService';
 import { getClientSafeGrowthNarrative } from '../src/modules/compliance/companyGrowthNarrative';
+import { reconcileClientCompliance } from '../src/modules/compliance/complianceReconcileService';
+import { getComplianceWorkspace } from '../src/modules/compliance/complianceWorkspaceService';
 
 const databaseUrl =
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
@@ -31,6 +33,8 @@ const IDS = {
   identityId: stableId('portalIdentity'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
   factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  requirementId: stableId('requirement'),
+  requirementVersionId: stableId('requirementVersion'),
 };
 
 d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
@@ -76,6 +80,43 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(grow.currentEmployeeCount).toBe(47);
     expect(grow.changed).toBe(false);
     expect(grow.newTopicSafeCount).toBe(0);
+  });
+
+  it('generic reconciliation backfills the evaluated 47 baseline — real DOES_NOT_APPLY, no fabricated finding', async () => {
+    await reset();
+    // Baseline: facts and the approved rule exist, but nothing was ever
+    // evaluated through the mutation path — the live gap this PR repairs.
+    // (Scope all assertions to the demo requirement: the shared CI database
+    // may hold requirements left by other suites.)
+    expect(await db.requirementApplicability.count({
+      where: { clientId: IDS.clientId, requirementVersionId: IDS.requirementVersionId },
+    })).toBe(0);
+
+    const result = await reconcileClientCompliance(admin, IDS.clientId, db);
+    expect(result.enrolled).toBe(true);
+    expect(result.evaluated).toBeGreaterThanOrEqual(1);
+    expect(result.snapshotsCreated).toBeGreaterThanOrEqual(1);
+
+    const rows = await db.requirementApplicability.findMany({
+      where: { clientId: IDS.clientId, requirementVersionId: IDS.requirementVersionId },
+      select: { id: true, outcome: true },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outcome).toBe('DOES_NOT_APPLY');
+
+    // The workspace now projects the real evaluated state.
+    const workspace = await getComplianceWorkspace(admin, IDS.clientId, db);
+    expect(workspace.summary.evaluatedCount).toBeGreaterThanOrEqual(1);
+    const demoArea = workspace.areas.find((area) => area.applicabilityId === rows[0].id);
+    expect(demoArea?.outcome).toBe('DOES_NOT_APPLY');
+    expect(await db.assessmentFinding.count({
+      where: { clientId: IDS.clientId, requirementId: IDS.requirementId },
+    })).toBe(0);
+
+    // Idempotent: a second run creates no duplicate current state.
+    const second = await reconcileClientCompliance(admin, IDS.clientId, db);
+    expect(second.snapshotsCreated).toBe(0);
+    expect(second.findingsCreated).toBe(0);
   });
 
   it('real portal-equivalent typed-fact mutation (valid observedAt) -> 52 -> one engine finding', async () => {

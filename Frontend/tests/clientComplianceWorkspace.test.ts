@@ -114,8 +114,26 @@ describe('Dedicated client compliance workspace (structural)', () => {
   it('uses a read-only workspace API client and does not duplicate the profile write UI', () => {
     const api = read('src/lib/complianceWorkspaceApi.ts');
     assert.match(api, /fetchApi<ComplianceWorkspace>\(`\/compliance\/clients\/\$\{encodeURIComponent\(clientId\)\}\/workspace`\)/);
-    assert.doesNotMatch(api, /method: ['"](?:POST|PUT|PATCH|DELETE)['"]/);
+    const getWorkspace = api.slice(api.indexOf('getWorkspace'), api.indexOf('reconcile'));
+    assert.doesNotMatch(getWorkspace, /method:/);
     const src = page();
     assert.doesNotMatch(src, /answerCompanyProfileQuestion|getCompanyProfileDiscovery/);
+  });
+
+  it('exposes an explicit, manual-only reconciliation action on the canonical endpoint', () => {
+    const src = page();
+    const api = read('src/lib/complianceWorkspaceApi.ts');
+    assert.match(api, /reconcile[\s\S]*?fetchApi<ComplianceReconcileResult>\(`\/compliance\/clients\/\$\{encodeURIComponent\(clientId\)\}\/reconcile`, \{\s*method: 'POST'\s*\}\)/);
+    assert.match(src, /Első megfelelőségi értékelés indítása/);
+    assert.match(src, /complianceWorkspaceApi\.reconcile\(clientId\)/);
+    // Manual trigger only: reconcile is invoked from the click handler, never from an effect.
+    const handler = src.slice(src.indexOf('const handleReconcile'));
+    assert.match(handler, /await Promise\.all\(\[loadWorkspace\(\), loadCompliance\(\)\]\)/);
+    const effects = src.match(/useEffect\(\(\) => \{[^}]*\}\)/g) || [];
+    for (const effect of effects) assert.doesNotMatch(effect, /reconcile/);
+    // Loading and failure states are visible and honest.
+    assert.match(src, /Értékelés folyamatban/);
+    assert.match(src, /reconcileError/);
+    assert.match(src, /role="alert"/);
   });
 });
