@@ -157,6 +157,8 @@ const COMM_IDS = {
 // ---- Teardown (FK-safe) ------------------------------------------------------
 async function teardown(db) {
   console.log('🗑  Tearing down previous DEMO KFT fixture...');
+  // compliance_proposals holds Restrict FKs to finding/applicability/case/task.
+  await db.complianceProposal.deleteMany({ where: { clientId: IDS.clientId } });
   await db.assessmentFinding.deleteMany({ where: { clientId: IDS.clientId } });
   await db.requirementApplicabilityFact.deleteMany({ where: { applicability: { clientId: IDS.clientId } } });
   await db.requirementApplicability.deleteMany({ where: { clientId: IDS.clientId } });
@@ -179,7 +181,16 @@ async function teardown(db) {
   await db.communication.deleteMany({ where: { id: { in: Object.values(COMM_IDS) } } });
 
   await db.timeEntry.deleteMany({ where: { id: { in: Object.values(TIME_IDS) } } });
-  await db.task.deleteMany({ where: { id: { in: Object.values(TASK_IDS) } } });
+  // Proposal-confirmed compliance tasks live on the demo cases but are not in
+  // TASK_IDS; task -> case is a Restrict FK so they must go before the cases.
+  await db.task.deleteMany({
+    where: {
+      OR: [
+        { id: { in: Object.values(TASK_IDS) } },
+        { caseId: { in: [IDS.caseEmploymentId, IDS.caseSupplierId, IDS.caseComplianceId] } },
+      ],
+    },
+  });
 
   await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackageId: IDS.wpId } });
   await db.caseWorkPackage.deleteMany({ where: { id: IDS.wpId } });

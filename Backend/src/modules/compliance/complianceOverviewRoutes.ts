@@ -4,6 +4,7 @@ import { InteractionError } from '../client-interaction/base';
 import { getComplianceOverview, listUnresolvedRuleScopes } from './complianceOverviewService';
 import { getCompanyGrowthNarrative } from './companyGrowthNarrative';
 import { getComplianceWorkspace } from './complianceWorkspaceService';
+import { reconcileClientCompliance } from './complianceReconcileService';
 
 const router = Router();
 
@@ -48,6 +49,20 @@ router.get('/clients/:clientId/workspace', async (req: Request, res: Response): 
       return;
     }
     res.status(500).json({ status: 500, code: 'COMPLIANCE_WORKSPACE_INTERNAL_ERROR', message: 'Compliance workspace request failed.' });
+  }
+});
+
+// Compliance reconciliation — explicit, idempotent initial/backfill evaluation
+// of the client's current approved effective rule set over existing facts.
+router.post('/clients/:clientId/reconcile', async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json(await reconcileClientCompliance(actor(req), String(req.params.clientId)));
+  } catch (error) {
+    if (error instanceof InteractionError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    res.status(500).json({ status: 500, code: 'COMPLIANCE_RECONCILE_INTERNAL_ERROR', message: 'Compliance reconciliation request failed.' });
   }
 });
 

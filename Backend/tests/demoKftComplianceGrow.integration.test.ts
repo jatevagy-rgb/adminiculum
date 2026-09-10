@@ -15,6 +15,8 @@ import { PrismaClient } from '@prisma/client';
 import { createTypedFactAndEvaluate } from '../src/modules/compliance/typedFactMutationService';
 import { createProposal, confirmProposal } from '../src/modules/compliance/complianceProposalService';
 import { getClientSafeGrowthNarrative } from '../src/modules/compliance/companyGrowthNarrative';
+import { reconcileClientCompliance } from '../src/modules/compliance/complianceReconcileService';
+import { getComplianceWorkspace } from '../src/modules/compliance/complianceWorkspaceService';
 
 const databaseUrl =
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
@@ -31,6 +33,9 @@ const IDS = {
   identityId: stableId('portalIdentity'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
   factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  requirementId: stableId('requirement'),
+  requirementVersionId: stableId('requirementVersion'),
+  caseComplianceId: stableId('caseCompliance'),
 };
 
 d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
@@ -72,14 +77,58 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     await reset();
     expect(await findingCount()).toBe(0);
     const grow = await getClientSafeGrowthNarrative(IDS.clientId, db);
-    expect(grow.beforeEmployeeCount).toBe(47);
+    // Baseline has one current fact and no superseded predecessor yet.
+    expect(grow.beforeEmployeeCount).toBeNull();
     expect(grow.currentEmployeeCount).toBe(47);
     expect(grow.changed).toBe(false);
     expect(grow.newTopicSafeCount).toBe(0);
   });
 
+  it('generic reconciliation backfills the evaluated 47 baseline — real DOES_NOT_APPLY, no fabricated finding', async () => {
+    await reset();
+    // Baseline: facts and the approved rule exist, but nothing was ever
+    // evaluated through the mutation path — the live gap this PR repairs.
+    // (Scope all assertions to the demo requirement: the shared CI database
+    // may hold requirements left by other suites.)
+    expect(await db.requirementApplicability.count({
+      where: { clientId: IDS.clientId, requirementVersionId: IDS.requirementVersionId },
+    })).toBe(0);
+
+    const result = await reconcileClientCompliance(admin, IDS.clientId, db);
+    expect(result.enrolled).toBe(true);
+    expect(result.evaluated).toBeGreaterThanOrEqual(1);
+    expect(result.snapshotsCreated).toBeGreaterThanOrEqual(1);
+
+    const rows = await db.requirementApplicability.findMany({
+      where: { clientId: IDS.clientId, requirementVersionId: IDS.requirementVersionId },
+      select: { id: true, outcome: true },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].outcome).toBe('DOES_NOT_APPLY');
+
+    // The workspace now projects the real evaluated state.
+    const workspace = await getComplianceWorkspace(admin, IDS.clientId, db);
+    expect(workspace.summary.evaluatedCount).toBeGreaterThanOrEqual(1);
+    const demoArea = workspace.areas.find((area) => area.applicabilityId === rows[0].id);
+    expect(demoArea?.outcome).toBe('DOES_NOT_APPLY');
+    expect(await db.assessmentFinding.count({
+      where: { clientId: IDS.clientId, requirementId: IDS.requirementId },
+    })).toBe(0);
+
+    // Idempotent: a second run creates no duplicate current state.
+    const second = await reconcileClientCompliance(admin, IDS.clientId, db);
+    expect(second.snapshotsCreated).toBe(0);
+    expect(second.findingsCreated).toBe(0);
+  });
+
   it('real portal-equivalent typed-fact mutation (valid observedAt) -> 52 -> one engine finding', async () => {
     const now = new Date();
+    // Mirror the canonical company-profile answer path: it supersedes the
+    // active company fact for the definition before writing the new truth.
+    await db.clientFact.updateMany({
+      where: { clientId: IDS.clientId, factDefinitionId: IDS.factDefinitionId, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null },
+      data: { supersededAt: now },
+    });
     const { evaluations } = await createTypedFactAndEvaluate(
       {
         clientId: IDS.clientId,
@@ -106,7 +155,7 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(grow.currentEmployeeCount).toBe(52);
     expect(grow.newTopicSafeCount).toBeGreaterThanOrEqual(1);
     expect(grow.safeFeedback).toContain('új terület');
-    expect(grow.safeMeaningText).toContain('szükséges');
+    expect(grow.safeNowText).toContain('szükséges');
   });
 
   it('proposal is human-gated: NO Task before confirm; Task created only after confirm', async () => {
@@ -115,6 +164,9 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
 
     const proposal = await createProposal(admin, {
       findingId: (finding as { id: string }).id,
+      // Proposal confirmation requires a linked Case (canonical binding since
+      // the Work-Package-spine convergence); the fixture seeds one.
+      caseId: IDS.caseComplianceId,
       proposalKind: 'REVIEW',
       title: 'Megfelelőségi áttekintés megindítása',
       suggestedAction: 'Jogi áttekintés a Szervezeti növekedési áttekintés témában.',
@@ -124,12 +176,15 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(proposal.taskId).toBeNull();
     expect(proposal.task).toBeNull();
 
-    const confirmed = await confirmProposal(admin, String(proposal.id), db);
-    expect(String(confirmed.status)).toBe('CONFIRMED');
-    expect(confirmed.taskId).not.toBeNull();
-    expect(confirmed.confirmedById).toBe(IDS.adminUserId);
-    const task = await db.task.findUnique({ where: { id: String(confirmed.taskId) } });
-    expect(task).not.toBeNull();
+    // confirmProposal returns the created compliance Task; the CONFIRMED
+    // transition lives on the proposal row.
+    const task = await confirmProposal(admin, String(proposal.id), db);
+    expect(String(task.type)).toBe('COMPLIANCE_PROPOSAL');
+    expect(String(task.caseId)).toBe(IDS.caseComplianceId);
+    const stored = await db.complianceProposal.findUniqueOrThrow({ where: { id: String(proposal.id) } });
+    expect(String(stored.status)).toBe('CONFIRMED');
+    expect(String(stored.taskId)).toBe(String(task.id));
+    expect(String(stored.confirmedById)).toBe(IDS.adminUserId);
   });
 
   it('reset restores 47 and removes the demo 52-derived finding truthfully', async () => {

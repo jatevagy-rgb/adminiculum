@@ -67,8 +67,19 @@ export type ComplianceWorkspace = {
   areas: ComplianceWorkspaceArea[];
 };
 
+export type ComplianceReconcileResult = {
+  enrolled: boolean;
+  evaluated: number;
+  snapshotsCreated: number;
+  snapshotsDeduplicated: number;
+  findingsCreated: number;
+};
+
 export const complianceWorkspaceApi = {
   getWorkspace(clientId: string) {
     return fetchApi<ComplianceWorkspace>(`/compliance/clients/${encodeURIComponent(clientId)}/workspace`);
+  },
+  reconcile(clientId: string) {
+    return fetchApi<ComplianceReconcileResult>(`/compliance/clients/${encodeURIComponent(clientId)}/reconcile`, { method: 'POST' });
   },
 };
