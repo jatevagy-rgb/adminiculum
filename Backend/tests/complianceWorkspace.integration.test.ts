@@ -85,7 +85,7 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
     } });
     await db.requirement.create({ data: { id: requirementId, key: `REQ_WS_${suffix}`, jurisdictionCode: 'HU', domainCode } });
     await db.requirementVersion.createMany({ data: [
-      { id: versionId, requirementId, versionKey: 'V1', title: 'Követelmény cím', normativeStatement: 'Pinned wording', effectiveFrom: new Date('2026-01-01T00:00:00Z'), status: 'APPROVED' },
+      { id: versionId, requirementId, versionKey: 'V1', title: 'Követelmény cím', normativeStatement: 'Pinned wording', effectiveFrom: new Date('2026-01-01T00:00:00Z'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' },
       { id: supersededVersionId, requirementId, versionKey: 'V0', title: 'Korábbi követelmény cím', normativeStatement: 'Old wording', effectiveFrom: new Date('2025-01-01T00:00:00Z'), effectiveTo: new Date('2026-01-01T00:00:00Z'), status: 'SUPERSEDED', supersededById: versionId },
     ] });
     await db.applicabilityRuleVersion.create({ data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: 'c'.repeat(64), status: 'APPROVED' } });

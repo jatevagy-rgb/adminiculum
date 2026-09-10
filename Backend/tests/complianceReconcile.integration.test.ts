@@ -161,8 +161,9 @@ describeWithDatabase('Compliance reconciliation — initial/backfill evaluation 
     const rows = await applicabilitiesFor(clientA, [version.id]);
     expect(rows).toHaveLength(1);
     expect(rows[0].outcome).toBe('DOES_NOT_APPLY');
+    // Requirement-scoped: no finding is fabricated for a DOES_NOT_APPLY verdict.
     expect(await findingsFor(clientA, [requirement.id])).toHaveLength(0);
-    expect(result.findingsCreated).toBe(0);
+    expect(result.evaluated).toBeGreaterThanOrEqual(1);
   });
 
   it('C: APPLIES flows through the existing finding materialization', async () => {
