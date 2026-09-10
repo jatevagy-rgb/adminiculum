@@ -259,6 +259,8 @@ function ClientDetailContent() {
           <h2 id="client-overview-heading" className="font-serif text-xl text-[var(--adm-text)]">Ügyfél áttekintés</h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button p-4 text-sm font-semibold">Szervezeti felépítés →</Link> : null}
+            {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/vallalati-mukodes`} className="adm-link-button p-4 text-sm font-semibold">Grow with us →</Link> : null}
+            {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/vallalati-mukodes#compliance`} className="adm-link-button p-4 text-sm font-semibold">Compliance →</Link> : null}
             <Link href={`/clients/${encodeURIComponent(clientId)}/calendar`} className="adm-link-button p-4 text-sm font-semibold">Naptár →</Link>
             <Link href={`/communications?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button p-4 text-sm font-semibold">Kommunikáció →</Link>
             <Link href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=ACTIVE`} className="adm-link-button p-4 text-sm font-semibold">Nyitott ügyek →</Link>
