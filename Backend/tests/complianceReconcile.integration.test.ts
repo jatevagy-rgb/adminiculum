@@ -222,9 +222,11 @@ describeWithDatabase('Compliance reconciliation — initial/backfill evaluation 
     const supersededRule = await createApplicabilityRuleVersion({ requirementVersionId: newVersion.id, ruleVersionKey: 'R0', astJson: ast(`rc_number_${suffix}`, 5, 'number'), evaluationScopeType: 'COMPANY' as never, db });
     const currentRule = await createApplicabilityRuleVersion({ requirementVersionId: newVersion.id, ruleVersionKey: 'R1', astJson: ast(`rc_number_${suffix}`, 10, 'number'), evaluationScopeType: 'COMPANY' as never, db });
     ruleIds.push(supersededRule.id, currentRule.id);
+    // Exactly one current approved rule is allowed per version: supersede R0
+    // before approving R1.
     await approveApplicabilityRuleVersion(supersededRule.id, adminId, db);
-    await approveApplicabilityRuleVersion(currentRule.id, adminId, db);
     await supersedeApplicabilityRuleVersion(supersededRule.id, currentRule.id, db);
+    await approveApplicabilityRuleVersion(currentRule.id, adminId, db);
     await seedCompanyFact(clientA, numberDefId, `rc_number_${suffix}`, { numberValue: 10 });
     await reconcileClientCompliance(admin, clientA, db);
     const rows = await applicabilitiesFor(clientA, [oldVersion.id, newVersion.id]);
