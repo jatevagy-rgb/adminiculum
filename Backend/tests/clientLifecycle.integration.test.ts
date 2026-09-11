@@ -47,7 +47,7 @@ d('Client lifecycle archive/delete (PostgreSQL)', () => {
     });
     // Client A: linked case + document + INDIVIDUAL portal workspace + identity membership
     await db.case.create({ data: { id: ids.case, caseNumber: `LCL-${ids.case.slice(0, 6)}`, title: 'Lifecycle case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.admin, assignedLawyerId: ids.admin } as any });
-    await db.document.create({ data: { id: ids.document, name: 'lifecycle.pdf', category: 'GENERAL', caseId: ids.case, clientId: ids.client } as any });
+    await db.document.create({ data: { id: ids.document, name: 'lifecycle.pdf', category: 'OTHER', caseId: ids.case, clientId: ids.client } as any });
     await db.clientPortalIdentity.create({ data: { id: ids.identity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://lifecycle.example.invalid/', subject: `lc-${ids.identity}`, normalizedEmail: `lc-${ids.identity}@example.invalid`, emailVerifiedAt: new Date(), displayName: 'Lifecycle Person', accountType: 'INDIVIDUAL', status: 'ACTIVE' } });
   });
 
