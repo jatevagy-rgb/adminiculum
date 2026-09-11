@@ -33,6 +33,7 @@ const IDS = {
   clientId: stableId('demoClient'),
   adminUserId: stableId('adminUser'),
   identityId: stableId('portalIdentity'),
+  workspaceId: stableId('orgWorkspace'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
   factDefinitionKey: 'employee_count',
   requirementId: stableId('requirement'),
