@@ -168,6 +168,8 @@ model Client {
   relationshipMode          ClientRelationshipMode @default(PORTAL_CENTRIC)
   portalAccessEnabled       Boolean                @default(false)
   connectedSystemState      String?                @db.VarChar(80)
+  archivedAt                DateTime?
+  archivedById              String?
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
 

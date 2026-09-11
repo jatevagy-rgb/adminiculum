@@ -13,6 +13,12 @@ import {
   requireDatabaseFoundation,
 } from '../../middleware/featureAvailability';
 import { ClientColorInputError, parseClientColorKey } from './clientColor';
+import {
+  ClientLifecycleError,
+  archiveClient,
+  getClientLifecyclePreview,
+  hardDeleteClient,
+} from './clientLifecycleService';
 
 const router = Router();
 const CLIENT_IDENTITY_MANAGER_ROLES = new Set(['ADMIN', 'PARTNER']);
@@ -33,6 +39,7 @@ const CLIENT_DETAIL_SELECT = {
   relationshipMode: true,
   portalAccessEnabled: true,
   connectedSystemState: true,
+  archivedAt: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ClientSelect;
@@ -296,7 +303,10 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
     let baseClients: any[] = [];
     try {
       baseClients = await prisma.client.findMany({
-        ...(accessibleClientIds ? { where: { id: { in: accessibleClientIds } } } : {}),
+        where: {
+          archivedAt: null,
+          ...(accessibleClientIds ? { id: { in: accessibleClientIds } } : {}),
+        },
         orderBy: { name: 'asc' },
         select: {
           id: true,
@@ -395,6 +405,7 @@ router.get('/lookup', authenticate, async (req: Request, res: Response): Promise
     const normalized = query.toLowerCase();
     const candidates = await prisma.client.findMany({
       where: {
+        archivedAt: null,
         ...(accessibleClientIds ? { id: { in: accessibleClientIds } } : {}),
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
@@ -617,22 +628,79 @@ router.patch('/:clientId', authenticate, requireClientIdentityManageAccess, asyn
 });
 
 // ============================================================================
-// DELETE /clients/:clientId
+// GET /clients/:clientId/lifecycle-preview — bounded dependency preview for
+// archive / hard-delete confirmation. ADMIN/PARTNER only.
 // ============================================================================
-router.delete('/:clientId', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:clientId/lifecycle-preview', authenticate, requireClientIdentityManageAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
-    
+    if (!clientId) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Client ID is required' });
+      return;
+    }
+    res.json(await getClientLifecyclePreview(clientId));
+  } catch (error: any) {
+    if (error instanceof ClientLifecycleError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message, ...(error.dependencies ? { dependencies: error.dependencies.dependencies, total: error.dependencies.total } : {}) });
+      return;
+    }
+    logPrismaRouteError('GET /clients/:clientId/lifecycle-preview', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// POST /clients/:clientId/archive — lifecycle archive, not deletion. Linked
+// cases/documents/history and the portal identity are preserved; the client's
+// non-archived portal workspaces are archived through the canonical
+// transition. ADMIN/PARTNER only.
+// ============================================================================
+router.post('/:clientId/archive', authenticate, requireClientIdentityManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
+    if (!clientId) {
+      res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Client ID is required' });
+      return;
+    }
+    const actor = { userId: String(req.user?.userId || ''), role: req.user?.role };
+    const result = await archiveClient(actor, clientId);
+    res.json({
+      client: result.client,
+      archivedWorkspaceIds: result.archivedWorkspaceIds,
+      alreadyArchived: result.alreadyArchived,
+    });
+  } catch (error: any) {
+    if (error instanceof ClientLifecycleError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    logPrismaRouteError('POST /clients/:clientId/archive', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// DELETE /clients/:clientId — hard delete, ADMIN/PARTNER only and
+// dependency-aware: any linked record blocks deletion with a machine-readable
+// CLIENT_DELETE_BLOCKED 409 carrying dependency counts. No cascade purge.
+// ============================================================================
+router.delete('/:clientId', authenticate, requireClientIdentityManageAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const clientId = Array.isArray(req.params.clientId) ? req.params.clientId[0] : req.params.clientId;
+
     if (!clientId) {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Client ID is required' });
       return;
     }
 
-    await prisma.client.delete({
-      where: { id: clientId }
-    });
+    const actor = { userId: String(req.user?.userId || ''), role: req.user?.role };
+    await hardDeleteClient(actor, clientId);
     res.status(204).send();
   } catch (error: any) {
+    if (error instanceof ClientLifecycleError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message, ...(error.dependencies ? { dependencies: error.dependencies.dependencies, total: error.dependencies.total } : {}) });
+      return;
+    }
     console.error('Delete client error:', error);
     
     if (error.code === 'P2025') {
