@@ -20,11 +20,14 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
   const otherClientIdentityId = crypto.randomUUID();
   const personId = crypto.randomUUID();
   const definitionId = crypto.randomUUID();
+  let selectedDefinitionId = definitionId;
   const sourceId = crypto.randomUUID();
   const sourceVersionId = crypto.randomUUID();
   const requirementId = crypto.randomUUID();
   const requirementVersionId = crypto.randomUUID();
   const ruleVersionId = crypto.randomUUID();
+  let ownsDefinition = false;
+  let existingDefinitionBaseline: Record<string, unknown> | null = null;
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
@@ -48,7 +51,15 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
       { id: crypto.randomUUID(), clientPortalIdentityId: otherClientIdentityId, workspaceId: workspaceB, status: 'ACTIVE', role: 'REPRESENTATIVE', approvedAt: new Date(), approvedById: adminId },
     ] });
     await db.organizationPerson.create({ data: { id: personId, clientId: clientA, name: 'Portal responsibility person', jobTitle: 'Director' } });
-    await db.factDefinition.create({ data: { id: definitionId, key: 'employee_count', domainCode: `ANSWER_STATE_${suffix}`, valueType: 'NUMBER', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'DISALLOW', temporalPolicy: 'OBSERVATION' } });
+    const existingDefinition = await db.factDefinition.findUnique({ where: { key: 'employee_count' } });
+    if (existingDefinition) {
+      existingDefinitionBaseline = JSON.parse(JSON.stringify(existingDefinition));
+      (globalThis as { answerStateDefinitionId?: string }).answerStateDefinitionId = existingDefinition.id;
+    } else {
+      await db.factDefinition.create({ data: { id: definitionId, key: 'employee_count', domainCode: `ANSWER_STATE_${suffix}`, valueType: 'NUMBER', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'DISALLOW', temporalPolicy: 'OBSERVATION' } });
+      ownsDefinition = true;
+    }
+    selectedDefinitionId = existingDefinition?.id ?? definitionId;
     await db.complianceDomain.create({ data: { code: `ANSWER_STATE_${suffix}`, label: 'Answer state acceptance domain' } });
     await db.legalSource.create({ data: { id: sourceId, sourceKey: `answer-state-source-${suffix}`, jurisdictionCode: 'HU', instrumentType: 'LEGISLATION', status: 'CANDIDATE' } });
     await db.legalSourceVersion.create({ data: { id: sourceVersionId, legalSourceId: sourceId, legalVersionKey: 'V1', status: 'ACTIVE', reviewStatus: 'APPROVED' } });
@@ -71,7 +82,11 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await db.applicabilityRuleVersion.deleteMany({ where: { id: ruleVersionId } });
     await db.requirementVersion.deleteMany({ where: { id: requirementVersionId } });
     await db.requirement.deleteMany({ where: { id: requirementId } });
-    await db.factDefinition.deleteMany({ where: { id: definitionId } });
+    if (ownsDefinition) await db.factDefinition.deleteMany({ where: { id: definitionId } });
+    if (existingDefinitionBaseline) {
+      const after = await db.factDefinition.findUniqueOrThrow({ where: { key: 'employee_count' } });
+      expect(JSON.parse(JSON.stringify(after))).toEqual(existingDefinitionBaseline);
+    }
     await db.legalSourceVersion.deleteMany({ where: { id: sourceVersionId } });
     await db.legalSource.deleteMany({ where: { id: sourceId } });
     await db.complianceDomain.deleteMany({ where: { code: `ANSWER_STATE_${suffix}` } });
@@ -131,7 +146,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
 
   it('supersedes a legacy active fact when the absent state is answered UNKNOWN', async () => {
     const legacyId = crypto.randomUUID();
-    await db.clientFact.create({ data: { id: legacyId, clientId: clientB, type: 'employee_count', value: '41', factDefinitionId: definitionId, scopeType: 'COMPANY', numberValue: 41, validFrom: new Date('2026-01-01T00:00:00Z'), observedAt: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' } });
+    await db.clientFact.create({ data: { id: legacyId, clientId: clientB, type: 'employee_count', value: '41', factDefinitionId: selectedDefinitionId, scopeType: 'COMPANY', numberValue: 41, validFrom: new Date('2026-01-01T00:00:00Z'), observedAt: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' } });
     await answerCompanyProfileQuestion(otherClientIdentityId, workspaceB, 'employee_count', { status: 'UNKNOWN' }, db);
     const legacy = await db.clientFact.findUniqueOrThrow({ where: { id: legacyId } });
     expect(legacy.supersededAt).not.toBeNull();
