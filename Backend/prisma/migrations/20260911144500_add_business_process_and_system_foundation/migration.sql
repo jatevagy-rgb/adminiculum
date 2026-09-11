@@ -52,6 +52,12 @@ CREATE TABLE "business_process_steps" (
 );
 
 -- CreateIndex
+CREATE UNIQUE INDEX IF NOT EXISTS "client_organization_groups_id_clientId_key" ON "client_organization_groups"("id", "clientId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX IF NOT EXISTS "organization_persons_id_clientId_key" ON "organization_persons"("id", "clientId");
+
+-- CreateIndex
 CREATE INDEX "business_processes_clientId_status_idx" ON "business_processes"("clientId", "status");
 
 -- CreateIndex
@@ -94,25 +100,25 @@ CREATE UNIQUE INDEX "business_process_steps_processId_position_key" ON "business
 ALTER TABLE "business_processes" ADD CONSTRAINT "business_processes_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "business_processes" ADD CONSTRAINT "business_processes_ownerPersonId_fkey" FOREIGN KEY ("ownerPersonId") REFERENCES "organization_persons"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "business_processes" ADD CONSTRAINT "business_processes_ownerPersonId_clientId_fkey" FOREIGN KEY ("ownerPersonId", "clientId") REFERENCES "organization_persons"("id", "clientId") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "business_processes" ADD CONSTRAINT "business_processes_organizationGroupId_fkey" FOREIGN KEY ("organizationGroupId") REFERENCES "client_organization_groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "business_processes" ADD CONSTRAINT "business_processes_organizationGroupId_clientId_fkey" FOREIGN KEY ("organizationGroupId", "clientId") REFERENCES "client_organization_groups"("id", "clientId") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "business_systems" ADD CONSTRAINT "business_systems_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "business_systems" ADD CONSTRAINT "business_systems_ownerPersonId_fkey" FOREIGN KEY ("ownerPersonId") REFERENCES "organization_persons"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "business_systems" ADD CONSTRAINT "business_systems_ownerPersonId_clientId_fkey" FOREIGN KEY ("ownerPersonId", "clientId") REFERENCES "organization_persons"("id", "clientId") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "business_process_steps" ADD CONSTRAINT "business_process_steps_processId_fkey" FOREIGN KEY ("processId") REFERENCES "business_processes"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "business_process_steps" ADD CONSTRAINT "business_process_steps_processId_clientId_fkey" FOREIGN KEY ("processId", "clientId") REFERENCES "business_processes"("id", "clientId") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "business_process_steps" ADD CONSTRAINT "business_process_steps_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "business_process_steps" ADD CONSTRAINT "business_process_steps_responsiblePersonId_fkey" FOREIGN KEY ("responsiblePersonId") REFERENCES "organization_persons"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "business_process_steps" ADD CONSTRAINT "business_process_steps_responsiblePersonId_clientId_fkey" FOREIGN KEY ("responsiblePersonId", "clientId") REFERENCES "organization_persons"("id", "clientId") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "business_process_steps" ADD CONSTRAINT "business_process_steps_systemId_fkey" FOREIGN KEY ("systemId") REFERENCES "business_systems"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "business_process_steps" ADD CONSTRAINT "business_process_steps_systemId_clientId_fkey" FOREIGN KEY ("systemId", "clientId") REFERENCES "business_systems"("id", "clientId") ON DELETE SET NULL ON UPDATE CASCADE;

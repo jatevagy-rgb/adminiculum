@@ -410,4 +410,80 @@ d('Grow With Us V2 T1 — Business Process & System Foundation', () => {
     const facts = await listFacts(admin, clientA, { type: 'IMPORTANT_IT_SYSTEM' });
     expect((facts as any).items.some((f: any) => f.id === fact.id)).toBe(true);
   });
+
+  it('18. Direct DB-level enforcement rejects cross-client foreign key references bypassing service layer', async () => {
+    // 1. Direct DB insert cross-client ownerPerson on BusinessProcess
+    await expect(
+      db.businessProcess.create({
+        data: {
+          clientId: clientA,
+          name: 'Direct DB Cross-Client Process Test',
+          ownerPersonId: personB, // personB belongs to clientB
+        },
+      })
+    ).rejects.toThrow();
+
+    // 2. Direct DB insert cross-client organizationGroup on BusinessProcess
+    await expect(
+      db.businessProcess.create({
+        data: {
+          clientId: clientA,
+          name: 'Direct DB Cross-Client OrgGroup Test',
+          organizationGroupId: groupB, // groupB belongs to clientB
+        },
+      })
+    ).rejects.toThrow();
+
+    // 3. Direct DB insert cross-client ownerPerson on BusinessSystem
+    await expect(
+      db.businessSystem.create({
+        data: {
+          clientId: clientA,
+          name: 'Direct DB Cross-Client System Test',
+          ownerPersonId: personB, // personB belongs to clientB
+        },
+      })
+    ).rejects.toThrow();
+
+    // 4. Direct DB insert cross-client process on BusinessProcessStep
+    const processB = await createBusinessProcess(admin, clientB, { name: 'Client B Process for Step Test' });
+    await expect(
+      db.businessProcessStep.create({
+        data: {
+          clientId: clientA,
+          processId: processB.id, // processB belongs to clientB
+          position: 1,
+          name: 'Step referencing cross-client process',
+        },
+      })
+    ).rejects.toThrow();
+
+    // 5. Direct DB insert cross-client responsiblePerson on BusinessProcessStep
+    const processA = await createBusinessProcess(admin, clientA, { name: 'Client A Process for Step FK Test' });
+    await expect(
+      db.businessProcessStep.create({
+        data: {
+          clientId: clientA,
+          processId: processA.id,
+          position: 1,
+          name: 'Step referencing cross-client person',
+          responsiblePersonId: personB, // personB belongs to clientB
+        },
+      })
+    ).rejects.toThrow();
+
+    // 6. Direct DB insert cross-client system on BusinessProcessStep
+    const systemB = await createBusinessSystem(admin, clientB, { name: 'Client B System for Step FK Test' });
+    await expect(
+      db.businessProcessStep.create({
+        data: {
+          clientId: clientA,
+          processId: processA.id,
+          position: 2,
+          name: 'Step referencing cross-client system',
+          systemId: systemB.id, // systemB belongs to clientB
+        },
+      })
+    ).rejects.toThrow();
+  });
 });

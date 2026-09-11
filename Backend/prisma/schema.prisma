@@ -2812,6 +2812,7 @@ model ClientOrganizationGroup {
   persons         OrganizationPerson[]
   businessProcesses BusinessProcess[]
 
+  @@unique([id, clientId])
   @@unique([clientId, workspaceId, name])
   @@index([clientId, status])
   @@index([workspaceId, status])
@@ -4971,6 +4972,7 @@ model OrganizationPerson {
   createdAt               DateTime                           @default(now())
   updatedAt               DateTime                           @updatedAt
 
+  @@unique([id, clientId])
   @@index([clientId, employmentStatus])
   @@index([clientId, organizationGroupId])
   @@index([managerPersonId])
@@ -5478,9 +5480,9 @@ model BusinessProcess {
   category            String                   @default("GENERAL")
   description         String?
   ownerPersonId       String?
-  ownerPerson         OrganizationPerson?      @relation("BusinessProcessOwnerPerson", fields: [ownerPersonId], references: [id], onDelete: SetNull)
+  ownerPerson         OrganizationPerson?      @relation("BusinessProcessOwnerPerson", fields: [ownerPersonId, clientId], references: [id, clientId], onDelete: SetNull)
   organizationGroupId String?
-  organizationGroup   ClientOrganizationGroup? @relation(fields: [organizationGroupId], references: [id], onDelete: SetNull)
+  organizationGroup   ClientOrganizationGroup? @relation(fields: [organizationGroupId, clientId], references: [id, clientId], onDelete: SetNull)
   criticality         String                   @default("MEDIUM")
   frequency           String                   @default("DAILY")
   status              String                   @default("ACTIVE")
@@ -5505,7 +5507,7 @@ model BusinessSystem {
   vendor        String?
   purpose       String?
   ownerPersonId String?
-  ownerPerson   OrganizationPerson? @relation("BusinessSystemOwnerPerson", fields: [ownerPersonId], references: [id], onDelete: SetNull)
+  ownerPerson   OrganizationPerson? @relation("BusinessSystemOwnerPerson", fields: [ownerPersonId, clientId], references: [id, clientId], onDelete: SetNull)
   status        String              @default("ACTIVE")
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
@@ -5522,16 +5524,16 @@ model BusinessSystem {
 model BusinessProcessStep {
   id                      String              @id @default(uuid())
   processId               String
-  process                 BusinessProcess     @relation(fields: [processId], references: [id], onDelete: Cascade)
+  process                 BusinessProcess     @relation(fields: [processId, clientId], references: [id, clientId], onDelete: Cascade)
   clientId                String
   client                  Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
   position                Int
   name                    String
   stepType                String              @default("MANUAL")
   responsiblePersonId     String?
-  responsiblePerson       OrganizationPerson? @relation("ProcessStepResponsiblePerson", fields: [responsiblePersonId], references: [id], onDelete: SetNull)
+  responsiblePerson       OrganizationPerson? @relation("ProcessStepResponsiblePerson", fields: [responsiblePersonId, clientId], references: [id, clientId], onDelete: SetNull)
   systemId                String?
-  system                  BusinessSystem?     @relation(fields: [systemId], references: [id], onDelete: SetNull)
+  system                  BusinessSystem?     @relation(fields: [systemId, clientId], references: [id, clientId], onDelete: SetNull)
   estimatedActiveMinutes  Int?
   estimatedWaitingMinutes Int?
   isApproval              Boolean             @default(false)
