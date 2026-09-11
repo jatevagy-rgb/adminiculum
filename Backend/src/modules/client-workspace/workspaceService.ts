@@ -394,6 +394,11 @@ export async function listAdminWorkspaces(actor: InternalActor, clientId?: strin
     db.clientPortalWorkspaceEvent.findMany({ where: { workspaceId: { in: workspaceIds } }, orderBy: { createdAt: 'desc' }, take: 200 }),
     db.clientPortalGrant.findMany({ where: { workspaceId: { in: workspaceIds }, status: 'ACTIVE', OR: [{ validUntil: null }, { validUntil: { gt: new Date() } }] }, orderBy: { updatedAt: 'desc' } }),
   ]);
+  const identities = await db.clientPortalIdentity.findMany({
+    where: { id: { in: [...new Set(memberships.map((membership) => membership.clientPortalIdentityId))] } },
+    select: { id: true, normalizedEmail: true, displayName: true, status: true },
+  });
+  const identityById = new Map(identities.map((identity) => [identity.id, identity]));
   const clientNames = new Map(clients.map((client) => [client.id, client.name]));
   return { items: workspaces.map((workspace) => ({
     ...workspace,
@@ -412,7 +417,15 @@ export async function listAdminWorkspaces(actor: InternalActor, clientId?: strin
       expiresAt: invitation.expiresAt,
       createdAt: invitation.createdAt,
     })),
-    memberships: memberships.filter((membership) => membership.workspaceId === workspace.id),
+    memberships: memberships.filter((membership) => membership.workspaceId === workspace.id).map((membership) => {
+      const identity = identityById.get(membership.clientPortalIdentityId);
+      return {
+        ...membership,
+        identityEmail: identity?.normalizedEmail ?? null,
+        identityDisplayName: identity?.displayName ?? null,
+        identityStatus: identity ? String(identity.status) : null,
+      };
+    }),
     events: events.filter((event) => event.workspaceId === workspace.id),
   })) };
 }

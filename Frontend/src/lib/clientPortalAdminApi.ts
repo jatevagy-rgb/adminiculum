@@ -87,6 +87,9 @@ export interface WorkspaceMembershipDTO {
   revision: number;
   invitedAt: string | null;
   approvedAt: string | null;
+  identityEmail?: string | null;
+  identityDisplayName?: string | null;
+  identityStatus?: string | null;
 }
 
 export interface AdminWorkspaceDTO {

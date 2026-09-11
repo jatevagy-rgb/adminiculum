@@ -5,6 +5,7 @@ import {
   createWorkspace,
   getPortalIdentityContext,
   inviteWorkspaceMember,
+  listAdminWorkspaces,
   resolvePortalWorkspace,
   transitionWorkspace,
   transitionWorkspaceMembership,
@@ -111,5 +112,34 @@ d('CP0 workspace authorization (PostgreSQL)', () => {
     expect((await getPortalIdentityContext(session, null, db)).state).toBe('ACCESS_SUSPENDED');
     await transitionWorkspace(actor, relay.id, 'archive', suspendedRelay.revision, db);
     expect((await getPortalIdentityContext(session, null, db)).state).toBe('NO_ACCESS');
+  });
+
+  it('reuses an existing verified identity for an APPROVER invite and exposes it in the client-scoped admin listing', async () => {
+    const organization = await createWorkspace(actor, { clientId: ids.client, name: 'Szervezeti tér', mode: 'ORGANIZATION', communicationMode: 'PORTAL_PRIMARY' }, db);
+    const identityCountBefore = await db.clientPortalIdentity.count();
+    const invite = await inviteWorkspaceMember(actor, organization.id, { email: session.normalizedEmail, role: 'APPROVER' }, db);
+    expect(invite.state).toBe('PENDING_APPROVAL');
+    expect(invite.membershipId).toBeTruthy();
+    // No duplicate ClientPortalIdentity for the same verified account
+    expect(await db.clientPortalIdentity.count()).toBe(identityCountBefore);
+    const pending = await db.clientPortalWorkspaceMembership.findUniqueOrThrow({ where: { id: invite.membershipId! } });
+    expect(pending.role).toBe('APPROVER');
+    expect(pending.status).toBe('PENDING_APPROVAL');
+    // Canonical approve transition -> ACTIVE membership on the same identity
+    const approved = await transitionWorkspaceMembership(actor, pending.id, 'approve', pending.revision, db);
+    expect(approved.status).toBe('ACTIVE');
+    expect(approved.role).toBe('APPROVER');
+
+    const adminView = await listAdminWorkspaces(actor, ids.client, db);
+    expect(adminView.items.every((workspace) => workspace.clientId === ids.client)).toBe(true);
+    const organizationView = adminView.items.find((workspace) => workspace.id === organization.id)!;
+    const listed = organizationView.memberships.find((membership) => membership.id === pending.id)!;
+    expect(listed.identityEmail).toBe(session.normalizedEmail);
+    expect(listed.identityDisplayName).toBe(session.displayName);
+    expect(listed.identityStatus).toBe('ACTIVE');
+
+    // Non-internal actors are rejected by the existing administration gate
+    await expect(listAdminWorkspaces({ userId: ids.admin, role: 'CLIENT' }, ids.client, db)).rejects.toThrow();
+    await expect(inviteWorkspaceMember({ userId: ids.admin, role: 'CLIENT' }, organization.id, { email: 'cp0-unauthorized@example.invalid' }, db)).rejects.toThrow();
   });
 });
