@@ -42,7 +42,7 @@ const IDS = {
   wpId: stableId('workPackage'),
   factEmployeeCountId: stableId('factEmployeeCount'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
-  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  factDefinitionKey: 'employee_count',
   complianceDomainCode: 'DEMO_KFT_GROWTH',
   requirementId: stableId('requirement'),
   requirementVersionId: stableId('requirementVersion'),

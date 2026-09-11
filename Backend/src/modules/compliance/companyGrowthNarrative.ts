@@ -15,7 +15,7 @@
 import type { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 
-const EMPLOYEE_COUNT_KEY = 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT';
+const EMPLOYEE_COUNT_KEY = 'employee_count';
 
 export interface CompanyGrowthNarrative {
   beforeEmployeeCount: number | null;
@@ -40,7 +40,7 @@ export interface ClientSafeGrowthNarrative {
 
 async function readFacts(db: PrismaClient, clientId: string) {
   const facts = await db.clientFact.findMany({
-    where: { clientId, type: EMPLOYEE_COUNT_KEY },
+    where: { clientId, factDefinition: { key: EMPLOYEE_COUNT_KEY } },
     orderBy: { validFrom: 'desc' },
     take: 2,
     select: { id: true, numberValue: true, supersededAt: true, validFrom: true },

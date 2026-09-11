@@ -120,7 +120,7 @@ const IDS = {
   pubSupplierId: stableId('pubSupplier'),
   factEmployeeCountId: stableId('factEmployeeCount'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
-  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  factDefinitionKey: 'employee_count',
   requirementId: stableId('requirement'),
   requirementVersionId: stableId('requirementVersion'),
   requirementKey: 'DEMO_KFT_COMPANY_GROWTH_REVIEW',
