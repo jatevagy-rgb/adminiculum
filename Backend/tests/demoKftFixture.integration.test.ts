@@ -201,4 +201,31 @@ d('DEMO KFT. organizational fixture (PostgreSQL)', () => {
     const findingRestored = await db.assessmentFinding.count({ where: { clientId: IDS.clientId } });
     expect(findingRestored).toBe(0);
   });
+
+  it('preserves a shared canonical employee_count definition and unrelated client state across reset', async () => {
+    await reset({ DEMO_KFT_PORTAL_IDENTITY_EMAIL: 'test-exec@fixture.invalid' });
+    const definition = await db.factDefinition.findUniqueOrThrow({ where: { key: 'employee_count' } });
+    const unrelatedClientId = crypto.randomUUID();
+    const factId = crypto.randomUUID();
+    const answerStateId = crypto.randomUUID();
+    await db.client.create({ data: { id: unrelatedClientId, name: `Unrelated ${unrelatedClientId}` } });
+    await db.clientFact.create({ data: { id: factId, clientId: unrelatedClientId, type: 'employee_count', value: '123', factDefinitionId: definition.id, scopeType: 'COMPANY', numberValue: 123, validFrom: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' } });
+    await db.clientFactAnswerState.create({ data: { id: answerStateId, clientId: unrelatedClientId, factDefinitionId: definition.id, scopeType: 'COMPANY', status: 'ANSWERED', currentFactId: factId } });
+    const assertPreserved = async () => {
+      const currentDefinition = await db.factDefinition.findUniqueOrThrow({ where: { key: 'employee_count' } });
+      expect(currentDefinition.id).toBe(definition.id);
+      const unrelated = await db.clientFact.findUniqueOrThrow({ where: { id: factId } });
+      expect(unrelated.factDefinitionId).toBe(definition.id);
+      expect(Number(unrelated.numberValue)).toBe(123);
+      expect((await db.clientFactAnswerState.findUniqueOrThrow({ where: { id: answerStateId } })).currentFactId).toBe(factId);
+      expect(Number((await db.clientFact.findFirstOrThrow({ where: { clientId: IDS.clientId, factDefinitionId: definition.id, supersededAt: null } })).numberValue)).toBe(47);
+    };
+    await reset({ DEMO_KFT_PORTAL_IDENTITY_EMAIL: 'test-exec@fixture.invalid' });
+    await assertPreserved();
+    await reset({ DEMO_KFT_PORTAL_IDENTITY_EMAIL: 'test-exec@fixture.invalid' });
+    await assertPreserved();
+    await db.clientFactAnswerState.delete({ where: { id: answerStateId } });
+    await db.clientFact.delete({ where: { id: factId } });
+    await db.client.delete({ where: { id: unrelatedClientId } });
+  });
 });
