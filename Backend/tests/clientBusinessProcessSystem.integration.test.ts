@@ -130,18 +130,18 @@ d('Grow With Us V2 T1 — Business Process & System Foundation', () => {
 
   it('2. Client A can create BusinessSystem', async () => {
     const system = await createBusinessSystem(admin, clientA, {
-      name: 'SharePoint Online',
+      name: 'Document Repository System',
       category: 'DOCUMENT_MGMT',
-      vendor: 'Microsoft',
+      vendor: 'Vendor Corp',
       purpose: 'Contract storage & document repository',
       ownerPersonId: personA,
     });
     expect(system).toBeDefined();
     expect(system.id).toBeDefined();
     expect(system.clientId).toBe(clientA);
-    expect(system.name).toBe('SharePoint Online');
+    expect(system.name).toBe('Document Repository System');
     expect(system.category).toBe('DOCUMENT_MGMT');
-    expect(system.vendor).toBe('Microsoft');
+    expect(system.vendor).toBe('Vendor Corp');
     expect(system.ownerPersonId).toBe(personA);
   });
 
