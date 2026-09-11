@@ -54,7 +54,7 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     await db.$disconnect();
   });
 
-  async function reset() {
+  async function reset(customEnv: Record<string, string> = {}) {
     const { execFileSync } = await import('node:child_process');
     const path = await import('node:path');
     const fs = await import('node:fs');
@@ -67,7 +67,7 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     const scriptPath = path.resolve(__dirname, '../scripts/demo-kft-reset.mjs');
     execFileSync(process.execPath, [tsxCli, scriptPath], {
       cwd: path.resolve(__dirname, '..'),
-      env: { ...process.env, ADMINICULUM_DEMO_CONTENT_ENABLED: 'true' },
+      env: { ...process.env, ADMINICULUM_DEMO_CONTENT_ENABLED: 'true', ...customEnv },
       stdio: 'pipe',
     });
   }
@@ -162,13 +162,15 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
   });
 
   it('mixed legacy rule key with canonical definition preserves discovery, reevaluation, and Grow continuity', async () => {
-    await reset();
-    const activeMembership = await db.clientPortalWorkspaceMembership.findFirst({
-      where: { workspaceId: IDS.workspaceId, status: 'ACTIVE', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-      select: { clientPortalIdentityId: true },
+    await db.clientPortalIdentity.upsert({
+      where: { id: IDS.identityId },
+      update: {},
+      create: { id: IDS.identityId, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://login.microsoftonline.com/demo-kft', subject: 'sub-peterfi', normalizedEmail: 'test-exec@fixture.invalid', displayName: 'Péterfi János', accountType: 'ORGANIZATION_MEMBER', status: 'ACTIVE', emailVerifiedAt: new Date() },
     });
-    expect(activeMembership).not.toBeNull();
-    const resolvedIdentityId = activeMembership!.clientPortalIdentityId;
+    await reset({ DEMO_KFT_PORTAL_IDENTITY_EMAIL: 'test-exec@fixture.invalid' });
+    const membership = await db.clientPortalWorkspaceMembership.findUnique({ where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: IDS.identityId, workspaceId: IDS.workspaceId } }, select: { status: true } });
+    expect(membership?.status).toBe('ACTIVE');
+    const resolvedIdentityId = IDS.identityId;
     const fact = await db.clientFact.findFirstOrThrow({ where: { clientId: IDS.clientId, factDefinitionId: IDS.factDefinitionId, supersededAt: null } });
     await db.clientFact.update({ where: { id: fact.id }, data: { type: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
     const rule = await db.applicabilityRuleVersion.findFirstOrThrow({ where: { requirementVersionId: IDS.requirementVersionId }, select: { id: true, astJson: true } });
