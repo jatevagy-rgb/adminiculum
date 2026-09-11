@@ -18,6 +18,7 @@ import { getClientSafeGrowthNarrative } from '../src/modules/compliance/companyG
 import { reconcileClientCompliance } from '../src/modules/compliance/complianceReconcileService';
 import { getComplianceWorkspace } from '../src/modules/compliance/complianceWorkspaceService';
 import { getCompanyProfileDiscovery, answerCompanyProfileQuestion } from '../src/modules/client-workspace/companyProfileAnswerService';
+import { canonicalDigest } from '../src/modules/compliance/canonicalDigest';
 
 const databaseUrl =
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
@@ -163,8 +164,14 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     await reset();
     const fact = await db.clientFact.findFirstOrThrow({ where: { clientId: IDS.clientId, factDefinitionId: IDS.factDefinitionId, supersededAt: null } });
     await db.clientFact.update({ where: { id: fact.id }, data: { type: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
-    const rule = await db.applicabilityRuleVersion.findFirstOrThrow({ where: { requirementVersionId: IDS.requirementVersionId }, select: { id: true } });
+    const rule = await db.applicabilityRuleVersion.findFirstOrThrow({ where: { requirementVersionId: IDS.requirementVersionId }, select: { id: true, astJson: true } });
+    const legacyAst = JSON.parse(JSON.stringify(rule.astJson).replaceAll('employee_count', 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT'));
+    await db.applicabilityRuleVersion.update({ where: { id: rule.id }, data: { astJson: legacyAst, canonicalDigest: canonicalDigest(legacyAst) } });
     await db.applicabilityRuleFactDependency.updateMany({ where: { applicabilityRuleVersionId: rule.id }, data: { factKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
+    const mixed = await db.applicabilityRuleFactDependency.findFirstOrThrow({ where: { applicabilityRuleVersionId: rule.id } });
+    expect(mixed.factKey).toBe('DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
+    expect(mixed.resolvedFactDefinitionId).toBe(IDS.factDefinitionId);
+    expect((legacyAst as any).node.left.factKey).toBe('DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
     const discovery = await getCompanyProfileDiscovery(IDS.identityId, IDS.workspaceId, db);
     expect(discovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'employee_count', status: 'ANSWERED', value: 47 })]));
     await answerCompanyProfileQuestion(IDS.identityId, IDS.workspaceId, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);
