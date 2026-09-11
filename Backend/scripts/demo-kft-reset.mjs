@@ -206,8 +206,6 @@ async function teardown(db) {
 
   await db.clientFactAnswerState.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientFact.deleteMany({ where: { clientId: IDS.clientId } });
-  const ownedDefinition = await db.factDefinition.findUnique({ where: { id: IDS.factDefinitionId }, select: { key: true } });
-  if (ownedDefinition?.key === IDS.factDefinitionKey) await db.factDefinition.delete({ where: { id: IDS.factDefinitionId } });
   await db.clientOperatingProfile.deleteMany({ where: { id: IDS.operatingProfileId } });
   await db.clientPortalWorkspace.deleteMany({ where: { id: IDS.workspaceId } });
   await db.client.deleteMany({ where: { id: IDS.clientId } });
