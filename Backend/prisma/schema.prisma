@@ -195,6 +195,9 @@ model Client {
   entitlements               ContractEntitlement[] // Contract library (Phase 2)
   organizationPersons        OrganizationPerson[] // Organization (Phase 3)
   factSubjects               FactSubject[]
+  businessProcesses          BusinessProcess[]
+  businessSystems            BusinessSystem[]
+  businessProcessSteps       BusinessProcessStep[]
 
   @@map("clients")
 }
@@ -2807,6 +2810,7 @@ model ClientOrganizationGroup {
   parentGroup     ClientOrganizationGroup?      @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
   childGroups     ClientOrganizationGroup[]     @relation("ClientOrganizationGroupHierarchy")
   persons         OrganizationPerson[]
+  businessProcesses BusinessProcess[]
 
   @@unique([clientId, workspaceId, name])
   @@index([clientId, status])
@@ -4961,6 +4965,9 @@ model OrganizationPerson {
   factSubjects            FactSubject[]                      @relation("FactSubjectEmployee")
   ownedObligations        ClientObligation[]
   ownedInitiatives        DevelopmentInitiative[]
+  ownedBusinessProcesses  BusinessProcess[]                  @relation("BusinessProcessOwnerPerson")
+  ownedBusinessSystems    BusinessSystem[]                   @relation("BusinessSystemOwnerPerson")
+  responsibleProcessSteps BusinessProcessStep[]              @relation("ProcessStepResponsiblePerson")
   createdAt               DateTime                           @default(now())
   updatedAt               DateTime                           @updatedAt
 
@@ -5457,4 +5464,84 @@ model RequirementApplicabilityFact {
   @@index([applicabilityId])
   @@index([clientFactId])
   @@map("requirement_applicability_facts")
+}
+
+// ============================================================================
+// GROW WITH US V2 — CANONICAL BUSINESS PROCESS & BUSINESS SYSTEM FOUNDATION (T1)
+// ============================================================================
+
+model BusinessProcess {
+  id                  String                   @id @default(uuid())
+  clientId            String
+  client              Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name                String
+  category            String                   @default("GENERAL")
+  description         String?
+  ownerPersonId       String?
+  ownerPerson         OrganizationPerson?      @relation("BusinessProcessOwnerPerson", fields: [ownerPersonId], references: [id], onDelete: SetNull)
+  organizationGroupId String?
+  organizationGroup   ClientOrganizationGroup? @relation(fields: [organizationGroupId], references: [id], onDelete: SetNull)
+  criticality         String                   @default("MEDIUM")
+  frequency           String                   @default("DAILY")
+  status              String                   @default("ACTIVE")
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  steps               BusinessProcessStep[]
+
+  @@unique([id, clientId])
+  @@index([clientId, status])
+  @@index([ownerPersonId])
+  @@index([organizationGroupId])
+  @@map("business_processes")
+}
+
+model BusinessSystem {
+  id            String              @id @default(uuid())
+  clientId      String
+  client        Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name          String
+  category      String              @default("SOFTWARE")
+  vendor        String?
+  purpose       String?
+  ownerPersonId String?
+  ownerPerson   OrganizationPerson? @relation("BusinessSystemOwnerPerson", fields: [ownerPersonId], references: [id], onDelete: SetNull)
+  status        String              @default("ACTIVE")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  processSteps  BusinessProcessStep[]
+
+  @@unique([id, clientId])
+  @@unique([clientId, name])
+  @@index([clientId, status])
+  @@index([ownerPersonId])
+  @@map("business_systems")
+}
+
+model BusinessProcessStep {
+  id                      String              @id @default(uuid())
+  processId               String
+  process                 BusinessProcess     @relation(fields: [processId], references: [id], onDelete: Cascade)
+  clientId                String
+  client                  Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  position                Int
+  name                    String
+  stepType                String              @default("MANUAL")
+  responsiblePersonId     String?
+  responsiblePerson       OrganizationPerson? @relation("ProcessStepResponsiblePerson", fields: [responsiblePersonId], references: [id], onDelete: SetNull)
+  systemId                String?
+  system                  BusinessSystem?     @relation(fields: [systemId], references: [id], onDelete: SetNull)
+  estimatedActiveMinutes  Int?
+  estimatedWaitingMinutes Int?
+  isApproval              Boolean             @default(false)
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  @@unique([processId, position])
+  @@index([processId])
+  @@index([clientId])
+  @@index([systemId])
+  @@index([responsiblePersonId])
+  @@map("business_process_steps")
 }

@@ -114,3 +114,52 @@ clientCompanyRouter.get('/initiatives/:initiativeId', async (req, res) => {
 clientCompanyRouter.patch('/initiatives/:initiativeId', async (req, res) => {
   try { res.json(await company.updateInitiative(actor(req), String(req.params.initiativeId), req.body || {})); } catch (e) { fail(res, e); }
 });
+
+// Business systems (T1)
+clientCompanyRouter.get('/clients/:clientId/systems', async (req, res) => {
+  try { res.json(await company.listBusinessSystems(actor(req), String(req.params.clientId), { status: req.query.status as string })); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.post('/clients/:clientId/systems', async (req, res) => {
+  try { res.status(201).json(await company.createBusinessSystem(actor(req), String(req.params.clientId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.get('/systems/:systemId', async (req, res) => {
+  try { res.json(await company.getBusinessSystem(actor(req), String(req.params.systemId))); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.patch('/systems/:systemId', async (req, res) => {
+  try { res.json(await company.updateBusinessSystem(actor(req), String(req.params.systemId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.delete('/systems/:systemId', async (req, res) => {
+  try { res.json(await company.deleteBusinessSystem(actor(req), String(req.params.systemId))); } catch (e) { fail(res, e); }
+});
+
+// Business processes (T1)
+clientCompanyRouter.get('/clients/:clientId/processes', async (req, res) => {
+  try { res.json(await company.listBusinessProcesses(actor(req), String(req.params.clientId), { status: req.query.status as string, category: req.query.category as string })); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.post('/clients/:clientId/processes', async (req, res) => {
+  try { res.status(201).json(await company.createBusinessProcess(actor(req), String(req.params.clientId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.get('/processes/:processId', async (req, res) => {
+  try { res.json(await company.getBusinessProcess(actor(req), String(req.params.processId))); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.patch('/processes/:processId', async (req, res) => {
+  try { res.json(await company.updateBusinessProcess(actor(req), String(req.params.processId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.delete('/processes/:processId', async (req, res) => {
+  try { res.json(await company.deleteBusinessProcess(actor(req), String(req.params.processId))); } catch (e) { fail(res, e); }
+});
+
+// Process steps (T1)
+clientCompanyRouter.post('/processes/:processId/steps', async (req, res) => {
+  try { res.status(201).json(await company.addProcessStep(actor(req), String(req.params.processId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.patch('/steps/:stepId', async (req, res) => {
+  try { res.json(await company.updateProcessStep(actor(req), String(req.params.stepId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.post('/processes/:processId/reorder-steps', async (req, res) => {
+  try { res.json(await company.reorderProcessSteps(actor(req), String(req.params.processId), req.body?.stepIds || [])); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.delete('/steps/:stepId', async (req, res) => {
+  try { res.json(await company.removeProcessStep(actor(req), String(req.params.stepId))); } catch (e) { fail(res, e); }
+});
+

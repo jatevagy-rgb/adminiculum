@@ -793,4 +793,505 @@ export async function updateInitiative(actor: InternalActor, initiativeId: strin
   return toInitiativeDTO(updated);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Grow With Us V2 — Business Systems & Business Processes (T1)              */
+/* -------------------------------------------------------------------------- */
+
+async function assertOrganizationPersonInClient(prisma: Prisma, clientId: string, personId: string): Promise<void> {
+  const ok = await prisma.organizationPerson.findFirst({ where: { id: personId, clientId }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'CROSS_CLIENT_REFERENCE', 'Referenced person does not belong to this client.');
+}
+
+async function assertOrganizationGroupInClient(prisma: Prisma, clientId: string, groupId: string): Promise<void> {
+  const ok = await prisma.clientOrganizationGroup.findFirst({ where: { id: groupId, clientId }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'CROSS_CLIENT_REFERENCE', 'Referenced organization group does not belong to this client.');
+}
+
+async function assertBusinessSystemInClient(prisma: Prisma, clientId: string, systemId: string): Promise<void> {
+  const ok = await prisma.businessSystem.findFirst({ where: { id: systemId, clientId }, select: { id: true } });
+  if (!ok) throw new InteractionError(400, 'CROSS_CLIENT_REFERENCE', 'Referenced business system does not belong to this client.');
+}
+
+/* -------------------------------------------------------------------------- */
+/* BusinessSystem                                                             */
+/* -------------------------------------------------------------------------- */
+
+export function toBusinessSystemDTO(row: any): any {
+  return {
+    id: row.id,
+    clientId: row.clientId,
+    name: row.name,
+    category: row.category,
+    vendor: row.vendor ?? null,
+    purpose: row.purpose ?? null,
+    ownerPersonId: row.ownerPersonId ?? null,
+    ownerPersonName: row.ownerPerson ? row.ownerPerson.name : null,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export async function listBusinessSystems(actor: InternalActor, clientId: string, filters?: { status?: string }, prisma: Prisma = defaultPrisma) {
+  await assertClientReadAccess(actor, clientId, prisma);
+  const where: any = { clientId };
+  if (filters?.status) where.status = String(filters.status);
+  const rows = await prisma.businessSystem.findMany({
+    where,
+    include: { ownerPerson: { select: { id: true, name: true } } },
+    orderBy: { name: 'asc' },
+  });
+  return rows.map(toBusinessSystemDTO);
+}
+
+export async function getBusinessSystem(actor: InternalActor, systemId: string, prisma: Prisma = defaultPrisma) {
+  const row = await prisma.businessSystem.findUnique({
+    where: { id: systemId },
+    include: { ownerPerson: { select: { id: true, name: true } } },
+  });
+  if (!row) throw new InteractionError(404, 'BUSINESS_SYSTEM_NOT_FOUND', 'Business system not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+  return toBusinessSystemDTO(row);
+}
+
+export async function createBusinessSystem(actor: InternalActor, clientId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  await assertClientReadAccess(actor, clientId, prisma);
+  const name = safeText(input.name, 'name', 120, true)!;
+  const category = safeText(input.category, 'category', 80, false) || 'SOFTWARE';
+  const vendor = safeText(input.vendor, 'vendor', 120, false);
+  const purpose = safeText(input.purpose, 'purpose', 500, false);
+  const status = safeText(input.status, 'status', 40, false) || 'ACTIVE';
+  const ownerPersonId = input.ownerPersonId ? String(input.ownerPersonId) : null;
+
+  if (ownerPersonId) {
+    await assertOrganizationPersonInClient(prisma, clientId, ownerPersonId);
+  }
+
+  const existing = await prisma.businessSystem.findUnique({
+    where: { clientId_name: { clientId, name } },
+  });
+  if (existing) {
+    throw new InteractionError(409, 'DUPLICATE_SYSTEM_NAME', 'A business system with this name already exists for this client.');
+  }
+
+  const row = await prisma.businessSystem.create({
+    data: {
+      clientId,
+      name,
+      category,
+      vendor,
+      purpose,
+      ownerPersonId,
+      status,
+    },
+    include: { ownerPerson: { select: { id: true, name: true } } },
+  });
+  return toBusinessSystemDTO(row);
+}
+
+export async function updateBusinessSystem(actor: InternalActor, systemId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const row = await prisma.businessSystem.findUnique({ where: { id: systemId } });
+  if (!row) throw new InteractionError(404, 'BUSINESS_SYSTEM_NOT_FOUND', 'Business system not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+
+  const data: any = {};
+  if (input.name !== undefined) {
+    const name = safeText(input.name, 'name', 120, true)!;
+    if (name !== row.name) {
+      const existing = await prisma.businessSystem.findUnique({
+        where: { clientId_name: { clientId: row.clientId, name } },
+      });
+      if (existing) {
+        throw new InteractionError(409, 'DUPLICATE_SYSTEM_NAME', 'A business system with this name already exists for this client.');
+      }
+      data.name = name;
+    }
+  }
+  if (input.category !== undefined) data.category = safeText(input.category, 'category', 80, false) || 'SOFTWARE';
+  if (input.vendor !== undefined) data.vendor = safeText(input.vendor, 'vendor', 120, false);
+  if (input.purpose !== undefined) data.purpose = safeText(input.purpose, 'purpose', 500, false);
+  if (input.status !== undefined) data.status = safeText(input.status, 'status', 40, false) || 'ACTIVE';
+  if (input.ownerPersonId !== undefined) {
+    const ownerPersonId = input.ownerPersonId ? String(input.ownerPersonId) : null;
+    if (ownerPersonId) {
+      await assertOrganizationPersonInClient(prisma, row.clientId, ownerPersonId);
+    }
+    data.ownerPersonId = ownerPersonId;
+  }
+
+  const updated = await prisma.businessSystem.update({
+    where: { id: systemId },
+    data,
+    include: { ownerPerson: { select: { id: true, name: true } } },
+  });
+  return toBusinessSystemDTO(updated);
+}
+
+export async function deleteBusinessSystem(actor: InternalActor, systemId: string, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const row = await prisma.businessSystem.findUnique({ where: { id: systemId } });
+  if (!row) throw new InteractionError(404, 'BUSINESS_SYSTEM_NOT_FOUND', 'Business system not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+
+  await prisma.businessSystem.delete({ where: { id: systemId } });
+  return { deleted: true, id: systemId };
+}
+
+/* -------------------------------------------------------------------------- */
+/* BusinessProcess & BusinessProcessStep                                     */
+/* -------------------------------------------------------------------------- */
+
+export function toBusinessProcessStepDTO(row: any): any {
+  return {
+    id: row.id,
+    processId: row.processId,
+    clientId: row.clientId,
+    position: row.position,
+    name: row.name,
+    stepType: row.stepType,
+    responsiblePersonId: row.responsiblePersonId ?? null,
+    responsiblePersonName: row.responsiblePerson ? row.responsiblePerson.name : null,
+    systemId: row.systemId ?? null,
+    systemName: row.system ? row.system.name : null,
+    estimatedActiveMinutes: row.estimatedActiveMinutes ?? null,
+    estimatedWaitingMinutes: row.estimatedWaitingMinutes ?? null,
+    isApproval: Boolean(row.isApproval),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+export function toBusinessProcessDTO(row: any): any {
+  return {
+    id: row.id,
+    clientId: row.clientId,
+    name: row.name,
+    category: row.category,
+    description: row.description ?? null,
+    ownerPersonId: row.ownerPersonId ?? null,
+    ownerPersonName: row.ownerPerson ? row.ownerPerson.name : null,
+    organizationGroupId: row.organizationGroupId ?? null,
+    organizationGroupName: row.organizationGroup ? row.organizationGroup.name : null,
+    criticality: row.criticality,
+    frequency: row.frequency,
+    status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    steps: Array.isArray(row.steps) ? row.steps.map(toBusinessProcessStepDTO) : undefined,
+  };
+}
+
+export async function listBusinessProcesses(actor: InternalActor, clientId: string, filters?: { status?: string; category?: string }, prisma: Prisma = defaultPrisma) {
+  await assertClientReadAccess(actor, clientId, prisma);
+  const where: any = { clientId };
+  if (filters?.status) where.status = String(filters.status);
+  if (filters?.category) where.category = String(filters.category);
+
+  const rows = await prisma.businessProcess.findMany({
+    where,
+    include: {
+      ownerPerson: { select: { id: true, name: true } },
+      organizationGroup: { select: { id: true, name: true } },
+      steps: {
+        orderBy: { position: 'asc' },
+        include: {
+          responsiblePerson: { select: { id: true, name: true } },
+          system: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+  return rows.map(toBusinessProcessDTO);
+}
+
+export async function getBusinessProcess(actor: InternalActor, processId: string, prisma: Prisma = defaultPrisma) {
+  const row = await prisma.businessProcess.findUnique({
+    where: { id: processId },
+    include: {
+      ownerPerson: { select: { id: true, name: true } },
+      organizationGroup: { select: { id: true, name: true } },
+      steps: {
+        orderBy: { position: 'asc' },
+        include: {
+          responsiblePerson: { select: { id: true, name: true } },
+          system: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+  if (!row) throw new InteractionError(404, 'BUSINESS_PROCESS_NOT_FOUND', 'Business process not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+  return toBusinessProcessDTO(row);
+}
+
+export async function createBusinessProcess(actor: InternalActor, clientId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  await assertClientReadAccess(actor, clientId, prisma);
+  const name = safeText(input.name, 'name', 160, true)!;
+  const category = safeText(input.category, 'category', 80, false) || 'GENERAL';
+  const description = safeText(input.description, 'description', 2000, false);
+  const criticality = safeText(input.criticality, 'criticality', 40, false) || 'MEDIUM';
+  const frequency = safeText(input.frequency, 'frequency', 40, false) || 'DAILY';
+  const status = safeText(input.status, 'status', 40, false) || 'ACTIVE';
+  const ownerPersonId = input.ownerPersonId ? String(input.ownerPersonId) : null;
+  const organizationGroupId = input.organizationGroupId ? String(input.organizationGroupId) : null;
+
+  if (ownerPersonId) {
+    await assertOrganizationPersonInClient(prisma, clientId, ownerPersonId);
+  }
+  if (organizationGroupId) {
+    await assertOrganizationGroupInClient(prisma, clientId, organizationGroupId);
+  }
+
+  const row = await prisma.businessProcess.create({
+    data: {
+      clientId,
+      name,
+      category,
+      description,
+      ownerPersonId,
+      organizationGroupId,
+      criticality,
+      frequency,
+      status,
+    },
+    include: {
+      ownerPerson: { select: { id: true, name: true } },
+      organizationGroup: { select: { id: true, name: true } },
+      steps: { orderBy: { position: 'asc' } },
+    },
+  });
+  return toBusinessProcessDTO(row);
+}
+
+export async function updateBusinessProcess(actor: InternalActor, processId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const row = await prisma.businessProcess.findUnique({ where: { id: processId } });
+  if (!row) throw new InteractionError(404, 'BUSINESS_PROCESS_NOT_FOUND', 'Business process not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+
+  const data: any = {};
+  if (input.name !== undefined) data.name = safeText(input.name, 'name', 160, true)!;
+  if (input.category !== undefined) data.category = safeText(input.category, 'category', 80, false) || 'GENERAL';
+  if (input.description !== undefined) data.description = safeText(input.description, 'description', 2000, false);
+  if (input.criticality !== undefined) data.criticality = safeText(input.criticality, 'criticality', 40, false) || 'MEDIUM';
+  if (input.frequency !== undefined) data.frequency = safeText(input.frequency, 'frequency', 40, false) || 'DAILY';
+  if (input.status !== undefined) data.status = safeText(input.status, 'status', 40, false) || 'ACTIVE';
+
+  if (input.ownerPersonId !== undefined) {
+    const ownerPersonId = input.ownerPersonId ? String(input.ownerPersonId) : null;
+    if (ownerPersonId) {
+      await assertOrganizationPersonInClient(prisma, row.clientId, ownerPersonId);
+    }
+    data.ownerPersonId = ownerPersonId;
+  }
+  if (input.organizationGroupId !== undefined) {
+    const organizationGroupId = input.organizationGroupId ? String(input.organizationGroupId) : null;
+    if (organizationGroupId) {
+      await assertOrganizationGroupInClient(prisma, row.clientId, organizationGroupId);
+    }
+    data.organizationGroupId = organizationGroupId;
+  }
+
+  const updated = await prisma.businessProcess.update({
+    where: { id: processId },
+    data,
+    include: {
+      ownerPerson: { select: { id: true, name: true } },
+      organizationGroup: { select: { id: true, name: true } },
+      steps: {
+        orderBy: { position: 'asc' },
+        include: {
+          responsiblePerson: { select: { id: true, name: true } },
+          system: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
+  return toBusinessProcessDTO(updated);
+}
+
+export async function deleteBusinessProcess(actor: InternalActor, processId: string, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const row = await prisma.businessProcess.findUnique({ where: { id: processId } });
+  if (!row) throw new InteractionError(404, 'BUSINESS_PROCESS_NOT_FOUND', 'Business process not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+
+  await prisma.businessProcess.delete({ where: { id: processId } });
+  return { deleted: true, id: processId };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Process Steps                                                             */
+/* -------------------------------------------------------------------------- */
+
+export async function addProcessStep(actor: InternalActor, processId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const process = await prisma.businessProcess.findUnique({ where: { id: processId } });
+  if (!process) throw new InteractionError(404, 'BUSINESS_PROCESS_NOT_FOUND', 'Business process not found.');
+  await assertClientReadAccess(actor, process.clientId, prisma);
+
+  const name = safeText(input.name, 'name', 160, true)!;
+  const stepType = safeText(input.stepType, 'stepType', 40, false) || 'MANUAL';
+  const isApproval = Boolean(input.isApproval);
+  const estimatedActiveMinutes = input.estimatedActiveMinutes !== undefined && input.estimatedActiveMinutes !== null ? Math.max(0, Number(input.estimatedActiveMinutes)) : null;
+  const estimatedWaitingMinutes = input.estimatedWaitingMinutes !== undefined && input.estimatedWaitingMinutes !== null ? Math.max(0, Number(input.estimatedWaitingMinutes)) : null;
+
+  const responsiblePersonId = input.responsiblePersonId ? String(input.responsiblePersonId) : null;
+  if (responsiblePersonId) {
+    await assertOrganizationPersonInClient(prisma, process.clientId, responsiblePersonId);
+  }
+
+  const systemId = input.systemId ? String(input.systemId) : null;
+  if (systemId) {
+    await assertBusinessSystemInClient(prisma, process.clientId, systemId);
+  }
+
+  // Determine next position
+  const maxStep = await prisma.businessProcessStep.findFirst({
+    where: { processId },
+    orderBy: { position: 'desc' },
+    select: { position: true },
+  });
+  const position = (maxStep?.position ?? 0) + 1;
+
+  const step = await prisma.businessProcessStep.create({
+    data: {
+      processId,
+      clientId: process.clientId,
+      position,
+      name,
+      stepType,
+      responsiblePersonId,
+      systemId,
+      estimatedActiveMinutes,
+      estimatedWaitingMinutes,
+      isApproval,
+    },
+    include: {
+      responsiblePerson: { select: { id: true, name: true } },
+      system: { select: { id: true, name: true } },
+    },
+  });
+  return toBusinessProcessStepDTO(step);
+}
+
+export async function updateProcessStep(actor: InternalActor, stepId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const step = await prisma.businessProcessStep.findUnique({
+    where: { id: stepId },
+    include: { process: { select: { clientId: true } } },
+  });
+  if (!step) throw new InteractionError(404, 'PROCESS_STEP_NOT_FOUND', 'Process step not found.');
+  await assertClientReadAccess(actor, step.clientId, prisma);
+
+  const data: any = {};
+  if (input.name !== undefined) data.name = safeText(input.name, 'name', 160, true)!;
+  if (input.stepType !== undefined) data.stepType = safeText(input.stepType, 'stepType', 40, false) || 'MANUAL';
+  if (input.isApproval !== undefined) data.isApproval = Boolean(input.isApproval);
+  if (input.estimatedActiveMinutes !== undefined) {
+    data.estimatedActiveMinutes = input.estimatedActiveMinutes !== null ? Math.max(0, Number(input.estimatedActiveMinutes)) : null;
+  }
+  if (input.estimatedWaitingMinutes !== undefined) {
+    data.estimatedWaitingMinutes = input.estimatedWaitingMinutes !== null ? Math.max(0, Number(input.estimatedWaitingMinutes)) : null;
+  }
+
+  if (input.responsiblePersonId !== undefined) {
+    const responsiblePersonId = input.responsiblePersonId ? String(input.responsiblePersonId) : null;
+    if (responsiblePersonId) {
+      await assertOrganizationPersonInClient(prisma, step.clientId, responsiblePersonId);
+    }
+    data.responsiblePersonId = responsiblePersonId;
+  }
+
+  if (input.systemId !== undefined) {
+    const systemId = input.systemId ? String(input.systemId) : null;
+    if (systemId) {
+      await assertBusinessSystemInClient(prisma, step.clientId, systemId);
+    }
+    data.systemId = systemId;
+  }
+
+  const updated = await prisma.businessProcessStep.update({
+    where: { id: stepId },
+    data,
+    include: {
+      responsiblePerson: { select: { id: true, name: true } },
+      system: { select: { id: true, name: true } },
+    },
+  });
+  return toBusinessProcessStepDTO(updated);
+}
+
+export async function reorderProcessSteps(actor: InternalActor, processId: string, stepIds: string[], prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const process = await prisma.businessProcess.findUnique({ where: { id: processId } });
+  if (!process) throw new InteractionError(404, 'BUSINESS_PROCESS_NOT_FOUND', 'Business process not found.');
+  await assertClientReadAccess(actor, process.clientId, prisma);
+
+  const existingSteps = await prisma.businessProcessStep.findMany({
+    where: { processId },
+    select: { id: true },
+  });
+  const existingSet = new Set(existingSteps.map((s) => s.id));
+
+  if (stepIds.length !== existingSet.size || !stepIds.every((id) => existingSet.has(id))) {
+    throw new InteractionError(400, 'INVALID_REORDER_STEPS', 'Provided step IDs do not match the process steps.');
+  }
+
+  // Temporary negative positioning to avoid unique constraint collisions during swap
+  for (let i = 0; i < stepIds.length; i++) {
+    await prisma.businessProcessStep.update({
+      where: { id: stepIds[i] },
+      data: { position: -(i + 1) },
+    });
+  }
+  for (let i = 0; i < stepIds.length; i++) {
+    await prisma.businessProcessStep.update({
+      where: { id: stepIds[i] },
+      data: { position: i + 1 },
+    });
+  }
+
+  const updatedSteps = await prisma.businessProcessStep.findMany({
+    where: { processId },
+    orderBy: { position: 'asc' },
+    include: {
+      responsiblePerson: { select: { id: true, name: true } },
+      system: { select: { id: true, name: true } },
+    },
+  });
+  return updatedSteps.map(toBusinessProcessStepDTO);
+}
+
+export async function removeProcessStep(actor: InternalActor, stepId: string, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const step = await prisma.businessProcessStep.findUnique({ where: { id: stepId } });
+  if (!step) throw new InteractionError(404, 'PROCESS_STEP_NOT_FOUND', 'Process step not found.');
+  await assertClientReadAccess(actor, step.clientId, prisma);
+
+  const processId = step.processId;
+  await prisma.businessProcessStep.delete({ where: { id: stepId } });
+
+  // Re-index remaining steps sequentially
+  const remaining = await prisma.businessProcessStep.findMany({
+    where: { processId },
+    orderBy: { position: 'asc' },
+    select: { id: true },
+  });
+
+  for (let i = 0; i < remaining.length; i++) {
+    await prisma.businessProcessStep.update({
+      where: { id: remaining[i].id },
+      data: { position: i + 1 },
+    });
+  }
+
+  return { deleted: true, id: stepId };
+}
+
 export { forbidden, requireExpected };
+
