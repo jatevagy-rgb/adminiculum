@@ -8,6 +8,7 @@ import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { getClient, updateClient, type Client } from "@/lib/api";
 import { getClientColorDefinition } from "@/lib/clientColors";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
+import { ClientPortalMemberAdmin } from "@/components/client-portal/ClientPortalMemberAdmin";
 
 const modeLabels: Record<AdminWorkspaceDTO["mode"], string> = {
   INDIVIDUAL: "Magánügyfél",
@@ -25,7 +26,8 @@ export default function ClientPortalContextPage() {
   const params = useParams();
   const clientId = String(params?.clientId || "");
   const [client, setClient] = useState<Client | null>(null);
-  const [workspace, setWorkspace] = useState<AdminWorkspaceDTO | null>(null);
+  const [workspaces, setWorkspaces] = useState<AdminWorkspaceDTO[]>([]);
+  const workspace = workspaces.find((item) => item.status !== "ARCHIVED") || workspaces[0] || null;
   const [error, setError] = useState<string | null>(null);
   const [savingPortal, setSavingPortal] = useState(false);
 
@@ -47,10 +49,15 @@ export default function ClientPortalContextPage() {
     void Promise.all([getClient(clientId), listAdminWorkspaces(clientId)])
       .then(([clientResult, workspaces]) => {
         setClient(clientResult);
-        setWorkspace(workspaces.items.find((item) => item.status !== "ARCHIVED") || workspaces.items[0] || null);
+        setWorkspaces(workspaces.items);
       })
       .catch(() => setError("A portál adatai jelenleg nem érhetők el."));
   }, [clientId]);
+
+  const refreshWorkspaces = async () => {
+    const result = await listAdminWorkspaces(clientId);
+    setWorkspaces(result.items);
+  };
 
   const organizationMode = workspace?.mode === "ORGANIZATION" || workspace?.mode === "CASE_RELAY";
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
@@ -161,6 +168,8 @@ export default function ClientPortalContextPage() {
                   {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button px-4 py-2 text-xs">Szervezeti kontextus</Link> : null}
                 </div>
               </section>
+
+              <ClientPortalMemberAdmin clientId={clientId} workspaces={workspaces} onRefresh={refreshWorkspaces} />
             </>
           ) : !error ? <div className="adm-board-panel p-5 text-sm text-[var(--adm-text-muted)]">Ügyfél betöltése…</div> : null}
         </div>
