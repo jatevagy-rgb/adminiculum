@@ -204,8 +204,10 @@ async function teardown(db) {
   await db.organizationPerson.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientOrganizationGroup.deleteMany({ where: { clientId: IDS.clientId } });
 
+  await db.clientFactAnswerState.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientFact.deleteMany({ where: { clientId: IDS.clientId } });
-  await db.factDefinition.deleteMany({ where: { OR: [{ id: IDS.factDefinitionId }, { key: IDS.factDefinitionKey }] } });
+  const ownedDefinition = await db.factDefinition.findUnique({ where: { id: IDS.factDefinitionId }, select: { key: true } });
+  if (ownedDefinition?.key === IDS.factDefinitionKey) await db.factDefinition.delete({ where: { id: IDS.factDefinitionId } });
   await db.clientOperatingProfile.deleteMany({ where: { id: IDS.operatingProfileId } });
   await db.clientPortalWorkspace.deleteMany({ where: { id: IDS.workspaceId } });
   await db.client.deleteMany({ where: { id: IDS.clientId } });
@@ -267,10 +269,9 @@ async function seed(db) {
   await db.organizationPerson.upsert({ where: { id: IDS.personOpsLeadId }, update: {}, create: { id: IDS.personOpsLeadId, clientId: IDS.clientId, organizationGroupId: IDS.opsGroupId, name: 'Operációs vezető', jobTitle: 'Operációs vezető', employmentStatus: 'ACTIVE' } });
 
   // 5. Company profile fact — employee_count = 47 (canonical typed-fact shape).
-  const fd = await db.factDefinition.upsert({
-    where: { id: IDS.factDefinitionId },
-    update: {},
-    create: {
+  const existingCanonical = await db.factDefinition.findUnique({ where: { key: IDS.factDefinitionKey } });
+  const fd = existingCanonical ?? await db.factDefinition.create({
+    data: {
       id: IDS.factDefinitionId,
       key: IDS.factDefinitionKey,
       domainCode: 'DEMO_KFT_GROWTH',
