@@ -172,9 +172,18 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(mixed.factKey).toBe('DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
     expect(mixed.resolvedFactDefinitionId).toBe(IDS.factDefinitionId);
     expect((legacyAst as any).node.left.factKey).toBe('DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
+    const legacyDependencyKey = mixed.factKey;
+    const legacyResolvedDefinitionId = mixed.resolvedFactDefinitionId;
     const discovery = await getCompanyProfileDiscovery(IDS.identityId, IDS.workspaceId, db);
     expect(discovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'employee_count', status: 'ANSWERED', value: 47 })]));
     await answerCompanyProfileQuestion(IDS.identityId, IDS.workspaceId, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);
+    const afterRule = await db.applicabilityRuleVersion.findUniqueOrThrow({ where: { id: rule.id }, select: { astJson: true } });
+    const afterDependency = await db.applicabilityRuleFactDependency.findFirstOrThrow({ where: { applicabilityRuleVersionId: rule.id } });
+    expect((afterRule.astJson as any).node.left.factKey).toBe(legacyDependencyKey);
+    expect(afterDependency.factKey).toBe(legacyDependencyKey);
+    expect(afterDependency.resolvedFactDefinitionId).toBe(legacyResolvedDefinitionId);
+    const applicability = await db.requirementApplicability.findFirstOrThrow({ where: { clientId: IDS.clientId, requirementVersionId: IDS.requirementVersionId }, select: { outcome: true } });
+    expect(applicability.outcome).toBe('APPLIES');
     const grow = await getClientSafeGrowthNarrative(IDS.clientId, db);
     expect(grow.beforeEmployeeCount).toBe(47);
     expect(grow.currentEmployeeCount).toBe(52);
