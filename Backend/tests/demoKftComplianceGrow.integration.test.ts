@@ -17,6 +17,7 @@ import { createProposal, confirmProposal } from '../src/modules/compliance/compl
 import { getClientSafeGrowthNarrative } from '../src/modules/compliance/companyGrowthNarrative';
 import { reconcileClientCompliance } from '../src/modules/compliance/complianceReconcileService';
 import { getComplianceWorkspace } from '../src/modules/compliance/complianceWorkspaceService';
+import { getCompanyProfileDiscovery, answerCompanyProfileQuestion } from '../src/modules/client-workspace/companyProfileAnswerService';
 
 const databaseUrl =
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
@@ -156,6 +157,21 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(grow.newTopicSafeCount).toBeGreaterThanOrEqual(1);
     expect(grow.safeFeedback).toContain('új terület');
     expect(grow.safeNowText).toContain('szükséges');
+  });
+
+  it('mixed legacy rule key with canonical definition preserves discovery, reevaluation, and Grow continuity', async () => {
+    await reset();
+    const fact = await db.clientFact.findFirstOrThrow({ where: { clientId: IDS.clientId, factDefinitionId: IDS.factDefinitionId, supersededAt: null } });
+    await db.clientFact.update({ where: { id: fact.id }, data: { type: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
+    const rule = await db.applicabilityRuleVersion.findFirstOrThrow({ where: { requirementVersionId: IDS.requirementVersionId }, select: { id: true } });
+    await db.applicabilityRuleFactDependency.updateMany({ where: { applicabilityRuleVersionId: rule.id }, data: { factKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
+    const discovery = await getCompanyProfileDiscovery(IDS.identityId, IDS.workspaceId, db);
+    expect(discovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'employee_count', status: 'ANSWERED', value: 47 })]));
+    await answerCompanyProfileQuestion(IDS.identityId, IDS.workspaceId, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);
+    const grow = await getClientSafeGrowthNarrative(IDS.clientId, db);
+    expect(grow.beforeEmployeeCount).toBe(47);
+    expect(grow.currentEmployeeCount).toBe(52);
+    expect(await findingCount()).toBeGreaterThanOrEqual(1);
   });
 
   it('proposal is human-gated: NO Task before confirm; Task created only after confirm', async () => {
