@@ -20,7 +20,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
   const otherClientIdentityId = crypto.randomUUID();
   const personId = crypto.randomUUID();
   const definitionId = crypto.randomUUID();
-  let selectedDefinitionId = definitionId;
+  let selectedDefinitionId: string = definitionId;
   const sourceId = crypto.randomUUID();
   const sourceVersionId = crypto.randomUUID();
   const requirementId = crypto.randomUUID();
