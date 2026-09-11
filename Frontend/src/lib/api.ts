@@ -2603,6 +2603,7 @@ export interface Client {
   relationshipMode?: "PORTAL_CENTRIC" | "EMAIL_CENTRIC" | "CONNECTED_SYSTEM";
   portalAccessEnabled?: boolean;
   connectedSystemState?: string | null;
+  archivedAt?: string | null;
   email?: string;
   phone?: string;
   address?: string;
@@ -2723,6 +2724,26 @@ export async function deleteClient(clientId: string): Promise<{ success: boolean
     method: 'DELETE',
   });
   return { success: true };
+}
+
+export interface ClientLifecyclePreview {
+  clientId: string;
+  name: string;
+  archivedAt: string | null;
+  dependencies: Record<string, number>;
+  total: number;
+  canHardDelete: boolean;
+}
+
+export async function getClientLifecyclePreview(clientId: string): Promise<ClientLifecyclePreview> {
+  return fetchApi<ClientLifecyclePreview>(`/clients/${encodeURIComponent(clientId)}/lifecycle-preview`);
+}
+
+export async function archiveClient(clientId: string): Promise<{ client: Client; archivedWorkspaceIds: string[]; alreadyArchived: boolean }> {
+  return fetchApi(`/clients/${encodeURIComponent(clientId)}/archive`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
 }
 
 // Contracts

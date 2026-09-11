@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   getClient,
   getCases,
@@ -20,6 +20,7 @@ import { ClientCompanyFoundation } from "@/components/clients/ClientCompanyFound
 import { ClientContractLibrary } from "@/components/clients/ClientContractLibrary";
 import { ClientOrganizationPreview } from "@/components/clients/ClientOrganizationPreview";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
+import { ClientLifecycleControls } from "@/components/clients/ClientLifecycleControls";
 import { getClientColorDefinition } from "@/lib/clientColors";
 import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
@@ -60,6 +61,7 @@ export default function ClientDetailPage() {
 
 function ClientDetailContent() {
   const params = useParams();
+  const router = useRouter();
   const clientId = (params?.clientId as string) || "";
 
   const [client, setClient] = useState<Client | null>(null);
@@ -215,6 +217,11 @@ function ClientDetailContent() {
                       {clientColorDef.label} kategória
                     </span>
                   )}
+                  {client.archivedAt ? (
+                    <span className="inline-flex items-center rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--adm-text-muted)]">
+                      Archivált
+                    </span>
+                  ) : null}
                 </div>
                 <h1 className="mt-1 font-serif text-[32px] leading-tight text-[var(--adm-text)] break-words">{client.name}</h1>
                 <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Kapcsolt ügyek, dokumentumok és kommunikációk belső operatív nézete</p>
@@ -247,6 +254,7 @@ function ClientDetailContent() {
                   >
                     Dokumentumstílus
                   </Link>
+                  <ClientLifecycleControls client={client} onArchived={() => router.push("/clients")} />
                 </div>
               </details>
             </div>
