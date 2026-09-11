@@ -77,7 +77,9 @@ const DEPENDENCY_CHECKS: Array<{ key: string; count: (db: Prisma, clientId: stri
       + (await db.assessmentFinding.count({ where: { clientId } }))
       + (await db.requirementApplicability.count({ where: { clientId } }))
       + (await db.complianceProposal.count({ where: { clientId } }))
-      + (await db.developmentInitiative.count({ where: { clientId } })),
+      + (await db.developmentInitiative.count({ where: { clientId } }))
+      + (await db.businessProcess.count({ where: { clientId } }))
+      + (await db.businessSystem.count({ where: { clientId } })),
   },
   {
     key: 'organizationRecords',
