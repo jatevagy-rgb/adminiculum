@@ -82,6 +82,23 @@ test("K. global /client-portal-admin remains intact and reuses the same canonica
   assert.match(admin, /cancelAdminInvitationNotification\(invitation\.id\)/);
 });
 
+test("L. APPROVER cannot leak to INDIVIDUAL/CASE_RELAY after a workspace switch or at submit", () => {
+  // Switching the target workspace normalizes a stale role draft to an allowed role
+  assert.match(admin, /selectWorkspace[\s\S]*?roleOptionsFor\(next\.mode\)\.some\(\(option\) => option\.value === current\.role\)[\s\S]*?role: "MEMBER"/);
+  assert.match(admin, /onChange=\{\(event\) => selectWorkspace\(event\.target\.value\)\}/);
+  // Submit re-validates against the selected mode's allowed roles, never sends a stale APPROVER
+  assert.match(admin, /const allowedRole = roleOptionsFor\(selected\.mode\)\.some\(\(option\) => option\.value === draft\.role\) \? draft\.role : "MEMBER"/);
+  assert.match(admin, /role: allowedRole,/);
+  // INDIVIDUAL and CASE_RELAY role option sets contain no APPROVER
+  const optionsFn = admin.match(/function roleOptionsFor[\s\S]*?\n\}/)![0];
+  const individual = optionsFn.match(/mode === "INDIVIDUAL"[\s\S]*?\];/)![0];
+  const relayReturn = optionsFn.split('mode === "ORGANIZATION"')[1].split('];').slice(1).join('];');
+  assert.ok(!individual.includes('"APPROVER"'));
+  assert.ok(!relayReturn.includes('"APPROVER"'));
+  // APPROVER label must never masquerade as Ügyfél in INDIVIDUAL mode
+  assert.match(admin, /if \(role === "APPROVER"\) return "Jóváhagyó \/ vezetői kapcsolattartó";/);
+});
+
 test("membership actions only expose canonical transitions supported by state", () => {
   assert.match(admin, /member\.status === "PENDING_APPROVAL" \|\| member\.status === "SUSPENDED"[\s\S]*?"approve"/);
   assert.match(admin, /member\.status === "ACTIVE" \|\| member\.status === "PENDING_APPROVAL"[\s\S]*?"suspend"/);

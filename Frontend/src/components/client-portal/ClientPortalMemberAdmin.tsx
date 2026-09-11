@@ -37,8 +37,8 @@ function deliverySummary(deliveryStatus?: string | null, codeSafe?: string | nul
 }
 
 function roleLabel(role: WorkspaceMembershipDTO["role"], mode: AdminWorkspaceDTO["mode"]): string {
-  if (mode === "INDIVIDUAL") return role === "REPRESENTATIVE" ? "Meghatalmazott / kapcsolattartó" : "Ügyfél";
   if (role === "APPROVER") return "Jóváhagyó / vezetői kapcsolattartó";
+  if (mode === "INDIVIDUAL") return role === "REPRESENTATIVE" ? "Meghatalmazott / kapcsolattartó" : "Ügyfél";
   if (role === "REPRESENTATIVE") return "Szervezeti kapcsolattartó";
   return "Portálfelhasználó";
 }
@@ -91,12 +91,23 @@ export function ClientPortalMemberAdmin({ clientId, workspaces, onRefresh }: { c
     }
   };
 
+  const selectWorkspace = (workspaceId: string) => {
+    setSelectedId(workspaceId);
+    const next = manageable.find((workspace) => workspace.id === workspaceId);
+    setDraft((current) =>
+      next && !roleOptionsFor(next.mode).some((option) => option.value === current.role)
+        ? { ...current, role: "MEMBER" }
+        : current,
+    );
+  };
+
   const submitInvite = () => run(async () => {
     if (!selected) return;
+    const allowedRole = roleOptionsFor(selected.mode).some((option) => option.value === draft.role) ? draft.role : "MEMBER";
     const result = await inviteAdminWorkspaceMember(selected.id, {
       email: draft.email.trim(),
       displayName: draft.displayName.trim() || undefined,
-      role: draft.role,
+      role: allowedRole,
       messageSafe: draft.messageSafe.trim() || undefined,
       expiresAt: draft.expiresAt || undefined,
     });
@@ -137,7 +148,7 @@ export function ClientPortalMemberAdmin({ clientId, workspaces, onRefresh }: { c
           {manageable.length > 1 ? (
             <label className="mt-4 grid max-w-md gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
               <span>Cél portál munkatér</span>
-              <select data-testid="workspace-select" value={selected?.id || ""} onChange={(event) => setSelectedId(event.target.value)} className={inputCls}>
+              <select data-testid="workspace-select" value={selected?.id || ""} onChange={(event) => selectWorkspace(event.target.value)} className={inputCls}>
                 <option value="">Válasszon munkateret…</option>
                 {manageable.map((workspace) => (
                   <option key={workspace.id} value={workspace.id}>{workspace.name} · {workspace.mode === "INDIVIDUAL" ? "Magánügyfél" : "Szervezeti"}</option>
