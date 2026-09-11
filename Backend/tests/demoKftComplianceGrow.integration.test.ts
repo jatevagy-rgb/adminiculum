@@ -163,6 +163,12 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
 
   it('mixed legacy rule key with canonical definition preserves discovery, reevaluation, and Grow continuity', async () => {
     await reset();
+    const activeMembership = await db.clientPortalWorkspaceMembership.findFirst({
+      where: { workspaceId: IDS.workspaceId, status: 'ACTIVE', OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      select: { clientPortalIdentityId: true },
+    });
+    expect(activeMembership).not.toBeNull();
+    const resolvedIdentityId = activeMembership!.clientPortalIdentityId;
     const fact = await db.clientFact.findFirstOrThrow({ where: { clientId: IDS.clientId, factDefinitionId: IDS.factDefinitionId, supersededAt: null } });
     await db.clientFact.update({ where: { id: fact.id }, data: { type: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
     const rule = await db.applicabilityRuleVersion.findFirstOrThrow({ where: { requirementVersionId: IDS.requirementVersionId }, select: { id: true, astJson: true } });
@@ -175,9 +181,9 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect((legacyAst as any).node.left.factKey).toBe('DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
     const legacyDependencyKey = mixed.factKey;
     const legacyResolvedDefinitionId = mixed.resolvedFactDefinitionId;
-    const discovery = await getCompanyProfileDiscovery(IDS.identityId, IDS.workspaceId, db);
+    const discovery = await getCompanyProfileDiscovery(resolvedIdentityId, IDS.workspaceId, db);
     expect(discovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'employee_count', status: 'ANSWERED', value: 47 })]));
-    await answerCompanyProfileQuestion(IDS.identityId, IDS.workspaceId, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);
+    await answerCompanyProfileQuestion(resolvedIdentityId, IDS.workspaceId, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);
     const afterRule = await db.applicabilityRuleVersion.findUniqueOrThrow({ where: { id: rule.id }, select: { astJson: true } });
     const afterDependency = await db.applicabilityRuleFactDependency.findFirstOrThrow({ where: { applicabilityRuleVersionId: rule.id } });
     expect((afterRule.astJson as any).node.left.factKey).toBe(legacyDependencyKey);
