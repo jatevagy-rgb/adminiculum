@@ -12,6 +12,7 @@ test('communication intake is case-first and retains secondary task capabilities
   assert.match(actions, /Új ügy létrehozása/);
   assert.match(actions, /onCreateCase\(item\)/);
   assert.match(actions, /onAssign\(item\)/);
+  assert.match(source, /caseId: result.communication.caseId, clientId: result.communication.clientId/);
   assert.match(actions, /href=\{`\/cases\/\$\{encodeURIComponent\(item.caseId\)\}/);
   assert.match(actions, /<details[\s\S]*onCreateTask\(item\)[\s\S]*onLinkTask\(item\)[\s\S]*<\/details>/);
   for (const contract of ['CompactNewCaseDialog', 'sourceCommunicationId={createCaseTarget?.id}', 'initialClientId={createCaseTarget?.clientId', 'linkCommunicationToCase(assignTarget.id, selectedCaseId)']) assert.ok(source.includes(contract));
@@ -31,7 +32,7 @@ test('organization editor uses existing scoped APIs and never grants portal acce
   assert.match(source, /getCurrentUser\(\)[\s\S]*\["ADMIN", "PARTNER"\]\.includes\(user.role\)/);
   assert.match(source, /if \(!canManage\) return null/);
   assert.match(source, /if \(busy \|\| !canManage\) return/);
-  for (const method of ['createPerson(clientId, patch)', 'createGroup(clientId, patch)', 'updatePerson(selectedId, patch)', 'updateGroup(selectedId, patch)']) assert.ok(source.includes(method));
+  for (const method of ['createPerson(clientId, patch)', 'createGroup(clientId, patch)', 'updatePerson(selectedId, editedOrganizationFields(patch, editedFields))', 'updateGroup(selectedId, editedOrganizationFields(patch, editedFields))']) assert.ok(source.includes(method));
   for (const key of ['organizationGroupId', 'managerPersonId', 'deputyPersonId', 'parentGroupId', 'responsibilitiesSummary', 'email', 'phone']) assert.ok(source.includes(key));
   assert.doesNotMatch(source, /portalMembershipId:|grant|deletePerson|deleteGroup/);
   assert.match(source, /item.id !== selectedId/);
@@ -53,4 +54,8 @@ test('document review uses three columns with one existing change list and uncha
   assert.equal(source.split('localReviewMarks.map((mark) => (').length - 1, 1);
   assert.match(source, /workspaceMainTab === "comments" \|\| workspaceMainTab === "review"/);
   assert.match(source, /<DocumentEditorShell/);
+  const document = source.indexOf('<div aria-label="Dokumentum"');
+  const comments = source.indexOf('<aside aria-label="Megjegyzések és magyarázatok"');
+  assert.ok(left < document && document < comments, 'DOM reading/focus order must match left-document-right visual order');
+  assert.doesNotMatch(source.slice(left, comments), /className="order-[123]/);
 });
