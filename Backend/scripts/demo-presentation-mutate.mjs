@@ -42,7 +42,7 @@ const IDS = {
   clientId: stableId('demoClient'),
   identityId: stableId('portalIdentity'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
-  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  factDefinitionKey: 'employee_count',
 };
 
 async function main() {

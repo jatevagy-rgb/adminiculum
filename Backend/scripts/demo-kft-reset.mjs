@@ -120,7 +120,7 @@ const IDS = {
   pubSupplierId: stableId('pubSupplier'),
   factEmployeeCountId: stableId('factEmployeeCount'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
-  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  factDefinitionKey: 'employee_count',
   requirementId: stableId('requirement'),
   requirementVersionId: stableId('requirementVersion'),
   requirementKey: 'DEMO_KFT_COMPANY_GROWTH_REVIEW',
@@ -204,8 +204,8 @@ async function teardown(db) {
   await db.organizationPerson.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientOrganizationGroup.deleteMany({ where: { clientId: IDS.clientId } });
 
+  await db.clientFactAnswerState.deleteMany({ where: { clientId: IDS.clientId } });
   await db.clientFact.deleteMany({ where: { clientId: IDS.clientId } });
-  await db.factDefinition.deleteMany({ where: { OR: [{ id: IDS.factDefinitionId }, { key: IDS.factDefinitionKey }] } });
   await db.clientOperatingProfile.deleteMany({ where: { id: IDS.operatingProfileId } });
   await db.clientPortalWorkspace.deleteMany({ where: { id: IDS.workspaceId } });
   await db.client.deleteMany({ where: { id: IDS.clientId } });
@@ -267,10 +267,9 @@ async function seed(db) {
   await db.organizationPerson.upsert({ where: { id: IDS.personOpsLeadId }, update: {}, create: { id: IDS.personOpsLeadId, clientId: IDS.clientId, organizationGroupId: IDS.opsGroupId, name: 'Operációs vezető', jobTitle: 'Operációs vezető', employmentStatus: 'ACTIVE' } });
 
   // 5. Company profile fact — employee_count = 47 (canonical typed-fact shape).
-  const fd = await db.factDefinition.upsert({
-    where: { id: IDS.factDefinitionId },
-    update: {},
-    create: {
+  const existingCanonical = await db.factDefinition.findUnique({ where: { key: IDS.factDefinitionKey } });
+  const fd = existingCanonical ?? await db.factDefinition.create({
+    data: {
       id: IDS.factDefinitionId,
       key: IDS.factDefinitionKey,
       domainCode: 'DEMO_KFT_GROWTH',
