@@ -5642,6 +5642,7 @@ model Observation {
   @@index([clientId, observationType])
   @@index([clientId, connectionId, discoveryRunId])
   @@map("observations")
+}
 
 model ProcessObservationSnapshot {
   id                String          @id @default(uuid())
