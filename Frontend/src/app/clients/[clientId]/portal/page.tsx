@@ -30,15 +30,18 @@ export default function ClientPortalContextPage() {
   const workspace = workspaces.find((item) => item.status !== "ARCHIVED") || workspaces[0] || null;
   const [error, setError] = useState<string | null>(null);
   const [savingPortal, setSavingPortal] = useState(false);
+  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
   const savePortalSettings = async (patch: Partial<Pick<Client, "relationshipMode" | "portalAccessEnabled" | "connectedSystemState">>) => {
     if (!client) return;
     setSavingPortal(true);
+    setSaveFeedback(null);
     try {
       const updated = await updateClient(client.id, patch);
       setClient(updated);
+      setSaveFeedback("A portálbeállítások mentve.");
     } catch (err) {
-      console.error("Failed to save portal settings:", err);
+      setSaveFeedback("A portálbeállítások mentése nem sikerült. Próbálja újra.");
     } finally {
       setSavingPortal(false);
     }
@@ -99,13 +102,14 @@ export default function ClientPortalContextPage() {
               <section className="adm-board-panel p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Client Portal control plane</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Portál-hozzáférés és működés</p>
                     <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Portál beállításai</h2>
                   </div>
                   <span className="rounded-full bg-[var(--adm-gold-soft,#f3ead2)] px-3 py-1 text-xs font-semibold">
                     {client.portalAccessEnabled ? "Portál előkészítve" : "Portál hozzáférés kikapcsolva"}
                   </span>
                 </div>
+                <p role="status" aria-live="polite" className="mt-3 text-sm">{savingPortal ? "Mentés…" : saveFeedback}</p>
                 <div className="mt-3 grid gap-3 md:grid-cols-2">
                   <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
                     <span>Működési mód</span>
