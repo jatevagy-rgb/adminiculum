@@ -12,7 +12,7 @@
  *  8. zero-time process preserves WAITING_SHARE=null
  *  9. null system/person semantics remain identical to T2A
  * 10. snapshot persistence does not mutate BusinessProcess or steps
- * 11. transaction rollback on persistence failure preserves atomicity
+ * 11. atomicity: failed snapshot insert leaves zero ProcessObservationSnapshot rows and canonical process unchanged
  * 12. provenance/digest deterministic and reproducible
  */
 
@@ -309,5 +309,50 @@ describeDb('Grow With Us V2 T2B — PostgreSQL Snapshot Persistence Integration'
 
     const latest = await getLatestProcessObservation(adminActor, clientA, processAId, db);
     expect(latest?.observedAt).toBe(t2.toISOString());
+  });
+
+  it('11. atomicity: failed snapshot insert leaves zero ProcessObservationSnapshot rows and canonical process unchanged', async () => {
+    // 1. Setup canonical process
+    const process = await db.businessProcess.create({
+      data: {
+        clientId: clientA,
+        name: 'Failure Test Process',
+        steps: {
+          create: [
+            { name: 'Step 1', position: 1, stepType: 'DATA_ENTRY' },
+          ],
+        },
+      },
+      include: { steps: { orderBy: { position: 'asc' } } },
+    });
+
+    const countBefore = await db.processObservationSnapshot.count({
+      where: { businessProcessId: process.id },
+    });
+    expect(countBefore).toBe(0);
+
+    // 2. Force failure using narrowest safe mechanism: jest.spyOn
+    const spy = jest.spyOn(db.processObservationSnapshot, 'upsert').mockRejectedValueOnce(new Error('Simulated DB Failure'));
+
+    // 3. Attempt capture
+    await expect(captureProcessObservation(adminActor, {
+      clientId: clientA,
+      businessProcessId: process.id,
+    }, db)).rejects.toThrow('Simulated DB Failure');
+
+    spy.mockRestore();
+
+    // 4. Prove snapshot count remains 0
+    const countAfter = await db.processObservationSnapshot.count({
+      where: { businessProcessId: process.id },
+    });
+    expect(countAfter).toBe(0);
+
+    // 5. Prove canonical process and steps are unchanged
+    const processAfter = await db.businessProcess.findUnique({
+      where: { id: process.id },
+      include: { steps: { orderBy: { position: 'asc' } } },
+    });
+    expect(processAfter).toEqual(process);
   });
 });
