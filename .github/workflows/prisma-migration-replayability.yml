@@ -10,6 +10,7 @@ on:
       - 'Backend/scripts/db-bootstrap-empty.mjs'
       - 'Backend/scripts/verify-migration-replay.mjs'
       - 'Backend/scripts/test-migration-webjob-runner.mjs'
+      - 'Backend/scripts/test-demo-kft-employee-count-migration-matrix.mjs'
       - 'Backend/App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
@@ -25,6 +26,7 @@ on:
       - 'Backend/scripts/db-bootstrap-empty.mjs'
       - 'Backend/scripts/verify-migration-replay.mjs'
       - 'Backend/scripts/test-migration-webjob-runner.mjs'
+      - 'Backend/scripts/test-demo-kft-employee-count-migration-matrix.mjs'
       - 'Backend/App_Data/jobs/triggered/adminiculum-db-migrate/runner.cjs'
       - 'Backend/package.json'
       - 'Backend/package-lock.json'
@@ -36,7 +38,7 @@ concurrency:
 
 jobs:
   migration-gate:
-    name: Migration gate (empty replay + webjob)
+    name: Migration gate (empty replay + state matrix + webjob)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -87,6 +89,16 @@ jobs:
           echo "webjob=$rc" >> "$RUNNER_TEMP/ci-migration-results.txt"
           exit $rc
 
+      - name: Demo Kft employee_count existing-data migration matrix
+        working-directory: Backend
+        env:
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          node scripts/test-demo-kft-employee-count-migration-matrix.mjs
+          rc=$?
+          echo "matrix=$rc" >> "$RUNNER_TEMP/ci-migration-results.txt"
+          exit $rc
+
       - name: Migration gate summary
         if: always()
         continue-on-error: true
@@ -94,6 +106,7 @@ jobs:
           declare -A names=(
             [replay]="Canonical empty migration replay"
             [webjob]="Migration WebJob runner test"
+            [matrix]="Demo Kft employee_count existing-data migration matrix"
           )
           {
             echo "### Prisma Migration Gate"
