@@ -1,10 +1,10 @@
-import { ExternalSourceStatus, DiscoveryRunStatus, ObservationType } from '@prisma/client';
+import { ExternalSourceStatus, DiscoveryRunStatus, ObservationType, Prisma } from '@prisma/client';
 
 export interface RegisterExternalSourceArgs {
   clientId: string;
   sourceType: string;
   name: string;
-  config?: any;
+  config?: Prisma.InputJsonValue;
 }
 
 export interface IngestObservationArgs {
@@ -12,6 +12,8 @@ export interface IngestObservationArgs {
   connectionId: string;
   discoveryRunId: string;
   idempotencyKey: string;
+  sourceRecordId?: string;
   observationType?: ObservationType;
-  rawPayload: any;
+  rawPayload: Prisma.InputJsonValue;
+  observedAt?: Date;
 }
