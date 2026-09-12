@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { getCurrentUser } from "@/lib/api";
 import { clientOrganizationApi, type OrgGroupDTO, type OrgPersonDTO } from "@/lib/clientOrganizationApi";
+import { editedOrganizationFields } from "@/lib/organizationEditorPayload";
 
 const field = "mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--adm-green-800)]";
 
@@ -15,6 +16,7 @@ export function OrganizationEditor({ clientId, groups, persons, onSaved }: {
   const [selectedId, setSelectedId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
   useEffect(() => {
     let active = true;
     void getCurrentUser().then((user) => { if (active) setCanManage(["ADMIN", "PARTNER"].includes(user.role)); }).catch(() => { if (active) setCanManage(false); });
@@ -34,11 +36,11 @@ export function OrganizationEditor({ clientId, groups, persons, onSaved }: {
     try {
       if (mode === "person") {
         const patch = { name: value("name"), jobTitle: nullable("jobTitle"), email: nullable("email"), phone: nullable("phone"), organizationGroupId: nullable("organizationGroupId"), managerPersonId: nullable("managerPersonId"), deputyPersonId: nullable("deputyPersonId"), responsibilitiesSummary: nullable("responsibilitiesSummary") };
-        if (selectedId) await clientOrganizationApi.updatePerson(selectedId, patch);
+        if (selectedId) await clientOrganizationApi.updatePerson(selectedId, editedOrganizationFields(patch, editedFields));
         else await clientOrganizationApi.createPerson(clientId, patch);
       } else if (mode === "group") {
         const patch = { name: value("name"), descriptionSafe: nullable("descriptionSafe"), parentGroupId: nullable("parentGroupId") };
-        if (selectedId) await clientOrganizationApi.updateGroup(selectedId, patch);
+        if (selectedId) await clientOrganizationApi.updateGroup(selectedId, editedOrganizationFields(patch, editedFields));
         else await clientOrganizationApi.createGroup(clientId, patch);
       }
       setMode(null);
@@ -52,17 +54,17 @@ export function OrganizationEditor({ clientId, groups, persons, onSaved }: {
   return (
     <section className="adm-board-panel p-5" aria-label="Szervezet szerkesztése">
       <div className="flex flex-wrap gap-3">
-        <button type="button" className="adm-link-button px-3 py-2" disabled={busy} onClick={() => { setMode("person"); setSelectedId(""); setError(null); }}>Személy hozzáadása / szerkesztése</button>
-        <button type="button" className="adm-link-button px-3 py-2" disabled={busy} onClick={() => { setMode("group"); setSelectedId(""); setError(null); }}>Szervezeti egység hozzáadása / szerkesztése</button>
+        <button type="button" className="adm-link-button px-3 py-2" disabled={busy} onClick={() => { setMode("person"); setSelectedId(""); setEditedFields(new Set()); setError(null); }}>Személy hozzáadása / szerkesztése</button>
+        <button type="button" className="adm-link-button px-3 py-2" disabled={busy} onClick={() => { setMode("group"); setSelectedId(""); setEditedFields(new Set()); setError(null); }}>Szervezeti egység hozzáadása / szerkesztése</button>
       </div>
       {mode ? <>
         <label className="mt-4 block text-sm">Szerkesztendő rekord
-          <select className={field} value={selectedId} disabled={busy} onChange={(event) => { setSelectedId(event.target.value); setError(null); }}>
+          <select className={field} value={selectedId} disabled={busy} onChange={(event) => { setSelectedId(event.target.value); setEditedFields(new Set()); setError(null); }}>
             <option value="">Új {mode === "person" ? "személy" : "szervezeti egység"}</option>
             {(mode === "person" ? persons : groups).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </label>
-        <form key={`${mode}:${selectedId}`} onSubmit={save} className="mt-4 space-y-4">
+        <form key={`${mode}:${selectedId}`} onSubmit={save} onChange={(event) => { const target = event.target; if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) { const name = target.name; if (name) setEditedFields((current) => new Set([...current, name])); } }} className="mt-4 space-y-4">
           <fieldset disabled={busy} className="grid gap-4 text-sm sm:grid-cols-2">
             <legend className="sr-only">Szervezeti adatok</legend>
             <label>Név<input name="name" required defaultValue={(mode === "person" ? person : group)?.name || ""} className={field} /></label>
