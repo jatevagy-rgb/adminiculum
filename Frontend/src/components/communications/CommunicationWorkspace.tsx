@@ -337,7 +337,7 @@ export default function CommunicationWorkspace() {
     setAssignFeedback(null);
     try {
       const result = await linkCommunicationToCase(assignTarget.id, selectedCaseId);
-      updateCommunication(assignTarget.id, { caseId: selectedCaseId });
+      updateCommunication(assignTarget.id, { caseId: result.communication.caseId, clientId: result.communication.clientId });
       setAssignFeedback({ tone: "success", message: result.message || "A kommunikáció ügyhöz rendelve." });
     } catch (error) {
       setAssignFeedback(apiFeedback(error, "Nem sikerült ügyhöz rendelni."));
