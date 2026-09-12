@@ -92,7 +92,7 @@ const IDS = {
   caseEmploymentId: stableId('caseEmployment'),
   caseSupplierId: stableId('caseSupplier'),
   caseComplianceId: stableId('caseCompliance'),
-  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  factDefinitionKey: 'employee_count',
 };
 
 async function runReset() {

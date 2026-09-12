@@ -48,13 +48,26 @@ export async function getCompanyProfileDiscovery(identityId: string, workspaceId
     include: { currentFact: { select: { numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true } } },
   });
   const stateByDefinition = new Map(states.map((state) => [state.factDefinitionId, state]));
+  const now = new Date();
+  const fallbackFacts = await db.clientFact.findMany({
+    where: { clientId: workspace.clientId, factDefinitionId: { in: definitions.map((d) => d.id) }, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }] },
+    select: { id: true, factDefinitionId: true, numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true, observedAt: true, effectiveAt: true },
+  });
+  const fallbackByDefinition = new Map<string, typeof fallbackFacts>();
+  for (const fact of fallbackFacts) fallbackByDefinition.set(fact.factDefinitionId, [...(fallbackByDefinition.get(fact.factDefinitionId) ?? []), fact]);
   return {
     client: { name: (await db.client.findUnique({ where: { id: workspace.clientId }, select: { name: true } }))?.name || null },
     questions: COMPANY_PROFILE_QUESTIONS.flatMap((question) => {
       const definition = definitionsByKey.get(question.factDefinitionKey);
       if (!definition) return [];
       const state = stateByDefinition.get(definition.id);
-      return [{ questionKey: question.questionKey, label: question.label, status: state?.status || 'UNANSWERED', value: state?.currentFact ? typedValue(state.currentFact) : null }];
+      const fallback = !state ? fallbackByDefinition.get(definition.id) : undefined;
+      const fallbackFact = fallback?.length === 1 && (
+        definition.temporalPolicy === 'VALIDITY_INTERVAL'
+        || (definition.temporalPolicy === 'OBSERVATION' && fallback[0].observedAt !== null && fallback[0].observedAt <= now)
+        || (definition.temporalPolicy === 'EFFECTIVE_INSTANT' && fallback[0].effectiveAt !== null && fallback[0].effectiveAt <= now)
+      ) ? fallback[0] : undefined;
+      return [{ questionKey: question.questionKey, label: question.label, status: state?.status || (fallbackFact ? 'ANSWERED' : 'UNANSWERED'), value: state?.currentFact ? typedValue(state.currentFact) : (fallbackFact ? typedValue(fallbackFact) : null) }];
     }),
   };
 }

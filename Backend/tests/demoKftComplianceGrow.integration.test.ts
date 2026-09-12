@@ -17,6 +17,8 @@ import { createProposal, confirmProposal } from '../src/modules/compliance/compl
 import { getClientSafeGrowthNarrative } from '../src/modules/compliance/companyGrowthNarrative';
 import { reconcileClientCompliance } from '../src/modules/compliance/complianceReconcileService';
 import { getComplianceWorkspace } from '../src/modules/compliance/complianceWorkspaceService';
+import { getCompanyProfileDiscovery, answerCompanyProfileQuestion } from '../src/modules/client-workspace/companyProfileAnswerService';
+import { canonicalDigest } from '../src/modules/compliance/canonicalDigest';
 
 const databaseUrl =
   process.env.DEMO_KFT_TEST_DATABASE_URL ||
@@ -31,8 +33,9 @@ const IDS = {
   clientId: stableId('demoClient'),
   adminUserId: stableId('adminUser'),
   identityId: stableId('portalIdentity'),
+  workspaceId: stableId('orgWorkspace'),
   factDefinitionId: stableId('factDefinitionEmployeeCount'),
-  factDefinitionKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+  factDefinitionKey: 'employee_count',
   requirementId: stableId('requirement'),
   requirementVersionId: stableId('requirementVersion'),
   caseComplianceId: stableId('caseCompliance'),
@@ -51,7 +54,7 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     await db.$disconnect();
   });
 
-  async function reset() {
+  async function reset(customEnv: Record<string, string> = {}) {
     const { execFileSync } = await import('node:child_process');
     const path = await import('node:path');
     const fs = await import('node:fs');
@@ -64,7 +67,7 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     const scriptPath = path.resolve(__dirname, '../scripts/demo-kft-reset.mjs');
     execFileSync(process.execPath, [tsxCli, scriptPath], {
       cwd: path.resolve(__dirname, '..'),
-      env: { ...process.env, ADMINICULUM_DEMO_CONTENT_ENABLED: 'true' },
+      env: { ...process.env, ADMINICULUM_DEMO_CONTENT_ENABLED: 'true', ...customEnv },
       stdio: 'pipe',
     });
   }
@@ -156,6 +159,44 @@ d('Demo Kft. compliance + Grow With Us (PostgreSQL)', () => {
     expect(grow.newTopicSafeCount).toBeGreaterThanOrEqual(1);
     expect(grow.safeFeedback).toContain('új terület');
     expect(grow.safeNowText).toContain('szükséges');
+  });
+
+  it('mixed legacy rule key with canonical definition preserves discovery, reevaluation, and Grow continuity', async () => {
+    await db.clientPortalIdentity.upsert({
+      where: { id: IDS.identityId },
+      update: {},
+      create: { id: IDS.identityId, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://login.microsoftonline.com/demo-kft', subject: 'sub-peterfi', normalizedEmail: 'test-exec@fixture.invalid', displayName: 'Péterfi János', accountType: 'ORGANIZATION_MEMBER', status: 'ACTIVE', emailVerifiedAt: new Date() },
+    });
+    await reset({ DEMO_KFT_PORTAL_IDENTITY_EMAIL: 'test-exec@fixture.invalid' });
+    const membership = await db.clientPortalWorkspaceMembership.findUnique({ where: { clientPortalIdentityId_workspaceId: { clientPortalIdentityId: IDS.identityId, workspaceId: IDS.workspaceId } }, select: { status: true } });
+    expect(membership?.status).toBe('ACTIVE');
+    const resolvedIdentityId = IDS.identityId;
+    const fact = await db.clientFact.findFirstOrThrow({ where: { clientId: IDS.clientId, factDefinitionId: IDS.factDefinitionId, supersededAt: null } });
+    await db.clientFact.update({ where: { id: fact.id }, data: { type: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
+    const rule = await db.applicabilityRuleVersion.findFirstOrThrow({ where: { requirementVersionId: IDS.requirementVersionId }, select: { id: true, astJson: true } });
+    const legacyAst = JSON.parse(JSON.stringify(rule.astJson).replaceAll('employee_count', 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT'));
+    await db.applicabilityRuleVersion.update({ where: { id: rule.id }, data: { astJson: legacyAst, canonicalDigest: canonicalDigest(legacyAst) } });
+    await db.applicabilityRuleFactDependency.updateMany({ where: { applicabilityRuleVersionId: rule.id }, data: { factKey: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT' } });
+    const mixed = await db.applicabilityRuleFactDependency.findFirstOrThrow({ where: { applicabilityRuleVersionId: rule.id } });
+    expect(mixed.factKey).toBe('DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
+    expect(mixed.resolvedFactDefinitionId).toBe(IDS.factDefinitionId);
+    expect((legacyAst as any).node.left.factKey).toBe('DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
+    const legacyDependencyKey = mixed.factKey;
+    const legacyResolvedDefinitionId = mixed.resolvedFactDefinitionId;
+    const discovery = await getCompanyProfileDiscovery(resolvedIdentityId, IDS.workspaceId, db);
+    expect(discovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'employee_count', status: 'ANSWERED', value: 47 })]));
+    await answerCompanyProfileQuestion(resolvedIdentityId, IDS.workspaceId, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);
+    const afterRule = await db.applicabilityRuleVersion.findUniqueOrThrow({ where: { id: rule.id }, select: { astJson: true } });
+    const afterDependency = await db.applicabilityRuleFactDependency.findFirstOrThrow({ where: { applicabilityRuleVersionId: rule.id } });
+    expect((afterRule.astJson as any).node.left.factKey).toBe(legacyDependencyKey);
+    expect(afterDependency.factKey).toBe(legacyDependencyKey);
+    expect(afterDependency.resolvedFactDefinitionId).toBe(legacyResolvedDefinitionId);
+    const applicability = await db.requirementApplicability.findFirstOrThrow({ where: { clientId: IDS.clientId, requirementVersionId: IDS.requirementVersionId }, select: { outcome: true } });
+    expect(applicability.outcome).toBe('APPLIES');
+    const grow = await getClientSafeGrowthNarrative(IDS.clientId, db);
+    expect(grow.beforeEmployeeCount).toBe(47);
+    expect(grow.currentEmployeeCount).toBe(52);
+    expect(await findingCount()).toBeGreaterThanOrEqual(1);
   });
 
   it('proposal is human-gated: NO Task before confirm; Task created only after confirm', async () => {
