@@ -204,6 +204,9 @@ model Client {
   externalSourceConnections ExternalSourceConnection[]
   discoveryRuns             DiscoveryRun[]
   observations              Observation[]
+
+  processObservationSnapshots ProcessObservationSnapshot[]
+
 }
 
 enum ClientRelationshipMode {
@@ -5500,6 +5503,7 @@ model BusinessProcess {
   @@index([ownerPersonId])
   @@index([organizationGroupId])
   @@map("business_processes")
+  observationSnapshots ProcessObservationSnapshot[]
 }
 
 model BusinessSystem {
@@ -5638,4 +5642,25 @@ model Observation {
   @@index([clientId, observationType])
   @@index([clientId, connectionId, discoveryRunId])
   @@map("observations")
+
+model ProcessObservationSnapshot {
+  id                String          @id @default(uuid())
+  clientId          String
+  client            Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  businessProcessId String
+  businessProcess   BusinessProcess @relation(fields: [businessProcessId, clientId], references: [id, clientId], onDelete: Cascade)
+  metricVersion     String
+  observedAt        DateTime
+  inputDigest       String          @db.VarChar(64)
+  snapshotDigest    String          @db.VarChar(64)
+  metrics           Json
+  provenance        Json?
+  createdAt         DateTime        @default(now())
+
+  @@unique([id, clientId])
+  @@unique([clientId, businessProcessId, metricVersion, inputDigest, observedAt])
+  @@index([clientId, businessProcessId, observedAt])
+  @@index([clientId, businessProcessId, inputDigest])
+  @@map("process_observation_snapshots")
+
 }
