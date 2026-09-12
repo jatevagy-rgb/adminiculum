@@ -174,30 +174,31 @@ model Client {
   updatedAt                 DateTime               @updatedAt
 
   // Relations
-  cases                      Case[]
-  documents                  Document[]
-  departments                Department[] // Client departments
-  matters                    Matter[] // All matters for this client
-  workgroups                 ClientWorkgroup[] // Client workgroups for workload tracking
-  redactorProfile            ClientRedactionProfile? // One-to-one relation for anonymization
-  houseStyleProfile          ClientHouseStyleProfile? // One-to-one relation for document house style
-  operatingProfile           ClientOperatingProfile? // Company foundation (Phase 1)
-  facts                      ClientFact[] // Company foundation (Phase 1)
-  factAnswerStates           ClientFactAnswerState[]
-  companyMilestones          CompanyMilestone[] // Company foundation (Phase 1)
-  assessments                Assessment[] // Company foundation (Phase 1)
-  assessmentFindings         AssessmentFinding[] // Company foundation (Phase 1)
-  requirementApplicabilities RequirementApplicability[]
-  developmentInitiatives     DevelopmentInitiative[] // Company foundation (Phase 1)
-  contractRecords            ContractRecord[] // Contract library (Phase 2)
-  complianceProposals        ComplianceProposal[]
-  obligations                ClientObligation[] // Contract library (Phase 2)
-  entitlements               ContractEntitlement[] // Contract library (Phase 2)
-  organizationPersons        OrganizationPerson[] // Organization (Phase 3)
-  factSubjects               FactSubject[]
-  businessProcesses          BusinessProcess[]
-  businessSystems            BusinessSystem[]
-  businessProcessSteps       BusinessProcessStep[]
+  cases                       Case[]
+  documents                   Document[]
+  departments                 Department[] // Client departments
+  matters                     Matter[] // All matters for this client
+  workgroups                  ClientWorkgroup[] // Client workgroups for workload tracking
+  redactorProfile             ClientRedactionProfile? // One-to-one relation for anonymization
+  houseStyleProfile           ClientHouseStyleProfile? // One-to-one relation for document house style
+  operatingProfile            ClientOperatingProfile? // Company foundation (Phase 1)
+  facts                       ClientFact[] // Company foundation (Phase 1)
+  factAnswerStates            ClientFactAnswerState[]
+  companyMilestones           CompanyMilestone[] // Company foundation (Phase 1)
+  assessments                 Assessment[] // Company foundation (Phase 1)
+  assessmentFindings          AssessmentFinding[] // Company foundation (Phase 1)
+  requirementApplicabilities  RequirementApplicability[]
+  developmentInitiatives      DevelopmentInitiative[] // Company foundation (Phase 1)
+  contractRecords             ContractRecord[] // Contract library (Phase 2)
+  complianceProposals         ComplianceProposal[]
+  obligations                 ClientObligation[] // Contract library (Phase 2)
+  entitlements                ContractEntitlement[] // Contract library (Phase 2)
+  organizationPersons         OrganizationPerson[] // Organization (Phase 3)
+  factSubjects                FactSubject[]
+  businessProcesses           BusinessProcess[]
+  businessSystems             BusinessSystem[]
+  businessProcessSteps        BusinessProcessStep[]
+  processObservationSnapshots ProcessObservationSnapshot[]
 
   @@map("clients")
 }
@@ -997,7 +998,7 @@ model InvoiceDraft {
   customerTaxNumberRequirement InvoiceCustomerTaxNumberRequirement @default(UNCONFIRMED)
   // true when ClientPortalWorkspace evidence canonically resolved the
   // applicability — such drafts are not reviewer-overridable.
-  customerTaxNumberCanonical   Boolean                          @default(false)
+  customerTaxNumberCanonical   Boolean                             @default(false)
   customerName                 String?
   customerAddress              String?
   customerTaxNumber            String?
@@ -1040,7 +1041,7 @@ model InvoiceDraftLine {
   // per-minute basis stays visible in description + annex provenance.
   description  String              @db.Text
   quantity     Decimal             @db.Decimal(12, 4) // always 1
-  unit         String              @db.VarChar(16)    // 'tétel'
+  unit         String              @db.VarChar(16) // 'tétel'
   netUnitPrice Decimal?            @db.Decimal(19, 4) // = netAmount
   netAmount    Decimal             @db.Decimal(19, 2)
   vatTreatment InvoiceVatTreatment @default(NORMAL_VAT)
@@ -2792,24 +2793,24 @@ model ClientPortalIntakeAttachment {
 }
 
 model ClientOrganizationGroup {
-  id              String                        @id @default(uuid())
-  clientId        String
+  id                String                        @id @default(uuid())
+  clientId          String
   // CP1: an organizational unit may be attached to exactly one ORGANIZATION
   // workspace (same Client). Legacy/internal groups keep workspaceId NULL.
-  workspaceId     String?
-  name            String
-  descriptionSafe String?
-  status          ClientOrganizationGroupStatus @default(ACTIVE)
-  createdById     String
-  createdAt       DateTime                      @default(now())
-  updatedAt       DateTime                      @updatedAt
-  revision        Int                           @default(0)
+  workspaceId       String?
+  name              String
+  descriptionSafe   String?
+  status            ClientOrganizationGroupStatus @default(ACTIVE)
+  createdById       String
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  revision          Int                           @default(0)
   // Phase 3: optional org-chart hierarchy (same Client, no cycles enforced in
   // service). NULL workspaceId groups may nest; org workspace groups nest too.
-  parentGroupId   String?
-  parentGroup     ClientOrganizationGroup?      @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
-  childGroups     ClientOrganizationGroup[]     @relation("ClientOrganizationGroupHierarchy")
-  persons         OrganizationPerson[]
+  parentGroupId     String?
+  parentGroup       ClientOrganizationGroup?      @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  childGroups       ClientOrganizationGroup[]     @relation("ClientOrganizationGroupHierarchy")
+  persons           OrganizationPerson[]
   businessProcesses BusinessProcess[]
 
   @@unique([id, clientId])
@@ -5489,7 +5490,8 @@ model BusinessProcess {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
 
-  steps               BusinessProcessStep[]
+  steps                BusinessProcessStep[]
+  observationSnapshots ProcessObservationSnapshot[]
 
   @@unique([id, clientId])
   @@index([clientId, status])
@@ -5512,7 +5514,7 @@ model BusinessSystem {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
-  processSteps  BusinessProcessStep[]
+  processSteps BusinessProcessStep[]
 
   @@unique([id, clientId])
   @@unique([clientId, name])
@@ -5546,4 +5548,25 @@ model BusinessProcessStep {
   @@index([systemId])
   @@index([responsiblePersonId])
   @@map("business_process_steps")
+}
+
+model ProcessObservationSnapshot {
+  id                String          @id @default(uuid())
+  clientId          String
+  client            Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  businessProcessId String
+  businessProcess   BusinessProcess @relation(fields: [businessProcessId, clientId], references: [id, clientId], onDelete: Cascade)
+  metricVersion     String
+  observedAt        DateTime
+  inputDigest       String          @db.VarChar(64)
+  snapshotDigest    String          @db.VarChar(64)
+  metrics           Json
+  provenance        Json?
+  createdAt         DateTime        @default(now())
+
+  @@unique([id, clientId])
+  @@unique([clientId, businessProcessId, metricVersion, inputDigest, observedAt])
+  @@index([clientId, businessProcessId, observedAt])
+  @@index([clientId, businessProcessId, inputDigest])
+  @@map("process_observation_snapshots")
 }
