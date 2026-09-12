@@ -1,6 +1,6 @@
 import { PrismaClient, ExternalSourceStatus, DiscoveryRunStatus, ObservationType, Prisma } from '@prisma/client';
 import { canonicalDigest } from '../../compliance/canonicalDigest';
-import { assertClientSafe } from '../../client-interaction/base';
+import { assertClientReadAccess, InternalActor } from '../../client-interaction/base';
 import { RegisterExternalSourceArgs, IngestObservationArgs } from './types';
 
 const prisma = new PrismaClient();
@@ -20,8 +20,8 @@ export function validateNoSecrets(config: any) {
 }
 
 export class ObservatoryIngestionService {
-  async registerExternalSource(actor: any, args: RegisterExternalSourceArgs) {
-    assertClientSafe(actor, args.clientId);
+  async registerExternalSource(actor: InternalActor, args: RegisterExternalSourceArgs) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     validateNoSecrets(args.config);
     return await prisma.externalSourceConnection.create({
       data: {
@@ -34,16 +34,16 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async updateExternalSourceStatus(actor: any, args: { clientId: string; connectionId: string; status: ExternalSourceStatus }) {
-    assertClientSafe(actor, args.clientId);
+  async updateExternalSourceStatus(actor: InternalActor, args: { clientId: string; connectionId: string; status: ExternalSourceStatus }) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     return await prisma.externalSourceConnection.update({
       where: { id_clientId: { id: args.connectionId, clientId: args.clientId } },
       data: { status: args.status },
     });
   }
 
-  async startDiscoveryRun(actor: any, args: { clientId: string; connectionId: string }) {
-    assertClientSafe(actor, args.clientId);
+  async startDiscoveryRun(actor: InternalActor, args: { clientId: string; connectionId: string }) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     return await prisma.discoveryRun.create({
       data: {
         clientId: args.clientId,
@@ -53,8 +53,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async completeDiscoveryRun(actor: any, args: { clientId: string; runId: string }) {
-    assertClientSafe(actor, args.clientId);
+  async completeDiscoveryRun(actor: InternalActor, args: { clientId: string; runId: string }) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     return await prisma.discoveryRun.update({
       where: { id_clientId: { id: args.runId, clientId: args.clientId } },
       data: {
@@ -64,8 +64,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async failDiscoveryRun(actor: any, args: { clientId: string; runId: string }) {
-    assertClientSafe(actor, args.clientId);
+  async failDiscoveryRun(actor: InternalActor, args: { clientId: string; runId: string }) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     return await prisma.discoveryRun.update({
       where: { id_clientId: { id: args.runId, clientId: args.clientId } },
       data: {
@@ -75,8 +75,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async markDiscoveryRunPartial(actor: any, args: { clientId: string; runId: string }) {
-    assertClientSafe(actor, args.clientId);
+  async markDiscoveryRunPartial(actor: InternalActor, args: { clientId: string; runId: string }) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     return await prisma.discoveryRun.update({
       where: { id_clientId: { id: args.runId, clientId: args.clientId } },
       data: {
@@ -86,8 +86,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async ingestObservation(actor: any, args: IngestObservationArgs) {
-    assertClientSafe(actor, args.clientId);
+  async ingestObservation(actor: InternalActor, args: IngestObservationArgs) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
 
     // Verify run and connection belong to client (implied by unique constraints, but explicit check avoids opaque P2025)
     const run = await prisma.discoveryRun.findUnique({
@@ -135,15 +135,15 @@ export class ObservatoryIngestionService {
     }
   }
 
-  async getObservation(actor: any, args: { clientId: string; observationId: string }) {
-    assertClientSafe(actor, args.clientId);
+  async getObservation(actor: InternalActor, args: { clientId: string; observationId: string }) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     return await prisma.observation.findUnique({
       where: { id_clientId: { id: args.observationId, clientId: args.clientId } }
     });
   }
 
-  async listObservationsForRun(actor: any, args: { clientId: string; runId: string }) {
-    assertClientSafe(actor, args.clientId);
+  async listObservationsForRun(actor: InternalActor, args: { clientId: string; runId: string }) {
+    await assertClientReadAccess(actor, args.clientId, prisma);
     return await prisma.observation.findMany({
       where: { discoveryRunId: args.runId, clientId: args.clientId }
     });

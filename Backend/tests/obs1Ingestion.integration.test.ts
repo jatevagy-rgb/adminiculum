@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 const service = new ObservatoryIngestionService();
 
 // Mock actor to satisfy tenant tests
-const mockActor = (clientId: string) => ({ id: 'u1', type: 'system', context: { clientId } });
+const mockActor = (clientId: string) => ({ actorType: "USER", userId: "u1", context: { clientId } } as any);
 
 describe('OBS-1 Ingestion Integration', () => {
 

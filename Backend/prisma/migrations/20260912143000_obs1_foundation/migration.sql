@@ -76,16 +76,16 @@ CREATE UNIQUE INDEX "observations_id_clientId_key" ON "observations"("id", "clie
 CREATE UNIQUE INDEX "observations_clientId_connectionId_idempotencyKey_key" ON "observations"("clientId", "connectionId", "idempotencyKey");
 
 -- AddForeignKey
-ALTER TABLE "external_source_connections" ADD CONSTRAINT "external_source_connections_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "external_source_connections" ADD CONSTRAINT "external_source_connections_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "discovery_runs" ADD CONSTRAINT "discovery_runs_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "discovery_runs" ADD CONSTRAINT "discovery_runs_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "discovery_runs" ADD CONSTRAINT "discovery_runs_connectionId_clientId_fkey" FOREIGN KEY ("connectionId", "clientId") REFERENCES "external_source_connections"("id", "clientId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "observations" ADD CONSTRAINT "observations_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "Client"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "observations" ADD CONSTRAINT "observations_clientId_fkey" FOREIGN KEY ("clientId") REFERENCES "clients"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "observations" ADD CONSTRAINT "observations_connectionId_clientId_fkey" FOREIGN KEY ("connectionId", "clientId") REFERENCES "external_source_connections"("id", "clientId") ON DELETE RESTRICT ON UPDATE CASCADE;
