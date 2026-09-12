@@ -200,7 +200,13 @@ model Client {
   businessProcessSteps       BusinessProcessStep[]
 
   @@map("clients")
+
+  externalSourceConnections ExternalSourceConnection[]
+  discoveryRuns             DiscoveryRun[]
+  observations              Observation[]
+
   processObservationSnapshots ProcessObservationSnapshot[]
+
 }
 
 enum ClientRelationshipMode {
@@ -5551,6 +5557,93 @@ model BusinessProcessStep {
 }
 
 
+// --- OBS-1: OBSERVATORY INGESTION FOUNDATION ---
+
+enum ExternalSourceStatus {
+  ACTIVE
+  PAUSED
+  REVOKED
+  ARCHIVED
+}
+
+enum DiscoveryRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum ObservationType {
+  GENERIC_RECORD
+  PERSON_RECORD
+  SYSTEM_RECORD
+  PROCESS_RECORD
+  PROCESS_STEP_RECORD
+  VENDOR_RECORD
+  DOCUMENT_RECORD
+  FACT_RECORD
+}
+
+model ExternalSourceConnection {
+  id          String               @id @default(uuid())
+  clientId    String
+  client      Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceType  String
+  name        String
+  status      ExternalSourceStatus @default(ACTIVE)
+  config      Json                 @default("{}")
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  runs         DiscoveryRun[]
+  observations Observation[]
+
+  @@unique([id, clientId])
+  @@index([clientId, status])
+  @@map("external_source_connections")
+}
+
+model DiscoveryRun {
+  id           String                   @id @default(uuid())
+  clientId     String
+  connectionId String
+  client       Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connection   ExternalSourceConnection @relation(fields: [connectionId, clientId], references: [id, clientId], onDelete: Restrict)
+  status       DiscoveryRunStatus       @default(RUNNING)
+  startedAt    DateTime                 @default(now())
+  completedAt  DateTime?
+  createdAt    DateTime                 @default(now())
+
+  observations Observation[]
+
+  @@unique([id, clientId])
+  @@unique([id, clientId, connectionId])
+  @@map("discovery_runs")
+}
+
+model Observation {
+  id              String                   @id @default(uuid())
+  clientId        String
+  connectionId    String
+  discoveryRunId  String
+  client          Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  connection      ExternalSourceConnection @relation(fields: [connectionId, clientId], references: [id, clientId], onDelete: Restrict)
+  discoveryRun    DiscoveryRun             @relation(fields: [discoveryRunId, clientId, connectionId], references: [id, clientId, connectionId], onDelete: Restrict)
+  sourceRecordId  String?
+  idempotencyKey  String                   @db.VarChar(255)
+  inputDigest     String                   @db.VarChar(64)
+  observationType ObservationType          @default(GENERIC_RECORD)
+  rawPayload      Json
+  observedAt      DateTime                 @default(now())
+  createdAt       DateTime                 @default(now())
+
+  @@unique([id, clientId])
+  @@unique([clientId, connectionId, idempotencyKey])
+  @@index([clientId, observationType])
+  @@index([clientId, connectionId, discoveryRunId])
+  @@map("observations")
+}
+
 model ProcessObservationSnapshot {
   id                String          @id @default(uuid())
   clientId          String
@@ -5570,4 +5663,5 @@ model ProcessObservationSnapshot {
   @@index([clientId, businessProcessId, observedAt])
   @@index([clientId, businessProcessId, inputDigest])
   @@map("process_observation_snapshots")
+
 }
