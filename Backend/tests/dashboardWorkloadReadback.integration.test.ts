@@ -64,7 +64,7 @@ d('dashboard attention workload readback (PostgreSQL)', () => {
     expect(planning.attentionCategory).toBe('APPROVAL');
     const before = await getDashboardOperationalOverview({ userId: ids.userA, role: 'LAWYER' });
     const baseline = categoryCount(before, 'APPROVAL');
-    await createTask({ caseId: ids.case, title: 'Default approval', taskType: 'OTHER', type: 'OTHER', assignedBy: ids.admin, assignedTo: ids.userA, attentionCategory: planning.attentionCategory, taskDefinitionId: planning.taskDefinitionId });
+    await createTask({ caseId: ids.case, title: 'Default approval', taskType: 'OTHER', type: 'OTHER', assignedBy: ids.admin, assignedTo: ids.userA, attentionCategory: planning.attentionCategory as never, taskDefinitionId: planning.taskDefinitionId });
     const after = await getDashboardOperationalOverview({ userId: ids.userA, role: 'LAWYER' });
     expect(categoryCount(after, 'APPROVAL')).toBe(baseline + 1);
   });
