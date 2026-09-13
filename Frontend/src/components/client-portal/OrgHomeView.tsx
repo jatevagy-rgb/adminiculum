@@ -19,67 +19,117 @@ import { formatDate } from "./MatterWorkspace";
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const compactState = "min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3";
 
-function Section({ kicker, title, children, empty, emptyText }: { kicker?: string; title: string; children?: React.ReactNode; empty?: boolean; emptyText?: string }) {
-  // Empty information must not consume the same visual weight as active work.
+function Section({
+  kicker,
+  title,
+  children,
+  empty,
+  emptyText,
+  actionLink,
+  actionLabel,
+}: {
+  kicker?: string;
+  title: string;
+  children?: React.ReactNode;
+  empty?: boolean;
+  emptyText?: string;
+  actionLink?: string;
+  actionLabel?: string;
+}) {
   if (empty) {
     return (
       <section className={compactState} data-testid="portal-compact-empty">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <p className="text-sm font-semibold text-stone-800">{title}</p>
-          <p className="text-sm text-stone-500">{emptyText || "Nincs megjeleníthető elem."}</p>
+          <div>
+            {kicker ? <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">{kicker} · </span> : null}
+            <span className="text-sm font-semibold text-stone-800">{title}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-stone-500">{emptyText || "Nincs megjeleníthető elem."}</span>
+            {actionLink && actionLabel ? (
+              <Link href={actionLink} className="text-xs font-semibold text-[#7a5f18] hover:underline">
+                {actionLabel} →
+              </Link>
+            ) : null}
+          </div>
         </div>
       </section>
     );
   }
   return (
     <section className={card}>
-      {kicker ? <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{kicker}</p> : null}
-      <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">{title}</h2>
-      <div className="mt-4 grid gap-3">
-        {children}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          {kicker ? <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{kicker}</p> : null}
+          <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">{title}</h2>
+        </div>
+        {actionLink && actionLabel ? (
+          <Link href={actionLink} className="text-sm font-semibold text-[#7a5f18] hover:underline">
+            {actionLabel} →
+          </Link>
+        ) : null}
       </div>
+      <div className="mt-4 grid gap-3">{children}</div>
     </section>
+  );
+}
+
+function ActionRow({ action }: { action: PortalOrgHome["actions"][number] }) {
+  const isCompliance = action.area === "COMPLIANCE";
+  const href = action.actionUrl || (
+    action.matterPublicationId
+      ? `/portal/matters/${encodeURIComponent(action.matterPublicationId)}`
+      : isCompliance
+      ? `/portal/megfeleles`
+      : `/portal/action-requests/${encodeURIComponent(action.id)}`
+  );
+
+  return (
+    <Link href={href} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 transition hover:border-[#b99b45]">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
+              isCompliance ? "bg-amber-200 text-amber-900" : "bg-stone-200 text-stone-800"
+            }`}
+          >
+            {isCompliance ? "Megfelelés" : action.typeLabel || "Jogi teendő"}
+          </span>
+          <span className="text-xs text-stone-500">{action.matterTitle || "Szervezeti teendő"}</span>
+        </div>
+        {action.dueAt ? <span className="text-xs font-medium text-stone-600">Határidő: {formatDate(action.dueAt)}</span> : null}
+      </div>
+      <p className="mt-2 font-semibold text-stone-950">{action.title}</p>
+      {action.instructions ? <p className="mt-1 text-sm text-stone-700">{action.instructions}</p> : null}
+      <div className="mt-3 flex items-center justify-between border-t border-stone-200/60 pt-2 text-xs text-stone-500">
+        <span>{action.readOnlyNote}</span>
+        <span className="font-semibold text-[#7a5f18]">Megnyitás →</span>
+      </div>
+    </Link>
   );
 }
 
 function CaseRow({ matter }: { matter: PortalOrgHome["matters"][number] }) {
   return (
-    <Link href={`/portal/matters/${encodeURIComponent(matter.matterPublicationId)}`} className="rounded-2xl border border-stone-200 p-4 transition hover:border-[#b99b45]">
+    <Link
+      href={`/portal/matters/${encodeURIComponent(matter.matterPublicationId)}`}
+      className="rounded-2xl border border-stone-200 p-4 transition hover:border-[#b99b45]"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="break-words font-semibold text-stone-950">{matter.publicTitle}</h3>
           <p className="mt-1 text-sm text-stone-600">{matter.publicStatus}</p>
         </div>
-        {matter.customerActionRequired ? <span className="rounded-full bg-[#fff6dc] px-3 py-1 text-xs font-semibold text-[#735717]">Teendő szükséges</span> : null}
+        {matter.customerActionRequired ? (
+          <span className="rounded-full bg-[#fff6dc] px-3 py-1 text-xs font-semibold text-[#735717]">
+            Teendő szükséges
+          </span>
+        ) : null}
       </div>
       <p className="mt-3 text-sm text-stone-600">{matter.nextStep || matter.waitingOn}</p>
-      {matter.lastPublishedUpdateAt ? <p className="mt-2 text-xs text-stone-500">Frissítve: {formatDate(matter.lastPublishedUpdateAt)}</p> : null}
-    </Link>
-  );
-}
-
-function ActionRow({ action }: { action: PortalOrgHome["actions"][number] }) {
-  const href = action.matterPublicationId
-    ? `/portal/matters/${encodeURIComponent(action.matterPublicationId)}`
-    : `/portal/action-requests/${encodeURIComponent(action.id)}`;
-  return (
-    <Link href={href} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 transition hover:border-[#b99b45]">
-      <p className="font-semibold text-stone-950">{action.title}</p>
-      <p className="mt-1 text-sm text-stone-700">{action.matterTitle || "Közzétett ügy"}</p>
-      {action.dueAt ? <p className="mt-2 text-xs text-stone-500">Határidő: {formatDate(action.dueAt)}</p> : null}
-    </Link>
-  );
-}
-
-function ActivityRow({ document }: { document: PortalOrgHome["recentDocuments"][number] }) {
-  return (
-    <Link href={`/portal/documents/${encodeURIComponent(document.id)}`} className="flex min-w-0 items-start gap-3 rounded-2xl bg-stone-50 p-4">
-      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-600" aria-hidden="true" />
-      <span className="min-w-0">
-        <span className="block break-words font-semibold text-stone-950">Új dokumentum érkezett</span>
-        <span className="mt-1 block break-words text-sm text-stone-700">{document.title}</span>
-        <span className="mt-1 block text-xs text-stone-500">{document.matterTitle || "Közzétett ügy"}{document.publishedAt ? ` · ${formatDate(document.publishedAt)}` : ""}</span>
-      </span>
+      {matter.lastPublishedUpdateAt ? (
+        <p className="mt-2 text-xs text-stone-500">Frissítve: {formatDate(matter.lastPublishedUpdateAt)}</p>
+      ) : null}
     </Link>
   );
 }
@@ -106,43 +156,32 @@ function CurrentMatter({ matter }: { matter: NonNullable<PortalOrgHome["currentM
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">Eddig</p>
           <p className="mt-2 text-sm leading-6 text-stone-800">
-            {matter.milestones.filter((milestone) => milestone.state === "COMPLETED").length
-              ? `${matter.milestones.filter((milestone) => milestone.state === "COMPLETED").length} közzétett lépés elkészült`
+            {matter.milestones.filter((m) => m.state === "COMPLETED").length
+              ? `${matter.milestones.filter((m) => m.state === "COMPLETED").length} közzétett lépés elkészült`
               : "A közzétett lépések itt jelennek meg."}
           </p>
         </div>
       </div>
-      <Link href={`/portal/matters/${encodeURIComponent(matter.publicationId)}`} className="mt-5 inline-flex font-semibold text-[#7a5f18] hover:underline">Ügy megnyitása →</Link>
+      <Link href={`/portal/matters/${encodeURIComponent(matter.publicationId)}`} className="mt-5 inline-flex font-semibold text-[#7a5f18] hover:underline">
+        Ügy megnyitása →
+      </Link>
     </section>
   );
 }
 
-function CompanyStatus({ company, summaries }: { company: PortalOrgCompany | null; summaries: PortalLeadershipUnitAggregate[] }) {
-  const activeCaseCount = summaries.reduce((total, summary) => total + summary.activeCaseCount, 0);
-  const areas = company?.visibleMattersByArea || [];
+function ActivityRow({ document }: { document: PortalOrgHome["recentDocuments"][number] }) {
   return (
-    <section className={card}>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Vállalati profil</p>
-      <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Szervezeti áttekintés</h2>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl bg-stone-50 p-4">
-          <p className="text-2xl font-semibold text-stone-950">{activeCaseCount || "—"}</p>
-          <p className="mt-1 text-sm text-stone-600">aktív jogi ügy</p>
-        </div>
-        <div className="rounded-2xl bg-stone-50 p-4">
-          <p className="text-2xl font-semibold text-stone-950">{company?.groups.length || "—"}</p>
-          <p className="mt-1 text-sm text-stone-600">látható szervezeti egység</p>
-        </div>
-      </div>
-      {company?.profileHeadline ? <p className="mt-4 break-words text-sm leading-6 text-stone-700">{company.profileHeadline}</p> : null}
-      {areas.length ? (
-        <div className="mt-4">
-          <p className="text-sm font-semibold text-stone-800">Szervezeti területek</p>
-          <div className="mt-2 flex flex-wrap gap-2">{areas.slice(0, 4).map((area) => <span key={area.areaName} className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs text-[#6f5514]">{area.areaName}</span>)}</div>
-        </div>
-      ) : null}
-      <Link href="/portal/vallalat" className="mt-5 inline-flex font-semibold text-[#7a5f18] hover:underline">Vállalati profil megnyitása →</Link>
-    </section>
+    <Link href={`/portal/documents/${encodeURIComponent(document.id)}`} className="flex min-w-0 items-start gap-3 rounded-2xl bg-stone-50 p-4">
+      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-600" aria-hidden="true" />
+      <span className="min-w-0">
+        <span className="block break-words font-semibold text-stone-950">Új dokumentum érkezett</span>
+        <span className="mt-1 block break-words text-sm text-stone-700">{document.title}</span>
+        <span className="mt-1 block text-xs text-stone-500">
+          {document.matterTitle || "Közzétett ügy"}
+          {document.publishedAt ? ` · ${formatDate(document.publishedAt)}` : ""}
+        </span>
+      </span>
+    </Link>
   );
 }
 
@@ -192,10 +231,13 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const actionNow = useMemo(() => (home?.actions || []).slice(0, 4), [home]);
   const activeMatters = useMemo(() => (home?.matters || []).slice(0, 6), [home]);
+
   const orientation = useMemo(() => {
     if (!home) return null;
     const updateCandidates = home.recentDocuments
@@ -208,56 +250,201 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
       lastUpdate: updateCandidates.length ? updateCandidates[updateCandidates.length - 1] : null,
     };
   }, [home]);
+
   if (loading) return <section className={card}>Az áttekintés betöltése…</section>;
   if (error) return <section className={card}>{error}</section>;
   if (!home) return <section className={card}>Az áttekintés jelenleg nem érhető el.</section>;
 
+  const grow = home.growSummary;
+  const compliance = home.complianceSummary;
+  const digitalTwin = home.digitalTwinSummary;
+
   return (
     <div className="space-y-5" data-testid="org-home-view">
-      {/* 1. Orientation */}
+      {/* 0. Orientation */}
       <section className={card}>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">Szervezeti ügyfélfelület</p>
         <h1 className="mt-1 break-words font-serif text-3xl font-semibold text-stone-950">{home.customer.name}</h1>
-        <p className="mt-2 break-words text-sm text-stone-600">{identity.displayName}{identity.jobTitle ? ` · ${identity.jobTitle}` : ""}</p>
+        <p className="mt-2 break-words text-sm text-stone-600">
+          {identity.displayName}
+          {identity.jobTitle ? ` · ${identity.jobTitle}` : ""}
+        </p>
         {orientation ? (
           <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-700" data-testid="portal-orientation">
             <span>{orientation.matterCount} közzétett ügy</span>
             <span aria-hidden="true">·</span>
             <span>{orientation.actionCount} Öntől vár teendő</span>
-            {orientation.lastUpdate ? (<><span aria-hidden="true">·</span><span>Utolsó frissítés: {formatDate(orientation.lastUpdate)}</span></>) : null}
+            {orientation.lastUpdate ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>Utolsó frissítés: {formatDate(orientation.lastUpdate)}</span>
+              </>
+            ) : null}
           </p>
         ) : null}
       </section>
 
-      {/* 2. Ami most Öntől kell — dominant when actions exist, compact when empty */}
-      <Section kicker="Teendői" title="Ami most Öntől kell" empty={!actionNow.length} emptyText="Jelenleg nincs Önnek szóló teendő.">
-        {actionNow.map((action) => <ActionRow key={action.id} action={action} />)}
+      {/* 1. AMI MOST ÖNTŐL KELL — dominant when actions exist, compact when empty */}
+      <Section
+        kicker="Teendői"
+        title="Ami most Öntől kell"
+        empty={!actionNow.length}
+        emptyText="Jelenleg nincs Önnek szóló teendő."
+      >
+        {actionNow.map((action) => (
+          <ActionRow key={action.id} action={action} />
+        ))}
       </Section>
 
-      {/* 3. Active legal work */}
+      {/* 2. JOGI ÜGYEK */}
       {home.currentMatter ? <CurrentMatter matter={home.currentMatter} /> : null}
 
-      <Section kicker="Aktív jogi munka" title="Ügyeink" empty={!activeMatters.length} emptyText="Jelenleg nincs közzétett aktív ügy.">
-        {activeMatters.map((matter) => <CaseRow key={matter.publicReference} matter={matter} />)}
+      <Section
+        kicker="Aktív jogi munka"
+        title="Ügyeink"
+        empty={!activeMatters.length}
+        emptyText="Jelenleg nincs közzétett aktív ügy."
+        actionLink="/portal/ugyek"
+        actionLabel="Összes ügy"
+      >
+        {activeMatters.map((matter) => (
+          <CaseRow key={matter.publicReference} matter={matter} />
+        ))}
       </Section>
 
-      {/* 4. Recent changes */}
-      <Section kicker="Legutóbbi tevékenység" title="Közzétett frissítések" empty={!home.recentDocuments.length} emptyText="Még nincs közzétett frissítés.">
-        {home.recentDocuments.slice(0, 4).map((document) => <ActivityRow key={document.id} document={document} />)}
+      {/* 3. FEJLESZTÉS / GROW WITH US */}
+      <Section
+        kicker="Vállalatfejlesztés"
+        title="Fejlesztés"
+        empty={!grow || (grow.activeInitiativesCount === 0 && grow.knownProcessesCount === 0)}
+        emptyText="Jelenleg nincs aktív fejlesztési kezdeményezés rögzítve."
+        actionLink="/portal/fejlesztes"
+        actionLabel="Fejlesztési felület"
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-2xl font-semibold text-stone-950">{grow?.activeInitiativesCount ?? 0}</p>
+            <p className="mt-1 text-sm text-stone-600">aktív fejlesztési kezdeményezés</p>
+          </div>
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-2xl font-semibold text-stone-950">{grow?.knownProcessesCount ?? 0}</p>
+            <p className="mt-1 text-sm text-stone-600">feltárt vállalati folyamat</p>
+          </div>
+        </div>
+        {grow && grow.initiatives && grow.initiatives.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">
+              Legutóbbi kezdeményezések:
+            </p>
+            {grow.initiatives.slice(0, 3).map((init) => (
+              <div key={init.id} className="flex items-center justify-between rounded-xl border border-stone-200 p-3 text-sm">
+                <span className="font-medium text-stone-900">{init.title}</span>
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-700">{init.statusLabel}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </Section>
 
-      {/* 5. Messages / contact */}
-      <Section kicker="Kapcsolat" title="Üzenetek" empty={!home.contactSummary.openCount && !home.contactSummary.unreadCount} emptyText="Még nincs folyamatban kérdés vagy üzenetváltás.">
-        {home.contactSummary.openCount ? <p className="text-sm text-stone-700">{home.contactSummary.openCount} nyitott beszélgetés{home.contactSummary.unreadCount ? `, ${home.contactSummary.unreadCount} olvasatlan üzenet` : ""}.</p> : null}
-        {home.contactSummary.latestPreview ? <p className="mt-2 break-words text-sm text-stone-600">{home.contactSummary.latestPreview}</p> : null}
-        <Link href="/portal/uzenetek" className="mt-3 inline-flex font-semibold text-[#7a5f18] hover:underline">Üzenetek megnyitása →</Link>
+      {/* 4. MEGFELELÉS */}
+      <Section
+        kicker="Megfelelés és biztonság"
+        title="Megfelelés"
+        empty={!compliance || (compliance.attentionCount === 0 && compliance.inProgressCount === 0 && compliance.noActionExpectedCount === 0)}
+        emptyText="A megfelelési vizsgálat jelenleg nincs közzétéve."
+        actionLink="/portal/megfeleles"
+        actionLabel="Megfelelési áttekintés"
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl bg-amber-50 p-4 border border-amber-100">
+            <p className="text-2xl font-semibold text-amber-950">{compliance?.attentionCount ?? 0}</p>
+            <p className="mt-1 text-xs text-amber-800">Teendőt igényel</p>
+          </div>
+          <div className="rounded-2xl bg-sky-50 p-4 border border-sky-100">
+            <p className="text-2xl font-semibold text-sky-950">{compliance?.inProgressCount ?? 0}</p>
+            <p className="mt-1 text-xs text-sky-800">Folyamatban lévő intézkedés</p>
+          </div>
+          <div className="rounded-2xl bg-emerald-50 p-4 border border-emerald-100">
+            <p className="text-2xl font-semibold text-emerald-950">{compliance?.noActionExpectedCount ?? 0}</p>
+            <p className="mt-1 text-xs text-emerald-800">Jelenleg nincs Öntől várt teendő</p>
+          </div>
+        </div>
+        {compliance && compliance.topics && compliance.topics.length > 0 ? (
+          <div className="mt-3 space-y-2">
+            {compliance.topics.slice(0, 3).map((topic) => (
+              <div key={topic.topicId} className="flex items-center justify-between rounded-xl border border-stone-200 p-3 text-sm">
+                <span className="font-medium text-stone-900">{topic.topicLabel}</span>
+                <span className="text-xs text-stone-600">{topic.nextAction || "Áttekintve"}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </Section>
 
-      {/* 6. Recorded work — only when real recorded time exists (never implied as savings/outcome) */}
+      {/* 5. FRISSÍTÉSEK */}
+      <Section
+        kicker="Legutóbbi tevékenység"
+        title="Közzétett frissítések"
+        empty={!home.recentDocuments.length}
+        emptyText="Még nincs közzétett frissítés."
+      >
+        {home.recentDocuments.slice(0, 4).map((document) => (
+          <ActivityRow key={document.id} document={document} />
+        ))}
+      </Section>
+
+      {/* 6. ÜZENETEK */}
+      <Section
+        kicker="Kapcsolat"
+        title="Üzenetek"
+        empty={!home.contactSummary.openCount && !home.contactSummary.unreadCount}
+        emptyText="Még nincs folyamatban kérdés vagy üzenetváltás."
+        actionLink="/portal/uzenetek"
+        actionLabel="Üzenetek megnyitása"
+      >
+        {home.contactSummary.openCount ? (
+          <p className="text-sm text-stone-700">
+            {home.contactSummary.openCount} nyitott beszélgetés
+            {home.contactSummary.unreadCount ? `, ${home.contactSummary.unreadCount} olvasatlan üzenet` : ""}.
+          </p>
+        ) : null}
+        {home.contactSummary.latestPreview ? (
+          <p className="mt-2 break-words text-sm text-stone-600">{home.contactSummary.latestPreview}</p>
+        ) : null}
+      </Section>
+
+      {/* Rögzített munka (ha van) */}
       {workSummary && workSummary.totalMinutes > 0 ? <WorkSummary summary={workSummary} /> : null}
 
-      {/* 7. Organization profile — secondary to legal work */}
-      <CompanyStatus company={company} summaries={summaries} />
+      {/* 7. VÁLLALAT / DIGITÁLIS IKER */}
+      <section className={card}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Vállalati digitális iker</p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Vállalati profil</h2>
+          </div>
+          <Link href="/portal/vallalat" className="text-sm font-semibold text-[#7a5f18] hover:underline">
+            Profil megnyitása →
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.employeeCount ?? company?.employeeCount ?? "—"}</p>
+            <p className="mt-1 text-sm text-stone-600">munkavállalói létszám (fő)</p>
+          </div>
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.knownSystemsCount ?? company?.systems?.length ?? "—"}</p>
+            <p className="mt-1 text-sm text-stone-600">ismert IT / üzleti rendszer</p>
+          </div>
+          <div className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.knownProcessesCount ?? company?.processes?.length ?? "—"}</p>
+            <p className="mt-1 text-sm text-stone-600">feltárt szervezeti folyamat</p>
+          </div>
+        </div>
+        {company?.profileHeadline ? (
+          <p className="mt-4 break-words text-sm leading-6 text-stone-700">{company.profileHeadline}</p>
+        ) : null}
+      </section>
     </div>
   );
 }

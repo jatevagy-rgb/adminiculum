@@ -1,4 +1,4 @@
-﻿import { fetchApi } from './api';
+import { fetchApi } from './api';
 
 export type PortalMatter = {
   id: string;
@@ -421,6 +421,28 @@ export type PortalOrgHomeAction = {
   dueAt?: string | null;
   typeLabel: string;
   readOnlyNote: string;
+  area?: 'LEGAL' | 'GROW' | 'COMPLIANCE';
+  actionUrl?: string;
+};
+
+export type PortalOrgHomeGrowSummary = {
+  activeInitiativesCount: number;
+  initiatives: Array<{ id: string; title: string; statusLabel: string; targetState: string | null }>;
+  knownProcessesCount: number;
+};
+
+export type PortalOrgHomeComplianceSummary = {
+  attentionCount: number;
+  inProgressCount: number;
+  noActionExpectedCount: number;
+  topics: Array<{ topicId: string; topicLabel: string; state: string; nextAction: string | null }>;
+};
+
+export type PortalOrgHomeDigitalTwinSummary = {
+  organizationUnitsCount: number;
+  knownProcessesCount: number;
+  knownSystemsCount: number;
+  employeeCount: number | null;
 };
 
 export type PortalOrgHome = {
@@ -430,6 +452,9 @@ export type PortalOrgHome = {
   actions: PortalOrgHomeAction[];
   recentDocuments: PortalOrgHomeDocument[];
   contactSummary: { openCount: number; unreadCount: number; latestPreview: string | null; latestUpdatedAt: string | null };
+  growSummary?: PortalOrgHomeGrowSummary;
+  complianceSummary?: PortalOrgHomeComplianceSummary;
+  digitalTwinSummary?: PortalOrgHomeDigitalTwinSummary;
 };
 
 export async function getPortalOrgHome() {
@@ -471,14 +496,32 @@ export type PortalOrgCompanyVisibleArea = {
   visibleMatterCount: number;
 };
 
+export type PortalOrgCompanySystem = {
+  id: string;
+  name: string;
+  category: string;
+  purpose: string | null;
+};
+
+export type PortalOrgCompanyProcess = {
+  id: string;
+  name: string;
+  category: string;
+  criticality: string;
+  frequency: string;
+};
+
 export type PortalOrgCompany = {
   companyName: string;
   profileHeadline: string | null;
+  employeeCount?: number | null;
   groups: PortalOrgCompanyGroup[];
   visibleMattersByArea: PortalOrgCompanyVisibleArea[];
   totalVisibleMatterCount: number;
   milestones: Array<{ id: string; title: string; date: string | null }>;
   initiatives: Array<{ id: string; title: string; targetState: string | null; statusLabel: string; targetAt: string | null }>;
+  systems?: PortalOrgCompanySystem[];
+  processes?: PortalOrgCompanyProcess[];
 };
 
 export async function getPortalOrganizationContracts() {
@@ -487,6 +530,107 @@ export async function getPortalOrganizationContracts() {
 
 export async function getPortalOrganizationCompany() {
   return fetchApi<PortalOrgCompany>('/client-portal/org/company', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
+export type PortalGrowProcessStep = {
+  id: string;
+  position: number;
+  name: string;
+  stepType: string;
+  isApproval: boolean;
+  systemName: string | null;
+  systemCategory: string | null;
+  estimatedWaitingMinutes: number | null;
+  estimatedActiveMinutes: number | null;
+};
+
+export type PortalGrowProcess = {
+  id: string;
+  name: string;
+  category: string;
+  criticality: string;
+  frequency: string;
+  organizationGroupName: string | null;
+  steps: PortalGrowProcessStep[];
+};
+
+export type PortalGrowInitiative = {
+  id: string;
+  title: string;
+  currentState: string | null;
+  targetState: string | null;
+  statusLabel: string;
+  rawStatus: string;
+  targetAt: string | null;
+  createdAt: string;
+  milestonesCount: number;
+  linkedCaseId: string | null;
+  responsibleSide: 'ADMINICULUM' | 'CUSTOMER' | 'JOINT';
+};
+
+export type PortalGrowOutcome = {
+  id: string;
+  basis: 'MEASURED' | 'CALCULATED' | 'ESTIMATED';
+  basisLabel: string;
+  metricsSummary: Record<string, unknown> | null;
+  note: string | null;
+  createdAt: string;
+  initiativeTitle: string | null;
+  processName: string | null;
+};
+
+export type PortalOrgGrow = {
+  customerName: string;
+  processes: PortalGrowProcess[];
+  initiatives: PortalGrowInitiative[];
+  outcomes: {
+    measured: PortalGrowOutcome[];
+    calculatedOrEstimated: PortalGrowOutcome[];
+  };
+  opportunities: Array<{
+    id: string;
+    title: string;
+    problem: string;
+    direction: string;
+    kind: string;
+    evidenceStrength: string;
+  }>;
+  opportunitiesDeferredNotice: string | null;
+};
+
+export async function getPortalOrgGrow() {
+  return fetchApi<PortalOrgGrow>('/client-portal/org/grow', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
+
+export type PortalComplianceMissingInfo = {
+  label: string;
+  portalAnswerable: boolean;
+  questionKey?: string | null;
+};
+
+export type PortalComplianceTopic = {
+  topicId: string;
+  topicLabel: string;
+  state: 'REVIEW_RECOMMENDED' | 'MORE_INFORMATION_NEEDED' | 'LAWYER_REVIEW_REQUIRED' | 'ACTION_IN_PROGRESS' | 'RESOLVED';
+  shortExplanation: string;
+  missingInformation: PortalComplianceMissingInfo[];
+  nextAction: string | null;
+};
+
+export type PortalComplianceReadModel = {
+  topics: PortalComplianceTopic[];
+};
+
+export async function getPortalCompliance() {
+  return fetchApi<PortalComplianceReadModel>('/client-portal/compliance', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
 }
 export type PortalCompanyProfileQuestion = {
   questionKey: string;

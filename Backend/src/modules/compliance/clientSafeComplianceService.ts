@@ -39,6 +39,8 @@ export interface MissingInformationItem {
   label: string;
   /** Whether this dependency can be answered through the portal. */
   portalAnswerable: boolean;
+  /** Safe question key for in-portal answering if portalAnswerable */
+  questionKey?: string | null;
 }
 
 export interface ClientSafeComplianceTopicDto {
@@ -232,7 +234,12 @@ function computeMissingInformation(
   const missing: MissingInformationItem[] = [];
   for (const dep of deps) {
     if (consumedKeys.has(dep.factKey)) continue;
-    missing.push({ label: safeQuestionLabel(dep.questionKey), portalAnswerable: isCompanyProfileQuestion(dep.questionKey) });
+    const portalAnswerable = isCompanyProfileQuestion(dep.questionKey);
+    missing.push({
+      label: safeQuestionLabel(dep.questionKey),
+      portalAnswerable,
+      questionKey: portalAnswerable ? dep.questionKey : null,
+    });
   }
   return missing;
 }
