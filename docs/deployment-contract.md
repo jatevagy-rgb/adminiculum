@@ -102,9 +102,14 @@ backend deploy → /health 200 → frontend deploy → smoke
 ## Trigger & safety
 
 - **Manual only** (`workflow_dispatch`). A code push must never deploy production.
-- Production source is **always** the canonical release branch `release/editor-ops-workflow-1`.
-  There is **no** feature-branch/ref override — a hotfix must be integrated into the release
-  branch first, then deployed.
+- Production source is **always the canonical release ref `master`** (matching `deploy.yml`
+  `CANONICAL_RELEASE_REF: master` and the `actions/checkout` `ref: master`). There is **no**
+  feature-branch/ref override — a hotfix must be integrated into `master` first, then deployed.
+  - Reconciliation note (2026-09-05): commit `8c13c9c1` ("chore(repository): prepare lossless
+    master convergence") intentionally changed `CANONICAL_RELEASE_REF` and `checkout.ref` from
+    `release/editor-ops-workflow-1` to `master`. That branch no longer exists remotely, and every
+    recent successful `workflow_dispatch` deploy ran with `head=master`. This document previously
+    lagged that change; it now matches the executable contract.
 - The workflow declares `environment: production` on the deploy jobs. This **only** enforces
   approvals/protection **if** the repository has a GitHub Environment named `production`
   configured with required reviewers/protection rules. **Recommended repository setup:** create
