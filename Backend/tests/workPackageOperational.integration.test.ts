@@ -9,6 +9,7 @@ import {
   CaseWorkPackageOperationalError,
   createTaskFromCaseWorkPackageItem,
   getCaseWorkPackage,
+  listCaseResponsibleCandidates,
   mutateCaseWorkPackageItem,
 } from '../src/modules/cases/caseWorkPackageOperational.service';
 import {
@@ -171,6 +172,33 @@ describeWithDatabase('work package operational runtime (PostgreSQL)', () => {
       const assigned = await mutateCaseWorkPackageItem(ids.case, ids.optionalItem, { expectedRevision: current!.revision, responsibleUserId: userId });
       expect(assigned.item.responsibleId).toBe(userId);
     }
+  });
+
+  it('exposes only authoritative case-eligible responsible candidates and grants no case access on assignment', async () => {
+    const candidates = await listCaseResponsibleCandidates(ids.case);
+    expect(candidates).not.toBeNull();
+    const candidateIds = new Set(candidates!.map((c) => c.id));
+    for (const eligible of [ids.admin, ids.partner, ids.lawyer, ids.collaborator, ids.trainee, ids.assistant]) {
+      expect(candidateIds.has(eligible)).toBe(true);
+    }
+    for (const ineligible of [ids.outsider, ids.external, ids.inactive, ids.clientUser]) {
+      expect(candidateIds.has(ineligible)).toBe(false);
+    }
+
+    const collaboratorsBefore = await db.caseCollaborator.count({ where: { caseId: ids.case, userId: ids.partner } });
+    const before = await getCaseWorkPackage(ids.case);
+    const beforeItem = before!.items.find((i) => i.id === ids.optionalItem) as never as { status: string };
+    const assigned = await mutateCaseWorkPackageItem(ids.case, ids.optionalItem, { expectedRevision: before!.revision, responsibleUserId: ids.partner });
+    expect(assigned.item.responsibleId).toBe(ids.partner);
+
+    const readback = await getCaseWorkPackage(ids.case);
+    const readbackItem = readback!.items.find((i) => i.id === ids.optionalItem) as never as { status: string; responsible?: { id: string } | null; responsibleId?: string | null };
+    expect(readbackItem.responsible?.id ?? readbackItem.responsibleId).toBe(ids.partner);
+    expect(readbackItem.status).toBe(beforeItem.status);
+
+    // Assigning responsibility must never create case access (no CaseCollaborator row).
+    const collaboratorsAfter = await db.caseCollaborator.count({ where: { caseId: ids.case, userId: ids.partner } });
+    expect(collaboratorsAfter).toBe(collaboratorsBefore);
   });
 
   it('keeps requiredness immutable across template edits and source deletion', async () => {

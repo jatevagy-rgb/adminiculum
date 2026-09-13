@@ -2,24 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  ApiError,
   getCaseWorkPackage,
   updateCaseWorkPackageItem,
   createCaseWorkPackageTask,
-  getUsers,
+  getCaseResponsibleCandidates,
   type CaseWorkPackageOperational,
   type CaseWorkPackageOperationalItem,
-  type User,
+  type CaseResponsibleCandidate,
 } from "@/lib/api";
 import { AdminButton, AdminBadge } from "@/components/adminiculum/ui";
-
-const ELIGIBLE_WORKFORCE_ROLES = new Set([
-  "ADMIN",
-  "PARTNER",
-  "LAWYER",
-  "COLLAB_LAWYER",
-  "TRAINEE",
-  "LEGAL_ASSISTANT",
-]);
 
 const ERROR_MESSAGES: Record<string, string> = {
   COMPLETED_ITEM_IMMUTABLE: "A befejezett munkamodul nem nyitható újra.",
@@ -35,6 +27,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 function mapErrorMessage(error: unknown): string {
+  // Prefer the structured error code from the backend (safe, specific UX).
+  const structuredCode = error instanceof ApiError ? error.code : undefined;
+  if (structuredCode && ERROR_MESSAGES[structuredCode]) return ERROR_MESSAGES[structuredCode];
   const msg = error instanceof Error ? error.message : "";
   for (const [code, hungarian] of Object.entries(ERROR_MESSAGES)) {
     if (msg.includes(code)) return hungarian;
@@ -49,7 +44,7 @@ type Props = {
 
 export function CaseWorkPackagePanel({ caseId, onTaskCreated }: Props) {
   const [pack, setPack] = useState<CaseWorkPackageOperational | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<CaseResponsibleCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyItem, setBusyItem] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,19 +62,13 @@ export function CaseWorkPackagePanel({ caseId, onTaskCreated }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [wp, userList] = await Promise.all([
+      const [wp, candidates] = await Promise.all([
         getCaseWorkPackage(caseId),
-        getUsers().catch(() => []),
+        getCaseResponsibleCandidates(caseId).catch(() => ({ items: [] as CaseResponsibleCandidate[] })),
       ]);
       setPack(wp);
-      setUsers(
-        userList.filter(
-          (u) =>
-            ELIGIBLE_WORKFORCE_ROLES.has(String(u.role || "").toUpperCase()) &&
-            u.status !== "INACTIVE" &&
-            u.isActive !== false,
-        ),
-      );
+      // Backend is the sole authority for case responsibility eligibility.
+      setUsers(candidates.items);
     } catch {
       setError("A munkacsomag betöltése nem sikerült.");
     } finally {

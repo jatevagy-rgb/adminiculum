@@ -141,6 +141,49 @@ async function caseWorkforceEligible(tx: Db, caseRow: { id: string; assignedLawy
   return Boolean(await tx.caseCollaborator.findFirst({ where: { caseId: caseRow.id, userId }, select: { id: true } }));
 }
 
+export interface CaseResponsibleCandidate {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string;
+}
+
+/**
+ * Authoritative read projection of users who may be assigned responsibility on
+ * this case. Mirrors caseWorkforceEligible exactly: the user must be an active
+ * workforce user AND be privileged (ADMIN/PARTNER) or case-related (assigned
+ * lawyer, creator, collaborator). The backend remains the sole authority; the
+ * frontend must not reproduce these rules.
+ */
+export async function listCaseResponsibleCandidates(caseId: string): Promise<CaseResponsibleCandidate[] | null> {
+  const caseRow = await prisma.case.findUnique({
+    where: { id: caseId },
+    select: {
+      id: true,
+      assignedLawyerId: true,
+      createdById: true,
+      collaborators: { select: { userId: true } },
+    },
+  });
+  if (!caseRow) return null;
+
+  const caseUserIds = new Set<string>(
+    [caseRow.assignedLawyerId, caseRow.createdById, ...caseRow.collaborators.map((c) => c.userId)].filter(
+      (value): value is string => Boolean(value),
+    ),
+  );
+
+  const users = await prisma.user.findMany({
+    where: { status: 'ACTIVE', isActive: { not: false } },
+    select: { id: true, name: true, email: true, role: true },
+    orderBy: { name: 'asc' },
+  });
+
+  return users
+    .filter((u) => isWorkforceRole(u.role) && (PRIVILEGED_ROLES.has(String(u.role)) || caseUserIds.has(u.id)))
+    .map((u) => ({ id: u.id, name: u.name, email: u.email, role: String(u.role) }));
+}
+
 async function loadScopedItem(tx: Db, caseId: string, itemId: string) {
   const workPackage = await tx.caseWorkPackage.findUnique({
     where: { caseId },

@@ -433,9 +433,9 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       </div>
 
       {/* ---- inline action modals ------------------------------------------ */}
-      {modal?.type === "task-create" ? <TaskFormModal caseId={caseId} mode="create" onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
-      {modal?.type === "task-edit" ? <TaskFormModal caseId={caseId} mode="edit" task={modal.task} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
-      {modal?.type === "deadline-create" ? <TaskFormModal caseId={caseId} mode="create" deadlineMode onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
+      {modal?.type === "task-create" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
+      {modal?.type === "task-edit" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="edit" task={modal.task} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
+      {modal?.type === "deadline-create" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" deadlineMode onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-upload" ? <DocumentUploadModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}

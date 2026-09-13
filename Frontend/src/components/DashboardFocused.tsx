@@ -408,7 +408,7 @@ export function DashboardFocused() {
 
   useEffect(() => {
     getNewsFeed("legal")
-      .then((result) => setNews((result.articles || []).slice(0, 4)))
+      .then((result) => setNews((result.articles || []).slice(0, 5)))
       .catch(() => setNews([]));
   }, []);
 
@@ -679,33 +679,36 @@ export function DashboardFocused() {
           )}
         </section>
 
-        {(recentDocuments.length > 0 || news.length > 0) ? (
+        {news.length > 0 ? (
+          <section aria-labelledby="dashboard-legal-news-heading" className="overflow-hidden rounded-xl border border-[var(--adm-border)] bg-white">
+            <div className="border-b border-[var(--adm-border)] px-4 py-3">
+              <p id="dashboard-legal-news-heading" className="text-[12px] font-semibold text-[var(--adm-text)]">Jogi hírek</p>
+            </div>
+            <div className="divide-y divide-[var(--adm-border)]">
+              {news.slice(0, 5).map((article) => (
+                article.url ? (
+                  <a key={`${article.title}-${article.date}`} href={article.url} target="_blank" rel="noreferrer" className="block px-4 py-2 text-[11px] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)] hover:text-[var(--adm-text)]">
+                    {article.title}
+                  </a>
+                ) : <p key={`${article.title}-${article.date}`} className="px-4 py-2 text-[11px] text-[var(--adm-text-muted)]">{article.title}</p>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {recentDocuments.length > 0 ? (
           <details open={signalsExpanded} onToggle={(event) => setSignalsExpanded(event.currentTarget.open)} className="border-y border-[var(--adm-border)] bg-transparent">
             <summary aria-expanded={signalsExpanded} className="flex cursor-pointer list-none items-center justify-between gap-3 px-1 py-3 text-[12px] font-semibold text-[var(--adm-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] focus-visible:ring-offset-2">
               <span>További jelzések</span><DashboardIcon name="chevron" className={`h-4 w-4 transition-transform ${signalsExpanded ? "rotate-90" : ""}`} />
             </summary>
-            <div className="grid gap-4 border-t border-[var(--adm-border)] p-4 md:grid-cols-2">
-              <div>
-                <p className="mb-2 text-[11px] font-semibold text-[var(--adm-text)]">Legutóbbi dokumentumok</p>
-                <div className="space-y-2">
-                  {recentDocuments.map((item) => (
-                    <Link key={item.id} href={item.caseId ? `/cases/${item.caseId}/documents` : "/documents/compare"} className="block text-[11px] text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">
-                      {formatActivityText(item.type, item.text)}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3" aria-labelledby="dashboard-legal-news-heading">
-                <p id="dashboard-legal-news-heading" className="mb-2 text-[11px] font-semibold text-[var(--adm-text)]">Jogi hírek</p>
-                <div className="space-y-2">
-                  {news.map((article) => (
-                    article.url ? (
-                      <a key={`${article.title}-${article.date}`} href={article.url} target="_blank" rel="noreferrer" className="block text-[11px] text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">
-                        {article.title}
-                      </a>
-                    ) : <p key={`${article.title}-${article.date}`} className="text-[11px] text-[var(--adm-text-muted)]">{article.title}</p>
-                  ))}
-                </div>
+            <div className="border-t border-[var(--adm-border)] p-4">
+              <p className="mb-2 text-[11px] font-semibold text-[var(--adm-text)]">Legutóbbi dokumentumok</p>
+              <div className="space-y-2">
+                {recentDocuments.map((item) => (
+                  <Link key={item.id} href={item.caseId ? `/cases/${item.caseId}/documents` : "/documents/compare"} className="block text-[11px] text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">
+                    {formatActivityText(item.type, item.text)}
+                  </Link>
+                ))}
               </div>
             </div>
           </details>

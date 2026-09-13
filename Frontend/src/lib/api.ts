@@ -754,6 +754,18 @@ export async function getCaseResponsibility(caseId: string): Promise<CaseRespons
   return fetchApi<CaseResponsibilityResponse>(`/cases/${caseId}/responsibility`);
 }
 
+export interface CaseResponsibleCandidate {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string;
+}
+
+/** Authoritative, backend-computed list of users eligible for case responsibility. */
+export async function getCaseResponsibleCandidates(caseId: string): Promise<{ items: CaseResponsibleCandidate[] }> {
+  return fetchApi<{ items: CaseResponsibleCandidate[] }>(`/cases/${caseId}/responsible-candidates`);
+}
+
 export interface CaseWorkItemCapabilities {
   canStart: boolean;
   canComplete: boolean;
@@ -1573,6 +1585,7 @@ export interface CreateTaskData {
   estimatedMinutes?: number | null;
   requestedByOrganizationPersonId?: string | null;
   taskDefinitionId?: string | null;
+  taskDefinitionClientId?: string | null;
   taskTypeLabel?: string | null;
   saveToCatalogue?: boolean;
   plannedReviewerId?: string | null;
@@ -4030,6 +4043,14 @@ export async function extractTaskFromCommunication(
     dueDate?: string;
     assignedTo?: string;
     caseId?: string;
+    attentionCategory?: string | null;
+    estimatedMinutes?: number | null;
+    taskDefinitionId?: string | null;
+    taskDefinitionClientId?: string | null;
+    taskTypeLabel?: string | null;
+    saveToCatalogue?: boolean;
+    plannedReviewerId?: string | null;
+    collaboratorUserIds?: string[];
   }
 ): Promise<{ success: boolean; task: TaskListItem; message: string }> {
   return fetchApi<{ success: boolean; task: TaskListItem; message: string }>(

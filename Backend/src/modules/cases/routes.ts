@@ -45,6 +45,7 @@ import {
   CaseWorkPackageOperationalError,
   createTaskFromCaseWorkPackageItem,
   getCaseWorkPackage,
+  listCaseResponsibleCandidates,
   mutateCaseWorkPackageItem,
 } from './caseWorkPackageOperational.service';
 
@@ -402,6 +403,26 @@ router.get('/:caseId/responsibility', authenticate, requireCaseReadAccess, async
     res.json(result);
   } catch (error) {
     console.error('Get case responsibility error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/responsible-candidates
+// Authoritative read projection of users eligible to be assigned responsibility.
+// Mirrors caseWorkforceEligible (active workforce AND privileged OR case-related).
+// ============================================================================
+router.get('/:caseId/responsible-candidates', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const result = await listCaseResponsibleCandidates(caseId);
+    if (!result) {
+      res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
+      return;
+    }
+    res.json({ items: result });
+  } catch (error) {
+    console.error('List case responsible candidates error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });
