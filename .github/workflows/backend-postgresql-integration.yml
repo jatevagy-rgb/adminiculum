@@ -787,7 +787,7 @@ jobs:
             [communication-task-guards]="Communication task guards"
             [dashboard-workload-readback]="Dashboard workload readback"
             [task-role-eligibility]="Task role eligibility"
-  [grow-research]="Grow research golden path"
+            [grow-research]="Grow research golden path"
             [client-portal-2-customer-product]="Client Portal 2.0 customer product"
           )
           {
