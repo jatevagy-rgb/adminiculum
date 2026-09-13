@@ -429,17 +429,17 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
     expect(res.body.code).toBe('CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED');
   });
 
-  it('10b. PORTAL_SURVEY_INACTIVE_IDENTITY_REJECTED=PASS', async () => {
-    // Persisted INACTIVE identity: DB state is authoritative (session status alone
-    // is not sufficient).
-    const inactiveIdentity = crypto.randomUUID();
+  it('10b. PORTAL_SURVEY_SUSPENDED_IDENTITY_REJECTED=PASS', async () => {
+    // Persisted non-active (SUSPENDED) identity: DB state is authoritative
+    // (session status alone is not sufficient).
+    const suspendedIdentity = crypto.randomUUID();
     await db.clientPortalIdentity.create({ data: {
-      id: inactiveIdentity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.invalid/',
-      subject: `sub-inactive-${seed}`, normalizedEmail: `inactive-${seed}@fixture.invalid`,
-      emailVerifiedAt: new Date('2026-01-01T00:00:00Z'), displayName: 'Inactive User',
-      accountType: 'ORGANIZATION_MEMBER', status: 'INACTIVE',
+      id: suspendedIdentity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.invalid/',
+      subject: `sub-suspended-${seed}`, normalizedEmail: `suspended-${seed}@fixture.invalid`,
+      emailVerifiedAt: new Date('2026-01-01T00:00:00Z'), displayName: 'Suspended User',
+      accountType: 'ORGANIZATION_MEMBER', status: 'SUSPENDED',
     } as never });
-    const session = makeSession(inactiveIdentity, `inactive-${seed}@fixture.invalid`, 'Inactive User');
+    const session = makeSession(suspendedIdentity, `suspended-${seed}@fixture.invalid`, 'Suspended User');
     const res = await httpRequest(
       app,
       'POST',
@@ -450,7 +450,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
       },
       {
         categories: ['SLOW_APPROVAL'],
-        idempotencyKey: `survey-inactive-${seed}`,
+        idempotencyKey: `survey-suspended-${seed}`,
       },
     );
 
