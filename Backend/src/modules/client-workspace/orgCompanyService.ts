@@ -48,14 +48,32 @@ export interface OrgCompanyVisibleArea {
   visibleMatterCount: number;
 }
 
+export interface OrgCompanySystem {
+  id: string;
+  name: string;
+  category: string;
+  purpose: string | null;
+}
+
+export interface OrgCompanyProcess {
+  id: string;
+  name: string;
+  category: string;
+  criticality: string;
+  frequency: string;
+}
+
 export interface OrgCompanyDto {
   companyName: string;
   profileHeadline: string | null;
+  employeeCount: number | null;
   groups: OrgCompanyGroup[];
   visibleMattersByArea: OrgCompanyVisibleArea[];
   totalVisibleMatterCount: number;
   milestones: Array<{ id: string; title: string; date: string | null }>;
   initiatives: Array<{ id: string; title: string; targetState: string | null; statusLabel: string; targetAt: string | null }>;
+  systems: OrgCompanySystem[];
+  processes: OrgCompanyProcess[];
 }
 
 const INITIATIVE_STATUS_LABELS: Record<string, string> = {
@@ -93,18 +111,34 @@ export async function getOrganizationalCompany(
   const client = await prisma.client.findUnique({ where: { id: workspace.clientId }, select: { name: true } });
 
   // Organization-wide overview content is loaded only after authorization.
-  const [overview, cases] = await Promise.all([
+  const [overview, cases, groups, systems, processes, employeeFact] = await Promise.all([
     projectCompanyOverviewForCustomer(workspace.clientId, prisma),
     listOrganizationalCases(identityId, workspaceId, { limit: ORG_CASE_LIST_LIMIT }, prisma),
+    prisma.clientOrganizationGroup.findMany({
+      where: { workspaceId: workspace.id, status: 'ACTIVE' },
+      select: { id: true, name: true, parentGroupId: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.businessSystem.findMany({
+      where: { clientId: workspace.clientId, status: 'ACTIVE' },
+      select: { id: true, name: true, category: true, purpose: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.businessProcess.findMany({
+      where: { clientId: workspace.clientId, status: 'ACTIVE' },
+      select: { id: true, name: true, category: true, criticality: true, frequency: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.clientFact.findFirst({
+      where: {
+        clientId: workspace.clientId,
+        supersededAt: null,
+        factDefinition: { key: 'employee_count' },
+      },
+      select: { numberValue: true },
+      orderBy: { createdAt: 'desc' },
+    }),
   ]);
-
-  // Workspace-scoped ACTIVE groups only — never a client-wide directory, and never
-  // derived from clientId alone. Allowlisted fields: id, name, parentGroupId.
-  const groups = await prisma.clientOrganizationGroup.findMany({
-    where: { workspaceId: workspace.id, status: 'ACTIVE' },
-    select: { id: true, name: true, parentGroupId: true },
-    orderBy: { name: 'asc' },
-  });
 
   // Visible matter counts per organizational area derive ONLY from the customer's
   // granted/visible cases (never hidden ones). The per-area sum equals the total.
@@ -117,6 +151,7 @@ export async function getOrganizationalCompany(
   const dto: OrgCompanyDto = {
     companyName: client?.name || 'Szervezet',
     profileHeadline: overview.profileHeadline,
+    employeeCount: employeeFact?.numberValue != null ? Number(employeeFact.numberValue) : null,
     groups: groups.map((group) => ({
       id: group.id,
       name: group.name,
@@ -135,6 +170,19 @@ export async function getOrganizationalCompany(
       targetState: initiative.targetState ? String(initiative.targetState) : null,
       statusLabel: INITIATIVE_STATUS_LABELS[String(initiative.status)] || 'Folyamatban',
       targetAt: initiative.targetAt ? String(initiative.targetAt) : null,
+    })),
+    systems: systems.map((s) => ({
+      id: s.id,
+      name: s.name,
+      category: s.category,
+      purpose: s.purpose || null,
+    })),
+    processes: processes.map((p) => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      criticality: p.criticality,
+      frequency: p.frequency,
     })),
   };
 

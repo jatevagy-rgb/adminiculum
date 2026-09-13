@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -28,8 +28,10 @@ import { CustomerInteractionCard } from "./CustomerInteractionCard";
 import { MatterView } from "./MatterWorkspace";
 import { ClientSafeResultCard, DemoContentBanner, PortalPersonHeader, PortalProfileCard } from "./PortalPresentationPrimitives";
 import { OrganizationCompanyProfile } from "./OrganizationCompanyProfile";
+import { OrgGrowView } from "./OrgGrowView";
+import { OrgComplianceView } from "./OrgComplianceView";
 
-export type OrganizationPortalView = "home" | "matters" | "tasks" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership" | "contracts" | "company";
+export type OrganizationPortalView = "home" | "matters" | "tasks" | "documents" | "messages" | "matter" | "intakes" | "new-intake" | "leadership" | "contracts" | "company" | "grow" | "compliance";
 
 type Props = {
   view: OrganizationPortalView;
@@ -518,6 +520,8 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       {view === "tasks" ? <OrganizationTasks workspace={workspace} /> : null}
       {view === "contracts" ? <OrganizationContracts contracts={state.contracts} /> : null}
       {view === "company" ? <OrganizationCompany company={state.company} onProfileUpdated={load} /> : null}
+      {view === "grow" ? <OrgGrowView /> : null}
+      {view === "compliance" ? <OrgComplianceView /> : null}
       {view === "intakes" && !isCaseRelay ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}
       {view === "new-intake" && !isCaseRelay ? <NewIntake units={state.units} onCreated={load} /> : null}
       {view === "leadership" ? <LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /> : null}

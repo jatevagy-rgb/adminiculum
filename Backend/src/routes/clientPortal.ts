@@ -44,8 +44,10 @@ import { organizationSummary, unitSummary } from '../modules/client-workspace/le
 import { getOrganizationalHome } from '../modules/client-workspace/orgHomeService';
 import { getOrganizationalContracts } from '../modules/client-workspace/orgContractsService';
 import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
+import { getOrganizationalGrow } from '../modules/client-workspace/orgGrowService';
+import { getClientSafeComplianceReadModel } from '../modules/compliance/clientSafeComplianceService';
 import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../modules/client-workspace/companyProfileAnswerService';
-import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
+import { RelationshipToCase, requireOrganizationWorkspace } from '../modules/client-workspace/organizationalAccessPolicy';
 import { getClientSafeWorkSummary } from '../modules/client-workspace/workSummaryService';
 import {
   createIntakeDraft,
@@ -514,6 +516,48 @@ router.get('/org/company', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await getOrganizationalCompany(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/grow', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalGrow(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/compliance', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { workspaceId } = orgContext(req);
+    const workspace = await requireOrganizationWorkspace(workspaceId);
+    const model = await getClientSafeComplianceReadModel(
+      workspace.clientId,
+      process.env.NODE_ENV === 'production',
+      process.env.PORTAL_DEMO_ENABLED === 'true',
+    );
+    res.json(model);
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/compliance', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { workspaceId } = orgContext(req);
+    const workspace = await requireOrganizationWorkspace(workspaceId);
+    const model = await getClientSafeComplianceReadModel(
+      workspace.clientId,
+      process.env.NODE_ENV === 'production',
+      process.env.PORTAL_DEMO_ENABLED === 'true',
+    );
+    res.json(model);
   } catch (error) {
     fail(res, error);
   }

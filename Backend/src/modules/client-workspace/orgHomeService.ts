@@ -20,6 +20,7 @@ import { listOrganizationalCases, getOrganizationalCaseDetail } from './organiza
 import { listPortalActionRequests, listPortalDocuments } from '../client-publication/publicationService';
 import { resolveActiveCustomerGrant } from '../client-interaction/base';
 import { listCustomerThreads } from '../client-interaction/questionService';
+import { getClientSafeComplianceReadModel } from '../compliance/clientSafeComplianceService';
 
 type Prisma = typeof defaultPrisma;
 
@@ -58,6 +59,8 @@ export interface OrgHomeAction {
   dueAt?: string | null;
   typeLabel: string;
   readOnlyNote: string;
+  area: 'LEGAL' | 'GROW' | 'COMPLIANCE';
+  actionUrl: string;
 }
 
 export interface OrgHomeMatterRow {
@@ -81,6 +84,26 @@ export interface OrgHomeContactSummary {
   latestUpdatedAt: string | null;
 }
 
+export interface OrgHomeGrowSummary {
+  activeInitiativesCount: number;
+  initiatives: Array<{ id: string; title: string; statusLabel: string; targetState: string | null }>;
+  knownProcessesCount: number;
+}
+
+export interface OrgHomeComplianceSummary {
+  attentionCount: number;
+  inProgressCount: number;
+  noActionExpectedCount: number;
+  topics: Array<{ topicId: string; topicLabel: string; state: string; nextAction: string | null }>;
+}
+
+export interface OrgHomeDigitalTwinSummary {
+  organizationUnitsCount: number;
+  knownProcessesCount: number;
+  knownSystemsCount: number;
+  employeeCount: number | null;
+}
+
 export interface OrgHomeDto {
   customer: { name: string };
   currentMatter?: OrgHomeCustomerMatter;
@@ -88,6 +111,9 @@ export interface OrgHomeDto {
   actions: OrgHomeAction[];
   recentDocuments: OrgHomeDocument[];
   contactSummary: OrgHomeContactSummary;
+  growSummary: OrgHomeGrowSummary;
+  complianceSummary: OrgHomeComplianceSummary;
+  digitalTwinSummary: OrgHomeDigitalTwinSummary;
 }
 
 function iso(v: Date | null | undefined): string | null {
@@ -236,27 +262,146 @@ export async function getOrganizationalHome(
   const list = await listOrganizationalCases(identityId, workspaceId, { limit: 50 }, prisma);
   const caseRows = list.items as unknown as OrgHomeMatterRow[];
 
-  const [currentMatter, actions, documents, contactSummary] = await Promise.all([
+  const isProduction = process.env.NODE_ENV === 'production';
+  const demoEnabled = !isProduction && process.env.ADMINICULUM_DEMO_CONTENT_ENABLED === 'true';
+
+  const [
+    currentMatter,
+    actions,
+    documents,
+    contactSummary,
+    complianceModel,
+    growInitiatives,
+    growInitiativesCount,
+    processesCount,
+    systemsCount,
+    groupsCount,
+    employeeFact,
+  ] = await Promise.all([
     resolveCurrentMatter(identityId, workspaceId, caseRows, prisma),
     listPortalActionRequests({ userId: identityId, role: 'CLIENT_PORTAL', workspaceId }, undefined, prisma),
     listPortalDocuments({ userId: identityId, role: 'CLIENT_PORTAL', workspaceId }, undefined, prisma),
     buildContactSummary(identityId, workspaceId, prisma),
+    getClientSafeComplianceReadModel(workspace.clientId, isProduction, demoEnabled, prisma).catch(() => ({ topics: [] })),
+    prisma.developmentInitiative.findMany({
+      where: { clientId: workspace.clientId, status: { in: ['PLANNED', 'ACTIVE'] } },
+      take: 3,
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, title: true, status: true, targetState: true },
+    }),
+    prisma.developmentInitiative.count({
+      where: { clientId: workspace.clientId, status: { in: ['PLANNED', 'ACTIVE'] } },
+    }),
+    prisma.businessProcess.count({
+      where: { clientId: workspace.clientId, status: 'ACTIVE' },
+    }),
+    prisma.businessSystem.count({
+      where: { clientId: workspace.clientId, status: 'ACTIVE' },
+    }),
+    prisma.clientOrganizationGroup.count({
+      where: { workspaceId: workspace.id, status: 'ACTIVE' },
+    }),
+    prisma.clientFact.findFirst({
+      where: {
+        clientId: workspace.clientId,
+        supersededAt: null,
+        factDefinition: { key: 'employee_count' },
+      },
+      select: { numberValue: true },
+      orderBy: { createdAt: 'desc' },
+    }),
   ]);
+
+  const legalActions: OrgHomeAction[] = (actions.items as unknown as OrgHomeAction[]).map((a) => {
+    const matterId = (a as any).matterId ?? (a as any).matterPublicationId ?? null;
+    return {
+      id: a.id,
+      matterPublicationId: matterId,
+      matterTitle: a.matterTitle ?? null,
+      title: a.title,
+      instructions: a.instructions ?? null,
+      dueAt: a.dueAt ?? null,
+      typeLabel: a.typeLabel || 'Ügyintézési teendő',
+      readOnlyNote: a.readOnlyNote || 'Ügyféli teendő',
+      area: 'LEGAL',
+      actionUrl: matterId ? `/portal/matters/${encodeURIComponent(String(matterId))}` : `/portal/action-requests/${encodeURIComponent(String(a.id))}`,
+    };
+  });
+
+  const complianceActions: OrgHomeAction[] = [];
+  let compAttentionCount = 0;
+  let compInProgressCount = 0;
+  let compNoActionExpectedCount = 0;
+
+  for (const topic of complianceModel.topics) {
+    if (topic.state === 'MORE_INFORMATION_NEEDED') {
+      compAttentionCount += 1;
+      for (const missing of topic.missingInformation) {
+        if (missing.portalAnswerable) {
+          complianceActions.push({
+            id: `compliance-${topic.topicId}-${missing.questionKey || missing.label}`,
+            matterPublicationId: null,
+            matterTitle: topic.topicLabel,
+            title: missing.label,
+            instructions: topic.shortExplanation,
+            dueAt: null,
+            typeLabel: 'Megfelelési adatkérés',
+            readOnlyNote: 'Töltse ki a hiányzó adatot a portálon.',
+            area: 'COMPLIANCE',
+            actionUrl: '/portal/megfeleles',
+          });
+        }
+      }
+    } else if (topic.state === 'ACTION_IN_PROGRESS' || topic.state === 'LAWYER_REVIEW_REQUIRED') {
+      compInProgressCount += 1;
+    } else if (topic.state === 'RESOLVED' || topic.state === 'REVIEW_RECOMMENDED') {
+      compNoActionExpectedCount += 1;
+    }
+  }
+
+  const INITIATIVE_STATUS_LABELS: Record<string, string> = {
+    PLANNED: 'Tervezett',
+    ACTIVE: 'Folyamatban',
+    COMPLETED: 'Kész',
+    ON_HOLD: 'Szünetel',
+    HOLD: 'Szünetel',
+  };
+
+  const growSummary: OrgHomeGrowSummary = {
+    activeInitiativesCount: growInitiativesCount,
+    initiatives: growInitiatives.map((i) => ({
+      id: i.id,
+      title: i.title,
+      statusLabel: INITIATIVE_STATUS_LABELS[i.status] || i.status,
+      targetState: i.targetState || null,
+    })),
+    knownProcessesCount: processesCount,
+  };
+
+  const complianceSummary: OrgHomeComplianceSummary = {
+    attentionCount: compAttentionCount,
+    inProgressCount: compInProgressCount,
+    noActionExpectedCount: compNoActionExpectedCount,
+    topics: complianceModel.topics.slice(0, 5).map((t) => ({
+      topicId: t.topicId,
+      topicLabel: t.topicLabel,
+      state: t.state,
+      nextAction: t.nextAction,
+    })),
+  };
+
+  const digitalTwinSummary: OrgHomeDigitalTwinSummary = {
+    organizationUnitsCount: groupsCount,
+    knownProcessesCount: processesCount,
+    knownSystemsCount: systemsCount,
+    employeeCount: employeeFact?.numberValue != null ? Number(employeeFact.numberValue) : null,
+  };
 
   const dto: OrgHomeDto = {
     customer: { name: client.name },
     currentMatter,
     matters: caseRows,
-    actions: (actions.items as unknown as OrgHomeAction[]).map((a) => ({
-      id: a.id,
-      matterPublicationId: (a as any).matterId ?? (a as any).matterPublicationId ?? null,
-      matterTitle: a.matterTitle ?? null,
-      title: a.title,
-      instructions: a.instructions ?? null,
-      dueAt: a.dueAt ?? null,
-      typeLabel: a.typeLabel,
-      readOnlyNote: a.readOnlyNote,
-    })),
+    actions: [...legalActions, ...complianceActions],
     recentDocuments: (documents.items as unknown as OrgHomeDocument[]).map((d) => ({
       id: d.id,
       matterTitle: d.matterTitle ?? null,
@@ -265,6 +410,9 @@ export async function getOrganizationalHome(
       downloadAvailable: Boolean(d.downloadAvailable),
     })),
     contactSummary,
+    growSummary,
+    complianceSummary,
+    digitalTwinSummary,
   };
 
   // Safety net: forbid internal fields from ever crossing the boundary.

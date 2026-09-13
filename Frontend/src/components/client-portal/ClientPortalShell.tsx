@@ -36,7 +36,7 @@ import {
   type PortalIdentityContext,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company';
+type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company' | 'grow' | 'compliance';
 
 type Props = { view: PortalView; resourceId?: string };
 
@@ -360,15 +360,14 @@ export function ClientPortalShell({ view, resourceId }: Props) {
     const communicationEnabled = workspace.communicationMode !== 'EXTERNAL_ONLY';
     if (workspace.mode === 'ORGANIZATION') {
       return [
-        ['Főoldal', '/portal'],
-        ['Ügyeink', '/portal/ugyeim'],
-        ['Teendőim', '/portal/teendoim'],
-        ['Dokumentumok', '/portal/dokumentumok'],
+        ['Áttekintés', '/portal'],
+        ['Jogi ügyek', '/portal/ugyek'],
+        ['Fejlesztés', '/portal/fejlesztes'],
+        ['Megfelelés', '/portal/megfeleles'],
         ['Üzenetek', '/portal/uzenetek'],
+        ['Vállalat', '/portal/vallalat'],
       ].filter(([, href]) => {
-        if (href === '/portal/ugyeim' && !capabilities.matters) return false;
-        if (href === '/portal/teendoim' && !capabilities.tasks) return false;
-        if (href === '/portal/dokumentumok' && !capabilities.documents) return false;
+        if (href === '/portal/ugyek' && !capabilities.matters) return false;
         if (href === '/portal/uzenetek' && (!capabilities.messages || !communicationEnabled)) return false;
         return true;
       }) as string[][];
