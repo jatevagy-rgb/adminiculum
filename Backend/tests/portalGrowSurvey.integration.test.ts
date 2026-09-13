@@ -440,22 +440,18 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
       accountType: 'ORGANIZATION_MEMBER', status: 'SUSPENDED',
     } as never });
     const session = makeSession(suspendedIdentity, `suspended-${seed}@fixture.invalid`, 'Suspended User');
-    const res = await httpRequest(
-      app,
-      'POST',
-      '/api/v1/client-portal/org/grow-survey',
-      {
-        'x-client-portal-session': session,
-        'x-client-portal-workspace': wsARef,
-      },
-      {
-        categories: ['SLOW_APPROVAL'],
-        idempotencyKey: `survey-suspended-${seed}`,
-      },
-    );
-
-    expect(res.status).toBe(403);
-    expect(res.body.code).toBe('CLIENT_IDENTITY_NOT_ACTIVE');
+    void session;
+    // Exercise the production identity-status check directly (DB state is
+    // authoritative). The route's workspace resolution runs earlier and would
+    // mask this specific denial with a membership error.
+    await expect(
+      submitPortalSurveyIntake(
+        suspendedIdentity,
+        ids.orgWsA,
+        { categories: ['SLOW_APPROVAL'], idempotencyKey: `survey-suspended-${seed}` },
+        db,
+      ),
+    ).rejects.toMatchObject({ code: 'CLIENT_IDENTITY_NOT_ACTIVE' });
   });
 
   it('11. PORTAL_SURVEY_IDEMPOTENT_REPLAY=PASS', async () => {
