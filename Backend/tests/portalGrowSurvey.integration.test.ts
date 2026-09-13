@@ -1,24 +1,15 @@
 /**
  * GROW WITH US P0-A: CUSTOMER SURVEY RUNTIME INTEGRATION SUITE (PostgreSQL).
  *
- * Verifies all 17 required runtime invariants:
- * 1.  PORTAL_SURVEY_PERSISTED_IN_SHARED_GROW_ENGINE=PASS
- * 2.  PORTAL_SURVEY_CREATES_CONNECTION_RUN_OBSERVATION=PASS
- * 3.  PORTAL_SURVEY_CANONICAL_SOURCE_TYPE_SURVEY=PASS
- * 4.  PORTAL_SURVEY_DECLARED_SURVEY_OBSERVATION=PASS
- * 5.  PORTAL_SURVEY_TRUTHFUL_PROVENANCE_AND_CHANNEL=PASS
- * 6.  PORTAL_SURVEY_NO_SECRETS_STORED=PASS
- * 7.  PORTAL_SURVEY_CLIENT_DERIVED_FROM_WORKSPACE_IDENTITY=PASS
- * 8.  PORTAL_SURVEY_CROSS_TENANT_REJECTED=PASS
- * 9.  PORTAL_SURVEY_UNAUTHENTICATED_REJECTED=PASS
- * 10. PORTAL_SURVEY_MISSING_MEMBERSHIP_REJECTED=PASS
- * 11. PORTAL_SURVEY_IDEMPOTENT_REPLAY=PASS
- * 12. PORTAL_SURVEY_WORKFORCE_RUN_RESEARCH_CYCLE_CONSUMES_IT=PASS
- * 13. PORTAL_SURVEY_NO_AUTOMATIC_TASK_OR_RECOMMENDATION=PASS
- * 14. PORTAL_SURVEY_CUSTOMER_READBACK_SAFE=PASS
- * 15. PORTAL_SURVEY_READBACK_CROSS_TENANT_ISOLATED=PASS
- * 16. PORTAL_SURVEY_ORGANIZATIONAL_GROW_VIEW_INCLUDES_SURVEYS=PASS
- * 17. PORTAL_SURVEY_SHARED_PERSISTENCE_NOT_DUPLICATE_ENGINE=PASS
+ * Covers the required runtime invariants:
+ *  - portal survey persistence through the canonical ingestion engine
+ *  - canonical SURVEY connection / DiscoveryRun / DECLARED_SURVEY observation + provenance
+ *  - server-derived clientId + cross-tenant isolation
+ *  - unauthenticated / missing-membership / inactive-identity denials
+ *  - idempotent replay AND idempotency conflict
+ *  - no automatic downstream objects before research
+ *  - workforce research consumption of the portal survey
+ *  - customer-safe readback, workspace-scoped (internal + other-workspace excluded)
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -409,14 +400,23 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
   });
 
   it('10. PORTAL_SURVEY_MISSING_MEMBERSHIP_REJECTED=PASS', async () => {
-    // Identity with no membership in orgWsA
-    const inactiveSession = makeSession(crypto.randomUUID(), 'unknown@fixture.invalid', 'Unknown User');
+    // REAL active identity in the DB with NO membership in orgWsA (the previous
+    // version used a nonexistent identity, which actually exercised a different
+    // denial path).
+    const noMemIdentity = crypto.randomUUID();
+    await db.clientPortalIdentity.create({ data: {
+      id: noMemIdentity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.invalid/',
+      subject: `sub-nomem-${seed}`, normalizedEmail: `nomem-${seed}@fixture.invalid`,
+      emailVerifiedAt: new Date('2026-01-01T00:00:00Z'), displayName: 'No Membership User',
+      accountType: 'ORGANIZATION_MEMBER', status: 'ACTIVE',
+    } as never });
+    const session = makeSession(noMemIdentity, `nomem-${seed}@fixture.invalid`, 'No Membership User');
     const res = await httpRequest(
       app,
       'POST',
       '/api/v1/client-portal/org/grow-survey',
       {
-        'x-client-portal-session': inactiveSession,
+        'x-client-portal-session': session,
         'x-client-portal-workspace': wsARef,
       },
       {
@@ -427,6 +427,35 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED');
+  });
+
+  it('10b. PORTAL_SURVEY_INACTIVE_IDENTITY_REJECTED=PASS', async () => {
+    // Persisted INACTIVE identity: DB state is authoritative (session status alone
+    // is not sufficient).
+    const inactiveIdentity = crypto.randomUUID();
+    await db.clientPortalIdentity.create({ data: {
+      id: inactiveIdentity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.invalid/',
+      subject: `sub-inactive-${seed}`, normalizedEmail: `inactive-${seed}@fixture.invalid`,
+      emailVerifiedAt: new Date('2026-01-01T00:00:00Z'), displayName: 'Inactive User',
+      accountType: 'ORGANIZATION_MEMBER', status: 'INACTIVE',
+    } as never });
+    const session = makeSession(inactiveIdentity, `inactive-${seed}@fixture.invalid`, 'Inactive User');
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-survey',
+      {
+        'x-client-portal-session': session,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        categories: ['SLOW_APPROVAL'],
+        idempotencyKey: `survey-inactive-${seed}`,
+      },
+    );
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CLIENT_IDENTITY_NOT_ACTIVE');
   });
 
   it('11. PORTAL_SURVEY_IDEMPOTENT_REPLAY=PASS', async () => {
@@ -452,6 +481,34 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
 
     const countAfter = await db.observation.count({ where: { clientId: ids.clientA } });
     expect(countAfter).toBe(countBefore);
+  });
+
+  it('11b. PORTAL_SURVEY_IDEMPOTENCY_CONFLICT=PASS', async () => {
+    const obsBefore = await db.observation.count({ where: { clientId: ids.clientA } });
+    const runBefore = await db.discoveryRun.count({ where: { clientId: ids.clientA } });
+
+    // Same idempotency key as the original submission, but a different
+    // digest-relevant payload (freeText changed).
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-survey',
+      {
+        'x-client-portal-session': sessionAuthA,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        categories: ['SLOW_APPROVAL', 'REWORK'],
+        freeText: 'DIFFERENT PAYLOAD for the same idempotency key.',
+        idempotencyKey: surveyKey1,
+      },
+    );
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('IDEMPOTENCY_CONFLICT');
+    // The exact-replay/conflict pre-check happens before startDiscoveryRun.
+    expect(await db.observation.count({ where: { clientId: ids.clientA } })).toBe(obsBefore);
+    expect(await db.discoveryRun.count({ where: { clientId: ids.clientA } })).toBe(runBefore);
   });
 
   it('12. PORTAL_SURVEY_WORKFORCE_RUN_RESEARCH_CYCLE_CONSUMES_IT=PASS', async () => {
