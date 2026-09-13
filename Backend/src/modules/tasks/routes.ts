@@ -11,6 +11,19 @@ import {
   WorkflowTransitionError,
 } from '../cases/workItems';
 import taskSubmissionRoutes from './taskSubmission.routes';
+import {
+  addTaskCollaborator,
+  archiveTaskDefinition,
+  assertTaskPlanningRolesEligible,
+  createTaskDefinition,
+  listTaskCollaborators,
+  listTaskDefinitions,
+  removeTaskCollaborator,
+  resolveTaskPlanning,
+  setPlannedReviewer,
+  updateTaskDefinition,
+} from './taskPlanning';
+import { InteractionError } from '../client-interaction/base';
 
 const router = Router();
 
@@ -26,6 +39,10 @@ function sendTaskWorkflowError(res: Response, error: unknown, fallbackMessage: s
   const prismaErr = buildPrismaErrorResponse(error);
   if (prismaErr) {
     res.status(prismaErr.status).json(prismaErr.body);
+    return;
+  }
+  if (error instanceof InteractionError) {
+    res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
     return;
   }
   res.status(500).json({ error: fallbackMessage });
@@ -102,6 +119,109 @@ router.get('/review-queue', authenticate, async (req: Request, res: Response) =>
   }
 });
 
+// ============================================================================
+// TASK PLANNING — reusable type catalogue + work roles (additive)
+// ============================================================================
+
+function actor(req: Request) {
+  return { userId: String((req as any).user?.userId || ''), role: String((req as any).user?.role || '') };
+}
+
+router.get('/task-definitions', authenticate, async (req: Request, res: Response) => {
+  try {
+    const items = await listTaskDefinitions(actor(req), {
+      clientId: req.query.clientId ? String(req.query.clientId) : undefined,
+      includeArchived: req.query.includeArchived === 'true',
+    });
+    return res.json({ items });
+  } catch (error) {
+    console.error('Error listing task definitions:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a feladattípus-katalógus lekérésekor');
+  }
+});
+
+router.post('/task-definitions', authenticate, async (req: Request, res: Response) => {
+  try {
+    const created = await createTaskDefinition(actor(req), {
+      clientId: req.body?.clientId ?? null,
+      label: req.body?.label,
+      description: req.body?.description,
+      defaultEstimatedMinutes: req.body?.defaultEstimatedMinutes ?? null,
+      defaultAttentionCategory: req.body?.defaultAttentionCategory ?? null,
+    });
+    return res.status(201).json(created);
+  } catch (error) {
+    console.error('Error creating task definition:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a feladattípus mentésekor');
+  }
+});
+
+router.patch('/task-definitions/:id', authenticate, async (req: Request, res: Response) => {
+  try {
+    const updated = await updateTaskDefinition(actor(req), String(req.params.id), {
+      label: req.body?.label,
+      description: req.body?.description,
+      defaultEstimatedMinutes: req.body?.defaultEstimatedMinutes,
+      defaultAttentionCategory: req.body?.defaultAttentionCategory,
+    });
+    return res.json(updated);
+  } catch (error) {
+    console.error('Error updating task definition:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a feladattípus frissítésekor');
+  }
+});
+
+router.post('/task-definitions/:id/archive', authenticate, async (req: Request, res: Response) => {
+  try {
+    const archived = await archiveTaskDefinition(actor(req), String(req.params.id));
+    return res.json(archived);
+  } catch (error) {
+    console.error('Error archiving task definition:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a feladattípus archiválásakor');
+  }
+});
+
+router.get('/:id/collaborators', authenticate, async (req: Request, res: Response) => {
+  try {
+    const items = await listTaskCollaborators(actor(req), String(req.params.id));
+    return res.json({ items });
+  } catch (error) {
+    console.error('Error listing task collaborators:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a közreműködők lekérésekor');
+  }
+});
+
+router.put('/:id/collaborators/:userId', authenticate, async (req: Request, res: Response) => {
+  try {
+    const row = await addTaskCollaborator(actor(req), String(req.params.id), String(req.params.userId));
+    return res.status(201).json(row);
+  } catch (error) {
+    console.error('Error adding task collaborator:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a közreműködő hozzáadásakor');
+  }
+});
+
+router.delete('/:id/collaborators/:userId', authenticate, async (req: Request, res: Response) => {
+  try {
+    const result = await removeTaskCollaborator(actor(req), String(req.params.id), String(req.params.userId));
+    return res.json(result);
+  } catch (error) {
+    console.error('Error removing task collaborator:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a közreműködő eltávolításakor');
+  }
+});
+
+router.put('/:id/planned-reviewer', authenticate, async (req: Request, res: Response) => {
+  try {
+    const reviewerId = req.body?.userId == null || req.body?.userId === '' ? null : String(req.body.userId);
+    const task = await setPlannedReviewer(actor(req), String(req.params.id), reviewerId);
+    return res.json(task);
+  } catch (error) {
+    console.error('Error setting planned reviewer:', error);
+    return sendTaskWorkflowError(res, error, 'Hiba a tervezett reviewer beállításakor');
+  }
+});
+
 router.use('/', taskSubmissionRoutes);
 
 // ============================================================================
@@ -149,6 +269,29 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
 
     const attentionInput = taskService.parseTaskAttentionInput(req.body || {});
 
+    // Additive planning resolution: catalogue pick snapshots the label, free
+    // label stays free, estimate precedence explicit > definition > band.
+    const planning = await resolveTaskPlanning({
+      taskDefinitionId: req.body?.taskDefinitionId ?? null,
+      taskTypeLabel: req.body?.taskTypeLabel ?? null,
+      plannedReviewerId: req.body?.plannedReviewerId ?? null,
+      estimatedMinutes: attentionInput.estimatedMinutes ?? null,
+      attentionCategory: attentionInput.attentionCategory ?? null,
+      saveToCatalogue: req.body?.saveToCatalogue === true,
+      taskDefinitionClientId: req.body?.taskDefinitionClientId ?? null,
+    }, actor(req));
+
+    const collaboratorUserIds = Array.isArray(req.body?.collaboratorUserIds)
+      ? req.body.collaboratorUserIds.map((v: unknown) => String(v))
+      : [];
+    if (planning.plannedReviewerId || collaboratorUserIds.length) {
+      await assertTaskPlanningRolesEligible(caseId, {
+        assigneeId: effectiveAssignedTo ?? null,
+        plannedReviewerId: planning.plannedReviewerId,
+        collaboratorUserIds,
+      });
+    }
+
     console.log(`[TASK_CREATE] Payload: caseId=${caseId}, title=${title}, rawType=${rawType}, mappedTaskType=${mappedTaskType}, priority=${priority}, assignedTo=${effectiveAssignedTo}`);
 
     const task = await taskService.createTask({
@@ -163,9 +306,13 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
       requiredSkills,
       dueDate: dueDate ? new Date(dueDate) : undefined,
       documentId,
-      attentionCategory: attentionInput.attentionCategory,
-      estimatedMinutes: attentionInput.estimatedMinutes,
+      attentionCategory: (planning.attentionCategory ?? attentionInput.attentionCategory) as any,
+      estimatedMinutes: planning.estimatedMinutes,
       requestedByOrganizationPersonId,
+      taskDefinitionId: planning.taskDefinitionId,
+      taskTypeLabelSnapshot: planning.taskTypeLabelSnapshot,
+      plannedReviewerId: planning.plannedReviewerId,
+      collaboratorUserIds,
     });
 
     res.status(201).json(task);

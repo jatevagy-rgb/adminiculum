@@ -135,7 +135,7 @@ export function ClientPortalMemberAdmin({ clientId, workspaces, onRefresh }: { c
 
   return (
     <section className="adm-board-panel p-5" data-testid="client-portal-member-admin">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Client Portal control plane</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Tagság · meghívások és kérések</p>
       <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Portál felhasználók</h2>
 
       {manageable.length === 0 ? (
@@ -163,6 +163,7 @@ export function ClientPortalMemberAdmin({ clientId, workspaces, onRefresh }: { c
 
           {selected ? (
             <div className="mt-4 grid gap-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Tagság</p>
               <div className="grid gap-2" data-testid="member-list">
                 {selected.memberships.length ? selected.memberships.map((member) => (
                   <div key={member.id} className="rounded-lg border border-[var(--adm-border)] p-3 text-sm">
@@ -196,6 +197,7 @@ export function ClientPortalMemberAdmin({ clientId, workspaces, onRefresh }: { c
 
               {selected.invitations.length ? (
                 <div className="grid gap-2" data-testid="invitation-list">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Meghívások és kérések</p>
                   {selected.invitations.map((invitation) => {
                     const revocable = invitation.status !== "USED" && invitation.status !== "REVOKED";
                     const notificationRetrying = (invitation.deliveryStatus || "").toUpperCase().includes("FAILED") || (invitation.deliveryStatus || "").toUpperCase().includes("RETRY") || (invitation.deliveryStatus || "").toUpperCase() === "PENDING";

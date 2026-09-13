@@ -99,18 +99,40 @@ export default function ClientPortalContextPage() {
               </header>
 
 
+              {/* 1. Státusz */}
+              <section className="adm-board-panel p-5">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Státusz</p>
+                <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Portál állapota</h2>
+                {workspace ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{statusLabels[workspace.status]}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Státusz</p></div>
+                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{modeLabels[workspace.mode]}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Mód</p></div>
+                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{workspace.activeMembershipCount}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív tag</p></div>
+                  </div>
+                ) : <p className="mt-4 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs létrehozott portál.</p>}
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Link href="/client-portal-admin" className="adm-link-button px-4 py-2 text-xs">Portál adminisztráció megnyitása</Link>
+                  {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button px-4 py-2 text-xs">Szervezeti kontextus</Link> : null}
+                </div>
+              </section>
+
+              {/* 2. Tagság · 3. Meghívások és kérések */}
+              <ClientPortalMemberAdmin clientId={clientId} workspaces={workspaces} onRefresh={refreshWorkspaces} />
+
+              {/* 4. Hozzáférés és kapcsolat · 5. Kapcsolt rendszerek */}
               <section className="adm-board-panel p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Portál-hozzáférés és működés</p>
-                    <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Portál beállításai</h2>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Hozzáférés és kapcsolat</p>
+                    <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Portál-hozzáférés és működés</h2>
                   </div>
                   <span className="rounded-full bg-[var(--adm-gold-soft,#f3ead2)] px-3 py-1 text-xs font-semibold">
                     {client.portalAccessEnabled ? "Portál előkészítve" : "Portál hozzáférés kikapcsolva"}
                   </span>
                 </div>
                 <p role="status" aria-live="polite" className="mt-3 text-sm">{savingPortal ? "Mentés…" : saveFeedback}</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Portál beállításai</p>
+                <div className="mt-2 grid gap-3 md:grid-cols-2">
                   <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
                     <span>Működési mód</span>
                     <select
@@ -136,7 +158,8 @@ export default function ClientPortalContextPage() {
                 </div>
                 {client.relationshipMode === "CONNECTED_SYSTEM" ? (
                   <div className="mt-3 rounded border border-[var(--adm-border)] bg-white/70 p-3">
-                    <label className="grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Kapcsolt rendszerek</p>
+                    <label className="mt-2 grid gap-1 text-xs font-semibold text-[var(--adm-text-muted)]">
                       <span>Kapcsolt rendszer állapota</span>
                       <input
                         value={client.connectedSystemState || ""}
@@ -158,22 +181,29 @@ export default function ClientPortalContextPage() {
                 )}
               </section>
 
+              {/* 6. Publikált tartalom */}
               <section className="adm-board-panel p-5">
-                <h2 className="font-serif text-xl text-[var(--adm-text)]">Portál állapota</h2>
-                {workspace ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{statusLabels[workspace.status]}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Státusz</p></div>
-                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{modeLabels[workspace.mode]}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Mód</p></div>
-                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{workspace.activeMembershipCount}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív tag</p></div>
-                  </div>
-                ) : <p className="mt-4 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs létrehozott portál.</p>}
-                <div className="mt-5 flex flex-wrap gap-2">
-                  <Link href="/client-portal-admin" className="adm-link-button px-4 py-2 text-xs">Portál adminisztráció megnyitása</Link>
-                  {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button px-4 py-2 text-xs">Szervezeti kontextus</Link> : null}
-                </div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Publikált tartalom</p>
+                <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Ügyfélnek látható tartalmak</h2>
+                <p className="mt-3 text-sm text-[var(--adm-text-muted)]">
+                  A dokumentum- és mérföldkő-publikációk ügyszinten készülnek és változatlanul jelennek meg az ügyfélportálon. Új publikáció az ügy dokumentumai közül indítható.
+                </p>
+                <Link href={`/cases?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button mt-4 inline-block px-4 py-2 text-xs">Ügyek megnyitása publikációhoz</Link>
               </section>
 
-              <ClientPortalMemberAdmin clientId={clientId} workspaces={workspaces} onRefresh={refreshWorkspaces} />
+              {/* 7. Technikai részletek (másodlagos) */}
+              <section className="adm-board-panel p-5">
+                <details>
+                  <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)] focus-visible:outline focus-visible:outline-2">Technikai részletek és audit</summary>
+                  <dl className="mt-3 grid gap-1 text-xs text-[var(--adm-text-muted)] sm:grid-cols-2">
+                    <div><dt className="font-semibold">Ügyfél-azonosító</dt><dd className="font-mono">{client.id}</dd></div>
+                    {workspace ? (
+                      <div><dt className="font-semibold">Munkatér-azonosító</dt><dd className="font-mono">{workspace.id}</dd></div>
+                    ) : null}
+                    <div><dt className="font-semibold">Kapcsolati mód (nyers)</dt><dd className="font-mono">{client.relationshipMode || "PORTAL_CENTRIC"}</dd></div>
+                  </dl>
+                </details>
+              </section>
             </>
           ) : !error ? <div className="adm-board-panel p-5 text-sm text-[var(--adm-text-muted)]">Ügyfél betöltése…</div> : null}
         </div>

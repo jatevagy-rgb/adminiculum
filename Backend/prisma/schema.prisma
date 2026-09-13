@@ -110,6 +110,12 @@ model User {
   assignedComplianceProposals       ComplianceProposal[]         @relation("ComplianceProposalAssignee")
   ownedDevelopmentInitiatives       DevelopmentInitiative[]
   lawFirmOwnedContracts             ContractRecord[]
+  plannedReviewTasks                Task[]                       @relation("TaskPlannedReviewer")
+  taskCollaborations                TaskCollaborator[]
+  addedTaskCollaborations           TaskCollaborator[]           @relation("TaskCollaboratorAddedBy")
+  createdTaskDefinitions            TaskDefinition[]             @relation("TaskDefinitionCreatedBy")
+  reviewedRecommendations           RecommendationCandidate[]    @relation("RecommendationReviewer")
+  recordedOutcomeMeasurements       OutcomeMeasurement[]
 
   @@map("users")
 }
@@ -199,14 +205,22 @@ model Client {
   businessSystems            BusinessSystem[]
   businessProcessSteps       BusinessProcessStep[]
 
-  @@map("clients")
-
   externalSourceConnections ExternalSourceConnection[]
   discoveryRuns             DiscoveryRun[]
   observations              Observation[]
 
   processObservationSnapshots ProcessObservationSnapshot[]
 
+  researchEvidence         ResearchEvidence[]
+  problemDomains           ProblemDomain[]
+  recommendationRuns       RecommendationRun[]
+  diagnosisCandidates      DiagnosisCandidate[]
+  recommendationCandidates RecommendationCandidate[]
+  improvementOpportunities ImprovementOpportunity[]
+  outcomeMeasurements      OutcomeMeasurement[]
+  taskDefinitions          TaskDefinition[]
+
+  @@map("clients")
 }
 
 enum ClientRelationshipMode {
@@ -1004,7 +1018,7 @@ model InvoiceDraft {
   customerTaxNumberRequirement InvoiceCustomerTaxNumberRequirement @default(UNCONFIRMED)
   // true when ClientPortalWorkspace evidence canonically resolved the
   // applicability — such drafts are not reviewer-overridable.
-  customerTaxNumberCanonical   Boolean                          @default(false)
+  customerTaxNumberCanonical   Boolean                             @default(false)
   customerName                 String?
   customerAddress              String?
   customerTaxNumber            String?
@@ -1047,7 +1061,7 @@ model InvoiceDraftLine {
   // per-minute basis stays visible in description + annex provenance.
   description  String              @db.Text
   quantity     Decimal             @db.Decimal(12, 4) // always 1
-  unit         String              @db.VarChar(16)    // 'tétel'
+  unit         String              @db.VarChar(16) // 'tétel'
   netUnitPrice Decimal?            @db.Decimal(19, 4) // = netAmount
   netAmount    Decimal             @db.Decimal(19, 2)
   vatTreatment InvoiceVatTreatment @default(NORMAL_VAT)
@@ -1878,6 +1892,15 @@ model Task {
   attentionCategory ReviewAttentionLevel?
   estimatedMinutes  Int?
 
+  // Reusable task definition catalogue (additive, optional). taskType remains the
+  // legacy enum; taskTypeLabelSnapshot freezes the chosen catalogue/free label at
+  // write time so later catalogue edits never rewrite historical tasks.
+  taskDefinitionId      String?
+  taskDefinition        TaskDefinition? @relation(fields: [taskDefinitionId], references: [id], onDelete: SetNull)
+  taskTypeLabelSnapshot String?
+  plannedReviewerId     String?
+  plannedReviewer       User?           @relation("TaskPlannedReviewer", fields: [plannedReviewerId], references: [id], onDelete: SetNull)
+
   // Dates
   dueDate     DateTime?
   startedAt   DateTime?
@@ -1888,6 +1911,7 @@ model Task {
 
   // Relations
   assignmentHistory     TaskAssignmentHistory[]
+  collaborators         TaskCollaborator[]
   sourceCommunication   Communication?          @relation("CommunicationTasks", fields: [sourceCommunicationId], references: [id])
   sourceCommunicationId String?
   submissions           TaskSubmission[]
@@ -2799,24 +2823,24 @@ model ClientPortalIntakeAttachment {
 }
 
 model ClientOrganizationGroup {
-  id              String                        @id @default(uuid())
-  clientId        String
+  id                String                        @id @default(uuid())
+  clientId          String
   // CP1: an organizational unit may be attached to exactly one ORGANIZATION
   // workspace (same Client). Legacy/internal groups keep workspaceId NULL.
-  workspaceId     String?
-  name            String
-  descriptionSafe String?
-  status          ClientOrganizationGroupStatus @default(ACTIVE)
-  createdById     String
-  createdAt       DateTime                      @default(now())
-  updatedAt       DateTime                      @updatedAt
-  revision        Int                           @default(0)
+  workspaceId       String?
+  name              String
+  descriptionSafe   String?
+  status            ClientOrganizationGroupStatus @default(ACTIVE)
+  createdById       String
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
+  revision          Int                           @default(0)
   // Phase 3: optional org-chart hierarchy (same Client, no cycles enforced in
   // service). NULL workspaceId groups may nest; org workspace groups nest too.
-  parentGroupId   String?
-  parentGroup     ClientOrganizationGroup?      @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
-  childGroups     ClientOrganizationGroup[]     @relation("ClientOrganizationGroupHierarchy")
-  persons         OrganizationPerson[]
+  parentGroupId     String?
+  parentGroup       ClientOrganizationGroup?      @relation("ClientOrganizationGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: SetNull)
+  childGroups       ClientOrganizationGroup[]     @relation("ClientOrganizationGroupHierarchy")
+  persons           OrganizationPerson[]
   businessProcesses BusinessProcess[]
 
   @@unique([id, clientId])
@@ -4753,6 +4777,9 @@ model DevelopmentInitiative {
   createdAt           DateTime                      @default(now())
   updatedAt           DateTime                      @updatedAt
 
+  improvementOpportunities ImprovementOpportunity[]
+  outcomeMeasurements      OutcomeMeasurement[]
+
   @@index([clientId, status])
   @@index([caseId])
   @@index([lawFirmOwnerUserId])
@@ -5496,14 +5523,16 @@ model BusinessProcess {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
 
-  steps               BusinessProcessStep[]
+  steps                BusinessProcessStep[]
+  diagnosisCandidates  DiagnosisCandidate[]
+  outcomeMeasurements  OutcomeMeasurement[]
+  observationSnapshots ProcessObservationSnapshot[]
 
   @@unique([id, clientId])
   @@index([clientId, status])
   @@index([ownerPersonId])
   @@index([organizationGroupId])
   @@map("business_processes")
-  observationSnapshots ProcessObservationSnapshot[]
 }
 
 model BusinessSystem {
@@ -5520,7 +5549,7 @@ model BusinessSystem {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
-  processSteps  BusinessProcessStep[]
+  processSteps BusinessProcessStep[]
 
   @@unique([id, clientId])
   @@unique([clientId, name])
@@ -5556,7 +5585,6 @@ model BusinessProcessStep {
   @@map("business_process_steps")
 }
 
-
 // --- OBS-1: OBSERVATORY INGESTION FOUNDATION ---
 
 enum ExternalSourceStatus {
@@ -5582,18 +5610,19 @@ enum ObservationType {
   VENDOR_RECORD
   DOCUMENT_RECORD
   FACT_RECORD
+  DECLARED_SURVEY
 }
 
 model ExternalSourceConnection {
-  id          String               @id @default(uuid())
-  clientId    String
-  client      Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  sourceType  String
-  name        String
-  status      ExternalSourceStatus @default(ACTIVE)
-  config      Json                 @default("{}")
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  id         String               @id @default(uuid())
+  clientId   String
+  client     Client               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceType String
+  name       String
+  status     ExternalSourceStatus @default(ACTIVE)
+  config     Json                 @default("{}")
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
 
   runs         DiscoveryRun[]
   observations Observation[]
@@ -5658,10 +5687,336 @@ model ProcessObservationSnapshot {
   provenance        Json?
   createdAt         DateTime        @default(now())
 
+  outcomesBefore OutcomeMeasurement[] @relation("OutcomeBeforeSnapshot")
+  outcomesAfter  OutcomeMeasurement[] @relation("OutcomeAfterSnapshot")
+
   @@unique([id, clientId])
   @@unique([clientId, businessProcessId, metricVersion, inputDigest, observedAt])
   @@index([clientId, businessProcessId, observedAt])
   @@index([clientId, businessProcessId, inputDigest])
   @@map("process_observation_snapshots")
+}
 
+// ============================================================================
+// GROW PRODUCT — RESEARCH CORPUS, DIAGNOSIS, RECOMMENDATION, OUTCOME
+//
+// Additive product layer on top of the OBS-1 observation foundation and the
+// T2A/T2B process metric/snapshot read models. Nothing here creates findings,
+// tasks, or initiatives directly: a RecommendationCandidate requires explicit
+// human review; ACCEPT only creates an ImprovementOpportunity; the handoff to a
+// canonical DevelopmentInitiative is a separate, explicit action. Unverified
+// research evidence is never silently treated as verified — eligibility is
+// enforced by the evidence-sufficiency gate.
+// ============================================================================
+
+enum EvidenceVerificationStatus {
+  VERIFIED
+  UNVERIFIED
+  DISPUTED
+}
+
+model ResearchEvidence {
+  id                 String                     @id @default(uuid())
+  // NULL clientId = global research-library entry; set = client-internal evidence.
+  clientId           String?
+  client             Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // Stable dedupe key for corpus-seeded and observation-derived entries.
+  corpusKey          String?                    @unique
+  kind               String // PAPER | BENCHMARK | INTERNAL_OBSERVATION | INTERNAL_MEASUREMENT | ORG_FACT
+  title              String
+  authors            String?
+  venue              String?
+  year               Int?
+  doi                String?
+  locator            String?
+  verificationStatus EvidenceVerificationStatus @default(UNVERIFIED)
+  strength           String                     @default("WEAK") // STRONG | MODERATE | WEAK
+  domainKeys         String[]                   @default([])
+  applicabilityNotes String?
+  limitations        String?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+
+  diagnosisLinks      DiagnosisEvidenceLink[]
+  recommendationLinks RecommendationEvidenceLink[]
+
+  @@index([clientId, verificationStatus])
+  @@index([verificationStatus])
+  @@map("research_evidence")
+}
+
+model ProblemDomain {
+  id          String   @id @default(uuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  key         String // stable per-client domain key, e.g. APPROVAL_DELAY
+  name        String
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE | ARCHIVED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  diagnoses DiagnosisCandidate[]
+
+  @@unique([clientId, key])
+  @@index([clientId, status])
+  @@map("problem_domains")
+}
+
+enum RecommendationRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+model RecommendationRun {
+  id             String                  @id @default(uuid())
+  clientId       String
+  client         Client                  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  status         RecommendationRunStatus @default(RUNNING)
+  idempotencyKey String?
+  startedAt      DateTime                @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime                @default(now())
+
+  diagnoses       DiagnosisCandidate[]
+  recommendations RecommendationCandidate[]
+
+  @@unique([id, clientId])
+  @@unique([clientId, idempotencyKey])
+  @@index([clientId, status])
+  @@map("recommendation_runs")
+}
+
+enum DiagnosisCandidateStatus {
+  OPEN
+  CONFIRMED
+  REJECTED
+  NEEDS_MORE_DATA
+}
+
+model DiagnosisCandidate {
+  id                String                   @id @default(uuid())
+  clientId          String
+  client            Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  runId             String
+  run               RecommendationRun        @relation(fields: [runId, clientId], references: [id, clientId], onDelete: Cascade)
+  problemDomainId   String?
+  problemDomain     ProblemDomain?           @relation(fields: [problemDomainId], references: [id], onDelete: SetNull)
+  businessProcessId String?
+  businessProcess   BusinessProcess?         @relation(fields: [businessProcessId, clientId], references: [id, clientId], onDelete: Cascade)
+  title             String
+  summary           String?
+  status            DiagnosisCandidateStatus @default(OPEN)
+  // Provenance refs: observation ids / snapshot ids / fact ids the diagnosis rests on.
+  sourceRefs        Json                     @default("[]")
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  evidenceLinks   DiagnosisEvidenceLink[]
+  recommendations RecommendationCandidate[]
+
+  @@unique([id, clientId])
+  @@index([clientId, status])
+  @@index([clientId, runId])
+  @@index([problemDomainId])
+  @@index([businessProcessId])
+  @@map("diagnosis_candidates")
+}
+
+model DiagnosisEvidenceLink {
+  id          String             @id @default(uuid())
+  diagnosisId String
+  diagnosis   DiagnosisCandidate @relation(fields: [diagnosisId], references: [id], onDelete: Cascade)
+  evidenceId  String
+  evidence    ResearchEvidence   @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  role        String             @default("SUPPORTING")
+  createdAt   DateTime           @default(now())
+
+  @@unique([diagnosisId, evidenceId])
+  @@index([evidenceId])
+  @@map("diagnosis_evidence_links")
+}
+
+enum SufficiencyDecision {
+  SUPPORTED
+  NEEDS_MORE_DATA
+  INSUFFICIENT_EVIDENCE
+  OUT_OF_SCOPE
+}
+
+enum RecommendationCandidateStatus {
+  PENDING_REVIEW
+  NEEDS_MORE_DATA
+  ACCEPTED
+  DECLINED
+}
+
+model RecommendationCandidate {
+  id               String                        @id @default(uuid())
+  clientId         String
+  client           Client                        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  runId            String
+  run              RecommendationRun             @relation(fields: [runId, clientId], references: [id, clientId], onDelete: Cascade)
+  diagnosisId      String?
+  diagnosis        DiagnosisCandidate?           @relation(fields: [diagnosisId], references: [id], onDelete: SetNull)
+  title            String
+  problemStatement String
+  direction        String
+  kind             String // QUICK_FIX | DEVELOPMENT
+  impactTags       String[]                      @default([])
+  sufficiency      SufficiencyDecision
+  status           RecommendationCandidateStatus @default(PENDING_REVIEW)
+  reviewedById     String?
+  reviewedBy       User?                         @relation("RecommendationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt       DateTime?
+  reviewNote       String?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
+
+  evidenceLinks          RecommendationEvidenceLink[]
+  improvementOpportunity ImprovementOpportunity?
+
+  @@unique([id, clientId])
+  @@index([clientId, status])
+  @@index([clientId, runId])
+  @@index([diagnosisId])
+  @@map("recommendation_candidates")
+}
+
+model RecommendationEvidenceLink {
+  id               String                  @id @default(uuid())
+  recommendationId String
+  recommendation   RecommendationCandidate @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+  evidenceId       String
+  evidence         ResearchEvidence        @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  role             String                  @default("SUPPORTING")
+  createdAt        DateTime                @default(now())
+
+  @@unique([recommendationId, evidenceId])
+  @@index([evidenceId])
+  @@map("recommendation_evidence_links")
+}
+
+enum ImprovementOpportunityStatus {
+  OPEN
+  INITIATIVE_STARTED
+  OUTCOME_RECORDED
+  CLOSED
+}
+
+model ImprovementOpportunity {
+  id                      String                       @id @default(uuid())
+  clientId                String
+  client                  Client                       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  recommendationId        String                       @unique
+  recommendation          RecommendationCandidate      @relation(fields: [recommendationId], references: [id], onDelete: Restrict)
+  title                   String
+  problem                 String
+  direction               String
+  kind                    String // QUICK_FIX | DEVELOPMENT
+  impactTags              String[]                     @default([])
+  evidenceStrength        String                       @default("WEAK")
+  status                  ImprovementOpportunityStatus @default(OPEN)
+  developmentInitiativeId String?
+  developmentInitiative   DevelopmentInitiative?       @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+
+  outcomes OutcomeMeasurement[]
+
+  @@index([clientId, status])
+  @@index([developmentInitiativeId])
+  @@map("improvement_opportunities")
+}
+
+enum OutcomeMeasurementBasis {
+  MEASURED
+  CALCULATED
+  ESTIMATED
+  ASSUMED
+}
+
+model OutcomeMeasurement {
+  id                      String                      @id @default(uuid())
+  clientId                String
+  client                  Client                      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  opportunityId           String
+  opportunity             ImprovementOpportunity      @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  developmentInitiativeId String?
+  developmentInitiative   DevelopmentInitiative?      @relation(fields: [developmentInitiativeId], references: [id], onDelete: SetNull)
+  businessProcessId       String?
+  businessProcess         BusinessProcess?            @relation(fields: [businessProcessId, clientId], references: [id, clientId], onDelete: Cascade)
+  beforeSnapshotId        String
+  beforeSnapshot          ProcessObservationSnapshot  @relation("OutcomeBeforeSnapshot", fields: [beforeSnapshotId], references: [id], onDelete: Restrict)
+  afterSnapshotId         String?
+  afterSnapshot           ProcessObservationSnapshot? @relation("OutcomeAfterSnapshot", fields: [afterSnapshotId], references: [id], onDelete: Restrict)
+  basis                   OutcomeMeasurementBasis
+  metricsSummary          Json?
+  roi                     Json?
+  // Explicit flag: synthetic demonstration/test data is never presented as real.
+  synthetic               Boolean                     @default(false)
+  note                    String?
+  recordedById            String
+  recordedBy              User                        @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+  createdAt               DateTime                    @default(now())
+
+  @@index([clientId, opportunityId])
+  @@index([clientId, businessProcessId])
+  @@index([developmentInitiativeId])
+  @@map("outcome_measurements")
+}
+
+// ============================================================================
+// TASK PLANNING — REUSABLE TASK DEFINITION CATALOGUE + WORK ROLES
+//
+// Additive only: the legacy TaskType enum remains the persisted task type.
+// A TaskDefinition is an optional reusable label/estimate template; choosing or
+// later editing a catalogue entry never rewrites historical tasks because the
+// label is snapshotted on the Task at write time. Definitions are archived, not
+// deleted. Task work roles are planning metadata: the planned reviewer and
+// collaborators receive NO Case access — case access stays with the existing
+// CaseCollaborator model and the TaskSubmission review lifecycle.
+// ============================================================================
+
+enum TaskDefinitionStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+model TaskDefinition {
+  id                       String                @id @default(uuid())
+  // Optional client scope: NULL = firm-wide shared definition.
+  clientId                 String?
+  client                   Client?               @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  label                    String
+  description              String?
+  defaultEstimatedMinutes  Int?
+  defaultAttentionCategory ReviewAttentionLevel?
+  status                   TaskDefinitionStatus  @default(ACTIVE)
+  createdById              String
+  createdBy                User                  @relation("TaskDefinitionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+
+  tasks Task[]
+
+  @@unique([clientId, label])
+  @@index([clientId, status])
+  @@map("task_definitions")
+}
+
+model TaskCollaborator {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addedById String?
+  addedBy   User?    @relation("TaskCollaboratorAddedBy", fields: [addedById], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+  @@index([userId])
+  @@map("task_collaborators")
 }

@@ -129,6 +129,17 @@ const taskReadSelect = {
   },
   attentionCategory: true,
   estimatedMinutes: true,
+  taskDefinitionId: true,
+  taskDefinition: { select: { id: true, label: true, status: true } },
+  taskTypeLabelSnapshot: true,
+  plannedReviewerId: true,
+  plannedReviewer: { select: { id: true, name: true, role: true } },
+  collaborators: {
+    select: {
+      userId: true,
+      user: { select: { id: true, name: true, role: true } },
+    },
+  },
   documentId: true,
   sourceCommunicationId: true,
   caseId: true,
@@ -314,6 +325,10 @@ export async function createTask(data: {
   workPackageItemId?: string;
   matterId?: string | null;
   requestedByOrganizationPersonId?: string | null;
+  taskDefinitionId?: string | null;
+  taskTypeLabelSnapshot?: string | null;
+  plannedReviewerId?: string | null;
+  collaboratorUserIds?: string[];
 }, db: PrismaClient | Prisma.TransactionClient = prisma) {
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
   const requestedByOrganizationPersonId = await validateTaskRequester(data.caseId, data.requestedByOrganizationPersonId, db);
@@ -336,6 +351,9 @@ export async function createTask(data: {
       sourceCommunicationId: data.sourceCommunicationId,
       attentionCategory: data.attentionCategory ?? null,
       estimatedMinutes: data.estimatedMinutes ?? null,
+      taskDefinitionId: data.taskDefinitionId ?? null,
+      taskTypeLabelSnapshot: data.taskTypeLabelSnapshot ?? null,
+      plannedReviewerId: data.plannedReviewerId ?? null,
       workPackageItemId: data.workPackageItemId ?? null,
       matterId: data.matterId ?? null,
     } as any,
@@ -344,6 +362,16 @@ export async function createTask(data: {
       assignedTo: true
     }
   });
+
+  if (data.collaboratorUserIds?.length) {
+    const uniqueIds = Array.from(new Set(data.collaboratorUserIds))
+      .filter((id) => id && id !== data.assignedTo && id !== data.plannedReviewerId);
+    for (const userId of uniqueIds) {
+      await db.taskCollaborator.create({
+        data: { taskId: task.id, userId, addedById: data.assignedBy },
+      });
+    }
+  }
 
   // Create timeline event (non-blocking for task create success)
   try {
@@ -576,7 +604,7 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
     throw new WorkflowTransitionError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
   }
   const payload = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
-  const allowed = new Set(['title', 'description', 'priority', 'dueDate', 'assignedToId', 'attentionCategory', 'estimatedMinutes', 'requestedByOrganizationPersonId']);
+  const allowed = new Set(['title', 'description', 'priority', 'dueDate', 'assignedToId', 'attentionCategory', 'estimatedMinutes', 'requestedByOrganizationPersonId', 'taskDefinitionId', 'taskTypeLabel', 'plannedReviewerId', 'collaboratorUserIds']);
   for (const key of Object.keys(payload)) {
     if (!allowed.has(key)) {
       throw new WorkflowTransitionError(400, 'UNSUPPORTED_TASK_FIELD', `Field ${key} is not accepted for task update.`);
@@ -588,7 +616,7 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
 
   const existing = await prisma.task.findUnique({
     where: { id: taskId },
-    select: { id: true, title: true, caseId: true, assignedToId: true, assignedById: true, requestedByOrganizationPersonId: true },
+    select: { id: true, title: true, caseId: true, assignedToId: true, assignedById: true, requestedByOrganizationPersonId: true, plannedReviewerId: true },
   });
   if (!existing) {
     throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
@@ -666,6 +694,42 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
     );
   }
 
+  // Additive planning fields: catalogue pick snapshots the label; a free label
+  // stays free; the planned reviewer passes the canonical eligibility rule.
+  if ('taskDefinitionId' in payload || 'taskTypeLabel' in payload) {
+    if (payload.taskDefinitionId) {
+      const def = await prisma.taskDefinition.findUnique({ where: { id: String(payload.taskDefinitionId) } });
+      if (!def) throw new WorkflowTransitionError(404, 'TASK_DEFINITION_NOT_FOUND', 'Task definition not found.');
+      if (String(def.status) !== 'ACTIVE') {
+        throw new WorkflowTransitionError(422, 'TASK_DEFINITION_ARCHIVED', 'An archived task definition cannot be applied to new work.');
+      }
+      data.taskDefinitionId = def.id;
+      data.taskTypeLabelSnapshot = def.label;
+    } else if ('taskDefinitionId' in payload && !payload.taskDefinitionId) {
+      data.taskDefinitionId = null;
+    }
+    if ('taskTypeLabel' in payload && !payload.taskDefinitionId) {
+      const label = payload.taskTypeLabel == null || payload.taskTypeLabel === '' ? null : String(payload.taskTypeLabel).trim();
+      data.taskTypeLabelSnapshot = label;
+      if (label && !('taskDefinitionId' in payload)) data.taskDefinitionId = null;
+    }
+  }
+  if ('plannedReviewerId' in payload) {
+    const reviewerId = payload.plannedReviewerId == null || payload.plannedReviewerId === '' ? null : String(payload.plannedReviewerId);
+    if (reviewerId) {
+      const assigneeAfter = ('assignedToId' in data ? (data.assignedToId as string | null) : existing.assignedToId);
+      if (assigneeAfter && reviewerId === assigneeAfter) {
+        throw new WorkflowTransitionError(422, 'REVIEWER_CANNOT_BE_WORKER', 'The planned reviewer cannot be the task worker.');
+      }
+      await assertPlanningRoleEligibility(existing.caseId, reviewerId);
+    }
+    data.plannedReviewerId = reviewerId;
+  }
+  if ('collaboratorUserIds' in payload) {
+    const ids = Array.isArray(payload.collaboratorUserIds) ? payload.collaboratorUserIds.map((v) => String(v)) : [];
+    await replaceTaskCollaborators(existing.caseId, taskId, ids, existing.assignedToId, ('plannedReviewerId' in data ? data.plannedReviewerId as string | null : undefined) ?? existing.plannedReviewerId ?? null, userId);
+  }
+
   if (Object.keys(data).length === 0) {
     return getTask(taskId);
   }
@@ -684,6 +748,57 @@ export async function updateTaskDetails(taskId: string, userId: string, body: un
   }
 
   return getTask(taskId);
+}
+
+/**
+ * Planning-role eligibility (planned reviewer / collaborator): the user must
+ * already have canonical case access. Planning roles never grant access.
+ */
+async function assertPlanningRoleEligibility(caseId: string, userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, status: true, isActive: true } });
+  if (!user || user.isActive === false || String(user.status) !== 'ACTIVE') {
+    throw new WorkflowTransitionError(422, 'TASK_ROLE_USER_INELIGIBLE', 'The selected user is not an active workforce member.');
+  }
+  if (['ADMIN', 'PARTNER'].includes(String(user.role))) return;
+  const caseRow = await prisma.case.findUnique({ where: { id: caseId }, select: { createdById: true, assignedLawyerId: true } });
+  if (caseRow && (caseRow.createdById === userId || caseRow.assignedLawyerId === userId)) return;
+  const collab = await prisma.caseCollaborator.findFirst({ where: { caseId, userId }, select: { id: true } });
+  if (!collab) {
+    throw new WorkflowTransitionError(422, 'TASK_ROLE_CASE_ACCESS_REQUIRED', 'Planning roles never grant case access — the user must already have it.');
+  }
+}
+
+/**
+ * Replace the full collaborator set for a task. Collaborators are parallel
+ * workers: they cannot be the assignee or the planned reviewer, and each must
+ * already pass the canonical case-access policy.
+ */
+async function replaceTaskCollaborators(
+  caseId: string,
+  taskId: string,
+  userIds: string[],
+  assignedToId: string | null,
+  plannedReviewerId: string | null,
+  actorUserId: string,
+) {
+  const wanted = new Set(userIds.filter((id) => id));
+  for (const uid of wanted) {
+    if (assignedToId && uid === assignedToId) {
+      throw new WorkflowTransitionError(422, 'COLLABORATOR_IS_WORKER', 'The assignee is already the task worker.');
+    }
+    if (plannedReviewerId && uid === plannedReviewerId) {
+      throw new WorkflowTransitionError(422, 'COLLABORATOR_IS_REVIEWER', 'The planned reviewer cannot also be a collaborator.');
+    }
+    await assertPlanningRoleEligibility(caseId, uid);
+  }
+  const existingRows = await prisma.taskCollaborator.findMany({ where: { taskId }, select: { id: true, userId: true } });
+  const toDelete = existingRows.filter((r) => !wanted.has(r.userId)).map((r) => r.id);
+  if (toDelete.length) await prisma.taskCollaborator.deleteMany({ where: { id: { in: toDelete } } });
+  for (const uid of wanted) {
+    if (!existingRows.some((r) => r.userId === uid)) {
+      await prisma.taskCollaborator.create({ data: { taskId, userId: uid, addedById: actorUserId } });
+    }
+  }
 }
 
 /**

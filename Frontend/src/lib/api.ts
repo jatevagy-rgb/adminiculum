@@ -1572,6 +1572,11 @@ export interface CreateTaskData {
   attentionCategory?: AttentionCategory | null;
   estimatedMinutes?: number | null;
   requestedByOrganizationPersonId?: string | null;
+  taskDefinitionId?: string | null;
+  taskTypeLabel?: string | null;
+  saveToCatalogue?: boolean;
+  plannedReviewerId?: string | null;
+  collaboratorUserIds?: string[];
 }
 
 export async function createTask(data: CreateTaskData): Promise<TaskItem> {

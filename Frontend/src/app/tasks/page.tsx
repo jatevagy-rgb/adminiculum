@@ -21,6 +21,7 @@ import {
   type User,
 } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
+import { TaskPlanningFields, EMPTY_TASK_PLANNING, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { getClientAccentBorderClass } from "@/lib/clientColors";
 import {
   ATTENTION_PRESENTATIONS,
@@ -241,6 +242,7 @@ function TasksPageContent() {
     attentionCategory: null,
     estimatedMinutes: null,
   });
+  const [taskPlanning, setTaskPlanning] = useState<TaskPlanningValue>(EMPTY_TASK_PLANNING);
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
 
   const loadTasks = useCallback(async () => {
@@ -343,8 +345,19 @@ function TasksPageContent() {
     setIsSaving(true);
     setError(null);
     try {
-      await createTask({ ...createData, dueDate: createData.dueDate || undefined, assignedTo: createData.assignedTo || undefined, estimatedMinutes: createData.estimatedMinutes ?? null });
+      await createTask({
+        ...createData,
+        dueDate: createData.dueDate || undefined,
+        assignedTo: createData.assignedTo || undefined,
+        estimatedMinutes: createData.estimatedMinutes ?? null,
+        taskDefinitionId: taskPlanning.taskDefinitionId,
+        taskTypeLabel: taskPlanning.taskTypeLabel,
+        saveToCatalogue: taskPlanning.saveToCatalogue,
+        plannedReviewerId: taskPlanning.plannedReviewerId,
+        collaboratorUserIds: taskPlanning.collaboratorUserIds.length ? taskPlanning.collaboratorUserIds : undefined,
+      });
       setShowCreateModal(false);
+      setTaskPlanning(EMPTY_TASK_PLANNING);
       setCreateData({ caseId: deepLinkedCaseId || "", title: "", type: "CONTRACT_REVIEW", priority: "MEDIUM", description: "", dueDate: "", assignedTo: "", attentionCategory: null, estimatedMinutes: null });
       await loadTasks();
     } catch (createError) {
@@ -434,6 +447,13 @@ function TasksPageContent() {
           <TaskAttentionFormFields attentionCategory={createData.attentionCategory ?? null} estimatedMinutes={createData.estimatedMinutes ?? null} onChange={(next) => setCreateData((current) => ({ ...current, ...next }))} />
           <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea rows={3} value={createData.description || ""} onChange={(event) => setCreateData((current) => ({ ...current, description: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" /></label>
           <div className="grid gap-3 sm:grid-cols-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={createData.dueDate || ""} onChange={(event) => setCreateData((current) => ({ ...current, dueDate: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" /></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Felelős<select value={createData.assignedTo || ""} onChange={(event) => setCreateData((current) => ({ ...current, assignedTo: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="">Nincs kijelölve</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label></div>
+          <TaskPlanningFields
+            clientId={cases.find((c) => c.id === createData.caseId)?.clientId || null}
+            users={users}
+            assigneeId={createData.assignedTo || null}
+            value={taskPlanning}
+            onChange={(next) => setTaskPlanning((current) => ({ ...current, ...next }))}
+          />
         </div>
       </WorkflowDialog>
     </div>

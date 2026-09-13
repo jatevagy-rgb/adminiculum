@@ -2916,6 +2916,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           onClose={() => setAnonymizeModalContract(null)}
           contract={anonymizeModalContract}
           caseId={canonicalCaseId}
+          clientId={caseRecord?.clientId}
           clientName={caseRecord?.clientName}
           clientRole={caseRecord?.clientRole}
           onSuccess={handleAnonymizeSuccess}

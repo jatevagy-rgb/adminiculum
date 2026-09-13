@@ -4,7 +4,7 @@ import Link from "next/link";
 
 type ClientWorkspaceTabsProps = {
   clientId: string;
-  active?: "overview" | "cases" | "communications" | "organization" | "company-operations" | "calendar" | "portal" | "compliance" | "advanced";
+  active?: "overview" | "cases" | "communications" | "organization" | "company-operations" | "calendar" | "portal" | "grow" | "compliance" | "advanced";
   organizationMode?: boolean;
 };
 
@@ -14,12 +14,13 @@ const tabs = [
   ["communications", "Kommunikáció", "/communications"],
   ["organization", "Szervezet", "/szervezet"],
   ["company-operations", "Vállalati működés", "/vallalati-mukodes"],
+  ["grow", "Grow", "/grow"],
   ["calendar", "Naptár", "/calendar"],
   ["portal", "Portál", "/portal"],
 ] as const;
 
 export function ClientWorkspaceTabs({ clientId, active = "overview", organizationMode = true }: ClientWorkspaceTabsProps) {
-  const visibleTabs = organizationMode ? tabs : tabs.filter(([key]) => key !== "organization" && key !== "company-operations");
+  const visibleTabs = organizationMode ? tabs : tabs.filter(([key]) => key !== "organization" && key !== "company-operations" && key !== "grow");
   return (
     <nav aria-label="Ügyfél munkaterület" className="border-b border-[var(--adm-border)]">
       <div className="flex min-w-0 flex-wrap items-center gap-1" role="tablist">
