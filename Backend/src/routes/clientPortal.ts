@@ -45,6 +45,7 @@ import { getOrganizationalHome } from '../modules/client-workspace/orgHomeServic
 import { getOrganizationalContracts } from '../modules/client-workspace/orgContractsService';
 import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
 import { getOrganizationalGrow } from '../modules/client-workspace/orgGrowService';
+import { submitPortalSurveyIntake, listPortalSurveyIntakes } from '../modules/company-observatory/intake';
 import { getClientSafeComplianceReadModel } from '../modules/compliance/clientSafeComplianceService';
 import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../modules/client-workspace/companyProfileAnswerService';
 import { RelationshipToCase, requireOrganizationWorkspace } from '../modules/client-workspace/organizationalAccessPolicy';
@@ -526,6 +527,37 @@ router.get('/org/grow', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await getOrganizationalGrow(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.post(['/org/grow-survey', '/org/grow/survey'], async (req, res) => {
+  try {
+    if (!(await portalIntake(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const result = await submitPortalSurveyIntake(identityId, workspaceId, {
+      categories: req.body?.categories,
+      freeText: req.body?.freeText,
+      processId: req.body?.processId,
+      idempotencyKey: req.body?.idempotencyKey,
+    });
+    const statusCode = result.replayed ? 200 : 201;
+    res.status(statusCode).json({
+      status: statusCode,
+      ...result,
+    });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get(['/org/grow-survey', '/org/grow/survey'], async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const data = await listPortalSurveyIntakes(identityId, workspaceId);
+    res.json(data);
   } catch (error) {
     fail(res, error);
   }

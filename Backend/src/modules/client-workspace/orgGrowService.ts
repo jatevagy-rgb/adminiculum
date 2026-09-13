@@ -20,6 +20,7 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
 import { requireOrganizationWorkspace } from './organizationalAccessPolicy';
+import { listPortalSurveyIntakes, SafePortalSurveyReadback } from '../company-observatory/intake';
 
 type Prisma = typeof defaultPrisma;
 
@@ -77,6 +78,7 @@ export interface OrgGrowDto {
     evidenceStrength: string;
   }>;
   opportunitiesDeferredNotice: string | null;
+  surveys: SafePortalSurveyReadback[];
 }
 
 const INITIATIVE_STATUS_LABELS: Record<string, string> = {
@@ -218,6 +220,9 @@ export async function getOrganizationalGrow(
   // 4. Opportunities:
   // SECURITY (Correction 2): ImprovementOpportunity has no customer publication flag in schema.
   // Per Correction 2: DO NOT expose raw rows. Report gap and truthful empty.
+  // 5. Surveys (safe customer readback of DECLARED_SURVEY submissions).
+  const surveyList = await listPortalSurveyIntakes(identityId, workspace.id, prisma);
+
   const dto: OrgGrowDto = {
     customerName: client.name,
     processes,
@@ -228,6 +233,7 @@ export async function getOrganizationalGrow(
     },
     opportunities: [],
     opportunitiesDeferredNotice: 'GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP',
+    surveys: surveyList.items,
   };
 
   assertClientSafe(dto);
