@@ -97,7 +97,7 @@ async function findOrCreateSurveyConnection(
  * Reusable by both internal workforce and customer portal callers after server-side authorization.
  * Produces exactly one DECLARED_SURVEY observation per idempotencyKey.
  */
-export async function persistCanonicalSurveySubmission(
+async function persistCanonicalSurveySubmission(
   actor: InternalActor,
   provenance: SurveySubmissionProvenance,
   clientId: string,
@@ -115,18 +115,23 @@ export async function persistCanonicalSurveySubmission(
 
   const connection = await findOrCreateSurveyConnection(actor, clientId, accessGuard);
 
-  const rawPayload = {
+  const rawPayload: Record<string, unknown> = {
     kind: 'GROW_PAIN_INTAKE',
     categories,
     categoryLabelsHu: categories.map((c) => SURVEY_CATEGORY_LABELS_HU[c as SurveyCategory] ?? c),
     freeText,
     processId: input.processId ? String(input.processId) : null,
-    provenance: {
-      channel: provenance.channel,
+  };
+  // Portal provenance only. The internal workforce payload must remain
+  // byte-compatible with the historical shape so existing idempotency digests
+  // are unchanged (no new `provenance` object on the internal path).
+  if (provenance.channel === 'CLIENT_PORTAL') {
+    rawPayload.provenance = {
+      channel: 'CLIENT_PORTAL',
       ...(provenance.workspaceId ? { workspaceId: provenance.workspaceId } : {}),
       ...(provenance.identityId ? { identityId: provenance.identityId } : {}),
-    },
-  };
+    };
+  }
 
   const digest = canonicalDigest(rawPayload);
 
@@ -152,8 +157,10 @@ export async function persistCanonicalSurveySubmission(
       observationType: ObservationType.DECLARED_SURVEY,
       idempotencyKey,
       sourceRecordId: `survey:${idempotencyKey}`,
-      rawPayload,
-      observedAt: new Date(provenance.submittedAt),
+      rawPayload: rawPayload as Prisma.InputJsonValue,
+      // Internal workforce historically relied on the ingestion service's
+      // internal new Date(); only the portal path pins observedAt explicitly.
+      ...(provenance.channel === 'CLIENT_PORTAL' ? { observedAt: new Date(provenance.submittedAt) } : {}),
     }, accessGuard);
     await ingestion.completeDiscoveryRun(actor, { clientId, runId: run.id }, accessGuard);
     return { observationId: observation.id, runId: run.id, connectionId: connection.id, replayed: false };
