@@ -87,4 +87,49 @@ describe('Organization internal UI (structural)', () => {
     assert.match(src, /UpdateOrgPersonInput/);
     assert.match(src, /JSON\.stringify\(\{\s*employmentStatus\s*\}\)/);
   });
+
+  it('renders a semantic group and manager tree with manager-only contextual actions', () => {
+    const src = component();
+    for (const token of ['Vezetői szint', 'Nincs közvetlen vezető megadva.', 'aria-label="Vezetői kapcsolat"', 'parentGroupId', 'managerPersonId', '+ Kolléga', '+ Alcsoport', 'Szerkesztés']) {
+      assert.ok(src.includes(token), `missing organization tree contract: ${token}`);
+    }
+    assert.match(src, /canManageOrganization \? <div className="flex gap-2/);
+  });
+
+  it('keeps removal lifecycle-based and keeps hierarchy separate from access', () => {
+    const editor = read('src/components/clients/OrganizationEditor.tsx');
+    assert.match(editor, /transitionPerson\(person\.id, "ENDED"\)/);
+    assert.doesNotMatch(editor, /deletePerson|deleteGroup/);
+    assert.match(editor, /ügy- vagy dokumentumhozzáférést nem ad/);
+    assert.match(editor, /nem ad portál-, ügy- vagy dokumentumhozzáférést/);
+  });
+
+  it('invites only through an explicitly selected active organization workspace', () => {
+    const editor = read('src/components/clients/OrganizationEditor.tsx');
+    assert.match(editor, /workspace\.status === "ACTIVE" && workspace\.mode === "ORGANIZATION"/);
+    assert.match(editor, /organizationWorkspaces\.length > 1/);
+    assert.match(editor, /PORTAL_WORKSPACE_SELECTION_REQUIRED/);
+    assert.match(editor, /inviteAdminWorkspaceMember\(workspaceId/);
+    assert.match(editor, /transitionAdminWorkspaceMembership\(portal\.membership\.id, "revoke", portal\.membership\.revision\)/);
+  });
+
+  it('keeps the portal-admin lookup optional for read-only organization readers', () => {
+    const src = component();
+    assert.match(src, /listAdminWorkspaces\(clientId\)\.catch\(\(\) => \(\{ items: \[\] \}\)\)/);
+    assert.match(src, /onManagePermissionChanged/);
+  });
+
+  it('renders each person once: manager roots are excluded from their group card list and cross-group reports do not recurse', () => {
+    const src = component();
+    assert.match(src, /organizationGroupStarts\(filteredPersons, group\.id\)/);
+    assert.match(src, /organizationReportsInScope\(filteredPersons, person\.id, groupScope\)/);
+    assert.match(src, /organizationRootPeople\(filteredPersons\)/);
+  });
+
+  it('keeps person save and invitation as truthful independent phases', () => {
+    const editor = read('src/components/clients/OrganizationEditor.tsx');
+    assert.match(editor, /let savedPerson: OrgPersonDTO \| null = null/);
+    assert.match(editor, /A személy mentve, de a portálmeghívás nem sikerült/);
+    assert.match(editor, /setSelectedId\(savedPerson\.id\); setMode\("person"\); setRetryPersonId\(savedPerson\.id\)/);
+  });
 });

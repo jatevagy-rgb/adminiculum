@@ -27,14 +27,17 @@ test('portal save reports both failure and success without changing the save con
   for (const contract of ['ClientPortalMemberAdmin', 'listAdminWorkspaces(clientId)', 'relationshipMode', 'portalAccessEnabled', 'connectedSystemState']) assert.ok(source.includes(contract));
 });
 
-test('organization editor uses existing scoped APIs and never grants portal access', () => {
+test('organization editor uses existing scoped APIs and keeps portal invitations separate from access grants', () => {
   const source = read('src/components/clients/OrganizationEditor.tsx');
   assert.match(source, /getCurrentUser\(\)[\s\S]*\["ADMIN", "PARTNER"\]\.includes\(user.role\)/);
   assert.match(source, /if \(!canManage\) return null/);
-  assert.match(source, /if \(busy \|\| !canManage\) return/);
+  assert.match(source, /if \(busy \|\| !canManage \|\| !mode\) return/);
   for (const method of ['createPerson(clientId, patch)', 'createGroup(clientId, patch)', 'updatePerson(selectedId, editedOrganizationFields(patch, editedFields))', 'updateGroup(selectedId, editedOrganizationFields(patch, editedFields))']) assert.ok(source.includes(method));
   for (const key of ['organizationGroupId', 'managerPersonId', 'deputyPersonId', 'parentGroupId', 'responsibilitiesSummary', 'email', 'phone']) assert.ok(source.includes(key));
-  assert.doesNotMatch(source, /portalMembershipId:|grant|deletePerson|deleteGroup/);
+  assert.match(source, /inviteAdminWorkspaceMember/);
+  assert.match(source, /transitionAdminWorkspaceMembership/);
+  assert.doesNotMatch(source, /deletePerson|deleteGroup/);
+  assert.match(source, /ügy- vagy dokumentumhozzáférést nem ad/);
   assert.match(source, /item.id !== selectedId/);
   assert.match(source, /<fieldset disabled=\{busy\}/);
   assert.match(source, /role="alert"/);
