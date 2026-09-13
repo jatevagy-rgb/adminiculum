@@ -42,8 +42,11 @@ export async function syncMailbox(id: string, ownerUserId: string, store: Secret
     await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_SUCCEEDED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: updated.status });
     return updated;
   } catch (error) {
-    await prisma.communicationMailboxConnection.update({ where: { id }, data: { status: 'ERROR', lastSyncStatus: 'FAILED', lastSyncError: error instanceof Error && error.message.includes('AUTHORIZATION') ? 'AUTHORIZATION_REQUIRED' : 'PROVIDER_SYNC_FAILED' } });
-    await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_FAILED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: 'ERROR', errorCode: 'PROVIDER_SYNC_FAILED' });
+    const reauthRequired = error instanceof Error && error.message.includes('AUTHORIZATION');
+    const status = reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'ERROR';
+    await prisma.communicationMailboxConnection.update({ where: { id }, data: { status, lastSyncStatus: 'FAILED', lastSyncError: reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'PROVIDER_SYNC_FAILED' } });
+    await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_FAILED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status, errorCode: reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'PROVIDER_SYNC_FAILED' });
+    if (reauthRequired) await recordMailboxAudit({ eventType: 'MAILBOX_REAUTH_REQUIRED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status, errorCode: 'AUTHORIZATION_REQUIRED' });
     throw new MailboxServiceError(502, 'MAILBOX_SYNC_FAILED');
   }
 }

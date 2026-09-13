@@ -83,6 +83,12 @@ export class AzureKeyVaultSecretStore implements SecretStore {
   }
 }
 
+// Test seam only. Production store selection remains environment-driven.
+let testSecretStore: SecretStore | null = null;
+export function setSecretStoreForTest(store: SecretStore | null): void {
+  testSecretStore = store;
+}
+
 export function isSecretStoreConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   const kind = String(env.MAILBOX_SECRET_STORE || '').trim().toLowerCase();
   if (kind === 'azure-keyvault') return Boolean(String(env.MAILBOX_KEYVAULT_URL || '').trim());
@@ -95,6 +101,7 @@ export function isSecretStoreConfigured(env: NodeJS.ProcessEnv = process.env): b
  * then this returns the fail-closed store.
  */
 export function getSecretStore(env: NodeJS.ProcessEnv = process.env): SecretStore {
+  if (testSecretStore) return testSecretStore;
   const kind = String(env.MAILBOX_SECRET_STORE || '').trim().toLowerCase();
   if (kind === 'azure-keyvault' && String(env.MAILBOX_KEYVAULT_URL || '').trim()) {
     return new AzureKeyVaultSecretStore(String(env.MAILBOX_KEYVAULT_URL).trim());

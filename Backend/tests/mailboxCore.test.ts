@@ -21,6 +21,7 @@ import { InMemorySecretStore, UnconfiguredSecretStore } from '../src/modules/mai
 import { getMailboxProvider } from '../src/modules/mailbox/provider';
 import { createOAuthState, verifyOAuthState } from '../src/modules/mailbox/oauthState';
 import { TransactionalMailConfigurationError, getTransactionalMailTransport } from '../src/modules/mailbox/transactionalMail';
+import { hasMailboxAuthorization } from '../src/modules/mailbox/types';
 
 describe('email verification code', () => {
   it('generates a 6-digit code and verifies it against its hash', () => {
@@ -140,6 +141,13 @@ describe('provider registry', () => {
     delete process.env.MICROSOFT_MAILBOX_CLIENT_ID;
     expect(() => getMailboxProvider('MICROSOFT_GRAPH').buildAuthorizationUrl({ state: 's', redirectUri: 'https://app/cb' })).toThrow(/NOT_CONFIGURED/);
     if (prev.id) process.env.MICROSOFT_MAILBOX_CLIENT_ID = prev.id;
+  });
+});
+
+describe('read-only mailbox lifecycle', () => {
+  it('authorizes reading a connected read-only mailbox without granting send capability', () => {
+    expect(hasMailboxAuthorization({ status: 'CONNECTED_READ_ONLY', readCapability: true, sendCapability: false })).toBe(true);
+    expect(hasMailboxAuthorization({ status: 'REVOKED', readCapability: true, sendCapability: false })).toBe(false);
   });
 });
 

@@ -698,7 +698,7 @@ jobs:
         env:
           MAILBOX_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-        run: npx jest --runInBand tests/mailbox.integration.test.ts
+        run: npx jest --runInBand tests/mailbox.integration.test.ts tests/mailboxRoutes.integration.test.ts
 
       - name: Backend PostgreSQL integration summary
         if: always()

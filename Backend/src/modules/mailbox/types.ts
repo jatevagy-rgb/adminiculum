@@ -23,7 +23,7 @@ export type MailboxStatusCode = (typeof MAILBOX_STATUSES)[number];
 
 /** True only when the mailbox can actually be read (not merely verified). */
 export function isConnected(status: MailboxStatusCode): boolean {
-  return status === 'CONNECTED' || status === 'SYNCING';
+  return status === 'CONNECTED' || status === 'CONNECTED_READ_ONLY' || status === 'SYNCING';
 }
 
 export function hasMailboxAuthorization(connection: {
