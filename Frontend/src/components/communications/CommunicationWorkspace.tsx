@@ -337,7 +337,7 @@ export default function CommunicationWorkspace() {
     setAssignFeedback(null);
     try {
       const result = await linkCommunicationToCase(assignTarget.id, selectedCaseId);
-      updateCommunication(assignTarget.id, { caseId: selectedCaseId });
+      updateCommunication(assignTarget.id, { caseId: result.communication.caseId, clientId: result.communication.clientId });
       setAssignFeedback({ tone: "success", message: result.message || "A kommunikáció ügyhöz rendelve." });
     } catch (error) {
       setAssignFeedback(apiFeedback(error, "Nem sikerült ügyhöz rendelni."));
@@ -557,7 +557,26 @@ function CommunicationDetail({ item, relatedCase, relatedClient, linkedTasks, li
         <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.createdAt)}</dd></dl>
         {item.sourceTaskCount > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt feladat</p>{linkedTasksLoading ? <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Betöltés…</p> : linkedTasks.length ? <div className="mt-2 space-y-1">{linkedTasks.map((task) => <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block text-[11px] font-semibold text-[var(--adm-blue-700)] hover:underline">{task.title} · {task.status}</Link>)}</div> : <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A feladatkapcsolat részlete nem érhető el.</p>}</div> : null}
         <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
-        <div className="border-t border-[var(--adm-border)] pt-4"><p className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Következő lépés</p><div className="grid gap-2">{item.caseId ? <><button type="button" onClick={() => onCreateTask(item)} className="bg-[var(--adm-green-800)] px-3 py-2 text-[11px] font-semibold text-white">Új feladat létrehozása</button><button type="button" onClick={() => onLinkTask(item)} className="border border-[var(--adm-blue-700)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-blue-700)]">Meglévő feladathoz</button></> : <><button type="button" onClick={() => onAssign(item)} className="bg-[var(--adm-blue-700)] px-3 py-2 text-[11px] font-semibold text-white">Meglévő ügyhöz rendelés</button><button type="button" onClick={() => onCreateCase(item)} className="border border-[var(--adm-blue-700)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-blue-700)]">Új ügy indítása</button></>}</div></div>
+        <section aria-label="Ügyindítás és ügyhöz rendelés" className="border-t border-[var(--adm-border)] pt-4">
+          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Következő lépés</h3>
+          {item.caseId ? (
+            <>
+              <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button adm-link-button-primary block px-3 py-2 text-center text-[11px]">Munka folytatása az ügyben</Link>
+              <details className="mt-3">
+                <summary className="cursor-pointer text-[11px] font-semibold focus-visible:outline focus-visible:outline-2">További feladatműveletek</summary>
+                <div className="mt-2 grid gap-2">
+                  <button type="button" onClick={() => onCreateTask(item)} className="adm-link-button px-3 py-2 text-[11px]">Új feladat létrehozása</button>
+                  <button type="button" onClick={() => onLinkTask(item)} className="adm-link-button px-3 py-2 text-[11px]">Meglévő feladathoz</button>
+                </div>
+              </details>
+            </>
+          ) : (
+            <div className="grid gap-2">
+              <button type="button" onClick={() => onCreateCase(item)} className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">Új ügy létrehozása</button>
+              <button type="button" onClick={() => onAssign(item)} className="adm-link-button px-3 py-2 text-[11px]">Meglévő ügyhöz rendelés</button>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

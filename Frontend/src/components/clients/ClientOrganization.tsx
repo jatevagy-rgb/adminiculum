@@ -10,6 +10,7 @@ import {
   type ResponsibilityGaps,
 } from "@/lib/clientOrganizationApi";
 import { clientWorkspaceApi, formatWorkspaceDate, type CompanyWorkspaceOverview } from "@/lib/clientWorkspaceApi";
+import { OrganizationEditor } from "./OrganizationEditor";
 
 const pill = "rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-xs text-[var(--adm-text-muted)]";
 
@@ -185,6 +186,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
 
       {!loading && !error ? (
         <>
+          <OrganizationEditor key={clientId} clientId={clientId} groups={groups} persons={persons} onSaved={async () => { setDetail(null); setSelectedId(null); await load(); }} />
           <Section title="Szervezeti adatok">
             {overview?.profile?.summary ? <p className="text-sm text-[var(--adm-text)]">{overview.profile.summary}</p> : null}
             {overview?.factGroups.length ? (

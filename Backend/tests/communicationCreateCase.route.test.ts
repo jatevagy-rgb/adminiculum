@@ -19,12 +19,13 @@ jest.mock('../src/middleware/auth', () => ({
 
 jest.mock('../src/prisma/prisma.service', () => {
   const mock: any = {
-    communication: { findUnique: jest.fn(), update: jest.fn() },
-    client: { findUnique: jest.fn() },
+    communication: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn() },
+    communicationAttachment: { findMany: jest.fn() },
+    client: { findUnique: jest.fn(), findMany: jest.fn() },
     user: { findUnique: jest.fn() },
-    case: { findUnique: jest.fn() },
+    case: { findUnique: jest.fn(), findMany: jest.fn() },
     caseCollaborator: { findFirst: jest.fn() },
-    task: { create: jest.fn() },
+    task: { create: jest.fn(), findMany: jest.fn() },
     timelineEvent: { create: jest.fn() },
   };
   mock.$transaction = jest.fn((cb: any) => cb(mock));
@@ -219,5 +220,51 @@ describe('POST /communications/:id/create-case', () => {
     });
     expect(response.status).not.toBe(201);
     expect(response.body?.success).not.toBe(true);
+  });
+});
+
+describe('communication case association and canonical case read projection', () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+    (prisma as any).$transaction = jest.fn((cb: any) => cb(prisma));
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).communicationAttachment.findMany.mockResolvedValue([]);
+    (prisma as any).task.findMany.mockResolvedValue([]);
+    (prisma as any).client.findMany.mockResolvedValue([]);
+    (prisma as any).communication.count.mockResolvedValue(1);
+    (prisma as any).timelineEvent.create.mockResolvedValue({ id: 'timeline-1' });
+  });
+  afterEach(() => { delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE; });
+
+  it.each(['create-case', 'link-case'])('%s preserves the original message and projects it through the case query', async (action) => {
+    let stored: any = { ...routeCommunication, createdById: 'user-1', content: 'Original incoming message', type: 'EMAIL', createdAt: new Date('2026-01-01T00:00:00Z'), updatedAt: new Date('2026-01-01T00:00:00Z') };
+    (prisma as any).communication.findUnique.mockImplementation(async () => ({ ...stored }));
+    (prisma as any).communication.update.mockImplementation(async ({ where, data }: any) => {
+      expect(where).toEqual({ id: 'comm-1' });
+      stored = { ...stored, ...data };
+      return { ...stored };
+    });
+    (prisma as any).client.findUnique.mockResolvedValue({ id: 'client-1', name: 'Client' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-new', caseNumber: 'CASE-1', clientId: 'client-1', assignedLawyerId: 'user-1' });
+    (prisma as any).case.findMany.mockResolvedValue([{ id: 'case-new' }]);
+    (casesService.createCase as jest.Mock).mockResolvedValue({ id: 'case-new', caseNumber: 'CASE-1', title: validBody.title });
+    const response = await requestJson(createApp(), 'POST', `/communications/comm-1/${action}`, { body: action === 'create-case' ? validBody : { caseId: 'case-new' } });
+    expect(response.status).toBe(action === 'create-case' ? 201 : 200);
+    expect(stored).toMatchObject({ id: 'comm-1', caseId: 'case-new', clientId: 'client-1', content: 'Original incoming message' });
+    expect((prisma as any).communication.create).not.toHaveBeenCalled();
+    (prisma as any).communication.findMany.mockResolvedValue([{ ...stored }]);
+    const listed = await requestJson(createApp(), 'GET', '/communications?caseId=case-new&clientId=client-1');
+    expect(listed.status).toBe(200);
+    expect((prisma as any).communication.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ caseId: 'case-new', clientId: 'client-1', OR: expect.any(Array) }) }));
+    expect(listed.body.communications).toEqual([expect.objectContaining({ id: 'comm-1', caseId: 'case-new', clientId: 'client-1', contentPreview: 'Original incoming message' })]);
+  });
+
+  it('rejects existing-case association across clients without modifying the message', async () => {
+    (prisma as any).communication.findUnique.mockResolvedValue({ ...routeCommunication, createdById: 'user-1' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'other-case', clientId: 'other-client', assignedLawyerId: 'user-1' });
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'other-case' } });
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('CLIENT_CASE_MISMATCH');
+    expect((prisma as any).communication.update).not.toHaveBeenCalled();
   });
 });
