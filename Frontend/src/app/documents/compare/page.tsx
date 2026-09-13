@@ -2508,202 +2508,10 @@ return (
               </div>
             </div>
           ) : (
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
-              <aside className="order-2 min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
-                {editorNotice ? (
-                  <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 text-[11px] text-[var(--adm-green-800)]">
-                    <p className="font-semibold">{editorNotice}</p>
-                    <button type="button" onClick={() => setEditorNotice(null)} className="text-sm font-bold leading-none text-[var(--adm-green-800)]" aria-label="Értesítés bezárása">
-                      ×
-                    </button>
-                  </div>
-                ) : null}
-
-                <details className="group rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)]">
-                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-4 marker:hidden">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyvédi átadás</p>
-                      <h2 className="mt-1 font-serif text-lg font-medium">Review átadási csomag</h2>
-                      <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                        Rövid átadási összefoglaló kollégának vagy vezető ügyvédnek.
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <AdminStatusPill tone="gold">Helyi</AdminStatusPill>
-                      <span className="text-sm text-[var(--adm-text-muted)] transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
-                    </div>
-                  </summary>
-                  <div className="space-y-3 border-t border-[var(--adm-border)] px-4 pb-4 pt-3">
-                    <textarea
-                      value={reviewHandoffDraft}
-                      onChange={(event) => {
-                        setReviewHandoffDraft(event.target.value);
-                        setReviewHandoffIsPristine(false);
-                        setReviewHandoffCopied(false);
-                      }}
-                      rows={10}
-                      className="min-h-[200px] w-full resize-y rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2 font-mono text-[11px] leading-5 text-[var(--adm-text)] outline-none transition-colors focus:border-[var(--adm-ochre-500)] focus:ring-2 focus:ring-[var(--adm-sand-300)]/40"
-                      aria-label="Review átadási csomag helyi szövege"
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      <AdminButton
-                        size="xs"
-                        variant="primary"
-                        onClick={handleCopyReviewHandoffPackage}
-                        disabled={!reviewHandoffDraft.trim() && !generatedReviewHandoffText.trim()}
-                      >
-                        {reviewHandoffCopied ? "Átadási csomag másolva" : "Átadási csomag másolása"}
-                      </AdminButton>
-                      <AdminButton
-                        size="xs"
-                        variant="neutral"
-                        onClick={() => {
-                          setReviewHandoffDraft(generatedReviewHandoffText);
-                          setReviewHandoffIsPristine(true);
-                          setReviewHandoffCopied(false);
-                        }}
-                      >
-                        Sablon frissítése
-                      </AdminButton>
-                    </div>
-                    <p className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                      A munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell.
-                    </p>
-                  </div>
-                </details>
-
-                {activeCaseId ? (
-                  <HandoffPackagePanel
-                    caseId={activeCaseId}
-                    sourceDocumentId={selectedDocument?.kind === "document" ? selectedDocument.id : null}
-                    generatedContractId={selectedDocument?.kind === "contract" ? selectedDocument.id : null}
-                    initialSummary={reviewHandoffDraft.trim() || generatedReviewHandoffText}
-                    contextLabel={selectedDocument?.fileName || selectedDocument?.title || undefined}
-                  />
-                ) : (
-                  <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Átadási csomagok</p>
-                    <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
-                      Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Válassz ügyhöz tartozó dokumentumot a leadási csomaghoz.
-                    </p>
-                  </section>
-                )}
-
-                <section className="space-y-3 rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="font-serif text-lg font-medium text-[var(--adm-text)]">
-                        {workspaceMainTab === "edit"
-                          ? "Szerkesztés"
-                          : workspaceMainTab === "review"
-                            ? "Review"
-                            : workspaceMainTab === "comments"
-                              ? "Megjegyzések"
-                              : workspaceMainTab === "clauses"
-                                ? "Klauzulák"
-                                : "Előzmények"}
-                      </h2>
-                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
-                        Jobb oldali támogatópanelek. A fő fókusz a munkapéldányon marad.
-                      </p>
-                    </div>
-                    <AdminStatusPill tone="neutral">Munkamód: {activeWorkspaceMode.label}</AdminStatusPill>
-                  </div>
-
-                  {workspaceMainTab === "edit" ? (
-                    <>
-                      <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Dokumentumállapot</p>
-                        <div className="mt-2 space-y-2 text-[11px] text-[var(--adm-text)]">
-                          <p><span className="font-semibold text-[var(--adm-text)]">Dokumentumtípus:</span> {getWorkspaceDocumentKindLabel()}</p>
-                          <p><span className="font-semibold text-[var(--adm-text)]">Szövegforrás:</span> {workspaceTextSourceLabel}</p>
-                          <p><span className="font-semibold text-[var(--adm-text)]">Verzió:</span> v{selectedDocument?.revisionNumber || 1}</p>
-                        </div>
-                        <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${isDraftDirty ? "border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]" : "border-[#D9E6D9] bg-[#F5FAF5] text-[#2F5A37]"}`}>
-                          {isDraftDirty ? "Nem mentett helyi módosítások." : "A munkapéldány szerkesztésre kész."}
-                        </div>
-                        {workspaceSaveState.type ? (
-                          <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${
-                            workspaceSaveState.type === "success"
-                              ? "border-[#A6C0AF] bg-[#E2EDE5] text-[var(--adm-green-800)]"
-                              : "border-[#F2DAD6] bg-[#FFF5F3] text-[#8B2A2A]"
-                          }`}>
-                            {workspaceSaveState.message}
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {isTipTapPreviewEnabled ? (
-                        <div className="rounded-[8px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Aktív szerkesztési mód</p>
-                            <span className="rounded-full border border-[var(--adm-ochre-500)] bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--adm-ochre-500)]">
-                              Kísérleti formázott szerkesztő
-                            </span>
-                          </div>
-                          <p className="mt-2 text-[11px] leading-5 text-[var(--adm-ochre-500)]">
-                            A kijelöléshez kapcsolt review-javaslatok a dokumentum vásznán jelennek meg, helyben maradnak, és nem kerülnek szerveroldali mentésre.
-                          </p>
-                          <div className="mt-3 rounded-[6px] border border-[var(--adm-border)] bg-white/80 px-3 py-2 text-[11px] text-[var(--adm-text)]">
-                            {tipTapPreviewDraft === editorDraft
-                              ? "A formázott szerkesztő szövege jelenleg megegyezik a munkapéldánnyal."
-                              : "Átvétel szükséges, ha a formázott szerkesztő szövegét a munkapéldányban is használni szeretnéd."}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kijelölés</p>
-                            {hasTextSelection ? (
-                              <span className="rounded-full border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-0.5 text-[10px] font-semibold text-[#1E6A34]">
-                                {selectionSnapshot?.text.trim().length || 0} karakter kijelölve
-                              </span>
-                            ) : null}
-                          </div>
-                          <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
-                            {hasTextSelection
-                              ? `Kijelölt részlet: „${getSelectionExcerpt(selectionSnapshot?.text || "", 120)}”`
-                              : "Jelölj ki szöveget a művelethez."}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={handleHighlightSelection}
-                              disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2.5 py-1 text-[10px] font-semibold text-[#1E6A34] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
-                            >
-                              Kiemelés
-                            </button>
-                            <button
-                              type="button"
-                              onClick={openAnchoredCommentComposer}
-                              disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2.5 py-1 text-[10px] font-semibold text-[#244B7A] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
-                            >
-                              Megjegyzés
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openProposedChangeComposer("replacement")}
-                              disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-ochre-500)] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
-                            >
-                              Cserejavaslat
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openProposedChangeComposer("deletion")}
-                              disabled={!hasTextSelection}
-                              className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2.5 py-1 text-[10px] font-semibold text-[#8B2A2A] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
-                            >
-                              Törlési javaslat
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  ) : null}
-
+            <div className={workspaceMainTab === "review" ? "grid gap-4 xl:grid-cols-[240px_minmax(0,1fr)_280px]" : "grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]"}>
+              {workspaceMainTab === "review" ? <aside aria-label="Mit változtattunk és miért" className="min-w-0 space-y-3 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+                <h2 className="font-serif text-lg">Mit változtattunk és miért</h2>
+                <p className="text-xs text-[var(--adm-text-muted)]">A helyi javaslatok nem módosítják automatikusan a kiadott dokumentumot.</p>
                   {workspaceMainTab === "review" ? (
                     <>
                       <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
@@ -2877,156 +2685,8 @@ return (
                     </>
                   ) : null}
 
-                  {workspaceMainTab === "comments" ? (
-                    <section className="space-y-3">
-                      <div className="rounded-[6px] border border-[#C8D8F0] bg-[#F1F6FE] px-3 py-2 text-[11px] text-[#244B7A]">
-                        Helyi megjegyzés — csak ebben a munkamenetben.
-                      </div>
-                      {composerMode === "comment" ? (
-                        <div className="rounded-[8px] border border-[#C8D8F0] bg-white p-3">
-                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B7E9A]">
-                            {editingReviewMarkId ? "Horgonyzott megjegyzés szerkesztése" : "Horgonyzott megjegyzés"}
-                          </p>
-                          <p className="mt-2 text-[11px] text-[var(--adm-text)]">Kijelölt idézet: „{getSelectionExcerpt(selectionSnapshot?.text || "", 120) || "Nincs kijelölés"}”</p>
-                          <textarea
-                            value={composerDraft}
-                            onChange={(e) => setComposerDraft(e.target.value)}
-                            rows={4}
-                            placeholder="Írd ide a horgonyzott megjegyzést."
-                            className="mt-3 w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] outline-none focus:border-[#244B7A]"
-                          />
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            <AdminButton size="xs" variant="primary" onClick={handleSubmitAnchoredComment}>
-                              Megjegyzés rögzítése
-                            </AdminButton>
-                            <AdminButton size="xs" variant="neutral" onClick={() => { setComposerMode(null); setComposerDraft(""); setEditingReviewMarkId(null); }}>
-                              Mégse
-                            </AdminButton>
-                          </div>
-                        </div>
-                      ) : null}
-                      <textarea
-                        ref={localCommentRef}
-                        value={localCommentDraft}
-                        onChange={(e) => setLocalCommentDraft(e.target.value)}
-                        rows={4}
-                        placeholder="Általános helyi megjegyzés ehhez a munkapéldányhoz."
-                        className="w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] outline-none focus:border-[var(--adm-green-800)]"
-                      />
-                      <div className="flex flex-wrap gap-2">
-                        <AdminButton size="xs" variant="primary" onClick={handleAddLocalComment} disabled={!localCommentDraft.trim()}>
-                          Általános megjegyzés mentése
-                        </AdminButton>
-                      </div>
-                      {localComments.length > 0 ? (
-                        <div className="space-y-2">
-                          {localComments.map((comment) => (
-                            <button
-                              key={comment.id}
-                              type="button"
-                              onClick={() => focusAnchor(comment.linkedMarkId || comment.id, "comments")}
-                              className={`w-full rounded-[6px] border p-3 text-left text-[11px] text-[var(--adm-text)] transition-colors ${
-                                activeAnchorId === (comment.linkedMarkId || comment.id)
-                                  ? "border-[#8CB4E6] bg-[#F3F8FF] ring-2 ring-[#D8E6FA]"
-                                  : "border-[#E6EDF8] bg-white"
-                              }`}
-                            >
-                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#6B7E9A]">
-                                <span className="font-semibold text-[var(--adm-text)]">{comment.authorLabel}</span>
-                                <span>•</span>
-                                <span>{formatDateTime(comment.createdAt)}</span>
-                                <span className="rounded-full border border-[#D5E3F5] bg-[#F1F6FE] px-2 py-0.5 text-[10px]">
-                                  Helyi
-                                </span>
-                              </div>
-                              {comment.quote ? (
-                                <p className="mt-2 rounded-[5px] border border-[#E4ECF7] bg-[#F8FBFF] px-2 py-1 text-[10px] italic text-[#4E6786]">
-                                  „{getSelectionExcerpt(comment.quote, 140)}”
-                                </p>
-                              ) : null}
-                              <p className="mt-2 whitespace-pre-wrap">{comment.text}</p>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[11px] text-[var(--adm-text-muted)]">Még nincs megjegyzés ehhez a munkapéldányhoz.</p>
-                      )}
-                    </section>
-                  ) : null}
-
-                  {workspaceMainTab === "clauses" ? (
-                    <>
-                      {demoMode ? (
-                        <p className="rounded-[6px] border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
-                          {DEMO_WARNING}
-                        </p>
-                      ) : null}
-                      <input
-                        ref={toolSearchRef}
-                        value={toolSearch}
-                        onChange={(e) => setToolSearch(e.target.value)}
-                        placeholder="Keress klauzulát…"
-                        className="w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
-                      />
-                      {filteredClauseTools.length === 0 ? (
-                        <p className="rounded-[5px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-xs text-[var(--adm-text-muted)]">Nincs találat a klauzulák között.</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {filteredClauseTools.map((clause) => (
-                            <div key={clause.id} className="rounded-[6px] border border-[var(--adm-border)] bg-white p-3">
-                              <div className="space-y-1">
-                                <h4 className="text-sm font-semibold text-[var(--adm-text)]">{clause.title}</h4>
-                                <p className="text-[11px] text-[var(--adm-text-muted)]">{clause.description}</p>
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-1.5">
-                                {clause.tags.map((tag) => (
-                                  <span key={`${clause.id}-${tag}`} className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                              {expandedToolId === clause.id ? (
-                                <div className="mt-3 space-y-2 rounded-[6px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                                  <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--adm-text)]">{clause.text}</p>
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <AdminButton size="xs" variant="neutral" onClick={() => handleInsertClauseIntoDraft(clause.text)}>
-                                      Beszúrás
-                                    </AdminButton>
-                                    <span className="text-[10px] text-[var(--adm-text-muted)]">Helyi beszúrás — mentés külön szükséges.</span>
-                                  </div>
-                                </div>
-                              ) : null}
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <AdminButton size="xs" variant="neutral" onClick={() => setExpandedToolId(expandedToolId === clause.id ? null : clause.id)}>
-                                  Előnézet
-                                </AdminButton>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  ) : null}
-
-                  {workspaceMainTab === "history" ? (
-                    <section className="space-y-3">
-                      <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
-                        <p className="text-sm font-semibold text-[var(--adm-text)]">Előzmények és technikai összevetés</p>
-                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Ez a nézet audit- és technikai célra marad elérhető. Nem ez a szerződés-workspace elsődleges workflow-ja.</p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <AdminButton size="xs" variant="neutral" onClick={activateCompareMode}>
-                            Technikai összevetés megnyitása
-                          </AdminButton>
-                          <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[10px] text-[var(--adm-text)]">
-                            {selectedBaseline ? "Alapdokumentum kiválasztva" : "Nincs összevetési alap"}
-                          </span>
-                        </div>
-                      </div>
-                    </section>
-                  ) : null}
-                </section>
-              </aside>
-              <div className="order-1 min-w-0 space-y-4">
+              </aside> : null}
+              <div aria-label="Dokumentum" className="min-w-0 space-y-4">
                 <DocumentEditorShell
                   ref={editorTextAreaRef}
                   title="Szerkeszthető munkapéldány"
@@ -3669,6 +3329,350 @@ return (
                 )}
               </section>
               </div>
+              <aside aria-label="Megjegyzések és magyarázatok" className="self-start min-w-0 space-y-4 xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+                {editorNotice ? (
+                  <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#A6C0AF] bg-[#E2EDE5] p-3 text-[11px] text-[var(--adm-green-800)]">
+                    <p className="font-semibold">{editorNotice}</p>
+                    <button type="button" onClick={() => setEditorNotice(null)} className="text-sm font-bold leading-none text-[var(--adm-green-800)]" aria-label="Értesítés bezárása">
+                      ×
+                    </button>
+                  </div>
+                ) : null}
+
+                <details className="group rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)]">
+                  <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-4 marker:hidden">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyvédi átadás</p>
+                      <h2 className="mt-1 font-serif text-lg font-medium">Review átadási csomag</h2>
+                      <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">
+                        Rövid átadási összefoglaló kollégának vagy vezető ügyvédnek.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <AdminStatusPill tone="gold">Helyi</AdminStatusPill>
+                      <span className="text-sm text-[var(--adm-text-muted)] transition-transform group-open:rotate-180" aria-hidden="true">⌄</span>
+                    </div>
+                  </summary>
+                  <div className="space-y-3 border-t border-[var(--adm-border)] px-4 pb-4 pt-3">
+                    <textarea
+                      value={reviewHandoffDraft}
+                      onChange={(event) => {
+                        setReviewHandoffDraft(event.target.value);
+                        setReviewHandoffIsPristine(false);
+                        setReviewHandoffCopied(false);
+                      }}
+                      rows={10}
+                      className="min-h-[200px] w-full resize-y rounded-[8px] border border-[var(--adm-border)] bg-white px-3 py-2 font-mono text-[11px] leading-5 text-[var(--adm-text)] outline-none transition-colors focus:border-[var(--adm-ochre-500)] focus:ring-2 focus:ring-[var(--adm-sand-300)]/40"
+                      aria-label="Review átadási csomag helyi szövege"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <AdminButton
+                        size="xs"
+                        variant="primary"
+                        onClick={handleCopyReviewHandoffPackage}
+                        disabled={!reviewHandoffDraft.trim() && !generatedReviewHandoffText.trim()}
+                      >
+                        {reviewHandoffCopied ? "Átadási csomag másolva" : "Átadási csomag másolása"}
+                      </AdminButton>
+                      <AdminButton
+                        size="xs"
+                        variant="neutral"
+                        onClick={() => {
+                          setReviewHandoffDraft(generatedReviewHandoffText);
+                          setReviewHandoffIsPristine(true);
+                          setReviewHandoffCopied(false);
+                        }}
+                      >
+                        Sablon frissítése
+                      </AdminButton>
+                    </div>
+                    <p className="rounded-[8px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
+                      A munkapéldány helyi szerkesztésű; a végleges dokumentumot exportálni kell.
+                    </p>
+                  </div>
+                </details>
+
+                {activeCaseId ? (
+                  <HandoffPackagePanel
+                    caseId={activeCaseId}
+                    sourceDocumentId={selectedDocument?.kind === "document" ? selectedDocument.id : null}
+                    generatedContractId={selectedDocument?.kind === "contract" ? selectedDocument.id : null}
+                    initialSummary={reviewHandoffDraft.trim() || generatedReviewHandoffText}
+                    contextLabel={selectedDocument?.fileName || selectedDocument?.title || undefined}
+                  />
+                ) : (
+                  <section className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Átadási csomagok</p>
+                    <p className="mt-2 text-[11px] leading-5 text-[var(--adm-text-muted)]">
+                      Ügykörnyezet nélkül csak a helyi átadási munkaszöveg használható. Válassz ügyhöz tartozó dokumentumot a leadási csomaghoz.
+                    </p>
+                  </section>
+                )}
+
+                <section className="space-y-3 rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[var(--adm-text)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h2 className="font-serif text-lg font-medium text-[var(--adm-text)]">
+                        {workspaceMainTab === "edit"
+                          ? "Szerkesztés"
+                          : workspaceMainTab === "review"
+                            ? "Megjegyzések és magyarázatok"
+                            : workspaceMainTab === "comments"
+                              ? "Megjegyzések"
+                              : workspaceMainTab === "clauses"
+                                ? "Klauzulák"
+                                : "Előzmények"}
+                      </h2>
+                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
+                        Jobb oldali támogatópanelek. A fő fókusz a munkapéldányon marad.
+                      </p>
+                    </div>
+                    <AdminStatusPill tone="neutral">Munkamód: {activeWorkspaceMode.label}</AdminStatusPill>
+                  </div>
+
+                  {workspaceMainTab === "edit" ? (
+                    <>
+                      <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Dokumentumállapot</p>
+                        <div className="mt-2 space-y-2 text-[11px] text-[var(--adm-text)]">
+                          <p><span className="font-semibold text-[var(--adm-text)]">Dokumentumtípus:</span> {getWorkspaceDocumentKindLabel()}</p>
+                          <p><span className="font-semibold text-[var(--adm-text)]">Szövegforrás:</span> {workspaceTextSourceLabel}</p>
+                          <p><span className="font-semibold text-[var(--adm-text)]">Verzió:</span> v{selectedDocument?.revisionNumber || 1}</p>
+                        </div>
+                        <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${isDraftDirty ? "border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]" : "border-[#D9E6D9] bg-[#F5FAF5] text-[#2F5A37]"}`}>
+                          {isDraftDirty ? "Nem mentett helyi módosítások." : "A munkapéldány szerkesztésre kész."}
+                        </div>
+                        {workspaceSaveState.type ? (
+                          <div className={`mt-3 rounded-[6px] border px-3 py-2 text-[11px] font-semibold ${
+                            workspaceSaveState.type === "success"
+                              ? "border-[#A6C0AF] bg-[#E2EDE5] text-[var(--adm-green-800)]"
+                              : "border-[#F2DAD6] bg-[#FFF5F3] text-[#8B2A2A]"
+                          }`}>
+                            {workspaceSaveState.message}
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {isTipTapPreviewEnabled ? (
+                        <div className="rounded-[8px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Aktív szerkesztési mód</p>
+                            <span className="rounded-full border border-[var(--adm-ochre-500)] bg-white px-2 py-0.5 text-[10px] font-semibold text-[var(--adm-ochre-500)]">
+                              Kísérleti formázott szerkesztő
+                            </span>
+                          </div>
+                          <p className="mt-2 text-[11px] leading-5 text-[var(--adm-ochre-500)]">
+                            A kijelöléshez kapcsolt review-javaslatok a dokumentum vásznán jelennek meg, helyben maradnak, és nem kerülnek szerveroldali mentésre.
+                          </p>
+                          <div className="mt-3 rounded-[6px] border border-[var(--adm-border)] bg-white/80 px-3 py-2 text-[11px] text-[var(--adm-text)]">
+                            {tipTapPreviewDraft === editorDraft
+                              ? "A formázott szerkesztő szövege jelenleg megegyezik a munkapéldánnyal."
+                              : "Átvétel szükséges, ha a formázott szerkesztő szövegét a munkapéldányban is használni szeretnéd."}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kijelölés</p>
+                            {hasTextSelection ? (
+                              <span className="rounded-full border border-[#BFDDBF] bg-[#EEF8ED] px-2 py-0.5 text-[10px] font-semibold text-[#1E6A34]">
+                                {selectionSnapshot?.text.trim().length || 0} karakter kijelölve
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
+                            {hasTextSelection
+                              ? `Kijelölt részlet: „${getSelectionExcerpt(selectionSnapshot?.text || "", 120)}”`
+                              : "Jelölj ki szöveget a művelethez."}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={handleHighlightSelection}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[#BFDDBF] bg-[#EEF8ED] px-2.5 py-1 text-[10px] font-semibold text-[#1E6A34] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
+                            >
+                              Kiemelés
+                            </button>
+                            <button
+                              type="button"
+                              onClick={openAnchoredCommentComposer}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[#C8D8F0] bg-[#F1F6FE] px-2.5 py-1 text-[10px] font-semibold text-[#244B7A] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
+                            >
+                              Megjegyzés
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openProposedChangeComposer("replacement")}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] px-2.5 py-1 text-[10px] font-semibold text-[var(--adm-ochre-500)] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
+                            >
+                              Cserejavaslat
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openProposedChangeComposer("deletion")}
+                              disabled={!hasTextSelection}
+                              className="rounded-[5px] border border-[#E5C3C3] bg-[#FFF1F1] px-2.5 py-1 text-[10px] font-semibold text-[#8B2A2A] disabled:cursor-not-allowed disabled:border-[var(--adm-border)] disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]"
+                            >
+                              Törlési javaslat
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+
+                  {workspaceMainTab === "comments" || workspaceMainTab === "review" ? (
+                    <section className="space-y-3">
+                      <div className="rounded-[6px] border border-[#C8D8F0] bg-[#F1F6FE] px-3 py-2 text-[11px] text-[#244B7A]">
+                        Helyi megjegyzés — csak ebben a munkamenetben.
+                      </div>
+                      {composerMode === "comment" ? (
+                        <div className="rounded-[8px] border border-[#C8D8F0] bg-white p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B7E9A]">
+                            {editingReviewMarkId ? "Horgonyzott megjegyzés szerkesztése" : "Horgonyzott megjegyzés"}
+                          </p>
+                          <p className="mt-2 text-[11px] text-[var(--adm-text)]">Kijelölt idézet: „{getSelectionExcerpt(selectionSnapshot?.text || "", 120) || "Nincs kijelölés"}”</p>
+                          <textarea
+                            value={composerDraft}
+                            onChange={(e) => setComposerDraft(e.target.value)}
+                            rows={4}
+                            placeholder="Írd ide a horgonyzott megjegyzést."
+                            className="mt-3 w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] outline-none focus:border-[#244B7A]"
+                          />
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <AdminButton size="xs" variant="primary" onClick={handleSubmitAnchoredComment}>
+                              Megjegyzés rögzítése
+                            </AdminButton>
+                            <AdminButton size="xs" variant="neutral" onClick={() => { setComposerMode(null); setComposerDraft(""); setEditingReviewMarkId(null); }}>
+                              Mégse
+                            </AdminButton>
+                          </div>
+                        </div>
+                      ) : null}
+                      <textarea
+                        ref={localCommentRef}
+                        value={localCommentDraft}
+                        onChange={(e) => setLocalCommentDraft(e.target.value)}
+                        rows={4}
+                        placeholder="Általános helyi megjegyzés ehhez a munkapéldányhoz."
+                        className="w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)] outline-none focus:border-[var(--adm-green-800)]"
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <AdminButton size="xs" variant="primary" onClick={handleAddLocalComment} disabled={!localCommentDraft.trim()}>
+                          Általános megjegyzés mentése
+                        </AdminButton>
+                      </div>
+                      {localComments.length > 0 ? (
+                        <div className="space-y-2">
+                          {localComments.map((comment) => (
+                            <button
+                              key={comment.id}
+                              type="button"
+                              onClick={() => focusAnchor(comment.linkedMarkId || comment.id, "comments")}
+                              className={`w-full rounded-[6px] border p-3 text-left text-[11px] text-[var(--adm-text)] transition-colors ${
+                                activeAnchorId === (comment.linkedMarkId || comment.id)
+                                  ? "border-[#8CB4E6] bg-[#F3F8FF] ring-2 ring-[#D8E6FA]"
+                                  : "border-[#E6EDF8] bg-white"
+                              }`}
+                            >
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-[#6B7E9A]">
+                                <span className="font-semibold text-[var(--adm-text)]">{comment.authorLabel}</span>
+                                <span>•</span>
+                                <span>{formatDateTime(comment.createdAt)}</span>
+                                <span className="rounded-full border border-[#D5E3F5] bg-[#F1F6FE] px-2 py-0.5 text-[10px]">
+                                  Helyi
+                                </span>
+                              </div>
+                              {comment.quote ? (
+                                <p className="mt-2 rounded-[5px] border border-[#E4ECF7] bg-[#F8FBFF] px-2 py-1 text-[10px] italic text-[#4E6786]">
+                                  „{getSelectionExcerpt(comment.quote, 140)}”
+                                </p>
+                              ) : null}
+                              <p className="mt-2 whitespace-pre-wrap">{comment.text}</p>
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-[var(--adm-text-muted)]">Még nincs megjegyzés ehhez a munkapéldányhoz.</p>
+                      )}
+                    </section>
+                  ) : null}
+
+                  {workspaceMainTab === "clauses" ? (
+                    <>
+                      {demoMode ? (
+                        <p className="rounded-[6px] border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                          {DEMO_WARNING}
+                        </p>
+                      ) : null}
+                      <input
+                        ref={toolSearchRef}
+                        value={toolSearch}
+                        onChange={(e) => setToolSearch(e.target.value)}
+                        placeholder="Keress klauzulát…"
+                        className="w-full rounded-[6px] border border-[var(--adm-border)] bg-white px-3 py-2 text-xs text-[var(--adm-text)]"
+                      />
+                      {filteredClauseTools.length === 0 ? (
+                        <p className="rounded-[5px] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-xs text-[var(--adm-text-muted)]">Nincs találat a klauzulák között.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {filteredClauseTools.map((clause) => (
+                            <div key={clause.id} className="rounded-[6px] border border-[var(--adm-border)] bg-white p-3">
+                              <div className="space-y-1">
+                                <h4 className="text-sm font-semibold text-[var(--adm-text)]">{clause.title}</h4>
+                                <p className="text-[11px] text-[var(--adm-text-muted)]">{clause.description}</p>
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {clause.tags.map((tag) => (
+                                  <span key={`${clause.id}-${tag}`} className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                              {expandedToolId === clause.id ? (
+                                <div className="mt-3 space-y-2 rounded-[6px] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+                                  <p className="whitespace-pre-wrap text-[11px] leading-relaxed text-[var(--adm-text)]">{clause.text}</p>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <AdminButton size="xs" variant="neutral" onClick={() => handleInsertClauseIntoDraft(clause.text)}>
+                                      Beszúrás
+                                    </AdminButton>
+                                    <span className="text-[10px] text-[var(--adm-text-muted)]">Helyi beszúrás — mentés külön szükséges.</span>
+                                  </div>
+                                </div>
+                              ) : null}
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <AdminButton size="xs" variant="neutral" onClick={() => setExpandedToolId(expandedToolId === clause.id ? null : clause.id)}>
+                                  Előnézet
+                                </AdminButton>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+
+                  {workspaceMainTab === "history" ? (
+                    <section className="space-y-3">
+                      <div className="rounded-[8px] border border-[var(--adm-border)] bg-white p-3">
+                        <p className="text-sm font-semibold text-[var(--adm-text)]">Előzmények és technikai összevetés</p>
+                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Ez a nézet audit- és technikai célra marad elérhető. Nem ez a szerződés-workspace elsődleges workflow-ja.</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <AdminButton size="xs" variant="neutral" onClick={activateCompareMode}>
+                            Technikai összevetés megnyitása
+                          </AdminButton>
+                          <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1 text-[10px] text-[var(--adm-text)]">
+                            {selectedBaseline ? "Alapdokumentum kiválasztva" : "Nincs összevetési alap"}
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+                  ) : null}
+                </section>
+              </aside>
             </div>
           )}
         </div>

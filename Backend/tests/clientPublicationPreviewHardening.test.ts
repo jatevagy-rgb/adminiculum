@@ -40,6 +40,9 @@ describe('TXT version preview failure is a controlled state, not a raw provider 
   });
 
   it('runs once per version (deps are version-scoped) — no retry loop', () => {
-    expect(page).toContain('}, [selectedVersionDocumentId, selectedVersionStableId, canRenderTextVersion]);');
+    expect(page).toContain('}, [versionTextPlan, selectedVersionDocumentId, selectedVersionStableId, selectedUploadedDocument?.id]);');
+    // The selected-document input cancels stale loads; no loaded-text state may
+    // enter this dependency list and turn a failed preview into a retry loop.
+    expect(page).toContain('resolveVersionTextPlan(');
   });
 });

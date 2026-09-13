@@ -9,6 +9,8 @@ import {
   type CaseContractListItem,
 } from "@/lib/api";
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
+import { OrganizationPersonPicker } from "@/components/documents/OrganizationPersonPicker";
+import type { KnownPartyTransfer } from "@/lib/organizationPersonMapping";
 
 // Minimal structured counterparty input
 interface CounterpartyInput {
@@ -22,6 +24,8 @@ interface AnonymizeModalProps {
   onClose: () => void;
   contract: CaseContractListItem;
   caseId?: string;
+  /** Case client id — enables the explicit organization-person picker for known-party data */
+  clientId?: string;
   /** Case client name, for known-party context in the anonymization surface */
   clientName?: string;
   /** Case client role (e.g. "Megbízó", "Ellenérdekű fél"), for known-party context */
@@ -63,7 +67,7 @@ const legalRoleOptions = ["Ügyfél", "Megbízó", "Eladó", "Vevő", "Ellenérd
 
 const SOURCE_TEXT_LIMITATION_MESSAGE = "A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.";
 
-export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, clientRole, onSuccess }: AnonymizeModalProps) {
+export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, clientName, clientRole, onSuccess }: AnonymizeModalProps) {
   const [aiTask, setAiTask] = useState<AITask>("REVIEW_RISKS");
   const [redactionLevel, setRedactionLevel] = useState<RedactionLevel>("FULL");
   const [customPrompt, setCustomPrompt] = useState("");
@@ -101,6 +105,22 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientName, 
   const [representativeTitle, setRepresentativeTitle] = useState("");
   const [contactEmail, setContactEmail] = useState("");
 const [phone, setPhone] = useState("");
+  const [showPersonPicker, setShowPersonPicker] = useState(false);
+
+  const applyOrganizationPerson = (transfer: KnownPartyTransfer, legalRole: string) => {
+    setKnownPartyKind("PERSON");
+    if (transfer.name !== undefined) {
+      setKnownPartyName(transfer.name);
+      setMetadataClientName(transfer.name);
+    }
+    if (transfer.role !== undefined) setKnownPartyRole(transfer.role);
+    if (transfer.notes !== undefined) setKnownPartyNotes(transfer.notes);
+    if (transfer.contactEmail !== undefined) setContactEmail(transfer.contactEmail);
+    if (transfer.phone !== undefined) setPhone(transfer.phone);
+    setKnownPartyLegalRole(legalRole);
+    setMetadataClientRole(legalRole);
+    setShowPersonPicker(false);
+  };
 
   const router = useRouter();
 
@@ -385,6 +405,26 @@ const [phone, setPhone] = useState("");
                 <p className="text-[10px] text-[#434843]/70 mb-3">
                   Az itt megadott adatok pontos egyezés alapján anonimizálódnak. Nem automatikus adatfelismerés, hanem ismert adatok védelme.
                 </p>
+                {clientId ? (
+                  <>
+                    {!showPersonPicker ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowPersonPicker(true)}
+                        className="mb-3 border border-[#23472F]/40 px-3 py-1.5 text-[11px] font-semibold text-[#23472F] hover:bg-[#e2ede5] focus-visible:outline focus-visible:outline-2"
+                      >
+                        Személy átvétele az ügyfélszervezetből…
+                      </button>
+                    ) : (
+                      <OrganizationPersonPicker
+                        clientId={clientId}
+                        isOpen={showPersonPicker}
+                        onCancel={() => setShowPersonPicker(false)}
+                        onConfirm={applyOrganizationPerson}
+                      />
+                    )}
+                  </>
+                ) : null}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <select
                     value={knownPartyKind}

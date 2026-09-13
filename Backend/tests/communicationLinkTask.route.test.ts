@@ -15,6 +15,8 @@ jest.mock('../src/middleware/auth', () => ({
 jest.mock('../src/prisma/prisma.service', () => ({
   prisma: {
     communication: { findUnique: jest.fn() },
+    case: { findUnique: jest.fn() },
+    caseCollaborator: { findFirst: jest.fn() },
     task: { findUnique: jest.fn(), update: jest.fn() },
   },
 }));
@@ -93,7 +95,10 @@ function createApp() {
 
 describe('POST /communications/:id/link-task', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    (prisma as any).communication.findUnique.mockResolvedValue({ id: 'comm-1', caseId: 'case-1', createdById: 'user-1' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'user-1' });
+    (prisma as any).caseCollaborator.findFirst.mockResolvedValue(null);
     (canUserActOnTask as jest.Mock).mockResolvedValue({ allowed: true, role: 'LAWYER' });
     delete process.env.ENABLE_COMMUNICATIONS_PERSISTENCE;
   });
@@ -109,11 +114,25 @@ describe('POST /communications/:id/link-task', () => {
     expect((prisma as any).task.update).not.toHaveBeenCalled();
   });
 
-  it('validates taskId before database reads', async () => {
+  it('validates taskId after communication authorization but before task reads or writes', async () => {
     process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
     const response = await requestJson(createApp(), '/communications/comm-1/link-task');
     expect(response.status).toBe(400);
-    expect((prisma as any).communication.findUnique).not.toHaveBeenCalled();
+    expect((prisma as any).communication.findUnique).toHaveBeenCalledTimes(1);
+    expect((prisma as any).case.findUnique).toHaveBeenCalledTimes(1);
+    expect((prisma as any).task.findUnique).not.toHaveBeenCalled();
+    expect((prisma as any).task.update).not.toHaveBeenCalled();
+  });
+
+  it('denies communication access before evaluating or mutating the task', async () => {
+    process.env.ENABLE_COMMUNICATIONS_PERSISTENCE = 'true';
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'other', createdById: 'other' });
+    const response = await requestJson(createApp(), '/communications/comm-1/link-task', { body: { taskId: 'task-1' } });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('COMMUNICATION_ACCESS_FORBIDDEN');
+    expect(canUserActOnTask).not.toHaveBeenCalled();
+    expect((prisma as any).task.findUnique).not.toHaveBeenCalled();
+    expect((prisma as any).task.update).not.toHaveBeenCalled();
   });
 
   it('rejects missing records and cross-case linkage', async () => {
