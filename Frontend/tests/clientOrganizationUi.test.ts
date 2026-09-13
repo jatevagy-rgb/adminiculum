@@ -87,4 +87,29 @@ describe('Organization internal UI (structural)', () => {
     assert.match(src, /UpdateOrgPersonInput/);
     assert.match(src, /JSON\.stringify\(\{\s*employmentStatus\s*\}\)/);
   });
+
+  it('renders a semantic group and manager tree with manager-only contextual actions', () => {
+    const src = component();
+    for (const token of ['Vezetői szint', 'Nincs közvetlen vezető megadva.', 'aria-label="Vezetői kapcsolat"', 'parentGroupId', 'managerPersonId', '+ Kolléga', '+ Alcsoport', 'Szerkesztés']) {
+      assert.ok(src.includes(token), `missing organization tree contract: ${token}`);
+    }
+    assert.match(src, /canManageOrganization \? <div className="flex gap-2/);
+  });
+
+  it('keeps removal lifecycle-based and keeps hierarchy separate from access', () => {
+    const editor = read('src/components/clients/OrganizationEditor.tsx');
+    assert.match(editor, /transitionPerson\(person\.id, "ENDED"\)/);
+    assert.doesNotMatch(editor, /deletePerson|deleteGroup/);
+    assert.match(editor, /ügy- vagy dokumentumhozzáférést nem ad/);
+    assert.match(editor, /nem ad portál-, ügy- vagy dokumentumhozzáférést/);
+  });
+
+  it('invites only through an explicitly selected active organization workspace', () => {
+    const editor = read('src/components/clients/OrganizationEditor.tsx');
+    assert.match(editor, /workspace\.status === "ACTIVE" && workspace\.mode === "ORGANIZATION"/);
+    assert.match(editor, /organizationWorkspaces\.length > 1/);
+    assert.match(editor, /PORTAL_WORKSPACE_SELECTION_REQUIRED/);
+    assert.match(editor, /inviteAdminWorkspaceMember\(workspaceId/);
+    assert.match(editor, /transitionAdminWorkspaceMembership\(membership\.id, "revoke", membership\.revision\)/);
+  });
 });
