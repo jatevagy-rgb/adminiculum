@@ -1,12 +1,30 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { getPortalOrgGrow, type PortalOrgGrow } from "@/lib/clientPortalApi";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getPortalOrgGrow,
+  listPortalGrowSurveys,
+  submitPortalGrowSurvey,
+  type PortalGrowSurveyItem,
+  type PortalOrgGrow,
+} from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { SURVEY_CATEGORY_LABELS_HU } from "@/lib/growApi";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 sm:p-6 shadow-sm";
 const compactState = "min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3";
+
+function generateUUID() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "Nincs megadva";
@@ -50,22 +68,77 @@ export function OrgGrowView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Survey questionnaire state
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedProcessId, setSelectedProcessId] = useState<string>("");
+  const [freeText, setFreeText] = useState<string>("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [surveys, setSurveys] = useState<PortalGrowSurveyItem[]>([]);
+  const idempotencyKeyRef = useRef<string>(generateUUID());
+
+  const loadSurveys = useCallback(async () => {
+    try {
+      const res = await listPortalGrowSurveys();
+      if (res && Array.isArray(res.items)) {
+        setSurveys(res.items);
+      }
+    } catch {
+      // safe fallback, non-blocking
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await getPortalOrgGrow();
       setData(res);
+      if (res?.surveys && Array.isArray(res.surveys)) {
+        setSurveys(res.surveys);
+      } else {
+        await loadSurveys();
+      }
     } catch (err) {
       setError(clientSafeError(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadSurveys]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handleSurveySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedCategories.length === 0) {
+      setSubmitError("Kérjük, válasszon legalább egy témakört a visszajelzéshez.");
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError(null);
+    setSubmitSuccess(null);
+    try {
+      const res = await submitPortalGrowSurvey({
+        categories: selectedCategories,
+        freeText: freeText.trim() || undefined,
+        processId: selectedProcessId || undefined,
+        idempotencyKey: idempotencyKeyRef.current,
+      });
+      setSubmitSuccess(res.message || "Rögzítettük. A jelzést a működés áttekintésekor figyelembe vesszük.");
+      setSelectedCategories([]);
+      setFreeText("");
+      setSelectedProcessId("");
+      idempotencyKeyRef.current = generateUUID();
+      await loadSurveys();
+    } catch (err) {
+      setSubmitError(clientSafeError(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -111,13 +184,146 @@ export function OrgGrowView() {
         </p>
       </section>
 
-      {/* Section 1: Hol érdemes javítani? (Truthful deferred state per Correction 2) */}
-      <Section
-        kicker="Feltárás"
-        title="Hol érdemes javítani?"
-        empty={true}
-        emptyText="Jelenleg nincs ügyféloldalra jóváhagyott fejlesztési lehetőség közzétéve. Az iroda elemzései az aktív kezdeményezésekben jelennek meg."
-      />
+      {/* Section 1: Hol érdemes javítani? / Működési visszajelzés (Feltárás) */}
+      <section className={card} data-testid="grow-feltaras-section">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Feltárás</p>
+        <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">
+          Hol érdemes javítani?
+        </h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Ossza meg velünk, milyen nehézségeket tapasztal a napi működésben. Visszajelzése közvetlenül beépül a szervezet közös fejlesztési áttekintésébe.
+        </p>
+
+        <form onSubmit={handleSurveySubmit} className="mt-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-stone-700 mb-2">
+              Jellemző működési tapasztalatok (válasszon egyet vagy többet)
+            </label>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {Object.entries(SURVEY_CATEGORY_LABELS_HU).map(([key, label]) => {
+                const checked = selectedCategories.includes(key);
+                return (
+                  <label
+                    key={key}
+                    className={`flex items-start gap-3 rounded-2xl border p-3.5 cursor-pointer transition ${
+                      checked
+                        ? "border-[#7a5f18] bg-[#fcf9f2] shadow-xs"
+                        : "border-stone-200 bg-white hover:border-stone-300"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        setSelectedCategories((prev) =>
+                          e.target.checked ? [...prev, key] : prev.filter((k) => k !== key)
+                        );
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-stone-300 text-[#7a5f18] focus:ring-[#7a5f18]"
+                    />
+                    <span className="text-sm font-medium text-stone-900 leading-snug">{label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {processes.length > 0 ? (
+            <div>
+              <label htmlFor="survey-process" className="block text-xs font-semibold uppercase tracking-wider text-stone-700 mb-1.5">
+                Érintett folyamat (opcionális)
+              </label>
+              <select
+                id="survey-process"
+                value={selectedProcessId}
+                onChange={(e) => setSelectedProcessId(e.target.value)}
+                className="w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm text-stone-900 focus:border-[#7a5f18] focus:outline-none"
+              >
+                <option value="">-- Nem köthető egyetlen folyamathoz / Általános --</option>
+                {processes.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+
+          <div>
+            <label htmlFor="survey-freetext" className="block text-xs font-semibold uppercase tracking-wider text-stone-700 mb-1.5">
+              Részletes kifejtés (opcionális)
+            </label>
+            <textarea
+              id="survey-freetext"
+              rows={3}
+              value={freeText}
+              onChange={(e) => setFreeText(e.target.value)}
+              placeholder="Írja le röviden a konkrét helyzetet vagy példát..."
+              className="w-full rounded-xl border border-stone-200 bg-white p-3.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-[#7a5f18] focus:outline-none"
+            />
+          </div>
+
+          {submitSuccess ? (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm text-emerald-900 font-medium">
+              ✓ {submitSuccess}
+            </div>
+          ) : null}
+
+          {submitError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-sm text-rose-900 font-medium">
+              ✕ {submitError}
+            </div>
+          ) : null}
+
+          <div className="pt-1">
+            <button
+              type="submit"
+              disabled={submitting || selectedCategories.length === 0}
+              className="rounded-full bg-stone-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? "Rögzítés folyamatban..." : "Visszajelzés beküldése"}
+            </button>
+          </div>
+        </form>
+
+        {/* Previously submitted feedback by customer */}
+        {surveys.length > 0 ? (
+          <div className="mt-6 border-t border-stone-100 pt-5">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">
+              Korábban beküldött működési visszajelzések
+            </h3>
+            <div className="space-y-3">
+              {surveys.map((s, idx) => (
+                <div key={idx} className="rounded-xl border border-stone-200/80 bg-stone-50/60 p-3.5 text-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      {s.categoryLabels.map((cat, cIdx) => (
+                        <span key={cIdx} className="rounded-full bg-amber-100/70 px-2.5 py-0.5 text-xs font-semibold text-[#6f5514]">
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
+                    <span className="text-xs text-stone-500">{formatDate(s.submittedAt)}</span>
+                  </div>
+                  {s.processName ? (
+                    <p className="mt-2 text-xs text-stone-600">
+                      Érintett folyamat: <span className="font-semibold">{s.processName}</span>
+                    </p>
+                  ) : null}
+                  {s.freeText ? (
+                    <p className="mt-2 text-sm text-stone-800 whitespace-pre-wrap">{s.freeText}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Truthful deferred notice */}
+        <div className="mt-5 rounded-2xl border border-stone-200/70 bg-stone-50/50 p-4 text-xs leading-5 text-stone-600">
+          Jelenleg nincs közvetlen ügyféloldali jóváhagyott fejlesztési lehetőség közzétéve. Az iroda elemzései a fenti visszajelzések alapján az aktív kezdeményezésekben öltenek formát.
+        </div>
+      </section>
 
       {/* Section 2: Min dolgozunk? (Active Initiatives) */}
       <Section

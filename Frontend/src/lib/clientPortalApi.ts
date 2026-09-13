@@ -586,10 +586,50 @@ export type PortalOrgGrow = {
     evidenceStrength: string;
   }>;
   opportunitiesDeferredNotice: string | null;
+  surveys?: PortalGrowSurveyItem[];
 };
 
 export async function getPortalOrgGrow() {
   return fetchApi<PortalOrgGrow>('/client-portal/org/grow', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
+
+export type SubmitPortalGrowSurveyInput = {
+  categories: string[];
+  freeText?: string;
+  processId?: string;
+  idempotencyKey: string;
+};
+
+export type PortalGrowSurveyResult = {
+  success: boolean;
+  replayed: boolean;
+  message: string;
+  submittedAt: string;
+};
+
+export type PortalGrowSurveyItem = {
+  submittedAt: string;
+  categoryLabels: string[];
+  freeText: string | null;
+  processName: string | null;
+};
+
+export async function submitPortalGrowSurvey(payload: SubmitPortalGrowSurveyInput) {
+  return fetchApi<PortalGrowSurveyResult>('/client-portal/org/grow-survey', {
+    authContext: 'customer',
+    method: 'POST',
+    body: JSON.stringify(payload),
+    suppressErrorStatuses: [400, 401, 403, 409],
+    suppressErrorLogging: true,
+  });
+}
+
+export async function listPortalGrowSurveys() {
+  return fetchApi<{ items: PortalGrowSurveyItem[] }>('/client-portal/org/grow-survey', {
     authContext: 'customer',
     suppressErrorStatuses: [401, 403, 404, 503],
     suppressErrorLogging: true,
