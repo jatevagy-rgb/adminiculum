@@ -11,6 +11,8 @@
 
 import type { MailboxProviderCode, MailboxSecretPayload } from './types';
 import { SecretStoreNotConfiguredError } from './secretStore';
+import { ImapFlow } from 'imapflow';
+import nodemailer from 'nodemailer';
 
 export interface MailboxAttachmentMeta {
   providerAttachmentId: string;
@@ -389,12 +391,32 @@ export class ImapSmtpMailboxProvider implements MailboxProviderAdapter {
     throw new SecretStoreNotConfiguredError();
   }
 
-  async listMessagesSinceCursor(): Promise<{ messages: MailboxMessage[]; nextCursor: string | null }> {
-    throw new SecretStoreNotConfiguredError();
+  async listMessagesSinceCursor(input: { secret: MailboxSecretPayload; cursor: string | null; maxMessages: number }): Promise<{ messages: MailboxMessage[]; nextCursor: string | null }> {
+    if (env('GENERIC_IMAP_ENABLED') !== 'true') throw new SecretStoreNotConfiguredError();
+    if (!input.secret.imapHost || !input.secret.username || !input.secret.password) throw new Error('MAILBOX_GENERIC_IMAP_CONFIGURATION_INVALID');
+    if (input.secret.imapTls === 'NONE' && env('MAILBOX_ALLOW_INSECURE_GENERIC_DEVELOPMENT') !== 'true') throw new Error('MAILBOX_GENERIC_TLS_REQUIRED');
+    const client = new ImapFlow({ host: input.secret.imapHost, port: input.secret.imapPort || 993, secure: input.secret.imapTls !== 'STARTTLS', auth: { user: input.secret.username, pass: input.secret.password }, logger: false });
+    try {
+      await client.connect(); const lock = await client.getMailboxLock('INBOX');
+      try {
+        const uidValidity = String(client.mailbox.uidValidity || '0'); const lastUid = Number(String(input.cursor || '').split(':')[1] || '0'); const max = Math.min(Math.max(input.maxMessages, 1), 250); const messages: MailboxMessage[] = [];
+        for await (const item of client.fetch(`${lastUid + 1}:*`, { uid: true, envelope: true, source: true }, { uid: true })) {
+          if (messages.length >= max) break; const envelope = item.envelope; const headers = String(item.source || '');
+          const header = (name: string) => new RegExp(`^${name}:\\s*(.+)$`, 'im').exec(headers)?.[1]?.trim() || null;
+          messages.push({ providerMessageId: String(item.uid), internetMessageId: header('Message-ID'), inReplyTo: header('In-Reply-To'), references: header('References'), direction: 'INBOUND', from: { email: envelope?.from?.[0]?.address || '' }, to: (envelope?.to || []).map((v) => ({ email: v.address || '', name: v.name || null })), cc: (envelope?.cc || []).map((v) => ({ email: v.address || '', name: v.name || null })), subject: envelope?.subject || '', bodyText: '', receivedAt: envelope?.date || null, attachments: [] });
+        }
+        const nextUid = messages.length ? messages[messages.length - 1].providerMessageId : String(lastUid); return { messages, nextCursor: `${uidValidity}:${nextUid}` };
+      } finally { lock.release(); }
+    } finally { await client.logout().catch(() => undefined); }
   }
 
-  async sendMessage(): Promise<{ providerMessageId: string; internetMessageId?: string | null; providerConversationId?: string | null }> {
-    throw new SecretStoreNotConfiguredError();
+  async sendMessage(input: { secret: MailboxSecretPayload; to: Array<{ name?: string | null; email: string }>; cc?: Array<{ name?: string | null; email: string }>; subject: string; bodyText: string; bodyHtml?: string | null; inReplyTo?: string | null; references?: string | null }): Promise<{ providerMessageId: string; internetMessageId?: string | null; providerConversationId?: string | null }> {
+    if (env('GENERIC_SMTP_ENABLED') !== 'true') throw new SecretStoreNotConfiguredError(); const s = input.secret;
+    if (!s.smtpHost || !s.username || !s.password) throw new Error('MAILBOX_GENERIC_SMTP_CONFIGURATION_INVALID');
+    if (s.smtpTls === 'NONE' && env('MAILBOX_ALLOW_INSECURE_GENERIC_DEVELOPMENT') !== 'true') throw new Error('MAILBOX_GENERIC_TLS_REQUIRED');
+    const transport = nodemailer.createTransport({ host: s.smtpHost, port: s.smtpPort || 465, secure: s.smtpTls !== 'STARTTLS', auth: { user: s.username, pass: s.password } });
+    await transport.verify(); const result = await transport.sendMail({ from: s.username, to: input.to.map((r) => r.email).join(', '), cc: input.cc?.map((r) => r.email).join(', '), subject: input.subject, text: input.bodyText, html: input.bodyHtml || undefined, inReplyTo: input.inReplyTo || undefined, references: input.references || undefined });
+    return { providerMessageId: result.messageId, internetMessageId: result.messageId, providerConversationId: null };
   }
 
   async refreshAuthorization(secret: MailboxSecretPayload): Promise<MailboxSecretPayload> {
