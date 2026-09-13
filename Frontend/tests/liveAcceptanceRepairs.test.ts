@@ -85,9 +85,24 @@ test('A5: linked and unlinked communication case-first actions are both present'
 
 test('Task catalogue: truthful empty state is rendered when no definitions exist', () => {
   const src = read('Frontend/src/components/tasks/TaskPlanningFields.tsx');
-  assert.match(src, /definition/);
   assert.match(src, /definitions\.length === 0/);
   assert.match(src, /Nincs még létrehozott feladattípus/);
   // Free naming must remain available alongside the catalogue.
   assert.match(src, /Szabad megnevezés/);
+});
+
+test('Case responsible selector uses the authoritative backend-eligible source, not unrestricted getUsers', () => {
+  const panel = read('Frontend/src/components/cases/CaseWorkPackagePanel.tsx');
+  assert.match(panel, /getCaseResponsibleCandidates/);
+  // The old unrestricted source must be gone from the responsible selector.
+  assert.doesNotMatch(panel, /getUsers\(\)/);
+  assert.doesNotMatch(panel, /ELIGIBLE_WORKFORCE_ROLES/);
+  const api = read('Frontend/src/lib/api.ts');
+  assert.match(api, /responsible-candidates/);
+});
+
+test('Case error mapping prefers the structured backend error code', () => {
+  const src = read('Frontend/src/components/cases/CaseWorkPackagePanel.tsx');
+  assert.match(src, /error instanceof ApiError \? error\.code/);
+  assert.match(src, /RESPONSIBLE_NOT_CASE_ELIGIBLE/);
 });
