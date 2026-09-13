@@ -5,6 +5,7 @@ import { taskPlanningApi, type TaskDefinitionDTO } from "@/lib/taskPlanningApi";
 export interface PlanningCandidate {
   id: string;
   name: string;
+  email?: string | null;
   role?: string | null;
 }
 
@@ -66,6 +67,9 @@ export function TaskPlanningFields({ clientId, users, assigneeId, value, onChang
 
   const reviewerCandidates = users.filter((u) => u.id !== assigneeId);
   const collaboratorCandidates = users.filter((u) => u.id !== assigneeId && u.id !== value.plannedReviewerId);
+  const candidateLabel = (candidate: PlanningCandidate) => users.filter((user) => user.name === candidate.name).length > 1 && candidate.email
+    ? `${candidate.name} · ${candidate.email}`
+    : candidate.name;
 
   const toggleCollaborator = (userId: string) => {
     const has = value.collaboratorUserIds.includes(userId);
@@ -137,7 +141,7 @@ export function TaskPlanningFields({ clientId, users, assigneeId, value, onChang
           >
             <option value="">Nincs</option>
             {reviewerCandidates.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
+              <option key={u.id} value={u.id}>{candidateLabel(u)}</option>
             ))}
           </select>
           {reviewerCandidates.length === 0 ? <span className="mt-1 block text-[10px] font-normal text-[var(--adm-text-muted)]">Nincs további jogosult munkatárs.</span> : null}
@@ -149,7 +153,7 @@ export function TaskPlanningFields({ clientId, users, assigneeId, value, onChang
             {collaboratorCandidates.map((u) => (
               <label key={u.id} className="flex items-center gap-2 text-[11px] font-normal text-[var(--adm-text)]">
                 <input type="checkbox" checked={value.collaboratorUserIds.includes(u.id)} onChange={() => toggleCollaborator(u.id)} />
-                {u.name}
+                {candidateLabel(u)}
               </label>
             ))}
           </div>

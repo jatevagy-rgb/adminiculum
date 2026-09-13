@@ -63,11 +63,15 @@ d('task planning role eligibility (PostgreSQL)', () => {
     expect(collabs.map((c) => c.userId)).toContain(ids.collaborator);
   });
 
-  it('B. candidate projection contains only case-eligible users', async () => {
+  it('B. candidate projection contains only directly case-related workforce users', async () => {
     const candidates = await listCaseResponsibleCandidates(ids.case);
     const idset = new Set((candidates ?? []).map((c) => c.id));
-    for (const eligible of [ids.admin, ids.lawyer, ids.reviewer, ids.collaborator]) expect(idset.has(eligible)).toBe(true);
-    for (const ineligible of [ids.outsider, ids.inactive]) expect(idset.has(ineligible)).toBe(false);
+    for (const eligible of [ids.lawyer, ids.reviewer, ids.collaborator]) expect(idset.has(eligible)).toBe(true);
+    for (const notDefaultCandidate of [ids.admin, ids.outsider, ids.inactive]) expect(idset.has(notDefaultCandidate)).toBe(false);
+  });
+
+  it('B2. privileged authorization remains available without flooding default discovery', async () => {
+    await expect(assertTaskPlanningRolesEligible(ids.case, { assigneeId: ids.admin })).resolves.toBeUndefined();
   });
 
   it('C. rejects a forged outsider reviewer', async () => {
