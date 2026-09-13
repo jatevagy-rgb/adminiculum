@@ -375,6 +375,13 @@ export async function listPortalSurveyIntakes(
       clientId: workspace.clientId,
       connectionId: connection.id,
       observationType: 'DECLARED_SURVEY',
+      // Customer-safe boundary: only surveys submitted through THIS authorized
+      // portal workspace. Internal-workforce rows and rows from another
+      // workspace on the same client must never appear. Fail closed.
+      AND: [
+        { rawPayload: { path: ['provenance', 'channel'], equals: 'CLIENT_PORTAL' } },
+        { rawPayload: { path: ['provenance', 'workspaceId'], equals: workspace.id } },
+      ],
     },
     orderBy: { observedAt: 'desc' },
     take: 50,

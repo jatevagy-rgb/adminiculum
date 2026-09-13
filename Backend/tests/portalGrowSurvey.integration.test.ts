@@ -594,7 +594,9 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
 
     expect(workforceList.length).toBeGreaterThan(0);
     expect(portalList.items.length).toBeGreaterThan(0);
-    expect(workforceList.length).toBe(portalList.items.length);
+    // Portal readback is a workspace-scoped subset of the canonical survey set;
+    // it must never exceed the workforce view for the same client.
+    expect(portalList.items.length).toBeLessThanOrEqual(workforceList.length);
 
     // Shared observation: verify that workforce observation id matches the one in DB
     const matchingObs = await db.observation.findUnique({
@@ -602,5 +604,46 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
     });
     expect(matchingObs).not.toBeNull();
     expect(matchingObs!.clientId).toBe(ids.clientA);
+  });
+
+  it('18. PORTAL_SURVEY_READBACK_WORKSPACE_SCOPED_ON_SAME_CLIENT=PASS', async () => {
+    const localSeed = crypto.randomUUID().slice(0, 8);
+    const wsA2 = crypto.randomUUID();
+    const identityA2 = crypto.randomUUID();
+
+    // Second ORGANIZATION workspace on the SAME Client A.
+    await db.clientPortalWorkspace.create({ data: {
+      id: wsA2, clientId: ids.clientA, name: 'Second org workspace (same client)', mode: 'ORGANIZATION',
+      status: 'ACTIVE', communicationMode: 'PORTAL_PRIMARY', connectedSystemState: 'NOT_CONFIGURED',
+      publicReference: `PW-A2-${localSeed}`, createdById: ids.adminId,
+    } as never });
+    await db.clientPortalIdentity.create({ data: {
+      id: identityA2, provider: 'ENTRA_EXTERNAL_ID', issuer: 'https://issuer.invalid/',
+      subject: `sub-a2-${localSeed}`, normalizedEmail: `a2-${localSeed}@fixture.invalid`,
+      emailVerifiedAt: new Date('2026-01-01T00:00:00Z'), displayName: 'Customer A2',
+      accountType: 'ORGANIZATION_MEMBER', status: 'ACTIVE',
+    } as never });
+    await db.clientPortalWorkspaceMembership.create({ data: {
+      id: crypto.randomUUID(), clientPortalIdentityId: identityA2, workspaceId: wsA2,
+      status: 'ACTIVE', role: 'MEMBER', approvedAt: new Date('2026-01-01T00:00:00Z'), approvedById: ids.adminId,
+    } as never });
+
+    const internalText = `INTERNAL_ONLY_${localSeed}`;
+    const aText = `WS_A_ONLY_${localSeed}`;
+    const bText = `WORKSPACE_B_ONLY_${localSeed}`;
+
+    await submitSurveyIntake(admin, ids.clientA, { categories: ['MANUAL_ADMIN'], freeText: internalText, idempotencyKey: `internal-${localSeed}` }, db);
+    await submitPortalSurveyIntake(ids.authorizedIdentity, ids.orgWsA, { categories: ['REWORK'], freeText: aText, idempotencyKey: `wsa-${localSeed}` }, db);
+    await submitPortalSurveyIntake(identityA2, wsA2, { categories: ['TOO_MANY_SYSTEMS'], freeText: bText, idempotencyKey: `wsb-${localSeed}` }, db);
+
+    const aTexts = (await listPortalSurveyIntakes(ids.authorizedIdentity, ids.orgWsA, db)).items.map((i) => i.freeText);
+    expect(aTexts).toContain(aText);
+    expect(aTexts).not.toContain(internalText);   // INTERNAL_WORKFORCE excluded
+    expect(aTexts).not.toContain(bText);          // same client, other workspace excluded
+
+    const bTexts = (await listPortalSurveyIntakes(identityA2, wsA2, db)).items.map((i) => i.freeText);
+    expect(bTexts).toContain(bText);
+    expect(bTexts).not.toContain(aText);
+    expect(bTexts).not.toContain(internalText);
   });
 });
