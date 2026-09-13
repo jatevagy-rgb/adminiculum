@@ -997,10 +997,28 @@ export async function createCanonicalTaskFromCommunication(
 
   const communicationCase = await prisma.case.findUnique({
     where: { id: communication.caseId },
-    select: { id: true, clientId: true },
+    select: { id: true, clientId: true, assignedLawyerId: true, createdById: true },
   });
   if (!communicationCase) {
     throw new SourceLinkedTaskError(404, 'CASE_NOT_FOUND', 'The communication case was not found.');
+  }
+
+  // Authorization: the actor must be able to act on the communication's case.
+  // Mirrors the canonical case-eligibility rule (privileged OR assigned lawyer,
+  // creator, collaborator). Roles never grant access here.
+  const privileged = new Set(['ADMIN', 'PARTNER']).has(String(actorRole || '').toUpperCase());
+  if (!privileged) {
+    const collaborator = await prisma.caseCollaborator.findFirst({
+      where: { caseId: communication.caseId, userId },
+      select: { id: true },
+    });
+    const allowed =
+      communicationCase.assignedLawyerId === userId ||
+      communicationCase.createdById === userId ||
+      Boolean(collaborator);
+    if (!allowed) {
+      throw new SourceLinkedTaskError(403, 'COMMUNICATION_NOT_AUTHORIZED', 'A felhasználó nem jogosult ehhez a kommunikációhoz.');
+    }
   }
 
   const requestedCaseId = payload.caseId != null ? String(payload.caseId) : null;
