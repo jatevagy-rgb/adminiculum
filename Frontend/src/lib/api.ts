@@ -754,6 +754,18 @@ export async function getCaseResponsibility(caseId: string): Promise<CaseRespons
   return fetchApi<CaseResponsibilityResponse>(`/cases/${caseId}/responsibility`);
 }
 
+export interface CaseResponsibleCandidate {
+  id: string;
+  name: string;
+  email: string | null;
+  role: string;
+}
+
+/** Authoritative, backend-computed list of users eligible for case responsibility. */
+export async function getCaseResponsibleCandidates(caseId: string): Promise<{ items: CaseResponsibleCandidate[] }> {
+  return fetchApi<{ items: CaseResponsibleCandidate[] }>(`/cases/${caseId}/responsible-candidates`);
+}
+
 export interface CaseWorkItemCapabilities {
   canStart: boolean;
   canComplete: boolean;

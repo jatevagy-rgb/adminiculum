@@ -17,14 +17,26 @@ import { clientSafeError } from "@/lib/clientInteractionApi";
 import { formatDate } from "./MatterWorkspace";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
+const compactState = "min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3";
 
 function Section({ kicker, title, children, empty, emptyText }: { kicker?: string; title: string; children?: React.ReactNode; empty?: boolean; emptyText?: string }) {
+  // Empty information must not consume the same visual weight as active work.
+  if (empty) {
+    return (
+      <section className={compactState} data-testid="portal-compact-empty">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p className="text-sm font-semibold text-stone-800">{title}</p>
+          <p className="text-sm text-stone-500">{emptyText || "Nincs megjeleníthető elem."}</p>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className={card}>
       {kicker ? <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{kicker}</p> : null}
       <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">{title}</h2>
       <div className="mt-4 grid gap-3">
-        {empty ? <p className="text-sm text-stone-600">{emptyText || "Nincs megjeleníthető elem."}</p> : children}
+        {children}
       </div>
     </section>
   );
@@ -184,42 +196,68 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
 
   const actionNow = useMemo(() => (home?.actions || []).slice(0, 4), [home]);
   const activeMatters = useMemo(() => (home?.matters || []).slice(0, 6), [home]);
+  const orientation = useMemo(() => {
+    if (!home) return null;
+    const updateCandidates = home.recentDocuments
+      .map((document) => document.publishedAt)
+      .filter((value): value is string => Boolean(value))
+      .sort();
+    return {
+      matterCount: home.matters.length,
+      actionCount: home.actions.length,
+      lastUpdate: updateCandidates.length ? updateCandidates[updateCandidates.length - 1] : null,
+    };
+  }, [home]);
   if (loading) return <section className={card}>Az áttekintés betöltése…</section>;
   if (error) return <section className={card}>{error}</section>;
   if (!home) return <section className={card}>Az áttekintés jelenleg nem érhető el.</section>;
 
   return (
     <div className="space-y-5" data-testid="org-home-view">
+      {/* 1. Orientation */}
       <section className={card}>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">Szervezeti ügyfélfelület</p>
         <h1 className="mt-1 break-words font-serif text-3xl font-semibold text-stone-950">{home.customer.name}</h1>
         <p className="mt-2 break-words text-sm text-stone-600">{identity.displayName}{identity.jobTitle ? ` · ${identity.jobTitle}` : ""}</p>
-        <p className="mt-3 text-sm text-stone-600">A közzétett ügyek, teendők és dokumentumok áttekintése egy helyen.</p>
+        {orientation ? (
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-stone-700" data-testid="portal-orientation">
+            <span>{orientation.matterCount} közzétett ügy</span>
+            <span aria-hidden="true">·</span>
+            <span>{orientation.actionCount} Öntől vár teendő</span>
+            {orientation.lastUpdate ? (<><span aria-hidden="true">·</span><span>Utolsó frissítés: {formatDate(orientation.lastUpdate)}</span></>) : null}
+          </p>
+        ) : null}
       </section>
 
+      {/* 2. Ami most Öntől kell — dominant when actions exist, compact when empty */}
       <Section kicker="Teendői" title="Ami most Öntől kell" empty={!actionNow.length} emptyText="Jelenleg nincs Önnek szóló teendő.">
         {actionNow.map((action) => <ActionRow key={action.id} action={action} />)}
       </Section>
 
+      {/* 3. Active legal work */}
       {home.currentMatter ? <CurrentMatter matter={home.currentMatter} /> : null}
 
       <Section kicker="Aktív jogi munka" title="Ügyeink" empty={!activeMatters.length} emptyText="Jelenleg nincs közzétett aktív ügy.">
         {activeMatters.map((matter) => <CaseRow key={matter.publicReference} matter={matter} />)}
       </Section>
 
+      {/* 4. Recent changes */}
       <Section kicker="Legutóbbi tevékenység" title="Közzétett frissítések" empty={!home.recentDocuments.length} emptyText="Még nincs közzétett frissítés.">
         {home.recentDocuments.slice(0, 4).map((document) => <ActivityRow key={document.id} document={document} />)}
       </Section>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <CompanyStatus company={company} summaries={summaries} />
-        <Section kicker="Kapcsolat" title="Üzenetek" empty={!home.contactSummary.openCount && !home.contactSummary.unreadCount} emptyText="Még nincs folyamatban kérdés vagy üzenetváltás.">
-          {home.contactSummary.openCount ? <p className="text-sm text-stone-700">{home.contactSummary.openCount} nyitott beszélgetés{home.contactSummary.unreadCount ? `, ${home.contactSummary.unreadCount} olvasatlan üzenet` : ""}.</p> : null}
-          {home.contactSummary.latestPreview ? <p className="mt-2 break-words text-sm text-stone-600">{home.contactSummary.latestPreview}</p> : null}
-          <Link href="/portal/uzenetek" className="mt-3 inline-flex font-semibold text-[#7a5f18] hover:underline">Üzenetek megnyitása →</Link>
-        </Section>
-      </div>
-      {workSummary ? <WorkSummary summary={workSummary} /> : null}
+      {/* 5. Messages / contact */}
+      <Section kicker="Kapcsolat" title="Üzenetek" empty={!home.contactSummary.openCount && !home.contactSummary.unreadCount} emptyText="Még nincs folyamatban kérdés vagy üzenetváltás.">
+        {home.contactSummary.openCount ? <p className="text-sm text-stone-700">{home.contactSummary.openCount} nyitott beszélgetés{home.contactSummary.unreadCount ? `, ${home.contactSummary.unreadCount} olvasatlan üzenet` : ""}.</p> : null}
+        {home.contactSummary.latestPreview ? <p className="mt-2 break-words text-sm text-stone-600">{home.contactSummary.latestPreview}</p> : null}
+        <Link href="/portal/uzenetek" className="mt-3 inline-flex font-semibold text-[#7a5f18] hover:underline">Üzenetek megnyitása →</Link>
+      </Section>
+
+      {/* 6. Recorded work — only when real recorded time exists (never implied as savings/outcome) */}
+      {workSummary && workSummary.totalMinutes > 0 ? <WorkSummary summary={workSummary} /> : null}
+
+      {/* 7. Organization profile — secondary to legal work */}
+      <CompanyStatus company={company} summaries={summaries} />
     </div>
   );
 }

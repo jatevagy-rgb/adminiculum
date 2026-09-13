@@ -82,3 +82,65 @@ test('A5: linked and unlinked communication case-first actions are both present'
   assert.match(src, /Új ügy létrehozása/);
   assert.match(src, /Meglévő ügyhöz rendelés/);
 });
+
+test('Task catalogue: truthful empty state is rendered when no definitions exist', () => {
+  const src = read('Frontend/src/components/tasks/TaskPlanningFields.tsx');
+  assert.match(src, /definitions\.length === 0/);
+  assert.match(src, /Nincs még létrehozott feladattípus/);
+  // Free naming must remain available alongside the catalogue.
+  assert.match(src, /Szabad megnevezés/);
+});
+
+test('Case responsible selector uses the authoritative backend-eligible source, not unrestricted getUsers', () => {
+  const panel = read('Frontend/src/components/cases/CaseWorkPackagePanel.tsx');
+  assert.match(panel, /getCaseResponsibleCandidates/);
+  // The old unrestricted source must be gone from the responsible selector.
+  assert.doesNotMatch(panel, /getUsers\(\)/);
+  assert.doesNotMatch(panel, /ELIGIBLE_WORKFORCE_ROLES/);
+  const api = read('Frontend/src/lib/api.ts');
+  assert.match(api, /responsible-candidates/);
+});
+
+test('Case error mapping prefers the structured backend error code', () => {
+  const src = read('Frontend/src/components/cases/CaseWorkPackagePanel.tsx');
+  assert.match(src, /error instanceof ApiError \? error\.code/);
+  assert.match(src, /RESPONSIBLE_NOT_CASE_ELIGIBLE/);
+});
+
+test('Portal: actionable and active content precede the organization profile', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  const actions = src.indexOf('title="Ami most Öntől kell"');
+  const matters = src.indexOf('title="Ügyeink"');
+  const org = src.indexOf('<CompanyStatus company=');
+  assert.ok(actions > -1 && matters > -1 && org > -1, 'portal markers missing');
+  assert.ok(actions < org, 'actions must precede organization profile');
+  assert.ok(matters < org, 'active matters must precede organization profile');
+});
+
+test('Portal: empty sections use a compact state, not full cards', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  assert.match(src, /data-testid="portal-compact-empty"/);
+  assert.match(src, /const compactState/);
+  // Empty branches must return the compact state before the full card.
+  assert.match(src, /if \(empty\) \{[\s\S]*compactState/);
+});
+
+test('Portal: recent changes use persisted/published content only and organization stays reachable', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  assert.match(src, /home\.recentDocuments\.slice\(0, 4\)/);
+  assert.match(src, /\/portal\/vallalat/);
+  assert.match(src, /\/portal\/uzenetek/);
+});
+
+test('Portal: recorded work is never presented as savings/outcome and only shows when real time exists', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  assert.match(src, /workSummary && workSummary\.totalMinutes > 0/);
+  assert.doesNotMatch(src, /megtakar|hatékonyság|növekedés|ROI/i);
+});
+
+test('Portal: organization mode uses OrgHomeView while individual mode is preserved', () => {
+  const src = read('Frontend/src/components/client-portal/ClientPortalShell.tsx');
+  assert.ok(src.includes('OrgHomeView'), 'OrgHomeView must be wired');
+  assert.ok(src.includes("mode === 'ORGANIZATION'"), 'organization branch must exist');
+  assert.ok(src.includes('INDIVIDUAL'), 'individual branch must remain');
+});
