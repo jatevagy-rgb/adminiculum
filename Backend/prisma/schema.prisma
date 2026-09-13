@@ -45,54 +45,54 @@ model User {
   updatedAt   DateTime  @updatedAt
 
   // Relations
-  assignedTasks                     Task[]                       @relation("AssignedTo")
-  assignedByTasks                   Task[]                       @relation("AssignedBy") // Tasks assigned by this user
-  createdCases                      Case[]                       @relation("CreatedBy")
-  assignedCases                     Case[]                       @relation("AssignedLawyer")
-  createdCaseTypeDefinitions        CaseTypeDefinition[]         @relation("CaseTypeDefinitionCreatedBy")
-  createdWorkPackageTemplates       WorkPackageTemplate[]        @relation("WorkPackageTemplateCreatedBy")
-  createdCaseWorkPackages           CaseWorkPackage[]            @relation("CaseWorkPackageCreatedBy")
-  createdCaseWorkPackageItems       CaseWorkPackageItem[]        @relation("CaseWorkPackageItemCreatedBy")
-  responsibleCaseWorkPackageItems   CaseWorkPackageItem[]        @relation("CaseWorkPackageItemResponsible")
+  assignedTasks                     Task[]                           @relation("AssignedTo")
+  assignedByTasks                   Task[]                           @relation("AssignedBy") // Tasks assigned by this user
+  createdCases                      Case[]                           @relation("CreatedBy")
+  assignedCases                     Case[]                           @relation("AssignedLawyer")
+  createdCaseTypeDefinitions        CaseTypeDefinition[]             @relation("CaseTypeDefinitionCreatedBy")
+  createdWorkPackageTemplates       WorkPackageTemplate[]            @relation("WorkPackageTemplateCreatedBy")
+  createdCaseWorkPackages           CaseWorkPackage[]                @relation("CaseWorkPackageCreatedBy")
+  createdCaseWorkPackageItems       CaseWorkPackageItem[]            @relation("CaseWorkPackageItemCreatedBy")
+  responsibleCaseWorkPackageItems   CaseWorkPackageItem[]            @relation("CaseWorkPackageItemResponsible")
   timelineEvents                    TimelineEvent[]
   comments                          Comment[]
-  documentReviewSuggestions         DocumentReviewSuggestion[]   @relation("DocumentReviewSuggestionAuthor")
-  createdDocumentReviews            DocumentReview[]             @relation("DocumentReviewCreatedBy")
-  assignedDocumentReviews           DocumentReview[]             @relation("DocumentReviewAssignedReviewer")
-  ownedDocumentReviews              DocumentReview[]             @relation("DocumentReviewOwner")
-  createdDocumentReviewRounds       DocumentReviewRound[]        @relation("DocumentReviewRoundCreatedBy")
-  createdReviewPoints               ReviewPoint[]                @relation("ReviewPointCreatedBy")
-  ownedReviewPoints                 ReviewPoint[]                @relation("ReviewPointOwner")
-  reviewDecisions                   ReviewDecision[]             @relation("ReviewDecisionActor")
-  createdDocumentComparisons        DocumentComparison[]         @relation("ComparisonCreatedBy")
+  documentReviewSuggestions         DocumentReviewSuggestion[]       @relation("DocumentReviewSuggestionAuthor")
+  createdDocumentReviews            DocumentReview[]                 @relation("DocumentReviewCreatedBy")
+  assignedDocumentReviews           DocumentReview[]                 @relation("DocumentReviewAssignedReviewer")
+  ownedDocumentReviews              DocumentReview[]                 @relation("DocumentReviewOwner")
+  createdDocumentReviewRounds       DocumentReviewRound[]            @relation("DocumentReviewRoundCreatedBy")
+  createdReviewPoints               ReviewPoint[]                    @relation("ReviewPointCreatedBy")
+  ownedReviewPoints                 ReviewPoint[]                    @relation("ReviewPointOwner")
+  reviewDecisions                   ReviewDecision[]                 @relation("ReviewDecisionActor")
+  createdDocumentComparisons        DocumentComparison[]             @relation("ComparisonCreatedBy")
   reviewSnapshots                   ReviewSnapshot[]
-  createdDocumentAnnotations        DocumentAnnotation[]         @relation("DocumentAnnotationCreatedBy")
-  createdCaseExternalParticipants   CaseExternalParticipant[]    @relation("CaseExternalParticipantCreatedBy")
-  responsibleDocuments              Document[]                   @relation("DocumentResponsible")
-  reviewerDocuments                 Document[]                   @relation("DocumentReviewer")
-  documentWorkInstructionUpdates    Document[]                   @relation("DocumentWorkInstructionUpdatedBy")
-  createdDocumentTaskLinks          DocumentTaskLink[]           @relation("DocumentTaskLinkCreatedBy")
-  createdCaseIntakeDeadlines        CaseIntakeDeadline[]         @relation("CaseIntakeDeadlineCreatedBy")
-  responsibleCaseIntakeDeadlines    CaseIntakeDeadline[]         @relation("CaseIntakeDeadlineResponsible")
-  assignedDocumentAnnotations       DocumentAnnotation[]         @relation("DocumentAnnotationAssignedTo")
-  resolvedDocumentAnnotations       DocumentAnnotation[]         @relation("DocumentAnnotationResolvedBy")
-  deletedDocumentAnnotations        DocumentAnnotation[]         @relation("DocumentAnnotationDeletedBy")
-  createdDocumentAnnotationComments DocumentAnnotationComment[]  @relation("DocumentAnnotationCommentCreatedBy")
-  deletedDocumentAnnotationComments DocumentAnnotationComment[]  @relation("DocumentAnnotationCommentDeletedBy")
-  documentAnnotationEvents          DocumentAnnotationEvent[]    @relation("DocumentAnnotationEventActor")
-  documentAnnotationAssignments     DocumentAnnotationEvent[]    @relation("DocumentAnnotationEventAssignedTo")
+  createdDocumentAnnotations        DocumentAnnotation[]             @relation("DocumentAnnotationCreatedBy")
+  createdCaseExternalParticipants   CaseExternalParticipant[]        @relation("CaseExternalParticipantCreatedBy")
+  responsibleDocuments              Document[]                       @relation("DocumentResponsible")
+  reviewerDocuments                 Document[]                       @relation("DocumentReviewer")
+  documentWorkInstructionUpdates    Document[]                       @relation("DocumentWorkInstructionUpdatedBy")
+  createdDocumentTaskLinks          DocumentTaskLink[]               @relation("DocumentTaskLinkCreatedBy")
+  createdCaseIntakeDeadlines        CaseIntakeDeadline[]             @relation("CaseIntakeDeadlineCreatedBy")
+  responsibleCaseIntakeDeadlines    CaseIntakeDeadline[]             @relation("CaseIntakeDeadlineResponsible")
+  assignedDocumentAnnotations       DocumentAnnotation[]             @relation("DocumentAnnotationAssignedTo")
+  resolvedDocumentAnnotations       DocumentAnnotation[]             @relation("DocumentAnnotationResolvedBy")
+  deletedDocumentAnnotations        DocumentAnnotation[]             @relation("DocumentAnnotationDeletedBy")
+  createdDocumentAnnotationComments DocumentAnnotationComment[]      @relation("DocumentAnnotationCommentCreatedBy")
+  deletedDocumentAnnotationComments DocumentAnnotationComment[]      @relation("DocumentAnnotationCommentDeletedBy")
+  documentAnnotationEvents          DocumentAnnotationEvent[]        @relation("DocumentAnnotationEventActor")
+  documentAnnotationAssignments     DocumentAnnotationEvent[]        @relation("DocumentAnnotationEventAssignedTo")
   caseCollaborations                CaseCollaborator[]
   documentVersions                  DocumentVersion[]
   taskAssignments                   TaskAssignmentHistory[]
   notifications                     Notification[]
   timeEntries                       TimeEntry[] // Time entries created by user
-  createdTaskSubmissions            TaskSubmission[]             @relation("TaskSubmissionCreatedBy")
-  submittedTaskSubmissions          TaskSubmission[]             @relation("TaskSubmissionSubmittedBy")
-  assignedTaskSubmissions           TaskSubmission[]             @relation("TaskSubmissionAssignedReviewer")
-  zeroTimeConfirmedTaskSubmissions  TaskSubmission[]             @relation("TaskSubmissionZeroTimeConfirmedBy")
-  externalCompletedTaskSubmissions  TaskSubmission[]             @relation("TaskSubmissionExternalCompletedBy")
-  createdTaskSubmissionDocuments    TaskSubmissionDocument[]     @relation("TaskSubmissionDocumentCreatedBy")
-  taskReviewDecisions               TaskReviewDecision[]         @relation("TaskReviewDecisionReviewer")
+  createdTaskSubmissions            TaskSubmission[]                 @relation("TaskSubmissionCreatedBy")
+  submittedTaskSubmissions          TaskSubmission[]                 @relation("TaskSubmissionSubmittedBy")
+  assignedTaskSubmissions           TaskSubmission[]                 @relation("TaskSubmissionAssignedReviewer")
+  zeroTimeConfirmedTaskSubmissions  TaskSubmission[]                 @relation("TaskSubmissionZeroTimeConfirmedBy")
+  externalCompletedTaskSubmissions  TaskSubmission[]                 @relation("TaskSubmissionExternalCompletedBy")
+  createdTaskSubmissionDocuments    TaskSubmissionDocument[]         @relation("TaskSubmissionDocumentCreatedBy")
+  taskReviewDecisions               TaskReviewDecision[]             @relation("TaskReviewDecisionReviewer")
   automationExecutionLogs           AutomationExecutionLog[]
   automationExecutionStepLogs       AutomationExecutionStepLog[]
   automationSuggestions             AutomationSuggestion[]
@@ -100,21 +100,23 @@ model User {
   automationPreference              UserAutomationPreference?
   automationSuppressions            UserAutomationSuppression[]
   verifiedCompanyFacts              ClientFact[]
-  importedLegalSourceCaptures       LegalSourceCapture[]         @relation("LegalSourceCaptureImportedBy")
+  importedLegalSourceCaptures       LegalSourceCapture[]             @relation("LegalSourceCaptureImportedBy")
   createdCompanyMilestones          CompanyMilestone[]
   createdAssessments                Assessment[]
   reviewedAssessmentItems           AssessmentItem[]
   createdAssessmentFindings         AssessmentFinding[]
-  createdComplianceProposals        ComplianceProposal[]         @relation("ComplianceProposalCreatedBy")
-  confirmedComplianceProposals      ComplianceProposal[]         @relation("ComplianceProposalConfirmedBy")
-  assignedComplianceProposals       ComplianceProposal[]         @relation("ComplianceProposalAssignee")
+  createdComplianceProposals        ComplianceProposal[]             @relation("ComplianceProposalCreatedBy")
+  confirmedComplianceProposals      ComplianceProposal[]             @relation("ComplianceProposalConfirmedBy")
+  assignedComplianceProposals       ComplianceProposal[]             @relation("ComplianceProposalAssignee")
   ownedDevelopmentInitiatives       DevelopmentInitiative[]
   lawFirmOwnedContracts             ContractRecord[]
-  plannedReviewTasks                Task[]                       @relation("TaskPlannedReviewer")
+  plannedReviewTasks                Task[]                           @relation("TaskPlannedReviewer")
   taskCollaborations                TaskCollaborator[]
-  addedTaskCollaborations           TaskCollaborator[]           @relation("TaskCollaboratorAddedBy")
-  createdTaskDefinitions            TaskDefinition[]             @relation("TaskDefinitionCreatedBy")
-  reviewedRecommendations           RecommendationCandidate[]    @relation("RecommendationReviewer")
+  addedTaskCollaborations           TaskCollaborator[]               @relation("TaskCollaboratorAddedBy")
+  createdTaskDefinitions            TaskDefinition[]                 @relation("TaskDefinitionCreatedBy")
+  reviewedRecommendations           RecommendationCandidate[]        @relation("RecommendationReviewer")
+  mailboxConnections                CommunicationMailboxConnection[] @relation("MailboxConnectionOwner")
+  emailVerificationChallenges       EmailVerificationChallenge[]     @relation("EmailVerificationChallenges")
   recordedOutcomeMeasurements       OutcomeMeasurement[]
 
   @@map("users")
@@ -3456,6 +3458,17 @@ model Communication {
   metadata               Json? // selected provider metadata only (not full raw headers)
   recipients             Json? // to/cc/bcc array [{ name?, email, kind }]
 
+  // Personal mailbox connection (additive). User-authorized mailboxes only;
+  // the fixed app-only Outlook reader keeps using externalMessageId/mailboxAddress.
+  mailboxConnectionId      String?
+  mailboxConnection        CommunicationMailboxConnection? @relation("MailboxConnectionCommunications", fields: [mailboxConnectionId], references: [id], onDelete: SetNull)
+  mailboxProviderMessageId String? // provider message id scoped to the connection (per-connection dedupe)
+  internetMessageId        String? // standards Internet Message-ID
+  inReplyTo                String? // standards In-Reply-To
+  references               String? // standards References
+  bodyPreview              String? // bounded preview text
+  bodyHtmlSanitized        String? // sanitized HTML (never raw provider HTML)
+
   // Meta
   createdById String
   createdAt   DateTime @default(now())
@@ -3465,9 +3478,11 @@ model Communication {
   attachments  CommunicationAttachment[]
   relatedTasks Task[]                    @relation("CommunicationTasks")
 
+  @@unique([mailboxConnectionId, mailboxProviderMessageId], map: "communications_mailbox_message_unique")
   @@index([caseId, createdAt])
   @@index([clientId, createdAt])
   @@index([providerConversationId])
+  @@index([mailboxConnectionId, receivedAt])
   @@map("communications")
 }
 
@@ -3520,6 +3535,80 @@ model CommunicationAttachment {
 
   @@unique([communicationId, providerAttachmentId], map: "communication_attachments_provider_unique_idx")
   @@map("communication_attachments")
+}
+
+// ============================================================================
+// UNIVERSAL MAILBOX CONNECTION (additive)
+// A per-user, user-authorized mailbox connection layered on top of the
+// existing Communication model. Owner-only by default. Secrets are stored only
+// as an opaque `secretReference`; no tokens/credentials in this table or JSON.
+// ============================================================================
+
+enum MailboxProvider {
+  MICROSOFT_GRAPH
+  GOOGLE_GMAIL
+  IMAP_SMTP
+}
+
+enum MailboxConnectionStatus {
+  EMAIL_UNVERIFIED
+  EMAIL_VERIFIED
+  AUTHORIZATION_REQUIRED
+  CONNECTED
+  CONNECTED_READ_ONLY
+  SYNCING
+  PAUSED
+  REVOKED
+  ERROR
+}
+
+model CommunicationMailboxConnection {
+  id                  String                  @id @default(uuid())
+  ownerUserId         String
+  owner               User                    @relation("MailboxConnectionOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  mailboxAddress      String
+  provider            MailboxProvider
+  status              MailboxConnectionStatus @default(EMAIL_UNVERIFIED)
+  verifiedAt          DateTime?
+  readCapability      Boolean                 @default(false)
+  sendCapability      Boolean                 @default(false)
+  providerAccountId   String?
+  providerTenantId    String?
+  // Opaque pointer into the secure secret store. NEVER the secret itself.
+  secretReference     String?
+  syncCursor          String?
+  syncCursorUpdatedAt DateTime?
+  lastSyncedAt        DateTime?
+  lastSyncStatus      String?
+  lastSyncError       String?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+
+  communications Communication[] @relation("MailboxConnectionCommunications")
+
+  @@unique([ownerUserId, mailboxAddress, provider])
+  @@index([ownerUserId, status])
+  @@map("communication_mailbox_connections")
+}
+
+model EmailVerificationChallenge {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation("EmailVerificationChallenges", fields: [userId], references: [id], onDelete: Cascade)
+  emailAddress String
+  codeHash     String
+  codeSalt     String
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  attemptCount Int       @default(0)
+  maxAttempts  Int       @default(5)
+  resendCount  Int       @default(0)
+  lastSentAt   DateTime  @default(now())
+  consumedAt   DateTime?
+
+  @@index([userId, emailAddress, createdAt])
+  @@index([emailAddress, createdAt])
+  @@map("email_verification_challenges")
 }
 
 // ============================================================================
