@@ -106,3 +106,41 @@ test('Case error mapping prefers the structured backend error code', () => {
   assert.match(src, /error instanceof ApiError \? error\.code/);
   assert.match(src, /RESPONSIBLE_NOT_CASE_ELIGIBLE/);
 });
+
+test('Portal: actionable and active content precede the organization profile', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  const actions = src.indexOf('title="Ami most Öntől kell"');
+  const matters = src.indexOf('title="Ügyeink"');
+  const org = src.indexOf('<CompanyStatus company=');
+  assert.ok(actions > -1 && matters > -1 && org > -1, 'portal markers missing');
+  assert.ok(actions < org, 'actions must precede organization profile');
+  assert.ok(matters < org, 'active matters must precede organization profile');
+});
+
+test('Portal: empty sections use a compact state, not full cards', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  assert.match(src, /data-testid="portal-compact-empty"/);
+  assert.match(src, /const compactState/);
+  // Empty branches must return the compact state before the full card.
+  assert.match(src, /if \(empty\) \{[\s\S]*compactState/);
+});
+
+test('Portal: recent changes use persisted/published content only and organization stays reachable', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  assert.match(src, /home\.recentDocuments\.slice\(0, 4\)/);
+  assert.match(src, /\/portal\/vallalat/);
+  assert.match(src, /\/portal\/uzenetek/);
+});
+
+test('Portal: recorded work is never presented as savings/outcome and only shows when real time exists', () => {
+  const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
+  assert.match(src, /workSummary && workSummary\.totalMinutes > 0/);
+  assert.doesNotMatch(src, /megtakar|hatékonyság|növekedés|ROI/i);
+});
+
+test('Portal: organization mode uses OrgHomeView while individual mode is preserved', () => {
+  const src = read('Frontend/src/components/client-portal/ClientPortalShell.tsx');
+  assert.ok(src.includes('OrgHomeView'), 'OrgHomeView must be wired');
+  assert.ok(src.includes("mode === 'ORGANIZATION'"), 'organization branch must exist');
+  assert.ok(src.includes('INDIVIDUAL'), 'individual branch must remain');
+});
