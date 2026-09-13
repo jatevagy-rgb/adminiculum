@@ -3,7 +3,7 @@ import type { OrgPersonDTO } from "@/lib/clientOrganizationApi";
 
 export type DerivedPortalMembership = {
   membership: WorkspaceMembershipDTO | null;
-  status: "NONE" | "INVITED" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "AMBIGUOUS";
+  status: "NONE" | "INVITED" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "AMBIGUOUS";
 };
 
 const normalized = (value: string | null | undefined) => value?.trim().toLocaleLowerCase("hu-HU") || "";
@@ -28,5 +28,5 @@ export function derivePortalMembership(person: OrgPersonDTO, workspaces: AdminWo
 }
 
 export function portalMembershipStatusLabel(status: DerivedPortalMembership["status"]): string {
-  return ({ NONE: "Nincs hozzáférés", INVITED: "Meghívó elküldve", PENDING_APPROVAL: "Jóváhagyásra vár", ACTIVE: "Aktív", SUSPENDED: "Felfüggesztve", REVOKED: "Visszavonva", AMBIGUOUS: "Több lehetséges tagság — ellenőrzés szükséges" })[status];
+  return ({ NONE: "Nincs hozzáférés", INVITED: "Meghívó elküldve", PENDING_APPROVAL: "Jóváhagyásra vár", ACTIVE: "Aktív", SUSPENDED: "Felfüggesztve", REVOKED: "Visszavonva", EXPIRED: "Lejárt", AMBIGUOUS: "Több lehetséges tagság — ellenőrzés szükséges" })[status];
 }

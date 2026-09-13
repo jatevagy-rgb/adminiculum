@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { derivePortalMembership } from "../src/lib/organizationPortalMembership";
+import { derivePortalMembership, portalMembershipStatusLabel } from "../src/lib/organizationPortalMembership";
 import type { AdminWorkspaceDTO } from "../src/lib/clientPortalAdminApi";
 import type { OrgPersonDTO } from "../src/lib/clientOrganizationApi";
 
@@ -23,4 +23,11 @@ test("reports a matching pending invitation separately from a membership", () =>
   const derived = derivePortalMembership(person("invite@example.test"), [workspace(undefined, "ACTIVE", "invite@example.test")]);
   assert.equal(derived.status, "INVITED");
   assert.equal(derived.membership, null);
+});
+
+test("preserves expired lifecycle state and label source", () => {
+  const derived = derivePortalMembership(person("expired@example.test"), [workspace("expired@example.test", "EXPIRED")]);
+  assert.equal(derived.status, "EXPIRED");
+  assert.equal(derived.membership?.status, "EXPIRED");
+  assert.equal(portalMembershipStatusLabel(derived.status), "Lejárt");
 });
