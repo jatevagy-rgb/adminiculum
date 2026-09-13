@@ -552,7 +552,7 @@ jobs:
           ENABLE_CLIENT_PORTAL: 'true'
           ENABLE_CLIENT_PORTAL_READS: 'true'
         run: |
-          if npx jest --runInBand tests/growPortalSurvey.integration.test.ts; then rc=0; else rc=$?; fi
+          if npx jest --runInBand tests/portalGrowSurvey.integration.test.ts; then rc=0; else rc=$?; fi
           sed -i "s/^grow-customer-survey=PENDING$/grow-customer-survey=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 

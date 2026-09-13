@@ -250,7 +250,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
         'x-client-portal-workspace': wsARef,
       },
       {
-        categories: ['APPROVAL_DELAY', 'REWORK'],
+        categories: ['SLOW_APPROVAL', 'REWORK'],
         freeText: 'A jóváhagyások túl lassan haladnak át a pénzügyi osztályon.',
         idempotencyKey: surveyKey1,
       },
@@ -351,7 +351,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
       },
       {
         clientId: ids.clientB, // spoof attempt in body!
-        categories: ['COMMUNICATION_OVERHEAD'],
+        categories: ['MANUAL_ADMIN'],
         freeText: 'Spoof attempt',
         idempotencyKey: spoofKey,
       },
@@ -380,7 +380,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
         'x-client-portal-workspace': wsARef,
       },
       {
-        categories: ['BOTTLENECK'],
+        categories: ['SLOW_APPROVAL'],
         freeText: 'Cross tenant attack',
         idempotencyKey: `survey-cross-${seed}`,
       },
@@ -399,7 +399,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
         'x-client-portal-workspace': wsARef,
       }, // no session header
       {
-        categories: ['BOTTLENECK'],
+        categories: ['SLOW_APPROVAL'],
         idempotencyKey: `survey-unauth-${seed}`,
       },
     );
@@ -420,7 +420,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
         'x-client-portal-workspace': wsARef,
       },
       {
-        categories: ['BOTTLENECK'],
+        categories: ['SLOW_APPROVAL'],
         idempotencyKey: `survey-nomem-${seed}`,
       },
     );
@@ -441,7 +441,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
         'x-client-portal-workspace': wsARef,
       },
       {
-        categories: ['APPROVAL_DELAY', 'REWORK'],
+        categories: ['SLOW_APPROVAL', 'REWORK'],
         freeText: 'A jóváhagyások túl lassan haladnak át a pénzügyi osztályon.',
         idempotencyKey: surveyKey1, // Identical key and payload
       },
@@ -492,7 +492,7 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
         'x-client-portal-workspace': wsARef,
       },
       {
-        categories: ['SCATTERED_TOOLING'],
+        categories: ['TOO_MANY_SYSTEMS'],
         freeText: 'Túl sok a párhuzamos szoftver.',
         idempotencyKey: freshKey,
       },
