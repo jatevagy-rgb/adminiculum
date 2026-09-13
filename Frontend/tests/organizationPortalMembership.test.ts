@@ -5,7 +5,7 @@ import type { AdminWorkspaceDTO } from "../src/lib/clientPortalAdminApi";
 import type { OrgPersonDTO } from "../src/lib/clientOrganizationApi";
 
 const person = (email: string | null, portalMembershipId: string | null = null): OrgPersonDTO => ({ id: "person", clientId: "client", organizationGroupId: null, managerPersonId: null, deputyPersonId: null, name: "Kolléga", jobTitle: null, email, phone: null, employmentStatus: "ACTIVE", startDate: null, endDate: null, responsibilitiesSummary: null, portalMembershipId });
-const workspace = (membershipEmail?: string, membershipStatus: any = "ACTIVE", invitationEmail?: string): AdminWorkspaceDTO => ({ id: "workspace", clientId: "client", clientName: "Ügyfél", name: "Szervezet", mode: "ORGANIZATION", status: "ACTIVE", communicationMode: "PORTAL_PRIMARY", connectedSystemState: "READY", revision: 1, activeMembershipCount: 0, activeCaseGrantCount: 0, activeCaseGrants: [], pendingInvitationCount: 0, pendingApprovalCount: 0, memberships: membershipEmail ? [{ id: `membership-${membershipEmail}`, clientPortalIdentityId: "identity", workspaceId: "workspace", status: membershipStatus, role: "MEMBER", revision: 2, invitedAt: null, approvedAt: null, identityEmail: membershipEmail }] : [], invitations: invitationEmail ? [{ id: "invitation", intendedEmail: invitationEmail, status: "ACTIVE", deliveryStatus: "SENT", deliveryCodeSafe: null, expiresAt: "2099-01-01", createdAt: "2026-01-01" }] : [], events: [] });
+const workspace = (membershipEmail?: string, membershipStatus: any = "ACTIVE", invitationEmail?: string, deliveryStatus: string | null = "SENT", deliveryCodeSafe: string | null = null): AdminWorkspaceDTO => ({ id: "workspace", clientId: "client", clientName: "Ügyfél", name: "Szervezet", mode: "ORGANIZATION", status: "ACTIVE", communicationMode: "PORTAL_PRIMARY", connectedSystemState: "READY", revision: 1, activeMembershipCount: 0, activeCaseGrantCount: 0, activeCaseGrants: [], pendingInvitationCount: 0, pendingApprovalCount: 0, memberships: membershipEmail ? [{ id: `membership-${membershipEmail}`, clientPortalIdentityId: "identity", workspaceId: "workspace", status: membershipStatus, role: "MEMBER", revision: 2, invitedAt: null, approvedAt: null, identityEmail: membershipEmail }] : [], invitations: invitationEmail ? [{ id: "invitation", intendedEmail: invitationEmail, status: "ACTIVE", deliveryStatus, deliveryCodeSafe, expiresAt: "2099-01-01", createdAt: "2026-01-01" }] : [], events: [] });
 
 test("derives one exact-email organization membership without persisting a person link", () => {
   const derived = derivePortalMembership(person("Member@example.test"), [workspace("member@example.test", "PENDING_APPROVAL")]);
@@ -30,4 +30,14 @@ test("preserves expired lifecycle state and label source", () => {
   assert.equal(derived.status, "EXPIRED");
   assert.equal(derived.membership?.status, "EXPIRED");
   assert.equal(portalMembershipStatusLabel(derived.status), "Lejárt");
+});
+
+test("surfaces truthful invitation delivery states without technical codes", () => {
+  const sent = derivePortalMembership(person("sent@example.test"), [workspace(undefined, "ACTIVE", "sent@example.test", "SENT")]);
+  const pending = derivePortalMembership(person("pending@example.test"), [workspace(undefined, "ACTIVE", "pending@example.test", "PENDING")]);
+  const unavailable = derivePortalMembership(person("unavailable@example.test"), [workspace(undefined, "ACTIVE", "unavailable@example.test", "FAILED_RETRYABLE", "MAIL_PROVIDER_NOT_CONFIGURED")]);
+  assert.equal(portalMembershipStatusLabel(sent), "Meghívó e-mail elküldve");
+  assert.equal(portalMembershipStatusLabel(pending), "Meghívás rögzítve · kézbesítésre vár");
+  assert.equal(portalMembershipStatusLabel(unavailable), "Meghívás rögzítve · e-mail-küldés nincs konfigurálva");
+  assert.doesNotMatch(portalMembershipStatusLabel(unavailable), /MAIL_PROVIDER_NOT_CONFIGURED/);
 });
