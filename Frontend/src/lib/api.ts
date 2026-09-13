@@ -1573,6 +1573,7 @@ export interface CreateTaskData {
   estimatedMinutes?: number | null;
   requestedByOrganizationPersonId?: string | null;
   taskDefinitionId?: string | null;
+  taskDefinitionClientId?: string | null;
   taskTypeLabel?: string | null;
   saveToCatalogue?: boolean;
   plannedReviewerId?: string | null;

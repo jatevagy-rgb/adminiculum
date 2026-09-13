@@ -139,7 +139,7 @@ function ClientsPageContent() {
     const color = getClientColorDefinition(client.colorKey);
 
     return (
-      <AdminPanel key={client.id} className={`relative min-w-0 border-2 p-4 sm:p-5 ${color.borderClass}`}>
+          <AdminPanel key={client.id} className={`relative min-w-0 border-2 border-l-4 p-4 sm:p-5 ${color.borderClass} ${color.key ? color.accentBorderClass : ""}`}>
         <div className="flex flex-col gap-4">
           <div className="min-w-0 flex-1">
             <h2 className="break-words font-serif text-2xl font-medium leading-snug text-[var(--adm-text)] [overflow-wrap:anywhere]">{client.name}</h2>
