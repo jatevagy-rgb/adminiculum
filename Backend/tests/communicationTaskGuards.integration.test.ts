@@ -64,7 +64,7 @@ d('communication → canonical task guards (PostgreSQL)', () => {
   afterAll(async () => { await db?.$disconnect(); });
 
   it('persists sourceCommunicationId + planning fields on the same case', async () => {
-    const result = await createCanonicalTaskFromCommunication(ids.commLined, ids.lawyer, 'LAWYER', {
+      const result = await createCanonicalTaskFromCommunication(ids.commLinked, ids.lawyer, 'LAWYER', {
       title: 'Canonical task from communication',
       caseId: ids.caseA,
       taskDefinitionId: ids.definition,
