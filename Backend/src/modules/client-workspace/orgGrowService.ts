@@ -102,6 +102,19 @@ export async function getOrganizationalGrow(
 ): Promise<OrgGrowDto> {
   const workspace = await requireOrganizationWorkspace(workspaceId, prisma);
 
+  const membership = await prisma.clientPortalWorkspaceMembership.findFirst({
+    where: {
+      clientPortalIdentityId: identityId,
+      workspaceId: workspace.id,
+      status: 'ACTIVE',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    select: { id: true },
+  });
+  if (!membership) {
+    throw new InteractionError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
+  }
+
   const client = await prisma.client.findUnique({
     where: { id: workspace.clientId },
     select: { name: true },

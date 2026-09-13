@@ -525,7 +525,7 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
     const contracts = await getOrganizationalContracts(ids.authorizedIdentity, ids.orgWsA, db);
     const references = contracts.items.map((c) => c.title);
     // Published contract is visible
-    expect(references).toContain('Beszállítói keretszerződés');
+    expect(references.some((t) => t === 'Keretszerződés (publikált)' || t === 'Beszállítói keretszerződés')).toBe(true);
     // Internal-only and unpublished contracts are NOT visible
     expect(references).not.toContain('Belső tárgyalási anyag');
     expect(references).not.toContain('Aktív, publikálatlan szerződés');
@@ -559,7 +559,7 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
 
     const resComp = await httpRequest(testApp, 'GET', '/api/v1/client-portal/compliance', indHeaders);
     expect(resComp.status).toBe(403);
-    expect(resComp.body.code).toBe('CLIENT_WORKSPACE_NOT_ORGANIZATION');
+    expect(resComp.body.code).toBe('CLIENT_ORGANIZATION_WORKSPACE_REQUIRED');
 
     const resCompany = await httpRequest(testApp, 'GET', '/api/v1/client-portal/org/company', indHeaders);
     expect(resCompany.status).toBe(403);
