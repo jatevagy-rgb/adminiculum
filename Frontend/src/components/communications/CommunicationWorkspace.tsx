@@ -16,16 +16,17 @@ import {
   linkCommunicationToTask,
   getOutlookStatus,
   runOutlookSync,
-  getUsers,
+  getCaseResponsibleCandidates,
   type CaseListItem,
   type Client,
   type CommunicationItem,
   type TaskItem,
   type TaskListItem,
   type OutlookStatus,
-  type User,
+  type CaseResponsibleCandidate,
 } from "@/lib/api";
 import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
+import { taskWorkflowErrorMessage } from "@/lib/taskWorkflowPresentation";
 import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
 
@@ -101,13 +102,21 @@ export default function CommunicationWorkspace() {
   const [taskAssigneeId, setTaskAssigneeId] = useState("");
   const [taskAttentionCategory, setTaskAttentionCategory] = useState("");
   const [taskEstimatedMinutes, setTaskEstimatedMinutes] = useState("");
-  const [planningUsers, setPlanningUsers] = useState<User[]>([]);
+  const [planningUsers, setPlanningUsers] = useState<CaseResponsibleCandidate[]>([]);
 
   useEffect(() => {
-    getUsers()
-      .then((list) => setPlanningUsers(Array.isArray(list) ? list : []))
-      .catch(() => setPlanningUsers([]));
-  }, []);
+    const caseId = taskTarget?.caseId;
+    if (!caseId) {
+      setPlanningUsers([]);
+      return;
+    }
+    let active = true;
+    // Authoritative case-scoped candidates; backend remains the sole authority.
+    getCaseResponsibleCandidates(caseId)
+      .then((result) => { if (active) setPlanningUsers(result.items); })
+      .catch(() => { if (active) setPlanningUsers([]); });
+    return () => { active = false; };
+  }, [taskTarget?.caseId]);
 
   const [linkTaskTarget, setLinkTaskTarget] = useState<CommunicationItem | null>(null);
   const [caseTasks, setCaseTasks] = useState<TaskItem[]>([]);
@@ -408,7 +417,7 @@ export default function CommunicationWorkspace() {
       setCreatedTaskId(result.task?.id || null);
       setTaskFeedback({ tone: "success", message: result.task?.title ? `Feladat létrehozva: ${result.task.title}` : "Feladat létrehozva." });
     } catch (error) {
-      setTaskFeedback(apiFeedback(error, "Nem sikerült feladatot létrehozni."));
+      setTaskFeedback({ tone: "error", message: taskWorkflowErrorMessage(error) });
     } finally {
       setTaskBusy(false);
     }
