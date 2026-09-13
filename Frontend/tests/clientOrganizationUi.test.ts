@@ -128,6 +128,13 @@ describe('Organization internal UI (structural)', () => {
     assert.match(src, /organizationRootPeople\(filteredPersons\)/);
   });
 
+  it('renders root and nested groups as visible hierarchy nodes', () => {
+    const src = component();
+    assert.match(src, /rounded-xl border border-\[var\(--adm-border\)\] bg-\[var\(--adm-surface\)\] p-4 shadow-sm/);
+    assert.match(src, /border-l-2 border-\[var\(--adm-green-300\)\] pl-5/);
+    assert.match(src, /children\.map\(\(child\) => renderGroup\(child, depth \+ 1, nextAncestors\)\)/);
+  });
+
   it('keeps person save and invitation as truthful independent phases', () => {
     const editor = read('src/components/clients/OrganizationEditor.tsx');
     assert.match(editor, /let savedPerson: OrgPersonDTO \| null = null/);

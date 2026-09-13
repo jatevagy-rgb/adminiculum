@@ -168,6 +168,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
     const members = personsByGroup.get(group.id) || [];
     return (
       <div key={group.id} className={depth ? "relative mt-5 border-l-2 border-[var(--adm-green-300)] pl-5 before:absolute before:left-0 before:top-7 before:h-px before:w-4 before:bg-[var(--adm-green-300)]" : ""}>
+        <div className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h3 className="font-serif text-lg text-[var(--adm-text)]">{group.name}</h3>
@@ -178,6 +179,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
         {members.length ? (
           <div className="mt-3 grid gap-3 lg:grid-cols-2">{organizationGroupStarts(filteredPersons, group.id).map((person) => renderPerson(person, false, group.id))}</div>
         ) : null}
+        </div>
         {children.map((child) => renderGroup(child, depth + 1, nextAncestors))}
       </div>
     );
