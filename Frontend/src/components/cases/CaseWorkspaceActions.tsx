@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import { clientOrganizationApi, type OrgPersonDTO } from "@/lib/clientOrganizationApi";
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
+import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { AdminButton } from "@/components/adminiculum/ui";
 
 // Accepted upload types — the current safe allowlist (unchanged in this slice).
@@ -112,11 +113,20 @@ function FieldError({ message }: { message?: string | null }) {
 const inputCls = "mt-1 w-full rounded-md border border-[var(--adm-border)] bg-white px-3 py-2 text-[13px] text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none disabled:opacity-60";
 const labelCls = "text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]";
 
+const EMPTY_TASK_PLANNING: TaskPlanningValue = {
+  taskDefinitionId: null,
+  taskTypeLabel: null,
+  saveToCatalogue: false,
+  plannedReviewerId: null,
+  collaboratorUserIds: [],
+};
+
 /** Create or edit a task. Deadline mode presents the same form with due date required. */
 export function TaskFormModal({
-  caseId, mode, task, deadlineMode, onClose, onSaved,
+  caseId, clientId, mode, task, deadlineMode, onClose, onSaved,
 }: {
   caseId: string;
+  clientId?: string | null;
   mode: "create" | "edit";
   task?: WorkspaceTask | null;
   deadlineMode?: boolean;
@@ -143,6 +153,7 @@ export function TaskFormModal({
   const [attentionCategory, setAttentionCategory] = useState<string>(task?.attentionCategory ?? "");
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>(task?.estimatedMinutes != null ? String(task.estimatedMinutes) : "");
   const [dueDate, setDueDate] = useState<string>(task?.dueDate ? task.dueDate.slice(0, 10) : "");
+  const [taskPlanning, setTaskPlanning] = useState<TaskPlanningValue>(EMPTY_TASK_PLANNING);
   const [busy, setBusy] = useState(false);
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
   const [serverErr, setServerErr] = useState<string | null>(null);
@@ -170,6 +181,12 @@ export function TaskFormModal({
           attentionCategory: (attentionCategory || null) as never,
           estimatedMinutes: est ?? undefined,
           requestedByOrganizationPersonId: requestedByOrganizationPersonId || undefined,
+          taskDefinitionId: taskPlanning.taskDefinitionId,
+          taskTypeLabel: taskPlanning.taskTypeLabel,
+          saveToCatalogue: taskPlanning.saveToCatalogue,
+          taskDefinitionClientId: clientId ?? null,
+          plannedReviewerId: taskPlanning.plannedReviewerId,
+          collaboratorUserIds: taskPlanning.collaboratorUserIds.length ? taskPlanning.collaboratorUserIds : undefined,
         });
       } else if (task) {
         await updateTask(task.id, {
@@ -248,6 +265,15 @@ export function TaskFormModal({
             {ATTENTION_CATEGORY_ORDER.map((c) => <option key={c} value={c}>{attentionPresentation(c).label}</option>)}
           </select>
         </div>
+        {mode === "create" ? (
+          <TaskPlanningFields
+            clientId={clientId ?? null}
+            users={users}
+            assigneeId={assignedToId || null}
+            value={taskPlanning}
+            onChange={(next) => setTaskPlanning((current) => ({ ...current, ...next }))}
+          />
+        ) : null}
         {serverErr ? <p role="alert" className="text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{serverErr}</p> : null}
         <div className="flex justify-end gap-2 pt-1">
           <AdminButton variant="neutral" onClick={onClose} disabled={busy}>Mégse</AdminButton>

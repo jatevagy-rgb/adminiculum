@@ -16,14 +16,26 @@ import {
   linkCommunicationToTask,
   getOutlookStatus,
   runOutlookSync,
+  getUsers,
   type CaseListItem,
   type Client,
   type CommunicationItem,
   type TaskItem,
   type TaskListItem,
   type OutlookStatus,
+  type User,
 } from "@/lib/api";
 import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
+import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
+import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
+
+const EMPTY_TASK_PLANNING: TaskPlanningValue = {
+  taskDefinitionId: null,
+  taskTypeLabel: null,
+  saveToCatalogue: false,
+  plannedReviewerId: null,
+  collaboratorUserIds: [],
+};
 
 const closedTaskStatuses = new Set(["DONE", "COMPLETED", "APPROVED", "FINALIZED", "CANCELLED", "ARCHIVED"]);
 
@@ -85,6 +97,17 @@ export default function CommunicationWorkspace() {
   const [taskBusy, setTaskBusy] = useState(false);
   const [taskFeedback, setTaskFeedback] = useState<Feedback | null>(null);
   const [createdTaskId, setCreatedTaskId] = useState<string | null>(null);
+  const [taskPlanning, setTaskPlanning] = useState<TaskPlanningValue>(EMPTY_TASK_PLANNING);
+  const [taskAssigneeId, setTaskAssigneeId] = useState("");
+  const [taskAttentionCategory, setTaskAttentionCategory] = useState("");
+  const [taskEstimatedMinutes, setTaskEstimatedMinutes] = useState("");
+  const [planningUsers, setPlanningUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    getUsers()
+      .then((list) => setPlanningUsers(Array.isArray(list) ? list : []))
+      .catch(() => setPlanningUsers([]));
+  }, []);
 
   const [linkTaskTarget, setLinkTaskTarget] = useState<CommunicationItem | null>(null);
   const [caseTasks, setCaseTasks] = useState<TaskItem[]>([]);
@@ -354,6 +377,10 @@ export default function CommunicationWorkspace() {
     setTaskPriority("MEDIUM");
     setTaskFeedback(null);
     setCreatedTaskId(null);
+    setTaskPlanning(EMPTY_TASK_PLANNING);
+    setTaskAssigneeId("");
+    setTaskAttentionCategory("");
+    setTaskEstimatedMinutes("");
   };
 
   const submitTask = async () => {
@@ -367,6 +394,15 @@ export default function CommunicationWorkspace() {
         dueDate: taskDueDate || undefined,
         priority: taskPriority,
         caseId: taskTarget.caseId,
+        assignedTo: taskAssigneeId || undefined,
+        attentionCategory: taskAttentionCategory || null,
+        estimatedMinutes: taskEstimatedMinutes.trim() === "" ? null : Number(taskEstimatedMinutes),
+        taskDefinitionId: taskPlanning.taskDefinitionId,
+        taskDefinitionClientId: taskTarget.clientId ?? null,
+        taskTypeLabel: taskPlanning.taskTypeLabel,
+        saveToCatalogue: taskPlanning.saveToCatalogue,
+        plannedReviewerId: taskPlanning.plannedReviewerId,
+        collaboratorUserIds: taskPlanning.collaboratorUserIds.length ? taskPlanning.collaboratorUserIds : undefined,
       });
       updateCommunication(taskTarget.id, { sourceTaskCount: taskTarget.sourceTaskCount + 1 });
       setCreatedTaskId(result.task?.id || null);
@@ -527,6 +563,9 @@ export default function CommunicationWorkspace() {
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Cím<input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} rows={3} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
         <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Sürgős</option></select></label></div>
+        <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Felelős<select value={taskAssigneeId} onChange={(event) => setTaskAssigneeId(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="">Nincs kijelölve</option>{planningUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Becsült idő (perc)<input type="number" min={0} value={taskEstimatedMinutes} onChange={(event) => setTaskEstimatedMinutes(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label></div>
+        <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Figyelmi kategória<select value={taskAttentionCategory} onChange={(event) => setTaskAttentionCategory(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="">Nincs besorolva</option>{ATTENTION_CATEGORY_ORDER.map((c) => <option key={c} value={c}>{attentionPresentation(c).label}</option>)}</select></label>
+        <TaskPlanningFields clientId={taskTarget.clientId ?? null} users={planningUsers} assigneeId={taskAssigneeId || null} value={taskPlanning} onChange={(next) => setTaskPlanning((current) => ({ ...current, ...next }))} />
       </SimpleModal> : null}
 
       {linkTaskTarget ? <SimpleModal title="Meglévő feladathoz" subtitle={linkTaskTarget.subject || "Nincs tárgy"} busy={linkTaskBusy || caseTasksLoading} feedback={linkTaskFeedback} onClose={() => setLinkTaskTarget(null)} onSubmit={submitLinkTask} submitLabel="Feladathoz kapcsolás" submitDisabled={!selectedTaskId || caseTasksLoading}>

@@ -27,6 +27,8 @@ const TaskStatus = {
   DONE: 'DONE'
 } as const;
 
+import { assertTaskPlanningRolesEligible, resolveTaskPlanning } from './taskPlanning';
+
 const TaskPriority = {
   LOW: 'LOW',
   MEDIUM: 'MEDIUM',
@@ -949,6 +951,136 @@ export async function createTaskFromCommunicationSource(communicationId: string,
       title: task.title,
       caseId: task.caseId,
       sourceCommunicationId: task.sourceCommunicationId,
+      status: task.status,
+      dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    },
+    source: {
+      type: 'COMMUNICATION',
+      id: communication.id,
+      caseId: communication.caseId,
+    },
+  };
+}
+
+/**
+ * Canonical task creation from a communication source.
+ *
+ * Converges the Communication → task flow with the single canonical planning
+ * implementation (resolveTaskPlanning + createTask). The communication's
+ * server-owned case/client always wins; caller-supplied case/client values are
+ * validated and rejected on mismatch. Roles grant no case access.
+ *
+ * Legacy compatibility: accepts `assigneeId`/`dueAt`/`kind` as well as the
+ * canonical `assignedTo`/`dueDate`/`type`.
+ */
+export async function createCanonicalTaskFromCommunication(
+  communicationId: string,
+  userId: string,
+  actorRole: string | null | undefined,
+  body: unknown,
+) {
+  if (!userId) {
+    throw new SourceLinkedTaskError(401, 'NOT_AUTHENTICATED', 'Authenticated user is required.');
+  }
+  const payload = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+
+  const communication = await prisma.communication.findUnique({
+    where: { id: communicationId },
+    select: { id: true, caseId: true, clientId: true, subject: true },
+  });
+  if (!communication) {
+    throw new SourceLinkedTaskError(404, 'COMMUNICATION_NOT_FOUND', 'Communication not found.');
+  }
+  if (!communication.caseId) {
+    throw new SourceLinkedTaskError(409, 'COMMUNICATION_NOT_LINKED_TO_CASE', 'Communication must be linked to a case before creating a task.');
+  }
+
+  const communicationCase = await prisma.case.findUnique({
+    where: { id: communication.caseId },
+    select: { id: true, clientId: true },
+  });
+  if (!communicationCase) {
+    throw new SourceLinkedTaskError(404, 'CASE_NOT_FOUND', 'The communication case was not found.');
+  }
+
+  const requestedCaseId = payload.caseId != null ? String(payload.caseId) : null;
+  if (requestedCaseId && requestedCaseId !== communication.caseId) {
+    throw new SourceLinkedTaskError(409, 'SOURCE_CASE_MISMATCH', 'A feladat ügye nem térhet el a kommunikáció ügyétől.');
+  }
+  const requestedClientId = payload.clientId != null ? String(payload.clientId) : null;
+  if (requestedClientId && communicationCase.clientId && requestedClientId !== communicationCase.clientId) {
+    throw new SourceLinkedTaskError(409, 'SOURCE_CLIENT_MISMATCH', 'A feladat ügyfele nem térhet el a kommunikáció ügyfelétől.');
+  }
+  if (communication.clientId && communicationCase.clientId && communication.clientId !== communicationCase.clientId) {
+    throw new SourceLinkedTaskError(409, 'SOURCE_CLIENT_MISMATCH', 'A kommunikáció és az ügy nem ugyanahhoz az ügyfélhez tartozik.');
+  }
+
+  const title = typeof payload.title === 'string' ? payload.title.trim() : '';
+  if (!title) {
+    throw new SourceLinkedTaskError(400, 'TITLE_REQUIRED', 'A feladat címe kötelező.');
+  }
+
+  const attentionInput = parseTaskAttentionInput(payload);
+  const planning = await resolveTaskPlanning(
+    {
+      taskDefinitionId: payload.taskDefinitionId != null ? String(payload.taskDefinitionId) : null,
+      taskTypeLabel: payload.taskTypeLabel != null ? String(payload.taskTypeLabel) : null,
+      plannedReviewerId: payload.plannedReviewerId != null ? String(payload.plannedReviewerId) : null,
+      estimatedMinutes: attentionInput.estimatedMinutes ?? null,
+      attentionCategory: attentionInput.attentionCategory ?? null,
+      saveToCatalogue: payload.saveToCatalogue === true,
+      taskDefinitionClientId: payload.taskDefinitionClientId != null ? String(payload.taskDefinitionClientId) : communicationCase.clientId ?? null,
+    },
+    { userId, role: actorRole ?? '' },
+  );
+
+  const assigneeRaw = payload.assignedTo ?? payload.assigneeId;
+  const assigneeId = assigneeRaw != null && String(assigneeRaw).trim() ? String(assigneeRaw).trim() : undefined;
+  const collaboratorUserIds = Array.isArray(payload.collaboratorUserIds)
+    ? (payload.collaboratorUserIds as unknown[]).map((v) => String(v)).filter(Boolean)
+    : [];
+
+  if (planning.plannedReviewerId || collaboratorUserIds.length) {
+    await assertTaskPlanningRolesEligible(communication.caseId, {
+      assigneeId: assigneeId ?? null,
+      plannedReviewerId: planning.plannedReviewerId,
+      collaboratorUserIds,
+    });
+  }
+
+  const typeInput = payload.type ?? payload.taskType;
+  const mappedTaskType = mapAnyTaskTypeToPrisma(typeInput != null ? String(typeInput) : 'OTHER') ?? TaskType.OTHER;
+  const dueInput = payload.dueDate ?? payload.dueAt;
+
+  const task = await createTask({
+    caseId: communication.caseId,
+    title,
+    description: typeof payload.description === 'string' && payload.description.trim() ? payload.description.trim() : undefined,
+    taskType: mappedTaskType,
+    type: mappedTaskType,
+    priority: (payload.priority != null ? String(payload.priority) : undefined) as never,
+    assignedTo: assigneeId,
+    assignedBy: userId,
+    dueDate: dueInput ? new Date(String(dueInput)) : undefined,
+    attentionCategory: (planning.attentionCategory ?? attentionInput.attentionCategory) as never,
+    estimatedMinutes: planning.estimatedMinutes,
+    requestedByOrganizationPersonId: payload.requestedByOrganizationPersonId != null ? String(payload.requestedByOrganizationPersonId) : null,
+    taskDefinitionId: planning.taskDefinitionId,
+    taskTypeLabelSnapshot: planning.taskTypeLabelSnapshot,
+    plannedReviewerId: planning.plannedReviewerId,
+    collaboratorUserIds,
+    sourceCommunicationId: communication.id,
+  });
+
+  return {
+    success: true,
+    task: {
+      id: task.id,
+      title: task.title,
+      caseId: task.caseId,
+      sourceCommunicationId: task.sourceCommunicationId,
+      taskDefinitionId: (task as { taskDefinitionId?: string | null }).taskDefinitionId ?? null,
+      plannedReviewerId: (task as { plannedReviewerId?: string | null }).plannedReviewerId ?? null,
       status: task.status,
       dueDate: task.dueDate ? task.dueDate.toISOString() : null,
     },
