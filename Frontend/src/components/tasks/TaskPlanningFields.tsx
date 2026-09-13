@@ -67,6 +67,13 @@ export function TaskPlanningFields({ clientId, users, assigneeId, value, onChang
 
   const reviewerCandidates = users.filter((u) => u.id !== assigneeId);
   const collaboratorCandidates = users.filter((u) => u.id !== assigneeId && u.id !== value.plannedReviewerId);
+  const isPrivileged = (candidate: PlanningCandidate) => ['ADMIN', 'PARTNER'].includes(String(candidate.role || '').toUpperCase());
+  // Primary group: directly case-related workforce. Privileged firm roles are a
+  // secondary, explicit group so they never flood the default picker.
+  const primaryReviewerCandidates = reviewerCandidates.filter((candidate) => !isPrivileged(candidate));
+  const privilegedReviewerCandidates = reviewerCandidates.filter(isPrivileged);
+  const primaryCollaboratorCandidates = collaboratorCandidates.filter((candidate) => !isPrivileged(candidate));
+  const privilegedCollaboratorCandidates = collaboratorCandidates.filter(isPrivileged);
   const candidateLabel = (candidate: PlanningCandidate) => users.filter((user) => user.name === candidate.name).length > 1 && candidate.email
     ? `${candidate.name} · ${candidate.email}`
     : candidate.name;
@@ -140,23 +147,51 @@ export function TaskPlanningFields({ clientId, users, assigneeId, value, onChang
             className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"
           >
             <option value="">Nincs</option>
-            {reviewerCandidates.map((u) => (
+            {primaryReviewerCandidates.map((u) => (
               <option key={u.id} value={u.id}>{candidateLabel(u)}</option>
             ))}
           </select>
           {reviewerCandidates.length === 0 ? <span className="mt-1 block text-[10px] font-normal text-[var(--adm-text-muted)]">Nincs további jogosult munkatárs.</span> : null}
+          {privilegedReviewerCandidates.length ? (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-[10px] font-normal text-[var(--adm-text-muted)]">Partner / admin kiválasztása</summary>
+              <select
+                value={value.plannedReviewerId || ""}
+                onChange={(event) => onChange({ plannedReviewerId: event.target.value || null })}
+                className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"
+              >
+                <option value="">Nincs</option>
+                {privilegedReviewerCandidates.map((u) => (
+                  <option key={u.id} value={u.id}>{candidateLabel(u)}</option>
+                ))}
+              </select>
+            </details>
+          ) : null}
         </label>
         <fieldset className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
           <legend className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Párhuzamos közreműködők (opcionális)</legend>
           <div className="mt-1 max-h-24 space-y-1 overflow-y-auto rounded border border-[var(--adm-border)] bg-white p-2">
             {collaboratorCandidates.length === 0 ? <p className="text-[10px] text-[var(--adm-text-muted)]">Nincs további jogosult munkatárs.</p> : null}
-            {collaboratorCandidates.map((u) => (
+            {primaryCollaboratorCandidates.map((u) => (
               <label key={u.id} className="flex items-center gap-2 text-[11px] font-normal text-[var(--adm-text)]">
                 <input type="checkbox" checked={value.collaboratorUserIds.includes(u.id)} onChange={() => toggleCollaborator(u.id)} />
                 {candidateLabel(u)}
               </label>
             ))}
           </div>
+          {privilegedCollaboratorCandidates.length ? (
+            <details className="mt-1">
+              <summary className="cursor-pointer text-[10px] font-normal text-[var(--adm-text-muted)]">Partner / admin kiválasztása</summary>
+              <div className="mt-1 space-y-1">
+                {privilegedCollaboratorCandidates.map((u) => (
+                  <label key={u.id} className="flex items-center gap-2 text-[11px] font-normal text-[var(--adm-text)]">
+                    <input type="checkbox" checked={value.collaboratorUserIds.includes(u.id)} onChange={() => toggleCollaborator(u.id)} />
+                    {candidateLabel(u)}
+                  </label>
+                ))}
+              </div>
+            </details>
+          ) : null}
         </fieldset>
       </div>
 
