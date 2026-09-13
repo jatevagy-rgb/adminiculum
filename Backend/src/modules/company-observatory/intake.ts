@@ -11,11 +11,14 @@
  * - Never writes findings, recommendations, tasks, or initiatives.
  */
 
-import { DiscoveryRunStatus, ExternalSourceStatus, ObservationType } from '@prisma/client';
+import { ObservationType } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { canonicalDigest } from '../compliance/canonicalDigest';
 import { assertClientReadAccess, assertClientSafe, InternalActor, InteractionError, Prisma, safeText } from '../client-interaction/base';
 import { requireOrganizationWorkspace } from '../client-workspace/organizationalAccessPolicy';
+import { ObservatoryIngestionService, type ObservatoryAccessGuard } from './ingestion/service';
+
+const ingestion = new ObservatoryIngestionService();
 
 const SURVEY_SOURCE_NAME = 'Grow strukturált intake';
 const SURVEY_SOURCE_TYPE = 'SURVEY';
@@ -70,20 +73,23 @@ export interface SurveySubmissionProvenance {
   identityId?: string;
 }
 
-async function findOrCreateSurveyConnection(clientId: string, prisma: Prisma = defaultPrisma) {
-  const existing = await prisma.externalSourceConnection.findFirst({
+async function findOrCreateSurveyConnection(
+  actor: InternalActor,
+  clientId: string,
+  accessGuard?: ObservatoryAccessGuard,
+) {
+  const existing = await defaultPrisma.externalSourceConnection.findFirst({
     where: { clientId, sourceType: SURVEY_SOURCE_TYPE },
   });
   if (existing) return existing;
-  return prisma.externalSourceConnection.create({
-    data: {
-      clientId,
-      sourceType: SURVEY_SOURCE_TYPE,
-      name: SURVEY_SOURCE_NAME,
-      config: { kind: 'structured-survey', version: 1 },
-      status: ExternalSourceStatus.ACTIVE,
-    },
-  });
+  // Creation must go through the canonical ingestion service so validateNoSecrets
+  // and canonical connection semantics remain active.
+  return ingestion.registerExternalSource(actor, {
+    clientId,
+    sourceType: SURVEY_SOURCE_TYPE,
+    name: SURVEY_SOURCE_NAME,
+    config: { kind: 'structured-survey', version: 1 },
+  }, accessGuard);
 }
 
 /**
@@ -92,10 +98,11 @@ async function findOrCreateSurveyConnection(clientId: string, prisma: Prisma = d
  * Produces exactly one DECLARED_SURVEY observation per idempotencyKey.
  */
 export async function persistCanonicalSurveySubmission(
+  actor: InternalActor,
   provenance: SurveySubmissionProvenance,
   clientId: string,
   input: SubmitSurveyIntakeInput,
-  prisma: Prisma = defaultPrisma,
+  accessGuard?: ObservatoryAccessGuard,
 ): Promise<SubmitSurveyIntakeResult> {
   const idempotencyKey = safeText(input.idempotencyKey, 'idempotencyKey', 200, true)!;
   const categories = (input.categories ?? [])
@@ -106,7 +113,7 @@ export async function persistCanonicalSurveySubmission(
   }
   const freeText = safeText(input.freeText, 'freeText', 4000, false) ?? null;
 
-  const connection = await findOrCreateSurveyConnection(clientId, prisma);
+  const connection = await findOrCreateSurveyConnection(actor, clientId, accessGuard);
 
   const rawPayload = {
     kind: 'GROW_PAIN_INTAKE',
@@ -125,7 +132,7 @@ export async function persistCanonicalSurveySubmission(
 
   // Exact replay: same key + same payload returns the existing observation
   // without creating a duplicate run.
-  const existing = await prisma.observation.findUnique({
+  const existing = await defaultPrisma.observation.findUnique({
     where: { clientId_connectionId_idempotencyKey: { clientId, connectionId: connection.id, idempotencyKey } },
   });
   if (existing) {
@@ -135,54 +142,25 @@ export async function persistCanonicalSurveySubmission(
     throw new InteractionError(409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used with a different payload.');
   }
 
-  const run = await prisma.discoveryRun.create({
-    data: {
-      clientId,
-      connectionId: connection.id,
-      status: DiscoveryRunStatus.RUNNING,
-    },
-  });
+  const run = await ingestion.startDiscoveryRun(actor, { clientId, connectionId: connection.id }, accessGuard);
 
   try {
-    const observation = await prisma.observation.create({
-      data: {
-        clientId,
-        connectionId: connection.id,
-        discoveryRunId: run.id,
-        observationType: ObservationType.DECLARED_SURVEY,
-        idempotencyKey,
-        sourceRecordId: `survey:${idempotencyKey}`,
-        inputDigest: digest,
-        rawPayload,
-        observedAt: new Date(provenance.submittedAt),
-      },
-    });
-    await prisma.discoveryRun.update({
-      where: { id_clientId: { id: run.id, clientId } },
-      data: {
-        status: DiscoveryRunStatus.COMPLETED,
-        completedAt: new Date(),
-      },
-    });
+    const observation = await ingestion.ingestObservation(actor, {
+      clientId,
+      connectionId: connection.id,
+      discoveryRunId: run.id,
+      observationType: ObservationType.DECLARED_SURVEY,
+      idempotencyKey,
+      sourceRecordId: `survey:${idempotencyKey}`,
+      rawPayload,
+      observedAt: new Date(provenance.submittedAt),
+    }, accessGuard);
+    await ingestion.completeDiscoveryRun(actor, { clientId, runId: run.id }, accessGuard);
     return { observationId: observation.id, runId: run.id, connectionId: connection.id, replayed: false };
   } catch (err: any) {
-    await prisma.discoveryRun.update({
-      where: { id_clientId: { id: run.id, clientId } },
-      data: {
-        status: DiscoveryRunStatus.FAILED,
-        completedAt: new Date(),
-      },
-    });
-    if (err?.code === 'P2002') {
-      const reloaded = await prisma.observation.findUnique({
-        where: { clientId_connectionId_idempotencyKey: { clientId, connectionId: connection.id, idempotencyKey } },
-      });
-      if (reloaded) {
-        if (reloaded.inputDigest === digest) {
-          return { observationId: reloaded.id, runId: reloaded.discoveryRunId, connectionId: connection.id, replayed: true };
-        }
-        throw new InteractionError(409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used with a different payload.');
-      }
+    await ingestion.failDiscoveryRun(actor, { clientId, runId: run.id }, accessGuard).catch(() => undefined);
+    if (err?.message === 'IDEMPOTENCY_CONFLICT') {
+      throw new InteractionError(409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used with a different payload.');
     }
     throw err;
   }
@@ -200,10 +178,10 @@ export async function submitSurveyIntake(
 ): Promise<SubmitSurveyIntakeResult> {
   await assertClientReadAccess(actor, clientId, prisma);
   return persistCanonicalSurveySubmission(
+    actor,
     { channel: 'INTERNAL_WORKFORCE', submittedAt: new Date().toISOString() },
     clientId,
     input,
-    prisma,
   );
 }
 
@@ -295,21 +273,35 @@ export async function submitPortalSurveyIntake(
   }
 
   const submittedAt = new Date().toISOString();
+
+  // Server-bound capability: created only AFTER real portal session + workspace
+  // authorization. The browser cannot construct this guard.
+  const authorizedClientId = workspace.clientId;
+  const portalAccessGuard: ObservatoryAccessGuard = async (_actor, requestedClientId) => {
+    if (requestedClientId !== authorizedClientId) {
+      throw new InteractionError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'Workspace does not authorize this client.');
+    }
+  };
+  // Truthful portal actor carrier. Authorization is performed by the guard; this
+  // role is never added to INTERNAL_ROLES.
+  const portalActor: InternalActor = { userId: identityId, role: 'CLIENT_PORTAL' };
+
   const res = await persistCanonicalSurveySubmission(
+    portalActor,
     {
       channel: 'CLIENT_PORTAL',
       submittedAt,
       workspaceId: workspace.id,
       identityId,
     },
-    workspace.clientId,
+    authorizedClientId,
     {
       categories: input.categories,
       freeText: input.freeText,
       processId: validProcessId,
       idempotencyKey: input.idempotencyKey,
     },
-    prisma,
+    portalAccessGuard,
   );
 
   return {
