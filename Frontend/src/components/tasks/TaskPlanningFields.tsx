@@ -104,6 +104,12 @@ export function TaskPlanningFields({ clientId, users, assigneeId, value, onChang
         </label>
       </div>
 
+      {definitions.length === 0 ? (
+        <p className="text-[10.5px] text-[var(--adm-text-muted)]" data-testid="task-catalogue-empty">
+          Nincs még létrehozott feladattípus ennél az ügyfélnél. Írjon be szabad megnevezést, és igény esetén mentse el újrafelhasználható típusként.
+        </p>
+      ) : null}
+
       {!value.taskDefinitionId && value.taskTypeLabel?.trim() ? (
         <label className="flex items-center gap-2 text-[11px] text-[var(--adm-text)]">
           <input type="checkbox" checked={value.saveToCatalogue} onChange={(event) => onChange({ saveToCatalogue: event.target.checked })} />

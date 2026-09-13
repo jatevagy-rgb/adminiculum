@@ -82,3 +82,12 @@ test('A5: linked and unlinked communication case-first actions are both present'
   assert.match(src, /Új ügy létrehozása/);
   assert.match(src, /Meglévő ügyhöz rendelés/);
 });
+
+test('Task catalogue: truthful empty state is rendered when no definitions exist', () => {
+  const src = read('Frontend/src/components/tasks/TaskPlanningFields.tsx');
+  assert.match(src, /definition/);
+  assert.match(src, /definitions\.length === 0/);
+  assert.match(src, /Nincs még létrehozott feladattípus/);
+  // Free naming must remain available alongside the catalogue.
+  assert.match(src, /Szabad megnevezés/);
+});
