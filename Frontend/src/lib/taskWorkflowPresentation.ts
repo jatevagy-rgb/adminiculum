@@ -282,6 +282,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   DOCUMENT_NOT_FOUND: "A dokumentum nem található vagy nem kapcsolható ehhez az ügyhöz.",
   TIME_ENTRY_NOT_FOUND: "A munkaóra nem található vagy nem kapcsolható ehhez a feladathoz.",
   ZERO_TIME_CONFIRMATION_CONFLICT: "Kapcsolt munkaóra mellett nem erősíthető meg a nulla idő.",
+  TASK_ROLE_CASE_ACCESS_REQUIRED: "A kiválasztott munkatárs nem rendelkezik hozzáféréssel ehhez az ügyhöz.",
+  TASK_ROLE_USER_INELIGIBLE: "A kiválasztott munkatárs jelenleg nem jelölhető ki erre a feladatra.",
+  REVIEWER_CANNOT_BE_WORKER: "A feladat végrehajtója és ellenőrzője nem lehet ugyanaz a személy.",
+  COLLABORATOR_IS_WORKER: "A feladat felelőse nem jelölhető meg párhuzamos közreműködőként is.",
+  COLLABORATOR_IS_REVIEWER: "Az ellenőrző nem lehet egyben párhuzamos közreműködő.",
 };
 
 export function taskWorkflowErrorMessage(error: unknown): string {

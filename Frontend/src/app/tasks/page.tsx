@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { TaskPlanningFields, EMPTY_TASK_PLANNING, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
+import { getCaseResponsibleCandidates, type CaseResponsibleCandidate } from "@/lib/api";
 import { getClientAccentBorderClass } from "@/lib/clientColors";
 import {
   ATTENTION_PRESENTATIONS,
@@ -245,6 +246,22 @@ function TasksPageContent() {
   const [taskPlanning, setTaskPlanning] = useState<TaskPlanningValue>(EMPTY_TASK_PLANNING);
   const focusedRowRef = useRef<HTMLTableRowElement | null>(null);
 
+  // Case-scoped planning candidates: when a case is selected, reviewer/
+  // collaborator/assignee options come from the authoritative backend projection.
+  const [caseCandidates, setCaseCandidates] = useState<CaseResponsibleCandidate[]>([]);
+  useEffect(() => {
+    if (!createData.caseId) {
+      setCaseCandidates([]);
+      return;
+    }
+    let active = true;
+    getCaseResponsibleCandidates(createData.caseId)
+      .then((result) => { if (active) setCaseCandidates(result.items); })
+      .catch(() => { if (active) setCaseCandidates([]); });
+    return () => { active = false; };
+  }, [createData.caseId]);
+  const planningUsers = createData.caseId ? caseCandidates : users;
+
   const loadTasks = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -441,15 +458,15 @@ function TasksPageContent() {
 
       <WorkflowDialog open={showCreateModal} title="Új feladat" description="A feladat egy meglévő ügyhöz kapcsolódik." primaryLabel="Feladat létrehozása" primaryDisabled={!createData.caseId || !createData.title.trim() || !createData.type} busy={isSaving} onClose={() => setShowCreateModal(false)} onConfirm={() => void handleCreateTask()}>
         <div className="space-y-4">
-          <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy<select autoFocus value={createData.caseId} onChange={(event) => setCreateData((current) => ({ ...current, caseId: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="">Válasszon ügyet</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}</select></label>
+          <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Ügy<select autoFocus value={createData.caseId} onChange={(event) => { setCreateData((current) => ({ ...current, caseId: event.target.value, assignedTo: "" })); setTaskPlanning(EMPTY_TASK_PLANNING); }} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="">Válasszon ügyet</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}</select></label>
           <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Cím<input value={createData.title} onChange={(event) => setCreateData((current) => ({ ...current, title: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" /></label>
           <div className="grid gap-3 sm:grid-cols-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Típus<select value={createData.type} onChange={(event) => setCreateData((current) => ({ ...current, type: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">{TASK_TYPES.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={createData.priority} onChange={(event) => setCreateData((current) => ({ ...current, priority: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Magas</option></select></label></div>
           <TaskAttentionFormFields attentionCategory={createData.attentionCategory ?? null} estimatedMinutes={createData.estimatedMinutes ?? null} onChange={(next) => setCreateData((current) => ({ ...current, ...next }))} />
           <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea rows={3} value={createData.description || ""} onChange={(event) => setCreateData((current) => ({ ...current, description: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" /></label>
-          <div className="grid gap-3 sm:grid-cols-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={createData.dueDate || ""} onChange={(event) => setCreateData((current) => ({ ...current, dueDate: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" /></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Felelős<select value={createData.assignedTo || ""} onChange={(event) => setCreateData((current) => ({ ...current, assignedTo: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="">Nincs kijelölve</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label></div>
+          <div className="grid gap-3 sm:grid-cols-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={createData.dueDate || ""} onChange={(event) => setCreateData((current) => ({ ...current, dueDate: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]" /></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Felelős<select value={createData.assignedTo || ""} onChange={(event) => setCreateData((current) => ({ ...current, assignedTo: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"><option value="">Nincs kijelölve</option>{planningUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label></div>
           <TaskPlanningFields
             clientId={cases.find((c) => c.id === createData.caseId)?.clientId || null}
-            users={users}
+            users={planningUsers}
             assigneeId={createData.assignedTo || null}
             value={taskPlanning}
             onChange={(next) => setTaskPlanning((current) => ({ ...current, ...next }))}

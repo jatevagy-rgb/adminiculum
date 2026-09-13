@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { taskPlanningApi, type TaskDefinitionDTO } from "@/lib/taskPlanningApi";
-import type { User } from "@/lib/api";
+export interface PlanningCandidate {
+  id: string;
+  name: string;
+  role?: string | null;
+}
 
 export interface TaskPlanningValue {
   taskDefinitionId: string | null;
@@ -23,8 +27,8 @@ export const EMPTY_TASK_PLANNING: TaskPlanningValue = {
 interface TaskPlanningFieldsProps {
   /** Client of the selected case — scopes the catalogue to client + firm-wide entries. */
   clientId: string | null;
-  /** Users eligible as planned reviewer / collaborators (must have case access — backend enforces). */
-  users: User[];
+  /** Case-eligible users only (authoritative backend projection; backend enforces). */
+  users: ReadonlyArray<PlanningCandidate>;
   /** The chosen executor — reviewer can never equal the worker. */
   assigneeId: string | null;
   value: TaskPlanningValue;
@@ -136,11 +140,12 @@ export function TaskPlanningFields({ clientId, users, assigneeId, value, onChang
               <option key={u.id} value={u.id}>{u.name}</option>
             ))}
           </select>
+          {reviewerCandidates.length === 0 ? <span className="mt-1 block text-[10px] font-normal text-[var(--adm-text-muted)]">Nincs további jogosult munkatárs.</span> : null}
         </label>
         <fieldset className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
           <legend className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Párhuzamos közreműködők (opcionális)</legend>
           <div className="mt-1 max-h-24 space-y-1 overflow-y-auto rounded border border-[var(--adm-border)] bg-white p-2">
-            {collaboratorCandidates.length === 0 ? <p className="text-[10px] text-[var(--adm-text-muted)]">Nincs további jelölt.</p> : null}
+            {collaboratorCandidates.length === 0 ? <p className="text-[10px] text-[var(--adm-text-muted)]">Nincs további jogosult munkatárs.</p> : null}
             {collaboratorCandidates.map((u) => (
               <label key={u.id} className="flex items-center gap-2 text-[11px] font-normal text-[var(--adm-text)]">
                 <input type="checkbox" checked={value.collaboratorUserIds.includes(u.id)} onChange={() => toggleCollaborator(u.id)} />
