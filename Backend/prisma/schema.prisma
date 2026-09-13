@@ -3502,6 +3502,7 @@ enum CommunicationDirection {
 enum CommunicationSource {
   MANUAL
   OUTLOOK
+  MAILBOX
 }
 
 enum CommunicationSyncStatus {
@@ -3609,6 +3610,23 @@ model EmailVerificationChallenge {
   @@index([userId, emailAddress, createdAt])
   @@index([emailAddress, createdAt])
   @@map("email_verification_challenges")
+}
+
+/// Mailbox-specific metadata audit trail. Deliberately no credential, code, or
+/// message-body fields: event payloads are safe classifications only.
+model MailboxAuditEvent {
+  id                  String   @id @default(uuid())
+  mailboxConnectionId String?
+  actorUserId         String
+  provider            MailboxProvider?
+  eventType           String
+  status              String?
+  errorCode           String?
+  createdAt           DateTime @default(now())
+
+  @@index([mailboxConnectionId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("mailbox_audit_events")
 }
 
 // ============================================================================

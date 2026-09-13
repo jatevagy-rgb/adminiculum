@@ -19,6 +19,8 @@ import {
 } from '../src/modules/mailbox/dedupe';
 import { InMemorySecretStore, UnconfiguredSecretStore } from '../src/modules/mailbox/secretStore';
 import { getMailboxProvider } from '../src/modules/mailbox/provider';
+import { createOAuthState, verifyOAuthState } from '../src/modules/mailbox/oauthState';
+import { TransactionalMailConfigurationError, getTransactionalMailTransport } from '../src/modules/mailbox/transactionalMail';
 
 describe('email verification code', () => {
   it('generates a 6-digit code and verifies it against its hash', () => {
@@ -138,5 +140,17 @@ describe('provider registry', () => {
     delete process.env.MICROSOFT_MAILBOX_CLIENT_ID;
     expect(() => getMailboxProvider('MICROSOFT_GRAPH').buildAuthorizationUrl({ state: 's', redirectUri: 'https://app/cb' })).toThrow(/NOT_CONFIGURED/);
     if (prev.id) process.env.MICROSOFT_MAILBOX_CLIENT_ID = prev.id;
+  });
+});
+
+describe('OAuth and transactional-mail boundaries', () => {
+  const env = { MAILBOX_OAUTH_STATE_SECRET: 'a'.repeat(32) } as NodeJS.ProcessEnv;
+  it('binds a signed OAuth state to one user, connection and mailbox', () => {
+    const state = createOAuthState({ userId: 'user-1', connectionId: 'connection-1', mailboxAddress: 'owner@example.com', provider: 'GOOGLE_GMAIL' }, env);
+    expect(verifyOAuthState(state, env)).toMatchObject({ userId: 'user-1', connectionId: 'connection-1', mailboxAddress: 'owner@example.com', provider: 'GOOGLE_GMAIL' });
+    expect(() => verifyOAuthState(`${state}x`, env)).toThrow(/INVALID/);
+  });
+  it('does not pretend verification mail was sent without a configured system transport', async () => {
+    await expect(getTransactionalMailTransport().sendVerificationCode({ email: 'owner@example.com', code: '123456', expiresAt: new Date() })).rejects.toBeInstanceOf(TransactionalMailConfigurationError);
   });
 });

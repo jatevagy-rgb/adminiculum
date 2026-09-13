@@ -415,3 +415,8 @@ const ADAPTERS: Record<MailboxProviderCode, MailboxProviderAdapter> = {
 export function getMailboxProvider(code: MailboxProviderCode): MailboxProviderAdapter {
   return ADAPTERS[code];
 }
+
+/** Test seam for provider-contract tests. Never configure this from a route. */
+export function setMailboxProviderForTest(code: MailboxProviderCode, adapter: MailboxProviderAdapter | null): void {
+  ADAPTERS[code] = adapter ?? (code === 'MICROSOFT_GRAPH' ? new MicrosoftGraphMailboxProvider() : code === 'GOOGLE_GMAIL' ? new GmailMailboxProvider() : new ImapSmtpMailboxProvider());
+}
