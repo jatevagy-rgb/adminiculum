@@ -2,8 +2,22 @@ import { fetchApi } from "./api";
 
 /** Grow product + Observatory intake API. All endpoints are additive. */
 
-export type SufficiencyDecision = "SUPPORTED" | "NEEDS_MORE_DATA" | "INSUFFICIENT_EVIDENCE" | "OUT_OF_SCOPE";
+export type SufficiencyDecision =
+  | "SUPPORTED"
+  | "NEEDS_MORE_DATA"
+  | "INSUFFICIENT_EVIDENCE"
+  | "CONFLICTING_EVIDENCE"
+  | "OUT_OF_SCOPE"
+  | "HUMAN_DOMAIN_REVIEW";
 export type EvidenceStrength = "STRONG" | "MODERATE" | "WEAK";
+
+export type RoiProvenanceType =
+  | "MEASURED"
+  | "CALCULATED"
+  | "CLIENT_ESTIMATE"
+  | "CONSULTANT_ESTIMATE"
+  | "RESEARCH_BENCHMARK"
+  | "GENERAL_ASSUMPTION";
 
 export interface GrowOpportunityItem {
   id: string;
@@ -11,6 +25,8 @@ export interface GrowOpportunityItem {
   status: string;
   kind: string;
   sufficiency: SufficiencyDecision;
+  actionable: boolean;
+  interventionCodes: string[];
   title: string;
   problemStatement: string;
   direction: string;
@@ -32,9 +48,14 @@ export interface GrowEvidenceItem {
   year: number | null;
   doi: string | null;
   locator: string | null;
+  origin: string | null;
+  boundedClaim: string | null;
+  evidenceType: string | null;
   verificationStatus: string;
   strength: string;
   domainKeys: string[];
+  supportedInterventions: string[];
+  supportedOutcomes: string[];
   applicabilityNotes: string | null;
   limitations: string | null;
   createdAt: string;
@@ -46,6 +67,8 @@ export interface GrowOpportunityDetail {
   status: string;
   kind: string;
   sufficiency: SufficiencyDecision;
+  actionable: boolean;
+  interventionCodes: string[];
   title: string;
   problemStatement: string;
   direction: string;
@@ -65,6 +88,7 @@ export interface GrowOpportunityDetail {
 }
 
 export interface GrowHomeSummary {
+  canRunResearch: boolean;
   opportunityCounts: {
     total: number;
     supported: number;
@@ -78,12 +102,14 @@ export interface GrowHomeSummary {
 
 export interface OutcomeRoi {
   basis: string;
+  provenanceType?: RoiProvenanceType | null;
   timeSavedMinutesPerRun?: { low: number; base: number; high: number } | null;
   timeSavedMinutesPerMonth?: { low: number; base: number; high: number } | null;
   cashSavedHufPerMonth?: { low: number; base: number; high: number } | null;
   provenance?: {
     formulaVersion: string;
     computedAt: string;
+    type?: RoiProvenanceType;
     timeSavedIsNotCashSaved: boolean;
     explanationHu: string;
     recordedById?: string;
@@ -175,7 +201,7 @@ export const growApi = {
     return fetchApi<GrowOpportunityDetail>(url(clientId, `/grow/opportunities/${encodeURIComponent(recommendationId)}`));
   },
   runResearch(clientId: string, input: { businessProcessId?: string; idempotencyKey?: string }) {
-    return fetchApi<{ run: { id: string; status: string }; idempotentReplay: boolean; counts: Record<string, number> }>(
+    return fetchApi<{ runId: string; status: string; diagnosisCount: number; recommendationCount: number; replayed: boolean }>(
       url(clientId, "/grow/research-runs"),
       { method: "POST", body: JSON.stringify(input) },
     );
@@ -211,7 +237,7 @@ export const growApi = {
     return fetchApi<{ items: Array<{ id: string; runId: string; connectionId: string; idempotencyKey: string; observedAt: string; payload: Record<string, unknown> }> }>(url(clientId, "/observatory/survey-intake"));
   },
   listSources(clientId: string) {
-    return fetchApi<{ items: Array<{ id: string; type: string; displayName: string | null; status: string }> }>(url(clientId, "/observatory/sources"));
+    return fetchApi<{ items: Array<{ id: string; sourceType: string; name: string; status: string; createdAt: string }> }>(url(clientId, "/observatory/sources"));
   },
   listProcesses(clientId: string) {
     return fetchApi<BusinessProcessDTO[]>(url(clientId, "/processes"));
@@ -226,9 +252,19 @@ export function sufficiencyLabelHu(sufficiency: SufficiencyDecision): string {
     SUPPORTED: "Alátámasztott",
     NEEDS_MORE_DATA: "Több adat kell",
     INSUFFICIENT_EVIDENCE: "Elégtelen bizonyíték",
+    CONFLICTING_EVIDENCE: "Ellentmondásos bizonyíték",
     OUT_OF_SCOPE: "Területen kívül",
+    HUMAN_DOMAIN_REVIEW: "Szakértői felülvizsgálat",
   };
   return labels[sufficiency];
+}
+
+export function sufficiencyExplanationHu(sufficiency: SufficiencyDecision): string | null {
+  const labels: Partial<Record<SufficiencyDecision, string>> = {
+    CONFLICTING_EVIDENCE: "A rendelkezésre álló bizonyítékok ellentmondásosak. Szakértői felülvizsgálat szükséges.",
+    HUMAN_DOMAIN_REVIEW: "Szakértői felülvizsgálat szükséges, mielőtt javaslatot adunk.",
+  };
+  return labels[sufficiency] ?? null;
 }
 
 export function evidenceStrengthLabelHu(strength: EvidenceStrength | string): string {
@@ -248,4 +284,47 @@ export function outcomeBasisLabelHu(basis: string): string {
     ASSUMED: "Feltételezés",
   };
   return labels[basis] || basis;
+}
+
+export function roiProvenanceLabelHu(type: RoiProvenanceType | string | null | undefined): string {
+  const labels: Record<string, string> = {
+    MEASURED: "Mért",
+    CALCULATED: "Számított",
+    CLIENT_ESTIMATE: "Ügyfélbecslés",
+    CONSULTANT_ESTIMATE: "Tanácsadói becslés",
+    RESEARCH_BENCHMARK: "Kutatási benchmark",
+    GENERAL_ASSUMPTION: "Általános feltételezés",
+  };
+  return type ? labels[type] || type : "—";
+}
+
+/** Display labels for the canonical backend intervention codes. */
+export const INTERVENTION_LABELS_HU: Record<string, string> = {
+  STANDARDIZE_PROCESS: "Folyamat standardizálása",
+  REDESIGN_APPROVAL_ROUTING: "Jóváhagyási útvonal újratervezése",
+  DIGITIZE_INTAKE: "Beviteli adatrögzítés digitalizálása",
+  CONSOLIDATE_SYSTEMS: "Rendszerek összevonása",
+  INTEGRATE_SYSTEMS: "Rendszerek integrálása",
+  AUTOMATE_REPETITIVE_STEP: "Ismétlődő lépés automatizálása",
+  CLARIFY_PROCESS_OWNERSHIP: "Folyamatfelelősség tisztázása",
+  TRAIN_DIGITAL_SKILLS: "Digitális készségek fejlesztése",
+  ALIGN_IT_WITH_BUSINESS_GOALS: "IT és üzleti célok összehangolása",
+  IMPLEMENT_PROCESS_MEASUREMENT: "Folyamatmérés bevezetése",
+  PHASE_DIGITAL_INVESTMENT: "Digitális beruházás szakaszolása",
+  REMOVE_NON_VALUE_ADDING_STEP: "Nem értékteremtő lépés elhagyása",
+  REDESIGN_BEFORE_AUTOMATING: "Újratervezés automatizálás előtt",
+};
+
+export function interventionLabelHu(code: string): string {
+  return INTERVENTION_LABELS_HU[code] ?? code;
+}
+
+export function evidenceOriginLabelHu(origin: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    USER_LIBRARY: "Felhasználói könyvtár",
+    ONLINE_VERIFIED: "Online ellenőrzött",
+    GENERAL_KNOWLEDGE: "Általános ismeret",
+    CLIENT_INTERNAL: "Ügyfél-belső",
+  };
+  return origin ? labels[origin] || origin : "—";
 }

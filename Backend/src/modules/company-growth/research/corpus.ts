@@ -42,6 +42,9 @@ export const DOMAIN_KEYS = [
 ] as const;
 export type ProblemDomainKey = (typeof DOMAIN_KEYS)[number];
 
+export const EVIDENCE_ORIGINS = ['USER_LIBRARY', 'ONLINE_VERIFIED', 'GENERAL_KNOWLEDGE', 'CLIENT_INTERNAL'] as const;
+export type EvidenceOrigin = (typeof EVIDENCE_ORIGINS)[number];
+
 export interface CorpusSeedEntry {
   corpusKey: string;
   kind: EvidenceKind;
@@ -51,9 +54,14 @@ export interface CorpusSeedEntry {
   year?: number;
   doi?: string;
   locator?: string;
+  origin?: EvidenceOrigin;
+  boundedClaim?: string;
+  evidenceType?: string;
   verificationStatus: EvidenceVerificationStatus;
   strength: EvidenceStrength;
   domainKeys: string[];
+  supportedInterventions?: string[];
+  supportedOutcomes?: string[];
   applicabilityNotes?: string;
   limitations?: string;
 }
@@ -74,9 +82,15 @@ export const SEEDED_CORPUS: readonly CorpusSeedEntry[] = [
     year: 2023,
     doi: '10.1007/s41471-023-00158-y',
     locator: 'https://doi.org/10.1007/s41471-023-00158-y',
+    origin: 'ONLINE_VERIFIED',
+    evidenceType: 'SYSTEMATIC_REVIEW',
+    boundedClaim:
+      'A szisztematikus áttekintés szerint a folyamatstandardizálás csökkenti a varianciát és a kézi újramunkát; az áttekintés nem állít konkrét százalékos megtakarítást.',
     verificationStatus: 'VERIFIED',
     strength: 'STRONG',
     domainKeys: ['MANUAL_ADMIN_LOAD', 'DUPLICATE_DATA_ENTRY', 'REWORK', 'GENERAL_FLOW'],
+    supportedInterventions: ['STANDARDIZE_PROCESS', 'REDESIGN_BEFORE_AUTOMATING'],
+    supportedOutcomes: ['TOTAL_ACTIVE_MINUTES', 'REWORK_INDICATOR'],
     applicabilityNotes:
       'Szisztematikus szakirodalmi áttekintés a folyamatstandardizálásról: a standardizált folyamatok csökkentik a varianciát, a kézi újramunkát és a többszörös adatrögzítést.',
     limitations: 'Szakirodalmi szintézis, nem konkrét cégmérés; a hatás nagysága kontextusfüggő.',
@@ -89,9 +103,15 @@ export const SEEDED_CORPUS: readonly CorpusSeedEntry[] = [
     venue: 'Sloan Management Review',
     year: 1990,
     locator: 'https://sloanreview.mit.edu/article/the-new-industrial-engineering-information-technology-and-business-process-redesign/',
+    origin: 'ONLINE_VERIFIED',
+    evidenceType: 'CONCEPTUAL',
+    boundedClaim:
+      'A cikk elvi szinten érvel amellett, hogy a folyamatfelelős és az IT-támogatás együtt csökkenti a rendszerközi váltást és a felelősségi réseket.',
     verificationStatus: 'VERIFIED',
     strength: 'MODERATE',
     domainKeys: ['UNCLEAR_OWNERSHIP', 'SYSTEM_SWITCHING', 'GENERAL_FLOW'],
+    supportedInterventions: ['CLARIFY_PROCESS_OWNERSHIP', 'INTEGRATE_SYSTEMS', 'ALIGN_IT_WITH_BUSINESS_GOALS'],
+    supportedOutcomes: ['SYSTEM_SWITCH_COUNT', 'UNASSIGNED_STEP_COUNT'],
     applicabilityNotes:
       'Klasszikus érvelés: a folyamatfelelős és az IT-támogatás együtt csökkenti a rendszerközi váltást és a felelősségi réseket.',
     limitations: 'Korai, pre-digitalizációs cikk; elvi irányok, nem mért hatások.',
@@ -104,9 +124,15 @@ export const SEEDED_CORPUS: readonly CorpusSeedEntry[] = [
     venue: 'Harvard Business Review',
     year: 1990,
     locator: 'https://hbr.org/1990/07/reengineering-work-dont-automate-obliterate',
+    origin: 'ONLINE_VERIFIED',
+    evidenceType: 'CONCEPTUAL',
+    boundedClaim:
+      'A cikk elvi szinten érvel amellett, hogy a felesleges jóváhagyási és várakozási rétegek eltörlése — nem automatizálása — csökkenti az átfutási időt.',
     verificationStatus: 'VERIFIED',
     strength: 'MODERATE',
     domainKeys: ['APPROVAL_DELAY', 'MANUAL_ADMIN_LOAD', 'SYSTEM_SWITCHING'],
+    supportedInterventions: ['REMOVE_NON_VALUE_ADDING_STEP', 'REDESIGN_APPROVAL_ROUTING', 'REDESIGN_BEFORE_AUTOMATING'],
+    supportedOutcomes: ['TOTAL_WAITING_MINUTES', 'TOTAL_CYCLE_MINUTES'],
     applicabilityNotes:
       'A klasszikus reengineering-érvelés: a felesleges jóváhagyási és várakozási rétegek eltörlése (nem automatizálása) csökkenti az átfutási időt.',
     limitations: 'Esettanulmány-alapú érvelés; nem kontrollált mérés — irányadó, nem hatásnagyságot igazoló.',
@@ -115,9 +141,14 @@ export const SEEDED_CORPUS: readonly CorpusSeedEntry[] = [
     corpusKey: 'benchmark:unverified-sme-admin-share',
     kind: 'BENCHMARK',
     title: 'Iparági állítás: az adminisztráció aránya kis- és középvállalkozásoknál',
+    origin: 'USER_LIBRARY',
+    evidenceType: 'INDUSTRY_CLAIM',
+    boundedClaim: 'Felhasználói könyvtári állítás; bibliográfiai forrás nem ellenőrizhető.',
     verificationStatus: 'UNVERIFIED',
     strength: 'WEAK',
     domainKeys: ['UNMEASURED_COST', 'MANUAL_ADMIN_LOAD'],
+    supportedInterventions: [],
+    supportedOutcomes: [],
     applicabilityNotes: 'Csak tájékozódási kontextus; forráshivatkozás nélküli gyakori állítás.',
     limitations: 'Nem ellenőrizhető forrás — nem támaszthat alá SUPPORTED javaslatot.',
   },
@@ -125,9 +156,14 @@ export const SEEDED_CORPUS: readonly CorpusSeedEntry[] = [
     corpusKey: 'benchmark:unverified-approval-cycle-time',
     kind: 'BENCHMARK',
     title: 'Iparági állítás: a jóváhagyási átfutás lerövidíthető',
+    origin: 'USER_LIBRARY',
+    evidenceType: 'INDUSTRY_CLAIM',
+    boundedClaim: 'Felhasználói könyvtári állítás; bibliográfiai forrás nem ellenőrizhető.',
     verificationStatus: 'UNVERIFIED',
     strength: 'WEAK',
     domainKeys: ['APPROVAL_DELAY'],
+    supportedInterventions: [],
+    supportedOutcomes: [],
     applicabilityNotes: 'Tájékoztató kontextus a jóváhagyási várakozásokhoz.',
     limitations: 'Nem ellenőrizhető forrás — mérés nélkül nem hivatkozható.',
   },
@@ -144,9 +180,14 @@ export interface EvidenceDTO {
   year: number | null;
   doi: string | null;
   locator: string | null;
+  origin: string | null;
+  boundedClaim: string | null;
+  evidenceType: string | null;
   verificationStatus: EvidenceVerificationStatus;
   strength: string;
   domainKeys: string[];
+  supportedInterventions: string[];
+  supportedOutcomes: string[];
   applicabilityNotes: string | null;
   limitations: string | null;
   createdAt: string;
@@ -155,7 +196,9 @@ export interface EvidenceDTO {
 export function toEvidenceDTO(row: {
   id: string; clientId: string | null; corpusKey: string | null; kind: string; title: string;
   authors: string | null; venue: string | null; year: number | null; doi: string | null; locator: string | null;
+  origin?: string | null; boundedClaim?: string | null; evidenceType?: string | null;
   verificationStatus: EvidenceVerificationStatus; strength: string; domainKeys: string[];
+  supportedInterventions?: string[]; supportedOutcomes?: string[];
   applicabilityNotes: string | null; limitations: string | null; createdAt: Date;
 }): EvidenceDTO {
   return {
@@ -169,9 +212,14 @@ export function toEvidenceDTO(row: {
     year: row.year,
     doi: row.doi,
     locator: row.locator,
+    origin: row.origin ?? null,
+    boundedClaim: row.boundedClaim ?? null,
+    evidenceType: row.evidenceType ?? null,
     verificationStatus: row.verificationStatus,
     strength: row.strength,
     domainKeys: row.domainKeys,
+    supportedInterventions: row.supportedInterventions ?? [],
+    supportedOutcomes: row.supportedOutcomes ?? [],
     applicabilityNotes: row.applicabilityNotes,
     limitations: row.limitations,
     createdAt: row.createdAt.toISOString(),
@@ -186,7 +234,33 @@ export async function ensureCorpusSeeded(db: Db = defaultPrisma): Promise<{ seed
   let seeded = 0;
   for (const entry of SEEDED_CORPUS) {
     const existing = await db.researchEvidence.findUnique({ where: { corpusKey: entry.corpusKey } });
-    if (existing) continue;
+    if (existing) {
+      // Backfill only metadata that is still missing; never rewrite an existing
+      // verified citation's substance.
+      const needsBackfill =
+        (existing.origin == null && entry.origin != null) ||
+        (existing.boundedClaim == null && entry.boundedClaim != null) ||
+        (existing.evidenceType == null && entry.evidenceType != null) ||
+        existing.supportedInterventions.length === 0 ||
+        existing.supportedOutcomes.length === 0;
+      if (needsBackfill) {
+        await db.researchEvidence.update({
+          where: { corpusKey: entry.corpusKey },
+          data: {
+            origin: existing.origin ?? entry.origin ?? null,
+            boundedClaim: existing.boundedClaim ?? entry.boundedClaim ?? null,
+            evidenceType: existing.evidenceType ?? entry.evidenceType ?? null,
+            supportedInterventions: existing.supportedInterventions.length
+              ? existing.supportedInterventions
+              : entry.supportedInterventions ?? [],
+            supportedOutcomes: existing.supportedOutcomes.length
+              ? existing.supportedOutcomes
+              : entry.supportedOutcomes ?? [],
+          },
+        });
+      }
+      continue;
+    }
     await db.researchEvidence.create({
       data: {
         corpusKey: entry.corpusKey,
@@ -198,9 +272,14 @@ export async function ensureCorpusSeeded(db: Db = defaultPrisma): Promise<{ seed
         year: entry.year ?? null,
         doi: entry.doi ?? null,
         locator: entry.locator ?? null,
+        origin: entry.origin ?? null,
+        boundedClaim: entry.boundedClaim ?? null,
+        evidenceType: entry.evidenceType ?? entry.kind,
         verificationStatus: entry.verificationStatus,
         strength: entry.strength,
         domainKeys: entry.domainKeys,
+        supportedInterventions: entry.supportedInterventions ?? [],
+        supportedOutcomes: entry.supportedOutcomes ?? [],
         applicabilityNotes: entry.applicabilityNotes ?? null,
         limitations: entry.limitations ?? null,
       },
@@ -241,6 +320,9 @@ export async function registerInternalEvidence(
     locator?: string;
     strength?: EvidenceStrength;
     domainKeys?: string[];
+    boundedClaim?: string;
+    supportedInterventions?: string[];
+    supportedOutcomes?: string[];
     applicabilityNotes?: string;
     limitations?: string;
   },
@@ -256,11 +338,16 @@ export async function registerInternalEvidence(
       kind: args.kind,
       title: args.title,
       locator: args.locator ?? null,
+      origin: 'CLIENT_INTERNAL',
+      evidenceType: args.kind,
+      boundedClaim: args.boundedClaim ?? null,
       // Internal evidence is VERIFIED in the sense that it is canonical tenant
       // data; strength still reflects how directly it measures the problem.
       verificationStatus: 'VERIFIED',
       strength: args.strength ?? 'MODERATE',
       domainKeys: args.domainKeys ?? [],
+      supportedInterventions: args.supportedInterventions ?? [],
+      supportedOutcomes: args.supportedOutcomes ?? [],
       applicabilityNotes: args.applicabilityNotes ?? null,
       limitations: args.limitations ?? 'Belső megfigyelés — csak erre az ügyfélre érvényes.',
     },
@@ -274,7 +361,7 @@ export async function registerInternalEvidence(
  */
 export async function findCorpusEvidenceForDomains(
   domainKeys: string[],
-  opts: { verifiedOnly?: boolean } = {},
+  opts: { verifiedOnly?: boolean; verificationStatuses?: EvidenceVerificationStatus[] } = {},
   db: Db = defaultPrisma,
 ): Promise<EvidenceDTO[]> {
   if (!domainKeys.length) return [];
@@ -283,6 +370,7 @@ export async function findCorpusEvidenceForDomains(
       clientId: null,
       domainKeys: { hasSome: domainKeys },
       ...(opts.verifiedOnly ? { verificationStatus: 'VERIFIED' as const } : {}),
+      ...(opts.verificationStatuses ? { verificationStatus: { in: opts.verificationStatuses } } : {}),
     },
     orderBy: [{ verificationStatus: 'asc' }, { createdAt: 'asc' }],
   });

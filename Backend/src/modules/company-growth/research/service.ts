@@ -35,8 +35,9 @@ import {
   assertClientReadAccess,
   safeText,
 } from '../../client-interaction/base';
-import { ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
-import { computeRoiEstimate, RoiEstimate, ROI_ENGINE_VERSION } from './roiEngine';
+import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
+import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
+import { deriveProcessSignals, selectInterventions } from './interventions';
 import { createInitiative } from '../../client-company/service';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -47,6 +48,71 @@ function requireManager(actor: InternalActor): void {
   if (!actor?.userId || !MANAGER_ROLES.has(String(actor.role || ''))) {
     throw new InteractionError(403, 'GROW_REVIEW_FORBIDDEN', 'Only managers may review grow recommendations.');
   }
+}
+
+export function canRunGrowResearch(actor: InternalActor): boolean {
+  return Boolean(actor?.userId) && MANAGER_ROLES.has(String(actor.role || ''));
+}
+
+/**
+ * Deterministic evidence-sufficiency gate (all six states reachable):
+ *   SUPPORTED            verified external evidence + internal signal
+ *   NEEDS_MORE_DATA      internal signal, but no verified external evidence
+ *   INSUFFICIENT_EVIDENCE no internal signal and no verified evidence
+ *   CONFLICTING_EVIDENCE  both verified and disputed evidence exist
+ *   OUT_OF_SCOPE          domain is not a Grow process domain
+ *   HUMAN_DOMAIN_REVIEW   only disputed evidence exists -> expert required
+ * Only SUPPORTED is actionable.
+ */
+export function decideSufficiency(input: {
+  domainKey: string;
+  verifiedEvidenceCount: number;
+  disputedEvidenceCount: number;
+  measured: boolean;
+  declared: boolean;
+}): { decision: SufficiencyDecision; reasons: string[] } {
+  const knownDomain = (DOMAIN_KEYS as readonly string[]).includes(input.domainKey);
+  if (!knownDomain) {
+    return {
+      decision: 'OUT_OF_SCOPE',
+      reasons: ['A jelzés nem a Grow folyamat-domainjei közé tartozik — más szakterületi folyamatra tartozhat.'],
+    };
+  }
+  if (input.verifiedEvidenceCount > 0 && input.disputedEvidenceCount > 0) {
+    return {
+      decision: 'CONFLICTING_EVIDENCE',
+      reasons: ['A rendelkezésre álló bizonyítékok ellentmondásosak. Szakértői felülvizsgálat szükséges.'],
+    };
+  }
+  if (input.disputedEvidenceCount > 0 && input.verifiedEvidenceCount === 0) {
+    return {
+      decision: 'HUMAN_DOMAIN_REVIEW',
+      reasons: ['Szakértői felülvizsgálat szükséges, mielőtt javaslatot adunk.'],
+    };
+  }
+  if (input.verifiedEvidenceCount === 0) {
+    if (input.measured || input.declared) {
+      return {
+        decision: 'NEEDS_MORE_DATA',
+        reasons: ['Nincs ellenőrzött külső szakirodalmi bizonyíték ehhez a területhez.'],
+      };
+    }
+    return { decision: 'INSUFFICIENT_EVIDENCE', reasons: ['A diagnózis jelzés belső bizonyíték nélkül áll.'] };
+  }
+  if (input.measured || input.declared) {
+    return {
+      decision: 'SUPPORTED',
+      reasons: [
+        input.measured
+          ? 'Ellenőrzött szakirodalmi bizonyíték + ügyfél-mérési pillanatkép támasztja alá.'
+          : 'Ellenőrzött szakirodalmi bizonyíték + deklarált megfigyelés támasztja alá.',
+      ],
+    };
+  }
+  return {
+    decision: 'INSUFFICIENT_EVIDENCE',
+    reasons: ['Van ellenőrzött külső bizonyíték, de hiányzik az ügyfél-oldali belső jelzés.'],
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +367,15 @@ async function executeRun(
     take: 50,
   });
 
+  const allSurveyCategories: string[] = [];
+  for (const obs of declaredObs) {
+    const payload = obs.rawPayload as { categories?: string[] } | null;
+    if (Array.isArray(payload?.categories)) allSurveyCategories.push(...payload!.categories!.map(String));
+  }
+
+  const metricsBySnapshot = new Map<string, Record<string, number | boolean | null>>();
+  for (const s of snapshots) metricsBySnapshot.set(s.id, Object.fromEntries(metricMap(s.metrics)));
+
   const outcomes: DiagnosisRuleOutcome[] = [];
   const surveyDomainHits = new Map<string, { observationIds: string[] }>();
   for (const obs of declaredObs) {
@@ -394,21 +469,37 @@ async function executeRun(
       internalEvidenceIds.push(ev.id);
     }
 
-    // Evidence sufficiency gate.
-    let decision: SufficiencyDecision;
-    let reasons: string[];
-    if (verifiedCorpus.length === 0) {
-      decision = outcome.measured || outcome.declared ? 'NEEDS_MORE_DATA' : 'INSUFFICIENT_EVIDENCE';
-      reasons = ['Nincs ellenőrzött külső szakirodalmi bizonyíték ehhez a területhez.'];
-    } else if (outcome.measured || outcome.declared) {
-      decision = 'SUPPORTED';
-      reasons = [outcome.measured
-        ? 'Ellenőrzött szakirodalmi bizonyíték + ügyfél-mérési pillanatkép támasztja alá.'
-        : 'Ellenőrzött szakirodalmi bizonyíték + deklarált megfigyelés támasztja alá.'];
-    } else {
-      decision = 'INSUFFICIENT_EVIDENCE';
-      reasons = ['A diagnózis jelzés belső bizonyíték nélkül áll.'];
-    }
+    // Evidence sufficiency gate — 6/6 states, only SUPPORTED is actionable.
+    const disputedCorpus = await findCorpusEvidenceForDomains(
+      [outcome.domainKey],
+      { verificationStatuses: ['DISPUTED'] },
+      db,
+    );
+    const gate = decideSufficiency({
+      domainKey: outcome.domainKey,
+      verifiedEvidenceCount: verifiedCorpus.length,
+      disputedEvidenceCount: disputedCorpus.length,
+      measured: outcome.measured,
+      declared: outcome.declared,
+    });
+    const decision = gate.decision;
+    const reasons = gate.reasons;
+
+    // Canonical intervention selection (backend-owned taxonomy + guardrails).
+    const metrics = outcome.sourceRefs.snapshotIds
+      .map((id) => metricsBySnapshot.get(id))
+      .find((m): m is Record<string, number | boolean | null> => Boolean(m)) ?? {};
+    const signals = deriveProcessSignals({
+      metrics,
+      surveyCategories: allSurveyCategories,
+      measured: outcome.measured,
+      declared: outcome.declared,
+    });
+    const interventionCodes = selectInterventions({
+      domainKey: outcome.domainKey,
+      signals,
+      measured: outcome.measured,
+    });
 
     const diagnosis = await db.diagnosisCandidate.create({
       data: {
@@ -451,6 +542,7 @@ async function executeRun(
           problemStatement: labels.problem,
           direction: labels.direction,
           impactTags: [outcome.domainKey, outcome.severity],
+          interventionCodes,
           sufficiency: decision,
         },
       });
@@ -499,6 +591,8 @@ export async function listGrowOpportunities(
     status: r.status,
     kind: r.kind,
     sufficiency: r.sufficiency,
+    actionable: r.sufficiency === 'SUPPORTED',
+    interventionCodes: r.interventionCodes,
     title: r.title,
     problemStatement: r.problemStatement,
     direction: r.direction,
@@ -536,6 +630,8 @@ export async function getOpportunityDetail(
     status: r.status,
     kind: r.kind,
     sufficiency: r.sufficiency,
+    actionable: r.sufficiency === 'SUPPORTED',
+    interventionCodes: r.interventionCodes,
     title: r.title,
     problemStatement: r.problemStatement,
     direction: r.direction,
@@ -591,6 +687,7 @@ export async function listGrowHome(
   );
 
   return {
+    canRunResearch: canRunGrowResearch(actor),
     opportunityCounts: {
       total: opportunities.length,
       supported: supported.length,
@@ -724,6 +821,7 @@ export async function recordOutcomeMeasurement(
     peopleAffected?: number;
     synthetic?: boolean;
     note?: string;
+    provenanceType?: RoiProvenanceType;
   },
   db: Db = defaultPrisma,
 ) {
@@ -765,6 +863,7 @@ export async function recordOutcomeMeasurement(
     expectedActiveReductionPct: input.expectedActiveReductionPct ?? null,
     hourlyCostHuf: input.hourlyCostHuf ?? null,
     peopleAffected: input.peopleAffected ?? null,
+    provenanceType: input.provenanceType ?? null,
   });
 
   const metricsSummary = {

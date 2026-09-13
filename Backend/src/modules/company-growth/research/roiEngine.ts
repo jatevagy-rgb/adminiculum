@@ -33,18 +33,45 @@ export interface RoiInputs {
   hourlyCostHuf?: { low: number; base: number; high: number } | null;
   /** Optional count of people whose time the process consumes per run. */
   peopleAffected?: number | null;
+  /**
+   * Explicit provenance override for the estimate. When omitted it is derived
+   * from the computed basis. Never silently assumed.
+   */
+  provenanceType?: RoiProvenanceType | null;
 }
 
 export type OutcomeBasis = 'MEASURED' | 'CALCULATED' | 'ESTIMATED' | 'ASSUMED';
 
+/** The six allowed provenance categories (completion of the taxonomy). */
+export const ROI_PROVENANCE_TYPES = [
+  'MEASURED',
+  'CALCULATED',
+  'CLIENT_ESTIMATE',
+  'CONSULTANT_ESTIMATE',
+  'RESEARCH_BENCHMARK',
+  'GENERAL_ASSUMPTION',
+] as const;
+export type RoiProvenanceType = (typeof ROI_PROVENANCE_TYPES)[number];
+
+const ROI_PROVENANCE_SET = new Set<string>(ROI_PROVENANCE_TYPES);
+
+const BASIS_TO_PROVENANCE: Record<OutcomeBasis, RoiProvenanceType> = {
+  MEASURED: 'MEASURED',
+  CALCULATED: 'CALCULATED',
+  ESTIMATED: 'CLIENT_ESTIMATE',
+  ASSUMED: 'GENERAL_ASSUMPTION',
+};
+
 export interface RoiEstimate {
   basis: OutcomeBasis;
+  provenanceType: RoiProvenanceType;
   timeSavedMinutesPerRun: { low: number; base: number; high: number };
   timeSavedMinutesPerMonth: { low: number; base: number; high: number };
   cashSavedHufPerMonth: { low: number; base: number; high: number } | null;
   provenance: {
     formulaVersion: string;
     computedAt: string;
+    type: RoiProvenanceType;
     inputs: {
       runsPerMonth: number;
       beforeActiveMinutes: number | null;
@@ -58,6 +85,60 @@ export interface RoiEstimate {
     timeSavedIsNotCashSaved: true;
     explanationHu: string;
   };
+}
+
+export interface RoiValidationIssue {
+  field: string;
+  message: string;
+}
+
+/**
+ * Validates ROI inputs: finite, non-negative, correct ranges/units and a valid
+ * provenance category. Low/base/high must be ordered low <= base <= high.
+ */
+export function validateRoiInputs(inputs: RoiInputs): RoiValidationIssue[] {
+  const issues: RoiValidationIssue[] = [];
+  const numOrNull = (value: unknown): number | null => {
+    if (value == null) return null;
+    const v = Number(value);
+    return Number.isFinite(v) ? v : null;
+  };
+  const checkNumber = (field: string, value: unknown): void => {
+    if (value == null) return;
+    const v = numOrNull(value);
+    if (v == null) issues.push({ field, message: 'must be a finite number' });
+    else if (v < 0) issues.push({ field, message: 'must be non-negative' });
+  };
+
+  checkNumber('runsPerMonth', inputs.runsPerMonth);
+  checkNumber('beforeActiveMinutes', inputs.beforeActiveMinutes);
+  checkNumber('beforeWaitingMinutes', inputs.beforeWaitingMinutes);
+  checkNumber('afterActiveMinutes', inputs.afterActiveMinutes);
+  checkNumber('afterWaitingMinutes', inputs.afterWaitingMinutes);
+  checkNumber('expectedActiveReductionPct', inputs.expectedActiveReductionPct);
+  checkNumber('peopleAffected', inputs.peopleAffected);
+
+  const pct = numOrNull(inputs.expectedActiveReductionPct);
+  if (pct != null && pct > 100) issues.push({ field: 'expectedActiveReductionPct', message: 'must be within 0-100' });
+
+  if (inputs.hourlyCostHuf) {
+    const { low, base, high } = inputs.hourlyCostHuf;
+    checkNumber('hourlyCostHuf.low', low);
+    checkNumber('hourlyCostHuf.base', base);
+    checkNumber('hourlyCostHuf.high', high);
+    const l = numOrNull(low);
+    const b = numOrNull(base);
+    const h = numOrNull(high);
+    if (l != null && b != null && h != null && !(l <= b && b <= h)) {
+      issues.push({ field: 'hourlyCostHuf', message: 'must satisfy low <= base <= high' });
+    }
+  }
+
+  if (inputs.provenanceType != null && !ROI_PROVENANCE_SET.has(String(inputs.provenanceType))) {
+    issues.push({ field: 'provenanceType', message: `must be one of ${ROI_PROVENANCE_TYPES.join(', ')}` });
+  }
+
+  return issues;
 }
 
 function n(value: unknown): number | null {
@@ -75,6 +156,10 @@ function round(value: number): number {
  * recorded provenance inputs — no hidden state, no randomness, no AI output.
  */
 export function computeRoiEstimate(inputs: RoiInputs): RoiEstimate {
+  const issues = validateRoiInputs(inputs);
+  if (issues.length) {
+    throw new Error(`ROI_INPUT_INVALID: ${issues.map((i) => `${i.field} ${i.message}`).join('; ')}`);
+  }
   const runsPerMonth = Math.max(0, n(inputs.runsPerMonth) ?? 0);
   const beforeActive = n(inputs.beforeActiveMinutes);
   const beforeWaiting = n(inputs.beforeWaitingMinutes);
@@ -141,14 +226,18 @@ export function computeRoiEstimate(inputs: RoiInputs): RoiEstimate {
       }
     : null;
 
+  const provenanceType: RoiProvenanceType = (inputs.provenanceType ?? BASIS_TO_PROVENANCE[basis]) as RoiProvenanceType;
+
   return {
     basis,
+    provenanceType,
     timeSavedMinutesPerRun: { low: perRunLow, base: perRunBase, high: perRunHigh },
     timeSavedMinutesPerMonth: monthly,
     cashSavedHufPerMonth: cash,
     provenance: {
       formulaVersion: ROI_ENGINE_VERSION,
       computedAt: new Date().toISOString(),
+      type: provenanceType,
       inputs: {
         runsPerMonth,
         beforeActiveMinutes: beforeActive,

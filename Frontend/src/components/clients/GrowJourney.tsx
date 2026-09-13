@@ -4,9 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   domainTitleHu,
+  evidenceOriginLabelHu,
   evidenceStrengthLabelHu,
   growApi,
+  interventionLabelHu,
   outcomeBasisLabelHu,
+  roiProvenanceLabelHu,
+  sufficiencyExplanationHu,
   sufficiencyLabelHu,
   type BusinessProcessDTO,
   type GrowEvidenceItem,
@@ -35,7 +39,9 @@ const sufficiencyTone: Record<SufficiencyDecision, string> = {
   SUPPORTED: "border-[var(--adm-green-800)]/40 bg-[var(--adm-green-800)]/10 text-[var(--adm-green-800)]",
   NEEDS_MORE_DATA: "border-[var(--adm-amber-500)]/40 bg-[var(--adm-amber-100)] text-[var(--adm-amber-950)]",
   INSUFFICIENT_EVIDENCE: "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]",
+  CONFLICTING_EVIDENCE: "border-[var(--adm-terracotta-700)]/50 bg-[var(--adm-terracotta-700)]/10 text-[var(--adm-terracotta-700)]",
   OUT_OF_SCOPE: "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]",
+  HUMAN_DOMAIN_REVIEW: "border-[var(--adm-ochre-500)]/50 bg-[var(--adm-amber-100)] text-[var(--adm-amber-950)]",
 };
 
 const strengthTone: Record<string, string> = {
@@ -121,7 +127,11 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
     setError(null);
     try {
       const result = await growApi.runResearch(clientId, { idempotencyKey: crypto.randomUUID() });
-      setResearchNote(result.idempotentReplay ? "A kutatási futás ismétlése — korábbi eredmény visszaadva." : "Kutatási futás kész — az új javaslatok emberi jóváhagyásra várnak.");
+      setResearchNote(
+        result.replayed
+          ? "A kutatási futás ismétlése — korábbi eredmény visszaadva."
+          : `Kutatási futás kész — ${result.recommendationCount} javaslat emberi jóváhagyásra vár.`,
+      );
       await load();
     } catch {
       setError("A kutatási futás nem indítható el.");
@@ -185,6 +195,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
               researchNote={researchNote}
               clientId={clientId}
               processes={processes}
+              canRunResearch={home?.canRunResearch ?? false}
               onSubmitted={load}
               onOpenDetail={(id) => void openDetail(id)}
             />
@@ -217,6 +228,7 @@ function GrowHomeScreen({
   researchNote,
   clientId,
   processes,
+  canRunResearch,
   onSubmitted,
   onOpenDetail,
 }: {
@@ -227,6 +239,7 @@ function GrowHomeScreen({
   researchNote: string | null;
   clientId: string;
   processes: BusinessProcessDTO[];
+  canRunResearch: boolean;
   onSubmitted: () => void;
   onOpenDetail: (id: string) => void;
 }) {
@@ -255,14 +268,20 @@ function GrowHomeScreen({
           >
             Mutasd, min érdemes javítani
           </button>
-          <button
-            type="button"
-            onClick={onRunResearch}
-            disabled={researchBusy}
-            className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-green-800)] px-4 py-2 text-[12px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)] disabled:opacity-40 focus-visible:outline focus-visible:outline-2"
-          >
-            {researchBusy ? "Kutatás fut…" : "Új mérési és kutatási futás"}
-          </button>
+          {canRunResearch ? (
+            <button
+              type="button"
+              onClick={onRunResearch}
+              disabled={researchBusy}
+              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-green-800)] px-4 py-2 text-[12px] font-semibold text-[var(--adm-green-800)] hover:bg-[var(--adm-surface)] disabled:opacity-40 focus-visible:outline focus-visible:outline-2"
+            >
+              {researchBusy ? "Kutatás fut…" : "Új mérési és kutatási futás"}
+            </button>
+          ) : (
+            <p className="text-[11px] text-[var(--adm-text-muted)]">
+              Kutatási futást csak vezető (admin vagy partner) indíthat.
+            </p>
+          )}
         </div>
         {researchNote ? <p className="mt-2 text-[12px] text-[var(--adm-text-muted)]" role="status">{researchNote}</p> : null}
         <p className="mt-3 text-[10.5px] text-[var(--adm-text-muted)]">
@@ -458,6 +477,12 @@ function GrowDetailScreen({
         </div>
       </header>
 
+      {sufficiencyExplanationHu(detail.sufficiency) ? (
+        <p className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[12px] text-[var(--adm-text)]" role="note">
+          {sufficiencyExplanationHu(detail.sufficiency)}
+        </p>
+      ) : null}
+
       <Panel title="Mit látunk?">
         <p className="text-[13px] text-[var(--adm-text)]">{detail.diagnosis?.summary ?? detail.problemStatement}</p>
         {detail.diagnosis?.businessProcess ? (
@@ -476,6 +501,16 @@ function GrowDetailScreen({
 
       <Panel title="Mit érdemes megvizsgálni?">
         <p className="text-[13px] text-[var(--adm-text)]">{detail.direction}</p>
+        {detail.interventionCodes.length ? (
+          <div className="mt-3">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Szóba jövő beavatkozások</p>
+            <ul className="mt-1 list-disc pl-4 text-[11px] text-[var(--adm-text)]">
+              {detail.interventionCodes.map((code) => (
+                <li key={code}>{interventionLabelHu(code)}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {detail.impactTags.length ? (
           <div className="mt-2 flex flex-wrap gap-1">
             {detail.impactTags.map((tag) => (
@@ -581,10 +616,18 @@ function EvidenceDrawer({ evidence }: { evidence: GrowEvidenceItem[] }) {
           <dl className="mt-2 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-3 gap-y-1 text-[11px]">
             <dt className="text-[var(--adm-text-muted)]">Forrás</dt>
             <dd>{[item.authors, item.venue, item.year].filter(Boolean).join(" · ") || "—"}</dd>
+            <dt className="text-[var(--adm-text-muted)]">Származás</dt>
+            <dd>{evidenceOriginLabelHu(item.origin)}</dd>
             <dt className="text-[var(--adm-text-muted)]">Típus</dt>
-            <dd>{item.kind}</dd>
+            <dd>{item.evidenceType || item.kind}</dd>
             <dt className="text-[var(--adm-text-muted)]">Erősség</dt>
             <dd>{evidenceStrengthLabelHu(item.strength)}</dd>
+            {item.boundedClaim ? (
+              <>
+                <dt className="text-[var(--adm-text-muted)]">Állítás</dt>
+                <dd>{item.boundedClaim}</dd>
+              </>
+            ) : null}
             {item.applicabilityNotes ? (
               <>
                 <dt className="text-[var(--adm-text-muted)]">Alkalmazhatóság</dt>
@@ -720,21 +763,31 @@ function BeforeAfterTable({ summary }: { summary: NonNullable<OutcomeMeasurement
         <tr className="text-[9.5px] uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">
           <th className="pb-1">Mutató</th>
           <th className="pb-1 text-right">Előtte</th>
-          <th className="pb-1 text-right">Utána</th>
+          <th className="pb-1 text-right">Most</th>
+          <th className="pb-1 text-right">Változás</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-[var(--adm-border)]">
-        {rows.map((key) => (
-          <tr key={key}>
-            <td className="py-1 text-[var(--adm-text-muted)]">{labels[key]}</td>
-            <td className="py-1 text-right font-medium">{before[key] != null ? `${Math.round(before[key])} p` : "—"}</td>
-            <td className="py-1 text-right font-medium">{after?.[key] != null ? `${Math.round(after[key]!)} p` : "—"}</td>
-          </tr>
-        ))}
+        {rows.map((key) => {
+          const b = before[key];
+          const a = after?.[key];
+          const hasDelta = b != null && a != null;
+          const delta = hasDelta ? b - a : null;
+          return (
+            <tr key={key}>
+              <td className="py-1 text-[var(--adm-text-muted)]">{labels[key]}</td>
+              <td className="py-1 text-right font-medium">{b != null ? `${Math.round(b)} p` : "—"}</td>
+              <td className="py-1 text-right font-medium">{a != null ? `${Math.round(a)} p` : "—"}</td>
+              <td className={`py-1 text-right font-semibold ${delta != null && delta > 0 ? "text-[var(--adm-green-800)]" : delta != null && delta < 0 ? "text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>
+                {delta == null ? "—" : delta === 0 ? "0 p" : `${delta > 0 ? "−" : "+"}${Math.abs(Math.round(delta))} p`}
+              </td>
+            </tr>
+          );
+        })}
       </tbody>
       {summary.comparable === false ? (
         <tfoot>
-          <tr><td colSpan={3} className="pt-1 text-[9.5px] text-[var(--adm-amber-950)]">A két mérés mérőszám-verziója eltér — a különbség óvatosan értelmezhető.</td></tr>
+          <tr><td colSpan={4} className="pt-1 text-[9.5px] text-[var(--adm-amber-950)]">A két mérés mérőszám-verziója eltér — a különbség óvatosan értelmezhető.</td></tr>
         </tfoot>
       ) : null}
     </table>
@@ -761,6 +814,7 @@ function RoiBlock({ roi }: { roi: NonNullable<OutcomeMeasurementDTO["roi"]> }) {
       {open && roi.provenance ? (
         <dl className="mt-1.5 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-3 gap-y-1 text-[10.5px]">
           <dt className="text-[var(--adm-text-muted)]">Alap</dt><dd>{outcomeBasisLabelHu(roi.basis)}</dd>
+          <dt className="text-[var(--adm-text-muted)]">Származás</dt><dd>{roiProvenanceLabelHu(roi.provenanceType ?? roi.provenance?.type)}</dd>
           <dt className="text-[var(--adm-text-muted)]">Képlet</dt><dd>{roi.provenance.formulaVersion}</dd>
           <dt className="text-[var(--adm-text-muted)]">Számítva</dt><dd>{new Date(roi.provenance.computedAt).toLocaleString("hu-HU")}</dd>
           <dt className="text-[var(--adm-text-muted)]">Magyarázat</dt><dd>{roi.provenance.explanationHu}</dd>

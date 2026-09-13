@@ -130,6 +130,14 @@ d('Demo Kft — end-to-end Grow journey (PostgreSQL)', () => {
     const supported = opps.filter((o) => o.sufficiency === 'SUPPORTED');
     expect(supported.length).toBeGreaterThan(0);
     for (const opp of supported) {
+      // Only SUPPORTED is actionable and it must carry ≥1 canonical intervention.
+      expect(opp.actionable).toBe(true);
+      expect(opp.interventionCodes.length).toBeGreaterThan(0);
+    }
+    for (const opp of opps.filter((o) => o.sufficiency !== 'SUPPORTED')) {
+      expect(opp.actionable).toBe(false);
+    }
+    for (const opp of supported) {
       const detail = await getOpportunityDetail(admin, clientId, opp.id, db);
       expect(detail.evidence.length).toBeGreaterThan(0);
       expect(detail.evidence.some((e) => e.verificationStatus === 'VERIFIED')).toBe(true);

@@ -201,7 +201,15 @@ clientCompanyRouter.get('/clients/:clientId/observatory/sources', async (req, re
       where: { clientId },
       orderBy: { createdAt: 'asc' },
     });
-    res.json({ items: rows });
+    res.json({
+      items: rows.map((r) => ({
+        id: r.id,
+        sourceType: r.sourceType,
+        name: r.name,
+        status: r.status,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
   } catch (e) { fail(res, e); }
 });
 clientCompanyRouter.get('/clients/:clientId/observatory/runs/:runId/observations', async (req, res) => {

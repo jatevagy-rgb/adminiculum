@@ -5716,26 +5716,35 @@ enum EvidenceVerificationStatus {
 }
 
 model ResearchEvidence {
-  id                 String                     @id @default(uuid())
+  id                     String                     @id @default(uuid())
   // NULL clientId = global research-library entry; set = client-internal evidence.
-  clientId           String?
-  client             Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId               String?
+  client                 Client?                    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   // Stable dedupe key for corpus-seeded and observation-derived entries.
-  corpusKey          String?                    @unique
-  kind               String // PAPER | BENCHMARK | INTERNAL_OBSERVATION | INTERNAL_MEASUREMENT | ORG_FACT
-  title              String
-  authors            String?
-  venue              String?
-  year               Int?
-  doi                String?
-  locator            String?
-  verificationStatus EvidenceVerificationStatus @default(UNVERIFIED)
-  strength           String                     @default("WEAK") // STRONG | MODERATE | WEAK
-  domainKeys         String[]                   @default([])
-  applicabilityNotes String?
-  limitations        String?
-  createdAt          DateTime                   @default(now())
-  updatedAt          DateTime                   @updatedAt
+  corpusKey              String?                    @unique
+  kind                   String // PAPER | BENCHMARK | INTERNAL_OBSERVATION | INTERNAL_MEASUREMENT | ORG_FACT
+  title                  String
+  authors                String?
+  venue                  String?
+  year                   Int?
+  doi                    String?
+  locator                String?
+  // Where the record came from. USER_LIBRARY | ONLINE_VERIFIED | GENERAL_KNOWLEDGE.
+  origin                 String?
+  // The single bounded claim this record is allowed to support (no over-reach).
+  boundedClaim           String?
+  // Finer-grained evidence type distinct from `kind`.
+  evidenceType           String?
+  verificationStatus     EvidenceVerificationStatus @default(UNVERIFIED)
+  strength               String                     @default("WEAK") // STRONG | MODERATE | WEAK
+  domainKeys             String[]                   @default([])
+  // Interventions / outcome metrics this evidence is allowed to support.
+  supportedInterventions String[]                   @default([])
+  supportedOutcomes      String[]                   @default([])
+  applicabilityNotes     String?
+  limitations            String?
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
 
   diagnosisLinks      DiagnosisEvidenceLink[]
   recommendationLinks RecommendationEvidenceLink[]
@@ -5842,7 +5851,9 @@ enum SufficiencyDecision {
   SUPPORTED
   NEEDS_MORE_DATA
   INSUFFICIENT_EVIDENCE
+  CONFLICTING_EVIDENCE
   OUT_OF_SCOPE
+  HUMAN_DOMAIN_REVIEW
 }
 
 enum RecommendationCandidateStatus {
@@ -5853,26 +5864,28 @@ enum RecommendationCandidateStatus {
 }
 
 model RecommendationCandidate {
-  id               String                        @id @default(uuid())
-  clientId         String
-  client           Client                        @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  runId            String
-  run              RecommendationRun             @relation(fields: [runId, clientId], references: [id, clientId], onDelete: Cascade)
-  diagnosisId      String?
-  diagnosis        DiagnosisCandidate?           @relation(fields: [diagnosisId], references: [id], onDelete: SetNull)
-  title            String
-  problemStatement String
-  direction        String
-  kind             String // QUICK_FIX | DEVELOPMENT
-  impactTags       String[]                      @default([])
-  sufficiency      SufficiencyDecision
-  status           RecommendationCandidateStatus @default(PENDING_REVIEW)
-  reviewedById     String?
-  reviewedBy       User?                         @relation("RecommendationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt       DateTime?
-  reviewNote       String?
-  createdAt        DateTime                      @default(now())
-  updatedAt        DateTime                      @updatedAt
+  id                String                        @id @default(uuid())
+  clientId          String
+  client            Client                        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  runId             String
+  run               RecommendationRun             @relation(fields: [runId, clientId], references: [id, clientId], onDelete: Cascade)
+  diagnosisId       String?
+  diagnosis         DiagnosisCandidate?           @relation(fields: [diagnosisId], references: [id], onDelete: SetNull)
+  title             String
+  problemStatement  String
+  direction         String
+  kind              String // QUICK_FIX | DEVELOPMENT
+  impactTags        String[]                      @default([])
+  // Canonical intervention codes selected by the intervention taxonomy.
+  interventionCodes String[]                      @default([])
+  sufficiency       SufficiencyDecision
+  status            RecommendationCandidateStatus @default(PENDING_REVIEW)
+  reviewedById      String?
+  reviewedBy        User?                         @relation("RecommendationReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt        DateTime?
+  reviewNote        String?
+  createdAt         DateTime                      @default(now())
+  updatedAt         DateTime                      @updatedAt
 
   evidenceLinks          RecommendationEvidenceLink[]
   improvementOpportunity ImprovementOpportunity?
