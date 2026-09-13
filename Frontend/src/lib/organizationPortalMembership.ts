@@ -3,6 +3,8 @@ import type { OrgPersonDTO } from "@/lib/clientOrganizationApi";
 
 export type DerivedPortalMembership = {
   membership: WorkspaceMembershipDTO | null;
+  invitationDeliveryStatus?: string | null;
+  invitationDeliveryCodeSafe?: string | null;
   status: "NONE" | "INVITED" | "PENDING_APPROVAL" | "ACTIVE" | "SUSPENDED" | "REVOKED" | "EXPIRED" | "AMBIGUOUS";
 };
 
@@ -23,10 +25,22 @@ export function derivePortalMembership(person: OrgPersonDTO, workspaces: AdminWo
   if (matches.length === 1) return { membership: matches[0], status: matches[0].status };
   if (matches.length > 1) return { membership: null, status: "AMBIGUOUS" };
   const pendingInvitation = activeOrganization.flatMap((workspace) => workspace.invitations)
-    .some((invitation) => normalized(invitation.intendedEmail) === email && invitation.status === "ACTIVE");
-  return { membership: null, status: pendingInvitation ? "INVITED" : "NONE" };
+    .find((invitation) => normalized(invitation.intendedEmail) === email && invitation.status === "ACTIVE");
+  return pendingInvitation
+    ? { membership: null, status: "INVITED", invitationDeliveryStatus: pendingInvitation.deliveryStatus, invitationDeliveryCodeSafe: pendingInvitation.deliveryCodeSafe }
+    : { membership: null, status: "NONE" };
 }
 
-export function portalMembershipStatusLabel(status: DerivedPortalMembership["status"]): string {
-  return ({ NONE: "Nincs hozzáférés", INVITED: "Meghívó elküldve", PENDING_APPROVAL: "Jóváhagyásra vár", ACTIVE: "Aktív", SUSPENDED: "Felfüggesztve", REVOKED: "Visszavonva", EXPIRED: "Lejárt", AMBIGUOUS: "Több lehetséges tagság — ellenőrzés szükséges" })[status];
+export function portalMembershipStatusLabel(value: DerivedPortalMembership | DerivedPortalMembership["status"]): string {
+  const status = typeof value === "string" ? value : value.status;
+  if (status === "INVITED" && typeof value !== "string") {
+    if (value.invitationDeliveryStatus === "SENT") return "Meghívó e-mail elküldve";
+    if (value.invitationDeliveryStatus === "PENDING") return "Meghívás rögzítve · kézbesítésre vár";
+    if (value.invitationDeliveryStatus === "SENDING") return "Meghívó küldése folyamatban";
+    if (value.invitationDeliveryStatus === "FAILED_RETRYABLE" && value.invitationDeliveryCodeSafe === "MAIL_PROVIDER_NOT_CONFIGURED") return "Meghívás rögzítve · e-mail-küldés nincs konfigurálva";
+    if (value.invitationDeliveryStatus === "FAILED_RETRYABLE") return "Meghívás rögzítve · e-mail-küldés átmenetileg sikertelen";
+    if (value.invitationDeliveryStatus === "FAILED_FINAL") return "Meghívás rögzítve · e-mail-küldés sikertelen";
+    return "Meghívás rögzítve · kézbesítési állapot nem ismert";
+  }
+  return ({ NONE: "Nincs hozzáférés", INVITED: "Meghívás rögzítve · kézbesítési állapot nem ismert", PENDING_APPROVAL: "Jóváhagyásra vár", ACTIVE: "Aktív", SUSPENDED: "Felfüggesztve", REVOKED: "Visszavonva", EXPIRED: "Lejárt", AMBIGUOUS: "Több lehetséges tagság — ellenőrzés szükséges" })[status];
 }

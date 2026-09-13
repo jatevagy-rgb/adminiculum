@@ -90,9 +90,11 @@ describe('Organization internal UI (structural)', () => {
 
   it('renders a semantic group and manager tree with manager-only contextual actions', () => {
     const src = component();
-    for (const token of ['Vezetői szint', 'Nincs közvetlen vezető megadva.', 'aria-label="Vezetői kapcsolat"', 'parentGroupId', 'managerPersonId', '+ Kolléga', '+ Alcsoport', 'Szerkesztés']) {
+    const hierarchy = read('src/lib/organizationHierarchy.ts');
+    for (const token of ['Vezetői szint', 'Nincs közvetlen vezető megadva.', 'aria-label="Vezetői kapcsolat"', 'parentGroupId', '+ Kolléga', '+ Alcsoport', 'Szerkesztés']) {
       assert.ok(src.includes(token), `missing organization tree contract: ${token}`);
     }
+    assert.match(hierarchy, /managerPersonId/);
     assert.match(src, /canManageOrganization \? <div className="flex gap-2/);
   });
 

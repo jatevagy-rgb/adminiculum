@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { getCurrentUser } from "@/lib/api";
 import { clientOrganizationApi, type OrgGroupDTO, type OrgPersonDTO } from "@/lib/clientOrganizationApi";
 import { inviteAdminWorkspaceMember, transitionAdminWorkspaceMembership, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
@@ -25,6 +25,7 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
   const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
   const [removeOpen, setRemoveOpen] = useState(false);
   const [retryPersonId, setRetryPersonId] = useState<string | null>(null);
+  const removeButtonRef = useRef<HTMLButtonElement | null>(null);
   const organizationWorkspaces = useMemo(() => workspaces.filter((workspace) => workspace.status === "ACTIVE" && workspace.mode === "ORGANIZATION"), [workspaces]);
 
   useEffect(() => {
@@ -41,6 +42,12 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
     setMode(action.mode); setSelectedId(action.selectedId || ""); setGroupId(action.groupId || null);
     setEditedFields(new Set()); setError(null); setFeedback(null); setRemoveOpen(Boolean(action.remove)); setRetryPersonId(null);
   }, [action, canManage]);
+
+  useEffect(() => {
+    if (!removeOpen) return;
+    removeButtonRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    removeButtonRef.current?.focus();
+  }, [removeOpen]);
 
   const person = persons.find((item) => item.id === selectedId);
   const group = groups.find((item) => item.id === selectedId);
@@ -76,7 +83,14 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
             const workspaceId = organizationWorkspaces.length === 1 ? organizationWorkspaces[0].id : value("portalWorkspaceId");
             if (!workspaceId) throw new Error("PORTAL_WORKSPACE_SELECTION_REQUIRED");
             const invitation = await inviteAdminWorkspaceMember(workspaceId, { email: patch.email, displayName: saved.name, role: "MEMBER" });
-            setFeedback(invitation.message || `A személy mentve. Portálstátusz: ${invitation.state}.`);
+            const deliveryFeedback = invitation.emailSent === true
+              ? "A személy mentve, a meghívó e-mail elküldve."
+              : invitation.deliveryCodeSafe === "MAIL_PROVIDER_NOT_CONFIGURED"
+                ? "A személy mentve, a meghívás rögzítve, de az e-mail-küldés nincs konfigurálva."
+                : invitation.deliveryStatus === "FAILED_RETRYABLE"
+                  ? "A személy mentve, a meghívás rögzítve, de az e-mail-küldés átmenetileg sikertelen."
+                  : invitation.message || "A személy mentve, a meghívás rögzítve; az e-mail-kézbesítés állapota nem ismert.";
+            setFeedback(deliveryFeedback);
           }
         }
       }
@@ -116,7 +130,7 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
             <div className="sm:col-span-2 rounded-lg bg-[var(--adm-ivory-100)] p-3"><label className="flex gap-2 text-sm"><input name="invitePortal" type="checkbox" defaultChecked={!selectedId || retryPersonId === selectedId} />Meghívás az ügyfélportálra ezzel az e-mail-címmel</label>{organizationWorkspaces.length > 1 ? <label className="mt-2 block">Aktív szervezeti munkaterület<select name="portalWorkspaceId" className={field} defaultValue=""><option value="">Válasszon munkaterületet</option>{organizationWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label> : null}<p className="mt-2 text-xs text-[var(--adm-text-muted)]">A meghívó csak portál-tagságot kezdeményez; ügy- vagy dokumentumhozzáférést nem ad.</p></div></> : <><label>Felettes szervezeti egység<select name="parentGroupId" defaultValue={group?.parentGroupId || groupId || ""} className={field}><option value="">Legfelső szint</option>{groups.filter((item) => item.id !== selectedId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Leírás<textarea name="descriptionSafe" defaultValue={group?.descriptionSafe || ""} className={field} /></label></>}
         </fieldset><p className="text-xs text-[var(--adm-text-muted)]">A szervezeti módosítás nem ad portál-, ügy- vagy dokumentumhozzáférést. A hierarchiát a rendszer mentéskor ellenőrzi.</p>{error ? <p role="alert" className="text-sm text-red-800">{error}</p> : null}{feedback ? <p role="status" className="text-sm text-[var(--adm-text-muted)]">{feedback}</p> : null}<div className="flex gap-3"><button type="submit" disabled={busy} className="adm-link-button adm-link-button-primary px-3 py-2">{busy ? "Mentés…" : "Mentés"}</button><button type="button" disabled={busy} className="adm-link-button px-3 py-2" onClick={() => setMode(null)}>Mégse</button></div>
       </form>
-      {mode === "person" && person ? <div className="mt-5 border-t border-[var(--adm-border)] pt-4">{removeOpen ? <><label className="flex gap-2 text-sm"><input id={`revoke-${person.id}`} type="checkbox" defaultChecked={canRevokePortal} disabled={!canRevokePortal} />A portálhozzáférést is visszavonjuk?</label><button type="button" onClick={() => void removePerson()} disabled={busy} className="mt-3 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-800">Eltávolítás a szervezetből</button></> : <button type="button" onClick={() => setRemoveOpen(true)} className="text-sm font-semibold text-red-800 underline">Eltávolítás a szervezetből</button>}</div> : null}
+      {mode === "person" && person ? <div className="mt-5 border-t border-[var(--adm-border)] pt-4">{removeOpen ? <><label className="flex gap-2 text-sm"><input id={`revoke-${person.id}`} type="checkbox" defaultChecked={canRevokePortal} disabled={!canRevokePortal} />A portálhozzáférést is visszavonjuk?</label><button ref={removeButtonRef} type="button" onClick={() => void removePerson()} disabled={busy} className="mt-3 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-800">Eltávolítás a szervezetből</button></> : <button type="button" onClick={() => setRemoveOpen(true)} className="text-sm font-semibold text-red-800 underline">Eltávolítás a szervezetből</button>}</div> : null}
     </> : null}
     {feedback ? <p role="status" className="mt-4 text-sm text-[var(--adm-text-muted)]">{feedback}</p> : null}
   </section>;

@@ -1,12 +1,17 @@
 import type { OrgPersonDTO } from "@/lib/clientOrganizationApi";
 
 export function organizationRootPeople(persons: OrgPersonDTO[]) {
-  return persons.filter((person) => !person.managerPersonId);
+  return persons.filter((person) => !person.organizationGroupId && !person.managerPersonId);
 }
 
 export function organizationGroupStarts(persons: OrgPersonDTO[], groupId: string) {
-  const members = persons.filter((person) => person.organizationGroupId === groupId && person.managerPersonId);
-  return members.filter((person) => !members.some((candidate) => candidate.id === person.managerPersonId));
+  const members = persons.filter((person) => person.organizationGroupId === groupId);
+  return members.filter((person) => !person.managerPersonId || !members.some((candidate) => candidate.id === person.managerPersonId));
+}
+
+export function organizationUngroupedStarts(persons: OrgPersonDTO[]) {
+  const members = persons.filter((person) => !person.organizationGroupId);
+  return members.filter((person) => Boolean(person.managerPersonId) && !members.some((candidate) => candidate.id === person.managerPersonId));
 }
 
 export function organizationReportsInScope(persons: OrgPersonDTO[], managerId: string, groupId: string | null) {
@@ -22,5 +27,6 @@ export function visibleOrganizationPersonIds(persons: OrgPersonDTO[], groupIds: 
   };
   organizationRootPeople(persons).forEach((person) => visit(person, null));
   groupIds.forEach((groupId) => organizationGroupStarts(persons, groupId).forEach((person) => visit(person, groupId)));
+  organizationUngroupedStarts(persons).forEach((person) => visit(person, null));
   return result;
 }
