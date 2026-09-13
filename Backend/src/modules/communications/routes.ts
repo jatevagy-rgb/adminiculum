@@ -73,7 +73,10 @@ router.param('id', async (req: Request, res: Response, next: NextFunction, id: s
       return;
     }
     if (!req.user?.userId || !(await userCanReadCommunication(req.user.userId, req.user.role, row))) {
-      res.status(403).json({ status: 403, code: 'COMMUNICATION_ACCESS_FORBIDDEN', message: 'You do not have access to this communication.' });
+      const isLinkedCaseReassignment = req.method === 'POST' && req.path.endsWith('/link-case') && Boolean(row.caseId);
+      res.status(403).json(isLinkedCaseReassignment
+        ? { status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to the currently linked case.' }
+        : { status: 403, code: 'COMMUNICATION_ACCESS_FORBIDDEN', message: 'You do not have access to this communication.' });
       return;
     }
     (req as any).communicationAccess = row;
