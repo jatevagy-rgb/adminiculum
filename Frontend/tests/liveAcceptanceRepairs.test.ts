@@ -58,3 +58,27 @@ test('A3: canonical planning fields are accepted by the create-task client type'
   assert.match(src, /plannedReviewerId\?: string \| null/);
   assert.match(src, /collaboratorUserIds\?: string\[\]/);
 });
+
+test('A4: Communication task form uses the canonical TaskPlanningFields contract', () => {
+  const src = read('Frontend/src/components/communications/CommunicationWorkspace.tsx');
+  assert.match(src, /TaskPlanningFields/);
+  assert.match(src, /<TaskPlanningFields/);
+  assert.match(src, /taskDefinitionId: taskPlanning\.taskDefinitionId/);
+  assert.match(src, /plannedReviewerId: taskPlanning\.plannedReviewerId/);
+  assert.match(src, /collaboratorUserIds: taskPlanning\.collaboratorUserIds/);
+  assert.match(src, /attentionCategory: taskAttentionCategory \|\| null/);
+  assert.match(src, /estimatedMinutes:/);
+});
+
+test('A4: Communication task submit is source-derived (id in path) and planning is canonical', () => {
+  const src = read('Frontend/src/lib/api.ts');
+  assert.match(src, /\/communications\/\$\{communicationId\}\/extract-task/);
+  assert.match(src, /taskDefinitionId\?: string \| null/);
+});
+
+test('A5: linked and unlinked communication case-first actions are both present', () => {
+  const src = read('Frontend/src/components/communications/CommunicationWorkspace.tsx');
+  assert.match(src, /Munka folytatása az ügyben/);
+  assert.match(src, /Új ügy létrehozása/);
+  assert.match(src, /Meglévő ügyhöz rendelés/);
+});

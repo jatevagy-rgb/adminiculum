@@ -26,7 +26,7 @@ import {
   syncOutlookMailbox,
 } from './outlookImport.service';
 import { readOutlookSyncConfig, isOutlookSyncConfigured } from './outlookGraphLive';
-import { canUserActOnTask, createTaskFromCommunicationSource, SourceLinkedTaskError } from '../tasks/services';
+import { canUserActOnTask, createCanonicalTaskFromCommunication, SourceLinkedTaskError } from '../tasks/services';
 import casesService from '../cases/services';
 import { userCanManageCase as canonicalUserCanManageCase } from '../cases/authorization';
 import { InteractionError, type InternalActor } from '../client-interaction/base';
@@ -970,12 +970,7 @@ router.post('/:id/extract-task', authenticate, requireCommunicationsFoundation, 
     // This compatibility route now delegates to the canonical source-linked
     // task service. Caller-supplied case, description, priority, and assignee
     // values are not allowed to bypass the communication's server-owned case.
-    const result = await createTaskFromCommunicationSource(String(id), userId, {
-      title: body.title,
-      kind: 'FOLLOW_UP',
-      dueAt: body.dueDate,
-      assigneeId: body.assignedTo,
-    });
+    const result = await createCanonicalTaskFromCommunication(String(id), userId, (req as any).user?.role ?? null, body);
     res.status(201).json(result);
   } catch (error) {
     if (error instanceof SourceLinkedTaskError) {
@@ -1140,7 +1135,7 @@ router.post('/:id/tasks', authenticate, requireCommunicationsFoundation, async (
   try {
     const userId = (req as any).user?.userId;
     const { id } = req.params;
-    const result = await createTaskFromCommunicationSource(String(id), userId, req.body);
+    const result = await createCanonicalTaskFromCommunication(String(id), userId, (req as any).user?.role ?? null, req.body);
     res.status(201).json(result);
   } catch (error) {
     if (error instanceof SourceLinkedTaskError) {

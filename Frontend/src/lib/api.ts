@@ -4031,6 +4031,14 @@ export async function extractTaskFromCommunication(
     dueDate?: string;
     assignedTo?: string;
     caseId?: string;
+    attentionCategory?: string | null;
+    estimatedMinutes?: number | null;
+    taskDefinitionId?: string | null;
+    taskDefinitionClientId?: string | null;
+    taskTypeLabel?: string | null;
+    saveToCatalogue?: boolean;
+    plannedReviewerId?: string | null;
+    collaboratorUserIds?: string[];
   }
 ): Promise<{ success: boolean; task: TaskListItem; message: string }> {
   return fetchApi<{ success: boolean; task: TaskListItem; message: string }>(
