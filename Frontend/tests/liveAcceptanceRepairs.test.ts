@@ -144,3 +144,28 @@ test('Portal: organization mode uses OrgHomeView while individual mode is preser
   assert.ok(src.includes("mode === 'ORGANIZATION'"), 'organization branch must exist');
   assert.ok(src.includes('INDIVIDUAL'), 'individual branch must remain');
 });
+
+test('Task planning candidates come from the authoritative case-scoped projection (not getUsers)', () => {
+  const cw = read('Frontend/src/components/cases/CaseWorkspaceActions.tsx');
+  assert.match(cw, /getCaseResponsibleCandidates/);
+  assert.doesNotMatch(cw, /getUsers\(\)/);
+  const comm = read('Frontend/src/components/communications/CommunicationWorkspace.tsx');
+  assert.match(comm, /getCaseResponsibleCandidates/);
+  assert.doesNotMatch(comm, /getUsers\(\)/);
+  const tasks = read('Frontend/src/app/tasks/page.tsx');
+  assert.match(tasks, /getCaseResponsibleCandidates/);
+  assert.match(tasks, /users=\{planningUsers\}/);
+});
+
+test('Structured task-role error codes map to specific Hungarian messages', () => {
+  const src = read('Frontend/src/lib/taskWorkflowPresentation.ts');
+  assert.match(src, /error\.code && ERROR_MESSAGES\[error\.code\]/);
+  for (const code of ['TASK_ROLE_CASE_ACCESS_REQUIRED', 'TASK_ROLE_USER_INELIGIBLE', 'REVIEWER_CANNOT_BE_WORKER', 'COLLABORATOR_IS_WORKER', 'COLLABORATOR_IS_REVIEWER']) {
+    assert.match(src, new RegExp(code));
+  }
+});
+
+test('TaskPlanningFields reports when no further eligible coworkers exist', () => {
+  const src = read('Frontend/src/components/tasks/TaskPlanningFields.tsx');
+  assert.match(src, /Nincs további jogosult munkatárs\./);
+});

@@ -17,15 +17,16 @@ import {
   createCaseComment,
   getDocumentComments,
   createDocumentComment,
-  getUsers,
+  getCaseResponsibleCandidates,
   getCaseWorkspace,
   safeUploadErrorMessage,
   type CaseWorkspace,
-  type User,
+  type CaseResponsibleCandidate,
 } from "@/lib/api";
 import { clientOrganizationApi, type OrgPersonDTO } from "@/lib/clientOrganizationApi";
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
 import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
+import { taskWorkflowErrorMessage } from "@/lib/taskWorkflowPresentation";
 import { AdminButton } from "@/components/adminiculum/ui";
 
 // Accepted upload types — the current safe allowlist (unchanged in this slice).
@@ -37,14 +38,16 @@ const PRIORITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
 type WorkspaceTask = CaseWorkspace["tasks"][number];
 type RequesterOption = Pick<OrgPersonDTO, "id" | "name" | "jobTitle" | "organizationGroupName" | "employmentStatus">;
 
-function useUsers(open: boolean): User[] {
-  const [users, setUsers] = useState<User[]>([]);
+function useCaseCandidates(caseId: string): CaseResponsibleCandidate[] {
+  const [users, setUsers] = useState<CaseResponsibleCandidate[]>([]);
   useEffect(() => {
-    if (!open) return;
     let active = true;
-    getUsers().then((list) => { if (active) setUsers(list); }).catch(() => { if (active) setUsers([]); });
+    // Authoritative case-scoped candidates; backend remains the sole authority.
+    getCaseResponsibleCandidates(caseId)
+      .then((result) => { if (active) setUsers(result.items); })
+      .catch(() => { if (active) setUsers([]); });
     return () => { active = false; };
-  }, [open]);
+  }, [caseId]);
   return users;
 }
 
@@ -133,7 +136,7 @@ export function TaskFormModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const users = useUsers(true);
+  const users = useCaseCandidates(caseId);
   const requesters = useTaskRequesters(caseId, true);
   const historicalRequester = task?.requestedByOrganizationPerson;
   const requesterOptions: RequesterOption[] = historicalRequester && !requesters.some((person) => person.id === historicalRequester.id)
@@ -205,7 +208,7 @@ export function TaskFormModal({
       onSaved();
       onClose();
     } catch (e) {
-      setServerErr(e instanceof Error ? e.message : "A mentés nem sikerült.");
+      setServerErr(taskWorkflowErrorMessage(e));
       setBusy(false);
     }
   }, [busy, title, description, priority, assignedToId, requestedByOrganizationPersonId, attentionCategory, estimatedMinutes, dueDate, deadlineMode, mode, task, caseId, onSaved, onClose]);
