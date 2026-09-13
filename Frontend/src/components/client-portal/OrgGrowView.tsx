@@ -139,13 +139,6 @@ export function OrgGrowView() {
                 </span>
               </div>
 
-              {item.currentState ? (
-                <div className="mt-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Kiinduló állapot</p>
-                  <p className="mt-0.5 text-sm text-stone-700">{item.currentState}</p>
-                </div>
-              ) : null}
-
               {item.targetState ? (
                 <div className="mt-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Célállapot</p>
@@ -154,9 +147,8 @@ export function OrgGrowView() {
               ) : null}
 
               <div className="mt-4 flex flex-wrap items-center justify-between border-t border-stone-100 pt-3 text-xs text-stone-500">
-                <span>Felelős: {item.responsibleSide === 'JOINT' ? 'Közös' : 'Adminiculum'}</span>
-                {item.targetAt ? <span>Célhatáridő: {formatDate(item.targetAt)}</span> : null}
-                {item.linkedCaseId ? (
+                {item.targetAt ? <span>Célhatáridő: {formatDate(item.targetAt)}</span> : <span />}
+                {item.hasRelatedMatter ? (
                   <Link
                     href={`/portal/ugyek`}
                     className="font-medium text-[#7a5f18] hover:underline"
@@ -255,8 +247,9 @@ export function OrgGrowView() {
                   {item.initiativeTitle ? (
                     <p className="mt-2 text-xs text-stone-500">Kezdeményezés: {item.initiativeTitle}</p>
                   ) : null}
-                  {item.note ? <p className="mt-1 text-sm text-stone-800">{item.note}</p> : null}
-                  <p className="mt-2 text-xs text-stone-400">Rögzítve: {formatDate(item.createdAt)}</p>
+                  {item.processName ? (
+                    <p className="mt-1 text-xs text-stone-500">Érintett folyamat: {item.processName}</p>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -277,8 +270,9 @@ export function OrgGrowView() {
                   {item.initiativeTitle ? (
                     <p className="mt-2 text-xs text-stone-500">Kezdeményezés: {item.initiativeTitle}</p>
                   ) : null}
-                  {item.note ? <p className="mt-1 text-sm text-stone-800">{item.note}</p> : null}
-                  <p className="mt-2 text-xs text-stone-400">Rögzítve: {formatDate(item.createdAt)}</p>
+                  {item.processName ? (
+                    <p className="mt-1 text-xs text-stone-500">Érintett folyamat: {item.processName}</p>
+                  ) : null}
                 </div>
               ))}
             </div>

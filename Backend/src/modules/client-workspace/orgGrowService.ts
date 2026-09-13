@@ -31,8 +31,6 @@ export interface OrgGrowProcessStep {
   isApproval: boolean;
   systemName: string | null;
   systemCategory: string | null;
-  estimatedWaitingMinutes: number | null;
-  estimatedActiveMinutes: number | null;
 }
 
 export interface OrgGrowProcess {
@@ -48,24 +46,16 @@ export interface OrgGrowProcess {
 export interface OrgGrowInitiative {
   id: string;
   title: string;
-  currentState: string | null;
   targetState: string | null;
   statusLabel: string;
-  rawStatus: string;
   targetAt: string | null;
-  createdAt: string;
-  milestonesCount: number;
-  linkedCaseId: string | null;
-  responsibleSide: 'ADMINICULUM' | 'CUSTOMER' | 'JOINT';
+  hasRelatedMatter: boolean;
 }
 
 export interface OrgGrowOutcome {
   id: string;
   basis: 'MEASURED' | 'CALCULATED' | 'ESTIMATED';
   basisLabel: string;
-  metricsSummary: Record<string, unknown> | null;
-  note: string | null;
-  createdAt: string;
   initiativeTitle: string | null;
   processName: string | null;
 }
@@ -150,20 +140,16 @@ export async function getOrganizationalGrow(
       isApproval: s.isApproval,
       systemName: s.system?.name || null,
       systemCategory: s.system?.category || null,
-      estimatedWaitingMinutes: s.estimatedWaitingMinutes,
-      estimatedActiveMinutes: s.estimatedActiveMinutes,
     })),
   }));
 
   // 2. Load development initiatives (safe customer projection).
   // Includes PLANNED, ACTIVE, COMPLETED, ON_HOLD (or HOLD).
+  // Strict publication boundary: internal IDs, raw status, and operational notes stripped.
   const initiativesRaw = await prisma.developmentInitiative.findMany({
     where: {
       clientId: workspace.clientId,
       status: { in: ['PLANNED', 'ACTIVE', 'COMPLETED', 'ON_HOLD'] },
-    },
-    include: {
-      milestones: { select: { id: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -171,15 +157,10 @@ export async function getOrganizationalGrow(
   const initiatives: OrgGrowInitiative[] = initiativesRaw.map((i) => ({
     id: i.id,
     title: i.title,
-    currentState: i.currentState || null,
     targetState: i.targetState || null,
     statusLabel: INITIATIVE_STATUS_LABELS[i.status] || i.status,
-    rawStatus: i.status,
     targetAt: i.targetAt ? i.targetAt.toISOString() : null,
-    createdAt: i.createdAt.toISOString(),
-    milestonesCount: i.milestones.length,
-    linkedCaseId: i.caseId || null,
-    responsibleSide: i.clientOwnerPersonId ? 'JOINT' : 'ADMINICULUM',
+    hasRelatedMatter: Boolean(i.caseId),
   }));
 
   // 3. Load outcome measurements.
@@ -187,6 +168,7 @@ export async function getOrganizationalGrow(
   // - Filter out synthetic entries (synthetic: false)
   // - Filter out ASSUMED entries from results
   // - Categorize into MEASURED vs CALCULATED/ESTIMATED
+  // - Strict DTO: metricsSummary, internal notes, and raw timestamps removed
   // - NEVER fabricate cash ROI
   const outcomesRaw = await prisma.outcomeMeasurement.findMany({
     where: {
@@ -210,9 +192,6 @@ export async function getOrganizationalGrow(
       id: o.id,
       basis,
       basisLabel: OUTCOME_BASIS_LABELS[basis] || basis,
-      metricsSummary: (o.metricsSummary as Record<string, unknown>) || null,
-      note: o.note || null,
-      createdAt: o.createdAt.toISOString(),
       initiativeTitle: o.developmentInitiative?.title || null,
       processName: o.businessProcess?.name || null,
     };

@@ -540,8 +540,6 @@ export type PortalGrowProcessStep = {
   isApproval: boolean;
   systemName: string | null;
   systemCategory: string | null;
-  estimatedWaitingMinutes: number | null;
-  estimatedActiveMinutes: number | null;
 };
 
 export type PortalGrowProcess = {
@@ -557,24 +555,16 @@ export type PortalGrowProcess = {
 export type PortalGrowInitiative = {
   id: string;
   title: string;
-  currentState: string | null;
   targetState: string | null;
   statusLabel: string;
-  rawStatus: string;
   targetAt: string | null;
-  createdAt: string;
-  milestonesCount: number;
-  linkedCaseId: string | null;
-  responsibleSide: 'ADMINICULUM' | 'CUSTOMER' | 'JOINT';
+  hasRelatedMatter: boolean;
 };
 
 export type PortalGrowOutcome = {
   id: string;
   basis: 'MEASURED' | 'CALCULATED' | 'ESTIMATED';
   basisLabel: string;
-  metricsSummary: Record<string, unknown> | null;
-  note: string | null;
-  createdAt: string;
   initiativeTitle: string | null;
   processName: string | null;
 };
