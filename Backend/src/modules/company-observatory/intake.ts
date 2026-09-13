@@ -157,7 +157,7 @@ async function persistCanonicalSurveySubmission(
       observationType: ObservationType.DECLARED_SURVEY,
       idempotencyKey,
       sourceRecordId: `survey:${idempotencyKey}`,
-      rawPayload: rawPayload as Prisma.InputJsonValue,
+      rawPayload: rawPayload as never,
       // Internal workforce historically relied on the ingestion service's
       // internal new Date(); only the portal path pins observedAt explicitly.
       ...(provenance.channel === 'CLIENT_PORTAL' ? { observedAt: new Date(provenance.submittedAt) } : {}),
