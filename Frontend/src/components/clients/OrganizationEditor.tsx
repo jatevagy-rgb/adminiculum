@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { getCurrentUser } from "@/lib/api";
 import { clientOrganizationApi, type OrgGroupDTO, type OrgPersonDTO } from "@/lib/clientOrganizationApi";
 import { inviteAdminWorkspaceMember, transitionAdminWorkspaceMembership, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
+import { derivePortalMembership } from "@/lib/organizationPortalMembership";
 import { editedOrganizationFields } from "@/lib/organizationEditorPayload";
 
 const field = "mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--adm-green-800)]";
@@ -23,6 +24,7 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
   const [feedback, setFeedback] = useState<string | null>(null);
   const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
   const [removeOpen, setRemoveOpen] = useState(false);
+  const [retryPersonId, setRetryPersonId] = useState<string | null>(null);
   const organizationWorkspaces = useMemo(() => workspaces.filter((workspace) => workspace.status === "ACTIVE" && workspace.mode === "ORGANIZATION"), [workspaces]);
 
   useEffect(() => {
@@ -37,12 +39,12 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
   useEffect(() => {
     if (!action || !canManage) return;
     setMode(action.mode); setSelectedId(action.selectedId || ""); setGroupId(action.groupId || null);
-    setEditedFields(new Set()); setError(null); setFeedback(null); setRemoveOpen(Boolean(action.remove));
+    setEditedFields(new Set()); setError(null); setFeedback(null); setRemoveOpen(Boolean(action.remove)); setRetryPersonId(null);
   }, [action, canManage]);
 
   const person = persons.find((item) => item.id === selectedId);
   const group = groups.find((item) => item.id === selectedId);
-  const start = (nextMode: "person" | "group") => { setMode(nextMode); setSelectedId(""); setGroupId(null); setEditedFields(new Set()); setError(null); setFeedback(null); setRemoveOpen(false); };
+  const start = (nextMode: "person" | "group") => { setMode(nextMode); setSelectedId(""); setGroupId(null); setEditedFields(new Set()); setError(null); setFeedback(null); setRemoveOpen(false); setRetryPersonId(null); };
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -55,6 +57,7 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
       return;
     }
     setBusy(true); setError(null); setFeedback(null);
+    let savedPerson: OrgPersonDTO | null = null;
     try {
       if (mode === "group") {
         const patch = { name: value("name"), descriptionSafe: nullable("descriptionSafe"), parentGroupId: nullable("parentGroupId") };
@@ -63,6 +66,7 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
       } else {
         const patch = { name: value("name"), jobTitle: nullable("jobTitle"), email: nullable("email"), phone: nullable("phone"), organizationGroupId: nullable("organizationGroupId"), managerPersonId: nullable("managerPersonId"), deputyPersonId: nullable("deputyPersonId"), responsibilitiesSummary: nullable("responsibilitiesSummary") };
         const saved = selectedId ? await clientOrganizationApi.updatePerson(selectedId, editedOrganizationFields(patch, editedFields)) : await clientOrganizationApi.createPerson(clientId, patch);
+        savedPerson = saved;
         if (data.get("invitePortal") === "on") {
           if (!patch.email) setFeedback("A személy mentve. Portálmeghívóhoz e-mail-cím szükséges.");
           else if (organizationWorkspaces.length === 0) setFeedback("A személy mentve. Nincs aktív szervezeti portál-munkaterület, ezért nem készült meghívó.");
@@ -75,9 +79,13 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
         }
       }
       await onSaved();
-      setMode(null); setRemoveOpen(false);
+      setMode(null); setRemoveOpen(false); setRetryPersonId(null);
     } catch (caught) {
-      setError(caught instanceof Error && caught.message === "PORTAL_WORKSPACE_SELECTION_REQUIRED" ? "Több aktív szervezeti munkaterület van. A meghíváshoz válasszon munkaterületet." : "A mentés nem sikerült. Ellenőrizze a mezőket, a hierarchiát és a szerkesztési jogosultságot.");
+      if (savedPerson) {
+        await onSaved();
+        setSelectedId(savedPerson.id); setMode("person"); setRetryPersonId(savedPerson.id);
+        setFeedback("A személy mentve, de a portálmeghívás nem sikerült.");
+      } else setError(caught instanceof Error && caught.message === "PORTAL_WORKSPACE_SELECTION_REQUIRED" ? "Több aktív szervezeti munkaterület van. A meghíváshoz válasszon munkaterületet." : "A mentés nem sikerült. Ellenőrizze a mezőket, a hierarchiát és a szerkesztési jogosultságot.");
     } finally { setBusy(false); }
   };
 
@@ -86,9 +94,9 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
     setBusy(true); setError(null); setFeedback(null);
     try {
       const revoke = document.querySelector<HTMLInputElement>(`#revoke-${person.id}`)?.checked;
-      if (revoke && person.portalMembershipId) {
-        const membership = workspaces.flatMap((workspace) => workspace.memberships).find((item) => item.id === person.portalMembershipId);
-        if (membership && !["REVOKED", "EXPIRED"].includes(membership.status)) await transitionAdminWorkspaceMembership(membership.id, "revoke", membership.revision);
+      const portal = derivePortalMembership(person, workspaces);
+      if (revoke && portal.membership) {
+        if (!["REVOKED", "EXPIRED"].includes(portal.membership.status)) await transitionAdminWorkspaceMembership(portal.membership.id, "revoke", portal.membership.revision);
       }
       await clientOrganizationApi.transitionPerson(person.id, "ENDED");
       setMode(null); setRemoveOpen(false); await onSaved(); setFeedback("A személy szervezeti státusza lezárva.");
@@ -103,7 +111,7 @@ export function OrganizationEditor({ clientId, groups, persons, workspaces, acti
       <form key={`${mode}:${selectedId}:${groupId || ""}`} onSubmit={save} onChange={(event) => { const target = event.target; if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) { if (target.name) setEditedFields((current) => new Set([...current, target.name])); } }} className="mt-4 space-y-4">
         <fieldset disabled={busy} className="grid gap-4 text-sm sm:grid-cols-2"><legend className="sr-only">Szervezeti adatok</legend><label>Név<input name="name" required defaultValue={(mode === "person" ? person : group)?.name || ""} className={field} /></label>
           {mode === "person" ? <><label>Pozíció<input name="jobTitle" defaultValue={person?.jobTitle || ""} className={field} /></label><label>E-mail<input name="email" type="email" defaultValue={person?.email || ""} className={field} /></label><label>Telefon<input name="phone" type="tel" defaultValue={person?.phone || ""} className={field} /></label><label>Szervezeti egység<select name="organizationGroupId" defaultValue={person?.organizationGroupId || groupId || ""} className={field}><option value="">Nincs megadva</option>{groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>{([['managerPersonId', 'Vezető'], ['deputyPersonId', 'Helyettes']] as const).map(([key, label]) => <label key={key}>{label}<select name={key} defaultValue={person?.[key] || ""} className={field}><option value="">Nincs megadva</option>{persons.filter((item) => item.id !== selectedId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>)}<label>Felelősségek összefoglalása<textarea name="responsibilitiesSummary" defaultValue={person?.responsibilitiesSummary || ""} className={field} /></label>
-            <div className="sm:col-span-2 rounded-lg bg-[var(--adm-ivory-100)] p-3"><label className="flex gap-2 text-sm"><input name="invitePortal" type="checkbox" defaultChecked={!selectedId} />Meghívás az ügyfélportálra ezzel az e-mail-címmel</label>{organizationWorkspaces.length > 1 ? <label className="mt-2 block">Aktív szervezeti munkaterület<select name="portalWorkspaceId" className={field} defaultValue=""><option value="">Válasszon munkaterületet</option>{organizationWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label> : null}<p className="mt-2 text-xs text-[var(--adm-text-muted)]">A meghívó csak portál-tagságot kezdeményez; ügy- vagy dokumentumhozzáférést nem ad.</p></div></> : <><label>Felettes szervezeti egység<select name="parentGroupId" defaultValue={group?.parentGroupId || groupId || ""} className={field}><option value="">Legfelső szint</option>{groups.filter((item) => item.id !== selectedId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Leírás<textarea name="descriptionSafe" defaultValue={group?.descriptionSafe || ""} className={field} /></label></>}
+            <div className="sm:col-span-2 rounded-lg bg-[var(--adm-ivory-100)] p-3"><label className="flex gap-2 text-sm"><input name="invitePortal" type="checkbox" defaultChecked={!selectedId || retryPersonId === selectedId} />Meghívás az ügyfélportálra ezzel az e-mail-címmel</label>{organizationWorkspaces.length > 1 ? <label className="mt-2 block">Aktív szervezeti munkaterület<select name="portalWorkspaceId" className={field} defaultValue=""><option value="">Válasszon munkaterületet</option>{organizationWorkspaces.map((workspace) => <option key={workspace.id} value={workspace.id}>{workspace.name}</option>)}</select></label> : null}<p className="mt-2 text-xs text-[var(--adm-text-muted)]">A meghívó csak portál-tagságot kezdeményez; ügy- vagy dokumentumhozzáférést nem ad.</p></div></> : <><label>Felettes szervezeti egység<select name="parentGroupId" defaultValue={group?.parentGroupId || groupId || ""} className={field}><option value="">Legfelső szint</option>{groups.filter((item) => item.id !== selectedId).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Leírás<textarea name="descriptionSafe" defaultValue={group?.descriptionSafe || ""} className={field} /></label></>}
         </fieldset><p className="text-xs text-[var(--adm-text-muted)]">A szervezeti módosítás nem ad portál-, ügy- vagy dokumentumhozzáférést. A hierarchiát a rendszer mentéskor ellenőrzi.</p>{error ? <p role="alert" className="text-sm text-red-800">{error}</p> : null}{feedback ? <p role="status" className="text-sm text-[var(--adm-text-muted)]">{feedback}</p> : null}<div className="flex gap-3"><button type="submit" disabled={busy} className="adm-link-button adm-link-button-primary px-3 py-2">{busy ? "Mentés…" : "Mentés"}</button><button type="button" disabled={busy} className="adm-link-button px-3 py-2" onClick={() => setMode(null)}>Mégse</button></div>
       </form>
       {mode === "person" && person ? <div className="mt-5 border-t border-[var(--adm-border)] pt-4">{removeOpen ? <><label className="flex gap-2 text-sm"><input id={`revoke-${person.id}`} type="checkbox" defaultChecked={Boolean(person.portalMembershipId)} disabled={!person.portalMembershipId} />A portálhozzáférést is visszavonjuk?</label><button type="button" onClick={() => void removePerson()} disabled={busy} className="mt-3 rounded-lg border border-red-300 px-3 py-2 text-sm font-semibold text-red-800">Eltávolítás a szervezetből</button></> : <button type="button" onClick={() => setRemoveOpen(true)} className="text-sm font-semibold text-red-800 underline">Eltávolítás a szervezetből</button>}</div> : null}

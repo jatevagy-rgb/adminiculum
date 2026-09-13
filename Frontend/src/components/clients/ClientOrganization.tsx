@@ -11,6 +11,8 @@ import {
 } from "@/lib/clientOrganizationApi";
 import { clientWorkspaceApi, formatWorkspaceDate, type CompanyWorkspaceOverview } from "@/lib/clientWorkspaceApi";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
+import { derivePortalMembership, portalMembershipStatusLabel } from "@/lib/organizationPortalMembership";
+import { organizationGroupStarts, organizationReportsInScope, organizationRootPeople } from "@/lib/organizationHierarchy";
 import { OrganizationEditor, type OrganizationEditorAction } from "./OrganizationEditor";
 
 const pill = "rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-xs text-[var(--adm-text-muted)]";
@@ -69,7 +71,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
         clientOrganizationApi.listGroups(clientId),
         clientOrganizationApi.listPersons(clientId),
         clientOrganizationApi.responsibilityGaps(clientId),
-        listAdminWorkspaces(clientId),
+        listAdminWorkspaces(clientId).catch(() => ({ items: [] })),
       ]);
       setOverview(overviewResult);
       setGroups(groupsResult.items);
@@ -136,30 +138,24 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
   };
 
   const roots = groups.filter((group) => !group.parentGroupId);
-  const rootPeople = filteredPersons.filter((person) => !person.managerPersonId);
-  const peopleManagedBy = useMemo(() => {
-    const result = new Map<string, OrgPersonDTO[]>();
-    filteredPersons.forEach((person) => {
-      if (!person.managerPersonId) return;
-      result.set(person.managerPersonId, [...(result.get(person.managerPersonId) || []), person]);
-    });
-    return result;
-  }, [filteredPersons]);
+  const rootPeople = organizationRootPeople(filteredPersons);
   const editPerson = (personId: string) => setEditorAction({ mode: "person", selectedId: personId });
   const removePerson = (personId: string) => setEditorAction({ mode: "person", selectedId: personId, remove: true });
   const addPersonToGroup = (groupId: string | null) => setEditorAction({ mode: "person", groupId });
   const editGroup = (groupId: string) => setEditorAction({ mode: "group", selectedId: groupId });
   const addSubgroup = (groupId: string) => setEditorAction({ mode: "group", groupId });
-  const renderPerson = (person: OrgPersonDTO, nested = false): ReactNode => {
-    const reports = peopleManagedBy.get(person.id) || [];
+  const renderPerson = (person: OrgPersonDTO, nested = false, groupScope: string | null = null): ReactNode => {
+    const reports = organizationReportsInScope(filteredPersons, person.id, groupScope);
+    const portal = derivePortalMembership(person, workspaces);
     return <div key={person.id} className={nested ? "relative mt-3 border-l border-[var(--adm-green-300)] pl-5 before:absolute before:left-0 before:top-6 before:h-px before:w-4 before:bg-[var(--adm-green-300)]" : ""}>
       <div className="rounded-xl border border-[var(--adm-border)] bg-white p-3 shadow-sm">
         <div className="flex items-start justify-between gap-2"><button type="button" onClick={() => void openPerson(person.id)} aria-expanded={selectedId === person.id} className="text-left font-semibold text-[var(--adm-text)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-700)]">{person.name}</button><span className={pill}>{personStatusLabel(person.employmentStatus)}</span></div>
         <p className="mt-1 text-sm text-[var(--adm-text-muted)]">{person.jobTitle || "Pozíció nincs megadva"}</p>
         <p className="mt-2 text-xs text-[var(--adm-text-muted)]">{person.managerName ? `Vezető: ${person.managerName}` : "Nincs közvetlen vezető megadva."}{person.deputyName ? ` · Helyettes: ${person.deputyName}` : ""}</p>
+        <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Portál: {portalMembershipStatusLabel(portal.status)}{groupScope === null && person.organizationGroupName ? ` · ${person.organizationGroupName}` : ""}</p>
         {canManageOrganization ? <div className="mt-3 flex gap-3"><button type="button" onClick={() => editPerson(person.id)} className="text-xs font-semibold text-[var(--adm-green-800)] underline">Szerkesztés</button><button type="button" onClick={() => removePerson(person.id)} className="text-xs font-semibold text-red-800 underline">Eltávolítás a szervezetből</button></div> : null}
       </div>
-      {reports.length ? <div className="mt-2" aria-label="Vezetői kapcsolat">{reports.map((report) => renderPerson(report, true))}</div> : null}
+      {reports.length ? <div className="mt-2" aria-label="Vezetői kapcsolat">{reports.map((report) => renderPerson(report, true, groupScope))}</div> : null}
     </div>;
   };
   const renderGroup = (group: OrgGroupDTO, depth = 0, ancestors = new Set<string>()): ReactNode => {
@@ -179,7 +175,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
           <div className="flex items-center gap-3"><span className={pill}>{members.length} személy</span>{canManageOrganization ? <div className="flex gap-2 text-xs font-semibold text-[var(--adm-green-800)]"><button type="button" onClick={() => addPersonToGroup(group.id)} className="underline">+ Kolléga</button><button type="button" onClick={() => addSubgroup(group.id)} className="underline">+ Alcsoport</button><button type="button" onClick={() => editGroup(group.id)} className="underline">Szerkesztés</button></div> : null}</div>
         </div>
         {members.length ? (
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">{members.filter((person) => !person.managerPersonId || !members.some((candidate) => candidate.id === person.managerPersonId)).map((person) => renderPerson(person))}</div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">{organizationGroupStarts(filteredPersons, group.id).map((person) => renderPerson(person, false, group.id))}</div>
         ) : null}
         {children.map((child) => renderGroup(child, depth + 1, nextAncestors))}
       </div>
@@ -228,7 +224,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
             <div className="space-y-5">
               {rootPeople.length ? <div className="rounded-xl bg-[var(--adm-ivory-100)] p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-serif text-lg text-[var(--adm-text)]">Vezetői szint</h3>{canManageOrganization ? <button type="button" onClick={() => addPersonToGroup(null)} className="text-xs font-semibold text-[var(--adm-green-800)] underline">+ Kolléga</button> : null}</div><div className="mt-3 grid gap-3 lg:grid-cols-2">{rootPeople.map((person) => renderPerson(person))}</div></div> : null}
               {roots.map((root) => renderGroup(root))}
-              {ungrouped.length ? <div className="border-t border-[var(--adm-border)] pt-4"><h3 className="font-serif text-lg text-[var(--adm-text)]">Nincs szervezeti egységhez rendelve</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">{ungrouped.filter((person) => person.managerPersonId).map((person) => renderPerson(person))}</div></div> : null}
+              {ungrouped.length ? <div className="border-t border-[var(--adm-border)] pt-4"><h3 className="font-serif text-lg text-[var(--adm-text)]">Nincs szervezeti egységhez rendelve</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">{ungrouped.filter((person) => person.managerPersonId && !ungrouped.some((candidate) => candidate.id === person.managerPersonId)).map((person) => renderPerson(person, false, null))}</div></div> : null}
             </div>
           </Section>
 

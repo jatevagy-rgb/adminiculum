@@ -110,6 +110,26 @@ describe('Organization internal UI (structural)', () => {
     assert.match(editor, /organizationWorkspaces\.length > 1/);
     assert.match(editor, /PORTAL_WORKSPACE_SELECTION_REQUIRED/);
     assert.match(editor, /inviteAdminWorkspaceMember\(workspaceId/);
-    assert.match(editor, /transitionAdminWorkspaceMembership\(membership\.id, "revoke", membership\.revision\)/);
+    assert.match(editor, /transitionAdminWorkspaceMembership\(portal\.membership\.id, "revoke", portal\.membership\.revision\)/);
+  });
+
+  it('keeps the portal-admin lookup optional for read-only organization readers', () => {
+    const src = component();
+    assert.match(src, /listAdminWorkspaces\(clientId\)\.catch\(\(\) => \(\{ items: \[\] \}\)\)/);
+    assert.match(src, /onManagePermissionChanged/);
+  });
+
+  it('renders each person once: manager roots are excluded from their group card list and cross-group reports do not recurse', () => {
+    const src = component();
+    assert.match(src, /organizationGroupStarts\(filteredPersons, group\.id\)/);
+    assert.match(src, /organizationReportsInScope\(filteredPersons, person\.id, groupScope\)/);
+    assert.match(src, /organizationRootPeople\(filteredPersons\)/);
+  });
+
+  it('keeps person save and invitation as truthful independent phases', () => {
+    const editor = read('src/components/clients/OrganizationEditor.tsx');
+    assert.match(editor, /let savedPerson: OrgPersonDTO \| null = null/);
+    assert.match(editor, /A személy mentve, de a portálmeghívás nem sikerült/);
+    assert.match(editor, /setSelectedId\(savedPerson\.id\); setMode\("person"\); setRetryPersonId\(savedPerson\.id\)/);
   });
 });
