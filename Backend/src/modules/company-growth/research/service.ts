@@ -40,6 +40,7 @@ import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION 
 import { deriveProcessSignals, selectInterventions } from './interventions';
 import {
   GROW_ASSESSMENT_SCHEMA,
+  GROW_PAIN_INTAKE_KIND,
   observationsToGrowSignals,
   supersedeAssessmentObservations,
   type GrowSignal,
@@ -418,12 +419,19 @@ async function executeRun(
   }
 
   // Bounded loading that stays correct:
-  // - non-superseded survey observations keep an explicit newest-50 bound;
+  // - non-superseded survey observations keep an explicit newest-50 bound and
+  //   are restricted to the canonical pain-intake kind, so assessment rows can
+  //   never fill the window and displace a valid survey (and, per the fail-closed
+  //   normalizer, a non-pain-intake declared survey contributes no signal anyway);
   // - each assessment scope is reduced to its latest row IN THE DATABASE, so a
   //   growing survey/retake history can neither truncate an assessment scope nor
   //   force the whole declared history to be loaded and sorted every cycle.
   const surveyObs = await db.observation.findMany({
-    where: { clientId, observationType: 'DECLARED_SURVEY' },
+    where: {
+      clientId,
+      observationType: 'DECLARED_SURVEY',
+      rawPayload: { path: ['kind'], equals: GROW_PAIN_INTAKE_KIND },
+    },
     orderBy: { observedAt: 'desc' },
     take: 50,
   });
