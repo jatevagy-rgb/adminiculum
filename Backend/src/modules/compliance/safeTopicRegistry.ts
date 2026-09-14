@@ -69,6 +69,9 @@ const DEMO_TOPIC_KEYS = new Set(SAFE_TOPICS.filter((t) => t.demo).map((t) => t.i
 const PRODUCTION_TOPIC_MAP = new Map(SAFE_TOPICS.filter((t) => !t.demo).map((t) => [t.internalKey, t]));
 const ALL_TOPIC_MAP = new Map(SAFE_TOPICS.map((t) => [t.internalKey, t]));
 const KEY_TO_ENTRY = new Map(SAFE_TOPICS.map((t) => [t.internalKey, t]));
+const SAFE_CONTROL_LABELS = new Map<string, string>([
+  ['GDPR_DATA_PROCESSING_CONTROL', 'Adatvédelmi intézkedés'],
+]);
 
 /**
  * Returns the set of internal Requirement.keys that are portal-visible
@@ -99,4 +102,8 @@ export function lookupSafeTopic(internalKey: string, isProduction: boolean, demo
  */
 export function isPortalVisible(internalKey: string, isProduction: boolean, demoEnabled = false): boolean {
   return lookupSafeTopic(internalKey, isProduction, demoEnabled) !== null;
+}
+
+export function lookupSafeControlLabel(controlKey: string): string | null {
+  return SAFE_CONTROL_LABELS.get(controlKey) || null;
 }

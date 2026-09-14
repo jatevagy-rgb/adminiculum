@@ -25,7 +25,7 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
-import { lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
+import { lookupSafeControlLabel, lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
 import { isCompanyProfileQuestion } from '../client-workspace/companyProfileQuestionRegistry';
 
 type Prisma = typeof defaultPrisma;
@@ -371,21 +371,25 @@ export async function getClientSafeComplianceReadModel(
   const controlByDefinition = new Map(clientControls.map((control) => [control.controlDefinitionId, control]));
   const controlsSummary = [...latest.values()]
     .filter((row) => row.outcome === 'APPLIES' && visibleKeys.has(row.requirementVersion.requirement.key))
-    .map((row) => ({
-      requirementTitle: row.requirementVersion.title,
-      controls: row.requirementVersion.controlMaps.map((map) => {
+    .flatMap((row) => {
+      const topic = lookupSafeTopic(row.requirementVersion.requirement.key, isProduction, demoEnabled);
+      if (!topic) return [];
+      const controls = row.requirementVersion.controlMaps.flatMap((map) => {
+        const title = lookupSafeControlLabel(map.controlDefinition.key);
+        if (!title) return [];
         const control = controlByDefinition.get(map.controlDefinitionId);
         const accepted = (control?.evidenceLinks || []).filter((link) => link.evidenceRecord.status === 'ACCEPTED');
         const current = accepted.filter((link) => !link.evidenceRecord.validUntil || link.evidenceRecord.validUntil >= now);
         return {
-          title: map.controlDefinition.title,
+          title,
           implementationStatus: control ? String(control.implementationStatus) : null,
           lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,
           nextReviewAt: control?.nextReviewAt?.toISOString() || null,
           evidence: { acceptedCurrent: current.length, stale: accepted.length - current.length, missing: current.length === 0 },
         };
-      }),
-    }));
+      });
+      return [{ requirementTitle: topic.portalLabel, controls }];
+    });
 
   const result: ClientSafeComplianceReadModel = { topics, controlsSummary };
   assertClientSafe(result);
