@@ -182,7 +182,8 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     expect(facts[0].supersededAt).not.toBeNull();
     expect(facts[1].numberValue?.toString()).toBe('52');
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
-    expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions[0]).toMatchObject({ status: 'UNKNOWN', value: null });
+    const employeeQuestion = (await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions.find((question) => question.questionKey === 'employee_count');
+    expect(employeeQuestion).toMatchObject({ status: 'UNKNOWN', value: null });
     expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(2);
   });
 
