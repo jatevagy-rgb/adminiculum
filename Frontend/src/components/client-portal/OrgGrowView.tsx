@@ -292,12 +292,16 @@ export function OrgGrowView() {
   const packs = catalogue?.packs || [];
   const aggregatedFindings = catalogue?.aggregatedFindings || [];
   const hasCompletedPack = packs.some((p) => p.status === "COMPLETED");
-  const hasEvaluableCompletedPack = packs.some(
-    (p) => p.status === "COMPLETED" && p.latestResultAvailable,
-  );
-  const hasUnavailableCompletedPack = packs.some(
-    (p) => p.status === "COMPLETED" && !p.latestResultAvailable,
-  );
+  // Availability is per completed RESULT SCOPE: a process pack can hold several
+  // scopes with independent evaluability, so a pack-level flag would let one
+  // unevaluable scope mask an available one (and an available one mask an
+  // unevaluable sibling). Non-process packs have a single scope, so behaviour is
+  // unchanged for them.
+  const completedResultScopes = packs
+    .filter((p) => p.status === "COMPLETED")
+    .flatMap((p) => p.resultScopes);
+  const hasEvaluableCompletedPack = completedResultScopes.some((s) => s.resultAvailable);
+  const hasUnavailableCompletedPack = completedResultScopes.some((s) => !s.resultAvailable);
 
   const runnerQuestions = runnerDetail?.definition.questions || [];
   const currentQuestion = runnerQuestions[runnerIndex];
@@ -654,7 +658,10 @@ export function OrgGrowView() {
                       >
                         {pack.status === "COMPLETED" ? "Újra kitöltöm" : "Kitöltöm"}
                       </button>
-                      {pack.status === "COMPLETED" && pack.latestResultAvailable ? (
+                      {pack.status === "COMPLETED" &&
+                      (pack.allowsProcessReference
+                        ? pack.resultScopes.some((s) => s.resultAvailable)
+                        : pack.latestResultAvailable) ? (
                         pack.allowsProcessReference && pack.resultScopes.length > 1 ? (
                           <div className="w-full" data-testid="grow-assessment-result-scopes">
                             <p className="text-xs font-semibold text-stone-600">Eredmény megtekintése:</p>

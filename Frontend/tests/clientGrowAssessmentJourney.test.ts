@@ -168,10 +168,8 @@ test('unevaluable completion has an explicit unavailable state, not zero finding
   assert.match(src, /hasUnavailableCompletedPack/);
   assert.match(src, /data-testid="grow-assessment-result-unavailable"/);
   assert.match(src, /Az eredmény jelenleg nem jeleníthető meg/);
-  // The zero-findings summary is qualified when any completed pack is unavailable.
+  // The zero-findings summary is qualified when any completed scope is unavailable.
   assert.match(src, /Néhány kitöltött felmérés eredménye jelenleg nem jeleníthető meg/);
-  // The result button is only offered when a result is actually available.
-  assert.match(src, /pack\.status === "COMPLETED" && pack\.latestResultAvailable/);
   const api = read(API);
   assert.match(api, /latestResultAvailable: boolean/);
 });
@@ -200,4 +198,39 @@ test('retake preserves the selected process scope', () => {
 test('non-process packs keep the single result action', () => {
   const src = read(VIEW);
   assert.match(src, /pack\.allowsProcessReference && pack\.resultScopes\.length > 1/);
+});
+
+test('P2 scope availability: any available scope keeps the chooser reachable', () => {
+  const src = read(VIEW);
+  // Result-action availability derives from ALL scopes for process packs...
+  assert.match(
+    src,
+    /pack\.allowsProcessReference\s*\?\s*pack\.resultScopes\.some\(\(s\) => s\.resultAvailable\)/,
+  );
+  // ...while non-process packs keep the pack-level flag.
+  assert.match(src, /: pack\.latestResultAvailable\)/);
+  // Per-scope control: available scopes open, unavailable scopes are disabled.
+  assert.match(src, /disabled=\{assessmentBusy \|\| !scope\.resultAvailable\}/);
+  assert.match(src, /viewAssessmentResult\(pack\.packKey, scope\.processId\)/);
+  // All scopes unavailable → honest unavailable note, not a hidden healthy state.
+  assert.match(src, /!pack\.resultScopes\.some\(\(s\) => s\.resultAvailable\)/);
+  assert.match(
+    src,
+    /A kitöltés rögzítve van, de az eredmény ehhez a verzióhoz jelenleg nem jeleníthető meg\./,
+  );
+  // Raw process id is never rendered; the chooser labels by process name.
+  assert.match(src, /scope\.processName \|\| "Általános"/);
+});
+
+test('P2 summary availability: derived from every completed scope', () => {
+  const src = read(VIEW);
+  assert.match(src, /const completedResultScopes = packs/);
+  assert.match(src, /\.flatMap\(\(p\) => p\.resultScopes\)/);
+  assert.match(src, /completedResultScopes\.some\(\(s\) => s\.resultAvailable\)/);
+  assert.match(src, /completedResultScopes\.some\(\(s\) => !s\.resultAvailable\)/);
+  // Existing copy preserved when everything is available.
+  assert.match(src, /jelenleg nem azonosítottunk figyelmet igénylő pontot/);
+  assert.match(src, /aggregatedFindings\.length > 0/);
+  // All unavailable → honest summary rather than a healthy claim.
+  assert.match(src, /A kitöltött felmérések eredménye jelenleg nem jeleníthető meg\./);
 });
