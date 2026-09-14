@@ -2,7 +2,7 @@
 
 **Status:** Proposed
 **Scope:** Backend/domain architecture inventory and implementation boundary
-**Repository baseline:** `e19cb4ab1832827e22daa23101e7ff4bf92d9355`
+**Repository baseline:** `ab980019a4809f545ef7d8bf3f3a813ba9e9dedf`
 **Decision date:** 2026-09-14
 
 ## Decision summary
@@ -28,13 +28,50 @@ The governing boundary is:
 > observed at a point in time.
 
 No new `ActionPlan`, `GrowSignal`, or second communication store is required
-for GWU-1. The first future implementation slice should be a read-only,
-internal diagnostic workbench over the existing observation, process metric,
-evidence, diagnosis, and recommendation services. It must preserve explicit
-human review before any opportunity or execution object is created.
+for GWU-1. The repository now contains the bounded GWU-2A read-only internal
+diagnostic workbench over the existing observation, process metric, evidence,
+diagnosis, and recommendation services. It preserves explicit human review
+before any opportunity or execution object is created. The next roadmap slice
+must build on that contract rather than replace it.
 
-This ADR is documentation-only. It does not implement GWU-2, redesign the
-frontend, add schema, or change production behavior.
+This ADR is documentation-only. It does not redesign the frontend, add
+schema, or change production behavior.
+
+## Roadmap Scope Lock
+
+An approved capability that is outside the current implementation slice is
+not removed from the Grow With Us / Company OS roadmap. Every implementation
+slice must classify approved capabilities as exactly one of:
+
+- `IMPLEMENTED_NOW`
+- `DEFERRED_TO=<slice>`
+- `BLOCKED_BY=<dependency>`
+
+No approved product capability may be silently removed, downgraded, or
+declared unnecessary merely because it is not in the current PR.
+
+The approved roadmap includes, at minimum:
+
+- Company Data Room / company digital twin;
+- structured company facts, organization, processes, and systems;
+- documents/contracts, provenance, freshness, conflict handling, controlled
+  editing, and evidence reuse;
+- Observatory declared observations, measured snapshots, and future
+  external/system/authority observations;
+- research/scientific evidence corpus;
+- operational diagnostics;
+- Order-to-Cash, Procure-to-Pay, Hire-to-Retire, Contract Lifecycle,
+  Incident/Complaint/Request Handling, and Management Reporting / Approval;
+- business diagnosis, legal/compliance inference, human review, and
+  customer-safe publication;
+- customer decision UX;
+- `ImprovementOpportunity`, `DevelopmentInitiative`, tasks, milestones, and
+  `OutcomeMeasurement`;
+- external verified company facts, customer Company OS UX, workforce Company OS
+  UX, document-driven intake/extraction, and future integrations.
+
+`ROADMAP_CAPABILITIES_REMOVED=NONE` unless removal is explicitly approved by
+the product owner.
 
 ## 1. Current canonical model map
 
@@ -215,6 +252,27 @@ The boundary prevents:
 The existing model set already supports most of this distinction. The main
 remaining design work is a consistent provenance and conflict contract for
 facts originating from observations.
+
+### Research and scientific evidence corpus
+
+`ResearchEvidence` is a distinct research/scientific evidence layer. It is
+not canonical company state and is not a substitute for client-specific facts
+or measurements. It supports diagnosis grounding, evidence sufficiency,
+intervention selection, benchmark and context interpretation, expected
+outcome selection, and measurement design.
+
+The bounded doctrine is:
+
+```text
+client fact or client measurement
+  + relevant research evidence
+  → bounded diagnosis/recommendation
+```
+
+Never derive a fabricated client fact from a research benchmark. Research
+evidence may inform a reviewed recommendation, but it cannot establish what
+is true about a specific client without client-specific evidence and the
+existing review gates.
 
 ## 5. Fact/entity decision matrix
 
@@ -448,9 +506,9 @@ The following rules are mandatory:
 
 ## 12. Exact recommended GWU implementation slices
 
-### Slice 1 — Internal diagnostic read model, no schema
+### Slice 1 — Internal diagnostic read model, no schema — `IMPLEMENTED_NOW`
 
-Build an internal-only service/route that reads:
+The GWU-2A implementation provides an internal-only service/route that reads:
 
 - active `BusinessProcess` and steps;
 - latest `ProcessObservationSnapshot`;
@@ -458,11 +516,11 @@ Build an internal-only service/route that reads:
 - `EvidenceRecord` and research sufficiency;
 - existing diagnosis/recommendation candidates.
 
-It should return explicit `MISSING_DATA`, `NEEDS_MORE_DATA`, and
+It returns explicit `MISSING_DATA`, `NEEDS_MORE_DATA`, and
 `HUMAN_REVIEW` states. It must not create findings, opportunities, initiatives,
 tasks, or customer publications.
 
-### Slice 2 — Evidence/provenance contract
+### Slice 2 — Evidence/provenance contract — `DEFERRED_TO=GWU-2B/GWU-3`
 
 Standardize DTO-level provenance and safe source summaries across facts,
 observations, snapshots, and evidence. Add tests for source mapping,
