@@ -27,6 +27,43 @@ secret references, provider errors, verification codes, credentials, or raw HTML
 - `POST /api/v1/mailboxes/:id/send` — sends and persists a canonical outbound Communication.
 - `POST /api/v1/mailboxes/:id/disconnect` — revokes the connection and removes provider access.
 
+## OAUTH_UI_RETURN
+
+Browser `GET` callbacks complete the server-side state, code exchange, provider
+identity match, and SecretStore persistence, then return `303` to the trusted
+Adminiculum mailbox surface:
+`/communications/mailboxes?mailbox=connected`. The destination is built only
+from the operator-controlled `MAILBOX_OAUTH_FRONTEND_RETURN_URL`, `FRONTEND_URL`,
+or `FRONTEND_ORIGIN` configuration; request/query/state redirect destinations
+are ignored. OAuth codes, state, tokens, and provider payloads are never placed
+in the redirect. Browser failures use only `mailbox=error&error=<safe-code>`.
+`POST` callbacks retain JSON behavior for API/test callers.
+
+## REVOKED_REAUTH
+
+The owner may start authorization again for a `REVOKED` connection. The backend
+clears authorization capabilities and the old secret reference, operates the
+connection as `AUTHORIZATION_REQUIRED`, and requires a fresh provider exchange,
+exact normalized identity match, and fresh SecretStore credential before
+returning to `CONNECTED`. Other users remain owner-denied.
+
+## SEND_CONTEXT_COMMUNICATION_ID
+
+`POST /api/v1/mailboxes/:id/send` accepts the additive
+`contextCommunicationId` field for forwards and other context-only sends.
+`replyToCommunicationId` remains the actual reply/threading field. Both source
+references must belong to the same owner mailbox connection; a Case-linked
+source additionally requires canonical Case read access for the acting user.
+Frontend-supplied `caseId`, `clientId`, or `documentId` are not accepted.
+
+## CASE_CONTEXT_INHERITANCE
+
+An outbound Communication created from a canonical source inherits only that
+source's `caseId` and `clientId`. Replies preserve `In-Reply-To`, `References`,
+and provider conversation metadata; forwards may use `contextCommunicationId`
+but do not receive reply threading metadata. Unlinked sources remain unlinked,
+and document context is never inherited automatically.
+
 Verification requires `email` and provider (`MICROSOFT_GRAPH`, `GOOGLE_GMAIL`, or
 `IMAP_SMTP`); verification alone never indicates a connected mailbox. Generic
 IMAP/SMTP remains feature-gated until a production SecretStore and connectivity

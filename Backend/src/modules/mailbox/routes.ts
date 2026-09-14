@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import crypto from 'crypto';
 import { authenticate } from '../../middleware/auth';
-import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
+import { isWorkforceRole, requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { normalizeMailboxAddress } from './dedupe';
 import { challengeExpiry, canResend, evaluateVerification, generateVerificationCode } from './verificationCode';
@@ -14,6 +14,10 @@ import { MAILBOX_PROVIDERS, type MailboxProviderCode } from './types';
 import { recordMailboxAudit } from './audit';
 
 const router = Router();
+router.get('/oauth/microsoft/callback', (req, res) => oauthCallback(req, res, 'MICROSOFT_GRAPH'));
+router.post('/oauth/microsoft/callback', (req, res) => oauthCallback(req, res, 'MICROSOFT_GRAPH'));
+router.get('/oauth/google/callback', (req, res) => oauthCallback(req, res, 'GOOGLE_GMAIL'));
+router.post('/oauth/google/callback', (req, res) => oauthCallback(req, res, 'GOOGLE_GMAIL'));
 router.use(authenticate, requireWorkforceUser);
 const provider = (value: unknown): MailboxProviderCode | null => MAILBOX_PROVIDERS.includes(value as MailboxProviderCode) ? value as MailboxProviderCode : null;
 const owner = (req: Request) => String(req.user?.userId || '');
@@ -25,6 +29,30 @@ function safeError(res: Response, error: unknown) {
     code: e?.code ?? (configuration ? 'MAILBOX_TRANSACTIONAL_MAIL_NOT_CONFIGURED' : providerIdentity ? 'MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE' : 'MAILBOX_OPERATION_FAILED'),
     message: e?.message ?? 'Mailbox operation could not be completed.',
   });
+}
+function trustedMailboxReturnUrl(result: 'connected' | 'error', errorCode?: string): string | null {
+  const configured = String(process.env.MAILBOX_OAUTH_FRONTEND_RETURN_URL || process.env.FRONTEND_URL || process.env.FRONTEND_ORIGIN || '').trim();
+  if (!configured) return null;
+  try {
+    const url = new URL('/communications/mailboxes', configured);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return null;
+    url.search = '';
+    if (result === 'connected') {
+      url.searchParams.set('mailbox', 'connected');
+    } else {
+      url.searchParams.set('mailbox', 'error');
+      url.searchParams.set('error', /^MAILBOX_[A-Z0-9_]+$/.test(errorCode || '') ? errorCode! : 'MAILBOX_OAUTH_FAILED');
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+function redirectBrowser(res: Response, result: 'connected' | 'error', error?: unknown) {
+  const code = error instanceof MailboxServiceError ? error.code : undefined;
+  const target = trustedMailboxReturnUrl(result, code);
+  if (!target) return safeError(res, error ?? new MailboxServiceError(500, 'MAILBOX_OAUTH_FRONTEND_RETURN_NOT_CONFIGURED'));
+  return res.redirect(303, target);
 }
 
 router.get('/', async (req, res) => res.json({ mailboxes: await prisma.communicationMailboxConnection.findMany({ where: { ownerUserId: owner(req) }, select: { id: true, mailboxAddress: true, provider: true, status: true, verifiedAt: true, readCapability: true, sendCapability: true, lastSyncedAt: true, lastSyncStatus: true, lastSyncError: true, createdAt: true }, orderBy: { createdAt: 'desc' } }) }));
@@ -55,7 +83,23 @@ router.post('/verification/confirm', async (req, res) => {
   await recordMailboxAudit({ eventType: 'MAILBOX_VERIFIED', actorUserId: owner(req), mailboxConnectionId: mailbox.id, provider: selected, status: mailbox.status });
   res.json({ mailbox: { id: mailbox.id, status: mailbox.status } });
 });
-async function oauthStart(req: Request, res: Response, code: MailboxProviderCode) { try { const mailbox = await ownedMailbox(String(req.params.id), owner(req)); if (mailbox.provider !== code || mailbox.status === 'REVOKED') throw new MailboxServiceError(409, 'MAILBOX_AUTHORIZATION_NOT_AVAILABLE'); const state = createOAuthState({ userId: owner(req), connectionId: mailbox.id, mailboxAddress: mailbox.mailboxAddress, provider: code }); const redirectUri = code === 'MICROSOFT_GRAPH' ? String(process.env.MICROSOFT_MAILBOX_REDIRECT_URI || '') : String(process.env.GOOGLE_MAILBOX_REDIRECT_URI || ''); await recordMailboxAudit({ eventType: 'MAILBOX_AUTHORIZATION_STARTED', actorUserId: owner(req), mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: mailbox.status }); res.json({ authorizationUrl: getMailboxProvider(code).buildAuthorizationUrl({ state, redirectUri }) }); } catch (e) { safeError(res, e); } }
+async function oauthStart(req: Request, res: Response, code: MailboxProviderCode) {
+  try {
+    let mailbox = await ownedMailbox(String(req.params.id), owner(req));
+    if (mailbox.provider !== code) throw new MailboxServiceError(409, 'MAILBOX_AUTHORIZATION_NOT_AVAILABLE');
+    if (mailbox.status === 'REVOKED') {
+      if (mailbox.secretReference) await getSecretStore().delete(mailbox.secretReference);
+      mailbox = await prisma.communicationMailboxConnection.update({
+        where: { id: mailbox.id },
+        data: { status: 'AUTHORIZATION_REQUIRED', readCapability: false, sendCapability: false, secretReference: null, providerAccountId: null, providerTenantId: null },
+      });
+    }
+    const state = createOAuthState({ userId: owner(req), connectionId: mailbox.id, mailboxAddress: mailbox.mailboxAddress, provider: code });
+    const redirectUri = code === 'MICROSOFT_GRAPH' ? String(process.env.MICROSOFT_MAILBOX_REDIRECT_URI || '') : String(process.env.GOOGLE_MAILBOX_REDIRECT_URI || '');
+    await recordMailboxAudit({ eventType: 'MAILBOX_AUTHORIZATION_STARTED', actorUserId: owner(req), mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: mailbox.status });
+    res.json({ authorizationUrl: getMailboxProvider(code).buildAuthorizationUrl({ state, redirectUri }) });
+  } catch (e) { safeError(res, e); }
+}
 router.post('/:id/authorize/microsoft/start', (req, res) => oauthStart(req, res, 'MICROSOFT_GRAPH'));
 router.post('/:id/authorize/google/start', (req, res) => oauthStart(req, res, 'GOOGLE_GMAIL'));
 router.post('/:id/generic/configure', async (req, res) => {
@@ -72,6 +116,10 @@ async function oauthCallback(req: Request, res: Response, expected: MailboxProvi
     const state = verifyOAuthState(String(req.query.state || req.body?.state || ''));
     if (state.provider !== expected) throw new MailboxServiceError(400, 'MAILBOX_OAUTH_STATE_INVALID');
     const mailbox = await ownedMailbox(state.connectionId, state.userId);
+    const actor = await prisma.user.findUnique({ where: { id: state.userId }, select: { role: true, status: true, isActive: true } });
+    if (!actor || actor.status !== 'ACTIVE' || actor.isActive === false || !isWorkforceRole(actor.role)) {
+      throw new MailboxServiceError(403, 'WORKFORCE_ACCESS_REQUIRED');
+    }
     const adapter = getMailboxProvider(expected);
     const redirectUri = expected === 'MICROSOFT_GRAPH' ? String(process.env.MICROSOFT_MAILBOX_REDIRECT_URI || '') : String(process.env.GOOGLE_MAILBOX_REDIRECT_URI || '');
     const authorized = await adapter.exchangeAuthorizationCode({ code: String(req.query.code || req.body?.code || ''), redirectUri });
@@ -88,11 +136,14 @@ async function oauthCallback(req: Request, res: Response, expected: MailboxProvi
     await getSecretStore().put(secretReference, authorized.secret);
     await prisma.communicationMailboxConnection.update({ where: { id: mailbox.id }, data: { secretReference, status: 'CONNECTED', readCapability: true, sendCapability: true, providerAccountId: authorized.providerAccountId ?? null, providerTenantId: authorized.providerTenantId ?? null } });
     await recordMailboxAudit({ eventType: 'MAILBOX_CONNECTED', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'CONNECTED' });
+    if (req.method === 'GET') return redirectBrowser(res, 'connected');
     res.json({ status: 'CONNECTED' });
-  } catch (e) { safeError(res, e); }
+  } catch (e) {
+    if (req.method === 'GET') return redirectBrowser(res, 'error', e);
+    safeError(res, e);
+  }
 }
-router.get('/oauth/microsoft/callback', (req, res) => oauthCallback(req, res, 'MICROSOFT_GRAPH')); router.post('/oauth/microsoft/callback', (req, res) => oauthCallback(req, res, 'MICROSOFT_GRAPH')); router.get('/oauth/google/callback', (req, res) => oauthCallback(req, res, 'GOOGLE_GMAIL')); router.post('/oauth/google/callback', (req, res) => oauthCallback(req, res, 'GOOGLE_GMAIL'));
 router.post('/:id/sync', async (req, res) => { try { res.json({ mailbox: await syncMailbox(String(req.params.id), owner(req)) }); } catch (e) { safeError(res, e); } });
-router.post('/:id/send', async (req, res) => { try { const communication = await sendMailboxMessage({ id: String(req.params.id), ownerUserId: owner(req), to: Array.isArray(req.body?.to) ? req.body.to : [], cc: Array.isArray(req.body?.cc) ? req.body.cc : [], bcc: Array.isArray(req.body?.bcc) ? req.body.bcc : [], subject: String(req.body?.subject || ''), bodyText: String(req.body?.bodyText || ''), bodyHtml: req.body?.bodyHtml ?? null, replyToCommunicationId: req.body?.replyToCommunicationId ?? null }); res.status(201).json({ communication }); } catch (e) { safeError(res, e); } });
+router.post('/:id/send', async (req, res) => { try { const communication = await sendMailboxMessage({ id: String(req.params.id), ownerUserId: owner(req), ownerRole: req.user?.role, to: Array.isArray(req.body?.to) ? req.body.to : [], cc: Array.isArray(req.body?.cc) ? req.body.cc : [], bcc: Array.isArray(req.body?.bcc) ? req.body.bcc : [], subject: String(req.body?.subject || ''), bodyText: String(req.body?.bodyText || ''), bodyHtml: req.body?.bodyHtml ?? null, replyToCommunicationId: req.body?.replyToCommunicationId ?? null, contextCommunicationId: req.body?.contextCommunicationId ?? null }); res.status(201).json({ communication }); } catch (e) { safeError(res, e); } });
 router.post('/:id/disconnect', async (req, res) => { try { const mailbox = await ownedMailbox(String(req.params.id), owner(req)); if (mailbox.secretReference) await getSecretStore().delete(mailbox.secretReference).catch(() => undefined); await prisma.communicationMailboxConnection.update({ where: { id: mailbox.id }, data: { status: 'REVOKED', readCapability: false, sendCapability: false, secretReference: null, syncCursor: null } }); await recordMailboxAudit({ eventType: 'MAILBOX_DISCONNECTED', actorUserId: owner(req), mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'REVOKED' }); await recordMailboxAudit({ eventType: 'MAILBOX_REVOKED', actorUserId: owner(req), mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'REVOKED' }); res.status(204).end(); } catch (e) { safeError(res, e); } });
 export default router;
