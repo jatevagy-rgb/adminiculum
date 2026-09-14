@@ -13,7 +13,7 @@ import {
   complianceOutcomeLabels,
   complianceScopeLabels,
 } from "@/components/clients/compliance/ComplianceOverview";
-import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlSummary } from "@/components/clients/compliance/ComplianceOverview";
+import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlsState } from "@/components/clients/compliance/ComplianceOverview";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
 import { getClient, type Client } from "@/lib/api";
@@ -164,7 +164,7 @@ export default function ClientCompliancePage() {
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(true);
-  const [controlSummary, setControlSummary] = useState<ComplianceControlSummary | null>(null);
+  const [controlsState, setControlsState] = useState<ComplianceControlsState>({ status: "loading" });
   const [workspace, setWorkspace] = useState<ComplianceWorkspace | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
@@ -188,6 +188,7 @@ export default function ClientCompliancePage() {
   const loadCompliance = useCallback(async () => {
     setComplianceLoading(true);
     setComplianceError(null);
+    setControlsState({ status: "loading" });
     try {
       const [overviewResult, controlsResult] = await Promise.allSettled([
         complianceOverviewApi.getOverview(clientId),
@@ -198,7 +199,11 @@ export default function ClientCompliancePage() {
       } else {
         setComplianceError("A compliance áttekintés jelenleg nem tölthető be.");
       }
-      if (controlsResult.status === "fulfilled") setControlSummary(controlsResult.value);
+      if (controlsResult.status === "fulfilled") {
+        setControlsState({ status: "success", summary: controlsResult.value });
+      } else {
+        setControlsState({ status: "error", message: "Az intézkedések és bizonyítékok jelenleg nem tölthetők be." });
+      }
     } finally {
       setComplianceLoading(false);
     }
@@ -374,7 +379,7 @@ export default function ClientCompliancePage() {
                     error={complianceError}
                     onRetry={() => { void loadCompliance(); }}
                   />
-                  <ComplianceControlsSection summary={controlSummary} />
+                  <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} />
 
                   {/* 5. Javasolt műveletek */}
                   <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />

@@ -170,6 +170,30 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
       title: 'Bad external reference',
       externalReference: '',
     }, db)).rejects.toMatchObject({ code: 'EVIDENCE_SOURCE_REQUIRED' });
+
+    await expect(createEvidenceRecord(actor, clientId, {
+      sourceType: 'EXTERNAL_REFERENCE',
+      title: 'Equal validity',
+      externalReference: 'https://example.invalid/equal',
+      validFrom: new Date('2026-09-14'),
+      validUntil: new Date('2026-09-14'),
+    }, db)).resolves.toMatchObject({ validFrom: new Date('2026-09-14'), validUntil: new Date('2026-09-14') });
+    await expect(createEvidenceRecord(actor, clientId, {
+      sourceType: 'EXTERNAL_REFERENCE',
+      title: 'Start-only validity',
+      externalReference: 'https://example.invalid/start-only',
+      validFrom: new Date('2026-09-14'),
+    }, db)).resolves.toMatchObject({ validUntil: null });
+
+    const evidenceBeforeReversedRange = await db.evidenceRecord.count({ where: { clientId } });
+    await expect(createEvidenceRecord(actor, clientId, {
+      sourceType: 'EXTERNAL_REFERENCE',
+      title: 'Reversed validity',
+      externalReference: 'https://example.invalid/reversed',
+      validFrom: new Date('2026-09-14'),
+      validUntil: new Date('2026-09-01'),
+    }, db)).rejects.toMatchObject({ status: 400, code: 'EVIDENCE_VALIDITY_INVALID' });
+    expect(await db.evidenceRecord.count({ where: { clientId } })).toBe(evidenceBeforeReversedRange);
   });
 
   it('APPLICABILITY_UNCHANGED_BY_CONTROL_MUTATION, APPLICABILITY_UNCHANGED_BY_EVIDENCE_MUTATION', async () => {

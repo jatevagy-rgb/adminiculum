@@ -39,6 +39,11 @@ export type ComplianceControlSummary = {
   }>;
 };
 
+export type ComplianceControlsState =
+  | { status: "loading" }
+  | { status: "success"; summary: ComplianceControlSummary }
+  | { status: "error"; message: string };
+
 const complianceControlStatusLabels: Record<string, string> = {
   NOT_ASSESSED: "Nincs felmérve",
   PLANNED: "Tervezett",
@@ -48,12 +53,28 @@ const complianceControlStatusLabels: Record<string, string> = {
   NOT_IMPLEMENTED: "Nincs bevezetve",
 };
 
-export function ComplianceControlsSection({ summary }: { summary: ComplianceControlSummary | null }) {
-  const controls = summary?.requirements.flatMap((item) => item.controls) || [];
+export function ComplianceControlsSection({
+  state,
+  onRetry,
+}: {
+  state: ComplianceControlsState;
+  onRetry: () => void;
+}) {
+  const controls = state.status === "success"
+    ? state.summary.requirements.flatMap((item) => item.controls)
+    : [];
   return (
     <section className="mt-4 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5" data-testid="compliance-controls-section">
       <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Intézkedések és bizonyítékok</h2>
-      {!controls.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített megfelelési intézkedés.</p> : (
+      {state.status === "loading" ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Intézkedések és bizonyítékok betöltése…</p> : null}
+      {state.status === "error" ? (
+        <div role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <span>{state.message}</span>
+          <button type="button" onClick={onRetry} className="ml-3 rounded border border-[var(--adm-border)] bg-white px-3 py-1 text-xs text-[var(--adm-text)]">Újrapróbálás</button>
+        </div>
+      ) : null}
+      {state.status === "success" && !controls.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített megfelelési intézkedés.</p> : null}
+      {state.status === "success" && controls.length ? (
         <ul className="mt-3 space-y-3">
           {controls.map((control, index) => (
             <li key={`${control.title}-${index}`} className="rounded border border-[var(--adm-border)] p-3">
@@ -67,7 +88,7 @@ export function ComplianceControlsSection({ summary }: { summary: ComplianceCont
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </section>
   );
 }

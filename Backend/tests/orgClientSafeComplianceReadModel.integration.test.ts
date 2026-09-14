@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { getClientSafeComplianceReadModel } from '../src/modules/compliance/clientSafeComplianceService';
+import { getControlCoverage } from '../src/modules/compliance/controlEvidenceService';
 
 const databaseUrl = process.env.PHASE7CB_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -18,6 +19,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   let sharedReqId: string;
   let sharedVersionId: string;
   let sharedRuleId: string;
+  let portalControlDefinitionId: string;
 
   let demoReqId: string;
   let demoVersionId: string;
@@ -67,6 +69,13 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     sharedReqId = shared.reqId;
     sharedVersionId = shared.versionId;
     sharedRuleId = shared.ruleId;
+    portalControlDefinitionId = crypto.randomUUID();
+    await db.controlDefinition.create({
+      data: { id: portalControlDefinitionId, key: `portal-scope-${suiteSuffix}`, title: 'Portal scope control', type: 'LEGAL' },
+    });
+    await db.requirementControlMap.create({
+      data: { requirementVersionId: sharedVersionId, controlDefinitionId: portalControlDefinitionId },
+    });
 
     const demo = await ensureRequirementChain('DEMO_SAMPLE_TOPIC', 'Demó téma', 'demo-rule');
     demoReqId = demo.reqId;
@@ -78,14 +87,17 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     if (testClients.length > 0) {
       await db.assessmentFinding.deleteMany({ where: { clientId: { in: testClients } } });
       await db.requirementApplicability.deleteMany({ where: { clientId: { in: testClients } } });
+      await db.clientControl.deleteMany({ where: { clientId: { in: testClients } } });
       await db.client.deleteMany({ where: { id: { in: testClients } } });
     }
+    await db.requirementControlMap.deleteMany({ where: { controlDefinitionId: portalControlDefinitionId } });
     if (createdRuleIds.length > 0) {
       await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: createdRuleIds } } });
     }
     if (createdVersionIds.length > 0) {
       await db.requirementVersion.deleteMany({ where: { id: { in: createdVersionIds } } });
     }
+    await db.controlDefinition.delete({ where: { id: portalControlDefinitionId } }).catch(() => {});
     if (createdRequirementIds.length > 0) {
       await db.requirement.deleteMany({ where: { id: { in: createdRequirementIds } } });
     }
@@ -206,6 +218,39 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('Employee finding');
+  });
+
+  it('PORTAL_COMPANY_SCOPE_ONLY, EMPLOYEE_SCOPE_PORTAL_EXCLUDED, OTHER_SCOPE_PORTAL_EXCLUDED, NO_DUPLICATE_PORTAL_CONTROL_PER_SUBJECT, WORKFORCE_SCOPE_BEHAVIOR_PRESERVED', async () => {
+    const clientId = await createTestClient('control-scopes');
+    await db.clientControl.create({ data: { clientId, controlDefinitionId: portalControlDefinitionId } });
+    const scopeSnapshot = (scopeType: 'COMPANY' | 'EMPLOYEE' | 'WORKPLACE_SITE', factSubjectId: string | null, evaluationAt: Date) => ({
+      clientId,
+      requirementVersionId: sharedVersionId,
+      ruleVersionId: sharedRuleId,
+      ruleDigest: hex64(`scope-${scopeType}-${factSubjectId || 'company'}-${clientId}`),
+      outcome: 'APPLIES' as const,
+      scopeType: scopeType as never,
+      factSubjectId,
+      evaluationAt,
+      sourceSupportState: 'SUFFICIENT' as const,
+      specialistRequirement: 'NONE' as const,
+      schemaVersion: 'phase6-requirement-applicability/v1',
+      snapshotJson: {},
+      snapshotDigest: hex64(`scope-snapshot-${scopeType}-${factSubjectId || 'company'}-${clientId}`),
+    });
+    await db.requirementApplicability.createMany({
+      data: [
+        scopeSnapshot('COMPANY', null, new Date('2026-09-14T10:00:00Z')),
+        scopeSnapshot('EMPLOYEE', crypto.randomUUID(), new Date('2026-09-14T10:01:00Z')),
+        scopeSnapshot('WORKPLACE_SITE', crypto.randomUUID(), new Date('2026-09-14T10:02:00Z')),
+      ],
+    });
+
+    const portal = await getClientSafeComplianceReadModel(clientId, true, false, db);
+    expect(portal.controlsSummary).toHaveLength(1);
+    expect(portal.controlsSummary[0].controls).toHaveLength(1);
+    const workforce = await getControlCoverage({ userId: adminId, role: 'ADMIN' }, clientId, db);
+    expect(workforce.requirements).toHaveLength(3);
   });
 
   it('maps INSUFFICIENT_FACTS to MORE_INFORMATION_NEEDED', async () => {

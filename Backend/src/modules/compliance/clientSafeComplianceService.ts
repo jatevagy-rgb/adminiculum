@@ -351,6 +351,7 @@ export async function getClientSafeComplianceReadModel(
     prisma.requirementApplicability.findMany({
       where: {
         clientId,
+        scopeType: 'COMPANY',
         requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
         ruleVersion: { status: 'APPROVED', supersededById: null },
       },

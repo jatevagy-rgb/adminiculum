@@ -171,6 +171,11 @@ export async function createEvidenceRecord(
     const row = await prisma.observation.findFirst({ where: { id: observationId, clientId }, select: { id: true } });
     if (!row) throw new InteractionError(403, 'EVIDENCE_ARTIFACT_FORBIDDEN', 'Observation is outside this client.');
   }
+  const validFrom = optionalDate(input.validFrom, 'validFrom');
+  const validUntil = optionalDate(input.validUntil, 'validUntil');
+  if (validFrom && validUntil && validUntil < validFrom) {
+    throw new InteractionError(400, 'EVIDENCE_VALIDITY_INVALID', 'validUntil must be on or after validFrom.');
+  }
   const status = input.status == null ? 'PROVIDED' : assertEnum(input.status, evidenceStatuses, 'status');
   if ((status === 'ACCEPTED' || status === 'REJECTED') && (!input.reviewedAt || !input.reviewedByUserId)) {
     throw new InteractionError(400, 'EVIDENCE_REVIEW_REQUIRED', 'Accepted or rejected evidence requires review metadata.');
@@ -182,8 +187,8 @@ export async function createEvidenceRecord(
       providedAt: input.providedAt == null ? new Date() : optionalDate(input.providedAt, 'providedAt'),
       reviewedAt: input.reviewedAt == null ? null : optionalDate(input.reviewedAt, 'reviewedAt'),
       reviewedByUserId: input.reviewedByUserId == null ? null : requiredString(input.reviewedByUserId, 'reviewedByUserId'),
-      validFrom: optionalDate(input.validFrom, 'validFrom'),
-      validUntil: optionalDate(input.validUntil, 'validUntil'),
+      validFrom,
+      validUntil,
       documentVersionId, clientFactId, observationId, externalReference,
     },
   });
