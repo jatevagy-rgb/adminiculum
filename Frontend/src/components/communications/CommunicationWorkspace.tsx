@@ -12,10 +12,13 @@ import {
   getClients,
   getCommunicationTasks,
   getCommunications,
+  getCommunicationById,
   linkCommunicationToCase,
   linkCommunicationToTask,
   getOutlookStatus,
   runOutlookSync,
+  getMailboxConnections,
+  sendMailboxMessage,
   getCaseResponsibleCandidates,
   type CaseListItem,
   type Client,
@@ -24,6 +27,8 @@ import {
   type TaskListItem,
   type OutlookStatus,
   type CaseResponsibleCandidate,
+  type CommunicationDetail as ApiCommunicationDetail,
+  type MailboxConnection,
 } from "@/lib/api";
 import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
 import { taskWorkflowErrorMessage } from "@/lib/taskWorkflowPresentation";
@@ -84,6 +89,8 @@ export default function CommunicationWorkspace() {
   const [outlookStatus, setOutlookStatus] = useState<OutlookStatus | null>(null);
   const [outlookSyncing, setOutlookSyncing] = useState(false);
   const [outlookMessage, setOutlookMessage] = useState<string | null>(null);
+  const [mailboxes, setMailboxes] = useState<MailboxConnection[]>([]);
+  const [selectedDetail, setSelectedDetail] = useState<ApiCommunicationDetail | null>(null);
 
   const [assignTarget, setAssignTarget] = useState<CommunicationItem | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState("");
@@ -137,6 +144,14 @@ export default function CommunicationWorkspace() {
     if (clientId && clientId.trim()) setClientFilter(clientId.trim());
     const caseId = params.get("caseId");
     if (caseId && caseId.trim()) setCaseFilter(caseId.trim());
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    getMailboxConnections()
+      .then((result) => { if (mounted) setMailboxes(Array.isArray(result.mailboxes) ? result.mailboxes : []); })
+      .catch(() => { if (mounted) setMailboxes([]); });
+    return () => { mounted = false; };
   }, []);
 
   const prevScopeRef = useRef({ client: clientFilter, case: caseFilter });
@@ -325,6 +340,18 @@ export default function CommunicationWorkspace() {
     };
   }, [selectedCommunicationId, selectedSourceTaskCount]);
 
+  useEffect(() => {
+    let mounted = true;
+    if (!selectedCommunicationId) {
+      setSelectedDetail(null);
+      return;
+    }
+    getCommunicationById(selectedCommunicationId)
+      .then((detail) => { if (mounted) setSelectedDetail(detail); })
+      .catch(() => { if (mounted) setSelectedDetail(null); });
+    return () => { mounted = false; };
+  }, [selectedCommunicationId]);
+
   const selectView = (view: string) => {
     setActiveView(view);
     const params = new URLSearchParams(window.location.search);
@@ -475,6 +502,7 @@ export default function CommunicationWorkspace() {
             <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[var(--adm-text-muted)]">
               <span>{outlookStatus?.available ? "Outlook összekötve." : "Az Outlook nincs összekötve."}</span>
               <button type="button" onClick={() => void syncOutlook()} disabled={!outlookStatus?.available || outlookSyncing} className="border border-[var(--adm-border)] bg-white px-2 py-1 font-semibold disabled:opacity-50">{outlookSyncing ? "Szinkronizálás…" : "Szinkronizálás most"}</button>
+              <Link href="/communications/mailboxes" className="adm-link-button px-2 py-1 font-semibold">Email-fiókok</Link>
               {outlookMessage ? <span role="status">{outlookMessage}</span> : null}
             </div>
           </div>
@@ -560,7 +588,7 @@ export default function CommunicationWorkspace() {
           </section>
 
           <aside className="adm-panel self-start bg-white">
-            {!selected ? <EmptyState title="Válassz kommunikációt." /> : <CommunicationDetail item={selected} relatedCase={selected.caseId ? caseById.get(selected.caseId) : undefined} relatedClient={selected.clientId ? clientById.get(selected.clientId) : undefined} linkedTasks={linkedTasks} linkedTasksLoading={linkedTasksLoading} onAssign={openAssign} onCreateCase={openCreateCase} onCreateTask={openTask} onLinkTask={(item) => void openLinkTask(item)} />}
+            {!selected ? <EmptyState title="Válassz kommunikációt." /> : <CommunicationDetail item={selected} detail={selectedDetail} mailboxes={mailboxes} relatedCase={selected.caseId ? caseById.get(selected.caseId) : undefined} relatedClient={selected.clientId ? clientById.get(selected.clientId) : undefined} linkedTasks={linkedTasks} linkedTasksLoading={linkedTasksLoading} onAssign={openAssign} onCreateCase={openCreateCase} onCreateTask={openTask} onLinkTask={(item) => void openLinkTask(item)} />}
           </aside>
         </div>
       </div>
@@ -594,18 +622,58 @@ export default function CommunicationWorkspace() {
   );
 }
 
-function CommunicationDetail({ item, relatedCase, relatedClient, linkedTasks, linkedTasksLoading, onAssign, onCreateCase, onCreateTask, onLinkTask }: { item: CommunicationItem; relatedCase?: CaseListItem; relatedClient?: Client; linkedTasks: TaskListItem[]; linkedTasksLoading: boolean; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void }) {
+function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClient, linkedTasks, linkedTasksLoading, onAssign, onCreateCase, onCreateTask, onLinkTask }: { item: CommunicationItem; detail: ApiCommunicationDetail | null; mailboxes: MailboxConnection[]; relatedCase?: CaseListItem; relatedClient?: Client; linkedTasks: TaskListItem[]; linkedTasksLoading: boolean; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void }) {
   const signal = toCommunicationSignal(item);
+  const [composerMode, setComposerMode] = useState<"reply" | "replyAll" | "forward" | null>(null);
+  const [composerTo, setComposerTo] = useState("");
+  const [composerBody, setComposerBody] = useState("");
+  const [composerBusy, setComposerBusy] = useState(false);
+  const [composerFeedback, setComposerFeedback] = useState<string | null>(null);
+  const mailboxConnection = detail?.mailboxConnectionId
+    ? mailboxes.find((mailbox) => mailbox.id === detail.mailboxConnectionId)
+    : undefined;
+  const isMailboxMessage = item.source === "MAILBOX" || detail?.source === "MAILBOX";
+  const canSend = Boolean(mailboxConnection?.sendCapability && ["CONNECTED", "SYNCING"].includes(mailboxConnection.status));
+  const openComposer = (mode: "reply" | "replyAll" | "forward") => {
+    setComposerMode(mode);
+    setComposerFeedback(null);
+    setComposerBody("");
+    setComposerTo(mode === "reply" ? (detail?.senderEmail || item.senderEmail || "") : mode === "replyAll" ? (detail?.senderEmail || item.senderEmail || "") : "");
+  };
+  const submitComposer = async () => {
+    if (!composerMode || !mailboxConnection || !composerTo.trim() || !composerBody.trim()) return;
+    setComposerBusy(true);
+    setComposerFeedback(null);
+    try {
+      await sendMailboxMessage({
+        mailboxId: mailboxConnection.id,
+        to: composerTo.split(",").map((email) => ({ email: email.trim() })).filter((recipient) => recipient.email),
+        cc: composerMode === "replyAll" && detail?.recipientEmail ? [{ email: detail.recipientEmail }] : [],
+        subject: `${composerMode === "forward" ? "Fwd" : "Re"}: ${item.subject || "Nincs tárgy"}`,
+        bodyText: composerBody.trim(),
+        replyToCommunicationId: composerMode === "forward" ? null : item.id,
+      });
+      setComposerFeedback("Az üzenetet elküldtük.");
+      setComposerMode(null);
+    } catch (error) {
+      setComposerFeedback(error instanceof ApiError && error.status === 409 ? "A küldés ehhez a kapcsolathoz nem érhető el." : "Az üzenet küldése nem sikerült.");
+    } finally {
+      setComposerBusy(false);
+    }
+  };
   return (
       <div>
       <div className="relative border-b border-[var(--adm-border)] px-4 py-3 pl-5"><ClientAccent colorKey={item.clientColorKey} className="absolute inset-y-0 left-0 w-1" /><p className="adm-kicker text-[var(--adm-blue-700)]">Kiválasztott kommunikáció</p><h2 className="adm-heading mt-1 text-[19px]">{item.subject || "Nincs tárgy"}</h2></div>
       <div className="space-y-4 p-4">
         <div><p className="text-[12px] font-semibold text-[var(--adm-text)]">{item.senderName || item.senderEmail || "Nincs feladóadat"}</p><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{formatContact(item)}</p></div>
         {item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}
+        {detail?.content ? <section aria-label="Üzenet tartalma" className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="whitespace-pre-wrap text-[11px] leading-5 text-[var(--adm-text)]">{detail.content}</p>{detail.attachments?.length ? <p className="mt-3 border-t border-[var(--adm-border)] pt-2 text-[10px] font-semibold text-[var(--adm-text-muted)]">{detail.attachments.length} melléklet csatolva</p> : null}</section> : null}
         <div className="flex flex-wrap gap-1"><StatusChip>{sourceLabel(item)}</StatusChip><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{signal.audience === "external" ? "Külső" : "Belső"}</StatusChip><StatusChip>{formatCommunicationType(item.type)}</StatusChip>{item.attachmentCount > 0 ? <StatusChip>{item.attachmentCount} melléklet</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</div>
         <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.createdAt)}</dd></dl>
         {item.sourceTaskCount > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt feladat</p>{linkedTasksLoading ? <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Betöltés…</p> : linkedTasks.length ? <div className="mt-2 space-y-1">{linkedTasks.map((task) => <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block text-[11px] font-semibold text-[var(--adm-blue-700)] hover:underline">{task.title} · {task.status}</Link>)}</div> : <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A feladatkapcsolat részlete nem érhető el.</p>}</div> : null}
         <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
+        {isMailboxMessage ? <section aria-label="E-mail műveletek" className="border-t border-[var(--adm-border)] pt-4"><h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">E-mail műveletek</h3>{canSend ? <div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => openComposer("reply")} className="adm-link-button px-3 py-2 text-[11px]">Válasz</button><button type="button" onClick={() => openComposer("replyAll")} className="adm-link-button px-3 py-2 text-[11px]">Válasz mindenkinek</button><button type="button" onClick={() => openComposer("forward")} className="adm-link-button px-3 py-2 text-[11px]">Továbbítás</button></div> : <p className="text-[11px] text-[var(--adm-text-muted)]">A küldés jelenleg nem érhető el ehhez a postafiókhoz.</p>}{composerFeedback ? <p role="status" className="mt-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{composerFeedback}</p> : null}</section> : null}
+        {composerMode ? <div className="mt-3 border border-[var(--adm-border)] bg-white p-3"><p className="text-[11px] font-semibold text-[var(--adm-text)]">{composerMode === "reply" ? "Válasz" : composerMode === "replyAll" ? "Válasz mindenkinek" : "Továbbítás"}</p><label className="mt-2 block text-[10px] font-semibold text-[var(--adm-text-muted)]">Címzett<input value={composerTo} onChange={(event) => setComposerTo(event.target.value)} className="adm-modal-field mt-1 w-full px-2 py-1.5 text-[11px]" placeholder="cimzett@example.com" /></label><label className="mt-2 block text-[10px] font-semibold text-[var(--adm-text-muted)]">Üzenet<textarea value={composerBody} onChange={(event) => setComposerBody(event.target.value)} rows={4} className="adm-modal-field mt-1 w-full px-2 py-1.5 text-[11px]" /></label><div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => setComposerMode(null)} className="border border-[var(--adm-border)] px-2 py-1.5 text-[10px] font-semibold">Mégse</button><button type="button" disabled={composerBusy || !composerTo.trim() || !composerBody.trim()} onClick={() => void submitComposer()} className="bg-[var(--adm-blue-700)] px-2 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">{composerBusy ? "Küldés…" : "Küldés"}</button></div></div> : null}
         <section aria-label="Ügybesorolás és feladatműveletek" className="border-t border-[var(--adm-border)] pt-4">
           <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügybesorolás</h3>
           {item.caseId ? (
@@ -680,6 +748,7 @@ function formatContact(item: CommunicationItem) {
 
 function sourceLabel(item: CommunicationItem) {
   if (isDemoFixture(item)) return "Demo adat";
+  if (item.source === "MAILBOX") return "Csatlakoztatott e-mail-fiók";
   if (item.source === "OUTLOOK") return "Outlook";
   if (item.source === "MANUAL") return "Rögzített kommunikáció";
   return item.type === "NOTE" ? "Belső" : "Kommunikáció";
