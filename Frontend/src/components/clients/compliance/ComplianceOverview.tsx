@@ -26,6 +26,43 @@ export type ComplianceFindingView = {
   subjectLabel?: string | null;
 };
 
+export type ComplianceControlSummary = {
+  requirements: Array<{
+    title: string;
+    controls: Array<{
+      title: string;
+      implementationStatus: string | null;
+      owner: string | null;
+      nextReviewAt: string | null;
+      evidenceSummary: { acceptedCurrent: number; stale: number; missing: boolean };
+    }>;
+  }>;
+};
+
+export function ComplianceControlsSection({ summary }: { summary: ComplianceControlSummary | null }) {
+  const controls = summary?.requirements.flatMap((item) => item.controls) || [];
+  return (
+    <section className="mt-4 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5" data-testid="compliance-controls-section">
+      <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Intézkedések és bizonyítékok</h2>
+      {!controls.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített megfelelési intézkedés.</p> : (
+        <ul className="mt-3 space-y-3">
+          {controls.map((control) => (
+            <li key={control.title} className="rounded border border-[var(--adm-border)] p-3">
+              <p className="font-medium text-[var(--adm-text)]">{control.title}</p>
+              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Állapot: {control.implementationStatus || "Nincs felmérve"}</p>
+              {control.owner ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Felelős: {control.owner}</p> : null}
+              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+                Bizonyíték: {control.evidenceSummary.acceptedCurrent} aktuális · {control.evidenceSummary.stale} felülvizsgálandó
+              </p>
+              {control.nextReviewAt ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Következő felülvizsgálat: {control.nextReviewAt.slice(0, 10)}</p> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export const complianceOutcomeLabels: Record<ComplianceApplicabilityStatus, string> = {
   APPLIES: "Belső értékelés szerint releváns",
   DOES_NOT_APPLY: "Nem releváns",

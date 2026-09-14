@@ -297,6 +297,8 @@ app.use('/api/v1/compliance/proposals', complianceProposalRoutes);
 
 import complianceOverviewRoutes from './modules/compliance/complianceOverviewRoutes';
 app.use('/api/v1/compliance', complianceOverviewRoutes);
+import controlEvidenceRoutes from './modules/compliance/controlEvidenceRoutes';
+app.use('/api/v1', controlEvidenceRoutes);
 
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);

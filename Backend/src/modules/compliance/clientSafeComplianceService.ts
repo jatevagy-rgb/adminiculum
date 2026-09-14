@@ -65,6 +65,18 @@ export interface ClientSafeComplianceTopicDto {
 
 export interface ClientSafeComplianceReadModel {
   topics: ClientSafeComplianceTopicDto[];
+  controlsSummary: ClientSafeControlSummaryDto[];
+}
+
+export interface ClientSafeControlSummaryDto {
+  requirementTitle: string;
+  controls: Array<{
+    title: string;
+    implementationStatus: string | null;
+    lastReviewedAt: string | null;
+    nextReviewAt: string | null;
+    evidence: { acceptedCurrent: number; stale: number; missing: boolean };
+  }>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -334,7 +346,45 @@ export async function getClientSafeComplianceReadModel(
     });
   }
 
-  const result: ClientSafeComplianceReadModel = { topics };
+  const now = new Date();
+  const [applicable, clientControls] = await Promise.all([
+    prisma.requirementApplicability.findMany({
+      where: {
+        clientId,
+        outcome: 'APPLIES',
+        requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+        ruleVersion: { status: 'APPROVED', supersededById: null },
+      },
+      orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
+      select: { requirementVersionId: true, requirementVersion: { select: { title: true, requirement: { select: { key: true } }, controlMaps: { include: { controlDefinition: true } } } } },
+    }),
+    prisma.clientControl.findMany({
+      where: { clientId },
+      include: { controlDefinition: true, evidenceLinks: { include: { evidenceRecord: true } } },
+    }),
+  ]);
+  const latest = new Map<string, (typeof applicable)[number]>();
+  for (const row of applicable) if (!latest.has(row.requirementVersionId)) latest.set(row.requirementVersionId, row);
+  const controlByDefinition = new Map(clientControls.map((control) => [control.controlDefinitionId, control]));
+  const controlsSummary = [...latest.values()]
+    .filter((row) => visibleKeys.has(row.requirementVersion.requirement.key))
+    .map((row) => ({
+      requirementTitle: row.requirementVersion.title,
+      controls: row.requirementVersion.controlMaps.map((map) => {
+        const control = controlByDefinition.get(map.controlDefinitionId);
+        const accepted = (control?.evidenceLinks || []).filter((link) => link.evidenceRecord.status === 'ACCEPTED');
+        const current = accepted.filter((link) => !link.evidenceRecord.validUntil || link.evidenceRecord.validUntil >= now);
+        return {
+          title: map.controlDefinition.title,
+          implementationStatus: control ? String(control.implementationStatus) : null,
+          lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,
+          nextReviewAt: control?.nextReviewAt?.toISOString() || null,
+          evidence: { acceptedCurrent: current.length, stale: accepted.length - current.length, missing: current.length === 0 },
+        };
+      }),
+    }));
+
+  const result: ClientSafeComplianceReadModel = { topics, controlsSummary };
   assertClientSafe(result);
   return result;
 }

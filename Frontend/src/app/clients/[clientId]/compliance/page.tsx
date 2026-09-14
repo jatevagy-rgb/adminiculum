@@ -7,12 +7,13 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import {
   ComplianceOverviewPanel,
+  ComplianceControlsSection,
   ComplianceProposalPanel,
   complianceOutcomeClass,
   complianceOutcomeLabels,
   complianceScopeLabels,
 } from "@/components/clients/compliance/ComplianceOverview";
-import type { ComplianceFindingView, ComplianceApplicabilityStatus } from "@/components/clients/compliance/ComplianceOverview";
+import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlSummary } from "@/components/clients/compliance/ComplianceOverview";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
 import { getClient, type Client } from "@/lib/api";
@@ -163,6 +164,7 @@ export default function ClientCompliancePage() {
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(true);
+  const [controlSummary, setControlSummary] = useState<ComplianceControlSummary | null>(null);
   const [workspace, setWorkspace] = useState<ComplianceWorkspace | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
@@ -186,7 +188,11 @@ export default function ClientCompliancePage() {
   const loadCompliance = useCallback(async () => {
     setComplianceLoading(true);
     setComplianceError(null);
-    try { setComplianceFindings((await complianceOverviewApi.getOverview(clientId)).findings); }
+    try {
+      const [overview, controls] = await Promise.all([complianceOverviewApi.getOverview(clientId), complianceOverviewApi.getControls(clientId)]);
+      setComplianceFindings(overview.findings);
+      setControlSummary(controls);
+    }
     catch { setComplianceError("A compliance áttekintés jelenleg nem tölthető be."); }
     finally { setComplianceLoading(false); }
   }, [clientId]);
@@ -361,6 +367,7 @@ export default function ClientCompliancePage() {
                     error={complianceError}
                     onRetry={() => { void loadCompliance(); }}
                   />
+                  <ComplianceControlsSection summary={controlSummary} />
 
                   {/* 5. Javasolt műveletek */}
                   <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />
