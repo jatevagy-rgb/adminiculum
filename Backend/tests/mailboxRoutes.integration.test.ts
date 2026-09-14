@@ -144,6 +144,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     for (const value of [...Object.values(sentinels), sentVerificationCode]) expect(serialized).not.toContain(value);
     expect(serialized).toContain(`ref-${suffix}`);
     expect(await db.mailboxAuditEvent.count({ where: { actorUserId: ids.owner, eventType: 'MAILBOX_VERIFICATION_STARTED' } })).toBeGreaterThan(0);
+    await db.communicationMailboxConnection.update({ where: { id: connectionId }, data: { status: 'CONNECTED', readCapability: true, sendCapability: true, lastSyncStatus: 'SUCCEEDED', lastSyncError: null } });
   });
 
   it('does not create a verification challenge when transactional delivery fails', async () => {
@@ -163,6 +164,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     expect(refreshCount).toBe(1);
     expect((await db.communicationMailboxConnection.findUniqueOrThrow({ where: { id: connectionId } })).status).toBe('AUTHORIZATION_REQUIRED');
     expect(await db.mailboxAuditEvent.count({ where: { mailboxConnectionId: connectionId, eventType: 'MAILBOX_REAUTH_REQUIRED' } })).toBeGreaterThan(0);
+    await db.communicationMailboxConnection.update({ where: { id: connectionId }, data: { status: 'CONNECTED', readCapability: true, sendCapability: true, lastSyncStatus: 'SUCCEEDED', lastSyncError: null } });
   });
 
   it('persists the authorization, connected, disconnect, and revoked lifecycle events', async () => {
