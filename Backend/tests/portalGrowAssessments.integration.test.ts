@@ -835,14 +835,18 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     const cycle = await runResearchCycle(admin, ids.clientA, { idempotencyKey: `research-volume-${seed}` }, db);
     expect(cycle.status).toBe('COMPLETED');
 
-    const diagnoses = await db.diagnosisCandidate.findMany({
+    const candidates = await db.diagnosisCandidate.findMany({
       where: { clientId: ids.clientA, runId: cycle.runId },
-      select: { domainKey: true },
+      select: { problemDomainId: true },
     });
-    const domains = diagnoses.map((d) => d.domainKey);
+    const domainIds = [...new Set(candidates.map((c) => c.problemDomainId))];
+    const domains = domainIds.length
+      ? await db.problemDomain.findMany({ where: { id: { in: domainIds } }, select: { key: true } })
+      : [];
+    const keys = domains.map((d) => d.key);
     // Assessment scope survives the volume...
-    expect(domains).toContain('MANUAL_ADMIN_LOAD');
+    expect(keys).toContain('MANUAL_ADMIN_LOAD');
     // ...and the generic pain-intake survey is not displaced by assessment rows.
-    expect(domains).toContain('REWORK');
+    expect(keys).toContain('REWORK');
   });
 });
