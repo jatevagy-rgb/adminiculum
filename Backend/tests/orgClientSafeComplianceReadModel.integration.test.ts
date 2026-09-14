@@ -134,7 +134,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
         versionKey: `V_${versionId.slice(0, 8)}`,
         title,
         normativeStatement: 'Test',
-        effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        effectiveFrom: new Date(Date.now() + createdVersionIds.length * 1000),
         sourceSupportState: 'SUFFICIENT',
         specialistRequirement: 'NONE',
         status: 'APPROVED',
