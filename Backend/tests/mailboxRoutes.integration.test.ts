@@ -40,7 +40,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
   const clientId = crypto.randomUUID(), caseId = crypto.randomUUID(), taskId = crypto.randomUUID();
   const sentinels = { access: `oauth-access-${suffix}`, refresh: `oauth-refresh-${suffix}`, clientSecret: `oauth-client-secret-${suffix}`, imap: `imap-password-${suffix}`, smtp: `smtp-password-${suffix}`, verification: `verification-code-${suffix}`, provider: `provider-error-${suffix}` };
   let db: PrismaClient; let app: Express; let store: any; let InMemorySecretStore: any; let setProvider: any; let setStore: any; let setTransactionalTransport: any; let sentVerificationCode = '';
-  let providerFailsWithSentinel = false, providerRequiresReauth = false, providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`, refreshCount = 0;
+  let providerFailsWithSentinel = false, providerRequiresReauth = false, providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`, refreshCount = 0, transactionalDeliveryFails = false;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl!;
@@ -50,7 +50,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     ({ InMemorySecretStore, setSecretStoreForTest: setStore } = require('../src/modules/mailbox/secretStore'));
     ({ setTransactionalMailTransport: setTransactionalTransport } = require('../src/modules/mailbox/transactionalMail'));
     store = new InMemorySecretStore(); setStore(store);
-    setTransactionalTransport({ sendVerificationCode: async ({ code }: { code: string }) => { sentVerificationCode = code; } });
+    setTransactionalTransport({ sendVerificationCode: async ({ code }: { code: string }) => { if (transactionalDeliveryFails) throw new Error('TLS_REQUIRED'); sentVerificationCode = code; } });
     setProvider('MICROSOFT_GRAPH', {
       code: 'MICROSOFT_GRAPH', displayName: 'route fake', requiresProviderConfiguration: false,
       buildAuthorizationUrl: () => 'https://provider.invalid/authorize', exchangeAuthorizationCode: async () => ({ authorizedAddress: providerAuthorizedAddress, secret: { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh } }),
@@ -130,6 +130,15 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     for (const value of [...Object.values(sentinels), sentVerificationCode]) expect(serialized).not.toContain(value);
     expect(serialized).toContain(`ref-${suffix}`);
     expect(await db.mailboxAuditEvent.count({ where: { actorUserId: ids.owner, eventType: 'MAILBOX_VERIFICATION_STARTED' } })).toBeGreaterThan(0);
+  });
+
+  it('does not create a verification challenge when transactional delivery fails', async () => {
+    const email = `tls-failure-${suffix}@fixture.invalid`;
+    transactionalDeliveryFails = true;
+    const response = await request(app, 'POST', '/mailboxes/verification/start', ids.owner, { email, provider: 'MICROSOFT_GRAPH' });
+    transactionalDeliveryFails = false;
+    expect(response.status).toBe(500);
+    expect(await db.emailVerificationChallenge.count({ where: { userId: ids.owner, emailAddress: email } })).toBe(0);
   });
 
   it('transitions provider authorization loss to a truthful non-connected state', async () => {

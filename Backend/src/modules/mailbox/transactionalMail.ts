@@ -25,8 +25,8 @@ class SmtpTransactionalMailTransport implements TransactionalMailTransport {
     this.from = String(env.MAILBOX_TRANSACTIONAL_SMTP_FROM || '').trim();
     if (!host || !user || !password || !this.from) throw new TransactionalMailConfigurationError();
     const port = Number(env.MAILBOX_TRANSACTIONAL_SMTP_PORT || 587);
-    const secure = String(env.MAILBOX_TRANSACTIONAL_SMTP_SECURE || '').toLowerCase() === 'true' || port === 465;
-    this.transport = nodemailer.createTransport({ host, port, secure, auth: { user, pass: password } });
+    const secure = port === 465;
+    this.transport = nodemailer.createTransport({ host, port, secure, requireTLS: port !== 465, auth: { user, pass: password } });
   }
 
   async sendVerificationCode(input: { email: string; code: string; expiresAt: Date }): Promise<void> {

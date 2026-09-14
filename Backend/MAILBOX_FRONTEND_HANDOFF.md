@@ -73,6 +73,11 @@ status. The body preview is not the source of truth; no `.txt` Document is creat
 per email.
 
 Microsoft Graph and Gmail remain configuration-dependent delegated integrations.
+Microsoft delegated authorization requires the minimum scopes
+`offline_access User.Read Mail.Read Mail.Send`; an operator-provided
+`MICROSOFT_MAILBOX_SCOPES` override must retain all four or authorization fails
+closed before identity validation can be bypassed. Transactional SMTP uses
+implicit TLS on port 465 and requires STARTTLS on other configured ports.
 After OAuth, the backend resolves the provider-authorized mailbox identity
 server-side and requires it to match the verified address before storing the
 opaque SecretStore reference. Access-token expiry is refreshed in-place through

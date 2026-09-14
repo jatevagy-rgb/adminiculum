@@ -1,4 +1,4 @@
-import { GmailMailboxProvider, MicrosoftGraphMailboxProvider } from '../src/modules/mailbox/provider';
+import { GmailMailboxProvider, MICROSOFT_REQUIRED_SCOPES, MicrosoftGraphMailboxProvider, mailboxProviderConfigStatus } from '../src/modules/mailbox/provider';
 
 function response(body: unknown): Response {
   return { ok: true, json: async () => body } as Response;
@@ -6,6 +6,26 @@ function response(body: unknown): Response {
 
 describe('mailbox provider normalization', () => {
   afterEach(() => jest.restoreAllMocks());
+
+  it('uses the least-privileged Microsoft scopes required for delegated identity and mail access', () => {
+    const previousScope = process.env.MICROSOFT_MAILBOX_SCOPES;
+    delete process.env.MICROSOFT_MAILBOX_SCOPES;
+    expect(mailboxProviderConfigStatus().microsoftScopes.split(/\s+/)).toEqual(expect.arrayContaining([...MICROSOFT_REQUIRED_SCOPES]));
+    if (previousScope === undefined) delete process.env.MICROSOFT_MAILBOX_SCOPES;
+    else process.env.MICROSOFT_MAILBOX_SCOPES = previousScope;
+  });
+
+  it('rejects a Microsoft scope override that would bypass the server-side identity check', () => {
+    const previousScope = process.env.MICROSOFT_MAILBOX_SCOPES;
+    const previousClientId = process.env.MICROSOFT_MAILBOX_CLIENT_ID;
+    process.env.MICROSOFT_MAILBOX_SCOPES = 'offline_access Mail.Read Mail.Send';
+    process.env.MICROSOFT_MAILBOX_CLIENT_ID = 'client';
+    expect(() => new MicrosoftGraphMailboxProvider().buildAuthorizationUrl({ state: 'state', redirectUri: 'https://app/callback' })).toThrow('MAILBOX_MICROSOFT_SCOPES_INSUFFICIENT:User.Read');
+    if (previousScope === undefined) delete process.env.MICROSOFT_MAILBOX_SCOPES;
+    else process.env.MICROSOFT_MAILBOX_SCOPES = previousScope;
+    if (previousClientId === undefined) delete process.env.MICROSOFT_MAILBOX_CLIENT_ID;
+    else process.env.MICROSOFT_MAILBOX_CLIENT_ID = previousClientId;
+  });
 
   it('resolves the delegated Microsoft mailbox identity server-side', async () => {
     process.env.MICROSOFT_MAILBOX_CLIENT_ID = 'client';

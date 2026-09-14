@@ -90,11 +90,20 @@ function requireEnv(name: string): string {
   return v;
 }
 
+export const MICROSOFT_REQUIRED_SCOPES = ['offline_access', 'User.Read', 'Mail.Read', 'Mail.Send'] as const;
+
+function microsoftScopes(): string {
+  const scopes = (env('MICROSOFT_MAILBOX_SCOPES') || MICROSOFT_REQUIRED_SCOPES.join(' ')).split(/\s+/).filter(Boolean);
+  const missing = MICROSOFT_REQUIRED_SCOPES.filter((required) => !scopes.includes(required));
+  if (missing.length) throw new Error(`MAILBOX_MICROSOFT_SCOPES_INSUFFICIENT:${missing.join(',')}`);
+  return scopes.join(' ');
+}
+
 export function mailboxProviderConfigStatus() {
   return {
     microsoft: Boolean(env('MICROSOFT_MAILBOX_CLIENT_ID') && env('MICROSOFT_MAILBOX_REDIRECT_URI')),
     google: Boolean(env('GOOGLE_MAILBOX_CLIENT_ID') && env('GOOGLE_MAILBOX_REDIRECT_URI')),
-    microsoftScopes: env('MICROSOFT_MAILBOX_SCOPES') || 'offline_access Mail.Read Mail.Send',
+    microsoftScopes: microsoftScopes(),
     googleScopes: env('GOOGLE_MAILBOX_SCOPES') || 'openid email https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send',
   };
 }
@@ -110,7 +119,7 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
 
   buildAuthorizationUrl(input: { state: string; codeChallenge?: string; redirectUri: string }): string {
     const clientId = requireEnv('MICROSOFT_MAILBOX_CLIENT_ID');
-    const scopes = (env('MICROSOFT_MAILBOX_SCOPES') || 'offline_access Mail.Read Mail.Send').split(/\s+/).join(' ');
+    const scopes = microsoftScopes();
     const params = new URLSearchParams({
       client_id: clientId,
       response_type: 'code',
@@ -123,6 +132,7 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
   }
 
   async exchangeAuthorizationCode(input: { code: string; redirectUri: string; codeVerifier?: string }): Promise<MailboxAuthorizationResult> {
+    microsoftScopes();
     const body = new URLSearchParams({
       client_id: requireEnv('MICROSOFT_MAILBOX_CLIENT_ID'),
       client_secret: requireEnv('MICROSOFT_MAILBOX_CLIENT_SECRET'),
