@@ -36,11 +36,11 @@ function request(app: Express, method: string, path: string, userId?: string, bo
 describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL proof', () => {
   const suffix = crypto.randomUUID();
   const ids = Object.fromEntries(['owner', 'caseCollaborator', 'taskAssignee', 'taskReviewer', 'taskCollaborator', 'tenantPeer', 'otherTenant', 'portalMember'].map((key) => [key, crypto.randomUUID()])) as Record<string, string>;
-  const connectionId = crypto.randomUUID(), readOnlyConnectionId = crypto.randomUUID(), revokedConnectionId = crypto.randomUUID(), oauthConnectionId = crypto.randomUUID();
+  const connectionId = crypto.randomUUID(), readOnlyConnectionId = crypto.randomUUID(), revokedConnectionId = crypto.randomUUID(), oauthConnectionId = crypto.randomUUID(), mismatchConnectionId = crypto.randomUUID();
   const clientId = crypto.randomUUID(), caseId = crypto.randomUUID(), taskId = crypto.randomUUID();
   const sentinels = { access: `oauth-access-${suffix}`, refresh: `oauth-refresh-${suffix}`, clientSecret: `oauth-client-secret-${suffix}`, imap: `imap-password-${suffix}`, smtp: `smtp-password-${suffix}`, verification: `verification-code-${suffix}`, provider: `provider-error-${suffix}` };
   let db: PrismaClient; let app: Express; let store: any; let InMemorySecretStore: any; let setProvider: any; let setStore: any; let setTransactionalTransport: any; let sentVerificationCode = '';
-  let providerFailsWithSentinel = false, providerRequiresReauth = false;
+  let providerFailsWithSentinel = false, providerRequiresReauth = false, providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`, refreshCount = 0;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl!;
@@ -53,9 +53,9 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     setTransactionalTransport({ sendVerificationCode: async ({ code }: { code: string }) => { sentVerificationCode = code; } });
     setProvider('MICROSOFT_GRAPH', {
       code: 'MICROSOFT_GRAPH', displayName: 'route fake', requiresProviderConfiguration: false,
-      buildAuthorizationUrl: () => 'https://provider.invalid/authorize', exchangeAuthorizationCode: async () => ({ secret: { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh } }),
+      buildAuthorizationUrl: () => 'https://provider.invalid/authorize', exchangeAuthorizationCode: async () => ({ authorizedAddress: providerAuthorizedAddress, secret: { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh } }),
       listMessagesSinceCursor: async () => { if (providerRequiresReauth) throw new Error('AUTHORIZATION_REQUIRED'); if (providerFailsWithSentinel) throw new Error(sentinels.provider); return { messages: [], nextCursor: 'route-cursor' }; },
-      sendMessage: async () => { if (providerFailsWithSentinel) throw new Error(sentinels.provider); return { providerMessageId: `sent-${suffix}` }; }, refreshAuthorization: async (secret: any) => secret, disconnect: async () => undefined,
+      sendMessage: async () => { if (providerFailsWithSentinel) throw new Error(sentinels.provider); return { providerMessageId: `sent-${suffix}` }; }, refreshAuthorization: async (secret: any) => { refreshCount += 1; return secret; }, disconnect: async () => undefined,
     });
     const router = require('../src/modules/mailbox/routes').default; app = express(); app.use(express.json()); app.use('/mailboxes', router);
     await db.user.createMany({ data: Object.entries(ids).map(([key, id]) => ({ id, email: `${key}-${suffix}@fixture.invalid`, name: key, role: key === 'portalMember' ? 'CLIENT' : 'LAWYER', status: 'ACTIVE', isActive: true, skills: [] } as any)) });
@@ -69,6 +69,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
       { id: readOnlyConnectionId, ownerUserId: ids.owner, mailboxAddress: `readonly-${suffix}@fixture.invalid`, provider: 'MICROSOFT_GRAPH', status: 'CONNECTED_READ_ONLY', verifiedAt: new Date(), readCapability: true, sendCapability: false, secretReference: `readonly-ref-${suffix}` },
       { id: revokedConnectionId, ownerUserId: ids.owner, mailboxAddress: `revoked-${suffix}@fixture.invalid`, provider: 'MICROSOFT_GRAPH', status: 'REVOKED', verifiedAt: new Date(), readCapability: false, sendCapability: false, secretReference: `revoked-ref-${suffix}` },
       { id: oauthConnectionId, ownerUserId: ids.owner, mailboxAddress: `oauth-${suffix}@fixture.invalid`, provider: 'MICROSOFT_GRAPH', status: 'AUTHORIZATION_REQUIRED', verifiedAt: new Date(), readCapability: true, sendCapability: false },
+      { id: mismatchConnectionId, ownerUserId: ids.owner, mailboxAddress: `verified-${suffix}@fixture.invalid`, provider: 'MICROSOFT_GRAPH', status: 'AUTHORIZATION_REQUIRED', verifiedAt: new Date(), readCapability: false, sendCapability: false },
     ] });
     await store.put(`ref-${suffix}`, { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh, password: sentinels.imap, username: 'safe@example.invalid' });
     await store.put(`readonly-ref-${suffix}`, { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh, password: sentinels.smtp });
@@ -80,7 +81,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     await db.mailboxAuditEvent.deleteMany({ where: { actorUserId: { in: Object.values(ids) } } });
     await db.emailVerificationChallenge.deleteMany({ where: { userId: { in: Object.values(ids) } } });
     await db.communication.deleteMany({ where: { createdById: { in: Object.values(ids) } } });
-    await db.communicationMailboxConnection.deleteMany({ where: { id: { in: [connectionId, readOnlyConnectionId, revokedConnectionId, oauthConnectionId] } } });
+    await db.communicationMailboxConnection.deleteMany({ where: { id: { in: [connectionId, readOnlyConnectionId, revokedConnectionId, oauthConnectionId, mismatchConnectionId] } } });
     await db.taskCollaborator.deleteMany({ where: { taskId } });
     await db.task.deleteMany({ where: { id: taskId } });
     await db.caseCollaborator.deleteMany({ where: { caseId } });
@@ -132,9 +133,11 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
   });
 
   it('transitions provider authorization loss to a truthful non-connected state', async () => {
+    refreshCount = 0;
     providerRequiresReauth = true;
     expect((await request(app, 'POST', `/mailboxes/${connectionId}/sync`, ids.owner)).status).toBe(502);
     providerRequiresReauth = false;
+    expect(refreshCount).toBe(1);
     expect((await db.communicationMailboxConnection.findUniqueOrThrow({ where: { id: connectionId } })).status).toBe('AUTHORIZATION_REQUIRED');
     expect(await db.mailboxAuditEvent.count({ where: { mailboxConnectionId: connectionId, eventType: 'MAILBOX_REAUTH_REQUIRED' } })).toBeGreaterThan(0);
   });
@@ -147,5 +150,19 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     expect((await request(app, 'POST', `/mailboxes/${oauthConnectionId}/disconnect`, ids.owner)).status).toBe(204);
     const events = await db.mailboxAuditEvent.findMany({ where: { mailboxConnectionId: oauthConnectionId }, select: { eventType: true } });
     expect(events.map((event) => event.eventType)).toEqual(expect.arrayContaining(['MAILBOX_AUTHORIZATION_STARTED', 'MAILBOX_CONNECTED', 'MAILBOX_DISCONNECTED', 'MAILBOX_REVOKED']));
+  });
+
+  it('rejects a provider identity mismatch before secret persistence or connection', async () => {
+    providerAuthorizedAddress = `different-${suffix}@fixture.invalid`;
+    const { createOAuthState } = require('../src/modules/mailbox/oauthState');
+    const state = createOAuthState({ userId: ids.owner, connectionId: mismatchConnectionId, mailboxAddress: `verified-${suffix}@fixture.invalid`, provider: 'MICROSOFT_GRAPH' });
+    const result = await request(app, 'GET', `/mailboxes/oauth/microsoft/callback?state=${encodeURIComponent(state)}&code=safe`, ids.owner);
+    expect(result.status).toBe(403);
+    expect(result.body.code).toBe('MAILBOX_PROVIDER_IDENTITY_MISMATCH');
+    const connection = await db.communicationMailboxConnection.findUniqueOrThrow({ where: { id: mismatchConnectionId } });
+    expect(connection.status).toBe('AUTHORIZATION_REQUIRED');
+    expect(connection.secretReference).toBeNull();
+    expect(await db.mailboxAuditEvent.count({ where: { mailboxConnectionId: mismatchConnectionId, eventType: 'MAILBOX_IDENTITY_MISMATCH' } })).toBe(1);
+    providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`;
   });
 });

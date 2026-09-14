@@ -20,7 +20,7 @@ import {
 import { InMemorySecretStore, UnconfiguredSecretStore } from '../src/modules/mailbox/secretStore';
 import { getMailboxProvider } from '../src/modules/mailbox/provider';
 import { createOAuthState, verifyOAuthState } from '../src/modules/mailbox/oauthState';
-import { TransactionalMailConfigurationError, getTransactionalMailTransport } from '../src/modules/mailbox/transactionalMail';
+import { TransactionalMailConfigurationError, getTransactionalMailTransport, transactionalMailStatus } from '../src/modules/mailbox/transactionalMail';
 import { hasMailboxAuthorization } from '../src/modules/mailbox/types';
 
 describe('email verification code', () => {
@@ -160,5 +160,6 @@ describe('OAuth and transactional-mail boundaries', () => {
   });
   it('does not pretend verification mail was sent without a configured system transport', async () => {
     await expect(getTransactionalMailTransport().sendVerificationCode({ email: 'owner@example.com', code: '123456', expiresAt: new Date() })).rejects.toBeInstanceOf(TransactionalMailConfigurationError);
+    expect(transactionalMailStatus({} as NodeJS.ProcessEnv)).toEqual({ ready: false, externalConfigurationRequired: true });
   });
 });

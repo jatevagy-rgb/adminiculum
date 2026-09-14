@@ -32,6 +32,14 @@ Verification requires `email` and provider (`MICROSOFT_GRAPH`, `GOOGLE_GMAIL`, o
 IMAP/SMTP remains feature-gated until a production SecretStore and connectivity
 implementation are enabled.
 
+Verification email delivery is a separate system-mail path from connected
+mailboxes. It uses the configured transactional SMTP boundary
+(`MAILBOX_TRANSACTIONAL_SMTP_*`); if that external configuration is absent,
+`verification/start` fails safely with
+`MAILBOX_TRANSACTIONAL_MAIL_NOT_CONFIGURED` and does not create a challenge.
+The verification code is hashed before persistence, expires, is single-use, and
+is attempt-limited.
+
 ## Safe DTO contract
 
 Connection responses may expose only `id`, `mailboxAddress`, `provider`, `status`,
@@ -65,6 +73,11 @@ status. The body preview is not the source of truth; no `.txt` Document is creat
 per email.
 
 Microsoft Graph and Gmail remain configuration-dependent delegated integrations.
-Google restricted-scope verification and production SecretStore provisioning are
+After OAuth, the backend resolves the provider-authorized mailbox identity
+server-side and requires it to match the verified address before storing the
+opaque SecretStore reference. Access-token expiry is refreshed in-place through
+the same SecretStore reference; failed refresh transitions the connection to
+`AUTHORIZATION_REQUIRED`. Google restricted-scope verification, transactional
+SMTP, and production SecretStore provisioning are
 external readiness requirements. `IMAP_SMTP` is intentionally not represented as
 production-ready.

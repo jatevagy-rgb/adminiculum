@@ -9,6 +9,37 @@ import { recordMailboxAudit } from './audit';
 export class MailboxServiceError extends Error {
   constructor(readonly status: number, readonly code: string, message = 'Mailbox operation could not be completed.') { super(message); }
 }
+function requiresAuthorization(error: unknown): boolean {
+  return error instanceof Error && /AUTHORIZATION/.test(error.message);
+}
+async function loadFreshSecret(
+  connection: Awaited<ReturnType<typeof ownedMailbox>>,
+  store: SecretStore,
+): Promise<{ secret: NonNullable<Awaited<ReturnType<SecretStore['get']>>>; refreshed: boolean }> {
+  if (!connection.secretReference) throw new MailboxServiceError(409, 'MAILBOX_SECRET_MISSING');
+  const secret = await store.get(connection.secretReference);
+  if (!secret) throw new MailboxServiceError(409, 'MAILBOX_SECRET_MISSING');
+  const expiresAt = secret.expiresAt ? new Date(secret.expiresAt).getTime() : null;
+  if (expiresAt === null || expiresAt > Date.now() + 60_000) return { secret, refreshed: false };
+  const refreshed = await getMailboxProvider(connection.provider).refreshAuthorization(secret);
+  await store.put(connection.secretReference, refreshed);
+  return { secret: refreshed, refreshed: true };
+}
+async function runWithRefresh<T>(
+  connection: Awaited<ReturnType<typeof ownedMailbox>>,
+  store: SecretStore,
+  operation: (secret: NonNullable<Awaited<ReturnType<SecretStore['get']>>>) => Promise<T>,
+): Promise<T> {
+  const loaded = await loadFreshSecret(connection, store);
+  try {
+    return await operation(loaded.secret);
+  } catch (error) {
+    if (!requiresAuthorization(error) || loaded.refreshed || !connection.secretReference) throw error;
+    const refreshed = await getMailboxProvider(connection.provider).refreshAuthorization(loaded.secret);
+    await store.put(connection.secretReference, refreshed);
+    return operation(refreshed);
+  }
+}
 export async function ownedMailbox(id: string, ownerUserId: string) {
   const connection = await prisma.communicationMailboxConnection.findFirst({ where: { id, ownerUserId } });
   if (!connection) throw new MailboxServiceError(404, 'MAILBOX_NOT_FOUND');
@@ -38,17 +69,16 @@ export async function syncMailbox(id: string, ownerUserId: string, store: Secret
   if (connection.status === 'REVOKED') throw new MailboxServiceError(409, 'MAILBOX_REVOKED');
   if (!hasMailboxAuthorization(connection)) throw new MailboxServiceError(409, 'MAILBOX_AUTHORIZATION_REQUIRED');
   if (!connection.secretReference) throw new MailboxServiceError(409, 'MAILBOX_SECRET_MISSING');
-  const secret = await store.get(connection.secretReference); if (!secret) throw new MailboxServiceError(409, 'MAILBOX_SECRET_MISSING');
   await prisma.communicationMailboxConnection.update({ where: { id }, data: { status: 'SYNCING', lastSyncStatus: 'RUNNING', lastSyncError: null } });
   await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_STARTED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: 'SYNCING' });
   try {
-    const result = await getMailboxProvider(connection.provider).listMessagesSinceCursor({ secret, cursor: connection.syncCursor, maxMessages: 250 });
+    const result = await runWithRefresh(connection, store, (secret) => getMailboxProvider(connection.provider).listMessagesSinceCursor({ secret, cursor: connection.syncCursor, maxMessages: 250 }));
     for (const message of result.messages) await persistMessage(connection, message, ownerUserId);
     const updated = await prisma.communicationMailboxConnection.update({ where: { id }, data: { status: connection.sendCapability ? 'CONNECTED' : 'CONNECTED_READ_ONLY', syncCursor: result.nextCursor, syncCursorUpdatedAt: new Date(), lastSyncedAt: new Date(), lastSyncStatus: 'SUCCEEDED' } });
     await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_SUCCEEDED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: updated.status });
     return updated;
   } catch (error) {
-    const reauthRequired = error instanceof Error && error.message.includes('AUTHORIZATION');
+    const reauthRequired = requiresAuthorization(error);
     const status = reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'ERROR';
     await prisma.communicationMailboxConnection.update({ where: { id }, data: { status, lastSyncStatus: 'FAILED', lastSyncError: reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'PROVIDER_SYNC_FAILED' } });
     await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_FAILED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status, errorCode: reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'PROVIDER_SYNC_FAILED' });
@@ -59,12 +89,33 @@ export async function syncMailbox(id: string, ownerUserId: string, store: Secret
 export async function sendMailboxMessage(input: { id: string; ownerUserId: string; to: Array<{ name?: string | null; email: string }>; cc?: Array<{ name?: string | null; email: string }>; bcc?: Array<{ name?: string | null; email: string }>; subject: string; bodyText: string; bodyHtml?: string | null; replyToCommunicationId?: string | null }, store: SecretStore = getSecretStore()) {
   const connection = await ownedMailbox(input.id, input.ownerUserId);
   if (!hasMailboxAuthorization(connection) || !connection.sendCapability || !connection.secretReference) throw new MailboxServiceError(409, 'MAILBOX_SEND_NOT_AVAILABLE');
-  const secret = await store.get(connection.secretReference); if (!secret) throw new MailboxServiceError(409, 'MAILBOX_SECRET_MISSING');
   const reply = input.replyToCommunicationId ? await prisma.communication.findFirst({ where: { id: input.replyToCommunicationId, mailboxConnectionId: connection.id } }) : null;
   let sent;
   const references = [reply?.references, reply?.internetMessageId].filter(Boolean).join(' ') || null;
-  try { sent = await getMailboxProvider(connection.provider).sendMessage({ secret, to: input.to, cc: input.cc, bcc: input.bcc, subject: input.subject, bodyText: input.bodyText, bodyHtml: input.bodyHtml, inReplyTo: reply?.internetMessageId ?? null, references }); }
-  catch (error) { await recordMailboxAudit({ eventType: 'MAILBOX_SEND_FAILED', actorUserId: input.ownerUserId, mailboxConnectionId: connection.id, provider: connection.provider, status: 'ERROR', errorCode: 'PROVIDER_SEND_FAILED' }); throw error; }
+  try {
+    sent = await runWithRefresh(connection, store, (secret) => getMailboxProvider(connection.provider).sendMessage({
+      secret,
+      to: input.to,
+      cc: input.cc,
+      bcc: input.bcc,
+      subject: input.subject,
+      bodyText: input.bodyText,
+      bodyHtml: input.bodyHtml,
+      inReplyTo: reply?.internetMessageId ?? null,
+      references,
+    }));
+  }
+  catch (error) {
+    const reauthRequired = requiresAuthorization(error);
+    const status = reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'ERROR';
+    await prisma.communicationMailboxConnection.update({ where: { id: connection.id }, data: { status, lastSyncError: reauthRequired ? 'AUTHORIZATION_REQUIRED' : undefined } });
+    await recordMailboxAudit({ eventType: 'MAILBOX_SEND_FAILED', actorUserId: input.ownerUserId, mailboxConnectionId: connection.id, provider: connection.provider, status, errorCode: reauthRequired ? 'AUTHORIZATION_REQUIRED' : 'PROVIDER_SEND_FAILED' });
+    if (reauthRequired) {
+      await recordMailboxAudit({ eventType: 'MAILBOX_REAUTH_REQUIRED', actorUserId: input.ownerUserId, mailboxConnectionId: connection.id, provider: connection.provider, status, errorCode: 'AUTHORIZATION_REQUIRED' });
+      throw new MailboxServiceError(502, 'MAILBOX_AUTHORIZATION_REQUIRED');
+    }
+    throw error;
+  }
   const communication = await persistMessage(connection, { providerMessageId: sent.providerMessageId, internetMessageId: sent.internetMessageId ?? null, inReplyTo: reply?.internetMessageId ?? null, references, direction: 'OUTBOUND', from: { email: connection.mailboxAddress }, to: input.to, cc: input.cc ?? [], bcc: input.bcc ?? [], subject: input.subject, bodyText: input.bodyText, bodyHtml: input.bodyHtml ?? null, sentAt: new Date(), providerConversationId: sent.providerConversationId ?? reply?.providerConversationId ?? null, attachments: [] }, input.ownerUserId);
   await recordMailboxAudit({ eventType: 'MAILBOX_SEND_SUCCEEDED', actorUserId: input.ownerUserId, mailboxConnectionId: connection.id, provider: connection.provider, status: 'CONNECTED' });
   return communication;

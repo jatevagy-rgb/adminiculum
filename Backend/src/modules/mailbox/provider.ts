@@ -138,6 +138,13 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
     if (!res.ok) throw new Error('MAILBOX_OAUTH_EXCHANGE_FAILED');
     const json = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string };
     if (!json.access_token) throw new Error('MAILBOX_OAUTH_EXCHANGE_FAILED');
+    const identity = await fetch('https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName', {
+      headers: { authorization: `Bearer ${json.access_token}` },
+    });
+    if (!identity.ok) throw new Error('MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE');
+    const profile = (await identity.json()) as { mail?: string | null; userPrincipalName?: string | null; id?: string };
+    const authorizedAddress = String(profile.mail || profile.userPrincipalName || '').trim();
+    if (!authorizedAddress) throw new Error('MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE');
     return {
       secret: {
         kind: 'OAUTH2',
@@ -146,6 +153,8 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
         expiresAt: json.expires_in ? new Date(Date.now() + json.expires_in * 1000).toISOString() : undefined,
         scope: json.scope,
       },
+      authorizedAddress,
+      providerAccountId: profile.id,
     };
   }
 
@@ -170,7 +179,7 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
 
   private async fetchGraphPage(token: string, url: string, direction: 'INBOUND' | 'OUTBOUND') {
     const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error('MAILBOX_PROVIDER_READ_FAILED');
+    if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_READ_FAILED');
     const json = (await res.json()) as { value?: Array<Record<string, unknown>>; '@odata.nextLink'?: string };
     const messages: MailboxMessage[] = (json.value ?? []).map((m) => {
       const body = (m.body as { contentType?: string; content?: string } | undefined) ?? {};
@@ -233,14 +242,14 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
         },
       }),
     });
-    if (!draftRes.ok) throw new Error('MAILBOX_PROVIDER_SEND_FAILED');
+    if (!draftRes.ok) throw new Error(draftRes.status === 401 || draftRes.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_SEND_FAILED');
     const draft = (await draftRes.json()) as { id?: string; internetMessageId?: string | null; conversationId?: string | null };
     if (!draft.id) throw new Error('MAILBOX_PROVIDER_SEND_FAILED');
     const sendRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(draft.id)}/send`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}` },
     });
-    if (!sendRes.ok) throw new Error('MAILBOX_PROVIDER_SEND_FAILED');
+    if (!sendRes.ok) throw new Error(sendRes.status === 401 || sendRes.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_SEND_FAILED');
     return { providerMessageId: draft.id, internetMessageId: draft.internetMessageId ?? null, providerConversationId: draft.conversationId ?? null };
   }
 
@@ -336,6 +345,13 @@ export class GmailMailboxProvider implements MailboxProviderAdapter {
     if (!res.ok) throw new Error('MAILBOX_OAUTH_EXCHANGE_FAILED');
     const json = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string };
     if (!json.access_token) throw new Error('MAILBOX_OAUTH_EXCHANGE_FAILED');
+    const profileRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/profile', {
+      headers: { authorization: `Bearer ${json.access_token}` },
+    });
+    if (!profileRes.ok) throw new Error('MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE');
+    const profile = (await profileRes.json()) as { emailAddress?: string };
+    const authorizedAddress = String(profile.emailAddress || '').trim();
+    if (!authorizedAddress) throw new Error('MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE');
     return {
       secret: {
         kind: 'OAUTH2',
@@ -344,6 +360,7 @@ export class GmailMailboxProvider implements MailboxProviderAdapter {
         expiresAt: json.expires_in ? new Date(Date.now() + json.expires_in * 1000).toISOString() : undefined,
         scope: json.scope,
       },
+      authorizedAddress,
     };
   }
 
@@ -355,14 +372,17 @@ export class GmailMailboxProvider implements MailboxProviderAdapter {
       ? `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${max}&pageToken=${encodeURIComponent(input.cursor)}`
       : `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${max}`;
     const res = await fetch(listUrl, { headers: { authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error('MAILBOX_PROVIDER_READ_FAILED');
+    if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_READ_FAILED');
     const list = (await res.json()) as { messages?: Array<{ id: string }>; nextPageToken?: string };
     const messages: MailboxMessage[] = [];
     for (const item of list.messages ?? []) {
       const getRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${item.id}?format=full`, {
         headers: { authorization: `Bearer ${token}` },
       });
-      if (!getRes.ok) continue;
+      if (!getRes.ok) {
+        if (getRes.status === 401 || getRes.status === 403) throw new Error('MAILBOX_AUTHORIZATION_REQUIRED');
+        continue;
+      }
       const m = (await getRes.json()) as { id: string; threadId?: string; snippet?: string; internalDate?: string; payload?: GmailPayload };
       const headers = new Map((m.payload?.headers ?? []).map((h) => [h.name.toLowerCase(), h.value]));
       const body = gmailBody(m.payload);
@@ -419,7 +439,7 @@ export class GmailMailboxProvider implements MailboxProviderAdapter {
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({ raw }),
     });
-    if (!res.ok) throw new Error('MAILBOX_PROVIDER_SEND_FAILED');
+    if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_SEND_FAILED');
     const json = (await res.json()) as { id: string; threadId?: string };
     return { providerMessageId: json.id, internetMessageId: null, providerConversationId: json.threadId ?? null };
   }

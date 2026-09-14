@@ -7,6 +7,55 @@ function response(body: unknown): Response {
 describe('mailbox provider normalization', () => {
   afterEach(() => jest.restoreAllMocks());
 
+  it('resolves the delegated Microsoft mailbox identity server-side', async () => {
+    process.env.MICROSOFT_MAILBOX_CLIENT_ID = 'client';
+    process.env.MICROSOFT_MAILBOX_CLIENT_SECRET = 'secret';
+    jest.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(response({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 }))
+      .mockResolvedValueOnce(response({ id: 'account-1', mail: 'Owner@Example.com', userPrincipalName: 'fallback@example.com' }));
+
+    const result = await new MicrosoftGraphMailboxProvider().exchangeAuthorizationCode({ code: 'code', redirectUri: 'https://app/callback' });
+
+    expect(result.authorizedAddress).toBe('Owner@Example.com');
+    expect(result.providerAccountId).toBe('account-1');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName',
+      expect.objectContaining({ headers: { authorization: 'Bearer access' } }),
+    );
+  });
+
+  it('resolves the delegated Google mailbox identity server-side', async () => {
+    process.env.GOOGLE_MAILBOX_CLIENT_ID = 'client';
+    process.env.GOOGLE_MAILBOX_CLIENT_SECRET = 'secret';
+    jest.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(response({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 }))
+      .mockResolvedValueOnce(response({ emailAddress: 'Owner@Example.com' }));
+
+    const result = await new GmailMailboxProvider().exchangeAuthorizationCode({ code: 'code', redirectUri: 'https://app/callback' });
+
+    expect(result.authorizedAddress).toBe('Owner@Example.com');
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+      expect.objectContaining({ headers: { authorization: 'Bearer access' } }),
+    );
+  });
+
+  it('refreshes Microsoft and Google access tokens without replacing refresh authorization', async () => {
+    process.env.MICROSOFT_MAILBOX_CLIENT_ID = 'client';
+    process.env.MICROSOFT_MAILBOX_CLIENT_SECRET = 'secret';
+    process.env.GOOGLE_MAILBOX_CLIENT_ID = 'client';
+    process.env.GOOGLE_MAILBOX_CLIENT_SECRET = 'secret';
+    jest.spyOn(global, 'fetch')
+      .mockResolvedValueOnce(response({ access_token: 'ms-new', expires_in: 3600 }))
+      .mockResolvedValueOnce(response({ access_token: 'google-new', expires_in: 3600 }));
+
+    const microsoft = await new MicrosoftGraphMailboxProvider().refreshAuthorization({ kind: 'OAUTH2', accessToken: 'ms-old', refreshToken: 'ms-refresh' });
+    const google = await new GmailMailboxProvider().refreshAuthorization({ kind: 'OAUTH2', accessToken: 'google-old', refreshToken: 'google-refresh' });
+
+    expect(microsoft).toMatchObject({ accessToken: 'ms-new', refreshToken: 'ms-refresh' });
+    expect(google).toMatchObject({ accessToken: 'google-new', refreshToken: 'google-refresh' });
+  });
+
   it('preserves Graph body, BCC, and threading headers', async () => {
     jest.spyOn(global, 'fetch').mockResolvedValue(response({
       value: [{
