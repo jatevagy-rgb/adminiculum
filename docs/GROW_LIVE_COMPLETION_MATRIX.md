@@ -10,9 +10,11 @@ Implementation inventory (not a stopping point). Status legend: YES / PARTIAL / 
 | ExternalSourceConnection / DiscoveryRun / Observation | YES | PARTIAL (`/observatory/sources`) | NO | YES (`obs1Ingestion.integration`) | YES | PARTIAL | workforce health projection is minimal/read-only (type/status/last-run/count) |
 | ObservatoryIngestionService | YES | (internal) | NO | YES (`obs1Ingestion.integration`) | YES | PARTIAL | — |
 | Structured Grow survey intake | YES (`company-observatory/intake.ts`) | YES (`GrowIntake`) | YES (portal `grow-survey` runtime) | YES (`growResearch.integration`, `portalGrowSurvey.integration`) | YES | YES | — |
+| Customer research-backed assessment packs (4) | YES (`company-growth/assessments/registry.ts`) | n/a | YES (catalogue / runner / result in `/portal/fejlesztes`) | YES (`portalGrowAssessments.integration`) | YES (`grow-customer-assessment`) | YES (customer) | — |
+| Customer self-assessment → declared evidence | YES (`company-observatory/assessmentIntake.ts`, `GROW_ASSESSMENT_V1`) | n/a | YES | YES (`portalGrowAssessments.integration`) | YES | YES | — |
 | Grow research run (corpus, diagnosis, gate) | YES (`company-growth/research/service.ts`) | YES (`GrowJourney`) | NO | YES (`growResearch.integration`) | YES | YES (workforce) | — |
 | ProblemDomain / DiagnosisCandidate / SufficiencyDecision | YES (6/6) | YES | NO | YES (`growResearch`, `observatoryGrowConvergence`) | YES | YES (workforce) | — |
-| Evidence corpus + evidence links | YES (verified sources incl. supplied pack) | YES (evidence drawer) | NO | YES | YES | YES (workforce) | — |
+| Evidence corpus + evidence links | YES (verified sources incl. supplied pack) | YES (evidence drawer) | YES (assessment result `Mi alapján?`, verified-only strong backing) | YES | YES | YES (workforce + assessment result) | workforce evidence drawer not yet wired in CI |
 | RecommendationCandidate | YES | YES | NO | YES (`growResearch`, `observatoryGrowConvergence`) | YES | YES (workforce) | customer-safe publication missing |
 | Human review ACCEPT/DECLINE/REQUEST_MORE_INFO | YES | YES | n/a (internal) | YES | YES | YES | — |
 | ImprovementOpportunity | YES | YES | NO | YES | YES | YES | — |
@@ -21,7 +23,7 @@ Implementation inventory (not a stopping point). Status legend: YES / PARTIAL / 
 | OutcomeMeasurement | YES | YES | NO | YES | YES | PARTIAL | customer-safe projection |
 | ROI provenance | YES (6/6) | YES ("Hogyan számoltuk?") | NO | YES (`roiEngine`) | n/a (unit) | YES | customer-safe projection |
 | Generic Observation → normalized Grow signal | YES (`company-growth/research/observationSignals.ts`, fail-closed) | n/a | n/a | YES (`growObservationSignals`, `observatoryGrowConvergence`) | YES | YES | — |
-| Customer Grow journey (`/portal/fejlesztes`) | YES (portal grow projection + survey) | n/a | PARTIAL | PARTIAL (`portalGrowSurvey.integration`) | YES | PARTIAL | fuller customer-safe Grow projection over canonical research |
+| Customer Grow journey (`/portal/fejlesztes`) | YES (portal grow projection + survey + assessment packs) | n/a | YES (assessment catalogue / runner / result / aggregated findings + preserved survey) | YES (`portalGrowSurvey.integration`, `portalGrowAssessments.integration`) | YES (`grow-customer-assessment`) | YES | published customer-safe `RecommendationCandidate` / approved opportunity is still not customer-visible |
 | Process observation loop (model→snapshot→research→review→initiative→snapshot→outcome) | YES | YES | NO | YES (`observatoryGrowConvergence.integration`, demo/vendor suites) | YES | YES (workforce) | — |
 
 ## This PR's coherent slice (Observatory → Grow convergence)
@@ -32,10 +34,19 @@ Implementation inventory (not a stopping point). Status legend: YES / PARTIAL / 
 - **Authoritative PG coverage (mission §10, §12, §13):** `obs1Ingestion.integration.test.ts` is repaired to use real canonical actors and is now CI-wired (`obs1-ingestion`); new `observatoryGrowConvergence.integration.test.ts` proves the golden path, zero automatic downstream creation, the gate/human-review/initiative handoff, idempotency convergence and cross-client isolation (`observatory-grow-convergence`).
 - **Workforce visibility (mission §15):** the existing read-only `/clients/:clientId/observatory/sources` route now additively exposes last-run timestamp/status and observation count (no raw payloads, tokens or secrets).
 
+## This PR's coherent slice (Grow customer assessment journey)
+- **Backend-owned evaluation, not a scoring model:** `company-growth/assessments/registry.ts` defines four V1 packs (Digitális érettség, Transzformációs felkészültség, Folyamatok és automatizálás, Rendszerek és adatáramlás) with original Adminiculum questions and deterministic `trigger answer → finding` rules. UNKNOWN / NOT_APPLICABLE never produce a negative finding; there is no percentage, no 1–100 scale and no fabricated maturity index.
+- **Declared evidence, canonical persistence:** `company-observatory/assessmentIntake.ts` persists each completion as ONE `DECLARED_SURVEY` observation (`GROW_ASSESSMENT_V1`) through the existing ExternalSourceConnection `SURVEY` → DiscoveryRun → Observation path. No new table, no schema change. Exact validation rejects unknown pack/version/question, duplicate question, invalid answer and oversized payloads; idempotent replay and `IDEMPOTENCY_CONFLICT` follow the PR #230 semantics.
+- **Fail-closed research convergence:** `observationSignals.ts` normalizes `GROW_ASSESSMENT_V1` only through explicit registry finding rules that carry a canonical survey category. Mappable process findings become `GrowSignal`s; strategy / leadership / culture findings stay assessment-level and are never coerced into a process domain (no `GENERAL_FLOW` fallback).
+- **Customer-safe result:** `Mi alapján?` is built from the curated corpus constant with no `ResearchEvidence` id, `clientId` or raw payload. Only VERIFIED records are labelled strong backing. Suggested directions reuse the canonical intervention taxonomy (labels only), and the automation guardrail (rework / instability / unclear ownership → `REDESIGN_BEFORE_AUTOMATING`) is preserved.
+- **Zero downstream side effects:** submission creates no `RecommendationCandidate`, `ImprovementOpportunity`, `DevelopmentInitiative` or `Task`; research and human review remain the next explicit steps.
+- **Preserved:** the generic `Hol érdemes javítani?` pain intake now sits under `Gyors működési jelzés` and is unchanged; survey history, initiatives, processes and outcomes are preserved.
+- **Coverage:** unit (`growAssessmentRegistry`, `growAssessmentObservationSignals`), new PostgreSQL `portalGrowAssessments.integration.test.ts` (CI-wired as `grow-customer-assessment`) and frontend source-contract `clientGrowAssessmentJourney.test.ts`.
+
 ## Remaining (exact continuation)
 1. Wire `growWithUsObservationSnapshot.integration` into CI after repairing its pre-existing cross-test timestamp isolation flaw.
 2. Repair the stale `demoKftJourney.integration.test.ts` UNMEASURED_COST expectation (pre-existing failure on pristine master) and decide whether it becomes CI-authoritative.
-3. Implement the fuller customer-safe Grow projection (`/portal/fejlesztes`: FELTÁRÁS / MIT LÁTUNK? / HOL ÉRDEMES JAVÍTANI? published-only / MIT CSINÁLUNK? / MIT ÉRTÜNK EL?).
+3. Publish human-approved customer-safe `RecommendationCandidate` / opportunity detail to `/portal/fejlesztes` (still the remaining missing link; assessment directions are NOT approved recommendations).
 4. Live Demo Kft Grow data audit (read-only; never reseed; never touch employee_count).
 
 ## Next recommended slice
