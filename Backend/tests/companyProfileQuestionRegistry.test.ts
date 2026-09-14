@@ -18,6 +18,8 @@ describe('company profile question registry', () => {
   it('only maps active canonical definitions with compatible typed metadata', () => {
     expect(getCompanyProfileQuestionForDefinition({ key: 'employee_count', valueType: 'NUMBER' })).toMatchObject({ questionKey: 'employee_count' });
     expect(getCompanyProfileQuestionForDefinition({ key: 'employee_count', valueType: 'STRING' })).toBeNull();
+    expect(getCompanyProfileQuestionForDefinition({ key: 'legacy_employee_count', questionKey: 'employee_count', valueType: 'NUMBER' })).toBeNull();
+    expect(getCompanyProfileQuestionForDefinition({ key: 'employee_count', questionKey: 'legacy_employee_count', valueType: 'NUMBER' })).toBeNull();
     expect(getCompanyProfileQuestionForDefinition({ key: 'internal_only', questionKey: 'internal_only', valueType: 'STRING' })).toBeNull();
   });
 
@@ -30,5 +32,9 @@ describe('company profile question registry', () => {
     expect(migration).toContain('IF FOUND THEN');
     expect(migration).toContain('RAISE EXCEPTION');
     expect(migration).toContain('INSERT INTO "fact_definitions"');
+    expect(migration).toContain('"temporalPolicy"');
+    expect(migration).toContain('existing_definition."temporalPolicy"::text <> \'OBSERVATION\'');
+    expect(migration).not.toMatch(/UPDATE\s+"fact_definitions"[\s\S]*temporalPolicy/i);
   });
+
 });

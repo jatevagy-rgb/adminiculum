@@ -116,7 +116,7 @@ export async function getCompanyProfileDiscovery(identityId: string, workspaceId
   const missingDependencies = missingFactKeys.size
     ? await db.applicabilityRuleFactDependency.findMany({
       where: { applicabilityRuleVersionId: { in: [...new Set(currentSnapshots.map((snapshot) => snapshot.ruleVersionId))] }, factKey: { in: [...missingFactKeys] } },
-      select: { factKey: true, resolvedFactDefinition: { select: { id: true, key: true, questionKey: true, valueType: true, status: true, allowedScopeTypes: true, allowedEnumValues: true } } },
+      select: { factKey: true, resolvedFactDefinition: { select: { id: true, key: true, questionKey: true, valueType: true, status: true, allowedScopeTypes: true, allowedEnumValues: true, temporalPolicy: true } } },
     })
     : [];
   const definitionsById = new Map<string, typeof definitions[number]>();
@@ -171,8 +171,7 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
   const question = getCompanyProfileQuestion(questionKey);
   const status = String(body.status || '').toUpperCase();
   if (!ANSWER_STATUSES.has(status)) error(400, 'CLIENT_PROFILE_ANSWER_STATUS_INVALID', 'Answer status must be ANSWERED or UNKNOWN.');
-  const definition = await tx.factDefinition.findUnique({ where: { key: question.factDefinitionKey } })
-    || await tx.factDefinition.findFirst({ where: { questionKey: question.questionKey, status: 'ACTIVE' } });
+  const definition = await tx.factDefinition.findUnique({ where: { key: question.factDefinitionKey } });
   if (!definition || definition.status !== 'ACTIVE') error(409, 'CLIENT_PROFILE_QUESTION_UNAVAILABLE', 'The configured company profile question is unavailable.');
   if (definition.valueType !== question.valueType || !definition.allowedScopeTypes.includes(question.scopeType)) error(500, 'CLIENT_PROFILE_QUESTION_MISCONFIGURED', 'The configured company profile question is invalid.');
 

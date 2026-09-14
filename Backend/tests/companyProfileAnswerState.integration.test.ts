@@ -1,4 +1,6 @@
 import crypto from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../src/modules/client-workspace/companyProfileAnswerService';
 import { addRequirementCitation, approveApplicabilityRuleVersion, approveRequirementVersion, createApplicabilityRuleVersion, createRequirement, createRequirementVersion } from '../src/modules/compliance/requirementRuleService';
@@ -30,6 +32,12 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
   const adaptiveRequirementId = crypto.randomUUID();
   const adaptiveRequirementVersionId = crypto.randomUUID();
   const adaptiveRuleVersionId = crypto.randomUUID();
+  const aliasDefinitionId = crypto.randomUUID();
+  const aliasDependencyId = crypto.randomUUID();
+  const canonicalAiDependencyId = crypto.randomUUID();
+  const aliasSnapshotId = crypto.randomUUID();
+  const canonicalAiSnapshotId = crypto.randomUUID();
+  const fallbackAiFactId = crypto.randomUUID();
   let ownsDefinition = false;
   let existingDefinitionBaseline: Record<string, unknown> | null = null;
 
@@ -165,9 +173,94 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).not.toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_regulated_activity' })]));
     const adaptiveDefinitionIds = (await db.factDefinition.findMany({ where: { key: { in: ['company_main_activity', 'company_regulated_activity'] } }, select: { id: true } })).map((definition) => definition.id);
     await db.assessmentFinding.deleteMany({ where: { clientId: clientA, requirementId: adaptiveRequirementId } });
-    await db.requirementApplicability.deleteMany({ where: { clientId: clientA, requirementVersionId: adaptiveRequirementVersionId } });
     await db.clientFactAnswerState.deleteMany({ where: { clientId: clientA, factDefinitionId: { in: adaptiveDefinitionIds } } });
     await db.clientFact.deleteMany({ where: { clientId: clientA, factDefinitionId: { in: adaptiveDefinitionIds } } });
+  });
+
+  it('does not expose questionKey aliases and binds adaptive writes to the canonical definition', async () => {
+    const canonicalDefinition = await db.factDefinition.findUniqueOrThrow({ where: { key: 'company_ai_usage' } });
+    const aliasKey = `legacy_ai_usage_${suffix}`;
+    const snapshotTemplate = await db.requirementApplicability.findFirstOrThrow({
+      where: { clientId: clientA, requirementVersionId: adaptiveRequirementVersionId, ruleVersionId: adaptiveRuleVersionId },
+      orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
+    });
+    await db.factDefinition.create({ data: {
+      id: aliasDefinitionId,
+      key: aliasKey,
+      domainCode: `ANSWER_STATE_${suffix}`,
+      valueType: 'BOOLEAN',
+      allowedScopeTypes: ['COMPANY'],
+      determinationMethod: 'USER_PROVIDED',
+      overlapPolicy: 'DISALLOW',
+      temporalPolicy: 'OBSERVATION',
+      questionKey: 'company_ai_usage',
+      status: 'ACTIVE',
+    } });
+    let snapshotClock = Date.now() + 10000;
+    const addSnapshot = (id: string, missingFactKey: string) => db.requirementApplicability.create({ data: {
+      id,
+      clientId: clientA,
+      requirementVersionId: adaptiveRequirementVersionId,
+      ruleVersionId: adaptiveRuleVersionId,
+      ruleDigest: snapshotTemplate.ruleDigest,
+      outcome: 'INSUFFICIENT_FACTS',
+      scopeType: 'COMPANY',
+      factSubjectId: null,
+      evaluationAt: new Date(++snapshotClock),
+      sourceSupportState: snapshotTemplate.sourceSupportState,
+      specialistRequirement: snapshotTemplate.specialistRequirement,
+      specialistDomainCode: snapshotTemplate.specialistDomainCode,
+      schemaVersion: snapshotTemplate.schemaVersion,
+      snapshotJson: { missingFactKeys: [missingFactKey] },
+      snapshotDigest: snapshotTemplate.snapshotDigest,
+    } });
+    try {
+      await db.applicabilityRuleFactDependency.create({ data: { id: aliasDependencyId, applicabilityRuleVersionId: adaptiveRuleVersionId, factKey: aliasKey, resolvedFactDefinitionId: aliasDefinitionId } });
+      await addSnapshot(aliasSnapshotId, aliasKey);
+      const aliasDiscovery = await getCompanyProfileDiscovery(memberId, workspaceA, db);
+      expect(aliasDiscovery.questions.some((question) => question.questionKey === 'company_ai_usage')).toBe(false);
+
+      await db.applicabilityRuleFactDependency.delete({ where: { id: aliasDependencyId } });
+      await db.applicabilityRuleFactDependency.create({ data: { id: canonicalAiDependencyId, applicabilityRuleVersionId: adaptiveRuleVersionId, factKey: 'company_ai_usage', resolvedFactDefinitionId: canonicalDefinition.id } });
+      await addSnapshot(canonicalAiSnapshotId, 'company_ai_usage');
+      const canonicalDiscovery = await getCompanyProfileDiscovery(memberId, workspaceA, db);
+      expect(canonicalDiscovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_ai_usage', status: 'UNANSWERED' })]));
+
+      await db.clientFact.create({ data: { id: fallbackAiFactId, clientId: clientA, type: 'company_ai_usage', value: 'false', factDefinitionId: canonicalDefinition.id, scopeType: 'COMPANY', booleanValue: false, validFrom: new Date('2026-01-01T00:00:00Z'), observedAt: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' } });
+      const fallbackDiscovery = await getCompanyProfileDiscovery(memberId, workspaceA, db);
+      expect(fallbackDiscovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_ai_usage', status: 'ANSWERED', value: false })]));
+      await answerCompanyProfileQuestion(representativeId, workspaceA, 'company_ai_usage', { status: 'ANSWERED', booleanValue: true }, db);
+      const written = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA, factDefinitionId: canonicalDefinition.id, supersededAt: null } });
+      expect(written.factDefinitionId).toBe(canonicalDefinition.id);
+      expect(written.booleanValue).toBe(true);
+    } finally {
+      await db.assessmentFinding.deleteMany({ where: { clientId: clientA, requirementId: adaptiveRequirementId } });
+      await db.requirementApplicability.deleteMany({ where: { clientId: clientA, requirementVersionId: adaptiveRequirementVersionId } });
+      await db.clientFactAnswerState.deleteMany({ where: { clientId: clientA, factDefinitionId: canonicalDefinition.id } });
+      await db.clientFact.deleteMany({ where: { clientId: clientA, factDefinitionId: canonicalDefinition.id } });
+      await db.applicabilityRuleFactDependency.deleteMany({ where: { id: { in: [aliasDependencyId, canonicalAiDependencyId] } } });
+      await db.factDefinition.deleteMany({ where: { id: aliasDefinitionId } });
+    }
+  });
+
+  it('preserves existing OBSERVATION definitions and rejects incompatible temporal policies', async () => {
+    const migration = readFileSync(path.resolve(__dirname, '../prisma/migrations/20260914100000_provision_company_profile_fact_definitions/migration.sql'), 'utf8');
+    const baseline = await db.factDefinition.findUniqueOrThrow({ where: { key: 'company_main_activity' } });
+    expect(baseline.temporalPolicy).toBe('OBSERVATION');
+
+    await db.$executeRawUnsafe(migration);
+    const replayed = await db.factDefinition.findUniqueOrThrow({ where: { key: 'company_main_activity' } });
+    expect(JSON.parse(JSON.stringify(replayed))).toEqual(JSON.parse(JSON.stringify(baseline)));
+
+    for (const incompatiblePolicy of ['EFFECTIVE_INSTANT', 'REFERENCE_PERIOD'] as const) {
+      await expect(db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`UPDATE "fact_definitions" SET "temporalPolicy" = '${incompatiblePolicy}'::"FactTemporalPolicy" WHERE "key" = 'company_main_activity'`);
+        await tx.$executeRawUnsafe(migration);
+      })).rejects.toThrow(/Incompatible company-profile FactDefinition/);
+
+      const afterRejectedReplay = await db.factDefinition.findUniqueOrThrow({ where: { key: 'company_main_activity' } });
+      expect(JSON.parse(JSON.stringify(afterRejectedReplay))).toEqual(JSON.parse(JSON.stringify(baseline)));
+    }
   });
 
   it('creates CLIENT_PROVIDED facts, supersedes immutable truth, and is idempotent', async () => {

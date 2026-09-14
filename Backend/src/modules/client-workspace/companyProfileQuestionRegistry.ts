@@ -112,9 +112,9 @@ export function getCompanyProfileQuestionForDefinition(definition: {
   questionKey?: string | null;
   valueType?: string;
 }): CompanyProfileQuestion | null {
-  const question = COMPANY_PROFILE_QUESTIONS.find((item) => item.factDefinitionKey === definition.key
-    || (definition.questionKey != null && item.questionKey === definition.questionKey));
+  const question = COMPANY_PROFILE_QUESTIONS.find((item) => item.factDefinitionKey === definition.key);
   if (!question) return null;
+  if (definition.questionKey != null && definition.questionKey !== question.questionKey) return null;
   if (definition.valueType && String(definition.valueType) !== question.valueType) return null;
   return question;
 }
