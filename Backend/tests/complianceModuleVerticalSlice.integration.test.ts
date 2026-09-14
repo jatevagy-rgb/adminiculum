@@ -16,6 +16,7 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
   const representativeId = crypto.randomUUID();
   let documentId = '';
   let documentVersionId = '';
+  const caseId = crypto.randomUUID();
 
   const answer = (questionKey: string, payload: Record<string, unknown>) => answerCompanyProfileQuestion(representativeId, workspaceId, questionKey, payload, db);
 
@@ -35,7 +36,9 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     await db.clientPortalIdentity.create({ data: { id: representativeId, provider: 'ENTRA_EXTERNAL_ID', issuer: `vertical-${suffix}`, subject: 'representative', normalizedEmail: `vertical-${suffix}@fixture.invalid`, emailVerifiedAt: new Date(), displayName: 'Representative', accountType: 'ORGANIZATION_MEMBER', status: 'ACTIVE' } });
     await db.clientPortalWorkspaceMembership.create({ data: { id: crypto.randomUUID(), clientPortalIdentityId: representativeId, workspaceId, status: 'ACTIVE', role: 'REPRESENTATIVE', approvedAt: new Date(), approvedById: adminId } });
 
-    const document = await db.document.create({ data: { clientId, name: 'Adatkezelési tájékoztató', category: 'EVIDENCE' } as never });
+    // Documents are case-scoped in this schema, so evidence documents need a case.
+    await db.case.create({ data: { id: caseId, caseNumber: `VS-${suffix.replace(/-/g, '').slice(0, 8)}`, title: 'Vertical slice case', caseType: 'OTHER', clientId, assignedLawyerId: adminId, createdById: adminId } as never });
+    const document = await db.document.create({ data: { clientId, caseId, name: 'Adatkezelési tájékoztató', category: 'EVIDENCE' } as never });
     documentId = document.id;
     const version = await db.documentVersion.create({ data: { documentId, version: 1, name: 'Adatkezelési tájékoztató v1', uploadedById: adminId } as never });
     documentVersionId = version.id;
@@ -53,6 +56,7 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     await db.clientControl.deleteMany({ where: { clientId } });
     await db.documentVersion.deleteMany({ where: { documentId } });
     await db.document.deleteMany({ where: { id: documentId } });
+    await db.case.deleteMany({ where: { id: caseId } });
     await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId } });
     await db.clientPortalIdentity.deleteMany({ where: { id: representativeId } });
     await db.clientPortalWorkspace.deleteMany({ where: { id: workspaceId } });
@@ -132,12 +136,15 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
 
   it('rejects a document version that belongs to another client', async () => {
     const otherClient = crypto.randomUUID();
+    const otherCase = crypto.randomUUID();
     await db.client.create({ data: { id: otherClient, name: 'Other client' } });
-    const otherDocument = await db.document.create({ data: { clientId: otherClient, name: 'Foreign document', category: 'EVIDENCE' } as never });
+    await db.case.create({ data: { id: otherCase, caseNumber: `VS-F-${suffix.replace(/-/g, '').slice(0, 6)}`, title: 'Foreign case', caseType: 'OTHER', clientId: otherClient, assignedLawyerId: adminId, createdById: adminId } as never });
+    const otherDocument = await db.document.create({ data: { clientId: otherClient, caseId: otherCase, name: 'Foreign document', category: 'EVIDENCE' } as never });
     const otherVersion = await db.documentVersion.create({ data: { documentId: otherDocument.id, version: 1, name: 'Foreign v1', uploadedById: adminId } as never });
     await expect(submitControlEvidenceAnswer(representativeId, workspaceId, 'C-WB-001', { answer: 'YES', documentVersionId: otherVersion.id }, db)).rejects.toMatchObject({ code: 'EVIDENCE_CROSS_CLIENT' });
     await db.documentVersion.deleteMany({ where: { documentId: otherDocument.id } });
     await db.document.deleteMany({ where: { id: otherDocument.id } });
+    await db.case.deleteMany({ where: { id: otherCase } });
     await db.client.delete({ where: { id: otherClient } });
   });
 
