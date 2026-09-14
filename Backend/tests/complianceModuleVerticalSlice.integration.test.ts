@@ -58,7 +58,8 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     await db.clientPortalWorkspace.deleteMany({ where: { id: workspaceId } });
     await db.clientOperatingProfile.deleteMany({ where: { clientId } });
     await db.client.delete({ where: { id: clientId } });
-    await db.user.delete({ where: { id: adminId } });
+    // Approved requirement/rule rows keep an approvedById reference, so the
+    // seed actor is intentionally left in place (fresh database per CI run).
     await db.$disconnect();
   });
 

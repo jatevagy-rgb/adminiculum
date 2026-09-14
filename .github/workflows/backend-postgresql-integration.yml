@@ -781,6 +781,18 @@ jobs:
           sed -i "s/^client-portal-2-customer-product=PENDING$/client-portal-2-customer-product=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Canonical company profile discovery PG
+        working-directory: Backend
+        env:
+          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npx jest --runInBand tests/canonicalCompanyProfileDiscovery.integration.test.ts
+
+      - name: Compliance module vertical slice PG
+        working-directory: Backend
+        env:
+          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npx jest --runInBand tests/complianceModuleVerticalSlice.integration.test.ts
+
       - name: Backend PostgreSQL integration summary
         if: always()
         continue-on-error: true
