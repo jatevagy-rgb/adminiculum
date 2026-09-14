@@ -42,7 +42,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     });
     if (!version) {
       version = await db.requirementVersion.create({
-        data: { id: crypto.randomUUID(), requirementId: req.id, versionKey: 'V1', title, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
+        data: { id: crypto.randomUUID(), requirementId: req.id, versionKey: 'V1', title, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z'), status: 'APPROVED' },
       });
       createdVersionIds.push(version.id);
     }
@@ -52,7 +52,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     });
     if (!rule) {
       rule = await db.applicabilityRuleVersion.create({
-        data: { id: crypto.randomUUID(), requirementVersionId: version.id, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(ruleDigestSeed) },
+        data: { id: crypto.randomUUID(), requirementVersionId: version.id, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(ruleDigestSeed), status: 'APPROVED' },
       });
       createdRuleIds.push(rule.id);
     }
