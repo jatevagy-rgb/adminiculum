@@ -10,6 +10,7 @@ export type DiagnosticProvenanceClass =
   | 'CANONICAL_STATE'
   | 'DECLARED_OBSERVATION'
   | 'MEASURED_SNAPSHOT'
+  | 'EVIDENCE_RECORD'
   | 'RESEARCH_EVIDENCE'
   | 'DERIVED_DIAGNOSIS'
   | 'RECOMMENDATION';
@@ -147,7 +148,7 @@ export interface DiagnosticWorkbenchDto {
   evidence: {
     records: Array<{
       id: string;
-      provenanceClass: 'RESEARCH_EVIDENCE';
+      provenanceClass: 'EVIDENCE_RECORD';
       sourceType: string;
       status: string;
       title: string;
@@ -622,7 +623,7 @@ export async function getDiagnosticWorkbench(
     evidence: {
       records: evidenceRecords.map((record) => ({
         id: record.id,
-        provenanceClass: 'RESEARCH_EVIDENCE' as const,
+        provenanceClass: 'EVIDENCE_RECORD' as const,
         sourceType: record.sourceType,
         status: record.status,
         title: record.title,

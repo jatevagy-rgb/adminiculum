@@ -136,6 +136,14 @@ d('Diagnostic workbench integration (PostgreSQL)', () => {
         strength: 'MODERATE',
       },
     });
+    await db.evidenceRecord.create({
+      data: {
+        clientId: clientA,
+        sourceType: 'OBSERVATION',
+        title: 'Declared observation evidence',
+        description: 'Bounded evidence record fixture',
+      },
+    });
     await db.diagnosisEvidenceLink.create({
       data: { diagnosisId: diagnosis.id, evidenceId: evidence.id },
     });
@@ -160,6 +168,10 @@ d('Diagnostic workbench integration (PostgreSQL)', () => {
     expect(result.observed.processSnapshots.some((snapshot) => snapshot.businessProcess.id === process.id)).toBe(true);
     expect(result.problems.diagnoses.some((diagnosisRow) => diagnosisRow.id === diagnosis.id)).toBe(true);
     expect(result.proposed.recommendations.some((recommendation) => recommendation.title === 'Reduce approval waiting')).toBe(true);
+    expect(result.evidence.records.length).toBeGreaterThan(0);
+    expect(result.evidence.records.every((record) => record.provenanceClass === 'EVIDENCE_RECORD')).toBe(true);
+    expect(result.evidence.research.length).toBeGreaterThan(0);
+    expect(result.evidence.research.every((record) => record.provenanceClass === 'RESEARCH_EVIDENCE')).toBe(true);
     expect(result.known.facts.every((fact) => fact.provenanceClass === 'CANONICAL_STATE')).toBe(true);
     expect(result.observed.observations.every((observation) => observation.provenanceClass === 'DECLARED_OBSERVATION')).toBe(true);
     expect(result.observed.observations).toHaveLength(1);
