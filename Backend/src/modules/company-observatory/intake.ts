@@ -228,7 +228,14 @@ export async function listSurveyIntakes(actor: InternalActor, clientId: string, 
   });
   if (!connection) return [];
   const rows = await prisma.observation.findMany({
-    where: { clientId, connectionId: connection.id, observationType: 'DECLARED_SURVEY' },
+    where: {
+      clientId,
+      connectionId: connection.id,
+      observationType: 'DECLARED_SURVEY',
+      // Only the canonical pain intake: customer Grow ASSESSMENT observations
+      // share the SURVEY connection but must never appear as survey feedback.
+      rawPayload: { path: ['kind'], equals: 'GROW_PAIN_INTAKE' },
+    },
     orderBy: { observedAt: 'desc' },
     take: 100,
   });
@@ -403,6 +410,9 @@ export async function listPortalSurveyIntakes(
       // portal workspace. Internal-workforce rows and rows from another
       // workspace on the same client must never appear. Fail closed.
       AND: [
+        // Only the canonical pain intake: customer Grow ASSESSMENT observations
+        // share the SURVEY connection but must never surface as survey feedback.
+        { rawPayload: { path: ['kind'], equals: 'GROW_PAIN_INTAKE' } },
         { rawPayload: { path: ['provenance', 'channel'], equals: 'CLIENT_PORTAL' } },
         { rawPayload: { path: ['provenance', 'workspaceId'], equals: workspace.id } },
       ],

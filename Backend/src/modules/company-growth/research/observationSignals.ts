@@ -1,3 +1,5 @@
+import { GROW_ASSESSMENT_SCHEMA, evaluateAssessmentAnswers } from '../assessments/registry';
+
 /**
  * GROW — fail-closed Observation → GrowSignal normalization boundary.
  *
@@ -36,6 +38,33 @@ export const DECLARED_SURVEY_OBSERVATION_TYPE = 'DECLARED_SURVEY';
 
 /** Marker written by the canonical structured survey intake producer. */
 export const GROW_PAIN_INTAKE_KIND = 'GROW_PAIN_INTAKE';
+
+/**
+ * Marker written by the customer Grow assessment intake producer.
+ *
+ * Assessment observations are normalized ONLY through explicit, registry-owned
+ * finding rules whose `surveyCategoryKey` references the canonical map below.
+ * There is no raw-payload guessing and no GENERAL_FLOW fallback: an assessment
+ * finding without a canonical category never produces a Grow signal.
+ */
+export { GROW_ASSESSMENT_SCHEMA };
+
+/**
+ * Canonical declared-survey category keys. This is the single, exhaustive
+ * vocabulary the fail-closed normalizer accepts; assessment finding rules may
+ * only reference one of these keys (see assessments/registry.ts).
+ */
+export const SURVEY_CATEGORY_KEYS = [
+  'MANUAL_ADMIN',
+  'SLOW_APPROVAL',
+  'DUPLICATE_DATA',
+  'TOO_MANY_SYSTEMS',
+  'UNCLEAR_OWNERSHIP',
+  'REWORK',
+  'UNMEASURED_COST',
+  'GENERAL_CONCERN',
+] as const;
+export type SurveyCategoryKey = (typeof SURVEY_CATEGORY_KEYS)[number];
 
 /**
  * Canonical survey category → Grow problem domain.
@@ -92,14 +121,87 @@ export interface NormalizableObservation {
   sourceRecordId?: string | null;
 }
 
+function readProvenanceChannel(record: Record<string, unknown>): string | null {
+  const provenance = record.provenance;
+  if (provenance === null || typeof provenance !== 'object' || Array.isArray(provenance)) return null;
+  const channel = (provenance as Record<string, unknown>).channel;
+  return typeof channel === 'string' && channel.trim() !== '' ? channel.trim() : null;
+}
+
+/**
+ * Normalizes a GROW_ASSESSMENT_V1 declared observation.
+ *
+ * Fail-closed:
+ * - Unknown pack / unsupported version / invalid or non-exact answer set →
+ *   the registry evaluator returns null → [].
+ * - Only findings with an explicit canonical `surveyCategoryKey` produce a
+ *   signal; the domain is derived from the single SURVEY_CATEGORY_TO_DOMAIN map.
+ * - Findings without a canonical category (e.g. strategy/leadership/culture)
+ *   remain assessment-level and NEVER enter Grow research. There is no
+ *   GENERAL_FLOW fallback.
+ * - One signal per canonical category per observation (deterministic dedupe).
+ */
+function assessmentObservationToGrowSignals(
+  observation: NormalizableObservation,
+  record: Record<string, unknown>,
+): GrowSignal[] {
+  const packKey = typeof record.packKey === 'string' ? record.packKey : '';
+  const packVersion =
+    typeof record.packVersion === 'number' ? record.packVersion : Number(record.packVersion);
+  const rawAnswers = record.answers;
+  if (!packKey || !Number.isFinite(packVersion) || !Array.isArray(rawAnswers)) return [];
+
+  const answers = rawAnswers
+    .filter((a): a is Record<string, unknown> => a !== null && typeof a === 'object' && !Array.isArray(a))
+    .map((a) => ({ questionKey: String(a.questionKey ?? ''), answer: String(a.answer ?? '') }));
+
+  const evaluation = evaluateAssessmentAnswers(packKey, packVersion, answers);
+  if (!evaluation) return [];
+
+  const businessProcessId =
+    typeof record.processId === 'string' && record.processId.trim() !== ''
+      ? record.processId.trim()
+      : null;
+  const channel = readProvenanceChannel(record);
+
+  const signals: GrowSignal[] = [];
+  const seenCategories = new Set<string>();
+  for (const finding of evaluation.findings) {
+    const categoryKey = finding.surveyCategoryKey;
+    if (!categoryKey || seenCategories.has(categoryKey)) continue;
+    const domainKey = SURVEY_CATEGORY_TO_DOMAIN[categoryKey];
+    if (!domainKey) continue; // fail-closed: never guess a domain
+    seenCategories.add(categoryKey);
+    signals.push({
+      domainKey,
+      observationId: observation.id,
+      sourceKind: DECLARED_SURVEY_OBSERVATION_TYPE,
+      businessProcessId,
+      observedAt: observation.observedAt,
+      declared: true,
+      measured: false,
+      provenance: {
+        categoryKey,
+        channel,
+        sourceRecordId: observation.sourceRecordId ?? null,
+      },
+    });
+  }
+
+  return signals;
+}
+
 /**
  * Normalizes a canonical observation into zero or more Grow signals.
  *
  * Fail-closed rules:
  * - Non-DECLARED_SURVEY observation types → [].
- * - Payload that is not a plain object, or lacks the canonical
- *   GROW_PAIN_INTAKE marker, or whose `categories` is not an array → [].
- * - Unknown category keys → skipped (never mapped to GENERAL_FLOW).
+ * - Payload that is not a plain object → [].
+ * - GROW_ASSESSMENT_V1 payloads normalize ONLY through the assessments registry
+ *   (see assessmentObservationToGrowSignals).
+ * - Otherwise the payload must carry the canonical GROW_PAIN_INTAKE marker and
+ *   an array `categories`; unknown category keys are skipped (never mapped to
+ *   GENERAL_FLOW).
  * - A business process reference is carried only when it is a non-empty string;
  *   tenant validation is the caller's responsibility (see executing research).
  */
@@ -109,6 +211,11 @@ export function observationToGrowSignals(observation: NormalizableObservation): 
   const payload = observation.rawPayload;
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return [];
   const record = payload as Record<string, unknown>;
+
+  if (record.schema === GROW_ASSESSMENT_SCHEMA) {
+    return assessmentObservationToGrowSignals(observation, record);
+  }
+
   if (record.kind !== GROW_PAIN_INTAKE_KIND) return [];
 
   const rawCategories = record.categories;
