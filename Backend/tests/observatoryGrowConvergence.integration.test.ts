@@ -528,4 +528,99 @@ d('Observatory → Grow convergence (PostgreSQL)', () => {
     expect(retry.replayed).toBe(true);
     expect(retry.observationId).toBe(first.observationId);
   });
+
+  it('16. TARGETED_RESEARCH_DOES_NOT_REINTERPRET_OTHER_PROCESS_AS_UNSCOPED=PASS', async () => {
+    const c = crypto.randomUUID();
+    await db.client.create({ data: { id: c, name: `Targeted scope ${suffix}` } });
+    const procA = await createBusinessProcess(admin, c, { name: `Targeted A ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+    const procB = await createBusinessProcess(admin, c, { name: `Targeted B ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+
+    // Valid same-client survey scoped to B.
+    const resB = await submitSurveyIntake(admin, c, { categories: ['REWORK'], processId: procB.id, idempotencyKey: `targeted-b-${suffix}` });
+
+    // Targeted run for A only.
+    const run = await runResearchCycle(admin, c, { businessProcessId: procA.id, idempotencyKey: `targeted-run-${suffix}` }, db);
+    const diags = await db.diagnosisCandidate.findMany({ where: { clientId: c, runId: run.runId } });
+
+    // B is excluded (not reinterpreted as unscoped): no B evidence anywhere and
+    // no unscoped declared-only outcome is fabricated for this run.
+    for (const diag of diags) {
+      const refs = diag.sourceRefs as any;
+      expect(Array.isArray(refs?.observationIds) ? refs.observationIds.includes(resB.observationId) : false).toBe(false);
+    }
+    expect(diags.every((diag) => diag.businessProcessId === procA.id)).toBe(true);
+    expect(diags.length).toBeGreaterThan(0);
+
+    const opps = await listGrowOpportunities(admin, c, db);
+    for (const opp of opps) {
+      expect(opp.businessProcess?.id ?? null).toBe(procA.id);
+    }
+  });
+
+  it('17. PROCESS_SCOPED_INTERVENTION_ISOLATION=PASS', async () => {
+    const c = crypto.randomUUID();
+    await db.client.create({ data: { id: c, name: `Intervention isolation ${suffix}` } });
+    const procA = await createBusinessProcess(admin, c, { name: `Intervention A ${suffix}`, category: 'PROCUREMENT', frequency: 'WEEKLY' });
+    // Three DATA_ENTRY steps → measured DUPLICATE_DATA_ENTRY + AUTOMATE_REPETITIVE_STEP eligibility.
+    await addProcessStep(admin, procA.id, { name: 'Adatrögzítés 1', stepType: 'DATA_ENTRY', estimatedActiveMinutes: 10 });
+    await addProcessStep(admin, procA.id, { name: 'Adatrögzítés 2', stepType: 'DATA_ENTRY', estimatedActiveMinutes: 10 });
+    await addProcessStep(admin, procA.id, { name: 'Adatrögzítés 3', stepType: 'DATA_ENTRY', estimatedActiveMinutes: 10 });
+    await captureProcessObservation(admin, { clientId: c, businessProcessId: procA.id });
+
+    const procB = await createBusinessProcess(admin, c, { name: `Intervention B ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+    const resB = await submitSurveyIntake(admin, c, { categories: ['REWORK'], processId: procB.id, idempotencyKey: `intervention-b-${suffix}` });
+
+    const run = await runResearchCycle(admin, c, { idempotencyKey: `intervention-run-${suffix}` }, db);
+    const opps = await listGrowOpportunities(admin, c, db);
+    const dupOpp = opps.find((o) => o.domainKey === 'DUPLICATE_DATA_ENTRY');
+    expect(dupOpp).toBeDefined();
+    // B's REWORK must NOT become a contraindication for A's automation choice.
+    expect(dupOpp!.interventionCodes).toContain('AUTOMATE_REPETITIVE_STEP');
+    expect(dupOpp!.interventionCodes).not.toContain('REDESIGN_BEFORE_AUTOMATING');
+
+    const diags = await db.diagnosisCandidate.findMany({ where: { clientId: c, runId: run.runId } });
+    for (const diag of diags.filter((d) => d.businessProcessId === procA.id)) {
+      const refs = diag.sourceRefs as any;
+      expect(Array.isArray(refs?.observationIds) ? refs.observationIds.includes(resB.observationId) : false).toBe(false);
+    }
+  });
+
+  it('18. SAME_PROCESS_CATEGORY_STILL_AFFECTS_INTERVENTION=PASS', async () => {
+    const c = crypto.randomUUID();
+    await db.client.create({ data: { id: c, name: `Same process category ${suffix}` } });
+    const procA = await createBusinessProcess(admin, c, { name: `Category A ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+    const res = await submitSurveyIntake(admin, c, { categories: ['REWORK'], processId: procA.id, idempotencyKey: `category-a-${suffix}` });
+
+    const run = await runResearchCycle(admin, c, { idempotencyKey: `category-run-${suffix}` }, db);
+    const diags = await db.diagnosisCandidate.findMany({ where: { clientId: c, runId: run.runId } });
+    const reworkDiag = diags.find((diag) => {
+      const refs = diag.sourceRefs as any;
+      return diag.businessProcessId === procA.id && Array.isArray(refs?.observationIds) && refs.observationIds.includes(res.observationId);
+    });
+    expect(reworkDiag).toBeDefined();
+
+    // The attached category still drives the canonical guardrails: REWORK_PRESENT
+    // selects REDESIGN_BEFORE_AUTOMATING for A's own REWORK outcome.
+    const opps = await listGrowOpportunities(admin, c, db);
+    const reworkOpp = opps.find((o) => o.domainKey === 'REWORK');
+    expect(reworkOpp).toBeDefined();
+    expect(reworkOpp!.interventionCodes).toContain('REDESIGN_BEFORE_AUTOMATING');
+  });
+
+  it('19. TRUE_UNSCOPED_BEHAVIOR_PRESERVED=PASS', async () => {
+    const c = crypto.randomUUID();
+    await db.client.create({ data: { id: c, name: `Unscoped behavior ${suffix}` } });
+    await createBusinessProcess(admin, c, { name: `Unscoped A ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+
+    // Genuinely wild unscoped survey (no processId).
+    const res = await submitSurveyIntake(admin, c, { categories: ['REWORK'], idempotencyKey: `unscoped-${suffix}` });
+    const run = await runResearchCycle(admin, c, { idempotencyKey: `unscoped-run-${suffix}` }, db);
+    const diags = await db.diagnosisCandidate.findMany({ where: { clientId: c, runId: run.runId } });
+    const reworkDiag = diags.find((diag) => {
+      const refs = diag.sourceRefs as any;
+      return Array.isArray(refs?.observationIds) && refs.observationIds.includes(res.observationId);
+    });
+    expect(reworkDiag).toBeDefined();
+    expect(reworkDiag!.businessProcessId).toBeNull();
+  });
 });

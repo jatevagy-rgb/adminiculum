@@ -344,13 +344,18 @@ async function executeRun(
   onlyProcessId: string | null,
   db: Db,
 ): Promise<{ diagnosisCount: number; recommendationCount: number }> {
-  const processes = await db.businessProcess.findMany({
-    where: { clientId, status: 'ACTIVE', ...(onlyProcessId ? { id: onlyProcessId } : {}) },
+  // Tenant/process VALIDITY and research SELECTION are distinct concerns. Load
+  // every ACTIVE client process once (validity), then narrow to the selected set
+  // for this run (selection). Conflating them would let a targeted run
+  // reinterpret another valid process's declared signal as unscoped.
+  const clientActiveProcesses = await db.businessProcess.findMany({
+    where: { clientId, status: 'ACTIVE' },
     orderBy: { createdAt: 'asc' },
   });
-  // Fail-closed tenant boundary for any business-process reference carried by a
-  // declared observation: only processes belonging to THIS client are allowed.
-  const processIds = new Set(processes.map((p) => p.id));
+  const clientActiveProcessIds = new Set(clientActiveProcesses.map((p) => p.id));
+  const processes = onlyProcessId
+    ? clientActiveProcesses.filter((p) => p.id === onlyProcessId)
+    : clientActiveProcesses;
 
   const snapshots = await db.processObservationSnapshot.findMany({
     where: { clientId },
@@ -379,9 +384,19 @@ async function executeRun(
     })),
   );
 
-  const allSurveyCategories: string[] = [];
+  // Survey categories are attributed PER OBSERVATION, so an outcome only ever
+  // sees the categories of the declarations actually attached to it. Passing
+  // every client category to every outcome would let process B's survey alter
+  // process A's intervention selection.
+  const categoriesByObservation = new Map<string, Set<string>>();
   for (const signal of declaredSignals) {
-    if (signal.provenance.categoryKey) allSurveyCategories.push(signal.provenance.categoryKey);
+    if (!signal.provenance.categoryKey) continue;
+    let categories = categoriesByObservation.get(signal.observationId);
+    if (!categories) {
+      categories = new Set<string>();
+      categoriesByObservation.set(signal.observationId, categories);
+    }
+    categories.add(signal.provenance.categoryKey);
   }
 
   const metricsBySnapshot = new Map<string, Record<string, number | boolean | null>>();
@@ -396,10 +411,21 @@ async function executeRun(
   type SurveyHit = { observationIds: string[]; businessProcessId: string | null };
   const surveyHitsByDomain = new Map<string, Map<string | null, SurveyHit>>();
   for (const signal of declaredSignals) {
-    // Fail-closed tenant binding: a foreign/unknown process reference is treated
-    // as unscoped rather than attaching to any process.
-    const businessProcessId =
-      signal.businessProcessId && processIds.has(signal.businessProcessId) ? signal.businessProcessId : null;
+    let businessProcessId: string | null;
+    if (!signal.businessProcessId) {
+      // True unscoped survey: existing semantics are preserved unchanged.
+      businessProcessId = null;
+    } else if (!clientActiveProcessIds.has(signal.businessProcessId)) {
+      // Fail-closed tenant binding: a foreign/unknown process reference is not
+      // trusted and is treated as unscoped rather than attaching to any process.
+      businessProcessId = null;
+    } else if (onlyProcessId && signal.businessProcessId !== onlyProcessId) {
+      // Valid same-client process, but outside this targeted run's selection.
+      // Exclude it instead of nulling it (which would falsely make it unscoped).
+      continue;
+    } else {
+      businessProcessId = signal.businessProcessId;
+    }
 
     let byProcess = surveyHitsByDomain.get(signal.domainKey);
     if (!byProcess) {
@@ -537,9 +563,17 @@ async function executeRun(
     const metrics = outcome.sourceRefs.snapshotIds
       .map((id) => metricsBySnapshot.get(id))
       .find((m): m is Record<string, number | boolean | null> => Boolean(m)) ?? {};
+    // Process-scoped categories: only those belonging to observations attached
+    // to THIS outcome. Process B's survey can never change process A's
+    // interventions.
+    const outcomeSurveyCategories = new Set<string>();
+    for (const obsId of outcome.sourceRefs.observationIds) {
+      const categories = categoriesByObservation.get(obsId);
+      if (categories) for (const category of categories) outcomeSurveyCategories.add(category);
+    }
     const signals = deriveProcessSignals({
       metrics,
-      surveyCategories: allSurveyCategories,
+      surveyCategories: [...outcomeSurveyCategories],
       measured: outcome.measured,
       declared: outcome.declared,
     });
