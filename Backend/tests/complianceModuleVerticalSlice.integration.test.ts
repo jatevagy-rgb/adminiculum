@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { answerCompanyProfileQuestion } from '../src/modules/client-workspace/companyProfileAnswerService';
 import { getControlEvidenceJourney, submitControlEvidenceAnswer } from '../src/modules/client-workspace/companyProfileEvidenceService';
 import { seedComplianceModuleRuleFamilies } from '../src/modules/compliance/complianceModuleSeedingService';
+import { createTypedFactInTx } from '../src/modules/compliance/typedFactMutationService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -19,6 +20,20 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
   const caseId = crypto.randomUUID();
 
   const answer = (questionKey: string, payload: Record<string, unknown>) => answerCompanyProfileQuestion(representativeId, workspaceId, questionKey, payload, db);
+
+  /**
+   * Supplies a fact that has no client question (legal classification), the way
+   * the legal team would. The evaluator requires every dependency to be present
+   * before it evaluates, so OR-branches cannot resolve from one side alone.
+   */
+  const setFact = async (factKey: string, values: Record<string, unknown>) => {
+    const definition = await db.factDefinition.findUniqueOrThrow({ where: { key: factKey } });
+    const now = new Date().toISOString();
+    await db.$transaction(
+      (tx) => createTypedFactInTx({ clientId, factDefinitionId: definition.id, actorUserId: adminId, verificationStatus: 'CLIENT_PROVIDED', input: { scopeType: 'COMPANY', ...values, validFrom: now, observedAt: now, evaluationAt: now, sourceReference: 'VERTICAL_TEST' } }, tx),
+      { isolationLevel: 'Serializable' },
+    );
+  };
 
   const latestOutcome = async (requirementKey: string) => {
     const requirement = await db.requirement.findFirstOrThrow({ where: { key: requirementKey } });
@@ -86,19 +101,22 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     expect(await latestOutcome('GDPR_GENERAL_SCOPE')).toBe('INSUFFICIENT_FACTS');
   });
 
-  it('WHISTLEBLOWING_DB_RUNTIME: headcount threshold applies; missing/unknown stays insufficient', async () => {
+  it('WHISTLEBLOWING_DB_RUNTIME: headcount threshold applies; unknown headcount stays insufficient', async () => {
     await answer('employee_count', { status: 'ANSWERED', numberValue: 73 });
+    // The whistleblowing rule ORs on the legally-classified special sector, so
+    // the evaluator needs that dependency present too.
+    await setFact('whistle_special_sector', { booleanValue: false });
     expect(await latestOutcome('WHISTLEBLOWING_INTERNAL_CHANNEL')).toBe('APPLIES');
-    await answer('employee_count', { status: 'ANSWERED', numberValue: 12 });
+    await answer('employee_count', { status: 'UNKNOWN' });
     expect(await latestOutcome('WHISTLEBLOWING_INTERNAL_CHANNEL')).toBe('INSUFFICIENT_FACTS');
   });
 
   it('NIS2_DB_RUNTIME: ambiguous scope is LEGAL_REVIEW_REQUIRED; controls evaluate deterministically', async () => {
     await answer('critical_it_dependency', { status: 'ANSWERED', booleanValue: true });
+    await answer('managed_it_service_provider', { status: 'ANSWERED', booleanValue: false });
     expect(await latestOutcome('NIS2_ORGANISATION_SCOPE')).toBe('LEGAL_REVIEW_REQUIRED');
     expect(await latestOutcome('NIS2_SECURITY_CONTROLS')).toBe('APPLIES');
     await answer('critical_it_dependency', { status: 'ANSWERED', booleanValue: false });
-    await answer('managed_it_service_provider', { status: 'ANSWERED', booleanValue: false });
     expect(await latestOutcome('NIS2_SECURITY_CONTROLS')).toBe('DOES_NOT_APPLY');
   });
 
