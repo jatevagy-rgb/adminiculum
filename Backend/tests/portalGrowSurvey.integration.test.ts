@@ -27,6 +27,7 @@ import {
   listPortalSurveyIntakes,
 } from '../src/modules/company-observatory/intake';
 import { runResearchCycle, listGrowOpportunities } from '../src/modules/company-growth/research/service';
+import { createBusinessProcess, updateBusinessProcess } from '../src/modules/client-company/service';
 import clientPortalRoutes from '../src/routes/clientPortal';
 
 // Mock authenticateClientPortal so route-level requests can supply a trusted test session
@@ -698,5 +699,34 @@ d('GROW WITH US P0-A: Customer Survey Runtime (PostgreSQL)', () => {
     expect(bTexts).toContain(bText);
     expect(bTexts).not.toContain(aText);
     expect(bTexts).not.toContain(internalText);
+  });
+
+  it('19. PORTAL_SURVEY_REPLAY_AFTER_PROCESS_DEACTIVATION=PASS', async () => {
+    const proc = await createBusinessProcess(admin, ids.clientA, {
+      name: `Portal replay process ${seed}`,
+      category: 'GENERAL',
+      frequency: 'WEEKLY',
+    });
+    const key = `portal-replay-deactivate-${seed}`;
+
+    const first = await submitPortalSurveyIntake(
+      ids.authorizedIdentity,
+      ids.orgWsA,
+      { categories: ['REWORK'], processId: proc.id, idempotencyKey: key },
+      db,
+    );
+    expect(first.replayed).toBe(false);
+
+    // Deactivate AFTER the original acceptance: an exact retry must still replay.
+    await updateBusinessProcess(admin, proc.id, { status: 'INACTIVE' });
+
+    const retry = await submitPortalSurveyIntake(
+      ids.authorizedIdentity,
+      ids.orgWsA,
+      { categories: ['REWORK'], processId: proc.id, idempotencyKey: key },
+      db,
+    );
+    expect(retry.replayed).toBe(true);
+    expect(await db.observation.count({ where: { clientId: ids.clientA, idempotencyKey: key } })).toBe(1);
   });
 });
