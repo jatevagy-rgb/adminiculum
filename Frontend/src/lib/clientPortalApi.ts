@@ -638,6 +638,14 @@ export async function listPortalGrowSurveys() {
 
 // --- GROW CUSTOMER ASSESSMENT JOURNEY -------------------------------------
 
+export type PortalGrowAssessmentResultScope = {
+  processId: string | null;
+  processName: string | null;
+  completedAt: string;
+  findingCount: number;
+  resultAvailable: boolean;
+};
+
 export type PortalGrowAssessmentCatalogueItem = {
   packKey: string;
   version: number;
@@ -650,6 +658,8 @@ export type PortalGrowAssessmentCatalogueItem = {
   latestFindingCount: number;
   latestSummaryHu: string | null;
   latestResultAvailable: boolean;
+  allowsProcessReference: boolean;
+  resultScopes: PortalGrowAssessmentResultScope[];
 };
 
 export type PortalGrowAssessmentFinding = {
@@ -713,6 +723,7 @@ export type PortalGrowAssessmentDetail = {
   };
   latestResult: PortalGrowAssessmentResult | null;
   latestResultAvailable: boolean;
+  resultScope: { processId: string | null; processName: string | null } | null;
 };
 
 export type PortalGrowAssessmentSubmissionResult = {
@@ -734,9 +745,13 @@ export async function listPortalGrowAssessments() {
   });
 }
 
-export async function getPortalGrowAssessment(packKey: string) {
+export async function getPortalGrowAssessment(packKey: string, processId?: string | null) {
+  const query =
+    processId !== undefined && processId !== null && processId !== ''
+      ? `?processId=${encodeURIComponent(processId)}`
+      : '';
   return fetchApi<PortalGrowAssessmentDetail>(
-    `/client-portal/org/grow-assessments/${encodeURIComponent(packKey)}`,
+    `/client-portal/org/grow-assessments/${encodeURIComponent(packKey)}${query}`,
     {
       authContext: 'customer',
       suppressErrorStatuses: [401, 403, 404, 503],

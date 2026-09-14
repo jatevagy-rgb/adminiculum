@@ -638,6 +638,156 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     expect(samePack.some((i) => i.processId === null)).toBe(true);
   });
 
+  it('T2. MULTI_PROCESS_RESULTS_EXPOSED_AND_REACHABLE=PASS', async () => {
+    const procA = crypto.randomUUID();
+    const procB = crypto.randomUUID();
+    const nameA = `Proc A ${seed}`;
+    const nameB = `Proc B ${seed}`;
+    await db.businessProcess.create({ data: { id: procA, clientId: ids.clientA, name: nameA, status: 'ACTIVE' } as never });
+    await db.businessProcess.create({ data: { id: procB, clientId: ids.clientA, name: nameB, status: 'ACTIVE' } as never });
+
+    for (const [pid, key] of [
+      [procA, `assess-procA-${seed}`],
+      [procB, `assess-procB-${seed}`],
+    ] as const) {
+      const res = await httpRequest(
+        app,
+        'POST',
+        '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS/submissions',
+        { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef },
+        {
+          answers: answersFor('PROCESS_AUTOMATION_READINESS', { ...NEUTRAL_PROCESS, pa_manual_repetitive: 'YES' }),
+          idempotencyKey: key,
+          processId: pid,
+        },
+      );
+      expect(res.status).toBe(201);
+    }
+
+    // MULTI_PROCESS_SAME_PACK_PRESERVED: both scopes survive in the catalogue.
+    const catalogue = await httpRequest(app, 'GET', '/api/v1/client-portal/org/grow-assessments', {
+      'x-client-portal-session': sessionAuthA,
+      'x-client-portal-workspace': wsARef,
+    });
+    const pack = catalogue.body.packs.find((p: any) => p.packKey === 'PROCESS_AUTOMATION_READINESS');
+    expect(pack.allowsProcessReference).toBe(true);
+    const scopes = pack.resultScopes.filter((s: any) => s.processId === procA || s.processId === procB);
+    expect(scopes).toHaveLength(2);
+    expect(scopes.map((s: any) => s.processName).sort()).toEqual([nameA, nameB].sort());
+
+    // PROCESS_A/B_RESULT_REACHABLE + PROCESS_RESULT_DISPLAYS_PROCESS_NAME
+    for (const [pid, name] of [
+      [procA, nameA],
+      [procB, nameB],
+    ] as const) {
+      const detail = await httpRequest(
+        app,
+        'GET',
+        `/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS?processId=${encodeURIComponent(pid)}`,
+        { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef },
+      );
+      expect(detail.status).toBe(200);
+      expect(detail.body.resultScope.processId).toBe(pid);
+      expect(detail.body.resultScope.processName).toBe(name);
+      expect(detail.body.latestResult).not.toBeNull();
+    }
+
+    // PROCESS_A_RESULT_NOT_REPLACED_BY_PROCESS_B: each scope resolves to its own.
+    const scopeA = await httpRequest(
+      app,
+      'GET',
+      `/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS?processId=${encodeURIComponent(procA)}`,
+      { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef },
+    );
+    const scopeB = await httpRequest(
+      app,
+      'GET',
+      `/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS?processId=${encodeURIComponent(procB)}`,
+      { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef },
+    );
+    expect(scopeA.body.resultScope.processId).toBe(procA);
+    expect(scopeB.body.resultScope.processId).toBe(procB);
+  });
+
+  it('T3. PROCESS_RESULT_SCOPE_AUTHORITY_ENFORCED=PASS', async () => {
+    // PROCESS_RESULT_INVALID_PROCESS_DENIED
+    const invalid = await httpRequest(
+      app,
+      'GET',
+      `/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS?processId=${crypto.randomUUID()}`,
+      { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef },
+    );
+    expect(invalid.status).toBe(404);
+    expect(invalid.body.code).toBe('ASSESSMENT_RESULT_SCOPE_NOT_FOUND');
+
+    // PROCESS_RESULT_CROSS_CLIENT_DENIED: a foreign client's process id is not a scope here.
+    const foreign = crypto.randomUUID();
+    await db.businessProcess.create({
+      data: { id: foreign, clientId: ids.clientB, name: `Foreign ${seed}`, status: 'ACTIVE' } as never,
+    });
+    const cross = await httpRequest(
+      app,
+      'GET',
+      `/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS?processId=${encodeURIComponent(foreign)}`,
+      { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef },
+    );
+    expect(cross.status).toBe(404);
+    expect(cross.body.code).toBe('ASSESSMENT_RESULT_SCOPE_NOT_FOUND');
+
+    // SINGLE_PROCESS_RESULT_STILL_WORKS: unscoped lookup keeps the latest result.
+    const plain = await httpRequest(app, 'GET', '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS', {
+      'x-client-portal-session': sessionAuthA,
+      'x-client-portal-workspace': wsARef,
+    });
+    expect(plain.status).toBe(200);
+    expect(plain.body.latestResult).not.toBeNull();
+
+    // NON_PROCESS_PACK_RESULT_UNCHANGED: a process scope is ignored for non-process packs.
+    const nonProcess = await httpRequest(
+      app,
+      'GET',
+      `/api/v1/client-portal/org/grow-assessments/DIGITAL_MATURITY?processId=${encodeURIComponent(foreign)}`,
+      { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef },
+    );
+    expect(nonProcess.status).toBe(200);
+  });
+
+  it('T4. CONCURRENT_SAME_KEY_REPLAY_SEMANTICS=PASS', async () => {
+    const key = `assess-concurrent-${seed}`;
+    const procId = crypto.randomUUID();
+    await db.businessProcess.create({
+      data: { id: procId, clientId: ids.clientA, name: `Concurrent ${seed}`, status: 'ACTIVE' } as never,
+    });
+    const body = {
+      answers: answersFor('PROCESS_AUTOMATION_READINESS', { ...NEUTRAL_PROCESS, pa_manual_repetitive: 'YES' }),
+      idempotencyKey: key,
+      processId: procId,
+    };
+    const headers = { 'x-client-portal-session': sessionAuthA, 'x-client-portal-workspace': wsARef };
+    const [first, second] = await Promise.all([
+      httpRequest(app, 'POST', '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS/submissions', headers, body),
+      httpRequest(app, 'POST', '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS/submissions', headers, body),
+    ]);
+
+    // Exactly one authoritative creation, one replay (works whether or not the
+    // two requests actually overlap: the early-exit path is also a replay).
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual([200, 201]);
+    const winner = first.status === 201 ? first : second;
+    const loser = first.status === 200 ? first : second;
+    expect(winner.body.submission.replayed).toBe(false);
+    expect(loser.body.submission.replayed).toBe(true);
+    // CONCURRENT_LOSER_NO_FAKE_COMPLETION_TIMESTAMP: the replay reports the
+    // authoritative persisted completion time.
+    expect(loser.body.submission.completedAt).toBe(winner.body.submission.completedAt);
+
+    const observations = await db.observation.findMany({
+      where: { clientId: ids.clientA, idempotencyKey: key },
+    });
+    expect(observations).toHaveLength(1);
+    expect(observations[0].observedAt.toISOString()).toBe(winner.body.submission.completedAt);
+  });
+
   it('U. COMPLETED_ZERO_FINDINGS_AND_UNKNOWN_SUMMARY=PASS', async () => {
     const res = await httpRequest(
       app,

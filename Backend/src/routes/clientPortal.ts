@@ -584,7 +584,11 @@ router.get('/org/grow-assessments/:packKey', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
-    res.json(await getGrowAssessmentDetail(identityId, workspaceId, req.params.packKey));
+    // Optional process scope; server-side authority is enforced in the service.
+    const rawProcessId = req.query.processId;
+    const processId =
+      typeof rawProcessId === 'string' && rawProcessId.trim() !== '' ? rawProcessId.trim() : null;
+    res.json(await getGrowAssessmentDetail(identityId, workspaceId, req.params.packKey, processId));
   } catch (error) {
     fail(res, error);
   }

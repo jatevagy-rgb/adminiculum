@@ -175,3 +175,29 @@ test('unevaluable completion has an explicit unavailable state, not zero finding
   const api = read(API);
   assert.match(api, /latestResultAvailable: boolean/);
 });
+
+test('multi-process results: chooser by process name, never raw process id', () => {
+  const src = read(VIEW);
+  assert.match(src, /data-testid="grow-assessment-result-scopes"/);
+  assert.match(src, /pack\.resultScopes\.map/);
+  assert.match(src, /scope\.processName \|\| "Általános"/);
+  assert.match(src, /viewAssessmentResult\(pack\.packKey, scope\.processId\)/);
+  // Customer-visible result labels the process by NAME.
+  assert.match(src, /Folyamat: \{assessmentResultScope\.processName\}/);
+  assert.match(src, /data-testid="grow-assessment-result-process"/);
+  const api = read(API);
+  assert.match(api, /resultScopes: PortalGrowAssessmentResultScope\[\]/);
+  assert.match(api, /processName: string \| null/);
+});
+
+test('retake preserves the selected process scope', () => {
+  const src = read(VIEW);
+  assert.match(src, /startAssessment\(assessmentResult\.packKey, assessmentResultScope\?\.processId/);
+  assert.match(src, /setAssessmentProcessId\(processId \?\? ""\)/);
+  assert.match(src, /getPortalGrowAssessment\(packKey, processId\)/);
+});
+
+test('non-process packs keep the single result action', () => {
+  const src = read(VIEW);
+  assert.match(src, /pack\.allowsProcessReference && pack\.resultScopes\.length > 1/);
+});

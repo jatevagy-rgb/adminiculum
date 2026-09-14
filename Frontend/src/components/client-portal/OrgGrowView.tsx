@@ -94,6 +94,10 @@ export function OrgGrowView() {
   const [runnerAnswers, setRunnerAnswers] = useState<Record<string, string>>({});
   const [assessmentResult, setAssessmentResult] = useState<PortalGrowAssessmentResult | null>(null);
   const [assessmentResultUnavailable, setAssessmentResultUnavailable] = useState(false);
+  const [assessmentResultScope, setAssessmentResultScope] = useState<{
+    processId: string | null;
+    processName: string | null;
+  } | null>(null);
   const [assessmentBusy, setAssessmentBusy] = useState(false);
   const [assessmentError, setAssessmentError] = useState<string | null>(null);
   const [catalogueError, setCatalogueError] = useState<string | null>(null);
@@ -178,7 +182,11 @@ export function OrgGrowView() {
     }
   };
 
-  const startAssessment = useCallback(async (packKey: string) => {
+  // Derived early so the assessment callbacks can resolve a customer-visible
+  // process name without referencing a later block-scoped binding.
+  const processes = data?.processes || [];
+
+  const startAssessment = useCallback(async (packKey: string, processId?: string | null) => {
     setAssessmentBusy(true);
     setAssessmentError(null);
     try {
@@ -186,7 +194,8 @@ export function OrgGrowView() {
       setRunnerDetail(detail);
       setRunnerIndex(0);
       setRunnerAnswers({});
-      setAssessmentProcessId("");
+      // Retaking from a process-scoped result keeps that process selected.
+      setAssessmentProcessId(processId ?? "");
       assessmentKeyRef.current = generateUUID();
       setAssessmentView({ mode: "runner", packKey });
     } catch (err) {
@@ -196,13 +205,14 @@ export function OrgGrowView() {
     }
   }, []);
 
-  const viewAssessmentResult = useCallback(async (packKey: string) => {
+  const viewAssessmentResult = useCallback(async (packKey: string, processId?: string | null) => {
     setAssessmentBusy(true);
     setAssessmentError(null);
     try {
-      const detail = await getPortalGrowAssessment(packKey);
+      const detail = await getPortalGrowAssessment(packKey, processId);
       setAssessmentResult(detail.latestResult);
       setAssessmentResultUnavailable(detail.latestResult === null);
+      setAssessmentResultScope(detail.resultScope ?? null);
       setAssessmentView({ mode: "result", packKey });
     } catch (err) {
       setAssessmentError(clientSafeError(err));
@@ -215,6 +225,8 @@ export function OrgGrowView() {
     setAssessmentView({ mode: "catalogue" });
     setRunnerDetail(null);
     setAssessmentResult(null);
+    setAssessmentResultUnavailable(false);
+    setAssessmentResultScope(null);
     setAssessmentError(null);
     assessmentKeyRef.current = generateUUID();
     await loadCatalogue();
@@ -238,6 +250,10 @@ export function OrgGrowView() {
       });
       setAssessmentResult(res.result);
       setAssessmentResultUnavailable(false);
+      setAssessmentResultScope({
+        processId: assessmentProcessId || null,
+        processName: processes.find((p) => p.id === assessmentProcessId)?.name ?? null,
+      });
       setAssessmentView({ mode: "result", packKey: runnerDetail.definition.packKey });
       await loadCatalogue();
     } catch (err) {
@@ -245,7 +261,7 @@ export function OrgGrowView() {
     } finally {
       setAssessmentBusy(false);
     }
-  }, [runnerDetail, runnerAnswers, assessmentProcessId, loadCatalogue]);
+  }, [runnerDetail, runnerAnswers, assessmentProcessId, processes, loadCatalogue]);
 
   if (loading) {
     return (
@@ -270,7 +286,6 @@ export function OrgGrowView() {
     );
   }
 
-  const processes = data?.processes || [];
   const initiatives = data?.initiatives || [];
   const measuredOutcomes = data?.outcomes.measured || [];
   const estimatedOutcomes = data?.outcomes.calculatedOrEstimated || [];
@@ -438,6 +453,11 @@ export function OrgGrowView() {
           <div data-testid="grow-assessment-result">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Felmérés elkészült</p>
             <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">{assessmentResult.titleHu}</h2>
+            {assessmentResultScope?.processName ? (
+              <p className="mt-1 text-sm font-medium text-stone-700" data-testid="grow-assessment-result-process">
+                Folyamat: {assessmentResultScope.processName}
+              </p>
+            ) : null}
             <p className="mt-2 text-sm text-stone-600">{assessmentResult.summaryHu}</p>
 
             <div className="mt-6">
@@ -529,7 +549,7 @@ export function OrgGrowView() {
               </button>
               <button
                 type="button"
-                onClick={() => void startAssessment(assessmentResult.packKey)}
+                onClick={() => void startAssessment(assessmentResult.packKey, assessmentResultScope?.processId ?? undefined)}
                 disabled={assessmentBusy}
                 className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 disabled:opacity-40"
               >
@@ -618,7 +638,7 @@ export function OrgGrowView() {
                             : ""}
                         </p>
                       ) : null}
-                      {pack.status === "COMPLETED" && !pack.latestResultAvailable ? (
+                      {pack.status === "COMPLETED" && !pack.resultScopes.some((s) => s.resultAvailable) ? (
                         <p className="mt-2 text-xs font-medium text-amber-800">
                           A kitöltés rögzítve van, de az eredmény ehhez a verzióhoz jelenleg nem jeleníthető meg.
                         </p>
@@ -635,14 +655,35 @@ export function OrgGrowView() {
                         {pack.status === "COMPLETED" ? "Újra kitöltöm" : "Kitöltöm"}
                       </button>
                       {pack.status === "COMPLETED" && pack.latestResultAvailable ? (
-                        <button
-                          type="button"
-                          onClick={() => void viewAssessmentResult(pack.packKey)}
-                          disabled={assessmentBusy}
-                          className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 disabled:opacity-40"
-                        >
-                          Eredmény megtekintése
-                        </button>
+                        pack.allowsProcessReference && pack.resultScopes.length > 1 ? (
+                          <div className="w-full" data-testid="grow-assessment-result-scopes">
+                            <p className="text-xs font-semibold text-stone-600">Eredmény megtekintése:</p>
+                            <div className="mt-1 flex flex-wrap gap-2">
+                              {pack.resultScopes.map((scope) => (
+                                <button
+                                  key={scope.processId ?? "__general__"}
+                                  type="button"
+                                  onClick={() => void viewAssessmentResult(pack.packKey, scope.processId)}
+                                  disabled={assessmentBusy || !scope.resultAvailable}
+                                  className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 disabled:opacity-40"
+                                >
+                                  {scope.processName || "Általános"}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void viewAssessmentResult(pack.packKey, pack.resultScopes[0]?.processId ?? undefined)
+                            }
+                            disabled={assessmentBusy}
+                            className="rounded-full border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 disabled:opacity-40"
+                          >
+                            Eredmény megtekintése
+                          </button>
+                        )
                       ) : null}
                     </div>
                   </div>

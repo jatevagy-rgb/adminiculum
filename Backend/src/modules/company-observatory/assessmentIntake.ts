@@ -65,6 +65,8 @@ export interface SafePortalAssessmentSubmission {
   packVersion: number;
   answers: AssessmentAnswerRecord[];
   processId: string | null;
+  /** Customer-visible process name resolved server-side; never the raw id. */
+  processName: string | null;
   completedAt: string;
 }
 
@@ -311,7 +313,7 @@ export async function submitPortalGrowAssessment(
   );
 
   try {
-    await ingestion.ingestObservation(
+    const observation = await ingestion.ingestObservation(
       ctx.portalActor,
       {
         clientId: ctx.clientId,
@@ -325,6 +327,11 @@ export async function submitPortalGrowAssessment(
       },
       ctx.portalAccessGuard,
     );
+    // The atomic ingestion boundary is authoritative. If it returns an observation
+    // from a DIFFERENT discovery run, a concurrent request with the same
+    // idempotency key won the insert; this request is a replay of that submission
+    // and must not claim a new completion timestamp.
+    const replayed = observation.discoveryRunId !== run.id;
     await ingestion.completeDiscoveryRun(
       ctx.portalActor,
       { clientId: ctx.clientId, runId: run.id },
@@ -333,8 +340,8 @@ export async function submitPortalGrowAssessment(
     return {
       packKey: pack.packKey,
       packVersion: pack.version,
-      replayed: false,
-      completedAt: completedAt.toISOString(),
+      replayed,
+      completedAt: (replayed ? observation.observedAt : completedAt).toISOString(),
     };
   } catch (err: any) {
     await ingestion.failDiscoveryRun(ctx.portalActor, { clientId: ctx.clientId, runId: run.id }, ctx.portalAccessGuard).catch(() => undefined);
@@ -373,6 +380,7 @@ function toSafeSubmission(row: {
     packVersion: recordedVersion,
     answers,
     processId: typeof payload.processId === 'string' && payload.processId ? payload.processId : null,
+    processName: null,
     completedAt: row.observedAt.toISOString(),
   };
 }
@@ -425,6 +433,21 @@ export async function listPortalGrowAssessments(
   for (const row of rows) {
     const safe = toSafeSubmission(row);
     if (safe) items.push(safe);
+  }
+  // Resolve customer-visible process names server-side so the portal never has to
+  // render or receive a raw process id as text.
+  const processIds = [
+    ...new Set(items.map((item) => item.processId).filter((id): id is string => Boolean(id))),
+  ];
+  if (processIds.length > 0) {
+    const processes = await db.businessProcess.findMany({
+      where: { clientId: ctx.clientId, id: { in: processIds } },
+      select: { id: true, name: true },
+    });
+    const namesById = new Map(processes.map((p) => [p.id, p.name]));
+    for (const item of items) {
+      item.processName = item.processId ? namesById.get(item.processId) ?? null : null;
+    }
   }
   return { items };
 }

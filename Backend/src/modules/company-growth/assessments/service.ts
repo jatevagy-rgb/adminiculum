@@ -68,6 +68,16 @@ export interface AssessmentResultDto {
   noticeHu: string;
 }
 
+export interface AssessmentResultScopeDto {
+  /** Scope token for the detail lookup. Never rendered as text in the UI. */
+  processId: string | null;
+  /** Customer-visible process name resolved server-side; never the raw id. */
+  processName: string | null;
+  completedAt: string;
+  findingCount: number;
+  resultAvailable: boolean;
+}
+
 export interface AssessmentCatalogueItemDto {
   packKey: string;
   version: number;
@@ -85,6 +95,9 @@ export interface AssessmentCatalogueItemDto {
    * result unavailable" so the UI never reports an unevaluable result as healthy.
    */
   latestResultAvailable: boolean;
+  allowsProcessReference: boolean;
+  /** Latest result per (process) scope, newest first. Empty when not started. */
+  resultScopes: AssessmentResultScopeDto[];
 }
 
 export interface AssessmentCatalogueDto {
@@ -113,6 +126,8 @@ export interface AssessmentDetailDto {
   latestResult: AssessmentResultDto | null;
   /** False when a completion exists but its recorded version is not evaluable. */
   latestResultAvailable: boolean;
+  /** The process scope this result belongs to; null for unscoped/non-process packs. */
+  resultScope: { processId: string | null; processName: string | null } | null;
 }
 
 function summaryStatement(attentionAreaCount: number, unknownAreaCount: number): string {
@@ -205,14 +220,20 @@ function tryBuildResultDto(
   }
 }
 
-function latestByPack(submissions: readonly SafePortalAssessmentSubmission[]): Map<string, SafePortalAssessmentSubmission> {
-  const out = new Map<string, SafePortalAssessmentSubmission>();
-  for (const submission of submissions) {
-    // oldest→newest iteration is unnecessary: submissions arrive newest-first,
-    // so the first occurrence per pack is the latest.
-    if (!out.has(submission.packKey)) out.set(submission.packKey, submission);
-  }
-  return out;
+function buildScopeDto(submission: SafePortalAssessmentSubmission): AssessmentResultScopeDto {
+  const result = tryBuildResultDto(
+    submission.packKey,
+    submission.packVersion,
+    submission.answers,
+    submission.completedAt,
+  );
+  return {
+    processId: submission.processId,
+    processName: submission.processName,
+    completedAt: submission.completedAt,
+    findingCount: result ? result.findings.length : 0,
+    resultAvailable: result !== null,
+  };
 }
 
 export async function getGrowAssessmentCatalogue(
@@ -221,7 +242,6 @@ export async function getGrowAssessmentCatalogue(
   db: Db = defaultPrisma,
 ): Promise<AssessmentCatalogueDto> {
   const { items } = await listPortalGrowAssessments(identityId, workspaceId, db);
-  const latest = latestByPack(items);
 
   const packs: AssessmentCatalogueItemDto[] = [];
   const aggregatedFindings: AssessmentResultFindingDto[] = [];
@@ -249,8 +269,14 @@ export async function getGrowAssessmentCatalogue(
   }
 
   for (const pack of listAssessmentPacks()) {
-    const submission = latest.get(pack.packKey);
-    if (!submission) {
+    // items are newest-first; every (pack, process) scope is retained here so the
+    // customer can reach and reopen the result for EACH process.
+    const packSubmissions = items.filter((item) => item.packKey === pack.packKey);
+    const newest = packSubmissions[0];
+    const allowsProcessReference = Boolean(pack.allowsProcessReference);
+    const resultScopes = packSubmissions.map(buildScopeDto);
+
+    if (!newest) {
       packs.push({
         packKey: pack.packKey,
         version: pack.version,
@@ -263,14 +289,16 @@ export async function getGrowAssessmentCatalogue(
         latestFindingCount: 0,
         latestSummaryHu: null,
         latestResultAvailable: false,
+        allowsProcessReference,
+        resultScopes: [],
       });
       continue;
     }
     const result = tryBuildResultDto(
       pack.packKey,
-      submission.packVersion,
-      submission.answers,
-      submission.completedAt,
+      newest.packVersion,
+      newest.answers,
+      newest.completedAt,
     );
     packs.push({
       packKey: pack.packKey,
@@ -280,10 +308,12 @@ export async function getGrowAssessmentCatalogue(
       estimatedMinutes: pack.estimatedMinutes,
       questionCount: pack.questions.length,
       status: 'COMPLETED',
-      latestCompletedAt: submission.completedAt,
+      latestCompletedAt: newest.completedAt,
       latestFindingCount: result ? result.findings.length : 0,
       latestSummaryHu: result ? result.summaryHu : null,
       latestResultAvailable: result !== null,
+      allowsProcessReference,
+      resultScopes,
     });
   }
 
@@ -302,6 +332,7 @@ export async function getGrowAssessmentDetail(
   identityId: string,
   workspaceId: string,
   packKey: string,
+  processId: string | null = null,
   db: Db = defaultPrisma,
 ): Promise<AssessmentDetailDto> {
   const pack = getAssessmentPack(packKey);
@@ -309,9 +340,20 @@ export async function getGrowAssessmentDetail(
     throw new InteractionError(404, 'ASSESSMENT_UNKNOWN_PACK', 'Ismeretlen felmérés.');
   }
   const { items } = await listPortalGrowAssessments(identityId, workspaceId, db);
-  // Match on pack key only: a completion recorded under an older pack version
-  // must remain visible rather than being hidden once the pack revision changes.
-  const submission = items.find((item) => item.packKey === pack.packKey) ?? null;
+  const packSubmissions = items.filter((item) => item.packKey === pack.packKey);
+
+  let submission: SafePortalAssessmentSubmission | null;
+  if (pack.allowsProcessReference && processId) {
+    // Server-side scope authority: the requested process must own a completion in
+    // THIS authorized workspace. A foreign or unknown process resolves to none.
+    submission = packSubmissions.find((item) => item.processId === processId) ?? null;
+    if (!submission) {
+      throw new InteractionError(404, 'ASSESSMENT_RESULT_SCOPE_NOT_FOUND', 'Ehhez a folyamathoz nincs kitöltés.');
+    }
+  } else {
+    // Unscoped and non-process packs keep the single latest-result behavior.
+    submission = packSubmissions[0] ?? null;
+  }
   const latestResult = submission
     ? tryBuildResultDto(pack.packKey, submission.packVersion, submission.answers, submission.completedAt)
     : null;
@@ -333,6 +375,9 @@ export async function getGrowAssessmentDetail(
     },
     latestResult,
     latestResultAvailable: latestResult !== null,
+    resultScope: submission
+      ? { processId: submission.processId, processName: submission.processName }
+      : null,
   };
   assertClientSafe(dto);
   return dto;
