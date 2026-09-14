@@ -14,7 +14,7 @@ import { clientSafeError } from "@/lib/clientInteractionApi";
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const compactState = "min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3";
 const inputClass =
-  "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm text-stone-900 shadow-sm focus:border-stone-950 focus:outline-none focus:ring-1 focus:ring-stone-950 disabled:bg-stone-50 disabled:text-stone-500";
+  "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm text-stone-900 shadow-sm focus:border-[#b95e4b] focus:outline-none focus:ring-2 focus:ring-[#b95e4b]/25 disabled:bg-stone-50 disabled:text-stone-500";
 
 function statusTone(state: PortalComplianceTopic["state"]) {
   switch (state) {
@@ -22,17 +22,17 @@ function statusTone(state: PortalComplianceTopic["state"]) {
     case "MORE_INFORMATION_NEEDED":
       return {
         label: "Teendőt igényel",
-        badgeClass: "bg-amber-100 text-amber-900 border-amber-300",
+        badgeClass: "bg-[#fbeae6] text-[#8a4536] border-[#e3b7ab]",
       };
     case "LAWYER_REVIEW_REQUIRED":
       return {
         label: "Ügyvédi vizsgálat alatt",
-        badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
+        badgeClass: "bg-[#f3ead2] text-[#6f5514] border-[#d7c48a]",
       };
     case "ACTION_IN_PROGRESS":
       return {
         label: "Folyamatban",
-        badgeClass: "bg-sky-100 text-sky-900 border-sky-300",
+        badgeClass: "bg-[#f7f1e2] text-[#7a5f18] border-[#d7c48a]",
       };
     case "RESOLVED":
       return {
@@ -303,7 +303,7 @@ export function OrgComplianceView() {
                                       type="button"
                                       onClick={() => handleSaveAnswer(info)}
                                       disabled={saving || !answerInput.trim()}
-                                      className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+                                      className="rounded-lg bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50"
                                     >
                                       {saving ? "Mentés…" : "Mentés"}
                                     </button>
