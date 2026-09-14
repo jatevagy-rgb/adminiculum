@@ -8,7 +8,7 @@ import {
 import { CANONICAL_COMPANY_FACTS } from '../src/modules/client-workspace/companyProfileFactCatalog';
 import { COMPANY_PROFILE_QUESTIONS, LEGACY_COMPANY_PROFILE_QUESTION_KEYS } from '../src/modules/client-workspace/companyProfileQuestionRegistry';
 
-const MIGRATION = path.resolve(__dirname, '../prisma/migrations/20260914110000_provision_canonical_company_profile_facts/migration.sql');
+const MIGRATION = path.resolve(__dirname, '../prisma/migrations/20260914111500_provision_canonical_company_profile_facts/migration.sql');
 
 describe('canonical company fact provisioning', () => {
   it('provisions every canonical fact exactly once and never re-provisions pre-existing keys', () => {

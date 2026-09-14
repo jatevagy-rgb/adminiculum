@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PROVISIONED_COMPANY_FACTS } from '../src/modules/client-workspace/companyProfileFactProvisioning';
 
-const dir = path.resolve('prisma/migrations/20260914110000_provision_canonical_company_profile_facts');
+const dir = path.resolve('prisma/migrations/20260914111500_provision_canonical_company_profile_facts');
 fs.mkdirSync(dir, { recursive: true });
 
 const esc = (value: string): string => value.replace(/'/g, "''");
