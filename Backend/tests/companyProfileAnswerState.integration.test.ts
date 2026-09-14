@@ -163,6 +163,11 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     const latestAdaptive = await db.requirementApplicability.findFirstOrThrow({ where: { clientId: clientA, requirementVersionId: adaptiveRequirementVersionId }, orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }] });
     expect(latestAdaptive.outcome).toBe('APPLIES');
     expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).not.toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_regulated_activity' })]));
+    const adaptiveDefinitionIds = (await db.factDefinition.findMany({ where: { key: { in: ['company_main_activity', 'company_regulated_activity'] } }, select: { id: true } })).map((definition) => definition.id);
+    await db.assessmentFinding.deleteMany({ where: { clientId: clientA, requirementId: adaptiveRequirementId } });
+    await db.requirementApplicability.deleteMany({ where: { clientId: clientA, requirementVersionId: adaptiveRequirementVersionId } });
+    await db.clientFactAnswerState.deleteMany({ where: { clientId: clientA, factDefinitionId: { in: adaptiveDefinitionIds } } });
+    await db.clientFact.deleteMany({ where: { clientId: clientA, factDefinitionId: { in: adaptiveDefinitionIds } } });
   });
 
   it('creates CLIENT_PROVIDED facts, supersedes immutable truth, and is idempotent', async () => {
