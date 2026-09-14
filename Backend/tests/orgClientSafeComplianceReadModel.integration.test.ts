@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { getClientSafeComplianceReadModel } from '../src/modules/compliance/clientSafeComplianceService';
-import { getControlCoverage } from '../src/modules/compliance/controlEvidenceService';
+import { createEvidenceRecord, getControlCoverage, linkEvidenceToControl, reviewEvidenceRecord } from '../src/modules/compliance/controlEvidenceService';
 
 const databaseUrl = process.env.PHASE7CB_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -247,6 +247,15 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const clientId = await createTestClient('control-scopes');
     await db.clientControl.create({ data: { clientId, controlDefinitionId: portalControlDefinitionId } });
     await db.clientControl.create({ data: { clientId, controlDefinitionId: unknownControlDefinitionId } });
+    const futureEvidence = await createEvidenceRecord({ userId: adminId, role: 'ADMIN' }, clientId, {
+      sourceType: 'EXTERNAL_REFERENCE',
+      title: 'Future portal evidence',
+      externalReference: 'https://example.invalid/future-portal',
+      validFrom: new Date(Date.now() + 86400000),
+    }, db);
+    await reviewEvidenceRecord({ userId: adminId, role: 'ADMIN' }, clientId, futureEvidence.id, { status: 'ACCEPTED' }, db);
+    const portalControl = await db.clientControl.findFirstOrThrow({ where: { clientId, controlDefinitionId: portalControlDefinitionId } });
+    await linkEvidenceToControl({ userId: adminId, role: 'ADMIN' }, clientId, portalControl.id, futureEvidence.id, db);
     const scopeSnapshot = (scopeType: 'COMPANY' | 'EMPLOYEE' | 'WORKPLACE_SITE', factSubjectId: string | null, evaluationAt: Date) => ({
       clientId,
       requirementVersionId: sharedVersionId,
@@ -273,6 +282,8 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const portal = await getClientSafeComplianceReadModel(clientId, true, false, db);
     expect(portal.controlsSummary).toHaveLength(1);
     expect(portal.controlsSummary[0].controls).toHaveLength(1);
+    expect(portal.controlsSummary[0].controls[0].evidence.acceptedCurrent).toBe(0);
+    expect(portal.controlsSummary[0].controls[0].evidence.missing).toBe(true);
     expect(portal.controlsSummary[0].requirementTitle).toBe('Adatvédelmi feldolgozás');
     expect(portal.controlsSummary[0].controls[0].title).toBe('Adatvédelmi intézkedés');
     const serialized = JSON.stringify(portal);

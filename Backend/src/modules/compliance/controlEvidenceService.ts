@@ -13,8 +13,18 @@ function requiredString(value: unknown, field: string): string {
   return output;
 }
 
-function freshness(validUntil: Date | null, now = new Date()): 'CURRENT' | 'STALE' {
-  return validUntil && validUntil < now ? 'STALE' : 'CURRENT';
+export function isEvidenceCurrent(validFrom: Date | null, validUntil: Date | null, now = new Date()): boolean {
+  return (!validFrom || validFrom <= now) && (!validUntil || validUntil >= now);
+}
+
+function freshness(validFrom: Date | null, validUntil: Date | null, now = new Date()): 'CURRENT' | 'STALE' {
+  return isEvidenceCurrent(validFrom, validUntil, now) ? 'CURRENT' : 'STALE';
+}
+
+function normalizeOptionalSource(value: unknown): string | null {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
 }
 
 function assertEnum(value: unknown, allowed: Set<string>, field: string): string {
@@ -77,17 +87,24 @@ export async function createClientControl(
   const definition = await prisma.controlDefinition.findFirst({ where: { id: controlDefinitionId, status: 'ACTIVE' } });
   if (!definition) throw new InteractionError(404, 'CONTROL_DEFINITION_NOT_FOUND', 'Control definition not found.');
   const implementationStatus = input.implementationStatus == null ? 'NOT_ASSESSED' : assertEnum(input.implementationStatus, controlStatuses, 'implementationStatus');
-  return prisma.clientControl.create({
-    data: {
-      clientId,
-      controlDefinitionId,
-      implementationStatus: implementationStatus as never,
-      ownerUserId: input.ownerUserId == null ? null : requiredString(input.ownerUserId, 'ownerUserId'),
-      nextReviewAt: optionalDate(input.nextReviewAt, 'nextReviewAt'),
-      notes: safeText(input.notes, 'notes', 2000),
-    },
-    include: { controlDefinition: true, ownerUser: { select: { id: true, name: true } } },
-  });
+  try {
+    return await prisma.clientControl.create({
+      data: {
+        clientId,
+        controlDefinitionId,
+        implementationStatus: implementationStatus as never,
+        ownerUserId: input.ownerUserId == null ? null : requiredString(input.ownerUserId, 'ownerUserId'),
+        nextReviewAt: optionalDate(input.nextReviewAt, 'nextReviewAt'),
+        notes: safeText(input.notes, 'notes', 2000),
+      },
+      include: { controlDefinition: true, ownerUser: { select: { id: true, name: true } } },
+    });
+  } catch (error: unknown) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      throw new InteractionError(409, 'CLIENT_CONTROL_ALREADY_EXISTS', 'Client control already exists.');
+    }
+    throw error;
+  }
 }
 
 export async function updateClientControl(
@@ -131,7 +148,7 @@ export async function getClientControl(actor: InternalActor, clientId: string, c
     evidence: row.evidenceLinks.map((link) => ({
       title: link.evidenceRecord.title,
       status: String(link.evidenceRecord.status),
-      freshness: freshness(link.evidenceRecord.validUntil),
+      freshness: freshness(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil),
     })),
   };
 }
@@ -148,12 +165,16 @@ export async function createEvidenceRecord(
 ) {
   await assertClientReadAccess(actor, clientId, prisma);
   const sourceType = assertEnum(input.sourceType, sourceTypes, 'sourceType');
-  const refs = [input.documentVersionId, input.clientFactId, input.observationId, input.externalReference].filter((value) => value != null && String(value).trim() !== '');
+  const documentVersionIdValue = normalizeOptionalSource(input.documentVersionId);
+  const clientFactIdValue = normalizeOptionalSource(input.clientFactId);
+  const observationIdValue = normalizeOptionalSource(input.observationId);
+  const externalReferenceValue = normalizeOptionalSource(input.externalReference);
+  const documentVersionId = documentVersionIdValue ? requiredString(documentVersionIdValue, 'documentVersionId') : null;
+  const clientFactId = clientFactIdValue ? requiredString(clientFactIdValue, 'clientFactId') : null;
+  const observationId = observationIdValue ? requiredString(observationIdValue, 'observationId') : null;
+  const externalReference = externalReferenceValue ? safeText(externalReferenceValue, 'externalReference', 2000, true) : null;
+  const refs = [documentVersionId, clientFactId, observationId, externalReference].filter((value) => value !== null);
   if (refs.length !== 1) throw new InteractionError(400, 'EVIDENCE_SOURCE_REQUIRED', 'Exactly one evidence source is required.');
-  const documentVersionId = input.documentVersionId == null ? null : requiredString(input.documentVersionId, 'documentVersionId');
-  const clientFactId = input.clientFactId == null ? null : requiredString(input.clientFactId, 'clientFactId');
-  const observationId = input.observationId == null ? null : requiredString(input.observationId, 'observationId');
-  const externalReference = input.externalReference == null ? null : safeText(input.externalReference, 'externalReference', 2000, true);
   if (sourceType === 'DOCUMENT_VERSION' && !documentVersionId) throw new InteractionError(400, 'EVIDENCE_SOURCE_MISMATCH', 'Document version source is required.');
   if (sourceType === 'CLIENT_FACT' && !clientFactId) throw new InteractionError(400, 'EVIDENCE_SOURCE_MISMATCH', 'Client fact source is required.');
   if (sourceType === 'OBSERVATION' && !observationId) throw new InteractionError(400, 'EVIDENCE_SOURCE_MISMATCH', 'Observation source is required.');
@@ -260,7 +281,7 @@ export async function getControlCoverage(actor: InternalActor, clientId: string,
         const control = byDefinition.get(map.controlDefinitionId);
         const evidence = control?.evidenceLinks.map((link) => link.evidenceRecord) || [];
         const accepted = evidence.filter((item) => item.status === 'ACCEPTED');
-        const current = accepted.filter((item) => freshness(item.validUntil, now) === 'CURRENT');
+        const current = accepted.filter((item) => isEvidenceCurrent(item.validFrom, item.validUntil, now));
         return {
           title: map.controlDefinition.title,
           implementationStatus: control ? String(control.implementationStatus) : null,

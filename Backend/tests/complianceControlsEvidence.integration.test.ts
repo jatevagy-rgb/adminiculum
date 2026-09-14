@@ -84,7 +84,8 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
   it('ONE_CLIENT_CONTROL_PER_CLIENT_DEFINITION, CLIENT_CONTROL_STATUS_PERSISTENCE, ZERO_AUTO_CLIENT_CONTROL', async () => {
     const definition = await db.controlDefinition.findFirstOrThrow({ where: { key: `access_review_${suffix}` } });
     const control = await createClientControl(actor, clientId, { controlDefinitionId: definition.id }, db);
-    await expect(createClientControl(actor, clientId, { controlDefinitionId: definition.id }, db)).rejects.toBeTruthy();
+    await expect(createClientControl(actor, clientId, { controlDefinitionId: definition.id }, db)).rejects.toMatchObject({ status: 409, code: 'CLIENT_CONTROL_ALREADY_EXISTS' });
+    await expect(createClientControl(actor, secondClientId, { controlDefinitionId: definition.id }, db)).resolves.toBeDefined();
     await updateClientControl(actor, clientId, control.id, { implementationStatus: 'PARTIAL' }, db);
     expect((await db.clientControl.findUniqueOrThrow({ where: { id: control.id } })).implementationStatus).toBe('PARTIAL');
     expect(await db.clientControl.count({ where: { clientId } })).toBe(1);
@@ -126,13 +127,16 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     const current = await createEvidenceRecord(actor, clientId, { sourceType: 'EXTERNAL_REFERENCE', title: 'Current review', externalReference: 'https://example.invalid/current' }, db);
     await reviewEvidenceRecord(actor, clientId, stale.id, { status: 'ACCEPTED' }, db);
     await reviewEvidenceRecord(actor, clientId, current.id, { status: 'ACCEPTED' }, db);
-    const documentEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'DOCUMENT_VERSION', title: 'Document evidence', documentVersionId }, db);
-    const factEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'CLIENT_FACT', title: 'Fact evidence', clientFactId }, db);
-    const observationEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'OBSERVATION', title: 'Observation evidence', observationId }, db);
+    const documentEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'DOCUMENT_VERSION', title: 'Document evidence', documentVersionId, clientFactId: '  ', observationId: '', externalReference: '   ' }, db);
+    const factEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'CLIENT_FACT', title: 'Fact evidence', clientFactId, documentVersionId: '', observationId: ' ', externalReference: '' }, db);
+    const observationEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'OBSERVATION', title: 'Observation evidence', observationId, documentVersionId: ' ', clientFactId: '', externalReference: '  ' }, db);
+    const externalEvidence = await createEvidenceRecord(actor, clientId, { sourceType: 'EXTERNAL_REFERENCE', title: 'External evidence', externalReference: ' https://example.invalid/blank-fields ', documentVersionId: '', clientFactId: ' ', observationId: '  ' }, db);
     expect(documentEvidence.documentVersionId).toBe(documentVersionId);
     expect(factEvidence.clientFactId).toBe(clientFactId);
     expect(observationEvidence.observationId).toBe(observationId);
+    expect(externalEvidence.externalReference).toBe('https://example.invalid/blank-fields');
     await expect(createEvidenceRecord(actor, clientId, { sourceType: 'DOCUMENT_VERSION', title: 'Mismatch', clientFactId }, db)).rejects.toMatchObject({ code: 'EVIDENCE_SOURCE_MISMATCH' });
+    await expect(createEvidenceRecord(actor, clientId, { sourceType: 'DOCUMENT_VERSION', title: 'Multiple sources', documentVersionId, clientFactId }, db)).rejects.toMatchObject({ code: 'EVIDENCE_SOURCE_REQUIRED' });
     await expect(createEvidenceRecord(actor, clientId, { sourceType: 'DOCUMENT_VERSION', title: 'Foreign document', documentVersionId: crypto.randomUUID() }, db)).rejects.toMatchObject({ code: 'EVIDENCE_ARTIFACT_FORBIDDEN' });
     await expect(createEvidenceRecord(actor, clientId, { sourceType: 'CLIENT_FACT', title: 'Foreign fact', clientFactId: crypto.randomUUID() }, db)).rejects.toMatchObject({ code: 'EVIDENCE_ARTIFACT_FORBIDDEN' });
     await expect(createEvidenceRecord(actor, clientId, { sourceType: 'OBSERVATION', title: 'Foreign observation', observationId: crypto.randomUUID() }, db)).rejects.toMatchObject({ code: 'EVIDENCE_ARTIFACT_FORBIDDEN' });
@@ -194,6 +198,18 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
       validUntil: new Date('2026-09-01'),
     }, db)).rejects.toMatchObject({ status: 400, code: 'EVIDENCE_VALIDITY_INVALID' });
     expect(await db.evidenceRecord.count({ where: { clientId } })).toBe(evidenceBeforeReversedRange);
+
+    const future = await createEvidenceRecord(actor, clientId, {
+      sourceType: 'EXTERNAL_REFERENCE',
+      title: 'Future evidence',
+      externalReference: 'https://example.invalid/future',
+      validFrom: new Date(Date.now() + 86400000),
+    }, db);
+    await reviewEvidenceRecord(actor, clientId, future.id, { status: 'ACCEPTED' }, db);
+    const control = await db.clientControl.findFirstOrThrow({ where: { clientId } });
+    await linkEvidenceToControl(actor, clientId, control.id, future.id, db);
+    const coverage = await getControlCoverage(actor, clientId, db);
+    expect(coverage.requirements.flatMap((item) => item.controls).some((item) => item.evidenceSummary.acceptedCurrent > 0 && item.evidenceSummary.missing === false)).toBe(false);
   });
 
   it('APPLICABILITY_UNCHANGED_BY_CONTROL_MUTATION, APPLICABILITY_UNCHANGED_BY_EVIDENCE_MUTATION', async () => {

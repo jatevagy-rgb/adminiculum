@@ -26,6 +26,7 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
 import { lookupSafeControlLabel, lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
+import { isEvidenceCurrent } from './controlEvidenceService';
 import { isCompanyProfileQuestion } from '../client-workspace/companyProfileQuestionRegistry';
 
 type Prisma = typeof defaultPrisma;
@@ -379,7 +380,7 @@ export async function getClientSafeComplianceReadModel(
         if (!title) return [];
         const control = controlByDefinition.get(map.controlDefinitionId);
         const accepted = (control?.evidenceLinks || []).filter((link) => link.evidenceRecord.status === 'ACCEPTED');
-        const current = accepted.filter((link) => !link.evidenceRecord.validUntil || link.evidenceRecord.validUntil >= now);
+        const current = accepted.filter((link) => isEvidenceCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
         return {
           title,
           implementationStatus: control ? String(control.implementationStatus) : null,
