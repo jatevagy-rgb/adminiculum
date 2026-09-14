@@ -95,9 +95,9 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await db.applicabilityRuleVersion.update({ where: { id: adaptiveRule.id }, data: { id: adaptiveRuleVersionId } });
     await approveApplicabilityRuleVersion(adaptiveRuleVersionId, adminId, db);
 
-    const requiredDefinitions = await db.factDefinition.findMany({ where: { key: { in: ['company_main_activity', 'company_operating_country', 'company_regulated_activity'] } }, select: { key: true, valueType: true, questionKey: true, allowedScopeTypes: true, status: true } });
+    const requiredDefinitions = await db.factDefinition.findMany({ where: { key: { in: ['company_main_activity', 'company_operating_country', 'company_regulated_activity'] } }, select: { key: true, valueType: true, questionKey: true, allowedScopeTypes: true, determinationMethod: true, status: true } });
     expect(requiredDefinitions).toHaveLength(3);
-    expect(requiredDefinitions.every((definition) => definition.status === 'ACTIVE' && definition.allowedScopeTypes.includes('COMPANY'))).toBe(true);
+    expect(requiredDefinitions.every((definition) => definition.status === 'ACTIVE' && definition.allowedScopeTypes.includes('COMPANY') && definition.determinationMethod === 'USER_PROVIDED')).toBe(true);
   });
 
   afterAll(async () => {
@@ -159,6 +159,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'company_main_activity', { status: 'ANSWERED', stringValue: '   logistics   ' }, db)).resolves.toMatchObject({ status: 'ANSWERED', answered: true });
     const stringFact = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_main_activity' }, supersededAt: null } });
     expect(stringFact.stringValue).toBe('logistics');
+    expect(stringFact.determinationMethod).toBe('USER_PROVIDED');
     expect((await db.clientFactAnswerState.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_main_activity' } } })).status).toBe('ANSWERED');
     expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_main_activity', status: 'ANSWERED', value: 'logistics' })]));
     await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'company_main_activity', { status: 'ANSWERED', stringValue: '   ' }, db)).rejects.toMatchObject({ code: 'CLIENT_PROFILE_ANSWER_INVALID' });
@@ -166,6 +167,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'company_regulated_activity', { status: 'ANSWERED', booleanValue: true }, db)).resolves.toMatchObject({ status: 'ANSWERED', answered: true });
     const booleanFact = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_regulated_activity' }, supersededAt: null } });
     expect(booleanFact.booleanValue).toBe(true);
+    expect(booleanFact.determinationMethod).toBe('USER_PROVIDED');
     const booleanState = await db.clientFactAnswerState.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_regulated_activity' } } });
     expect(booleanState.status).toBe('ANSWERED');
     const latestAdaptive = await db.requirementApplicability.findFirstOrThrow({ where: { clientId: clientA, requirementVersionId: adaptiveRequirementVersionId }, orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }] });
@@ -246,9 +248,10 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     }
   });
 
-  it('preserves existing OBSERVATION definitions and rejects incompatible temporal policies', async () => {
+  it('preserves existing USER_PROVIDED OBSERVATION definitions and rejects incompatible metadata', async () => {
     const migration = readFileSync(path.resolve(__dirname, '../prisma/migrations/20260914100000_provision_company_profile_fact_definitions/migration.sql'), 'utf8');
     const baseline = await db.factDefinition.findUniqueOrThrow({ where: { key: 'company_main_activity' } });
+    expect(baseline.determinationMethod).toBe('USER_PROVIDED');
     expect(baseline.temporalPolicy).toBe('OBSERVATION');
 
     await db.$executeRawUnsafe(migration);
@@ -258,6 +261,16 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     for (const incompatiblePolicy of ['EFFECTIVE_INSTANT', 'REFERENCE_PERIOD'] as const) {
       await expect(db.$transaction(async (tx) => {
         await tx.$executeRawUnsafe(`UPDATE "fact_definitions" SET "temporalPolicy" = '${incompatiblePolicy}'::"FactTemporalPolicy" WHERE "key" = 'company_main_activity'`);
+        await tx.$executeRawUnsafe(migration);
+      })).rejects.toThrow(/Incompatible company-profile FactDefinition/);
+
+      const afterRejectedReplay = await db.factDefinition.findUniqueOrThrow({ where: { key: 'company_main_activity' } });
+      expect(JSON.parse(JSON.stringify(afterRejectedReplay))).toEqual(JSON.parse(JSON.stringify(baseline)));
+    }
+
+    for (const incompatibleMethod of ['DERIVED', 'LEGAL_CLASSIFICATION_REQUIRED', 'TECHNICAL_CLASSIFICATION_REQUIRED'] as const) {
+      await expect(db.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(`UPDATE "fact_definitions" SET "determinationMethod" = '${incompatibleMethod}'::"FactDeterminationMethod" WHERE "key" = 'company_main_activity'`);
         await tx.$executeRawUnsafe(migration);
       })).rejects.toThrow(/Incompatible company-profile FactDefinition/);
 
@@ -274,6 +287,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 47 }, db);
     const first = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA }, orderBy: { createdAt: 'asc' } });
     expect(first.verificationStatus).toBe('CLIENT_PROVIDED');
+    expect(first.determinationMethod).toBe('USER_PROVIDED');
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 47 }, db);
     expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(2);
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);

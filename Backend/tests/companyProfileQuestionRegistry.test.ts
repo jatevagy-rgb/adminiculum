@@ -36,6 +36,9 @@ describe('company profile question registry', () => {
     expect(migration).toContain('INSERT INTO "fact_definitions"');
     expect(migration).toContain('"temporalPolicy"');
     expect(migration).toContain('existing_definition."temporalPolicy"::text <> \'OBSERVATION\'');
+    expect(migration).toContain('"determinationMethod"');
+    expect(migration).toContain('existing_definition."determinationMethod"::text <> \'USER_PROVIDED\'');
+    expect(migration).toContain("'USER_PROVIDED'::\"FactDeterminationMethod\"");
     expect(migration).not.toMatch(/UPDATE\s+"fact_definitions"[\s\S]*temporalPolicy/i);
   });
 

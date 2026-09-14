@@ -18,7 +18,7 @@ BEGIN
       ('company_export_activity', 'company_export_activity', 'BOOLEAN')
     ) AS registry("key", "questionKey", "valueType")
   LOOP
-    SELECT "id", "valueType", "questionKey", "allowedScopeTypes", "status", "temporalPolicy"
+    SELECT "id", "valueType", "questionKey", "allowedScopeTypes", "determinationMethod", "status", "temporalPolicy"
       INTO existing_definition
       FROM "fact_definitions"
       WHERE "key" = seed."key"
@@ -28,6 +28,7 @@ BEGIN
       IF existing_definition."valueType"::text <> seed."valueType"
         OR existing_definition."questionKey" IS DISTINCT FROM seed."questionKey"
         OR existing_definition."allowedScopeTypes" <> ARRAY['COMPANY']::"FactScopeType"[]
+        OR existing_definition."determinationMethod"::text <> 'USER_PROVIDED'
         OR existing_definition."status"::text <> 'ACTIVE'
         OR existing_definition."temporalPolicy"::text <> 'OBSERVATION' THEN
         RAISE EXCEPTION 'Incompatible company-profile FactDefinition for key %', seed."key";
