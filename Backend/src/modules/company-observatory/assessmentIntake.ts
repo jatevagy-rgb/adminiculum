@@ -237,6 +237,14 @@ export async function submitPortalGrowAssessment(
     return process?.id ?? null;
   };
 
+  const clientHasActiveProcess = async (): Promise<boolean> => {
+    const existing = await defaultPrisma.businessProcess.findFirst({
+      where: { clientId: ctx.clientId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    return Boolean(existing);
+  };
+
   const connection = await findOrCreateSurveyConnection(ctx.portalActor, ctx.clientId, ctx.portalAccessGuard);
 
   // Exact replay must not depend on mutable current process status: compare the
@@ -276,6 +284,17 @@ export async function submitPortalGrowAssessment(
       400,
       'ASSESSMENT_PROCESS_REFERENCE_INVALID',
       'A kiválasztott folyamat nem érhető el ehhez a szervezethez.',
+    );
+  }
+  // Process-oriented packs must not be persisted unscoped while the client has
+  // active processes: unscoped findings would later merge into every matching
+  // process and create unrelated diagnoses. When the client has no active
+  // process there is nothing to scope or leak into, so unscoped is allowed.
+  if (!requestedProcessId && pack.allowsProcessReference && (await clientHasActiveProcess())) {
+    throw new InteractionError(
+      400,
+      'ASSESSMENT_PROCESS_REFERENCE_REQUIRED',
+      'Ehhez a felméréshez válasszon folyamatot.',
     );
   }
 
@@ -336,6 +355,12 @@ function toSafeSubmission(row: {
   const packKey = typeof payload.packKey === 'string' ? payload.packKey : '';
   const pack = getAssessmentPack(packKey);
   if (!pack) return null;
+  // Carry the version the submission was RECORDED under, not the current registry
+  // version: relabeling historical rows would re-evaluate old answers with new
+  // rules. A row without a usable version is not safely readable.
+  const recordedVersion =
+    typeof payload.packVersion === 'number' ? payload.packVersion : Number(payload.packVersion);
+  if (!Number.isFinite(recordedVersion)) return null;
   const answers = Array.isArray(payload.answers)
     ? payload.answers
         .filter((a: unknown): a is Record<string, unknown> => a !== null && typeof a === 'object')
@@ -346,7 +371,7 @@ function toSafeSubmission(row: {
     : [];
   return {
     packKey: pack.packKey,
-    packVersion: pack.version,
+    packVersion: recordedVersion,
     answers,
     processId: typeof payload.processId === 'string' && payload.processId ? payload.processId : null,
     completedAt: row.observedAt.toISOString(),

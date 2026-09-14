@@ -130,7 +130,10 @@ function buildResultDto(
   if (!pack) {
     throw new InteractionError(404, 'ASSESSMENT_UNKNOWN_PACK', 'Ismeretlen felmérés.');
   }
-  const evaluation = evaluateAssessmentAnswers(pack.packKey, pack.version, answers);
+  // Evaluate with the version the submission was actually recorded under, never
+  // the current registry definition: applying new rules to old answers would
+  // reinterpret an existing completion (or reject it outright).
+  const evaluation = evaluateAssessmentAnswers(pack.packKey, packVersion, answers);
   if (!evaluation) {
     throw new InteractionError(400, 'ASSESSMENT_INVALID_RESULT', 'A felmérés eredménye nem állítható elő.');
   }
@@ -161,7 +164,7 @@ function buildResultDto(
 
   return {
     packKey: pack.packKey,
-    packVersion: pack.version,
+    packVersion,
     titleHu: pack.titleHu,
     completedAt,
     findings,
@@ -172,6 +175,26 @@ function buildResultDto(
     summaryHu: summaryStatement(findings.length, evaluation.unknownDimensions.length),
     noticeHu: ASSESSMENT_CUSTOMER_NOTICE_HU,
   };
+}
+
+/**
+ * Version-aware wrapper for read paths. A stored submission recorded under a
+ * pack version that can no longer be evaluated (for example after an
+ * incompatible pack revision) must not fail the whole catalogue or detail
+ * request; such a submission yields null instead.
+ */
+function tryBuildResultDto(
+  packKey: string,
+  packVersion: number,
+  answers: readonly AssessmentAnswerInput[],
+  completedAt: string,
+): AssessmentResultDto | null {
+  try {
+    return buildResultDto(packKey, packVersion, answers, completedAt);
+  } catch (error) {
+    if (error instanceof InteractionError && error.code === 'ASSESSMENT_INVALID_RESULT') return null;
+    throw error;
+  }
 }
 
 function latestByPack(submissions: readonly SafePortalAssessmentSubmission[]): Map<string, SafePortalAssessmentSubmission> {
@@ -215,7 +238,12 @@ export async function getGrowAssessmentCatalogue(
       });
       continue;
     }
-    const result = buildResultDto(pack.packKey, pack.version, submission.answers, submission.completedAt);
+    const result = tryBuildResultDto(
+      pack.packKey,
+      submission.packVersion,
+      submission.answers,
+      submission.completedAt,
+    );
     packs.push({
       packKey: pack.packKey,
       version: pack.version,
@@ -225,9 +253,11 @@ export async function getGrowAssessmentCatalogue(
       questionCount: pack.questions.length,
       status: 'COMPLETED',
       latestCompletedAt: submission.completedAt,
-      latestFindingCount: result.findings.length,
-      latestSummaryHu: result.summaryHu,
+      latestFindingCount: result ? result.findings.length : 0,
+      latestSummaryHu: result ? result.summaryHu : null,
     });
+
+    if (!result) continue;
 
     aggregatedAttentionAreaCount += result.findings.length;
     aggregatedUnknownAreaCount += result.unknownAreaCount;
@@ -260,7 +290,9 @@ export async function getGrowAssessmentDetail(
     throw new InteractionError(404, 'ASSESSMENT_UNKNOWN_PACK', 'Ismeretlen felmérés.');
   }
   const { items } = await listPortalGrowAssessments(identityId, workspaceId, db);
-  const submission = items.find((item) => item.packKey === pack.packKey && item.packVersion === pack.version) ?? null;
+  // Match on pack key only: a completion recorded under an older pack version
+  // must remain visible rather than being hidden once the pack revision changes.
+  const submission = items.find((item) => item.packKey === pack.packKey) ?? null;
 
   const dto: AssessmentDetailDto = {
     definition: {
@@ -278,7 +310,7 @@ export async function getGrowAssessmentDetail(
       })),
     },
     latestResult: submission
-      ? buildResultDto(pack.packKey, pack.version, submission.answers, submission.completedAt)
+      ? tryBuildResultDto(pack.packKey, submission.packVersion, submission.answers, submission.completedAt)
       : null,
   };
   assertClientSafe(dto);

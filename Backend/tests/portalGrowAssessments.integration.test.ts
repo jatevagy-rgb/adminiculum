@@ -747,4 +747,79 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     // DIGITAL_MATURITY does not allow a process reference → persisted as unscoped.
     expect((rows[0].rawPayload as any).processId).toBeNull();
   });
+
+  it('Y. PROCESS_REFERENCE_REQUIRED_WHEN_ACTIVE_PROCESS_EXISTS=PASS', async () => {
+    // Test T created an ACTIVE process for client A, so a process-scoped pack may
+    // no longer be persisted unscoped at the submission boundary.
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS/submissions',
+      {
+        'x-client-portal-session': sessionAuthA,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        answers: answersFor('PROCESS_AUTOMATION_READINESS', { ...NEUTRAL_PROCESS, pa_manual_repetitive: 'YES' }),
+        idempotencyKey: `assess-requireproc-${seed}`,
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('ASSESSMENT_PROCESS_REFERENCE_REQUIRED');
+    expect(
+      await db.observation.count({ where: { clientId: ids.clientA, idempotencyKey: `assess-requireproc-${seed}` } }),
+    ).toBe(0);
+  });
+
+  it('Z. STORED_PACK_VERSION_IS_PRESERVED_NOT_RELABELED=PASS', async () => {
+    const reference = await db.observation.findFirst({
+      where: { clientId: ids.clientA, idempotencyKey: processKey },
+    });
+    const connection = await db.externalSourceConnection.findFirst({
+      where: { clientId: ids.clientA, sourceType: 'SURVEY' },
+    });
+    // Record a submission under a future/incompatible version.
+    await db.observation.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId: ids.clientA,
+        connectionId: connection!.id,
+        discoveryRunId: reference!.discoveryRunId,
+        idempotencyKey: `assess-futurever-${seed}`,
+        inputDigest: crypto.createHash('sha256').update(`futurever-${seed}`).digest('hex'),
+        observationType: 'DECLARED_SURVEY',
+        observedAt: new Date(Date.now() + 10 * 60_000),
+        rawPayload: {
+          schema: 'GROW_ASSESSMENT_V1',
+          kind: 'GROW_ASSESSMENT',
+          packKey: 'DIGITAL_MATURITY',
+          packVersion: 99,
+          answers: answersFor('DIGITAL_MATURITY', {}, 'UNKNOWN'),
+          processId: null,
+          provenance: { channel: 'CLIENT_PORTAL', workspaceId: ids.orgWsA, identityId: ids.authorizedIdentity },
+        },
+      } as never,
+    });
+
+    // Readback carries the RECORDED version, not the current registry version.
+    const items = await listPortalGrowAssessments(ids.authorizedIdentity, ids.orgWsA, db);
+    const digital = items.items.find((i) => i.packKey === 'DIGITAL_MATURITY');
+    expect(digital?.packVersion).toBe(99);
+
+    // A non-evaluable stored version must not fail the catalogue or detail read.
+    const catalogue = await httpRequest(app, 'GET', '/api/v1/client-portal/org/grow-assessments', {
+      'x-client-portal-session': sessionAuthA,
+      'x-client-portal-workspace': wsARef,
+    });
+    expect(catalogue.status).toBe(200);
+    const pack = catalogue.body.packs.find((p: any) => p.packKey === 'DIGITAL_MATURITY');
+    expect(pack.status).toBe('COMPLETED');
+
+    const detail = await httpRequest(app, 'GET', '/api/v1/client-portal/org/grow-assessments/DIGITAL_MATURITY', {
+      'x-client-portal-session': sessionAuthA,
+      'x-client-portal-workspace': wsARef,
+    });
+    expect(detail.status).toBe(200);
+    expect(detail.body.latestResult).toBeNull();
+  });
 });
