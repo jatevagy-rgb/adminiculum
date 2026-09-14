@@ -135,6 +135,8 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
         title,
         normativeStatement: 'Test',
         effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        sourceSupportState: 'SUFFICIENT',
+        specialistRequirement: 'NONE',
         status: 'APPROVED',
       },
     });
