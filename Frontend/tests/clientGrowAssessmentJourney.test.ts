@@ -165,8 +165,11 @@ test('unevaluable completion has an explicit unavailable state, not zero finding
   const src = read(VIEW);
   assert.match(src, /latestResultAvailable/);
   assert.match(src, /hasEvaluableCompletedPack/);
+  assert.match(src, /hasUnavailableCompletedPack/);
   assert.match(src, /data-testid="grow-assessment-result-unavailable"/);
   assert.match(src, /Az eredmény jelenleg nem jeleníthető meg/);
+  // The zero-findings summary is qualified when any completed pack is unavailable.
+  assert.match(src, /Néhány kitöltött felmérés eredménye jelenleg nem jeleníthető meg/);
   // The result button is only offered when a result is actually available.
   assert.match(src, /pack\.status === "COMPLETED" && pack\.latestResultAvailable/);
   const api = read(API);

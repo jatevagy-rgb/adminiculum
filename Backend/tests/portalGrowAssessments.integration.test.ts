@@ -827,4 +827,14 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     expect(detail.body.latestResult).toBeNull();
     expect(detail.body.latestResultAvailable).toBe(false);
   });
+
+  it('AA. RESEARCH_KEEPS_ASSESSMENT_SIGNALS_UNDER_HIGH_DECLARED_VOLUME=PASS', async () => {
+    // Test S flooded 55 newer DIGITAL_MATURITY submissions, so a bounded
+    // newest-50 declared load would have excluded the older completed
+    // PROCESS_AUTOMATION_READINESS scope. Research must still see its signal.
+    const cycle = await runResearchCycle(admin, ids.clientA, { idempotencyKey: `research-volume-${seed}` }, db);
+    expect(cycle.status).toBe('COMPLETED');
+    const opportunities = await listGrowOpportunities(admin, ids.clientA, db);
+    expect(opportunities.some((o) => o.domainKey === 'MANUAL_ADMIN_LOAD')).toBe(true);
+  });
 });

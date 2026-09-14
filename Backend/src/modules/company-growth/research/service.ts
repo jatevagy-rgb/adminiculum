@@ -39,9 +39,11 @@ import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, register
 import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
 import { deriveProcessSignals, selectInterventions } from './interventions';
 import {
+  GROW_ASSESSMENT_SCHEMA,
   observationsToGrowSignals,
   supersedeAssessmentObservations,
   type GrowSignal,
+  type NormalizableObservation,
 } from './observationSignals';
 import { createInitiative } from '../../client-company/service';
 
@@ -341,6 +343,47 @@ export async function runResearchCycle(
   }
 }
 
+interface RawAssessmentObservationRow {
+  id: string;
+  observationType: string;
+  rawPayload: Prisma.JsonValue;
+  observedAt: Date;
+  sourceRecordId: string | null;
+}
+
+/**
+ * Loads exactly one (the latest) GROW_ASSESSMENT_V1 observation per
+ * (packKey, workspaceId, processId) scope, in the database.
+ *
+ * This keeps research correctness AND a hard bound: the result size is the
+ * number of assessment scopes, so neither a growing generic-survey history nor
+ * repeated retakes can truncate a scope or force the entire declared history to
+ * be loaded and sorted in memory on every run.
+ */
+async function loadLatestAssessmentObservations(
+  db: Db,
+  clientId: string,
+): Promise<RawAssessmentObservationRow[]> {
+  return db.$queryRaw<RawAssessmentObservationRow[]>`
+    SELECT DISTINCT ON (
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->'provenance'->>'workspaceId', ''),
+      COALESCE("rawPayload"->>'processId', '')
+    )
+      "id", "observationType", "rawPayload", "observedAt", "sourceRecordId"
+    FROM "observations"
+    WHERE "clientId" = ${clientId}
+      AND "observationType"::text = 'DECLARED_SURVEY'
+      AND "rawPayload"->>'schema' = ${GROW_ASSESSMENT_SCHEMA}
+    ORDER BY
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->'provenance'->>'workspaceId', ''),
+      COALESCE("rawPayload"->>'processId', ''),
+      "observedAt" DESC,
+      "id" DESC
+  `;
+}
+
 async function executeRun(
   actor: InternalActor,
   clientId: string,
@@ -374,15 +417,28 @@ async function executeRun(
     if (!latestByProcess.has(s.businessProcessId)) latestByProcess.set(s.businessProcessId, s);
   }
 
-  // Load ALL declared observations. A global newest-N limit here would truncate
-  // BEFORE the per-scope supersede below, so the latest assessment for an older
-  // (pack, workspace, process) scope could be absent and its valid findings would
-  // silently vanish from the diagnosis. Declared survey volume is bounded by
-  // user submissions, so correctness wins over a pre-grouping cap.
-  const declaredObs = await db.observation.findMany({
+  // Bounded loading that stays correct:
+  // - non-superseded survey observations keep an explicit newest-50 bound;
+  // - each assessment scope is reduced to its latest row IN THE DATABASE, so a
+  //   growing survey/retake history can neither truncate an assessment scope nor
+  //   force the whole declared history to be loaded and sorted every cycle.
+  const surveyObs = await db.observation.findMany({
     where: { clientId, observationType: 'DECLARED_SURVEY' },
     orderBy: { observedAt: 'desc' },
+    take: 50,
   });
+  const assessmentObs = await loadLatestAssessmentObservations(db, clientId);
+  const declaredById = new Map<string, NormalizableObservation>();
+  for (const obs of [...assessmentObs, ...surveyObs]) {
+    declaredById.set(obs.id, {
+      id: obs.id,
+      observationType: obs.observationType,
+      rawPayload: obs.rawPayload,
+      observedAt: obs.observedAt,
+      sourceRecordId: obs.sourceRecordId,
+    });
+  }
+  const declaredObs = [...declaredById.values()];
 
   // Single fail-closed normalization boundary. The research engine no longer
   // parses source-specific survey payloads or owns a category→domain map.
@@ -390,15 +446,7 @@ async function executeRun(
   // (pack, workspace, process) scope so a retake supersedes the observation it
   // corrects; the generic pain-intake survey is intentionally left untouched.
   const declaredSignals: GrowSignal[] = observationsToGrowSignals(
-    supersedeAssessmentObservations(
-      declaredObs.map((obs) => ({
-        id: obs.id,
-        observationType: obs.observationType,
-        rawPayload: obs.rawPayload,
-        observedAt: obs.observedAt,
-        sourceRecordId: obs.sourceRecordId,
-      })),
-    ),
+    supersedeAssessmentObservations(declaredObs),
   );
 
   // Survey categories are attributed PER OBSERVATION, so an outcome only ever

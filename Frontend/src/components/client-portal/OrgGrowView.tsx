@@ -280,6 +280,9 @@ export function OrgGrowView() {
   const hasEvaluableCompletedPack = packs.some(
     (p) => p.status === "COMPLETED" && p.latestResultAvailable,
   );
+  const hasUnavailableCompletedPack = packs.some(
+    (p) => p.status === "COMPLETED" && !p.latestResultAvailable,
+  );
 
   const runnerQuestions = runnerDetail?.definition.questions || [];
   const currentQuestion = runnerQuestions[runnerIndex];
@@ -679,6 +682,9 @@ export function OrgGrowView() {
             A kitöltött felmérések alapján jelenleg nem azonosítottunk figyelmet igénylő pontot.
             {catalogue && catalogue.aggregatedUnknownAreaCount > 0
               ? ` ${catalogue.aggregatedUnknownAreaCount} területen nincs elég információ a kiértékeléshez.`
+              : ""}
+            {hasUnavailableCompletedPack
+              ? " Néhány kitöltött felmérés eredménye jelenleg nem jeleníthető meg."
               : ""}
           </p>
         ) : hasCompletedPack ? (
