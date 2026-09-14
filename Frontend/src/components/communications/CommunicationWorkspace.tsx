@@ -297,6 +297,7 @@ export default function CommunicationWorkspace() {
   const selected = filtered.find((item) => item.id === selectedId) || filtered[0] || null;
   const selectedCommunicationId = selected?.id || null;
   const selectedSourceTaskCount = selected?.sourceTaskCount || 0;
+  const duplicatePlanningNames = useMemo(() => new Set(planningUsers.filter((candidate, _index, all) => all.filter((other) => other.name === candidate.name).length > 1).map((candidate) => candidate.name)), [planningUsers]);
   const hasPrevious = offset > 0;
   const hasNext = offset + pageSize < total;
 
@@ -572,7 +573,7 @@ export default function CommunicationWorkspace() {
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Cím<input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Leírás<textarea value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} rows={3} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label>
         <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Határidő<input type="date" value={taskDueDate} onChange={(event) => setTaskDueDate(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Prioritás<select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="LOW">Alacsony</option><option value="MEDIUM">Közepes</option><option value="HIGH">Magas</option><option value="URGENT">Sürgős</option></select></label></div>
-        <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Felelős<select value={taskAssigneeId} onChange={(event) => setTaskAssigneeId(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="">Nincs kijelölve</option>{planningUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Becsült idő (perc)<input type="number" min={0} value={taskEstimatedMinutes} onChange={(event) => setTaskEstimatedMinutes(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label></div>
+        <div className="grid grid-cols-2 gap-2"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Felelős<select value={taskAssigneeId} onChange={(event) => setTaskAssigneeId(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="">Nincs kijelölve</option>{planningUsers.map((u) => <option key={u.id} value={u.id}>{u.name}{duplicatePlanningNames.has(u.name) && u.email ? ` · ${u.email}` : ""}</option>)}</select></label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Becsült idő (perc)<input type="number" min={0} value={taskEstimatedMinutes} onChange={(event) => setTaskEstimatedMinutes(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm" /></label></div>
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Figyelmi kategória<select value={taskAttentionCategory} onChange={(event) => setTaskAttentionCategory(event.target.value)} className="adm-modal-field mt-1 w-full px-3 py-2 text-sm"><option value="">Nincs besorolva</option>{ATTENTION_CATEGORY_ORDER.map((c) => <option key={c} value={c}>{attentionPresentation(c).label}</option>)}</select></label>
         <TaskPlanningFields clientId={taskTarget.clientId ?? null} users={planningUsers} assigneeId={taskAssigneeId || null} value={taskPlanning} onChange={(next) => setTaskPlanning((current) => ({ ...current, ...next }))} />
       </SimpleModal> : null}
@@ -605,23 +606,27 @@ function CommunicationDetail({ item, relatedCase, relatedClient, linkedTasks, li
         <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.createdAt)}</dd></dl>
         {item.sourceTaskCount > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt feladat</p>{linkedTasksLoading ? <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Betöltés…</p> : linkedTasks.length ? <div className="mt-2 space-y-1">{linkedTasks.map((task) => <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block text-[11px] font-semibold text-[var(--adm-blue-700)] hover:underline">{task.title} · {task.status}</Link>)}</div> : <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A feladatkapcsolat részlete nem érhető el.</p>}</div> : null}
         <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
-        <section aria-label="Ügyindítás és ügyhöz rendelés" className="border-t border-[var(--adm-border)] pt-4">
-          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Következő lépés</h3>
+        <section aria-label="Ügybesorolás és feladatműveletek" className="border-t border-[var(--adm-border)] pt-4">
+          <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügybesorolás</h3>
           {item.caseId ? (
             <>
-              <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button adm-link-button-primary block px-3 py-2 text-center text-[11px]">Munka folytatása az ügyben</Link>
-              <details className="mt-3">
-                <summary className="cursor-pointer text-[11px] font-semibold focus-visible:outline focus-visible:outline-2">További feladatműveletek</summary>
-                <div className="mt-2 grid gap-2">
-                  <button type="button" onClick={() => onCreateTask(item)} className="adm-link-button px-3 py-2 text-[11px]">Új feladat létrehozása</button>
-                  <button type="button" onClick={() => onLinkTask(item)} className="adm-link-button px-3 py-2 text-[11px]">Meglévő feladathoz</button>
+              <p className="text-[11px] font-semibold text-[var(--adm-text)]">Aktuális ügy: {relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : "Ügyhöz sorolt"}</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button adm-link-button-primary px-3 py-2 text-center text-[11px]">Ügy megnyitása</Link>
+                <button type="button" onClick={() => onAssign(item)} className="adm-link-button px-3 py-2 text-[11px]">Ügy módosítása</button>
+              </div>
+              <div className="mt-4 border-t border-[var(--adm-border)] pt-3">
+                <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Feladatműveletek</h3>
+                <div className="grid gap-2">
+                  <button type="button" onClick={() => onCreateTask(item)} className="adm-link-button px-3 py-2 text-[11px]">Új feladat ebből</button>
+                  <button type="button" onClick={() => onLinkTask(item)} className="adm-link-button px-3 py-2 text-[11px]">Kapcsolás meglévő feladathoz</button>
                 </div>
-              </details>
+              </div>
             </>
           ) : (
             <div className="grid gap-2">
-              <button type="button" onClick={() => onCreateCase(item)} className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">Új ügy létrehozása</button>
-              <button type="button" onClick={() => onAssign(item)} className="adm-link-button px-3 py-2 text-[11px]">Meglévő ügyhöz rendelés</button>
+              <button type="button" onClick={() => onAssign(item)} className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">Meglévő ügyhöz kapcsolás</button>
+              <button type="button" onClick={() => onCreateCase(item)} className="adm-link-button px-3 py-2 text-[11px]">Új ügy létrehozása</button>
             </div>
           )}
         </section>

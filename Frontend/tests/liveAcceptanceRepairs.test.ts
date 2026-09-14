@@ -76,11 +76,16 @@ test('A4: Communication task submit is source-derived (id in path) and planning 
   assert.match(src, /taskDefinitionId\?: string \| null/);
 });
 
-test('A5: linked and unlinked communication case-first actions are both present', () => {
+test('A5/3A1: communication is case-first (linked: case actions primary, tasks secondary; unlinked: link/create case)', () => {
   const src = read('Frontend/src/components/communications/CommunicationWorkspace.tsx');
-  assert.match(src, /Munka folytatása az ügyben/);
+  // linked communication
+  assert.match(src, /Ügy megnyitása/);
+  assert.match(src, /Ügy módosítása/);
+  assert.match(src, /Feladatműveletek/);
+  assert.match(src, /Új feladat ebből/);
+  // unlinked communication
+  assert.match(src, /Meglévő ügyhöz kapcsolás/);
   assert.match(src, /Új ügy létrehozása/);
-  assert.match(src, /Meglévő ügyhöz rendelés/);
 });
 
 test('Task catalogue: truthful empty state is rendered when no definitions exist', () => {
