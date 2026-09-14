@@ -57,6 +57,36 @@ const SAFE_TOPICS: SafeTopicEntry[] = [
     shortExplanation: 'A pénzmosás és terrorizmus finanszírozása megelőzési követelmények.',
   },
   {
+    internalKey: 'GDPR_GENERAL_SCOPE',
+    topicKey: 'portal/gdpr-general-scope',
+    portalLabel: 'Általános adatvédelem',
+    shortExplanation: 'A személyes adatok kezelésére vonatkozó alapvető adatvédelmi követelmények.',
+  },
+  {
+    internalKey: 'GDPR_ELEVATED_RISK_DPIA_DPO',
+    topicKey: 'portal/gdpr-elevated-risk',
+    portalLabel: 'Fokozott adatvédelmi kockázat',
+    shortExplanation: 'A magas kockázatú adatkezeléshez kapcsolódó hatásvizsgálati és adatvédelmi tisztviselői követelmények.',
+  },
+  {
+    internalKey: 'WHISTLEBLOWING_INTERNAL_CHANNEL',
+    topicKey: 'portal/whistleblowing-internal-channel',
+    portalLabel: 'Belső visszaélés-bejelentés',
+    shortExplanation: 'A belső visszaélés-bejelentési csatorna működtetésére vonatkozó követelmények.',
+  },
+  {
+    internalKey: 'NIS2_ORGANISATION_SCOPE',
+    topicKey: 'portal/nis2-organisation-scope',
+    portalLabel: 'Kiberbiztonsági (NIS2) hatály',
+    shortExplanation: 'A szervezet kiberbiztonsági szabályozás alá tartozásának vizsgálata.',
+  },
+  {
+    internalKey: 'NIS2_SECURITY_CONTROLS',
+    topicKey: 'portal/nis2-security-controls',
+    portalLabel: 'Kiberbiztonsági intézkedések',
+    shortExplanation: 'A kritikus informatikai rendszerekhez kapcsolódó kockázatkezelési és incidenskezelési intézkedések.',
+  },
+  {
     internalKey: 'DEMO_SAMPLE_TOPIC',
     topicKey: 'portal/demo-sample-topic',
     portalLabel: 'Demó téma',
@@ -71,6 +101,12 @@ const ALL_TOPIC_MAP = new Map(SAFE_TOPICS.map((t) => [t.internalKey, t]));
 const KEY_TO_ENTRY = new Map(SAFE_TOPICS.map((t) => [t.internalKey, t]));
 const SAFE_CONTROL_LABELS = new Map<string, string>([
   ['GDPR_DATA_PROCESSING_CONTROL', 'Adatvédelmi intézkedés'],
+  ['C-DATA-001', 'Adatkezelési nyilvántartás és jogalap-mátrix'],
+  ['C-DATA-002', 'Adatkezelési tájékoztató'],
+  ['C-DATA-003', 'Adatvédelmi hatásvizsgálat / DPO'],
+  ['C-CYBER-001', 'Kiberkockázat-kezelési keret'],
+  ['C-CYBER-002', 'Incidenskezelési folyamat'],
+  ['C-WB-001', 'Belső visszaélés-bejelentési csatorna'],
 ]);
 
 /**

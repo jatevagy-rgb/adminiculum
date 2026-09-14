@@ -180,10 +180,15 @@ export async function createRequirementApplicabilityInTx(
       factSubjectId: input.scope.factSubjectId ?? null,
     },
     select: { id: true, snapshotJson: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
   });
   const state = logicalState(built.payload);
-  const duplicate = existing.find((row) => sameLogicalState(row, state));
+  // Dedupe only against the most recent snapshot. Reusing any older snapshot
+  // with an equal logical state would leave an intermediate state (e.g. a prior
+  // DOES_NOT_APPLY) as the "latest" after a transition back to a state like
+  // INSUFFICIENT_FACTS whose logical state carries no fact ids.
+  const latest = existing[0];
+  const duplicate = latest && sameLogicalState(latest, state) ? latest : undefined;
   if (duplicate) {
     const applicability = await tx.requirementApplicability.findUniqueOrThrow({
       where: { id: duplicate.id },

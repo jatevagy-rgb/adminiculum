@@ -2,384 +2,610 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  answerPortalCompanyProfileEvidence,
+  answerPortalCompanyProfileScreen,
   getPortalCompanyProfileDiscovery,
-  answerPortalCompanyProfileQuestion,
+  getPortalCompanyProfileEvidence,
+  getPortalCompanyProfileTeaor25Options,
+  type PortalCompanyProfileAnswerPayload,
   type PortalCompanyProfileDiscovery,
+  type PortalCompanyProfileEvidenceItem,
+  type PortalCompanyProfileEvidenceJourney,
   type PortalCompanyProfileQuestion,
+  type PortalCompanyProfileScreen,
+  type PortalCompanyProfileReusableDocument,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const inputClass =
   "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm text-stone-900 shadow-sm focus:border-stone-950 focus:outline-none focus:ring-1 focus:ring-stone-950 disabled:bg-stone-50 disabled:text-stone-500";
+const chipBase = "rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50";
+const chipOn = `${chipBase} bg-stone-950 text-white`;
+const chipOff = `${chipBase} border border-stone-300 text-stone-700 hover:bg-stone-50`;
 
-function statusTag(status: PortalCompanyProfileQuestion["status"]) {
-  switch (status) {
-    case "ANSWERED":
-      return {
-        label: "Megadva",
-        className: "bg-emerald-50 text-emerald-800 border-emerald-200",
-      };
-    case "UNKNOWN":
-      return {
-        label: "Nem ismertként jelölve",
-        className: "bg-amber-50 text-amber-800 border-amber-200",
-      };
-    case "UNANSWERED":
-    default:
-      return {
-        label: "Nincs megadva",
-        className: "bg-stone-100 text-stone-700 border-stone-200",
-      };
-  }
-}
+const TEAOR_UNAVAILABLE =
+  "Az ágazati besorolás jelenleg nem érhető el. A korábban megadott tevékenységi adat megmaradt.";
 
-function questionDisplayLabel(question: PortalCompanyProfileQuestion) {
-  if (question.questionKey === "employee_count") return "Foglalkoztatottak létszáma";
-  return question.label?.trim() || "Szervezeti adat";
-}
-
-function sectionLabel(section: PortalCompanyProfileQuestion["section"]) {
-  return {
-    COMPANY: "Vállalat",
-    OPERATIONS: "Működés",
-    PEOPLE: "Munkavállalók",
-    DATA: "Adatkezelés",
-    DIGITAL: "Digitális működés",
-    MARKET: "Piac és ügyfelek",
-    SPECIAL: "Speciális / szabályozott működés",
-  }[section];
-}
-
-function formatQuestionValue(question: PortalCompanyProfileQuestion) {
-  if (question.status === "UNKNOWN") {
-    return "A szervezet jelenleg nem rendelkezik pontos adattal.";
-  }
-  if (question.status === "UNANSWERED" || question.value === null || question.value === undefined) {
-    return "Ehhez még szükségünk van egy adatra.";
-  }
-  if (question.valueType === "NUMBER" && typeof question.value === "number") {
-    return `${question.value} fő`;
-  }
-  if (typeof question.value === "boolean") {
-    return question.value ? "Igen" : "Nem";
-  }
-  return String(question.value);
-}
-
-type Props = {
-  onProfileUpdated?: () => void | Promise<void>;
+type DraftValue = {
+  status: "ANSWERED" | "UNKNOWN";
+  numberValue?: string;
+  booleanValue?: boolean;
+  stringValue?: string;
+  enumValue?: string;
+  jsonValue?: string[];
 };
 
-export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
+function valueToDraft(question: PortalCompanyProfileQuestion): DraftValue | undefined {
+  if (question.status !== "ANSWERED" || question.value === null || question.value === undefined) return undefined;
+  if (Array.isArray(question.value)) return { status: "ANSWERED", jsonValue: [...question.value] };
+  if (question.valueType === "NUMBER" && typeof question.value === "number") return { status: "ANSWERED", numberValue: String(question.value) };
+  if (question.valueType === "BOOLEAN" && typeof question.value === "boolean") return { status: "ANSWERED", booleanValue: question.value };
+  if (question.valueType === "ENUM" || question.valueType === "JURISDICTION") return { status: "ANSWERED", enumValue: String(question.value) };
+  return { status: "ANSWERED", stringValue: String(question.value) };
+}
+
+function draftToPayload(question: PortalCompanyProfileQuestion, draft: DraftValue): PortalCompanyProfileAnswerPayload | null {
+  if (draft.status === "UNKNOWN") return { status: "UNKNOWN" };
+  switch (question.valueType) {
+    case "NUMBER": {
+      const trimmed = (draft.numberValue ?? "").trim();
+      if (!trimmed) return null;
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed) || parsed < 0) return null;
+      if (question.integerOnly && !Number.isInteger(parsed)) return null;
+      return { status: "ANSWERED", numberValue: parsed };
+    }
+    case "BOOLEAN":
+      return typeof draft.booleanValue === "boolean" ? { status: "ANSWERED", booleanValue: draft.booleanValue } : null;
+    case "ENUM":
+      return draft.enumValue ? { status: "ANSWERED", enumValue: draft.enumValue } : null;
+    case "JURISDICTION": {
+      const code = (draft.enumValue ?? "").trim();
+      return code ? { status: "ANSWERED", enumValue: code.toUpperCase() } : null;
+    }
+    case "MULTI_ENUM": {
+      const values = draft.jsonValue ?? [];
+      return values.length ? { status: "ANSWERED", jsonValue: values } : null;
+    }
+    case "STRING": {
+      const value = (draft.stringValue ?? "").trim();
+      return value ? { status: "ANSWERED", stringValue: value } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+function draftLabel(question: PortalCompanyProfileQuestion, draft: DraftValue | undefined) {
+  if (!draft || draft.status === "UNKNOWN") return "Nincs megadva";
+  const payload = draftToPayload(question, draft);
+  if (!payload) return "Nincs megadva";
+  if (payload.jsonValue) return payload.jsonValue.join(", ");
+  if (typeof payload.numberValue === "number") return String(payload.numberValue);
+  if (typeof payload.booleanValue === "boolean") return payload.booleanValue ? "Igen" : "Nem";
+  return String(payload.enumValue ?? payload.stringValue ?? "");
+}
+
+export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpdated?: () => void | Promise<void> }) {
   const [discovery, setDiscovery] = useState<PortalCompanyProfileDiscovery | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Edit state per questionKey
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState<string>("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [drafts, setDrafts] = useState<Record<string, DraftValue>>({});
+  const [teaorLabels, setTeaorLabels] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<PortalCompanyProfileEvidenceJourney | null>(null);
 
   const refreshDiscovery = useCallback(async () => {
     const result = await getPortalCompanyProfileDiscovery();
     setDiscovery(result);
+    return result;
   }, []);
 
-  const loadDiscovery = useCallback(async () => {
+  const refreshEvidence = useCallback(async () => {
+    try {
+      setEvidence(await getPortalCompanyProfileEvidence());
+    } catch {
+      setEvidence(null);
+    }
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       await refreshDiscovery();
+      await refreshEvidence();
     } catch (err) {
       setError(clientSafeError(err));
     } finally {
       setLoading(false);
     }
-  }, [refreshDiscovery]);
+  }, [refreshDiscovery, refreshEvidence]);
 
   useEffect(() => {
-    void loadDiscovery();
-  }, [loadDiscovery]);
+    void load();
+  }, [load]);
 
-  const questions = useMemo(() => discovery?.questions || [], [discovery]);
+  const questions = useMemo(() => discovery?.questions ?? [], [discovery]);
+  const screens = useMemo(() => discovery?.screens ?? [], [discovery]);
+  const teaorInstalled = discovery?.capabilities.teaor25CatalogInstalled ?? false;
 
-  const stats = useMemo(() => {
-    const total = questions.length;
-    const answered = questions.filter((q) => q.status === "ANSWERED").length;
-    const unknown = questions.filter((q) => q.status === "UNKNOWN").length;
-    return { total, answered, unknown };
+  const atomsByKey = useMemo(() => {
+    const index = new Map<string, PortalCompanyProfileQuestion>();
+    for (const question of questions) index.set(question.questionKey, question);
+    return index;
   }, [questions]);
 
-  const handleStartEdit = (question: PortalCompanyProfileQuestion) => {
-    setEditingKey(question.questionKey);
-    setActionError(null);
-    setRefreshWarning(null);
-    setSuccessMessage(null);
-    if (question.status === "ANSWERED" && question.value !== null && question.value !== undefined) {
-      setEditValue(String(question.value));
-    } else {
-      setEditValue("");
+  const progress = useMemo(() => {
+    const total = questions.length;
+    const answered = questions.filter((question) => question.status === "ANSWERED").length;
+    return { total, answered, percent: total ? Math.round((answered / total) * 100) : 0 };
+  }, [questions]);
+
+  const activeScreen: PortalCompanyProfileScreen | undefined = screens[activeIndex];
+
+  const activeAtoms = useMemo(() => {
+    if (!activeScreen) return [] as PortalCompanyProfileQuestion[];
+    return activeScreen.factBindings
+      .map((factKey) => atomsByKey.get(factKey))
+      .filter((atom): atom is PortalCompanyProfileQuestion => Boolean(atom));
+  }, [activeScreen, atomsByKey]);
+
+  // Seed drafts from persisted answers, and resolve TEÁOR labels for stored codes.
+  useEffect(() => {
+    if (!activeScreen) return;
+    setDrafts((previous) => {
+      const next = { ...previous };
+      for (const atom of activeAtoms) {
+        if (next[atom.questionKey]) continue;
+        const seeded = valueToDraft(atom);
+        if (seeded) next[atom.questionKey] = seeded;
+      }
+      return next;
+    });
+    for (const atom of activeAtoms) {
+      if (atom.codeCatalog !== "TEAOR25") continue;
+      const draft = drafts[atom.questionKey];
+      const codes = draft?.jsonValue ?? (draft?.stringValue ? [draft.stringValue] : []);
+      for (const code of codes) {
+        if (teaorLabels[code]) continue;
+        void getPortalCompanyProfileTeaor25Options(code)
+          .then((result) => {
+            const match = result.options.find((option) => option.code === code);
+            if (match) setTeaorLabels((labels) => ({ ...labels, [match.code]: match.labelHu }));
+          })
+          .catch(() => undefined);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScreen?.screenKey]);
+
+  const setDraft = (questionKey: string, draft: DraftValue) => {
+    setActionError(null);
+    setSuccessMessage(null);
+    setDrafts((previous) => ({ ...previous, [questionKey]: draft }));
   };
 
-  const handleCancelEdit = () => {
-    setEditingKey(null);
-    setEditValue("");
-    setActionError(null);
-    setRefreshWarning(null);
+  const clearDraft = (questionKey: string) => {
+    setDrafts((previous) => {
+      const next = { ...previous };
+      delete next[questionKey];
+      return next;
+    });
   };
 
-  const handleSaveAnswer = async (question: PortalCompanyProfileQuestion) => {
+  const toggleMultiValue = (question: PortalCompanyProfileQuestion, value: string) => {
+    const current = drafts[question.questionKey]?.jsonValue ?? [];
+    const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
+    setDraft(question.questionKey, { status: "ANSWERED", jsonValue: next });
+  };
+
+  const saveActiveScreen = async (advance: boolean) => {
+    if (!activeScreen) return;
     setActionError(null);
-    setRefreshWarning(null);
     setSuccessMessage(null);
-
-    let payload: Parameters<typeof answerPortalCompanyProfileQuestion>[1] = { status: "ANSWERED" };
-    if (question.valueType === "NUMBER") {
-      const trimmed = editValue.trim();
-      if (trimmed === "") {
-        setActionError("Kérjük, adjon meg egy érvényes számértéket.");
+    setRefreshWarning(null);
+    const facts: Record<string, PortalCompanyProfileAnswerPayload> = {};
+    for (const atom of activeAtoms) {
+      const draft = drafts[atom.questionKey];
+      if (!draft) continue;
+      const payload = draftToPayload(atom, draft);
+      if (!payload) {
+        setActionError(`Hiányos vagy érvénytelen válasz: ${atom.label}.`);
         return;
       }
-      const parsedNumber = Number(trimmed);
-      if (!Number.isFinite(parsedNumber) || parsedNumber < 0) {
-        setActionError("Kérjük, pozitív egész számot adjon meg.");
-        return;
-      }
-      payload.numberValue = parsedNumber;
-    } else if (question.valueType === "BOOLEAN") {
-      if (editValue !== "true" && editValue !== "false") {
-        setActionError("Kérjük, válasszon Igen vagy Nem értéket.");
-        return;
-      }
-      payload.booleanValue = editValue === "true";
-    } else if (question.valueType === "ENUM") {
-      if (!question.options?.includes(editValue)) {
-        setActionError("Kérjük, válasszon a megadott lehetőségek közül.");
-        return;
-      }
-      payload.enumValue = editValue;
-    } else if (question.valueType === "DATE") {
-      if (!editValue) {
-        setActionError("Kérjük, adjon meg egy dátumot.");
-        return;
-      }
-      payload.dateValue = editValue;
-    } else if (question.valueType === "STRING") {
-      if (!editValue.trim()) {
-        setActionError("Kérjük, adjon meg egy értéket.");
-        return;
-      }
-      payload.stringValue = editValue.trim();
+      facts[atom.questionKey] = payload;
     }
-
+    if (Object.keys(facts).length === 0) {
+      if (advance) setActiveIndex((index) => Math.min(index + 1, Math.max(0, screens.length - 1)));
+      return;
+    }
     setSaving(true);
-    let mutationCompleted = false;
+    let saved = false;
     try {
-      await answerPortalCompanyProfileQuestion(question.questionKey, payload);
-      mutationCompleted = true;
-      setEditingKey(null);
-      setEditValue("");
+      await answerPortalCompanyProfileScreen(activeScreen.screenKey, facts);
+      saved = true;
       await refreshDiscovery();
+      await refreshEvidence();
       await onProfileUpdated?.();
-      setSuccessMessage(
-        "A cégadatokat frissítettük. A szervezeti áttekintést az új adatok alapján frissítettük.",
-      );
+      setSuccessMessage("A válaszokat elmentettük.");
+      if (advance) setActiveIndex((index) => Math.min(index + 1, Math.max(0, screens.length - 1)));
     } catch (err) {
-      if (mutationCompleted) {
-        setRefreshWarning("Az adat mentése megtörtént, de a frissített áttekintés betöltése nem sikerült. Kérjük, frissítse az oldalt.");
-      } else {
-        setActionError(clientSafeError(err));
-      }
+      if (saved) setRefreshWarning("A mentés megtörtént, de a frissítés nem sikerült. Kérjük, töltse újra az oldalt.");
+      else setActionError(clientSafeError(err));
     } finally {
       setSaving(false);
     }
   };
 
-  const handleMarkUnknown = async (question: PortalCompanyProfileQuestion) => {
+  const markUnknown = async (question: PortalCompanyProfileQuestion) => {
     setActionError(null);
-    setRefreshWarning(null);
     setSuccessMessage(null);
     setSaving(true);
-    let mutationCompleted = false;
     try {
-      await answerPortalCompanyProfileQuestion(question.questionKey, {
-        status: "UNKNOWN",
-      });
-      mutationCompleted = true;
-      setEditingKey(null);
-      setEditValue("");
+      await answerPortalCompanyProfileScreen(activeScreen?.screenKey ?? "", { [question.questionKey]: { status: "UNKNOWN" } });
+      setDraft(question.questionKey, { status: "UNKNOWN" });
       await refreshDiscovery();
-      await onProfileUpdated?.();
-      setSuccessMessage("Nem ismertként jelölve.");
     } catch (err) {
-      if (mutationCompleted) {
-        setRefreshWarning("Az adat mentése megtörtént, de a frissített áttekintés betöltése nem sikerült. Kérjük, frissítse az oldalt.");
-      } else {
-        setActionError(clientSafeError(err));
-      }
+      setActionError(clientSafeError(err));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return <section className={card}>Vállalati profil betöltése…</section>;
-  }
-
-  if (error) {
-    return <section className={card}>{error}</section>;
-  }
+  if (loading) return <section className={card}>Vállalati profil betöltése…</section>;
+  if (error) return <section className={card}>{error}</section>;
 
   return (
     <section className={card} data-testid="organization-company-profile">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">
-            Cégadatok
-          </p>
-          <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">
-            Vállalati profil
-          </h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">Cégadatok</p>
+          <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Vállalati profil</h2>
           <p className="mt-2 text-sm text-stone-600">
-            A szervezeti áttekintéshez szükséges cégadatok.
+            Segítsen pontosítani, milyen szabályok érintik a vállalkozását.
           </p>
         </div>
-
-        {stats.total > 0 ? (
-          <div className="rounded-2xl bg-stone-50 px-4 py-3 text-right">
-            <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-              Adatállapot
-            </span>
-            <p className="text-lg font-semibold text-stone-900">
-              {stats.answered} adat ismert · {Math.max(0, stats.total - stats.answered)} tisztázandó
-            </p>
+        <div className="rounded-2xl bg-stone-50 px-4 py-3 text-right">
+          <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">Kitöltöttség</span>
+          <p className="text-lg font-semibold text-stone-900">
+            {progress.answered} / {progress.total}
+          </p>
+          <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-stone-200">
+            <div className="h-full bg-stone-950" style={{ width: `${progress.percent}%` }} />
           </div>
-        ) : null}
+        </div>
       </div>
 
-      {successMessage ? (
-        <div
-          className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900"
-          role="status"
-        >
-          {successMessage}
-        </div>
-      ) : null}
+      {successMessage ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status">{successMessage}</div> : null}
+      {refreshWarning ? <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="status">{refreshWarning}</div> : null}
+      {actionError ? <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900" role="alert">{actionError}</div> : null}
 
-      {refreshWarning ? (
-        <div
-          className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
-          role="status"
-        >
-          {refreshWarning}
-        </div>
-      ) : null}
+      {screens.length === 0 || !activeScreen ? (
+        <p className="mt-6 text-sm text-stone-600">A jelenlegi adatok alapján nincs további tisztázandó kérdés.</p>
+      ) : (
+        <div className="mt-6">
+          <div className="flex flex-wrap items-center gap-2">
+            {screens.map((screen, index) => (
+              <button
+                key={screen.screenKey}
+                type="button"
+                onClick={() => setActiveIndex(index)}
+                aria-current={index === activeIndex}
+                className={index === activeIndex ? "h-2 w-6 rounded-full bg-stone-950" : "h-2 w-6 rounded-full bg-stone-200 hover:bg-stone-300"}
+                title={screen.sectionTitleHu}
+              >
+                <span className="sr-only">{screen.titleHu}</span>
+              </button>
+            ))}
+            <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-stone-500">
+              {activeIndex + 1} / {screens.length} · {activeScreen.sectionTitleHu}
+            </span>
+          </div>
 
-      {actionError ? (
-        <div
-          className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900"
-          role="alert"
-        >
-          {actionError}
-        </div>
-      ) : null}
+          <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4" data-testid="company-profile-screen">
+            <h3 className="font-semibold text-stone-950">{activeScreen.titleHu}</h3>
+            <p className="mt-1 text-sm text-stone-700">{activeScreen.helpTextHu}</p>
+            {activeScreen.whyHu ? <p className="mt-1 text-xs text-stone-400">Miért kérdezzük? {activeScreen.whyHu}</p> : null}
 
-      <div className="mt-6 space-y-6">
-        {questions.length === 0 ? (
-          <p className="text-sm text-stone-600">A jelenlegi adatok alapján nincs további tisztázandó kérdés.</p>
-        ) : (
-          questions.map((question, index) => {
-            const isEditing = editingKey === question.questionKey;
-            const tag = statusTag(question.status);
-            const previous = questions[index - 1];
-            const showSection = !previous || previous.section !== question.section;
+            <div className="mt-4 space-y-5">
+              {activeAtoms.map((atom) => {
+                const draft = drafts[atom.questionKey];
+                const isTeaor = atom.codeCatalog === "TEAOR25";
+                return (
+                  <div key={atom.questionKey} className="border-t border-stone-100 pt-3">
+                    <label className="block text-sm font-semibold text-stone-900">{atom.label}</label>
+                    {atom.helpText ? <p className="mt-1 text-xs text-stone-500">{atom.helpText}</p> : null}
+                    {atom.why ? <p className="mt-1 text-xs text-stone-400">Miért kérdezzük? {atom.why}</p> : null}
 
-            return (
-              <div key={question.questionKey}>
-                {showSection ? <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">{sectionLabel(question.section)}</h3> : null}
-                <div className="rounded-2xl border border-stone-200 bg-white p-4 transition" data-testid="company-profile-question">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="font-semibold text-stone-950">
-                      {questionDisplayLabel(question)}
-                    </h3>
-                    <p className="mt-1 text-sm text-stone-700">
-                      {formatQuestionValue(question)}
-                    </p>
-                    {question.helpText ? <p className="mt-1 text-xs text-stone-500">{question.helpText}</p> : null}
-                  </div>
-                  <span
-                    className={`rounded-full border px-3 py-1 text-xs font-semibold ${tag.className}`}
-                  >
-                    {tag.label}
-                  </span>
-                </div>
+                    <div className="mt-2">
+                      {isTeaor && !teaorInstalled ? (
+                        <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{TEAOR_UNAVAILABLE}</p>
+                      ) : isTeaor ? (
+                        <TeaorSelector
+                          multi={atom.valueType === "MULTI_ENUM"}
+                          selected={atom.valueType === "MULTI_ENUM" ? draft?.jsonValue ?? [] : draft?.stringValue ? [draft.stringValue] : []}
+                          labels={teaorLabels}
+                          disabled={saving}
+                          onSelect={(option) => {
+                            setTeaorLabels((labels) => ({ ...labels, [option.code]: option.labelHu }));
+                            if (atom.valueType === "MULTI_ENUM") toggleMultiValue(atom, option.code);
+                            else setDraft(atom.questionKey, { status: "ANSWERED", stringValue: option.code });
+                          }}
+                          onRemove={(code) => {
+                            if (atom.valueType === "MULTI_ENUM") toggleMultiValue(atom, code);
+                            else clearDraft(atom.questionKey);
+                          }}
+                        />
+                      ) : atom.valueType === "BOOLEAN" ? (
+                        <select
+                          className={inputClass}
+                          value={typeof draft?.booleanValue === "boolean" ? String(draft.booleanValue) : ""}
+                          onChange={(event) => setDraft(atom.questionKey, { status: "ANSWERED", booleanValue: event.target.value === "true" })}
+                          disabled={saving}
+                        >
+                          <option value="">Válasszon</option>
+                          <option value="true">Igen</option>
+                          <option value="false">Nem</option>
+                        </select>
+                      ) : atom.valueType === "ENUM" ? (
+                        <select
+                          className={inputClass}
+                          value={draft?.enumValue ?? ""}
+                          onChange={(event) => setDraft(atom.questionKey, { status: "ANSWERED", enumValue: event.target.value })}
+                          disabled={saving}
+                        >
+                          <option value="">Válasszon</option>
+                          {(atom.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      ) : atom.valueType === "MULTI_ENUM" ? (
+                        <div className="flex flex-wrap gap-2">
+                          {(atom.options ?? []).map((option) => {
+                            const active = (draft?.jsonValue ?? []).includes(option);
+                            return (
+                              <button key={option} type="button" aria-pressed={active} disabled={saving} onClick={() => toggleMultiValue(atom, option)} className={active ? chipOn : chipOff}>
+                                {option}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : atom.valueType === "JURISDICTION" ? (
+                        <input
+                          type="text"
+                          className={inputClass}
+                          placeholder="Pl. HU"
+                          value={draft?.enumValue ?? ""}
+                          onChange={(event) => setDraft(atom.questionKey, { status: "ANSWERED", enumValue: event.target.value })}
+                          disabled={saving}
+                        />
+                      ) : (
+                        <input
+                          type={atom.valueType === "NUMBER" ? "number" : atom.valueType === "DATE" ? "date" : "text"}
+                          className={inputClass}
+                          placeholder={atom.valueType === "NUMBER" ? "Pl. 52" : undefined}
+                          value={atom.valueType === "NUMBER" ? draft?.numberValue ?? "" : draft?.stringValue ?? ""}
+                          onChange={(event) => setDraft(atom.questionKey, atom.valueType === "NUMBER" ? { status: "ANSWERED", numberValue: event.target.value } : { status: "ANSWERED", stringValue: event.target.value })}
+                          disabled={saving}
+                        />
+                      )}
+                    </div>
 
-                {isEditing ? (
-                  <div className="mt-4 space-y-3 border-t border-stone-100 pt-3">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-600">
-                      Érték megadása
-                    </label>
-                    {question.valueType === "BOOLEAN" ? (
-                      <select className={inputClass} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus>
-                        <option value="">Válasszon</option><option value="true">Igen</option><option value="false">Nem</option>
-                      </select>
-                    ) : question.valueType === "ENUM" ? (
-                      <select className={inputClass} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus>
-                        <option value="">Válasszon</option>{(question.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
-                      </select>
-                    ) : (
-                      <input type={question.valueType === "NUMBER" ? "number" : question.valueType === "DATE" ? "date" : "text"} className={inputClass} placeholder={question.valueType === "NUMBER" ? "Pl. 52" : undefined} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus />
-                    )}
-                    <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={handleCancelEdit}
-                        disabled={saving}
-                        className="rounded-full border border-stone-300 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
-                      >
-                        Mégse
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleMarkUnknown(question)}
-                        disabled={saving}
-                        className="rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-                      >
-                        Nem ismertként jelölöm
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleSaveAnswer(question)}
-                        disabled={saving}
-                        className="rounded-full bg-stone-950 px-4 py-2 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
-                      >
-                        {saving ? "Mentés folyamatban…" : "Mentés"}
+                    <div className="mt-2 flex items-center gap-3">
+                      <span className="text-xs text-stone-500">{draftLabel(atom, draft)}</span>
+                      <button type="button" onClick={() => void markUnknown(atom)} disabled={saving} className="text-xs font-semibold text-amber-800 hover:underline">
+                        Nem tudom
                       </button>
                     </div>
                   </div>
-                ) : (
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit(question)}
-                      className="inline-flex items-center text-xs font-semibold text-[#7a5f18] hover:underline"
-                    >
-                      {question.status === "ANSWERED" ? "Módosítás →" : "Kitöltés →"}
-                    </button>
-                  </div>
-                )}
-                  </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setActiveIndex((index) => Math.max(0, index - 1))}
+                disabled={saving || activeIndex === 0}
+                className="rounded-full border border-stone-300 px-4 py-2 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+              >
+                ← Vissza
+              </button>
+              <button
+                type="button"
+                onClick={() => void saveActiveScreen(true)}
+                disabled={saving}
+                className="rounded-full bg-stone-950 px-5 py-2 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+              >
+                {saving ? "Mentés folyamatban…" : activeIndex >= screens.length - 1 ? "Mentés" : "Mentés és tovább →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {evidence ? (
+        <div className="mt-6 border-t border-stone-200 pt-5" data-testid="company-profile-evidence">
+          <h3 className="font-semibold text-stone-950">Dokumentumok és intézkedések</h3>
+          <p className="mt-1 text-sm text-stone-600">
+            A rátok vonatkozó területeken ellenőrizzük, hogy rendelkezésre áll-e a szükséges dokumentum vagy intézkedés.
+          </p>
+          <div className="mt-4 space-y-4">
+            {evidence.items
+              .filter((item) => item.relevance === "APPLIES")
+              .map((item) => (
+                <EvidenceQuestion key={item.controlKey} item={item} documents={evidence.reusableDocuments} onAnswered={() => void refreshEvidence()} />
+              ))}
+            {evidence.items.some((item) => item.relevance === "LEGAL_REVIEW_REQUIRED") ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Egyes területek a tevékenység vagy méret miatt jogi pontosítást igényelnek, ezért azokat ügyvédünk ellenőrzi.
+              </p>
+            ) : null}
+            {evidence.items.length > 0 && evidence.items.every((item) => item.relevance === "INSUFFICIENT_FACTS" || item.relevance === "DOES_NOT_APPLY") ? (
+              <p className="text-sm text-stone-500">A dokumentumokkal kapcsolatos kérdések a vállalati profil kitöltése után jelennek meg.</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function EvidenceQuestion({
+  item,
+  documents,
+  onAnswered,
+}: {
+  item: PortalCompanyProfileEvidenceItem;
+  documents: PortalCompanyProfileReusableDocument[];
+  onAnswered: () => void;
+}) {
+  const [mode, setMode] = useState<"YES" | "NO" | "UNKNOWN" | null>(null);
+  const [documentVersionId, setDocumentVersionId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (answer: "YES" | "NO" | "UNKNOWN") => {
+    if (answer === "YES" && !documentVersionId) {
+      setError("Válassz egy meglévő dokumentumot.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await answerPortalCompanyProfileEvidence(item.controlKey, {
+        answer,
+        ...(answer === "YES" ? { documentVersionId } : {}),
+      });
+      setMode(null);
+      onAnswered();
+    } catch (err) {
+      setError(clientSafeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-stone-200 p-4">
+      <p className="text-sm font-semibold text-stone-900">{item.questionHu}</p>
+      <p className="mt-1 text-xs text-stone-500">{item.stateHu}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setMode("YES")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
+          Igen
+        </button>
+        <button type="button" onClick={() => void submit("NO")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
+          Nem
+        </button>
+        <button type="button" onClick={() => void submit("UNKNOWN")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">
+          Nem tudom
+        </button>
+      </div>
+      {mode === "YES" ? (
+        <div className="mt-3">
+          {documents.length ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <select className={inputClass} value={documentVersionId} onChange={(event) => setDocumentVersionId(event.target.value)} disabled={busy}>
+                <option value="">Válassz dokumentumot…</option>
+                {documents.map((doc) => (
+                  <option key={doc.documentVersionId} value={doc.documentVersionId}>
+                    {doc.label}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={() => void submit("YES")} disabled={busy || !documentVersionId} className="rounded-full bg-stone-950 px-4 py-1.5 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50">
+                {busy ? "Mentés…" : "Mentés"}
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-stone-500">Nincs elérhető dokumentum a kiválasztáshoz.</p>
+          )}
+        </div>
+      ) : null}
+      {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+    </div>
+  );
+}
+
+function TeaorSelector({
+  multi,
+  selected,
+  labels,
+  disabled,
+  onSelect,
+  onRemove,
+}: {
+  multi: boolean;
+  selected: string[];
+  labels: Record<string, string>;
+  disabled: boolean;
+  onSelect: (option: { code: string; labelHu: string }) => void;
+  onRemove: (code: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [options, setOptions] = useState<Array<{ code: string; labelHu: string }>>([]);
+  const [open, setOpen] = useState(false);
+
+  const search = async (value: string) => {
+    setQuery(value);
+    setOpen(true);
+    try {
+      const result = await getPortalCompanyProfileTeaor25Options(value);
+      setOptions(result.options);
+    } catch {
+      setOptions([]);
+    }
+  };
+
+  return (
+    <div>
+      {selected.length ? (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {selected.map((code) => (
+            <span key={code} className="inline-flex items-center gap-2 rounded-full border border-stone-300 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-800">
+              {labels[code] ? `${code} — ${labels[code]}` : code}
+              <button type="button" onClick={() => onRemove(code)} disabled={disabled} className="text-stone-500 hover:text-stone-900" aria-label={`Eltávolítás: ${code}`}>
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <input
+        type="text"
+        className={inputClass}
+        placeholder="Kezdje el beírni a tevékenységet, pl. programozás"
+        value={query}
+        onChange={(event) => void search(event.target.value)}
+        onFocus={() => setOpen(true)}
+        disabled={disabled}
+        aria-autocomplete="list"
+      />
+      {open && options.length ? (
+        <ul className="mt-1 max-h-56 overflow-auto rounded-xl border border-stone-200 bg-white shadow-sm" role="listbox">
+          {options.map((option) => (
+            <li key={option.code}>
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(option);
+                  setQuery("");
+                  setOpen(false);
+                }}
+                disabled={disabled}
+                className="block w-full px-3 py-2 text-left text-sm text-stone-800 hover:bg-stone-50"
+              >
+                {option.code} — {option.labelHu}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {!multi ? <p className="mt-1 text-xs text-stone-400">A fő tevékenységet egy kód jelöli.</p> : null}
+    </div>
   );
 }

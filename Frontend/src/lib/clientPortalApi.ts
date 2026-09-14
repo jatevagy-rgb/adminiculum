@@ -805,22 +805,61 @@ export async function getPortalCompliance() {
     suppressErrorLogging: true,
   });
 }
+export type PortalCompanyProfileSection =
+  | "COMPANY"
+  | "OPERATIONS"
+  | "PEOPLE"
+  | "SIZE"
+  | "DATA"
+  | "DIGITAL"
+  | "MARKET"
+  | "AI"
+  | "FINANCE"
+  | "PRODUCT"
+  | "ENVIRONMENT"
+  | "SECTOR"
+  | "SPECIAL";
+
 export type PortalCompanyProfileQuestion = {
   questionKey: string;
   label: string;
   helpText?: string | null;
-  section: "COMPANY" | "OPERATIONS" | "PEOPLE" | "DATA" | "DIGITAL" | "MARKET" | "SPECIAL";
-  valueType: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "DATE";
+  why?: string | null;
+  section: PortalCompanyProfileSection;
+  module?: string | null;
+  valueType: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "MULTI_ENUM" | "DATE" | "JURISDICTION";
   options?: string[];
+  codeCatalog?: "TEAOR25" | null;
+  discoveryBaseline?: boolean;
   integerOnly?: boolean;
   order: number;
   status: "ANSWERED" | "UNKNOWN" | "UNANSWERED";
-  value: number | string | boolean | null;
+  value: number | string | boolean | string[] | null;
+};
+
+export type PortalCompanyProfileScreen = {
+  screenKey: string;
+  order: number;
+  sectionKey: string;
+  sectionTitleHu: string;
+  titleHu: string;
+  helpTextHu: string;
+  whyHu: string;
+  uiKind: string;
+  factBindings: string[];
+  questionAtomKeys: string[];
 };
 
 export type PortalCompanyProfileDiscovery = {
   client: { name: string | null };
+  capabilities: { teaor25CatalogInstalled: boolean };
+  screens: PortalCompanyProfileScreen[];
   questions: PortalCompanyProfileQuestion[];
+};
+
+export type PortalTeaor25Options = {
+  installed: boolean;
+  options: Array<{ code: string; labelHu: string }>;
 };
 
 export type PortalCompanyProfileAnswerPayload = {
@@ -830,6 +869,7 @@ export type PortalCompanyProfileAnswerPayload = {
   booleanValue?: boolean;
   enumValue?: string;
   dateValue?: string;
+  jsonValue?: string[];
 };
 
 export type PortalCompanyProfileAnswerResult = {
@@ -856,6 +896,98 @@ export async function answerPortalCompanyProfileQuestion(
       authContext: 'customer',
       method: 'PUT',
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function answerPortalCompanyProfileScreen(
+  screenKey: string,
+  facts: Record<string, PortalCompanyProfileAnswerPayload>,
+) {
+  return fetchApi<{ screenKey: string; answers: PortalCompanyProfileAnswerResult[] }>(
+    `/client-portal/org/company-profile/screens/${encodeURIComponent(screenKey)}`,
+    {
+      authContext: 'customer',
+      method: 'PUT',
+      body: JSON.stringify({ facts }),
+    },
+  );
+}
+
+export async function getPortalCompanyProfileTeaor25Options(query: string) {
+  return fetchApi<PortalTeaor25Options>(
+    `/client-portal/org/company-profile/teaor25-options?q=${encodeURIComponent(query)}`,
+    {
+      authContext: 'customer',
+      suppressErrorStatuses: [404, 503],
+      suppressErrorLogging: true,
+    },
+  );
+}
+
+// --- COMPANY PROFILE 2.0 — CONTROL / EVIDENCE FOLLOW-UP -------------------
+
+export type PortalEvidenceRelevance =
+  | "APPLIES"
+  | "LEGAL_REVIEW_REQUIRED"
+  | "DOES_NOT_APPLY"
+  | "INSUFFICIENT_FACTS";
+
+export type PortalCompanyProfileEvidenceItem = {
+  controlKey: string;
+  module: "DATA" | "WHISTLEBLOWING" | "CYBER";
+  questionHu: string;
+  relevance: PortalEvidenceRelevance;
+  implemented: boolean;
+  evidenceLinked: boolean;
+  stateHu: string;
+};
+
+export type PortalCompanyProfileReusableDocument = {
+  documentVersionId: string;
+  label: string;
+};
+
+export type PortalCompanyProfileEvidenceJourney = {
+  items: PortalCompanyProfileEvidenceItem[];
+  reusableDocuments: PortalCompanyProfileReusableDocument[];
+};
+
+export type PortalCompanyProfileEvidenceAnswer = {
+  answer: "YES" | "NO" | "UNKNOWN";
+  documentVersionId?: string;
+};
+
+export type PortalCompanyProfileEvidenceResult = {
+  controlKey: string;
+  module: string;
+  route: "UPLOAD_OR_REUSE_DOCUMENT" | "MISSING_CONTROL_EVIDENCE" | "LAWYER_REVIEW";
+  messageHu: string;
+  implemented: boolean;
+  documentVersionId: string | null;
+};
+
+export async function getPortalCompanyProfileEvidence() {
+  return fetchApi<PortalCompanyProfileEvidenceJourney>(
+    "/client-portal/org/company-profile/evidence",
+    {
+      authContext: "customer",
+      suppressErrorStatuses: [401, 403, 404, 503],
+      suppressErrorLogging: true,
+    },
+  );
+}
+
+export async function answerPortalCompanyProfileEvidence(
+  controlKey: string,
+  answer: PortalCompanyProfileEvidenceAnswer,
+) {
+  return fetchApi<PortalCompanyProfileEvidenceResult>(
+    `/client-portal/org/company-profile/evidence/${encodeURIComponent(controlKey)}`,
+    {
+      authContext: "customer",
+      method: "PUT",
+      body: JSON.stringify(answer),
     },
   );
 }
