@@ -34,6 +34,7 @@ import { classifyAudience, toCommunicationSignal } from "@/lib/communicationInta
 import { taskWorkflowErrorMessage } from "@/lib/taskWorkflowPresentation";
 import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
+import { buildForwardBody, buildReplyAllRecipients } from "@/lib/mailboxMessageRecipients";
 
 const EMPTY_TASK_PLANNING: TaskPlanningValue = {
   taskDefinitionId: null,
@@ -626,6 +627,7 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
   const signal = toCommunicationSignal(item);
   const [composerMode, setComposerMode] = useState<"reply" | "replyAll" | "forward" | null>(null);
   const [composerTo, setComposerTo] = useState("");
+  const [composerCc, setComposerCc] = useState("");
   const [composerBody, setComposerBody] = useState("");
   const [composerBusy, setComposerBusy] = useState(false);
   const [composerFeedback, setComposerFeedback] = useState<string | null>(null);
@@ -637,8 +639,16 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
   const openComposer = (mode: "reply" | "replyAll" | "forward") => {
     setComposerMode(mode);
     setComposerFeedback(null);
-    setComposerBody("");
-    setComposerTo(mode === "reply" ? (detail?.senderEmail || item.senderEmail || "") : mode === "replyAll" ? (detail?.senderEmail || item.senderEmail || "") : "");
+    const sender = detail?.senderEmail || item.senderEmail || "";
+    if (mode === "replyAll" && detail) {
+      const recipients = buildReplyAllRecipients(detail, mailboxConnection);
+      setComposerTo(recipients.to.map((recipient) => recipient.email).join(", "));
+      setComposerCc(recipients.cc.map((recipient) => recipient.email).join(", "));
+    } else {
+      setComposerTo(mode === "reply" ? sender : "");
+      setComposerCc("");
+    }
+    setComposerBody(mode === "forward" && detail ? buildForwardBody(detail) : "");
   };
   const submitComposer = async () => {
     if (!composerMode || !mailboxConnection || !composerTo.trim() || !composerBody.trim()) return;
@@ -648,7 +658,7 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
       await sendMailboxMessage({
         mailboxId: mailboxConnection.id,
         to: composerTo.split(",").map((email) => ({ email: email.trim() })).filter((recipient) => recipient.email),
-        cc: composerMode === "replyAll" && detail?.recipientEmail ? [{ email: detail.recipientEmail }] : [],
+        cc: composerCc.split(",").map((email) => ({ email: email.trim() })).filter((recipient) => recipient.email),
         subject: `${composerMode === "forward" ? "Fwd" : "Re"}: ${item.subject || "Nincs tárgy"}`,
         bodyText: composerBody.trim(),
         replyToCommunicationId: composerMode === "forward" ? null : item.id,
@@ -673,7 +683,7 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
         {item.sourceTaskCount > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt feladat</p>{linkedTasksLoading ? <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Betöltés…</p> : linkedTasks.length ? <div className="mt-2 space-y-1">{linkedTasks.map((task) => <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block text-[11px] font-semibold text-[var(--adm-blue-700)] hover:underline">{task.title} · {task.status}</Link>)}</div> : <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A feladatkapcsolat részlete nem érhető el.</p>}</div> : null}
         <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
         {isMailboxMessage ? <section aria-label="E-mail műveletek" className="border-t border-[var(--adm-border)] pt-4"><h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">E-mail műveletek</h3>{canSend ? <div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => openComposer("reply")} className="adm-link-button px-3 py-2 text-[11px]">Válasz</button><button type="button" onClick={() => openComposer("replyAll")} className="adm-link-button px-3 py-2 text-[11px]">Válasz mindenkinek</button><button type="button" onClick={() => openComposer("forward")} className="adm-link-button px-3 py-2 text-[11px]">Továbbítás</button></div> : <p className="text-[11px] text-[var(--adm-text-muted)]">A küldés jelenleg nem érhető el ehhez a postafiókhoz.</p>}{composerFeedback ? <p role="status" className="mt-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{composerFeedback}</p> : null}</section> : null}
-        {composerMode ? <div className="mt-3 border border-[var(--adm-border)] bg-white p-3"><p className="text-[11px] font-semibold text-[var(--adm-text)]">{composerMode === "reply" ? "Válasz" : composerMode === "replyAll" ? "Válasz mindenkinek" : "Továbbítás"}</p><label className="mt-2 block text-[10px] font-semibold text-[var(--adm-text-muted)]">Címzett<input value={composerTo} onChange={(event) => setComposerTo(event.target.value)} className="adm-modal-field mt-1 w-full px-2 py-1.5 text-[11px]" placeholder="cimzett@example.com" /></label><label className="mt-2 block text-[10px] font-semibold text-[var(--adm-text-muted)]">Üzenet<textarea value={composerBody} onChange={(event) => setComposerBody(event.target.value)} rows={4} className="adm-modal-field mt-1 w-full px-2 py-1.5 text-[11px]" /></label><div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => setComposerMode(null)} className="border border-[var(--adm-border)] px-2 py-1.5 text-[10px] font-semibold">Mégse</button><button type="button" disabled={composerBusy || !composerTo.trim() || !composerBody.trim()} onClick={() => void submitComposer()} className="bg-[var(--adm-blue-700)] px-2 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">{composerBusy ? "Küldés…" : "Küldés"}</button></div></div> : null}
+        {composerMode ? <div className="mt-3 border border-[var(--adm-border)] bg-white p-3"><p className="text-[11px] font-semibold text-[var(--adm-text)]">{composerMode === "reply" ? "Válasz" : composerMode === "replyAll" ? "Válasz mindenkinek" : "Továbbítás"}</p><label className="mt-2 block text-[10px] font-semibold text-[var(--adm-text-muted)]">Címzett<input value={composerTo} onChange={(event) => setComposerTo(event.target.value)} className="adm-modal-field mt-1 w-full px-2 py-1.5 text-[11px]" placeholder="cimzett@example.com" /></label>{composerMode === "replyAll" ? <label className="mt-2 block text-[10px] font-semibold text-[var(--adm-text-muted)]">Másolat<input value={composerCc} onChange={(event) => setComposerCc(event.target.value)} className="adm-modal-field mt-1 w-full px-2 py-1.5 text-[11px]" placeholder="masolat@example.com" /></label> : null}<label className="mt-2 block text-[10px] font-semibold text-[var(--adm-text-muted)]">Üzenet<textarea value={composerBody} onChange={(event) => setComposerBody(event.target.value)} rows={4} className="adm-modal-field mt-1 w-full px-2 py-1.5 text-[11px]" /></label>{composerMode === "forward" && detail?.attachments?.length ? <p className="mt-2 text-[10px] font-semibold text-[var(--adm-text-muted)]">Az eredeti mellékletek nem kerülnek automatikusan továbbításra.</p> : null}<div className="mt-2 flex justify-end gap-2"><button type="button" onClick={() => setComposerMode(null)} className="border border-[var(--adm-border)] px-2 py-1.5 text-[10px] font-semibold">Mégse</button><button type="button" disabled={composerBusy || !composerTo.trim() || !composerBody.trim()} onClick={() => void submitComposer()} className="bg-[var(--adm-blue-700)] px-2 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">{composerBusy ? "Küldés…" : "Küldés"}</button></div></div> : null}
         <section aria-label="Ügybesorolás és feladatműveletek" className="border-t border-[var(--adm-border)] pt-4">
           <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Ügybesorolás</h3>
           {item.caseId ? (

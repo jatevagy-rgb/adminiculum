@@ -3781,6 +3781,7 @@ export interface CommunicationItem {
 
 export interface CommunicationDetail extends CommunicationItem {
   content: string | null;
+  recipients?: CommunicationRecipient[] | null;
   mailboxAddress?: string | null;
   mailboxConnectionId?: string | null;
   mailboxProviderMessageId?: string | null;
@@ -4118,6 +4119,12 @@ export async function getCommunicationAttachments(communicationId: string): Prom
   return fetchApi<CommunicationAttachment[]>(`/communications/${communicationId}/attachments`);
 }
 
+export interface CommunicationRecipient {
+  name?: string | null;
+  email: string;
+  kind?: 'TO' | 'CC' | 'BCC' | string | null;
+}
+
 // ============================================================================
 // UNIVERSAL MAILBOX — owner-scoped frontend contract (PR #219)
 // ============================================================================
@@ -4186,6 +4193,7 @@ export async function sendMailboxMessage(data: {
   mailboxId: string;
   to: Array<{ name?: string | null; email: string }>;
   cc?: Array<{ name?: string | null; email: string }>;
+  bcc?: Array<{ name?: string | null; email: string }>;
   subject: string;
   bodyText: string;
   replyToCommunicationId?: string | null;

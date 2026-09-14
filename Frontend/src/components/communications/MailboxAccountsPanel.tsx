@@ -77,6 +77,24 @@ export default function MailboxAccountsPanel() {
 
   useEffect(() => { void refresh(); }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const mailboxState = params.get("mailbox")?.toLowerCase();
+    const safeStateMessages: Record<string, Feedback> = {
+      connected: { tone: "success", message: "Az e-mail-fiók csatlakozott. A fióklista frissült." },
+      error: { tone: "error", message: "Az e-mail-fiók engedélyezése nem sikerült." },
+      authorization_required: { tone: "error", message: "Az e-mail-fiók további engedélyezést igényel." },
+      failed: { tone: "error", message: "Az e-mail-fiók engedélyezése nem sikerült." },
+    };
+    const nextFeedback = mailboxState ? safeStateMessages[mailboxState] : undefined;
+    if (!nextFeedback) return;
+    setFeedback(nextFeedback);
+    if (mailboxState === "connected") void refresh();
+    params.delete("mailbox");
+    window.history.replaceState({}, "", `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}${window.location.hash}`);
+  }, []);
+
   const closeConnect = () => {
     if (busy) return;
     setShowConnect(false);
@@ -105,12 +123,18 @@ export default function MailboxAccountsPanel() {
     setBusy(true);
     setFeedback(null);
     try {
-      await confirmMailboxVerification({ email: email.trim(), provider, code: code.trim() });
-      setFeedback({ tone: "success", message: "Az e-mail-cím megerősítve. A szolgáltatói engedélyezés még szükséges." });
+      const result = await confirmMailboxVerification({ email: email.trim(), provider, code: code.trim() });
       setShowConnect(false);
       setVerificationStarted(false);
       setCode("");
-      await refresh();
+      if (provider === "IMAP_SMTP") {
+        setFeedback({ tone: "success", message: "Az e-mail-cím megerősítve." });
+        await refresh();
+      } else {
+        const authorization = await startMailboxAuthorization(result.mailbox.id, provider);
+        if (!authorization.authorizationUrl) throw new Error("Authorization URL unavailable");
+        window.location.assign(authorization.authorizationUrl);
+      }
     } catch (error) {
       setFeedback({ tone: "error", message: safeError(error, "Az ellenőrző kód nem fogadható el.") });
     } finally {

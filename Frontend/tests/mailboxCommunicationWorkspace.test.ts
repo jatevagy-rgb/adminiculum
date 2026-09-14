@@ -40,4 +40,27 @@ describe("Universal mailbox frontend contract", () => {
     assert.doesNotMatch(src, /Ez az Ön ügye/);
     assert.doesNotMatch(src, /setTimeout\([^)]*time/i);
   });
+
+  it("starts OAuth immediately after verification and presents only safe callback states", () => {
+    const src = panel();
+    assert.match(src, /confirmMailboxVerification/);
+    assert.match(src, /startMailboxAuthorization\(result\.mailbox\.id, provider\)/);
+    assert.match(src, /window\.location\.assign\(authorization\.authorizationUrl\)/);
+    assert.match(src, /provider === "IMAP_SMTP"/);
+    assert.match(src, /connected: \{ tone: "success"/);
+    assert.match(src, /Az e-mail-fiók engedélyezése nem sikerült/);
+    assert.doesNotMatch(src, /params\.get\("code"\)|params\.get\("state"\)|providerError|accessToken|refreshToken/);
+  });
+
+  it("uses structured Reply All and truthful Forward data without arbitrary case authority", () => {
+    const src = workspace();
+    assert.match(src, /buildReplyAllRecipients/);
+    assert.match(src, /buildForwardBody/);
+    assert.match(src, /replyToCommunicationId: composerMode === "forward" \? null : item\.id/);
+    assert.doesNotMatch(src, /cc: composerMode === "replyAll" && detail\?\.recipientEmail/);
+    const sendBlock = src.slice(src.indexOf("await sendMailboxMessage({"), src.indexOf("});", src.indexOf("await sendMailboxMessage({")));
+    assert.doesNotMatch(sendBlock, /\b(caseId|clientId)\s*:/);
+    assert.match(src, /Az eredeti mellékletek nem kerülnek automatikusan továbbításra/);
+    assert.doesNotMatch(src, /dangerouslySetInnerHTML|bodyHtmlSanitized/);
+  });
 });
