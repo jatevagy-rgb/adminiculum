@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../src/modules/client-workspace/companyProfileAnswerService';
 import { addRequirementCitation, approveApplicabilityRuleVersion, approveRequirementVersion, createApplicabilityRuleVersion, createRequirement, createRequirementVersion } from '../src/modules/compliance/requirementRuleService';
+import { createRequirementApplicability } from '../src/modules/compliance/requirementApplicabilityService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -26,6 +27,9 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
   const requirementId = crypto.randomUUID();
   const requirementVersionId = crypto.randomUUID();
   const ruleVersionId = crypto.randomUUID();
+  const adaptiveRequirementId = crypto.randomUUID();
+  const adaptiveRequirementVersionId = crypto.randomUUID();
+  const adaptiveRuleVersionId = crypto.randomUUID();
   let ownsDefinition = false;
   let existingDefinitionBaseline: Record<string, unknown> | null = null;
 
@@ -72,6 +76,20 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     const rule = await createApplicabilityRuleVersion({ requirementVersionId, ruleVersionKey: 'R1', evaluationScopeType: 'COMPANY', astJson: { schemaVersion: 'rule-ast/v1', node: { kind: 'COMPARE', operator: 'GTE', left: { kind: 'FACT', factKey: 'employee_count' }, right: { kind: 'LITERAL', valueType: 'number', value: 50 } } }, db });
     await db.applicabilityRuleVersion.update({ where: { id: rule.id }, data: { id: ruleVersionId } });
     await approveApplicabilityRuleVersion(ruleVersionId, adminId, db);
+
+    const adaptiveRequirement = await createRequirement({ key: `ANSWER_STATE_BOOLEAN_${suffix}`, jurisdictionCode: 'HU', domainCode: `ANSWER_STATE_${suffix}`, db });
+    await db.requirement.update({ where: { id: adaptiveRequirement.id }, data: { id: adaptiveRequirementId } });
+    await createRequirementVersion({ requirementId: adaptiveRequirementId, versionKey: 'V1', title: 'Regulated activity', normativeStatement: 'A regulated activity flag is required.', effectiveFrom: new Date('2026-01-01T00:00:00Z'), db });
+    await db.requirementVersion.update({ where: { requirementId_versionKey: { requirementId: adaptiveRequirementId, versionKey: 'V1' } }, data: { id: adaptiveRequirementVersionId } });
+    await addRequirementCitation({ requirementVersionId: adaptiveRequirementVersionId, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
+    await approveRequirementVersion(adaptiveRequirementVersionId, adminId, db);
+    const adaptiveRule = await createApplicabilityRuleVersion({ requirementVersionId: adaptiveRequirementVersionId, ruleVersionKey: 'R1', evaluationScopeType: 'COMPANY', astJson: { schemaVersion: 'rule-ast/v1', node: { kind: 'COMPARE', operator: 'EQ', left: { kind: 'FACT', factKey: 'company_regulated_activity' }, right: { kind: 'LITERAL', valueType: 'boolean', value: true } } }, db });
+    await db.applicabilityRuleVersion.update({ where: { id: adaptiveRule.id }, data: { id: adaptiveRuleVersionId } });
+    await approveApplicabilityRuleVersion(adaptiveRuleVersionId, adminId, db);
+
+    const requiredDefinitions = await db.factDefinition.findMany({ where: { key: { in: ['company_main_activity', 'company_operating_country', 'company_regulated_activity'] } }, select: { key: true, valueType: true, questionKey: true, allowedScopeTypes: true, status: true } });
+    expect(requiredDefinitions).toHaveLength(3);
+    expect(requiredDefinitions.every((definition) => definition.status === 'ACTIVE' && definition.allowedScopeTypes.includes('COMPANY'))).toBe(true);
   });
 
   afterAll(async () => {
@@ -80,8 +98,11 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await db.clientFactAnswerState.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.clientFact.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.applicabilityRuleVersion.deleteMany({ where: { id: ruleVersionId } });
+    await db.applicabilityRuleVersion.deleteMany({ where: { id: adaptiveRuleVersionId } });
     await db.requirementVersion.deleteMany({ where: { id: requirementVersionId } });
+    await db.requirementVersion.deleteMany({ where: { id: adaptiveRequirementVersionId } });
     await db.requirement.deleteMany({ where: { id: requirementId } });
+    await db.requirement.deleteMany({ where: { id: adaptiveRequirementId } });
     if (ownsDefinition) await db.factDefinition.deleteMany({ where: { id: definitionId } });
     if (existingDefinitionBaseline) {
       const after = await db.factDefinition.findUniqueOrThrow({ where: { key: 'employee_count' } });
@@ -101,12 +122,47 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
   });
 
   it('derives UNANSWERED and preserves UNKNOWN without a fake ClientFact', async () => {
-    expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).toEqual([expect.objectContaining({ questionKey: 'employee_count', label: 'Number of employees', valueType: 'NUMBER', status: 'UNANSWERED', value: null })]);
+    const discovery = (await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions;
+    expect(discovery).toHaveLength(3);
+    expect(discovery).toEqual(expect.arrayContaining([
+      expect.objectContaining({ questionKey: 'employee_count', label: 'Number of employees', valueType: 'NUMBER', status: 'UNANSWERED', value: null }),
+      expect.objectContaining({ questionKey: 'company_main_activity', valueType: 'STRING', status: 'UNANSWERED', value: null }),
+      expect.objectContaining({ questionKey: 'company_operating_country', valueType: 'STRING', status: 'UNANSWERED', value: null }),
+    ]));
     const result = await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
     expect(result).toEqual({ questionKey: 'employee_count', status: 'UNKNOWN', answered: false });
     expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(0);
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
     expect(await db.clientFactAnswerState.count({ where: { clientId: clientA } })).toBe(1);
+  });
+
+  it('discovers adaptive dependencies and persists typed STRING/BOOLEAN answers with reevaluation', async () => {
+    await createRequirementApplicability({
+      requirementVersionId: adaptiveRequirementVersionId,
+      ruleVersionId: adaptiveRuleVersionId,
+      clientId: clientA,
+      scope: { scopeType: 'COMPANY', evaluationAt: new Date() },
+    }, db);
+    const before = await getCompanyProfileDiscovery(memberId, workspaceA, db);
+    expect(before.questions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ questionKey: 'company_main_activity', valueType: 'STRING', status: 'UNANSWERED' }),
+      expect.objectContaining({ questionKey: 'company_regulated_activity', valueType: 'BOOLEAN', status: 'UNANSWERED' }),
+    ]));
+    await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'company_main_activity', { status: 'ANSWERED', stringValue: '   logistics   ' }, db)).resolves.toMatchObject({ status: 'ANSWERED', answered: true });
+    const stringFact = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_main_activity' }, supersededAt: null } });
+    expect(stringFact.stringValue).toBe('logistics');
+    expect((await db.clientFactAnswerState.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_main_activity' } } })).status).toBe('ANSWERED');
+    expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_main_activity', status: 'ANSWERED', value: 'logistics' })]));
+    await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'company_main_activity', { status: 'ANSWERED', stringValue: '   ' }, db)).rejects.toMatchObject({ code: 'CLIENT_PROFILE_ANSWER_INVALID' });
+    await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'company_main_activity', { status: 'ANSWERED', stringValue: 'x'.repeat(501) }, db)).rejects.toMatchObject({ code: 'CLIENT_PROFILE_ANSWER_INVALID' });
+    await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'company_regulated_activity', { status: 'ANSWERED', booleanValue: true }, db)).resolves.toMatchObject({ status: 'ANSWERED', answered: true });
+    const booleanFact = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_regulated_activity' }, supersededAt: null } });
+    expect(booleanFact.booleanValue).toBe(true);
+    const booleanState = await db.clientFactAnswerState.findFirstOrThrow({ where: { clientId: clientA, factDefinition: { key: 'company_regulated_activity' } } });
+    expect(booleanState.status).toBe('ANSWERED');
+    const latestAdaptive = await db.requirementApplicability.findFirstOrThrow({ where: { clientId: clientA, requirementVersionId: adaptiveRequirementVersionId }, orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }] });
+    expect(latestAdaptive.outcome).toBe('APPLIES');
+    expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).not.toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_regulated_activity' })]));
   });
 
   it('creates CLIENT_PROVIDED facts, supersedes immutable truth, and is idempotent', async () => {

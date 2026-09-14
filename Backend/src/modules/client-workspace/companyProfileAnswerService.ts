@@ -9,6 +9,7 @@ type Tx = Prisma.TransactionClient;
 
 const WRITE_ROLES = new Set(['REPRESENTATIVE', 'APPROVER']);
 const ANSWER_STATUSES = new Set(['ANSWERED', 'UNKNOWN']);
+const MAX_PROFILE_STRING_LENGTH = 500;
 
 function error(status: number, code: string, message: string): never {
   throw Object.assign(new Error(message), { status, code });
@@ -39,13 +40,30 @@ function typedValue(fact: { numberValue: Prisma.Decimal | null; stringValue: str
   return fact.enumValue;
 }
 
-function answerInput(question: CompanyProfileQuestion, body: Record<string, unknown>): Record<string, unknown> {
+function answerInput(question: CompanyProfileQuestion, body: Record<string, unknown>, definition: { allowedEnumValues: unknown }): Record<string, unknown> {
   switch (question.valueType) {
     case 'NUMBER': return { numberValue: body.numberValue };
     case 'BOOLEAN': return { booleanValue: body.booleanValue };
-    case 'STRING': return { stringValue: body.stringValue };
-    case 'ENUM': return { enumValue: body.enumValue };
-    case 'DATE': return { dateValue: body.dateValue };
+    case 'STRING': {
+      if (typeof body.stringValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'stringValue must be a string.');
+      const value = body.stringValue.trim();
+      if (!value || value.length > MAX_PROFILE_STRING_LENGTH) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', `stringValue must contain 1-${MAX_PROFILE_STRING_LENGTH} characters after trimming.`);
+      return { stringValue: value };
+    }
+    case 'ENUM': {
+      if (typeof body.enumValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue must be a string.');
+      const configuredOptions = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
+      if (!configuredOptions.length) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue is unavailable because no approved options are configured.');
+      if (!configuredOptions.includes(body.enumValue)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue is not an allowed option.');
+      return { enumValue: body.enumValue };
+    }
+    case 'DATE': {
+      if (typeof body.dateValue !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.dateValue)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'dateValue must be a valid YYYY-MM-DD date.');
+      const [year, month, day] = body.dateValue.split('-').map(Number);
+      const candidate = new Date(Date.UTC(year, month - 1, day));
+      if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'dateValue must be a valid YYYY-MM-DD date.');
+      return { dateValue: body.dateValue };
+    }
     default: return {};
   }
 }
@@ -58,6 +76,15 @@ function snapshotMissingFactKeys(snapshotJson: unknown): string[] {
   if (!snapshotJson || typeof snapshotJson !== 'object') return [];
   const value = (snapshotJson as { missingFactKeys?: unknown }).missingFactKeys;
   return Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : [];
+}
+
+function latestCurrentSnapshots<T extends { requirementVersionId: string; ruleVersionId: string; scopeType: string; factSubjectId: string | null }>(snapshots: T[]): T[] {
+  const current = new Map<string, T>();
+  for (const snapshot of snapshots) {
+    const logicalScope = [snapshot.requirementVersionId, snapshot.ruleVersionId, snapshot.scopeType, snapshot.factSubjectId ?? ''].join('|');
+    if (!current.has(logicalScope)) current.set(logicalScope, snapshot);
+  }
+  return [...current.values()];
 }
 
 export async function getCompanyProfileDiscovery(identityId: string, workspaceId: string, db: Db = defaultPrisma) {
@@ -79,18 +106,24 @@ export async function getCompanyProfileDiscovery(identityId: string, workspaceId
       requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
       ruleVersion: { status: 'APPROVED', supersededById: null },
     },
-    select: { ruleVersionId: true, outcome: true, snapshotJson: true },
+    orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
+    select: { requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true, snapshotJson: true },
   });
-  const missingFactKeys = new Set(snapshots
+  const currentSnapshots = latestCurrentSnapshots(snapshots);
+  const missingFactKeys = new Set(currentSnapshots
     .filter((snapshot) => String(snapshot.outcome) === 'INSUFFICIENT_FACTS')
     .flatMap((snapshot) => snapshotMissingFactKeys(snapshot.snapshotJson)));
   const missingDependencies = missingFactKeys.size
     ? await db.applicabilityRuleFactDependency.findMany({
-      where: { applicabilityRuleVersionId: { in: [...new Set(snapshots.map((snapshot) => snapshot.ruleVersionId))] }, factKey: { in: [...missingFactKeys] } },
+      where: { applicabilityRuleVersionId: { in: [...new Set(currentSnapshots.map((snapshot) => snapshot.ruleVersionId))] }, factKey: { in: [...missingFactKeys] } },
       select: { factKey: true, resolvedFactDefinition: { select: { id: true, key: true, questionKey: true, valueType: true, status: true, allowedScopeTypes: true, allowedEnumValues: true } } },
     })
     : [];
-  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
+  const definitionsById = new Map<string, typeof definitions[number]>();
+  for (const definition of definitions) {
+    const question = getCompanyProfileQuestionForDefinition(definition);
+    if (question?.baseline) definitionsById.set(definition.id, definition);
+  }
   for (const dependency of missingDependencies) {
     const definition = dependency.resolvedFactDefinition;
     if (definition && definition.status === 'ACTIVE' && definition.allowedScopeTypes.includes('COMPANY')) {
@@ -145,16 +178,9 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
 
   const state = await tx.clientFactAnswerState.findFirst({ where: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: question.scopeType, factSubjectId: null }, include: { currentFact: { select: { id: true, numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true } } } });
   if (status === 'ANSWERED') {
-    const input = answerInput(question, body);
+    const input = answerInput(question, body, definition);
     if (question.valueType === 'NUMBER' && (typeof input.numberValue !== 'number' || !Number.isFinite(input.numberValue) || Number(input.numberValue) < 0)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'numberValue must be a non-negative finite number.');
     if (question.valueType === 'BOOLEAN' && typeof input.booleanValue !== 'boolean') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'booleanValue must be boolean.');
-    if (question.valueType === 'STRING' && typeof input.stringValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'stringValue must be a string.');
-    if (question.valueType === 'ENUM') {
-      if (typeof input.enumValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue must be a string.');
-      const configuredOptions = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
-      if (configuredOptions.length && !configuredOptions.includes(input.enumValue)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue is not an allowed option.');
-    }
-    if (question.valueType === 'DATE' && typeof input.dateValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'dateValue must be a valid date.');
     const existingValue = state?.currentFact ? typedValue(state.currentFact) : null;
     const requestedValue = Object.values(input)[0] ?? null;
     if (state?.status === 'ANSWERED' && existingValue === requestedValue) return state;

@@ -9,6 +9,8 @@ export type CompanyProfileQuestion = {
   scopeType: 'COMPANY';
   valueType: CompanyProfileValueType;
   enumOptions?: readonly string[];
+  /** Baseline questions are always available; other questions are adaptive. */
+  baseline: boolean;
   order: number;
 };
 
@@ -23,6 +25,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'PEOPLE',
     scopeType: 'COMPANY',
     valueType: 'NUMBER',
+    baseline: true,
     order: 10,
   },
   {
@@ -33,6 +36,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'OPERATIONS',
     scopeType: 'COMPANY',
     valueType: 'STRING',
+    baseline: true,
     order: 20,
   },
   {
@@ -43,6 +47,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'COMPANY',
     scopeType: 'COMPANY',
     valueType: 'STRING',
+    baseline: true,
     order: 30,
   },
   {
@@ -53,6 +58,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'SPECIAL',
     scopeType: 'COMPANY',
     valueType: 'BOOLEAN',
+    baseline: false,
     order: 40,
   },
   {
@@ -63,6 +69,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'DATA',
     scopeType: 'COMPANY',
     valueType: 'BOOLEAN',
+    baseline: false,
     order: 50,
   },
   {
@@ -73,6 +80,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'DIGITAL',
     scopeType: 'COMPANY',
     valueType: 'BOOLEAN',
+    baseline: false,
     order: 60,
   },
   {
@@ -83,6 +91,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'DIGITAL',
     scopeType: 'COMPANY',
     valueType: 'BOOLEAN',
+    baseline: false,
     order: 70,
   },
   {
@@ -93,6 +102,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'MARKET',
     scopeType: 'COMPANY',
     valueType: 'BOOLEAN',
+    baseline: false,
     order: 80,
   },
 ];
