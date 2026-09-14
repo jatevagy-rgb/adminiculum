@@ -37,6 +37,8 @@ import {
   addProcessStep,
   createBusinessProcess,
   createBusinessSystem,
+  deleteBusinessProcess,
+  updateBusinessProcess,
 } from '../src/modules/client-company/service';
 
 const databaseUrl =
@@ -65,6 +67,12 @@ d('Observatory → Grow convergence (PostgreSQL)', () => {
   let runId: string;
   let observationId: string;
   let surveyKey: string;
+
+  // Process-scoped declared survey fixtures (defect-1 / defect-2 coverage).
+  let scopedProcessAId: string;
+  let scopedProcessBId: string;
+  let scopedObservationAId: string;
+  let scopedObservationBId: string;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
@@ -368,5 +376,156 @@ d('Observatory → Grow convergence (PostgreSQL)', () => {
       const refs = diag.sourceRefs as any;
       expect(Array.isArray(refs?.observationIds) ? refs.observationIds.includes(genericObs.id) : false).toBe(false);
     }
+  });
+
+  it('8. PROCESS_SCOPED_SURVEY_SEPARATION=PASS', async () => {
+    const procPA = await createBusinessProcess(admin, clientA, { name: `Scoped A ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+    scopedProcessAId = procPA.id;
+    const procPB = await createBusinessProcess(admin, clientA, { name: `Scoped B ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+    scopedProcessBId = procPB.id;
+
+    const resA = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: scopedProcessAId, idempotencyKey: `scope-a-${suffix}` });
+    const resB = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: scopedProcessBId, idempotencyKey: `scope-b-${suffix}` });
+    scopedObservationAId = resA.observationId;
+    scopedObservationBId = resB.observationId;
+
+    const before = await counts(clientA);
+    const run = await runResearchCycle(admin, clientA, { idempotencyKey: `scope-run-${suffix}` }, db);
+    expect(run.status).toBe('COMPLETED');
+
+    const diagnoses = await db.diagnosisCandidate.findMany({ where: { clientId: clientA } });
+    const diagA = diagnoses.find((diag) => {
+      const refs = diag.sourceRefs as any;
+      return Array.isArray(refs?.observationIds) && refs.observationIds.includes(scopedObservationAId);
+    });
+    const diagB = diagnoses.find((diag) => {
+      const refs = diag.sourceRefs as any;
+      return Array.isArray(refs?.observationIds) && refs.observationIds.includes(scopedObservationBId);
+    });
+    expect(diagA).toBeDefined();
+    expect(diagB).toBeDefined();
+    expect(diagA!.id).not.toBe(diagB!.id);
+
+    const refsA = diagA!.sourceRefs as any;
+    const refsB = diagB!.sourceRefs as any;
+    expect(refsA.businessProcessId).toBe(scopedProcessAId);
+    expect(refsA.observationIds).not.toContain(scopedObservationBId);
+    expect(refsB.businessProcessId).toBe(scopedProcessBId);
+    expect(refsB.observationIds).not.toContain(scopedObservationAId);
+
+    // Both diagnoses remain under the canonical REWORK ProblemDomain.
+    const reworkDomain = await db.problemDomain.findFirst({ where: { clientId: clientA, key: 'REWORK' } });
+    expect(reworkDomain).not.toBeNull();
+    expect(diagA!.problemDomainId).toBe(reworkDomain!.id);
+    expect(diagB!.problemDomainId).toBe(reworkDomain!.id);
+
+    // Ingestion + explicit research create no automatic opportunity/initiative/task.
+    const after = await counts(clientA);
+    expect(after.opportunities).toBe(before.opportunities);
+    expect(after.initiatives).toBe(before.initiatives);
+    expect(after.tasks).toBe(before.tasks);
+  });
+
+  it('9. SAME_PROCESS_SAME_DOMAIN_AGGREGATION=PASS', async () => {
+    const res2 = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: scopedProcessAId, idempotencyKey: `scope-a2-${suffix}` });
+    const res3 = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: scopedProcessAId, idempotencyKey: `scope-a3-${suffix}` });
+
+    await runResearchCycle(admin, clientA, { idempotencyKey: `scope-agg-run-${suffix}` }, db);
+    const diagnoses = await db.diagnosisCandidate.findMany({ where: { clientId: clientA } });
+    const diagA = diagnoses.find((diag) => {
+      const refs = diag.sourceRefs as any;
+      return Array.isArray(refs?.observationIds) && refs.observationIds.includes(res2.observationId);
+    });
+    expect(diagA).toBeDefined();
+    const refs = diagA!.sourceRefs as any;
+    expect(refs.businessProcessId).toBe(scopedProcessAId);
+    expect(refs.observationIds).toContain(res2.observationId);
+    expect(refs.observationIds).toContain(res3.observationId);
+    // Same-process bucket aggregates across observations from prior runs too.
+    expect(refs.observationIds).toContain(scopedObservationAId);
+    // No evidence leakage from the other process.
+    expect(refs.observationIds).not.toContain(scopedObservationBId);
+  });
+
+  it('10. MEASURED_DECLARED_SAME_PROCESS_CONVERGENCE=PASS', async () => {
+    const procM = await createBusinessProcess(admin, clientA, { name: `Measured scoped ${suffix}`, category: 'PROCUREMENT', frequency: 'WEEKLY' });
+    await addProcessStep(admin, procM.id, { name: 'Kérés', stepType: 'MANUAL', estimatedActiveMinutes: 10, estimatedWaitingMinutes: 0 });
+    await addProcessStep(admin, procM.id, { name: 'Jóváhagyás 1', stepType: 'APPROVAL', isApproval: true, estimatedActiveMinutes: 5, estimatedWaitingMinutes: 1440 });
+    await addProcessStep(admin, procM.id, { name: 'Jóváhagyás 2', stepType: 'APPROVAL', isApproval: true, estimatedActiveMinutes: 5, estimatedWaitingMinutes: 1440 });
+    const snapshot = await captureProcessObservation(admin, { clientId: clientA, businessProcessId: procM.id });
+    const res = await submitSurveyIntake(admin, clientA, { categories: ['SLOW_APPROVAL'], processId: procM.id, idempotencyKey: `scope-measured-${suffix}` });
+
+    await runResearchCycle(admin, clientA, { idempotencyKey: `scope-measured-run-${suffix}` }, db);
+    const diagnoses = await db.diagnosisCandidate.findMany({ where: { clientId: clientA } });
+    const diag = diagnoses.find((d) => {
+      const refs = d.sourceRefs as any;
+      return refs?.businessProcessId === procM.id && Array.isArray(refs?.snapshotIds) && refs.snapshotIds.includes(snapshot.id);
+    });
+    expect(diag).toBeDefined();
+    const refs = diag!.sourceRefs as any;
+    expect(refs.snapshotIds).toContain(snapshot.id);
+    expect(refs.observationIds).toContain(res.observationId);
+  });
+
+  it('11. IDEMPOTENT_REPLAY_AFTER_PROCESS_DEACTIVATION=PASS', async () => {
+    const proc = await createBusinessProcess(admin, clientA, { name: `Replay deactivate ${suffix}` });
+    const key = `replay-deactivate-${suffix}`;
+    const first = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: proc.id, idempotencyKey: key });
+    expect(first.replayed).toBe(false);
+
+    await updateBusinessProcess(admin, proc.id, { status: 'INACTIVE' });
+
+    const retry = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: proc.id, idempotencyKey: key });
+    expect(retry.replayed).toBe(true);
+    expect(retry.observationId).toBe(first.observationId);
+    expect(retry.runId).toBe(first.runId);
+    expect(await db.observation.count({ where: { clientId: clientA, idempotencyKey: key } })).toBe(1);
+  });
+
+  it('12. IDEMPOTENT_CHANGED_PROCESS_CONFLICT=PASS', async () => {
+    const p1 = await createBusinessProcess(admin, clientA, { name: `Conflict p1 ${suffix}` });
+    const p2 = await createBusinessProcess(admin, clientA, { name: `Conflict p2 ${suffix}` });
+    const key = `replay-changed-process-${suffix}`;
+    await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: p1.id, idempotencyKey: key });
+    await expect(
+      submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: p2.id, idempotencyKey: key }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+  });
+
+  it('13. IDEMPOTENT_CHANGED_PAYLOAD_CONFLICT=PASS', async () => {
+    const key = `replay-changed-payload-${suffix}`;
+    await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], idempotencyKey: key });
+    await expect(
+      submitSurveyIntake(admin, clientA, { categories: ['SLOW_APPROVAL'], idempotencyKey: key }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+    await expect(
+      submitSurveyIntake(admin, clientA, { categories: ['REWORK'], freeText: 'changed payload', idempotencyKey: key }),
+    ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+  });
+
+  it('14. FOREIGN_PROCESS_NEW_SUBMISSION_STILL_SAFE=PASS', async () => {
+    const key = `foreign-new-${suffix}`;
+    const res = await submitSurveyIntake(admin, clientA, { categories: ['MANUAL_ADMIN'], processId: processBId, idempotencyKey: key });
+    expect(res.replayed).toBe(false);
+    const obs = await db.observation.findUnique({ where: { id: res.observationId } });
+    expect(obs!.clientId).toBe(clientA);
+    expect((obs!.rawPayload as any).processId).toBeNull();
+
+    await runResearchCycle(admin, clientA, { idempotencyKey: `foreign-run-${suffix}` }, db);
+    const diagnoses = await db.diagnosisCandidate.findMany({ where: { clientId: clientA } });
+    for (const diag of diagnoses) {
+      const refs = diag.sourceRefs as any;
+      expect(refs?.businessProcessId).not.toBe(processBId);
+    }
+  });
+
+  it('15. IDEMPOTENT_REPLAY_AFTER_PROCESS_DELETE=PASS', async () => {
+    const proc = await createBusinessProcess(admin, clientA, { name: `Replay delete ${suffix}` });
+    const key = `replay-delete-${suffix}`;
+    const first = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: proc.id, idempotencyKey: key });
+    await deleteBusinessProcess(admin, proc.id);
+    const retry = await submitSurveyIntake(admin, clientA, { categories: ['REWORK'], processId: proc.id, idempotencyKey: key });
+    expect(retry.replayed).toBe(true);
+    expect(retry.observationId).toBe(first.observationId);
   });
 });

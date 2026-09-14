@@ -115,51 +115,65 @@ async function persistCanonicalSurveySubmission(
 
   const connection = await findOrCreateSurveyConnection(actor, clientId, accessGuard);
 
-  // Fail-closed tenant validation of the optional business-process reference.
-  // `clientId` is already server-resolved/authorized here; a referenced process
-  // must belong to the SAME client and be ACTIVE, otherwise the reference is
-  // dropped. This centralizes the guarantee so a forged cross-client processId
-  // can never attach a declared observation to another tenant's process.
-  let validProcessId: string | null = null;
-  if (input.processId) {
+  const requestedProcessId = input.processId ? String(input.processId) : null;
+
+  const buildRawPayload = (processId: string | null): Record<string, unknown> => {
+    const payload: Record<string, unknown> = {
+      kind: 'GROW_PAIN_INTAKE',
+      categories,
+      categoryLabelsHu: categories.map((c) => SURVEY_CATEGORY_LABELS_HU[c as SurveyCategory] ?? c),
+      freeText,
+      processId,
+    };
+    // Portal provenance only. The internal workforce payload must remain
+    // byte-compatible with the historical shape so existing idempotency digests
+    // are unchanged (no new `provenance` object on the internal path).
+    if (provenance.channel === 'CLIENT_PORTAL') {
+      payload.provenance = {
+        channel: 'CLIENT_PORTAL',
+        ...(provenance.workspaceId ? { workspaceId: provenance.workspaceId } : {}),
+        ...(provenance.identityId ? { identityId: provenance.identityId } : {}),
+      };
+    }
+    return payload;
+  };
+
+  // Fail-closed tenant validation of the optional business-process reference for
+  // NEW submissions. `clientId` is already server-resolved/authorized here; a
+  // referenced process must belong to the SAME client and be ACTIVE, otherwise
+  // the reference is dropped. This centralizes the guarantee so a forged
+  // cross-client processId can never attach a declared observation.
+  const resolveActiveProcessId = async (processId: string | null): Promise<string | null> => {
+    if (!processId) return null;
     const process = await defaultPrisma.businessProcess.findFirst({
-      where: { id: String(input.processId), clientId, status: 'ACTIVE' },
+      where: { id: processId, clientId, status: 'ACTIVE' },
       select: { id: true },
     });
-    validProcessId = process?.id ?? null;
-  }
-
-  const rawPayload: Record<string, unknown> = {
-    kind: 'GROW_PAIN_INTAKE',
-    categories,
-    categoryLabelsHu: categories.map((c) => SURVEY_CATEGORY_LABELS_HU[c as SurveyCategory] ?? c),
-    freeText,
-    processId: validProcessId,
+    return process?.id ?? null;
   };
-  // Portal provenance only. The internal workforce payload must remain
-  // byte-compatible with the historical shape so existing idempotency digests
-  // are unchanged (no new `provenance` object on the internal path).
-  if (provenance.channel === 'CLIENT_PORTAL') {
-    rawPayload.provenance = {
-      channel: 'CLIENT_PORTAL',
-      ...(provenance.workspaceId ? { workspaceId: provenance.workspaceId } : {}),
-      ...(provenance.identityId ? { identityId: provenance.identityId } : {}),
-    };
-  }
 
-  const digest = canonicalDigest(rawPayload);
-
-  // Exact replay: same key + same payload returns the existing observation
-  // without creating a duplicate run.
+  // Exact replay MUST NOT depend on mutable current process status. The original
+  // submission may have accepted process A which has since become inactive or
+  // been removed; the same request must still replay. We therefore compare the
+  // persisted digest against BOTH the raw requested process reference (what the
+  // original request asked for) and the currently-validated reference.
   const existing = await defaultPrisma.observation.findUnique({
     where: { clientId_connectionId_idempotencyKey: { clientId, connectionId: connection.id, idempotencyKey } },
   });
   if (existing) {
-    if (existing.inputDigest === digest) {
+    const digestRaw = canonicalDigest(buildRawPayload(requestedProcessId));
+    if (existing.inputDigest === digestRaw) {
+      return { observationId: existing.id, runId: existing.discoveryRunId, connectionId: connection.id, replayed: true };
+    }
+    const digestValidated = canonicalDigest(buildRawPayload(await resolveActiveProcessId(requestedProcessId)));
+    if (existing.inputDigest === digestValidated) {
       return { observationId: existing.id, runId: existing.discoveryRunId, connectionId: connection.id, replayed: true };
     }
     throw new InteractionError(409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used with a different payload.');
   }
+
+  // New submission: persist the ACTIVE-validated process reference.
+  const rawPayload = buildRawPayload(await resolveActiveProcessId(requestedProcessId));
 
   const run = await ingestion.startDiscoveryRun(actor, { clientId, connectionId: connection.id }, accessGuard);
 

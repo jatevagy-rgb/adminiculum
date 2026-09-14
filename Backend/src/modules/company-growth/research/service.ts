@@ -388,12 +388,27 @@ async function executeRun(
   for (const s of snapshots) metricsBySnapshot.set(s.id, Object.fromEntries(metricMap(s.metrics)));
 
   const outcomes: DiagnosisRuleOutcome[] = [];
-  const surveyDomainHits = new Map<string, { observationIds: string[]; businessProcessId: string | null }>();
+
+  // Process-scoped declared survey grouping. A declared problem belongs to a
+  // (domainKey, businessProcessId) pair — never to a domain alone — so evidence
+  // for process B can never collapse into process A's diagnosis. The `null` key
+  // is the existing unscoped bucket (surveys submitted without a process).
+  type SurveyHit = { observationIds: string[]; businessProcessId: string | null };
+  const surveyHitsByDomain = new Map<string, Map<string | null, SurveyHit>>();
   for (const signal of declaredSignals) {
-    const hit = surveyDomainHits.get(signal.domainKey) ?? { observationIds: [], businessProcessId: null };
+    // Fail-closed tenant binding: a foreign/unknown process reference is treated
+    // as unscoped rather than attaching to any process.
+    const businessProcessId =
+      signal.businessProcessId && processIds.has(signal.businessProcessId) ? signal.businessProcessId : null;
+
+    let byProcess = surveyHitsByDomain.get(signal.domainKey);
+    if (!byProcess) {
+      byProcess = new Map<string | null, SurveyHit>();
+      surveyHitsByDomain.set(signal.domainKey, byProcess);
+    }
+    const hit = byProcess.get(businessProcessId) ?? { observationIds: [], businessProcessId };
     if (!hit.observationIds.includes(signal.observationId)) hit.observationIds.push(signal.observationId);
-    if (!hit.businessProcessId && signal.businessProcessId) hit.businessProcessId = signal.businessProcessId;
-    surveyDomainHits.set(signal.domainKey, hit);
+    byProcess.set(businessProcessId, hit);
   }
 
   for (const process of processes) {
@@ -403,19 +418,40 @@ async function executeRun(
       latest ? { id: latest.id, metrics: latest.metrics } : null,
     );
     for (const d of diags) {
-      const survey = surveyDomainHits.get(d.domainKey);
-      if (survey) {
-        d.declared = true;
-        d.sourceRefs.observationIds.push(...survey.observationIds);
+      const byProcess = surveyHitsByDomain.get(d.domainKey);
+      if (byProcess) {
+        const ids = new Set<string>();
+        // Same-process declared signals converge with this measured diagnosis.
+        const scoped = byProcess.get(process.id);
+        if (scoped) for (const id of scoped.observationIds) ids.add(id);
+        // Unscoped declared signals keep their existing "all measured processes"
+        // semantics.
+        const unscoped = byProcess.get(null);
+        if (unscoped) for (const id of unscoped.observationIds) ids.add(id);
+        if (ids.size) {
+          d.declared = true;
+          d.sourceRefs.observationIds.push(...ids);
+        }
       }
       outcomes.push(d);
     }
   }
 
-  // Survey-declared domains with no measured process counterpart still surface
-  // as declared-only diagnoses (they gate to NEEDS_MORE_DATA at most).
-  for (const [domain, hit] of surveyDomainHits) {
-    if (!outcomes.some((o) => o.domainKey === domain)) {
+  // Declared-only outcomes: one per (domain, process) bucket that did not
+  // converge with a measured diagnosis of the SAME process. A distinct process
+  // is never suppressed by another process's outcome.
+  const domainsWithMeasured = new Set(outcomes.map((o) => o.domainKey));
+  for (const [domain, byProcess] of surveyHitsByDomain) {
+    for (const [businessProcessId, hit] of byProcess) {
+      if (businessProcessId === null) {
+        // Preserve existing unscoped semantics: stand alone only when the domain
+        // has no measured diagnosis at all.
+        if (domainsWithMeasured.has(domain)) continue;
+      } else if (
+        outcomes.some((o) => o.domainKey === domain && o.sourceRefs.businessProcessId === businessProcessId)
+      ) {
+        continue;
+      }
       outcomes.push({
         domainKey: domain,
         measured: false,
@@ -423,10 +459,8 @@ async function executeRun(
         severity: 'MEDIUM',
         sourceRefs: {
           snapshotIds: [],
-          observationIds: hit.observationIds,
-          // Fail-closed: a forged/foreign process reference never attaches.
-          businessProcessId:
-            hit.businessProcessId && processIds.has(hit.businessProcessId) ? hit.businessProcessId : null,
+          observationIds: [...hit.observationIds],
+          businessProcessId,
           severity: 'MEDIUM',
         },
       });
