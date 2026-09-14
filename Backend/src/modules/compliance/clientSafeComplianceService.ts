@@ -351,12 +351,11 @@ export async function getClientSafeComplianceReadModel(
     prisma.requirementApplicability.findMany({
       where: {
         clientId,
-        outcome: 'APPLIES',
         requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
         ruleVersion: { status: 'APPROVED', supersededById: null },
       },
       orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
-      select: { requirementVersionId: true, requirementVersion: { select: { title: true, requirement: { select: { key: true } }, controlMaps: { include: { controlDefinition: true } } } } },
+      select: { requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true, evaluationAt: true, createdAt: true, requirementVersion: { select: { title: true, requirement: { select: { key: true } }, controlMaps: { include: { controlDefinition: true } } } } },
     }),
     prisma.clientControl.findMany({
       where: { clientId },
@@ -364,10 +363,13 @@ export async function getClientSafeComplianceReadModel(
     }),
   ]);
   const latest = new Map<string, (typeof applicable)[number]>();
-  for (const row of applicable) if (!latest.has(row.requirementVersionId)) latest.set(row.requirementVersionId, row);
+  for (const row of applicable) {
+    const key = [row.requirementVersionId, row.ruleVersionId, row.scopeType, row.factSubjectId || ''].join(':');
+    if (!latest.has(key)) latest.set(key, row);
+  }
   const controlByDefinition = new Map(clientControls.map((control) => [control.controlDefinitionId, control]));
   const controlsSummary = [...latest.values()]
-    .filter((row) => visibleKeys.has(row.requirementVersion.requirement.key))
+    .filter((row) => row.outcome === 'APPLIES' && visibleKeys.has(row.requirementVersion.requirement.key))
     .map((row) => ({
       requirementTitle: row.requirementVersion.title,
       controls: row.requirementVersion.controlMaps.map((map) => {

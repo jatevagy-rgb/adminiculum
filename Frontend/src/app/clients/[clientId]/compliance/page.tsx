@@ -189,12 +189,19 @@ export default function ClientCompliancePage() {
     setComplianceLoading(true);
     setComplianceError(null);
     try {
-      const [overview, controls] = await Promise.all([complianceOverviewApi.getOverview(clientId), complianceOverviewApi.getControls(clientId)]);
-      setComplianceFindings(overview.findings);
-      setControlSummary(controls);
+      const [overviewResult, controlsResult] = await Promise.allSettled([
+        complianceOverviewApi.getOverview(clientId),
+        complianceOverviewApi.getControls(clientId),
+      ]);
+      if (overviewResult.status === "fulfilled") {
+        setComplianceFindings(overviewResult.value.findings);
+      } else {
+        setComplianceError("A compliance áttekintés jelenleg nem tölthető be.");
+      }
+      if (controlsResult.status === "fulfilled") setControlSummary(controlsResult.value);
+    } finally {
+      setComplianceLoading(false);
     }
-    catch { setComplianceError("A compliance áttekintés jelenleg nem tölthető be."); }
-    finally { setComplianceLoading(false); }
   }, [clientId]);
 
   const loadWorkspace = useCallback(async () => {

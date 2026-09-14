@@ -23,6 +23,13 @@ function assertEnum(value: unknown, allowed: Set<string>, field: string): string
   return output;
 }
 
+function optionalDate(value: unknown, field: string): Date | null {
+  if (value == null || value === '') return null;
+  const output = new Date(String(value));
+  if (Number.isNaN(output.getTime())) throw new InteractionError(400, 'INVALID_FIELD', `${field} is invalid.`);
+  return output;
+}
+
 export async function createControlDefinition(
   actor: InternalActor,
   input: { key: unknown; title: unknown; description?: unknown; type: unknown; defaultReviewCadenceDays?: unknown },
@@ -76,7 +83,7 @@ export async function createClientControl(
       controlDefinitionId,
       implementationStatus: implementationStatus as never,
       ownerUserId: input.ownerUserId == null ? null : requiredString(input.ownerUserId, 'ownerUserId'),
-      nextReviewAt: input.nextReviewAt == null ? null : new Date(String(input.nextReviewAt)),
+      nextReviewAt: optionalDate(input.nextReviewAt, 'nextReviewAt'),
       notes: safeText(input.notes, 'notes', 2000),
     },
     include: { controlDefinition: true, ownerUser: { select: { id: true, name: true } } },
@@ -99,9 +106,9 @@ export async function updateClientControl(
     data: {
       implementationStatus: implementationStatus as never,
       ownerUserId: input.ownerUserId === undefined ? undefined : input.ownerUserId === null ? null : requiredString(input.ownerUserId, 'ownerUserId'),
-      implementedAt: input.implementedAt === undefined ? undefined : input.implementedAt === null ? null : new Date(String(input.implementedAt)),
-      lastReviewedAt: input.lastReviewedAt === undefined ? undefined : input.lastReviewedAt === null ? null : new Date(String(input.lastReviewedAt)),
-      nextReviewAt: input.nextReviewAt === undefined ? undefined : input.nextReviewAt === null ? null : new Date(String(input.nextReviewAt)),
+      implementedAt: input.implementedAt === undefined ? undefined : optionalDate(input.implementedAt, 'implementedAt'),
+      lastReviewedAt: input.lastReviewedAt === undefined ? undefined : optionalDate(input.lastReviewedAt, 'lastReviewedAt'),
+      nextReviewAt: input.nextReviewAt === undefined ? undefined : optionalDate(input.nextReviewAt, 'nextReviewAt'),
       notes: input.notes === undefined ? undefined : safeText(input.notes, 'notes', 2000),
     },
     include: { controlDefinition: true, ownerUser: { select: { id: true, name: true } } },
@@ -165,16 +172,41 @@ export async function createEvidenceRecord(
     if (!row) throw new InteractionError(403, 'EVIDENCE_ARTIFACT_FORBIDDEN', 'Observation is outside this client.');
   }
   const status = input.status == null ? 'PROVIDED' : assertEnum(input.status, evidenceStatuses, 'status');
+  if ((status === 'ACCEPTED' || status === 'REJECTED') && (!input.reviewedAt || !input.reviewedByUserId)) {
+    throw new InteractionError(400, 'EVIDENCE_REVIEW_REQUIRED', 'Accepted or rejected evidence requires review metadata.');
+  }
   return prisma.evidenceRecord.create({
     data: {
       clientId, sourceType: sourceType as never, status: status as never, title: requiredString(input.title, 'title'),
       description: safeText(input.description, 'description', 2000),
-      providedAt: input.providedAt == null ? new Date() : new Date(String(input.providedAt)),
-      reviewedAt: input.reviewedAt == null ? null : new Date(String(input.reviewedAt)),
+      providedAt: input.providedAt == null ? new Date() : optionalDate(input.providedAt, 'providedAt'),
+      reviewedAt: input.reviewedAt == null ? null : optionalDate(input.reviewedAt, 'reviewedAt'),
       reviewedByUserId: input.reviewedByUserId == null ? null : requiredString(input.reviewedByUserId, 'reviewedByUserId'),
-      validFrom: input.validFrom == null ? null : new Date(String(input.validFrom)),
-      validUntil: input.validUntil == null ? null : new Date(String(input.validUntil)),
+      validFrom: optionalDate(input.validFrom, 'validFrom'),
+      validUntil: optionalDate(input.validUntil, 'validUntil'),
       documentVersionId, clientFactId, observationId, externalReference,
+    },
+  });
+}
+
+export async function reviewEvidenceRecord(
+  actor: InternalActor,
+  clientId: string,
+  evidenceRecordId: string,
+  input: { status: unknown },
+  prisma: Prisma = defaultPrisma,
+) {
+  await assertClientReadAccess(actor, clientId, prisma);
+  const status = assertEnum(input.status, evidenceStatuses, 'status');
+  const evidence = await prisma.evidenceRecord.findFirst({ where: { id: evidenceRecordId, clientId } });
+  if (!evidence) throw new InteractionError(404, 'EVIDENCE_RECORD_NOT_FOUND', 'Evidence record not found.');
+  const reviewed = status === 'ACCEPTED' || status === 'REJECTED';
+  return prisma.evidenceRecord.update({
+    where: { id: evidence.id },
+    data: {
+      status: status as never,
+      reviewedAt: reviewed ? new Date() : null,
+      reviewedByUserId: reviewed ? actor.userId : null,
     },
   });
 }
@@ -194,26 +226,29 @@ export async function getControlCoverage(actor: InternalActor, clientId: string,
   const now = new Date();
   const snapshots = await prisma.requirementApplicability.findMany({
     where: {
-      clientId, outcome: 'APPLIES',
+      clientId,
       requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
       ruleVersion: { status: 'APPROVED', supersededById: null },
     },
     orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
     select: {
-      requirementVersionId: true, outcome: true, requirementVersion: {
+      requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true, requirementVersion: {
         select: { title: true, controlMaps: { include: { controlDefinition: true } } },
       },
     },
   });
   const latest = new Map<string, (typeof snapshots)[number]>();
-  for (const row of snapshots) if (!latest.has(row.requirementVersionId)) latest.set(row.requirementVersionId, row);
+  for (const row of snapshots) {
+    const key = [row.requirementVersionId, row.ruleVersionId, row.scopeType, row.factSubjectId || ''].join(':');
+    if (!latest.has(key)) latest.set(key, row);
+  }
   const controls = await prisma.clientControl.findMany({
     where: { clientId },
     include: { controlDefinition: true, ownerUser: { select: { name: true } }, evidenceLinks: { include: { evidenceRecord: true } } },
   });
   const byDefinition = new Map(controls.map((control) => [control.controlDefinitionId, control]));
   return {
-    requirements: [...latest.values()].map((row) => ({
+    requirements: [...latest.values()].filter((row) => row.outcome === 'APPLIES').map((row) => ({
       title: row.requirementVersion.title,
       applicability: String(row.outcome),
       controls: row.requirementVersion.controlMaps.map((map) => {

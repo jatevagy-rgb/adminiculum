@@ -39,6 +39,15 @@ export type ComplianceControlSummary = {
   }>;
 };
 
+const complianceControlStatusLabels: Record<string, string> = {
+  NOT_ASSESSED: "Nincs felmérve",
+  PLANNED: "Tervezett",
+  IMPLEMENTING: "Bevezetés alatt",
+  IMPLEMENTED: "Bevezetve",
+  PARTIAL: "Részben bevezetve",
+  NOT_IMPLEMENTED: "Nincs bevezetve",
+};
+
 export function ComplianceControlsSection({ summary }: { summary: ComplianceControlSummary | null }) {
   const controls = summary?.requirements.flatMap((item) => item.controls) || [];
   return (
@@ -46,10 +55,10 @@ export function ComplianceControlsSection({ summary }: { summary: ComplianceCont
       <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Intézkedések és bizonyítékok</h2>
       {!controls.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített megfelelési intézkedés.</p> : (
         <ul className="mt-3 space-y-3">
-          {controls.map((control) => (
-            <li key={control.title} className="rounded border border-[var(--adm-border)] p-3">
+          {controls.map((control, index) => (
+            <li key={`${control.title}-${index}`} className="rounded border border-[var(--adm-border)] p-3">
               <p className="font-medium text-[var(--adm-text)]">{control.title}</p>
-              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Állapot: {control.implementationStatus || "Nincs felmérve"}</p>
+              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Állapot: {complianceControlStatusLabels[control.implementationStatus || "NOT_ASSESSED"] || "Nincs felmérve"}</p>
               {control.owner ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Felelős: {control.owner}</p> : null}
               <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
                 Bizonyíték: {control.evidenceSummary.acceptedCurrent} aktuális · {control.evidenceSummary.stale} felülvizsgálandó

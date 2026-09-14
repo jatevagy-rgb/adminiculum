@@ -38,6 +38,12 @@ router.post('/clients/:clientId/compliance/evidence', async (req, res) => {
   try { res.status(201).json(await service.createEvidenceRecord(actor(req), String(req.params.clientId), req.body || {})); } catch (error) { fail(res, error); }
 });
 
+router.patch('/clients/:clientId/compliance/evidence/:evidenceId', async (req, res) => {
+  try {
+    res.json(await service.reviewEvidenceRecord(actor(req), String(req.params.clientId), String(req.params.evidenceId), req.body || {}));
+  } catch (error) { fail(res, error); }
+});
+
 router.post('/clients/:clientId/compliance/controls/:controlId/evidence/:evidenceId', async (req, res) => {
   try {
     res.status(201).json(await service.linkEvidenceToControl(actor(req), String(req.params.clientId), String(req.params.controlId), String(req.params.evidenceId)));
