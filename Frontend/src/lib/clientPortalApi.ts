@@ -665,6 +665,11 @@ export async function getPortalCompliance() {
 export type PortalCompanyProfileQuestion = {
   questionKey: string;
   label: string;
+  helpText?: string | null;
+  section: "COMPANY" | "OPERATIONS" | "PEOPLE" | "DATA" | "DIGITAL" | "MARKET" | "SPECIAL";
+  valueType: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "DATE";
+  options?: string[];
+  order: number;
   status: "ANSWERED" | "UNKNOWN" | "UNANSWERED";
   value: number | string | boolean | null;
 };
@@ -679,6 +684,8 @@ export type PortalCompanyProfileAnswerPayload = {
   numberValue?: number;
   stringValue?: string;
   booleanValue?: boolean;
+  enumValue?: string;
+  dateValue?: string;
 };
 
 export type PortalCompanyProfileAnswerResult = {

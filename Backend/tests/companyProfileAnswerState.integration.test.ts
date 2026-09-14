@@ -101,7 +101,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
   });
 
   it('derives UNANSWERED and preserves UNKNOWN without a fake ClientFact', async () => {
-    expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).toEqual([{ questionKey: 'employee_count', label: 'Number of employees', status: 'UNANSWERED', value: null }]);
+    expect((await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions).toEqual([expect.objectContaining({ questionKey: 'employee_count', label: 'Foglalkoztatottak létszáma', valueType: 'NUMBER', status: 'UNANSWERED', value: null })]);
     const result = await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
     expect(result).toEqual({ questionKey: 'employee_count', status: 'UNKNOWN', answered: false });
     expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(0);

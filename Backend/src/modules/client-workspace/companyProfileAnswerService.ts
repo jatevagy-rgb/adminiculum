@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { createTypedFactInTx, reevaluateTypedFactInTx } from '../compliance/typedFactMutationService';
-import { getCompanyProfileQuestion, COMPANY_PROFILE_QUESTIONS } from './companyProfileQuestionRegistry';
+import { getCompanyProfileQuestion, getCompanyProfileQuestionForDefinition, COMPANY_PROFILE_QUESTIONS, type CompanyProfileQuestion } from './companyProfileQuestionRegistry';
 import { addPortalResponsibility } from '../client-organization/service';
 
 type Db = PrismaClient;
@@ -34,31 +34,91 @@ function typedValue(fact: { numberValue: Prisma.Decimal | null; stringValue: str
   if (fact.numberValue !== null) return Number(fact.numberValue);
   if (fact.stringValue !== null) return fact.stringValue;
   if (fact.booleanValue !== null) return fact.booleanValue;
-  if (fact.dateValue !== null) return fact.dateValue.toISOString();
+  if (fact.dateValue !== null) return fact.dateValue.toISOString().slice(0, 10);
   if (fact.datetimeValue !== null) return fact.datetimeValue.toISOString();
   return fact.enumValue;
 }
 
+function answerInput(question: CompanyProfileQuestion, body: Record<string, unknown>): Record<string, unknown> {
+  switch (question.valueType) {
+    case 'NUMBER': return { numberValue: body.numberValue };
+    case 'BOOLEAN': return { booleanValue: body.booleanValue };
+    case 'STRING': return { stringValue: body.stringValue };
+    case 'ENUM': return { enumValue: body.enumValue };
+    case 'DATE': return { dateValue: body.dateValue };
+    default: return {};
+  }
+}
+
+function allowedEnumValues(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function snapshotMissingFactKeys(snapshotJson: unknown): string[] {
+  if (!snapshotJson || typeof snapshotJson !== 'object') return [];
+  const value = (snapshotJson as { missingFactKeys?: unknown }).missingFactKeys;
+  return Array.isArray(value) ? value.filter((key): key is string => typeof key === 'string') : [];
+}
+
 export async function getCompanyProfileDiscovery(identityId: string, workspaceId: string, db: Db = defaultPrisma) {
   const workspace = await workspaceContext(identityId, workspaceId, db, false);
-  const definitions = await db.factDefinition.findMany({ where: { key: { in: COMPANY_PROFILE_QUESTIONS.map((q) => q.factDefinitionKey) }, status: 'ACTIVE' } });
+  const now = new Date();
+  const definitions = await db.factDefinition.findMany({
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        { key: { in: COMPANY_PROFILE_QUESTIONS.map((q) => q.factDefinitionKey) } },
+        { questionKey: { in: COMPANY_PROFILE_QUESTIONS.map((q) => q.questionKey) } },
+      ],
+    },
+  });
+  const snapshots = await db.requirementApplicability.findMany({
+    where: {
+      clientId: workspace.clientId,
+      scopeType: 'COMPANY',
+      requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+      ruleVersion: { status: 'APPROVED', supersededById: null },
+    },
+    select: { ruleVersionId: true, outcome: true, snapshotJson: true },
+  });
+  const missingFactKeys = new Set(snapshots
+    .filter((snapshot) => String(snapshot.outcome) === 'INSUFFICIENT_FACTS')
+    .flatMap((snapshot) => snapshotMissingFactKeys(snapshot.snapshotJson)));
+  const missingDependencies = missingFactKeys.size
+    ? await db.applicabilityRuleFactDependency.findMany({
+      where: { applicabilityRuleVersionId: { in: [...new Set(snapshots.map((snapshot) => snapshot.ruleVersionId))] }, factKey: { in: [...missingFactKeys] } },
+      select: { factKey: true, resolvedFactDefinition: { select: { id: true, key: true, questionKey: true, valueType: true, status: true, allowedScopeTypes: true, allowedEnumValues: true } } },
+    })
+    : [];
+  const definitionsById = new Map(definitions.map((definition) => [definition.id, definition]));
+  for (const dependency of missingDependencies) {
+    const definition = dependency.resolvedFactDefinition;
+    if (definition && definition.status === 'ACTIVE' && definition.allowedScopeTypes.includes('COMPANY')) {
+      definitionsById.set(definition.id, definition as typeof definitions[number]);
+    }
+  }
+  const questionByDefinitionId = new Map<string, CompanyProfileQuestion>();
+  for (const definition of definitionsById.values()) {
+    const question = getCompanyProfileQuestionForDefinition(definition);
+    if (question && definition.allowedScopeTypes.includes(question.scopeType)) questionByDefinitionId.set(definition.id, question);
+  }
+  const answerableDefinitions = [...questionByDefinitionId.keys()];
   const definitionsByKey = new Map(definitions.map((definition) => [definition.key, definition]));
   const states = await db.clientFactAnswerState.findMany({
-    where: { clientId: workspace.clientId, scopeType: 'COMPANY', factSubjectId: null, factDefinitionId: { in: definitions.map((d) => d.id) } },
+    where: { clientId: workspace.clientId, scopeType: 'COMPANY', factSubjectId: null, factDefinitionId: { in: answerableDefinitions } },
     include: { currentFact: { select: { numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true } } },
   });
   const stateByDefinition = new Map(states.map((state) => [state.factDefinitionId, state]));
-  const now = new Date();
   const fallbackFacts = await db.clientFact.findMany({
-    where: { clientId: workspace.clientId, factDefinitionId: { in: definitions.map((d) => d.id) }, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }] },
+    where: { clientId: workspace.clientId, factDefinitionId: { in: answerableDefinitions }, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }] },
     select: { id: true, factDefinitionId: true, numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true, observedAt: true, effectiveAt: true },
   });
   const fallbackByDefinition = new Map<string, typeof fallbackFacts>();
   for (const fact of fallbackFacts) fallbackByDefinition.set(fact.factDefinitionId, [...(fallbackByDefinition.get(fact.factDefinitionId) ?? []), fact]);
   return {
     client: { name: (await db.client.findUnique({ where: { id: workspace.clientId }, select: { name: true } }))?.name || null },
-    questions: COMPANY_PROFILE_QUESTIONS.flatMap((question) => {
-      const definition = definitionsByKey.get(question.factDefinitionKey);
+    questions: [...questionByDefinitionId.entries()].flatMap(([definitionId, question]) => {
+      const definition = definitionsById.get(definitionId) || definitionsByKey.get(question.factDefinitionKey);
       if (!definition) return [];
       const state = stateByDefinition.get(definition.id);
       const fallback = !state ? fallbackByDefinition.get(definition.id) : undefined;
@@ -67,8 +127,9 @@ export async function getCompanyProfileDiscovery(identityId: string, workspaceId
         || (definition.temporalPolicy === 'OBSERVATION' && fallback[0].observedAt !== null && fallback[0].observedAt <= now)
         || (definition.temporalPolicy === 'EFFECTIVE_INSTANT' && fallback[0].effectiveAt !== null && fallback[0].effectiveAt <= now)
       ) ? fallback[0] : undefined;
-      return [{ questionKey: question.questionKey, label: question.label, status: state?.status || (fallbackFact ? 'ANSWERED' : 'UNANSWERED'), value: state?.currentFact ? typedValue(state.currentFact) : (fallbackFact ? typedValue(fallbackFact) : null) }];
-    }),
+      const options = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
+      return [{ questionKey: question.questionKey, label: question.label, helpText: question.helpText || null, section: question.section, valueType: question.valueType, options, order: question.order, status: state?.status || (fallbackFact ? 'ANSWERED' : 'UNANSWERED'), value: state?.currentFact ? typedValue(state.currentFact) : (fallbackFact ? typedValue(fallbackFact) : null) }];
+    }).sort((left, right) => left.section.localeCompare(right.section) || left.order - right.order || left.label.localeCompare(right.label) || left.questionKey.localeCompare(right.questionKey)),
   };
 }
 
@@ -77,15 +138,26 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
   const question = getCompanyProfileQuestion(questionKey);
   const status = String(body.status || '').toUpperCase();
   if (!ANSWER_STATUSES.has(status)) error(400, 'CLIENT_PROFILE_ANSWER_STATUS_INVALID', 'Answer status must be ANSWERED or UNKNOWN.');
-  const definition = await tx.factDefinition.findUnique({ where: { key: question.factDefinitionKey } });
+  const definition = await tx.factDefinition.findUnique({ where: { key: question.factDefinitionKey } })
+    || await tx.factDefinition.findFirst({ where: { questionKey: question.questionKey, status: 'ACTIVE' } });
   if (!definition || definition.status !== 'ACTIVE') error(409, 'CLIENT_PROFILE_QUESTION_UNAVAILABLE', 'The configured company profile question is unavailable.');
   if (definition.valueType !== question.valueType || !definition.allowedScopeTypes.includes(question.scopeType)) error(500, 'CLIENT_PROFILE_QUESTION_MISCONFIGURED', 'The configured company profile question is invalid.');
 
-  const state = await tx.clientFactAnswerState.findFirst({ where: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: question.scopeType, factSubjectId: null }, include: { currentFact: { select: { id: true, numberValue: true } } } });
+  const state = await tx.clientFactAnswerState.findFirst({ where: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: question.scopeType, factSubjectId: null }, include: { currentFact: { select: { id: true, numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true } } } });
   if (status === 'ANSWERED') {
-    const numberValue = body.numberValue;
-    if (typeof numberValue !== 'number' || !Number.isFinite(numberValue) || numberValue < 0) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'numberValue must be a non-negative finite number.');
-    if (state?.status === 'ANSWERED' && state.currentFact && Number(state.currentFact.numberValue) === numberValue) return state;
+    const input = answerInput(question, body);
+    if (question.valueType === 'NUMBER' && (typeof input.numberValue !== 'number' || !Number.isFinite(input.numberValue) || Number(input.numberValue) < 0)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'numberValue must be a non-negative finite number.');
+    if (question.valueType === 'BOOLEAN' && typeof input.booleanValue !== 'boolean') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'booleanValue must be boolean.');
+    if (question.valueType === 'STRING' && typeof input.stringValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'stringValue must be a string.');
+    if (question.valueType === 'ENUM') {
+      if (typeof input.enumValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue must be a string.');
+      const configuredOptions = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
+      if (configuredOptions.length && !configuredOptions.includes(input.enumValue)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue is not an allowed option.');
+    }
+    if (question.valueType === 'DATE' && typeof input.dateValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'dateValue must be a valid date.');
+    const existingValue = state?.currentFact ? typedValue(state.currentFact) : null;
+    const requestedValue = Object.values(input)[0] ?? null;
+    if (state?.status === 'ANSWERED' && existingValue === requestedValue) return state;
     // A pre-existing typed fact has no AnswerState by design.  Supersede any
     // active company fact for this explicit definition before the new truth is
     // created so DISALLOW overlap policy cannot turn first discovery into a
@@ -95,7 +167,7 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
     // AssessmentFinding currently requires an internal creator. The existing
     // workspace creator is an explicit on-behalf operational actor; the
     // sourceReference remains the authoritative portal identity.
-    const created = await createTypedFactInTx({ clientId: workspace.clientId, factDefinitionId: definition.id, actorUserId: workspace.createdById, verificationStatus: 'CLIENT_PROVIDED', input: { scopeType: 'COMPANY', numberValue, validFrom: evaluationAt.toISOString(), observedAt: evaluationAt.toISOString(), evaluationAt: evaluationAt.toISOString(), sourceReference: `CLIENT_PORTAL_IDENTITY:${identityId}` } }, tx);
+    const created = await createTypedFactInTx({ clientId: workspace.clientId, factDefinitionId: definition.id, actorUserId: workspace.createdById, verificationStatus: 'CLIENT_PROVIDED', input: { scopeType: 'COMPANY', ...input, validFrom: evaluationAt.toISOString(), observedAt: evaluationAt.toISOString(), evaluationAt: evaluationAt.toISOString(), sourceReference: `CLIENT_PORTAL_IDENTITY:${identityId}` } }, tx);
     return state
       ? tx.clientFactAnswerState.update({ where: { id: state.id }, data: { status: 'ANSWERED', currentFactId: created.fact.id } })
       : tx.clientFactAnswerState.create({ data: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: 'COMPANY', status: 'ANSWERED', currentFactId: created.fact.id } });
