@@ -90,7 +90,7 @@ d('Diagnostic workbench integration (PostgreSQL)', () => {
       clientId: clientA,
       sourceType: 'CSV_IMPORT',
       name: 'Declared survey source',
-      config: { description: 'bounded test source' },
+      config: { description: 'source-secret-marker', secret: 'source-secret-marker' },
     });
     const run = await observatory.startDiscoveryRun(admin, { clientId: clientA, connectionId: source.id });
     await observatory.ingestObservation(admin, {
@@ -100,6 +100,14 @@ d('Diagnostic workbench integration (PostgreSQL)', () => {
       idempotencyKey: `workbench-${suffix}`,
       rawPayload: { privateDetail: 'must not escape' },
       observationType: 'DECLARED_SURVEY',
+    });
+    await observatory.ingestObservation(admin, {
+      clientId: clientA,
+      connectionId: source.id,
+      discoveryRunId: run.id,
+      idempotencyKey: `workbench-system-${suffix}`,
+      rawPayload: { systemDetail: 'must not be projected yet' },
+      observationType: 'SYSTEM_RECORD',
     });
     await captureProcessObservation(admin, { clientId: clientA, businessProcessId: process.id }, db);
     const researchRun = await db.recommendationRun.create({
@@ -154,22 +162,47 @@ d('Diagnostic workbench integration (PostgreSQL)', () => {
     expect(result.proposed.recommendations.some((recommendation) => recommendation.title === 'Reduce approval waiting')).toBe(true);
     expect(result.known.facts.every((fact) => fact.provenanceClass === 'CANONICAL_STATE')).toBe(true);
     expect(result.observed.observations.every((observation) => observation.provenanceClass === 'DECLARED_OBSERVATION')).toBe(true);
+    expect(result.observed.observations).toHaveLength(1);
+    expect(result.observed.observations[0].observationType).toBe('DECLARED_SURVEY');
     expect(result.observed.processSnapshots.every((snapshot) => snapshot.provenanceClass === 'MEASURED_SNAPSHOT')).toBe(true);
+    expect(result.observed.processSnapshots[0].metrics.every((metric) => [
+      'TOTAL_ACTIVE_MINUTES',
+      'TOTAL_WAITING_MINUTES',
+      'TOTAL_CYCLE_MINUTES',
+      'WAITING_SHARE',
+      'APPROVAL_STEP_COUNT',
+      'DATA_ENTRY_STEP_COUNT',
+      'HANDOFF_STEP_COUNT',
+      'RESPONSIBLE_PERSON_CHANGE_COUNT',
+      'SYSTEM_COUNT',
+      'SYSTEM_SWITCH_COUNT',
+      'UNASSIGNED_STEP_COUNT',
+      'PROCESS_OWNER_PRESENT',
+    ].includes(metric.code))).toBe(true);
     expect(JSON.stringify(result)).not.toContain('rawPayload');
     expect(JSON.stringify(result)).not.toContain('privateDetail');
+    expect(JSON.stringify(result)).not.toContain('systemDetail');
+    expect(JSON.stringify(result)).not.toContain('source-secret-marker');
+    expect(JSON.stringify(result)).not.toContain('"config"');
+    expect(JSON.stringify(result)).not.toContain('"sourceRefs"');
   });
 
   it('isolates clients and preserves empty states without creating downstream objects', async () => {
     const before = await Promise.all([
+      db.observation.count({ where: { clientId: clientA } }),
+      db.diagnosisCandidate.count({ where: { clientId: clientA } }),
+      db.recommendationRun.count({ where: { clientId: clientA } }),
       db.recommendationCandidate.count({ where: { clientId: clientA } }),
       db.improvementOpportunity.count({ where: { clientId: clientA } }),
       db.developmentInitiative.count({ where: { clientId: clientA } }),
       db.task.count({ where: { case: { clientId: clientA } } }),
+      db.timeEntry.count({ where: { case: { clientId: clientA } } }),
     ]);
 
     const lawyerView = await getDiagnosticWorkbench(lawyer, clientA, db);
     await expect(getDiagnosticWorkbench(lawyer, clientB, db)).rejects.toMatchObject({ code: 'CLIENT_ACCESS_FORBIDDEN' });
     const clientBView = await getDiagnosticWorkbench(admin, clientB, db);
+    await expect(getDiagnosticWorkbench(admin, crypto.randomUUID(), db)).rejects.toMatchObject({ code: 'CLIENT_NOT_FOUND', status: 404 });
 
     expect(lawyerView.client.id).toBe(clientA);
     expect(lawyerView.known.facts.every((fact) => fact.value !== 'Client B Kft.')).toBe(true);
@@ -180,10 +213,14 @@ d('Diagnostic workbench integration (PostgreSQL)', () => {
     expect(clientBView.missing.unresolvedItems).toEqual([]);
 
     const after = await Promise.all([
+      db.observation.count({ where: { clientId: clientA } }),
+      db.diagnosisCandidate.count({ where: { clientId: clientA } }),
+      db.recommendationRun.count({ where: { clientId: clientA } }),
       db.recommendationCandidate.count({ where: { clientId: clientA } }),
       db.improvementOpportunity.count({ where: { clientId: clientA } }),
       db.developmentInitiative.count({ where: { clientId: clientA } }),
       db.task.count({ where: { case: { clientId: clientA } } }),
+      db.timeEntry.count({ where: { case: { clientId: clientA } } }),
     ]);
     expect(after).toEqual(before);
   });

@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../../prisma/prisma.service';
-import { InternalActor, assertClientReadAccess } from '../../client-interaction/base';
+import { InteractionError, InternalActor, assertClientReadAccess } from '../../client-interaction/base';
+import { DECLARED_SURVEY_OBSERVATION_TYPE } from '../research/observationSignals';
+import { ProcessMetricCode, ProcessMetricUnit, ProcessMetricValue } from '../metrics/metricTypes';
 
 type Prisma = typeof defaultPrisma;
 
@@ -96,8 +98,13 @@ export interface DiagnosticWorkbenchDto {
       observedAt: string;
       inputDigest: string;
       snapshotDigest: string;
-      metrics: unknown;
-      provenance: unknown;
+      metrics: ProcessMetricValue[];
+      provenance: {
+        source: string;
+        calculatedBy: string;
+        stepCount: number;
+        inputFieldInventory: string[];
+      } | null;
     }>;
   };
   problems: {
@@ -110,7 +117,6 @@ export interface DiagnosticWorkbenchDto {
       status: string;
       problemDomain: { id: string; key: string; name: string } | null;
       businessProcess: { id: string; name: string } | null;
-      sourceRefs: unknown;
       evidence: Array<{ id: string; title: string; verificationStatus: string; strength: string }>;
     }>;
     sufficiency: Array<{
@@ -166,7 +172,6 @@ export interface DiagnosticWorkbenchDto {
   };
   missing: {
     hasUnknownFacts: boolean;
-    hasUnansweredFactDefinitions: boolean;
     hasConflictingEvidence: boolean;
     insufficientRecommendationCount: number;
     unresolvedItems: Array<{ code: string; message: string }>;
@@ -186,12 +191,82 @@ function evidenceSummary(row: { id: string; title: string; verificationStatus: s
   };
 }
 
+const PROCESS_METRIC_CODES = new Set<ProcessMetricCode>([
+  'TOTAL_ACTIVE_MINUTES',
+  'TOTAL_WAITING_MINUTES',
+  'TOTAL_CYCLE_MINUTES',
+  'WAITING_SHARE',
+  'APPROVAL_STEP_COUNT',
+  'DATA_ENTRY_STEP_COUNT',
+  'HANDOFF_STEP_COUNT',
+  'RESPONSIBLE_PERSON_CHANGE_COUNT',
+  'SYSTEM_COUNT',
+  'SYSTEM_SWITCH_COUNT',
+  'UNASSIGNED_STEP_COUNT',
+  'PROCESS_OWNER_PRESENT',
+]);
+
+const PROCESS_METRIC_UNITS = new Set<ProcessMetricUnit>(['MINUTES', 'COUNT', 'RATIO', 'BOOLEAN']);
+
+function projectMetrics(value: unknown): ProcessMetricValue[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry): ProcessMetricValue[] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const candidate = entry as Record<string, unknown>;
+    const code = candidate.code;
+    const unit = candidate.unit;
+    const metricVersion = candidate.metricVersion;
+    const metricValue = candidate.value;
+    const validValue =
+      metricValue === null ||
+      typeof metricValue === 'number' ||
+      typeof metricValue === 'boolean';
+    if (
+      typeof code !== 'string' ||
+      !PROCESS_METRIC_CODES.has(code as ProcessMetricCode) ||
+      typeof unit !== 'string' ||
+      !PROCESS_METRIC_UNITS.has(unit as ProcessMetricUnit) ||
+      typeof metricVersion !== 'string' ||
+      !validValue
+    ) {
+      return [];
+    }
+    return [{
+      code: code as ProcessMetricCode,
+      value: metricValue as number | boolean | null,
+      unit: unit as ProcessMetricUnit,
+      metricVersion,
+    }];
+  });
+}
+
+function projectProvenance(value: unknown): DiagnosticWorkbenchDto['observed']['processSnapshots'][number]['provenance'] {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.source !== 'string' ||
+    typeof candidate.calculatedBy !== 'string' ||
+    typeof candidate.stepCount !== 'number' ||
+    !Number.isInteger(candidate.stepCount) ||
+    !Array.isArray(candidate.inputFieldInventory) ||
+    !candidate.inputFieldInventory.every((field) => typeof field === 'string')
+  ) {
+    return null;
+  }
+  return {
+    source: candidate.source,
+    calculatedBy: candidate.calculatedBy,
+    stepCount: candidate.stepCount,
+    inputFieldInventory: candidate.inputFieldInventory,
+  };
+}
+
 export async function getDiagnosticWorkbench(
   actor: InternalActor,
   clientId: string,
   prisma: Prisma = defaultPrisma,
 ): Promise<DiagnosticWorkbenchDto> {
-  await assertClientReadAccess(actor, clientId, prisma as PrismaClient);
+  const authorizedClient = await assertClientReadAccess(actor, clientId, prisma as PrismaClient);
   const now = new Date();
 
   const [
@@ -209,7 +284,7 @@ export async function getDiagnosticWorkbench(
     answerStates,
   ] = await Promise.all([
     prisma.client.findUnique({
-      where: { id: clientId },
+      where: { id: authorizedClient.id },
       select: {
         id: true,
         name: true,
@@ -269,7 +344,7 @@ export async function getDiagnosticWorkbench(
       include: { ownerPerson: { select: { id: true, name: true } } },
     }),
     prisma.observation.findMany({
-      where: { clientId },
+      where: { clientId, observationType: DECLARED_SURVEY_OBSERVATION_TYPE },
       orderBy: [{ observedAt: 'desc' }, { id: 'asc' }],
       take: 200,
       select: {
@@ -313,7 +388,6 @@ export async function getDiagnosticWorkbench(
         title: true,
         summary: true,
         status: true,
-        sourceRefs: true,
         problemDomain: { select: { id: true, key: true, name: true } },
         businessProcess: { select: { id: true, name: true } },
         evidenceLinks: {
@@ -390,25 +464,7 @@ export async function getDiagnosticWorkbench(
   ]);
 
   if (!client) {
-    return {
-      client: {
-        id: clientId,
-        name: '',
-        operatingProfile: null,
-      },
-      known: { facts: [], processes: [], systems: [] },
-      observed: { observations: [], processSnapshots: [] },
-      problems: { domains: [], diagnoses: [], sufficiency: [] },
-      proposed: { recommendations: [] },
-      evidence: { records: [], research: [] },
-      missing: {
-        hasUnknownFacts: false,
-        hasUnansweredFactDefinitions: false,
-        hasConflictingEvidence: false,
-        insufficientRecommendationCount: 0,
-        unresolvedItems: [{ code: 'CLIENT_NOT_FOUND', message: 'Client not found.' }],
-      },
-    };
+    throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
   }
 
   const diagnosisDtos = diagnoses.map((row) => ({
@@ -419,7 +475,6 @@ export async function getDiagnosticWorkbench(
     status: row.status,
     problemDomain: row.problemDomain,
     businessProcess: row.businessProcess,
-    sourceRefs: row.sourceRefs,
     evidence: row.evidenceLinks.map(({ evidence }) => evidenceSummary(evidence)),
   }));
 
@@ -542,8 +597,8 @@ export async function getDiagnosticWorkbench(
         observedAt: snapshot.observedAt.toISOString(),
         inputDigest: snapshot.inputDigest,
         snapshotDigest: snapshot.snapshotDigest,
-        metrics: snapshot.metrics,
-        provenance: snapshot.provenance,
+        metrics: projectMetrics(snapshot.metrics),
+        provenance: projectProvenance(snapshot.provenance),
       })),
     },
     problems: {
@@ -592,7 +647,6 @@ export async function getDiagnosticWorkbench(
     },
     missing: {
       hasUnknownFacts,
-      hasUnansweredFactDefinitions: false,
       hasConflictingEvidence,
       insufficientRecommendationCount,
       unresolvedItems: [
