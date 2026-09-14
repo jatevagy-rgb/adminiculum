@@ -40,6 +40,10 @@ describeWithDatabase('canonical company profile discovery (PostgreSQL)', () => {
 
   afterAll(async () => {
     resetTeaor25Catalog();
+    // Answering facts triggers reevaluation, which persists applicability
+    // snapshots (and findings) for this client; clear them before the client.
+    await db.assessmentFinding.deleteMany({ where: { clientId } });
+    await db.requirementApplicability.deleteMany({ where: { clientId } });
     await db.clientFactAnswerState.deleteMany({ where: { clientId } });
     await db.clientFact.deleteMany({ where: { clientId } });
     await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId } });
