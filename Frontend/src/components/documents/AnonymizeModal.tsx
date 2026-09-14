@@ -52,20 +52,24 @@ type RedactionLevel = "FULL" | "CLIENT_ONLY";
 type KnownPartyKind = "PERSON" | "COMPANY";
 
 const aiTaskOptions: { value: AITask; label: string; description: string }[] = [
-  { value: "REVIEW_RISKS", label: "Review Risks", description: "Analyze for legal risks" },
-  { value: "COMPARE_TEMPLATE", label: "Compare Template", description: "Compare with standard template" },
-  { value: "SUMMARIZE", label: "Summarize", description: "Create document summary" },
-  { value: "CUSTOM", label: "Custom", description: "Custom prompt" },
+  { value: "REVIEW_RISKS", label: "Jogi kockázatok áttekintése", description: "Elemzés jogi kockázatok szempontjából" },
+  { value: "COMPARE_TEMPLATE", label: "Összevetés mintával", description: "Összehasonlítás a standard mintával" },
+  { value: "SUMMARIZE", label: "Összefoglalás", description: "A dokumentum összefoglalójának elkészítése" },
+  { value: "CUSTOM", label: "Egyedi feladat", description: "Egyedi prompt" },
 ];
 
 const redactionLevelOptions: { value: RedactionLevel; label: string }[] = [
-  { value: "FULL", label: "Full Redaction" },
-  { value: "CLIENT_ONLY", label: "Client Data Only" },
+  { value: "FULL", label: "Teljes anonimizálás" },
+  { value: "CLIENT_ONLY", label: "Csak ügyféladatok" },
 ];
 
 const legalRoleOptions = ["Ügyfél", "Megbízó", "Eladó", "Vevő", "Ellenérdekű fél", "Egyéb fél"];
 
 const SOURCE_TEXT_LIMITATION_MESSAGE = "A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.";
+
+const COPY_FAILURE_MESSAGE = "Nem sikerült a vágólapra másolni. Jelöld ki és másold kézzel.";
+
+const PSEUDONYMIZATION_NOTE = "Az Adminiculum az AI-átadáshoz pszeudonimizált munkapéldányt készít; az eredeti adatok visszaállíthatók az Adminiculumban.";
 
 export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, clientName, clientRole, onSuccess }: AnonymizeModalProps) {
   const [aiTask, setAiTask] = useState<AITask>("REVIEW_RISKS");
@@ -137,6 +141,16 @@ const [phone, setPhone] = useState("");
     setKnownPartyLegalRole(clientRole || "Ügyfél");
     setCompanyName(clientName || "");
   }, [clientName, clientRole]);
+
+  // Reset stale result/error/copied state whenever the modal opens or the
+  // document changes, so an old anonymized result never masquerades as belonging
+  // to a different document.
+  useEffect(() => {
+    if (!isOpen) return;
+    setResult(null);
+    setError(null);
+    setCopiedState(null);
+  }, [isOpen, contract.id]);
 
   const knownPartyPrimaryName = knownPartyKind === "COMPANY"
     ? (companyName.trim() || knownPartyName.trim())
@@ -265,7 +279,7 @@ const [phone, setPhone] = useState("");
         setResult(resultData);
         onSuccess?.(resultData);
       } else {
-        setError(response.error || "Anonymization failed");
+        setError(response.error || "Az anonimizálás nem sikerült.");
       }
     } catch (err) {
       const e = err as any;
@@ -277,7 +291,7 @@ const [phone, setPhone] = useState("");
         (typeof e?.details === 'string' && e.details) ||
         (typeof e?.message === 'string' && e.message) ||
         (typeof e?.error === 'string' && e.error) ||
-        "Failed to anonymize document";
+        "Az anonimizálás nem sikerült.";
       setError(msg);
     } finally {
       setIsLoading(false);
@@ -291,7 +305,7 @@ const [phone, setPhone] = useState("");
         setCopiedState("redacted");
         setTimeout(() => setCopiedState(null), 2000);
       } catch {
-        setError("Failed to copy text to clipboard");
+        setError(COPY_FAILURE_MESSAGE);
       }
     }
   };
@@ -303,7 +317,7 @@ const [phone, setPhone] = useState("");
         setCopiedState("prompt");
         setTimeout(() => setCopiedState(null), 2000);
       } catch {
-        setError("Failed to copy prompt to clipboard");
+        setError(COPY_FAILURE_MESSAGE);
       }
     }
   };
@@ -311,11 +325,11 @@ const [phone, setPhone] = useState("");
   const handleCopyPromptAndText = async () => {
     if (result?.aiReadyPrompt && result?.redactedText) {
       try {
-        await navigator.clipboard.writeText(`${result.aiReadyPrompt}\n\n---\n\nANONYMIZED TEXT:\n${result.redactedText}`);
+        await navigator.clipboard.writeText(`${result.aiReadyPrompt}\n\n---\n\nANONIMIZÁLT SZÖVEG:\n${result.redactedText}`);
         setCopiedState("both");
         setTimeout(() => setCopiedState(null), 2000);
       } catch {
-        setError("Failed to copy prompt and text to clipboard");
+        setError(COPY_FAILURE_MESSAGE);
       }
     }
   };
@@ -335,7 +349,7 @@ const [phone, setPhone] = useState("");
         <div className="bg-[#06190d] px-6 py-4 flex justify-between items-center">
           <div>
             <h2 className="text-lg font-['Newsreader'] font-bold text-white">
-              Anonymize for AI Processing
+              AI-előkészítés / Anonimizálás
             </h2>
             <p className="text-xs text-white/60 mt-1">
               {contract.title || contract.templateName}
@@ -597,12 +611,12 @@ const [phone, setPhone] = useState("");
               {aiTask === "CUSTOM" && (
                 <div className="mb-6">
                   <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
-                    Custom Prompt
+                    Egyedi prompt
                   </label>
                   <textarea
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Enter your custom analysis instructions..."
+                    placeholder="Add meg az egyedi elemzési utasításaidat..."
                     className="w-full p-3 border border-[#c3c8c1]/20 text-sm text-[#06190d] placeholder-[#c3c8c1] focus:outline-none focus:border-[#06190d]"
                     rows={3}
                   />
@@ -612,7 +626,7 @@ const [phone, setPhone] = useState("");
               {/* Redaction Level */}
               <div className="mb-6">
                 <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
-                  Redaction Level
+                  Anonimizálás mértéke
                 </label>
                 <div className="flex gap-3">
                   {redactionLevelOptions.map((option) => (
@@ -632,6 +646,9 @@ const [phone, setPhone] = useState("");
                 <p className="mt-2 text-[10px] text-[#434843]/60">
                   Az anonimizálás jelenleg pontos ismert értékeket cserél: a tárolt ügyfél-/profiladatokat, valamint az itt megadott ügyfél- és ellenoldali adatokat. Nem végez automatikus AI/NER alapú felismerést ismeretlen e-mailekre, telefonszámokra, dátumokra, címekre vagy azonosítókra.
                 </p>
+                <p className="mt-2 text-[10px] text-[#514D45]">
+                  {PSEUDONYMIZATION_NOTE}
+                </p>
               </div>
 
               {/* Error Message */}
@@ -648,9 +665,9 @@ const [phone, setPhone] = useState("");
                 <div className="flex items-center gap-3">
                   <span className="material-symbols-outlined text-[#23472F]">check_circle</span>
                   <div>
-                    <p className="text-sm font-bold text-[#23472F]">Anonymization Complete</p>
+                    <p className="text-sm font-bold text-[#23472F]">Anonimizálás kész</p>
                     <p className="text-xs text-[#23472F]/70">
-                      {result.redactedItems.length} items redacted
+                      {result.redactedItems.length} elem anonimizálva
                     </p>
                     <p className="text-xs text-[#23472F]/70 mt-1">
                       Az alábbi prompt panelből külső AI eszközbe másolható munkapromptokat készíthetsz az anonimizált szöveghez.
@@ -662,10 +679,10 @@ const [phone, setPhone] = useState("");
               {/* Redacted Preview */}
               <div className="mb-6">
                 <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
-                  Redacted Content Preview
+                  Anonimizált tartalom előnézete
                 </label>
                 <div className="p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
-                  {result.redactedText || "No preview available"}
+                  {result.redactedText || "Nincs elérhető előnézet"}
                 </div>
               </div>
 
@@ -673,7 +690,7 @@ const [phone, setPhone] = useState("");
               {result.aiReadyPrompt && (
                 <div className="mb-6">
                   <label className="block text-xs font-bold uppercase tracking-widest text-[#434843] mb-3">
-                    AI-Ready Prompt
+                    AI-átadásra kész prompt
                   </label>
                   <div className="p-4 bg-[#f5f3ee] border border-[#c3c8c1]/10 text-xs text-[#434843] max-h-48 overflow-y-auto font-mono whitespace-pre-wrap">
                     {result.aiReadyPrompt}
@@ -701,7 +718,7 @@ const [phone, setPhone] = useState("");
                       : "border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5"
                   }`}
                 >
-                  {copiedState === "redacted" ? "✓ Copied" : "Copy Anonymized Text"}
+                  {copiedState === "redacted" ? "✓ Másolva" : "Anonimizált szöveg másolása"}
                 </button>
                 <button
                   onClick={handleCopyAIPrompt}
@@ -711,7 +728,7 @@ const [phone, setPhone] = useState("");
                       : "border-[#06190d]/20 text-[#06190d] hover:bg-[#06190d]/5"
                   }`}
                 >
-                  {copiedState === "prompt" ? "✓ Copied" : "Copy AI Prompt"}
+                  {copiedState === "prompt" ? "✓ Másolva" : "Prompt másolása"}
                 </button>
                 <button
                   onClick={handleCopyPromptAndText}
@@ -721,7 +738,7 @@ const [phone, setPhone] = useState("");
                       : "bg-[#06190d] text-white hover:opacity-90"
                   }`}
                 >
-                  {copiedState === "both" ? "✓ Copied" : "Copy Prompt + Text"}
+                  {copiedState === "both" ? "✓ Másolva" : "Prompt + szöveg másolása"}
                 </button>
               </div>
 
@@ -745,7 +762,7 @@ const [phone, setPhone] = useState("");
                   onClick={handleReset}
                   className="w-full py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
                 >
-                  Anonymize Another
+                  Új anonimizálás
                 </button>
               </div>
             </>
@@ -759,14 +776,14 @@ const [phone, setPhone] = useState("");
               onClick={onClose}
               className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
             >
-              Cancel
+              Mégse
             </button>
             <button
               onClick={handleAnonymize}
               disabled={isLoading || (aiTask === "CUSTOM" && !customPrompt)}
               className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#06190d] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? "Processing..." : "Create Anonymized Copy"}
+              {isLoading ? "Feldolgozás..." : "Anonimizált másolat készítése"}
             </button>
           </div>
         )}
