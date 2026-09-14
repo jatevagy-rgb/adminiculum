@@ -102,9 +102,9 @@ type FactRow = readonly [
 const FACT_ROWS: readonly FactRow[] = [
   ['company_legal_form', 'Jogi forma', 'COMPANY', 'ENUM', 'single', true, false, 'A szervezet jogi formája.'],
   ['registered_country', 'Bejegyzés országa', 'COMPANY', 'JURISDICTION', 'single', true, false, 'A szervezet bejegyzésének országa.'],
-  ['operating_countries', 'Működési országok', 'COMPANY', 'JURISDICTION', 'multi', true, false, 'Mely országokban működik ténylegesen.'],
+  ['operating_countries', 'Működési országok', 'COMPANY', 'MULTI_ENUM', 'multi', true, false, 'Mely országokban működik ténylegesen.'],
   ['primary_teaor25_code', "Fő TEÁOR'25 kód", 'OPERATIONS', 'STRING', 'single', true, false, "A fő tevékenység TEÁOR'25 kódja."],
-  ['additional_teaor25_codes', "További TEÁOR'25 kódok", 'OPERATIONS', 'STRING', 'multi', true, false, 'További ténylegesen végzett tevékenységek.'],
+  ['additional_teaor25_codes', "További TEÁOR'25 kódok", 'OPERATIONS', 'MULTI_ENUM', 'multi', true, false, 'További ténylegesen végzett tevékenységek.'],
   ['sites_count', 'Telephelyek száma', 'COMPANY', 'NUMBER', 'single', true, false, 'Telephelyek/fióktelepek száma.'],
   ['group_member', 'Vállalatcsoport tagja', 'COMPANY', 'BOOLEAN', 'single', true, false, 'Csoporttagság.'],
   ['parent_country', 'Anyavállalat országa', 'COMPANY', 'JURISDICTION', 'single', false, false, 'Csoporttagság esetén.'],

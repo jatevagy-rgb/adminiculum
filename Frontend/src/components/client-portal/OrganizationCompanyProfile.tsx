@@ -44,9 +44,15 @@ function sectionLabel(section: PortalCompanyProfileQuestion["section"]) {
     COMPANY: "Vállalat",
     OPERATIONS: "Működés",
     PEOPLE: "Munkavállalók",
+    SIZE: "Vállalkozás mérete",
     DATA: "Adatkezelés",
     DIGITAL: "Digitális működés",
     MARKET: "Piac és ügyfelek",
+    AI: "Mesterséges intelligencia",
+    FINANCE: "Pénzügy",
+    PRODUCT: "Termékek",
+    ENVIRONMENT: "Környezet",
+    SECTOR: "Ágazat",
     SPECIAL: "Speciális / szabályozott működés",
   }[section];
 }
@@ -57,6 +63,9 @@ function formatQuestionValue(question: PortalCompanyProfileQuestion) {
   }
   if (question.status === "UNANSWERED" || question.value === null || question.value === undefined) {
     return "Ehhez még szükségünk van egy adatra.";
+  }
+  if (Array.isArray(question.value)) {
+    return question.value.length ? question.value.join(", ") : "Ehhez még szükségünk van egy adatra.";
   }
   if (question.valueType === "NUMBER" && typeof question.value === "number") {
     return `${question.value} fő`;
@@ -79,6 +88,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
   // Edit state per questionKey
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState<string>("");
+  const [editMulti, setEditMulti] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
@@ -120,15 +130,23 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
     setRefreshWarning(null);
     setSuccessMessage(null);
     if (question.status === "ANSWERED" && question.value !== null && question.value !== undefined) {
-      setEditValue(String(question.value));
+      if (Array.isArray(question.value)) {
+        setEditMulti(question.value);
+        setEditValue(question.value.join(", "));
+      } else {
+        setEditMulti([]);
+        setEditValue(String(question.value));
+      }
     } else {
       setEditValue("");
+      setEditMulti([]);
     }
   };
 
   const handleCancelEdit = () => {
     setEditingKey(null);
     setEditValue("");
+    setEditMulti([]);
     setActionError(null);
     setRefreshWarning(null);
   };
@@ -175,6 +193,22 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
         return;
       }
       payload.stringValue = editValue.trim();
+    } else if (question.valueType === "MULTI_ENUM") {
+      const hasOptions = (question.options || []).length > 0;
+      const values = hasOptions
+        ? editMulti
+        : editValue.split(",").map((item) => item.trim()).filter((item) => item.length > 0);
+      if (!values.length) {
+        setActionError("Kérjük, válasszon legalább egy lehetőséget.");
+        return;
+      }
+      payload.jsonValue = values;
+    } else if (question.valueType === "JURISDICTION") {
+      if (!editValue.trim()) {
+        setActionError("Kérjük, adjon meg egy országkódot.");
+        return;
+      }
+      payload.enumValue = editValue.trim().toUpperCase();
     }
 
     setSaving(true);
@@ -312,6 +346,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
                       {formatQuestionValue(question)}
                     </p>
                     {question.helpText ? <p className="mt-1 text-xs text-stone-500">{question.helpText}</p> : null}
+                    {question.why ? <p className="mt-1 text-xs text-stone-400">Miért kérdezzük? {question.why}</p> : null}
                   </div>
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${tag.className}`}
@@ -333,8 +368,48 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
                       <select className={inputClass} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus>
                         <option value="">Válasszon</option>{(question.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
                       </select>
+                    ) : question.valueType === "MULTI_ENUM" ? (
+                      (question.options || []).length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {(question.options || []).map((option) => {
+                            const active = editMulti.includes(option);
+                            return (
+                              <button
+                                key={option}
+                                type="button"
+                                aria-pressed={active}
+                                disabled={saving}
+                                onClick={() => setEditMulti((prev) => (active ? prev.filter((value) => value !== option) : [...prev, option]))}
+                                className={active
+                                  ? "rounded-full bg-stone-950 px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                                  : "rounded-full border border-stone-300 px-3 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50"}
+                              >
+                                {option}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          className={inputClass}
+                          placeholder="Kódok vesszővel elválasztva, pl. 62.01, 62.02"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          disabled={saving}
+                          autoFocus
+                        />
+                      )
                     ) : (
-                      <input type={question.valueType === "NUMBER" ? "number" : question.valueType === "DATE" ? "date" : "text"} className={inputClass} placeholder={question.valueType === "NUMBER" ? "Pl. 52" : undefined} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus />
+                      <input
+                        type={question.valueType === "NUMBER" ? "number" : question.valueType === "DATE" ? "date" : "text"}
+                        className={inputClass}
+                        placeholder={question.valueType === "NUMBER" ? "Pl. 52" : question.valueType === "JURISDICTION" ? "Pl. HU" : question.codeCatalog === "TEAOR25" ? "Pl. 62.01" : undefined}
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        disabled={saving}
+                        autoFocus
+                      />
                     )}
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                       <button

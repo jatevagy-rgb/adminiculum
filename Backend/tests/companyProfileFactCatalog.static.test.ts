@@ -23,9 +23,12 @@ describe('canonical company fact catalogue', () => {
       expect(fact.factKey).toMatch(/^[a-z0-9_]+$/);
       expect(fact.labelHu.length).toBeGreaterThan(0);
       expect(allowedValueTypes.has(fact.valueType)).toBe(true);
-      if (fact.valueType === 'ENUM' || fact.valueType === 'MULTI_ENUM') {
+      if (fact.valueType === 'ENUM') {
         expect(Array.isArray(fact.allowedEnumValues)).toBe(true);
         expect(fact.allowedEnumValues?.length).toBeGreaterThan(0);
+      }
+      if (fact.valueType === 'MULTI_ENUM' && fact.allowedEnumValues) {
+        expect(fact.allowedEnumValues.length).toBeGreaterThan(0);
       }
       if (fact.cardinality === 'multi') expect(fact.derivation === null || typeof fact.derivation === 'string').toBe(true);
     }

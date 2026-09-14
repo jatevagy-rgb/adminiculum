@@ -805,17 +805,36 @@ export async function getPortalCompliance() {
     suppressErrorLogging: true,
   });
 }
+export type PortalCompanyProfileSection =
+  | "COMPANY"
+  | "OPERATIONS"
+  | "PEOPLE"
+  | "SIZE"
+  | "DATA"
+  | "DIGITAL"
+  | "MARKET"
+  | "AI"
+  | "FINANCE"
+  | "PRODUCT"
+  | "ENVIRONMENT"
+  | "SECTOR"
+  | "SPECIAL";
+
 export type PortalCompanyProfileQuestion = {
   questionKey: string;
   label: string;
   helpText?: string | null;
-  section: "COMPANY" | "OPERATIONS" | "PEOPLE" | "DATA" | "DIGITAL" | "MARKET" | "SPECIAL";
-  valueType: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "DATE";
+  why?: string | null;
+  section: PortalCompanyProfileSection;
+  module?: string | null;
+  valueType: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "MULTI_ENUM" | "DATE" | "JURISDICTION";
   options?: string[];
+  codeCatalog?: "TEAOR25" | null;
+  discoveryBaseline?: boolean;
   integerOnly?: boolean;
   order: number;
   status: "ANSWERED" | "UNKNOWN" | "UNANSWERED";
-  value: number | string | boolean | null;
+  value: number | string | boolean | string[] | null;
 };
 
 export type PortalCompanyProfileDiscovery = {
@@ -830,6 +849,7 @@ export type PortalCompanyProfileAnswerPayload = {
   booleanValue?: boolean;
   enumValue?: string;
   dateValue?: string;
+  jsonValue?: string[];
 };
 
 export type PortalCompanyProfileAnswerResult = {

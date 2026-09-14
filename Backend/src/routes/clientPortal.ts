@@ -664,7 +664,7 @@ router.get('/org/company-profile', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
-    res.json(await getCompanyProfileDiscovery(identityId, workspaceId));
+    res.json(await getCompanyProfileDiscovery(identityId, workspaceId, undefined, { includeCanonicalBaseline: true }));
   } catch (error) {
     fail(res, error);
   }

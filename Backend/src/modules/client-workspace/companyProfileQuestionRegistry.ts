@@ -1,11 +1,19 @@
-export type CompanyProfileValueType = 'NUMBER' | 'BOOLEAN' | 'STRING' | 'ENUM' | 'DATE';
+import {
+  CANONICAL_COMPANY_QUESTIONS,
+  type CompanyProfileAnswerType,
+  type CompanyProfileModule,
+  type CompanyProfileVisibilityCondition,
+} from './companyProfileQuestionCatalog';
+import { getCanonicalCompanyFact, type CompanyProfileFactSection } from './companyProfileFactCatalog';
+
+export type CompanyProfileValueType = 'NUMBER' | 'BOOLEAN' | 'STRING' | 'ENUM' | 'MULTI_ENUM' | 'DATE' | 'JURISDICTION';
 
 export type CompanyProfileQuestion = {
   questionKey: string;
   factDefinitionKey: string;
   label: string;
   helpText?: string;
-  section: 'COMPANY' | 'OPERATIONS' | 'PEOPLE' | 'DATA' | 'DIGITAL' | 'MARKET' | 'SPECIAL';
+  section: CompanyProfileFactSection;
   scopeType: 'COMPANY';
   valueType: CompanyProfileValueType;
   enumOptions?: readonly string[];
@@ -14,11 +22,31 @@ export type CompanyProfileQuestion = {
   /** Baseline questions are always available; other questions are adaptive. */
   baseline: boolean;
   order: number;
+  /**
+   * Canonical discovery baseline (workbook Fact_Dictionary `baseline` column).
+   * Kept separate from the legacy `baseline` flag so the existing allow-list and
+   * its provisioning migration stay byte-for-byte compatible. The discovery
+   * service includes these only when explicitly asked for canonical baseline.
+   */
+  discoveryBaseline?: boolean;
+  /** Client-facing "Miért kérdezzük?" explanation. Never exposes engine terms. */
+  why?: string;
+  module?: CompanyProfileModule;
+  /** Declarative adaptive gate; owned by the catalogue, not the renderer. */
+  showWhen?: CompanyProfileVisibilityCondition;
+  /** `TEAOR25` marks a code validated against the structured activity catalogue. */
+  codeCatalog?: 'TEAOR25';
+  /** Workbook Question_Catalog id, retained for traceability only. */
+  catalogQuestionKey?: string;
 };
 
-// This is an explicit client-safe allow-list.  Internal FactDefinition ids,
-// rule ids, and arbitrary typed-fact payloads never cross the portal boundary.
-export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
+/**
+ * LEGACY (already provisioned + already tested) allow-list. These entries are
+ * intentionally unchanged: existing stored answers, snapshots and tests depend
+ * on their exact keys, value types and metadata. New canonical questions are
+ * appended below and never replace these.
+ */
+const LEGACY_COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
   {
     questionKey: 'employee_count',
     factDefinitionKey: 'employee_count',
@@ -108,6 +136,70 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     baseline: false,
     order: 80,
   },
+];
+
+/** Question keys provisioned by the legacy migration and asserted by tests. */
+export const LEGACY_COMPANY_PROFILE_QUESTION_KEYS: readonly string[] = LEGACY_COMPANY_PROFILE_QUESTIONS.map((question) => question.questionKey);
+
+function valueTypeFor(answerType: CompanyProfileAnswerType): CompanyProfileValueType {
+  switch (answerType) {
+    case 'BOOLEAN':
+    case 'BOOLEAN_UNKNOWN':
+      return 'BOOLEAN';
+    case 'ENUM':
+      return 'ENUM';
+    case 'MULTI_ENUM':
+    case 'COUNTRY_MULTI':
+    case 'TEAOR25_MULTI':
+      return 'MULTI_ENUM';
+    case 'COUNTRY':
+      return 'JURISDICTION';
+    case 'TEAOR25':
+      return 'STRING';
+    case 'NUMBER':
+    default:
+      return 'NUMBER';
+  }
+}
+
+const LEGACY_FACT_KEYS = new Set(LEGACY_COMPANY_PROFILE_QUESTIONS.map((question) => question.factDefinitionKey));
+
+/**
+ * Canonical questions projected from the workbook catalogue. New fact keys only;
+ * the legacy keys above are never replaced. `questionKey` equals the canonical
+ * fact key so it matches the provisioned `FactDefinition.questionKey`.
+ */
+const CANONICAL_COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = CANONICAL_COMPANY_QUESTIONS
+  .filter((question) => question.factKeys.length === 1 && !LEGACY_FACT_KEYS.has(question.factKeys[0]))
+  .map((question, index): CompanyProfileQuestion => {
+    const factKey = question.factKeys[0];
+    const fact = getCanonicalCompanyFact(factKey);
+    return {
+      questionKey: factKey,
+      factDefinitionKey: factKey,
+      label: question.labelHu,
+      helpText: question.helpTextHu || undefined,
+      section: fact?.section ?? 'COMPANY',
+      scopeType: 'COMPANY',
+      valueType: valueTypeFor(question.answerType),
+      enumOptions: question.optionsHu.length ? question.optionsHu : undefined,
+      integerOnly: factKey === 'sites_count' ? true : undefined,
+      baseline: false,
+      discoveryBaseline: question.baseline,
+      order: 100 + index,
+      why: question.whyHu,
+      module: question.module,
+      showWhen: question.showWhen,
+      codeCatalog: fact?.codeCatalog,
+      catalogQuestionKey: question.questionKey,
+    };
+  });
+
+// This is an explicit client-safe allow-list.  Internal FactDefinition ids,
+// rule ids, and arbitrary typed-fact payloads never cross the portal boundary.
+export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
+  ...LEGACY_COMPANY_PROFILE_QUESTIONS,
+  ...CANONICAL_COMPANY_PROFILE_QUESTIONS,
 ];
 
 export function getCompanyProfileQuestionForDefinition(definition: {

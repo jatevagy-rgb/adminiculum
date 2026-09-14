@@ -3,6 +3,8 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { createTypedFactInTx, reevaluateTypedFactInTx } from '../compliance/typedFactMutationService';
 import { getCompanyProfileQuestion, getCompanyProfileQuestionForDefinition, COMPANY_PROFILE_QUESTIONS, type CompanyProfileQuestion } from './companyProfileQuestionRegistry';
 import { addPortalResponsibility } from '../client-organization/service';
+import { resolveVisibleQuestions, type CompanyProfileFactState, type CompanyProfileFactValue } from './companyProfileAdaptive';
+import { isTeaor25CatalogInstalled, isValidTeaor25Code } from './teaor25Catalog';
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -10,6 +12,26 @@ type Tx = Prisma.TransactionClient;
 const WRITE_ROLES = new Set(['REPRESENTATIVE', 'APPROVER']);
 const ANSWER_STATUSES = new Set(['ANSWERED', 'UNKNOWN']);
 const MAX_PROFILE_STRING_LENGTH = 500;
+
+type FactValueShape = {
+  numberValue: Prisma.Decimal | null;
+  stringValue: string | null;
+  booleanValue: boolean | null;
+  dateValue: Date | null;
+  datetimeValue: Date | null;
+  enumValue: string | null;
+  jsonValue?: Prisma.JsonValue | null;
+};
+
+const FACT_VALUE_SELECT = {
+  numberValue: true,
+  stringValue: true,
+  booleanValue: true,
+  dateValue: true,
+  datetimeValue: true,
+  enumValue: true,
+  jsonValue: true,
+} as const;
 
 function error(status: number, code: string, message: string): never {
   throw Object.assign(new Error(message), { status, code });
@@ -31,13 +53,21 @@ async function workspaceContext(identityId: string, workspaceId: string, db: Db 
   return { ...workspace, membershipRole: String(membership.role) };
 }
 
-function typedValue(fact: { numberValue: Prisma.Decimal | null; stringValue: string | null; booleanValue: boolean | null; dateValue: Date | null; datetimeValue: Date | null; enumValue: string | null }) {
+function typedValue(fact: FactValueShape): CompanyProfileFactValue | null {
   if (fact.numberValue !== null) return Number(fact.numberValue);
   if (fact.stringValue !== null) return fact.stringValue;
   if (fact.booleanValue !== null) return fact.booleanValue;
   if (fact.dateValue !== null) return fact.dateValue.toISOString().slice(0, 10);
   if (fact.datetimeValue !== null) return fact.datetimeValue.toISOString();
+  if (fact.jsonValue !== null && fact.jsonValue !== undefined) return fact.jsonValue as CompanyProfileFactValue;
   return fact.enumValue;
+}
+
+function validateTeaor25String(value: string, field: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_PROFILE_STRING_LENGTH) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', `${field} must contain 1-${MAX_PROFILE_STRING_LENGTH} characters after trimming.`);
+  if (isTeaor25CatalogInstalled() && !isValidTeaor25Code(trimmed)) error(400, 'CLIENT_PROFILE_TEAOR25_UNKNOWN', `${field} is not a known TEÁOR'25 code.`);
+  return trimmed;
 }
 
 function answerInput(question: CompanyProfileQuestion, body: Record<string, unknown>, definition: { allowedEnumValues: unknown }): Record<string, unknown> {
@@ -46,7 +76,9 @@ function answerInput(question: CompanyProfileQuestion, body: Record<string, unkn
     case 'BOOLEAN': return { booleanValue: body.booleanValue };
     case 'STRING': {
       if (typeof body.stringValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'stringValue must be a string.');
-      const value = body.stringValue.trim();
+      const value = question.codeCatalog === 'TEAOR25'
+        ? validateTeaor25String(body.stringValue, 'stringValue')
+        : body.stringValue.trim();
       if (!value || value.length > MAX_PROFILE_STRING_LENGTH) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', `stringValue must contain 1-${MAX_PROFILE_STRING_LENGTH} characters after trimming.`);
       return { stringValue: value };
     }
@@ -56,6 +88,24 @@ function answerInput(question: CompanyProfileQuestion, body: Record<string, unkn
       if (!configuredOptions.length) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue is unavailable because no approved options are configured.');
       if (!configuredOptions.includes(body.enumValue)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue is not an allowed option.');
       return { enumValue: body.enumValue };
+    }
+    case 'JURISDICTION': {
+      if (typeof body.enumValue !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue must be a country code.');
+      const value = body.enumValue.trim();
+      if (!value || value.length > 8) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'enumValue must be a valid country code.');
+      return { enumValue: value };
+    }
+    case 'MULTI_ENUM': {
+      if (!Array.isArray(body.jsonValue) || !body.jsonValue.every((item) => typeof item === 'string')) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'jsonValue must be a string array.');
+      const raw = (body.jsonValue as string[]).map((item) => item.trim()).filter((item) => item.length > 0);
+      if (!raw.length) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'jsonValue must contain at least one selected value.');
+      if (question.codeCatalog === 'TEAOR25') {
+        for (const code of raw) validateTeaor25String(code, 'jsonValue');
+        return { jsonValue: [...new Set(raw)] };
+      }
+      const configuredOptions = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
+      if (configuredOptions.length && raw.some((item) => !configuredOptions.includes(item))) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'jsonValue contains a value that is not an allowed option.');
+      return { jsonValue: [...new Set(raw)] };
     }
     case 'DATE': {
       if (typeof body.dateValue !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.dateValue)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'dateValue must be a valid YYYY-MM-DD date.');
@@ -87,7 +137,50 @@ function latestCurrentSnapshots<T extends { requirementVersionId: string; ruleVe
   return [...current.values()];
 }
 
-export async function getCompanyProfileDiscovery(identityId: string, workspaceId: string, db: Db = defaultPrisma) {
+/**
+ * Canonical fact state used to evaluate the declarative adaptive gates.
+ * Fallback facts (no AnswerState) are only considered when the definition's
+ * temporal policy makes them currently valid, matching discovery semantics.
+ */
+function buildCanonicalFactState(input: {
+  definitions: Array<{ id: string; key: string; temporalPolicy: string }>;
+  states: Array<{ factDefinitionId: string; status: string; currentFact: FactValueShape | null }>;
+  facts: Array<FactValueShape & { factDefinitionId: string; observedAt: Date | null; effectiveAt: Date | null }>;
+  now: Date;
+}): Record<string, CompanyProfileFactState> {
+  const stateByDefinition = new Map(input.states.map((state) => [state.factDefinitionId, state]));
+  const factsByDefinition = new Map<string, typeof input.facts>();
+  for (const fact of input.facts) factsByDefinition.set(fact.factDefinitionId, [...(factsByDefinition.get(fact.factDefinitionId) ?? []), fact]);
+  const out: Record<string, CompanyProfileFactState> = {};
+  for (const definition of input.definitions) {
+    const state = stateByDefinition.get(definition.id);
+    if (state) {
+      const value = state.status === 'ANSWERED' && state.currentFact ? typedValue(state.currentFact) : null;
+      out[definition.key] = value === null
+        ? { status: state.status === 'UNKNOWN' ? 'UNKNOWN' : 'UNANSWERED' }
+        : { status: 'ANSWERED', value };
+      continue;
+    }
+    const fallback = factsByDefinition.get(definition.id);
+    const usable = fallback?.length === 1 && (
+      definition.temporalPolicy === 'VALIDITY_INTERVAL'
+      || (definition.temporalPolicy === 'OBSERVATION' && fallback[0].observedAt !== null && fallback[0].observedAt <= input.now)
+      || (definition.temporalPolicy === 'EFFECTIVE_INSTANT' && fallback[0].effectiveAt !== null && fallback[0].effectiveAt <= input.now)
+    ) ? fallback[0] : undefined;
+    if (usable) {
+      const value = typedValue(usable);
+      if (value !== null) out[definition.key] = { status: 'ANSWERED', value };
+    }
+  }
+  return out;
+}
+
+export async function getCompanyProfileDiscovery(
+  identityId: string,
+  workspaceId: string,
+  db: Db = defaultPrisma,
+  options: { includeCanonicalBaseline?: boolean } = {},
+) {
   const workspace = await workspaceContext(identityId, workspaceId, db, false);
   const now = new Date();
   const definitions = await db.factDefinition.findMany({
@@ -130,21 +223,60 @@ export async function getCompanyProfileDiscovery(identityId: string, workspaceId
       definitionsById.set(definition.id, definition as typeof definitions[number]);
     }
   }
+
+  const definitionsByKey = new Map(definitions.map((definition) => [definition.key, definition]));
+
+  // Canonical Company Profile 2.0 baseline + declarative adaptive gates. This is
+  // opt-in so the legacy discovery contract (and its tests) stay unchanged.
+  if (options.includeCanonicalBaseline) {
+    const canonicalDefinitions = definitions.filter((definition) => {
+      const question = getCompanyProfileQuestionForDefinition(definition);
+      return Boolean(question) && definition.allowedScopeTypes.includes('COMPANY');
+    });
+    const canonicalIds = canonicalDefinitions.map((definition) => definition.id);
+    const [stateRows, factRows] = canonicalIds.length
+      ? await Promise.all([
+        db.clientFactAnswerState.findMany({
+          where: { clientId: workspace.clientId, scopeType: 'COMPANY', factSubjectId: null, factDefinitionId: { in: canonicalIds } },
+          select: { factDefinitionId: true, status: true, currentFact: { select: FACT_VALUE_SELECT } },
+        }),
+        db.clientFact.findMany({
+          where: { clientId: workspace.clientId, factDefinitionId: { in: canonicalIds }, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }] },
+          select: { factDefinitionId: true, observedAt: true, effectiveAt: true, ...FACT_VALUE_SELECT },
+        }),
+      ])
+      : [[], []];
+    const canonicalState = buildCanonicalFactState({
+      definitions: canonicalDefinitions.map((definition) => ({ id: definition.id, key: definition.key, temporalPolicy: definition.temporalPolicy })),
+      states: stateRows,
+      facts: factRows,
+      now,
+    });
+    const visibility = resolveVisibleQuestions(canonicalState);
+    // Only definitely-relevant follow-ups are asked. Questions whose gate is
+    // still UNKNOWN are NOT shown as follow-ups (no irrelevant questions); the
+    // applicability engine owns the "more information / review" outcome.
+    const visibleFactKeys = new Set(visibility.visible.flatMap((question) => question.factKeys));
+    for (const definition of definitions) {
+      const question = getCompanyProfileQuestionForDefinition(definition);
+      if (question && visibleFactKeys.has(question.factDefinitionKey)) definitionsById.set(definition.id, definition);
+    }
+  }
+
   const questionByDefinitionId = new Map<string, CompanyProfileQuestion>();
   for (const definition of definitionsById.values()) {
     const question = getCompanyProfileQuestionForDefinition(definition);
     if (question && definition.allowedScopeTypes.includes(question.scopeType)) questionByDefinitionId.set(definition.id, question);
   }
   const answerableDefinitions = [...questionByDefinitionId.keys()];
-  const definitionsByKey = new Map(definitions.map((definition) => [definition.key, definition]));
   const states = await db.clientFactAnswerState.findMany({
     where: { clientId: workspace.clientId, scopeType: 'COMPANY', factSubjectId: null, factDefinitionId: { in: answerableDefinitions } },
-    include: { currentFact: { select: { numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true } } },
+    include: { currentFact: { select: FACT_VALUE_SELECT } },
   });
   const stateByDefinition = new Map(states.map((state) => [state.factDefinitionId, state]));
   const fallbackFacts = await db.clientFact.findMany({
     where: { clientId: workspace.clientId, factDefinitionId: { in: answerableDefinitions }, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }] },
-    select: { id: true, factDefinitionId: true, numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true, observedAt: true, effectiveAt: true },
+    select: { id: true, factDefinitionId: true, observedAt: true, effectiveAt: true, ...FACT_VALUE_SELECT },
   });
   const fallbackByDefinition = new Map<string, typeof fallbackFacts>();
   for (const fact of fallbackFacts) fallbackByDefinition.set(fact.factDefinitionId, [...(fallbackByDefinition.get(fact.factDefinitionId) ?? []), fact]);
@@ -160,8 +292,23 @@ export async function getCompanyProfileDiscovery(identityId: string, workspaceId
         || (definition.temporalPolicy === 'OBSERVATION' && fallback[0].observedAt !== null && fallback[0].observedAt <= now)
         || (definition.temporalPolicy === 'EFFECTIVE_INSTANT' && fallback[0].effectiveAt !== null && fallback[0].effectiveAt <= now)
       ) ? fallback[0] : undefined;
-      const options = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
-      return [{ questionKey: question.questionKey, label: question.label, helpText: question.helpText || null, section: question.section, valueType: question.valueType, options, ...(question.integerOnly ? { integerOnly: true } : {}), order: question.order, status: state?.status || (fallbackFact ? 'ANSWERED' : 'UNANSWERED'), value: state?.currentFact ? typedValue(state.currentFact) : (fallbackFact ? typedValue(fallbackFact) : null) }];
+      const enumOptions = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
+      return [{
+        questionKey: question.questionKey,
+        label: question.label,
+        helpText: question.helpText || null,
+        why: question.why ?? null,
+        section: question.section,
+        module: question.module ?? null,
+        valueType: question.valueType,
+        options: enumOptions,
+        codeCatalog: question.codeCatalog ?? null,
+        ...(question.integerOnly ? { integerOnly: true } : {}),
+        ...(question.discoveryBaseline ? { discoveryBaseline: true } : {}),
+        order: question.order,
+        status: state?.status || (fallbackFact ? 'ANSWERED' : 'UNANSWERED'),
+        value: state?.currentFact ? typedValue(state.currentFact) : (fallbackFact ? typedValue(fallbackFact) : null),
+      }];
     }).sort((left, right) => left.section.localeCompare(right.section) || left.order - right.order || left.label.localeCompare(right.label) || left.questionKey.localeCompare(right.questionKey)),
   };
 }
@@ -175,7 +322,7 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
   if (!definition || definition.status !== 'ACTIVE') error(409, 'CLIENT_PROFILE_QUESTION_UNAVAILABLE', 'The configured company profile question is unavailable.');
   if (definition.valueType !== question.valueType || !definition.allowedScopeTypes.includes(question.scopeType)) error(500, 'CLIENT_PROFILE_QUESTION_MISCONFIGURED', 'The configured company profile question is invalid.');
 
-  const state = await tx.clientFactAnswerState.findFirst({ where: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: question.scopeType, factSubjectId: null }, include: { currentFact: { select: { id: true, numberValue: true, stringValue: true, booleanValue: true, dateValue: true, datetimeValue: true, enumValue: true } } } });
+  const state = await tx.clientFactAnswerState.findFirst({ where: { clientId: workspace.clientId, factDefinitionId: definition.id, scopeType: question.scopeType, factSubjectId: null }, include: { currentFact: { select: FACT_VALUE_SELECT } } });
   if (status === 'ANSWERED') {
     const input = answerInput(question, body, definition);
     if (question.valueType === 'NUMBER' && (typeof input.numberValue !== 'number' || !Number.isFinite(input.numberValue) || Number(input.numberValue) < 0)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'numberValue must be a non-negative finite number.');
@@ -183,7 +330,7 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
     if (question.valueType === 'BOOLEAN' && typeof input.booleanValue !== 'boolean') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'booleanValue must be boolean.');
     const existingValue = state?.currentFact ? typedValue(state.currentFact) : null;
     const requestedValue = Object.values(input)[0] ?? null;
-    if (state?.status === 'ANSWERED' && existingValue === requestedValue) return state;
+    if (state?.status === 'ANSWERED' && JSON.stringify(existingValue) === JSON.stringify(requestedValue)) return state;
     // A pre-existing typed fact has no AnswerState by design.  Supersede any
     // active company fact for this explicit definition before the new truth is
     // created so DISALLOW overlap policy cannot turn first discovery into a
