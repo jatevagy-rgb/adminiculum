@@ -200,6 +200,12 @@ clientCompanyRouter.get('/clients/:clientId/observatory/sources', async (req, re
     const rows = await defaultPrisma.externalSourceConnection.findMany({
       where: { clientId },
       orderBy: { createdAt: 'asc' },
+      include: {
+        // Read-only health projection: bounded to status/timestamp/count, never
+        // raw payloads, tokens, secrets or OAuth values.
+        runs: { orderBy: { startedAt: 'desc' }, take: 1, select: { startedAt: true, status: true } },
+        _count: { select: { observations: true } },
+      },
     });
     res.json({
       items: rows.map((r) => ({
@@ -208,6 +214,9 @@ clientCompanyRouter.get('/clients/:clientId/observatory/sources', async (req, re
         name: r.name,
         status: r.status,
         createdAt: r.createdAt.toISOString(),
+        lastRunAt: r.runs[0]?.startedAt ? r.runs[0].startedAt.toISOString() : null,
+        lastRunStatus: r.runs[0]?.status ?? null,
+        observationCount: r._count.observations,
       })),
     });
   } catch (e) { fail(res, e); }
