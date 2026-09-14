@@ -38,6 +38,7 @@ import {
 import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
 import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
 import { deriveProcessSignals, selectInterventions } from './interventions';
+import { observationsToGrowSignals, type GrowSignal } from './observationSignals';
 import { createInitiative } from '../../client-company/service';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -162,17 +163,13 @@ export const DOMAIN_LABELS_HU: Record<string, { title: string; problem: string; 
   },
 };
 
-/** Survey intake category → problem domain. */
-export const SURVEY_CATEGORY_TO_DOMAIN: Record<string, string> = {
-  MANUAL_ADMIN: 'MANUAL_ADMIN_LOAD',
-  SLOW_APPROVAL: 'APPROVAL_DELAY',
-  DUPLICATE_DATA: 'DUPLICATE_DATA_ENTRY',
-  TOO_MANY_SYSTEMS: 'SYSTEM_SWITCHING',
-  UNCLEAR_OWNERSHIP: 'UNCLEAR_OWNERSHIP',
-  REWORK: 'REWORK',
-  UNMEASURED_COST: 'UNMEASURED_COST',
-  GENERAL_CONCERN: 'GENERAL_FLOW',
-};
+/**
+ * Survey intake category → problem domain.
+ *
+ * Owned by the fail-closed Observation→Grow normalizer and re-exported here so
+ * existing importers keep their contract. There is exactly one canonical map.
+ */
+export { SURVEY_CATEGORY_TO_DOMAIN } from './observationSignals';
 
 // ---------------------------------------------------------------------------
 // Snapshot helpers — work on the T2A metric array persisted in the snapshot.
@@ -351,6 +348,9 @@ async function executeRun(
     where: { clientId, status: 'ACTIVE', ...(onlyProcessId ? { id: onlyProcessId } : {}) },
     orderBy: { createdAt: 'asc' },
   });
+  // Fail-closed tenant boundary for any business-process reference carried by a
+  // declared observation: only processes belonging to THIS client are allowed.
+  const processIds = new Set(processes.map((p) => p.id));
 
   const snapshots = await db.processObservationSnapshot.findMany({
     where: { clientId },
@@ -367,26 +367,33 @@ async function executeRun(
     take: 50,
   });
 
+  // Single fail-closed normalization boundary. The research engine no longer
+  // parses source-specific survey payloads or owns a category→domain map.
+  const declaredSignals: GrowSignal[] = observationsToGrowSignals(
+    declaredObs.map((obs) => ({
+      id: obs.id,
+      observationType: obs.observationType,
+      rawPayload: obs.rawPayload,
+      observedAt: obs.observedAt,
+      sourceRecordId: obs.sourceRecordId,
+    })),
+  );
+
   const allSurveyCategories: string[] = [];
-  for (const obs of declaredObs) {
-    const payload = obs.rawPayload as { categories?: string[] } | null;
-    if (Array.isArray(payload?.categories)) allSurveyCategories.push(...payload!.categories!.map(String));
+  for (const signal of declaredSignals) {
+    if (signal.provenance.categoryKey) allSurveyCategories.push(signal.provenance.categoryKey);
   }
 
   const metricsBySnapshot = new Map<string, Record<string, number | boolean | null>>();
   for (const s of snapshots) metricsBySnapshot.set(s.id, Object.fromEntries(metricMap(s.metrics)));
 
   const outcomes: DiagnosisRuleOutcome[] = [];
-  const surveyDomainHits = new Map<string, { observationIds: string[] }>();
-  for (const obs of declaredObs) {
-    const payload = obs.rawPayload as { categories?: string[] } | null;
-    const categories = Array.isArray(payload?.categories) ? payload!.categories! : [];
-    for (const cat of categories) {
-      const domain = SURVEY_CATEGORY_TO_DOMAIN[String(cat)] ?? 'GENERAL_FLOW';
-      const hit = surveyDomainHits.get(domain) ?? { observationIds: [] };
-      hit.observationIds.push(obs.id);
-      surveyDomainHits.set(domain, hit);
-    }
+  const surveyDomainHits = new Map<string, { observationIds: string[]; businessProcessId: string | null }>();
+  for (const signal of declaredSignals) {
+    const hit = surveyDomainHits.get(signal.domainKey) ?? { observationIds: [], businessProcessId: null };
+    if (!hit.observationIds.includes(signal.observationId)) hit.observationIds.push(signal.observationId);
+    if (!hit.businessProcessId && signal.businessProcessId) hit.businessProcessId = signal.businessProcessId;
+    surveyDomainHits.set(signal.domainKey, hit);
   }
 
   for (const process of processes) {
@@ -414,7 +421,14 @@ async function executeRun(
         measured: false,
         declared: true,
         severity: 'MEDIUM',
-        sourceRefs: { snapshotIds: [], observationIds: hit.observationIds, businessProcessId: null, severity: 'MEDIUM' },
+        sourceRefs: {
+          snapshotIds: [],
+          observationIds: hit.observationIds,
+          // Fail-closed: a forged/foreign process reference never attaches.
+          businessProcessId:
+            hit.businessProcessId && processIds.has(hit.businessProcessId) ? hit.businessProcessId : null,
+          severity: 'MEDIUM',
+        },
       });
     }
   }
