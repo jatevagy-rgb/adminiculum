@@ -329,6 +329,9 @@ app.use('/api/v1/document-reviews', reviewRouter);
 import communicationsRoutes from './modules/communications/routes';
 app.use('/api/v1/communications', communicationsRoutes);
 
+import mailboxRoutes from './modules/mailbox/routes';
+app.use('/api/v1/mailboxes', mailboxRoutes);
+
 import workgroupRoutes from './modules/workgroups/routes';
 app.use('/api/v1', workgroupRoutes);
 

@@ -3771,7 +3771,7 @@ export interface CommunicationItem {
   providerConversationId: string | null;
   direction: 'INBOUND' | 'OUTBOUND' | null;
   receivedAt: string | null;
-  source: 'MANUAL' | 'OUTLOOK' | null;
+  source: 'MANUAL' | 'OUTLOOK' | 'MAILBOX' | null;
   syncStatus: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
   triage: 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR';
   case?: { id: string; caseNumber: string; title: string } | null;
@@ -3781,6 +3781,12 @@ export interface CommunicationItem {
 
 export interface CommunicationDetail extends CommunicationItem {
   content: string | null;
+  recipients?: CommunicationRecipient[] | null;
+  mailboxAddress?: string | null;
+  mailboxConnectionId?: string | null;
+  mailboxProviderMessageId?: string | null;
+  bodyHtmlSanitized?: string | null;
+  sentAt?: string | null;
   attachments: CommunicationAttachment[];
   relatedTasks: TaskListItem[];
   timelineEvents: CommunicationTimelineEventItem[];
@@ -4111,6 +4117,93 @@ export async function getCommunicationTasks(communicationId: string): Promise<Ta
 
 export async function getCommunicationAttachments(communicationId: string): Promise<CommunicationAttachment[]> {
   return fetchApi<CommunicationAttachment[]>(`/communications/${communicationId}/attachments`);
+}
+
+export interface CommunicationRecipient {
+  name?: string | null;
+  email: string;
+  kind?: 'TO' | 'CC' | 'BCC' | string | null;
+}
+
+// ============================================================================
+// UNIVERSAL MAILBOX — owner-scoped frontend contract (PR #219)
+// ============================================================================
+
+export type MailboxProvider = 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL' | 'IMAP_SMTP';
+export type MailboxStatus =
+  | 'EMAIL_UNVERIFIED'
+  | 'EMAIL_VERIFIED'
+  | 'AUTHORIZATION_REQUIRED'
+  | 'CONNECTED'
+  | 'CONNECTED_READ_ONLY'
+  | 'SYNCING'
+  | 'PAUSED'
+  | 'REVOKED'
+  | 'ERROR';
+
+export interface MailboxConnection {
+  id: string;
+  mailboxAddress: string;
+  provider: MailboxProvider;
+  status: MailboxStatus;
+  verifiedAt: string | null;
+  readCapability: boolean;
+  sendCapability: boolean;
+  lastSyncedAt: string | null;
+  lastSyncStatus?: string | null;
+  createdAt?: string;
+}
+
+export async function getMailboxConnections(): Promise<{ mailboxes: MailboxConnection[] }> {
+  return fetchApi<{ mailboxes: MailboxConnection[] }>('/mailboxes');
+}
+
+export async function startMailboxVerification(data: { email: string; provider: MailboxProvider }): Promise<{ status: string; expiresAt: string }> {
+  return fetchApi<{ status: string; expiresAt: string }>('/mailboxes/verification/start', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function confirmMailboxVerification(data: { email: string; provider: MailboxProvider; code: string }): Promise<{ mailbox: Pick<MailboxConnection, 'id' | 'status'> }> {
+  return fetchApi<{ mailbox: Pick<MailboxConnection, 'id' | 'status'> }>('/mailboxes/verification/confirm', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function startMailboxAuthorization(id: string, provider: Extract<MailboxProvider, 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL'>): Promise<{ authorizationUrl: string }> {
+  const segment = provider === 'MICROSOFT_GRAPH' ? 'microsoft' : 'google';
+  return fetchApi<{ authorizationUrl: string }>(`/mailboxes/${encodeURIComponent(id)}/authorize/${segment}/start`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function configureGenericMailbox(id: string, data: Record<string, unknown> = {}): Promise<{ status: string }> {
+  return fetchApi<{ status: string }>(`/mailboxes/${encodeURIComponent(id)}/generic/configure`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export async function syncMailbox(id: string): Promise<{ mailbox: MailboxConnection }> {
+  return fetchApi<{ mailbox: MailboxConnection }>(`/mailboxes/${encodeURIComponent(id)}/sync`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function disconnectMailbox(id: string): Promise<void> {
+  await fetchApi<void>(`/mailboxes/${encodeURIComponent(id)}/disconnect`, { method: 'POST', body: JSON.stringify({}) });
+}
+
+export async function sendMailboxMessage(data: {
+  mailboxId: string;
+  to: Array<{ name?: string | null; email: string }>;
+  cc?: Array<{ name?: string | null; email: string }>;
+  bcc?: Array<{ name?: string | null; email: string }>;
+  subject: string;
+  bodyText: string;
+  replyToCommunicationId?: string | null;
+  contextCommunicationId?: string | null;
+}): Promise<{ communication: CommunicationItem }> {
+  const { mailboxId, ...payload } = data;
+  return fetchApi<{ communication: CommunicationItem }>(`/mailboxes/${encodeURIComponent(mailboxId)}/send`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }
 
 // ============================================================================

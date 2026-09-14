@@ -770,6 +770,13 @@ jobs:
           sed -i "s/^demo-kft-compliance-grow=PENDING$/demo-kft-compliance-grow=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Universal mailbox PG
+        working-directory: Backend
+        env:
+          MAILBOX_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npx jest --runInBand tests/mailbox.integration.test.ts tests/mailboxRoutes.integration.test.ts
+
       - name: Client Portal 2.0 customer product PG
         working-directory: Backend
         env:
