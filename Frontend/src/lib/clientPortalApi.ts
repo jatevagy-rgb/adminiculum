@@ -649,6 +649,7 @@ export type PortalGrowAssessmentCatalogueItem = {
   latestCompletedAt: string | null;
   latestFindingCount: number;
   latestSummaryHu: string | null;
+  latestResultAvailable: boolean;
 };
 
 export type PortalGrowAssessmentFinding = {
@@ -711,6 +712,7 @@ export type PortalGrowAssessmentDetail = {
     questions: PortalGrowAssessmentQuestion[];
   };
   latestResult: PortalGrowAssessmentResult | null;
+  latestResultAvailable: boolean;
 };
 
 export type PortalGrowAssessmentSubmissionResult = {

@@ -79,6 +79,12 @@ export interface AssessmentCatalogueItemDto {
   latestCompletedAt: string | null;
   latestFindingCount: number;
   latestSummaryHu: string | null;
+  /**
+   * False when a completion exists but its recorded pack version cannot be
+   * evaluated. Distinguishes "completed, no attention points" from "completed,
+   * result unavailable" so the UI never reports an unevaluable result as healthy.
+   */
+  latestResultAvailable: boolean;
 }
 
 export interface AssessmentCatalogueDto {
@@ -105,6 +111,8 @@ export interface AssessmentDetailDto {
     }>;
   };
   latestResult: AssessmentResultDto | null;
+  /** False when a completion exists but its recorded version is not evaluable. */
+  latestResultAvailable: boolean;
 }
 
 function summaryStatement(attentionAreaCount: number, unknownAreaCount: number): string {
@@ -235,6 +243,7 @@ export async function getGrowAssessmentCatalogue(
         latestCompletedAt: null,
         latestFindingCount: 0,
         latestSummaryHu: null,
+        latestResultAvailable: false,
       });
       continue;
     }
@@ -255,6 +264,7 @@ export async function getGrowAssessmentCatalogue(
       latestCompletedAt: submission.completedAt,
       latestFindingCount: result ? result.findings.length : 0,
       latestSummaryHu: result ? result.summaryHu : null,
+      latestResultAvailable: result !== null,
     });
 
     if (!result) continue;
@@ -293,6 +303,9 @@ export async function getGrowAssessmentDetail(
   // Match on pack key only: a completion recorded under an older pack version
   // must remain visible rather than being hidden once the pack revision changes.
   const submission = items.find((item) => item.packKey === pack.packKey) ?? null;
+  const latestResult = submission
+    ? tryBuildResultDto(pack.packKey, submission.packVersion, submission.answers, submission.completedAt)
+    : null;
 
   const dto: AssessmentDetailDto = {
     definition: {
@@ -309,9 +322,8 @@ export async function getGrowAssessmentDetail(
         options: q.options.map((o) => ({ value: o.value, labelHu: o.labelHu })),
       })),
     },
-    latestResult: submission
-      ? tryBuildResultDto(pack.packKey, submission.packVersion, submission.answers, submission.completedAt)
-      : null,
+    latestResult,
+    latestResultAvailable: latestResult !== null,
   };
   assertClientSafe(dto);
   return dto;

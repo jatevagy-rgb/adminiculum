@@ -814,6 +814,10 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     expect(catalogue.status).toBe(200);
     const pack = catalogue.body.packs.find((p: any) => p.packKey === 'DIGITAL_MATURITY');
     expect(pack.status).toBe('COMPLETED');
+    // An unevaluable stored version must be an explicit unavailable state, never
+    // serialized as a healthy zero-finding completion.
+    expect(pack.latestResultAvailable).toBe(false);
+    expect(pack.latestSummaryHu).toBeNull();
 
     const detail = await httpRequest(app, 'GET', '/api/v1/client-portal/org/grow-assessments/DIGITAL_MATURITY', {
       'x-client-portal-session': sessionAuthA,
@@ -821,5 +825,6 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     });
     expect(detail.status).toBe(200);
     expect(detail.body.latestResult).toBeNull();
+    expect(detail.body.latestResultAvailable).toBe(false);
   });
 });

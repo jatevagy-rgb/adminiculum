@@ -160,3 +160,15 @@ test('aggregated empty states: NO_COMPLETION / ZERO_FINDINGS / UNKNOWN / WITH_FI
   assert.match(src, /aggregatedUnknownAreaCount/);
   assert.match(src, /aggregatedFindings\.length > 0/);
 });
+
+test('unevaluable completion has an explicit unavailable state, not zero findings', () => {
+  const src = read(VIEW);
+  assert.match(src, /latestResultAvailable/);
+  assert.match(src, /hasEvaluableCompletedPack/);
+  assert.match(src, /data-testid="grow-assessment-result-unavailable"/);
+  assert.match(src, /Az eredmény jelenleg nem jeleníthető meg/);
+  // The result button is only offered when a result is actually available.
+  assert.match(src, /pack\.status === "COMPLETED" && pack\.latestResultAvailable/);
+  const api = read(API);
+  assert.match(api, /latestResultAvailable: boolean/);
+});

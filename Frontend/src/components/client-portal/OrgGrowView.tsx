@@ -93,6 +93,7 @@ export function OrgGrowView() {
   const [runnerIndex, setRunnerIndex] = useState(0);
   const [runnerAnswers, setRunnerAnswers] = useState<Record<string, string>>({});
   const [assessmentResult, setAssessmentResult] = useState<PortalGrowAssessmentResult | null>(null);
+  const [assessmentResultUnavailable, setAssessmentResultUnavailable] = useState(false);
   const [assessmentBusy, setAssessmentBusy] = useState(false);
   const [assessmentError, setAssessmentError] = useState<string | null>(null);
   const [catalogueError, setCatalogueError] = useState<string | null>(null);
@@ -201,6 +202,7 @@ export function OrgGrowView() {
     try {
       const detail = await getPortalGrowAssessment(packKey);
       setAssessmentResult(detail.latestResult);
+      setAssessmentResultUnavailable(detail.latestResult === null);
       setAssessmentView({ mode: "result", packKey });
     } catch (err) {
       setAssessmentError(clientSafeError(err));
@@ -235,6 +237,7 @@ export function OrgGrowView() {
         processId: assessmentProcessId || undefined,
       });
       setAssessmentResult(res.result);
+      setAssessmentResultUnavailable(false);
       setAssessmentView({ mode: "result", packKey: runnerDetail.definition.packKey });
       await loadCatalogue();
     } catch (err) {
@@ -274,6 +277,9 @@ export function OrgGrowView() {
   const packs = catalogue?.packs || [];
   const aggregatedFindings = catalogue?.aggregatedFindings || [];
   const hasCompletedPack = packs.some((p) => p.status === "COMPLETED");
+  const hasEvaluableCompletedPack = packs.some(
+    (p) => p.status === "COMPLETED" && p.latestResultAvailable,
+  );
 
   const runnerQuestions = runnerDetail?.definition.questions || [];
   const currentQuestion = runnerQuestions[runnerIndex];
@@ -528,6 +534,23 @@ export function OrgGrowView() {
               </button>
             </div>
           </div>
+        ) : assessmentView.mode === "result" && assessmentResultUnavailable ? (
+          <div data-testid="grow-assessment-result-unavailable">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Felmérés elkészült</p>
+            <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">
+              Az eredmény jelenleg nem jeleníthető meg
+            </h2>
+            <p className="mt-2 text-sm text-stone-600">
+              A kitöltést rögzítettük, de ehhez a felmérésverzióhoz tartozó eredmény most nem állítható elő.
+            </p>
+            <button
+              type="button"
+              onClick={() => void backToCatalogue()}
+              className="mt-5 rounded-full bg-stone-950 px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-stone-800"
+            >
+              Vissza a felmérésekhez
+            </button>
+          </div>
         ) : (
           <div data-testid="grow-assessment-catalogue">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Felmérések</p>
@@ -587,7 +610,14 @@ export function OrgGrowView() {
                       {pack.status === "COMPLETED" ? (
                         <p className="mt-2 text-xs text-stone-500">
                           Utolsó kitöltés: {formatDate(pack.latestCompletedAt)}
-                          {pack.latestFindingCount > 0 ? ` · ${pack.latestFindingCount} megállapítás` : ""}
+                          {pack.latestResultAvailable && pack.latestFindingCount > 0
+                            ? ` · ${pack.latestFindingCount} megállapítás`
+                            : ""}
+                        </p>
+                      ) : null}
+                      {pack.status === "COMPLETED" && !pack.latestResultAvailable ? (
+                        <p className="mt-2 text-xs font-medium text-amber-800">
+                          A kitöltés rögzítve van, de az eredmény ehhez a verzióhoz jelenleg nem jeleníthető meg.
                         </p>
                       ) : null}
                     </div>
@@ -601,7 +631,7 @@ export function OrgGrowView() {
                       >
                         {pack.status === "COMPLETED" ? "Újra kitöltöm" : "Kitöltöm"}
                       </button>
-                      {pack.status === "COMPLETED" ? (
+                      {pack.status === "COMPLETED" && pack.latestResultAvailable ? (
                         <button
                           type="button"
                           onClick={() => void viewAssessmentResult(pack.packKey)}
@@ -644,12 +674,16 @@ export function OrgGrowView() {
               ))}
             </div>
           </>
-        ) : hasCompletedPack ? (
+        ) : hasEvaluableCompletedPack ? (
           <p className="mt-2 text-sm text-stone-600">
             A kitöltött felmérések alapján jelenleg nem azonosítottunk figyelmet igénylő pontot.
             {catalogue && catalogue.aggregatedUnknownAreaCount > 0
               ? ` ${catalogue.aggregatedUnknownAreaCount} területen nincs elég információ a kiértékeléshez.`
               : ""}
+          </p>
+        ) : hasCompletedPack ? (
+          <p className="mt-2 text-sm text-stone-600">
+            A kitöltött felmérések eredménye jelenleg nem jeleníthető meg. A kitöltéseket rögzítettük.
           </p>
         ) : (
           <p className="mt-2 text-sm text-stone-600">
