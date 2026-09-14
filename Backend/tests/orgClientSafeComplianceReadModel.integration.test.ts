@@ -42,7 +42,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     });
     if (!version) {
       version = await db.requirementVersion.create({
-        data: { id: crypto.randomUUID(), requirementId: req.id, versionKey: 'V1', title, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z'), status: 'APPROVED' },
+        data: { id: crypto.randomUUID(), requirementId: req.id, versionKey: 'V1', title, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', status: 'APPROVED' },
       });
       createdVersionIds.push(version.id);
     }
