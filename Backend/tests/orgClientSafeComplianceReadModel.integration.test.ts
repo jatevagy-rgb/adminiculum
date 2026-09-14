@@ -125,12 +125,25 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   }
 
   async function createMissingProjection(clientId: string, title: string, definitionId: string, factKey: string) {
+    const versionId = crypto.randomUUID();
+    createdVersionIds.push(versionId);
+    await db.requirementVersion.create({
+      data: {
+        id: versionId,
+        requirementId: sharedReqId,
+        versionKey: `V_${versionId.slice(0, 8)}`,
+        title,
+        normativeStatement: 'Test',
+        effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        status: 'APPROVED',
+      },
+    });
     const ruleId = crypto.randomUUID();
     createdRuleIds.push(ruleId);
     await db.applicabilityRuleVersion.create({
       data: {
         id: ruleId,
-        requirementVersionId: sharedVersionId,
+        requirementVersionId: versionId,
         ruleVersionKey: `R_${ruleId.slice(0, 8)}`,
         schemaVersion: 'rule-ast/v1',
         astJson: { node: 'test' },
@@ -146,7 +159,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
       data: {
         id: applicabilityId,
         clientId,
-        requirementVersionId: sharedVersionId,
+        requirementVersionId: versionId,
         ruleVersionId: ruleId,
         ruleDigest: hex64(`projection-app-${applicabilityId}`),
         outcome: 'INSUFFICIENT_FACTS',
