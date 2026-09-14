@@ -374,17 +374,21 @@ async function executeRun(
     if (!latestByProcess.has(s.businessProcessId)) latestByProcess.set(s.businessProcessId, s);
   }
 
+  // Load ALL declared observations. A global newest-N limit here would truncate
+  // BEFORE the per-scope supersede below, so the latest assessment for an older
+  // (pack, workspace, process) scope could be absent and its valid findings would
+  // silently vanish from the diagnosis. Declared survey volume is bounded by
+  // user submissions, so correctness wins over a pre-grouping cap.
   const declaredObs = await db.observation.findMany({
     where: { clientId, observationType: 'DECLARED_SURVEY' },
     orderBy: { observedAt: 'desc' },
-    take: 50,
   });
 
   // Single fail-closed normalization boundary. The research engine no longer
   // parses source-specific survey payloads or owns a category→domain map.
   // Assessment observations are first reduced to the LATEST submission per
-  // (pack, process) scope so a retake supersedes the observation it corrects;
-  // the generic pain-intake survey is intentionally left untouched.
+  // (pack, workspace, process) scope so a retake supersedes the observation it
+  // corrects; the generic pain-intake survey is intentionally left untouched.
   const declaredSignals: GrowSignal[] = observationsToGrowSignals(
     supersedeAssessmentObservations(
       declaredObs.map((obs) => ({

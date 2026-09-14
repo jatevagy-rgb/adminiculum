@@ -12,6 +12,7 @@ import {
   getAssessmentPack,
 } from '../src/modules/company-growth/assessments/registry';
 import {
+  observationsToGrowSignals,
   supersedeAssessmentObservations,
   type NormalizableObservation,
 } from '../src/modules/company-growth/research/observationSignals';
@@ -102,5 +103,67 @@ describe('GROW assessment observation supersede', () => {
     const s1 = survey('obs-s1', '2026-09-01T10:00:00Z', ['REWORK']);
     const kept = supersedeAssessmentObservations([s1]);
     expect(kept).toEqual([s1]);
+  });
+});
+
+describe('GROW assessment retake research semantics', () => {
+  const problemAnswers = { pa_rework: 'YES', pa_manual_repetitive: 'YES' };
+  const healthyAnswers = { pa_rework: 'NO', pa_manual_repetitive: 'NO' };
+
+  it('ASSESSMENT_RETAKE_OLD_OBSERVATION_PRESERVED=PASS', () => {
+    const older = assessment('obs-1', 'PROCESS_AUTOMATION_READINESS', '2026-09-01T10:00:00Z', 'proc-a', problemAnswers);
+    const newer = assessment('obs-2', 'PROCESS_AUTOMATION_READINESS', '2026-09-10T10:00:00Z', 'proc-a', healthyAnswers);
+    const input = [older, newer];
+    const kept = supersedeAssessmentObservations(input);
+    // Selection is non-destructive: the source array is untouched and the older
+    // observation still exists (history stays immutable).
+    expect(input).toHaveLength(2);
+    expect(input).toContain(older);
+    expect(kept).not.toContain(older);
+  });
+
+  it('ASSESSMENT_RETAKE_ONLY_LATEST_ENTERS_RESEARCH=PASS', () => {
+    const older = assessment('obs-1', 'PROCESS_AUTOMATION_READINESS', '2026-09-01T10:00:00Z', 'proc-a', problemAnswers);
+    const newer = assessment('obs-2', 'PROCESS_AUTOMATION_READINESS', '2026-09-10T10:00:00Z', 'proc-a', healthyAnswers);
+    const signals = observationsToGrowSignals(supersedeAssessmentObservations([newer, older]));
+    // Only the latest (healthy) submission is normalized → no signal at all.
+    expect(signals).toHaveLength(0);
+  });
+
+  it('ASSESSMENT_RETAKE_HEALTHY_ANSWER_REMOVES_STALE_SIGNAL=PASS', () => {
+    const older = assessment('obs-1', 'PROCESS_AUTOMATION_READINESS', '2026-09-01T10:00:00Z', 'proc-a', problemAnswers);
+    const staleBefore = observationsToGrowSignals([older]);
+    expect(staleBefore.map((s) => s.domainKey).sort()).toEqual(['MANUAL_ADMIN_LOAD', 'REWORK']);
+
+    const newer = assessment('obs-2', 'PROCESS_AUTOMATION_READINESS', '2026-09-10T10:00:00Z', 'proc-a', healthyAnswers);
+    const afterRetake = observationsToGrowSignals(supersedeAssessmentObservations([newer, older]));
+    expect(afterRetake).toHaveLength(0);
+  });
+
+  it('GENERIC_SURVEY_RESEARCH_UNCHANGED=PASS', () => {
+    const s1 = survey('obs-s1', '2026-09-01T10:00:00Z', ['REWORK']);
+    const a1 = assessment('obs-a1', 'PROCESS_AUTOMATION_READINESS', '2026-09-01T09:00:00Z', 'proc-a', problemAnswers);
+    const a2 = assessment('obs-a2', 'PROCESS_AUTOMATION_READINESS', '2026-09-10T09:00:00Z', 'proc-a', healthyAnswers);
+    const before = observationsToGrowSignals([s1]);
+    const after = observationsToGrowSignals(supersedeAssessmentObservations([s1, a2, a1]));
+    expect(after).toEqual(before);
+    expect(after.map((s) => s.domainKey)).toEqual(['REWORK']);
+  });
+
+  it('PROCESS_SIGNAL_SCOPED_TO_SELECTED_PROCESS=PASS', () => {
+    const scoped = assessment('obs-1', 'PROCESS_AUTOMATION_READINESS', '2026-09-01T10:00:00Z', 'proc-a', problemAnswers);
+    const signals = observationsToGrowSignals([scoped]);
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((s) => s.businessProcessId === 'proc-a')).toBe(true);
+  });
+
+  it('NON_PROCESS_PACK_REMAINS_UNSCOPED=PASS', () => {
+    // A submission without a process reference normalizes to an unscoped signal
+    // (businessProcessId null); the intake separately guarantees that packs which
+    // do not allow a process reference never persist one.
+    const unscoped = assessment('obs-1', 'PROCESS_AUTOMATION_READINESS', '2026-09-01T10:00:00Z', null, problemAnswers);
+    const signals = observationsToGrowSignals([unscoped]);
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((s) => s.businessProcessId === null)).toBe(true);
   });
 });

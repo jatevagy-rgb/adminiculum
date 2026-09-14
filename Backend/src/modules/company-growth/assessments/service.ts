@@ -303,9 +303,12 @@ export async function submitGrowAssessment(
   db: Db = defaultPrisma,
 ): Promise<SubmitGrowAssessmentResponse> {
   // Validate up-front so an unknown pack / bad answer set is rejected before any
-  // persistence work. Exact validation is enforced again at the intake boundary
-  // as defense-in-depth.
-  const validated = validateAssessmentSubmission(packKey, 1, input.answers);
+  // persistence work. The version must come from the registry: validation
+  // requires the supplied version to equal the current pack version, so a
+  // hard-coded 1 would reject every submission once a pack advances.
+  // Exact validation is enforced again at the intake boundary (defense-in-depth).
+  const packDefinition = getAssessmentPack(packKey);
+  const validated = validateAssessmentSubmission(packKey, packDefinition?.version ?? 1, input.answers);
 
   const submission = await submitPortalGrowAssessment(
     identityId,

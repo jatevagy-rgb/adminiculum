@@ -197,7 +197,10 @@ export async function submitPortalGrowAssessment(
 
   let validated;
   try {
-    validated = validateAssessmentSubmission(packKey, 1, input.answers);
+    // Use the registry pack version instead of a hard-coded 1 so a pack version
+    // bump does not make every submission fail with ASSESSMENT_UNKNOWN_VERSION.
+    const packDefinition = getAssessmentPack(packKey);
+    validated = validateAssessmentSubmission(packKey, packDefinition?.version ?? 1, input.answers);
   } catch (error) {
     if (error instanceof AssessmentValidationError) {
       throw new InteractionError(error.status, error.code, error.message);
@@ -262,7 +265,21 @@ export async function submitPortalGrowAssessment(
     throw new InteractionError(409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used with a different payload.');
   }
 
-  const rawPayload = canonical(await resolveActiveProcessId(requestedProcessId));
+  // A provided process reference must resolve to an ACTIVE process owned by the
+  // authorized client. A foreign (cross-client) or unknown reference is rejected
+  // instead of silently downgrading the submission to unscoped. Replay above is
+  // intentionally evaluated BEFORE this check so an exact retry of an already
+  // persisted submission is still replayed.
+  const resolvedProcessId = await resolveActiveProcessId(requestedProcessId);
+  if (requestedProcessId && !resolvedProcessId) {
+    throw new InteractionError(
+      400,
+      'ASSESSMENT_PROCESS_REFERENCE_INVALID',
+      'A kiválasztott folyamat nem érhető el ehhez a szervezethez.',
+    );
+  }
+
+  const rawPayload = canonical(resolvedProcessId);
   guardSecretLike(rawPayload);
   if (JSON.stringify(rawPayload).length > 20000) {
     throw new InteractionError(400, 'ASSESSMENT_PAYLOAD_TOO_LARGE', 'A bekĂĽldĂ¶tt felmĂ©rĂ©s tĂşl nagy.');

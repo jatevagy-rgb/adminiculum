@@ -279,6 +279,12 @@ export function OrgGrowView() {
   const currentQuestion = runnerQuestions[runnerIndex];
   const isLastQuestion = runnerQuestions.length > 0 && runnerIndex === runnerQuestions.length - 1;
   const currentAnswered = currentQuestion ? Boolean(runnerAnswers[currentQuestion.questionKey]) : false;
+  // Process-oriented packs are scoped to a chosen process. When the workspace has
+  // processes, a selection is required so findings cannot leak across processes.
+  const requiresProcess = Boolean(
+    runnerDetail?.definition.allowsProcessReference && processes.length > 0,
+  );
+  const processReady = !requiresProcess || assessmentProcessId !== "";
 
   return (
     <div className="space-y-6" data-testid="org-grow-view">
@@ -333,9 +339,9 @@ export function OrgGrowView() {
               <div className="mt-5" data-testid="grow-assessment-process-scope">
                 <label
                   htmlFor="assessment-process"
-                  className="block text-xs font-semibold uppercase tracking-wider text-stone-700 mb-1.5"
+                  className="block text-sm font-semibold text-stone-800 mb-1.5"
                 >
-                  Érintett folyamat (opcionális)
+                  Melyik folyamatot szeretné ezzel a felméréssel áttekinteni?
                 </label>
                 <select
                   id="assessment-process"
@@ -343,7 +349,7 @@ export function OrgGrowView() {
                   onChange={(e) => setAssessmentProcessId(e.target.value)}
                   className="w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm text-stone-900 focus:border-[#7a5f18] focus:outline-none"
                 >
-                  <option value="">-- Általános (nem egy konkrét folyamathoz) --</option>
+                  <option value="">Válasszon folyamatot…</option>
                   {processes.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
@@ -351,7 +357,8 @@ export function OrgGrowView() {
                   ))}
                 </select>
                 <p className="mt-1.5 text-xs text-stone-500">
-                  A válaszokat a kiválasztott folyamathoz rendelve értékeljük.
+                  A válaszokat a kiválasztott folyamathoz rendelve értékeljük, így a megállapítások nem
+                  keverednek más folyamatokkal.
                 </p>
               </div>
             ) : null}
@@ -411,7 +418,7 @@ export function OrgGrowView() {
                     setRunnerIndex((idx) => Math.min(runnerQuestions.length - 1, idx + 1));
                   }
                 }}
-                disabled={!currentAnswered || assessmentBusy}
+                disabled={!currentAnswered || assessmentBusy || !processReady}
                 className="rounded-full bg-stone-950 px-5 py-2 text-sm font-semibold text-white transition hover:bg-stone-800 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isLastQuestion ? (assessmentBusy ? "Beküldés…" : "Befejezés") : "Tovább →"}
@@ -536,6 +543,23 @@ export function OrgGrowView() {
               </div>
             ) : null}
 
+            {catalogueError ? (
+              <div
+                className="mt-4 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-900"
+                data-testid="grow-assessment-catalogue-error"
+              >
+                <p className="font-semibold">A felmérések most nem érhetők el.</p>
+                <p className="mt-1">{catalogueError}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadCatalogue()}
+                  className="mt-3 rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Újrapróbálás
+                </button>
+              </div>
+            ) : null}
+
             {packs.length > 0 ? (
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {packs.map((pack) => (
@@ -591,22 +615,7 @@ export function OrgGrowView() {
                   </div>
                 ))}
               </div>
-            ) : catalogueError ? (
-              <div
-                className="mt-5 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-900"
-                data-testid="grow-assessment-catalogue-error"
-              >
-                <p className="font-semibold">A felmérések most nem érhetők el.</p>
-                <p className="mt-1">{catalogueError}</p>
-                <button
-                  type="button"
-                  onClick={() => void loadCatalogue()}
-                  className="mt-3 rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Újrapróbálás
-                </button>
-              </div>
-            ) : (
+            ) : catalogueError ? null : (
               <p className="mt-4 text-sm text-stone-600">A felmérések betöltése folyamatban…</p>
             )}
           </div>

@@ -631,4 +631,120 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     const scoped = assessments.items.find((i) => i.packKey === 'PROCESS_AUTOMATION_READINESS');
     expect(scoped?.processId).toBe(processId);
   });
+
+  it('U. COMPLETED_ZERO_FINDINGS_AND_UNKNOWN_SUMMARY=PASS', async () => {
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-assessments/TRANSFORMATION_READINESS/submissions',
+      {
+        'x-client-portal-session': sessionAuthA,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        answers: answersFor('TRANSFORMATION_READINESS', {}, 'UNKNOWN'),
+        idempotencyKey: `assess-zero-find-${seed}`,
+      },
+    );
+    expect(res.status).toBe(201);
+    expect(res.body.result.findings).toHaveLength(0);
+    expect(res.body.result.unknownAreaCount).toBeGreaterThan(0);
+
+    const catalogue = await httpRequest(app, 'GET', '/api/v1/client-portal/org/grow-assessments', {
+      'x-client-portal-session': sessionAuthA,
+      'x-client-portal-workspace': wsARef,
+    });
+    const pack = catalogue.body.packs.find((p: any) => p.packKey === 'TRANSFORMATION_READINESS');
+    // Completed with zero findings must still read COMPLETED (the UI bases its
+    // empty message on completion status, not on aggregated finding count).
+    expect(pack.status).toBe('COMPLETED');
+    expect(pack.latestFindingCount).toBe(0);
+    expect(catalogue.body.aggregatedUnknownAreaCount).toBeGreaterThan(0);
+  });
+
+  it('V. PROCESS_REFERENCE_INVALID_DENIED=PASS', async () => {
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS/submissions',
+      {
+        'x-client-portal-session': sessionAuthA,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        answers: answersFor('PROCESS_AUTOMATION_READINESS', { ...NEUTRAL_PROCESS, pa_manual_repetitive: 'YES' }),
+        idempotencyKey: `assess-badproc-${seed}`,
+        processId: crypto.randomUUID(),
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('ASSESSMENT_PROCESS_REFERENCE_INVALID');
+    expect(
+      await db.observation.count({ where: { clientId: ids.clientA, idempotencyKey: `assess-badproc-${seed}` } }),
+    ).toBe(0);
+  });
+
+  it('W. PROCESS_REFERENCE_CROSS_CLIENT_DENIED=PASS', async () => {
+    const foreignProcessId = crypto.randomUUID();
+    await db.businessProcess.create({
+      data: {
+        id: foreignProcessId,
+        clientId: ids.clientB,
+        name: `Foreign process ${seed}`,
+        status: 'ACTIVE',
+      } as never,
+    });
+
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS/submissions',
+      {
+        'x-client-portal-session': sessionAuthA,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        answers: answersFor('PROCESS_AUTOMATION_READINESS', { ...NEUTRAL_PROCESS, pa_manual_repetitive: 'YES' }),
+        idempotencyKey: `assess-foreignproc-${seed}`,
+        processId: foreignProcessId,
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('ASSESSMENT_PROCESS_REFERENCE_INVALID');
+  });
+
+  it('X. NON_PROCESS_PACK_PROCESS_REFERENCE_IGNORED=PASS', async () => {
+    const processId = crypto.randomUUID();
+    await db.businessProcess.create({
+      data: {
+        id: processId,
+        clientId: ids.clientA,
+        name: `Non-process-pack scope ${seed}`,
+        status: 'ACTIVE',
+      } as never,
+    });
+
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-assessments/DIGITAL_MATURITY/submissions',
+      {
+        'x-client-portal-session': sessionAuthA,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        answers: answersFor('DIGITAL_MATURITY', {}, 'UNKNOWN'),
+        idempotencyKey: `assess-nonprocess-${seed}`,
+        processId,
+      },
+    );
+    expect(res.status).toBe(201);
+
+    const rows = await db.observation.findMany({
+      where: { clientId: ids.clientA, idempotencyKey: `assess-nonprocess-${seed}` },
+    });
+    expect(rows).toHaveLength(1);
+    // DIGITAL_MATURITY does not allow a process reference → persisted as unscoped.
+    expect((rows[0].rawPayload as any).processId).toBeNull();
+  });
 });

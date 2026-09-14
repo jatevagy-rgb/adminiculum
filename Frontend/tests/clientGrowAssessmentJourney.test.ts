@@ -126,17 +126,37 @@ test('process-scoped packs: runner offers and sends the selected process', () =>
   assert.match(src, /allowsProcessReference/);
   assert.match(src, /assessmentProcessId/);
   assert.match(src, /processId: assessmentProcessId \|\| undefined/);
+  assert.match(src, /Melyik folyamatot szeretné ezzel a felméréssel áttekinteni\?/);
+  assert.match(src, /requiresProcess/);
 });
 
-test('catalogue: failed load shows an unavailable state with retry, not endless loading', () => {
+test('catalogue states: loading, success, error and retry all exist', () => {
   const src = read(VIEW);
+  assert.match(src, /A felmérések betöltése folyamatban…/);
+  assert.match(src, /data-testid="grow-assessment-catalogue"/);
   assert.match(src, /data-testid="grow-assessment-catalogue-error"/);
   assert.match(src, /A felmérések most nem érhetők el/);
-  assert.match(src, /catalogueError/);
+  assert.match(src, /Újrapróbálás/);
+  // Error is rendered AHEAD of cached packs, so a failed refresh stays visible.
+  assert.match(src, /catalogueError \?\s*\(/);
+  assert.match(src, /catalogueError \? null/);
 });
 
-test('aggregated: honest empty message is based on completion, not finding count', () => {
+test('catalogue failure is local: base Grow stays and no raw error leaks', () => {
+  const src = read(VIEW);
+  assert.match(src, /clientSafeError\(err\)/);
+  assert.match(src, /data-testid="grow-feltaras-section"/);
+  assert.match(src, /Min dolgozunk jelenleg\?/);
+  // No raw Error object is interpolated into the UI.
+  assert.doesNotMatch(src, /\{err\.message\}/);
+  assert.doesNotMatch(src, /\{error\.message\}/);
+});
+
+test('aggregated empty states: NO_COMPLETION / ZERO_FINDINGS / UNKNOWN / WITH_FINDINGS', () => {
   const src = read(VIEW);
   assert.match(src, /hasCompletedPack/);
+  assert.match(src, /Még nincs kitöltött felmérés/);
   assert.match(src, /jelenleg nem azonosítottunk figyelmet igénylő pontot/);
+  assert.match(src, /aggregatedUnknownAreaCount/);
+  assert.match(src, /aggregatedFindings\.length > 0/);
 });
