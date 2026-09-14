@@ -6,6 +6,7 @@ describe('company profile question registry', () => {
   it('keeps the server-controlled baseline typed and sectioned', () => {
     expect(COMPANY_PROFILE_QUESTIONS.find((question) => question.questionKey === 'employee_count')).toMatchObject({
       valueType: 'NUMBER',
+      integerOnly: true,
       scopeType: 'COMPANY',
       section: 'PEOPLE',
       baseline: true,
@@ -13,6 +14,7 @@ describe('company profile question registry', () => {
     expect(COMPANY_PROFILE_QUESTIONS.filter((question) => question.baseline).map((question) => question.questionKey)).toEqual(['employee_count', 'company_main_activity', 'company_operating_country']);
     expect(COMPANY_PROFILE_QUESTIONS.some((question) => question.valueType === 'BOOLEAN')).toBe(true);
     expect(COMPANY_PROFILE_QUESTIONS.some((question) => question.valueType === 'STRING')).toBe(true);
+    expect(COMPANY_PROFILE_QUESTIONS.filter((question) => question.integerOnly).map((question) => question.questionKey)).toEqual(['employee_count']);
   });
 
   it('only maps active canonical definitions with compatible typed metadata', () => {
@@ -35,6 +37,13 @@ describe('company profile question registry', () => {
     expect(migration).toContain('"temporalPolicy"');
     expect(migration).toContain('existing_definition."temporalPolicy"::text <> \'OBSERVATION\'');
     expect(migration).not.toMatch(/UPDATE\s+"fact_definitions"[\s\S]*temporalPolicy/i);
+  });
+
+  it('keeps integer-only validation question-scoped', () => {
+    const answerService = readFileSync(path.resolve(__dirname, '../src/modules/client-workspace/companyProfileAnswerService.ts'), 'utf8');
+    expect(answerService).toContain('question.integerOnly');
+    expect(answerService).toContain('Number.isInteger(input.numberValue)');
+    expect(COMPANY_PROFILE_QUESTIONS.filter((question) => question.valueType === 'NUMBER' && question.questionKey !== 'employee_count').every((question) => question.integerOnly !== true)).toBe(true);
   });
 
 });

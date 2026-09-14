@@ -133,7 +133,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     const discovery = (await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions;
     expect(discovery).toHaveLength(3);
     expect(discovery).toEqual(expect.arrayContaining([
-      expect.objectContaining({ questionKey: 'employee_count', label: 'Number of employees', valueType: 'NUMBER', status: 'UNANSWERED', value: null }),
+      expect.objectContaining({ questionKey: 'employee_count', label: 'Number of employees', valueType: 'NUMBER', integerOnly: true, status: 'UNANSWERED', value: null }),
       expect.objectContaining({ questionKey: 'company_main_activity', valueType: 'STRING', status: 'UNANSWERED', value: null }),
       expect.objectContaining({ questionKey: 'company_operating_country', valueType: 'STRING', status: 'UNANSWERED', value: null }),
     ]));
@@ -229,6 +229,9 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
       await db.clientFact.create({ data: { id: fallbackAiFactId, clientId: clientA, type: 'company_ai_usage', value: 'false', factDefinitionId: canonicalDefinition.id, scopeType: 'COMPANY', booleanValue: false, validFrom: new Date('2026-01-01T00:00:00Z'), observedAt: new Date('2026-01-01T00:00:00Z'), verificationStatus: 'CLIENT_PROVIDED' } });
       const fallbackDiscovery = await getCompanyProfileDiscovery(memberId, workspaceA, db);
       expect(fallbackDiscovery.questions).toEqual(expect.arrayContaining([expect.objectContaining({ questionKey: 'company_ai_usage', status: 'ANSWERED', value: false })]));
+      await answerCompanyProfileQuestion(representativeId, workspaceA, 'company_ai_usage', { status: 'ANSWERED', booleanValue: false }, db);
+      const falseWritten = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA, factDefinitionId: canonicalDefinition.id, supersededAt: null } });
+      expect(falseWritten.booleanValue).toBe(false);
       await answerCompanyProfileQuestion(representativeId, workspaceA, 'company_ai_usage', { status: 'ANSWERED', booleanValue: true }, db);
       const written = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA, factDefinitionId: canonicalDefinition.id, supersededAt: null } });
       expect(written.factDefinitionId).toBe(canonicalDefinition.id);
@@ -264,20 +267,25 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
   });
 
   it('creates CLIENT_PROVIDED facts, supersedes immutable truth, and is idempotent', async () => {
+    await expect(answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 1.5 }, db)).rejects.toMatchObject({ code: 'CLIENT_PROFILE_ANSWER_INVALID' });
+    await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 0 }, db);
+    const zero = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA }, orderBy: { createdAt: 'asc' } });
+    expect(zero.numberValue?.toString()).toBe('0');
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 47 }, db);
     const first = await db.clientFact.findFirstOrThrow({ where: { clientId: clientA }, orderBy: { createdAt: 'asc' } });
     expect(first.verificationStatus).toBe('CLIENT_PROVIDED');
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 47 }, db);
-    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(1);
+    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(2);
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'ANSWERED', numberValue: 52 }, db);
     const facts = await db.clientFact.findMany({ where: { clientId: clientA }, orderBy: { createdAt: 'asc' } });
-    expect(facts).toHaveLength(2);
+    expect(facts).toHaveLength(3);
     expect(facts[0].supersededAt).not.toBeNull();
-    expect(facts[1].numberValue?.toString()).toBe('52');
+    expect(facts[1].supersededAt).not.toBeNull();
+    expect(facts[2].numberValue?.toString()).toBe('52');
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
     const employeeQuestion = (await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions.find((question) => question.questionKey === 'employee_count');
     expect(employeeQuestion).toMatchObject({ status: 'UNKNOWN', value: null });
-    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(2);
+    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(3);
   });
 
   it('changes real compliance truth for 47 -> 52 and for fact removal', async () => {
@@ -290,7 +298,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     await answerCompanyProfileQuestion(representativeId, workspaceA, 'employee_count', { status: 'UNKNOWN' }, db);
     const outcomes = await db.requirementApplicability.findMany({ where: { clientId: clientA, requirementVersionId }, select: { outcome: true } });
     expect(outcomes.map((row) => row.outcome)).toContain('INSUFFICIENT_FACTS');
-    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(4);
+    expect(await db.clientFact.count({ where: { clientId: clientA } })).toBe(5);
   });
 
   it('enforces representative authority and client isolation', async () => {

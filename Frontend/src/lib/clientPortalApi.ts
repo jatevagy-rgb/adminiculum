@@ -640,6 +640,9 @@ export type PortalComplianceMissingInfo = {
   label: string;
   portalAnswerable: boolean;
   questionKey?: string | null;
+  valueType?: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "DATE";
+  options?: string[];
+  integerOnly?: boolean;
 };
 
 export type PortalComplianceTopic = {
@@ -669,6 +672,7 @@ export type PortalCompanyProfileQuestion = {
   section: "COMPANY" | "OPERATIONS" | "PEOPLE" | "DATA" | "DIGITAL" | "MARKET" | "SPECIAL";
   valueType: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "DATE";
   options?: string[];
+  integerOnly?: boolean;
   order: number;
   status: "ANSWERED" | "UNKNOWN" | "UNANSWERED";
   value: number | string | boolean | null;

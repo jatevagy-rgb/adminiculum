@@ -161,7 +161,7 @@ export async function getCompanyProfileDiscovery(identityId: string, workspaceId
         || (definition.temporalPolicy === 'EFFECTIVE_INSTANT' && fallback[0].effectiveAt !== null && fallback[0].effectiveAt <= now)
       ) ? fallback[0] : undefined;
       const options = question.enumOptions?.length ? [...question.enumOptions] : allowedEnumValues(definition.allowedEnumValues);
-      return [{ questionKey: question.questionKey, label: question.label, helpText: question.helpText || null, section: question.section, valueType: question.valueType, options, order: question.order, status: state?.status || (fallbackFact ? 'ANSWERED' : 'UNANSWERED'), value: state?.currentFact ? typedValue(state.currentFact) : (fallbackFact ? typedValue(fallbackFact) : null) }];
+      return [{ questionKey: question.questionKey, label: question.label, helpText: question.helpText || null, section: question.section, valueType: question.valueType, options, ...(question.integerOnly ? { integerOnly: true } : {}), order: question.order, status: state?.status || (fallbackFact ? 'ANSWERED' : 'UNANSWERED'), value: state?.currentFact ? typedValue(state.currentFact) : (fallbackFact ? typedValue(fallbackFact) : null) }];
     }).sort((left, right) => left.section.localeCompare(right.section) || left.order - right.order || left.label.localeCompare(right.label) || left.questionKey.localeCompare(right.questionKey)),
   };
 }
@@ -179,6 +179,7 @@ async function answerInTx(identityId: string, workspaceId: string, questionKey: 
   if (status === 'ANSWERED') {
     const input = answerInput(question, body, definition);
     if (question.valueType === 'NUMBER' && (typeof input.numberValue !== 'number' || !Number.isFinite(input.numberValue) || Number(input.numberValue) < 0)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'numberValue must be a non-negative finite number.');
+    if (question.valueType === 'NUMBER' && question.integerOnly && !Number.isInteger(input.numberValue)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'numberValue must be a non-negative integer.');
     if (question.valueType === 'BOOLEAN' && typeof input.booleanValue !== 'boolean') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'booleanValue must be boolean.');
     const existingValue = state?.currentFact ? typedValue(state.currentFact) : null;
     const requestedValue = Object.values(input)[0] ?? null;

@@ -9,6 +9,8 @@ export type CompanyProfileQuestion = {
   scopeType: 'COMPANY';
   valueType: CompanyProfileValueType;
   enumOptions?: readonly string[];
+  /** Some numeric questions represent counts and therefore require integers. */
+  integerOnly?: boolean;
   /** Baseline questions are always available; other questions are adaptive. */
   baseline: boolean;
   order: number;
@@ -25,6 +27,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
     section: 'PEOPLE',
     scopeType: 'COMPANY',
     valueType: 'NUMBER',
+    integerOnly: true,
     baseline: true,
     order: 10,
   },
