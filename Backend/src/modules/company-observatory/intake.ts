@@ -115,12 +115,26 @@ async function persistCanonicalSurveySubmission(
 
   const connection = await findOrCreateSurveyConnection(actor, clientId, accessGuard);
 
+  // Fail-closed tenant validation of the optional business-process reference.
+  // `clientId` is already server-resolved/authorized here; a referenced process
+  // must belong to the SAME client and be ACTIVE, otherwise the reference is
+  // dropped. This centralizes the guarantee so a forged cross-client processId
+  // can never attach a declared observation to another tenant's process.
+  let validProcessId: string | null = null;
+  if (input.processId) {
+    const process = await defaultPrisma.businessProcess.findFirst({
+      where: { id: String(input.processId), clientId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    validProcessId = process?.id ?? null;
+  }
+
   const rawPayload: Record<string, unknown> = {
     kind: 'GROW_PAIN_INTAKE',
     categories,
     categoryLabelsHu: categories.map((c) => SURVEY_CATEGORY_LABELS_HU[c as SurveyCategory] ?? c),
     freeText,
-    processId: input.processId ? String(input.processId) : null,
+    processId: validProcessId,
   };
   // Portal provenance only. The internal workforce payload must remain
   // byte-compatible with the historical shape so existing idempotency digests
