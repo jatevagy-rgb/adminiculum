@@ -35,10 +35,20 @@ function statusTag(status: PortalCompanyProfileQuestion["status"]) {
 }
 
 function questionDisplayLabel(question: PortalCompanyProfileQuestion) {
-  if (question.questionKey === "employee_count") {
-    return "Foglalkoztatottak létszáma";
-  }
+  if (question.questionKey === "employee_count") return "Foglalkoztatottak létszáma";
   return question.label?.trim() || "Szervezeti adat";
+}
+
+function sectionLabel(section: PortalCompanyProfileQuestion["section"]) {
+  return {
+    COMPANY: "Vállalat",
+    OPERATIONS: "Működés",
+    PEOPLE: "Munkavállalók",
+    DATA: "Adatkezelés",
+    DIGITAL: "Digitális működés",
+    MARKET: "Piac és ügyfelek",
+    SPECIAL: "Speciális / szabályozott működés",
+  }[section];
 }
 
 function formatQuestionValue(question: PortalCompanyProfileQuestion) {
@@ -48,7 +58,7 @@ function formatQuestionValue(question: PortalCompanyProfileQuestion) {
   if (question.status === "UNANSWERED" || question.value === null || question.value === undefined) {
     return "Ehhez még szükségünk van egy adatra.";
   }
-  if (question.questionKey === "employee_count" && typeof question.value === "number") {
+  if (question.valueType === "NUMBER" && typeof question.value === "number") {
     return `${question.value} fő`;
   }
   if (typeof question.value === "boolean") {
@@ -128,27 +138,49 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
     setRefreshWarning(null);
     setSuccessMessage(null);
 
-    let parsedNumber: number | undefined;
-    if (question.questionKey === "employee_count" || typeof question.value === "number") {
+    let payload: Parameters<typeof answerPortalCompanyProfileQuestion>[1] = { status: "ANSWERED" };
+    if (question.valueType === "NUMBER") {
       const trimmed = editValue.trim();
       if (trimmed === "") {
         setActionError("Kérjük, adjon meg egy érvényes számértéket.");
         return;
       }
-      parsedNumber = parseInt(trimmed, 10);
-      if (Number.isNaN(parsedNumber) || parsedNumber < 0) {
+      const parsedNumber = Number(trimmed);
+      if (!Number.isFinite(parsedNumber) || parsedNumber < 0) {
         setActionError("Kérjük, pozitív egész számot adjon meg.");
         return;
       }
+      payload.numberValue = parsedNumber;
+    } else if (question.valueType === "BOOLEAN") {
+      if (editValue !== "true" && editValue !== "false") {
+        setActionError("Kérjük, válasszon Igen vagy Nem értéket.");
+        return;
+      }
+      payload.booleanValue = editValue === "true";
+    } else if (question.valueType === "ENUM") {
+      if (!question.options?.includes(editValue)) {
+        setActionError("Kérjük, válasszon a megadott lehetőségek közül.");
+        return;
+      }
+      payload.enumValue = editValue;
+    } else if (question.valueType === "DATE") {
+      if (!editValue) {
+        setActionError("Kérjük, adjon meg egy dátumot.");
+        return;
+      }
+      payload.dateValue = editValue;
+    } else if (question.valueType === "STRING") {
+      if (!editValue.trim()) {
+        setActionError("Kérjük, adjon meg egy értéket.");
+        return;
+      }
+      payload.stringValue = editValue.trim();
     }
 
     setSaving(true);
     let mutationCompleted = false;
     try {
-      await answerPortalCompanyProfileQuestion(question.questionKey, {
-        status: "ANSWERED",
-        ...(parsedNumber !== undefined ? { numberValue: parsedNumber } : {}),
-      });
+      await answerPortalCompanyProfileQuestion(question.questionKey, payload);
       mutationCompleted = true;
       setEditingKey(null);
       setEditValue("");
@@ -221,10 +253,10 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
         {stats.total > 0 ? (
           <div className="rounded-2xl bg-stone-50 px-4 py-3 text-right">
             <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">
-              Kitöltöttség
+              Adatállapot
             </span>
             <p className="text-lg font-semibold text-stone-900">
-              {stats.answered} / {stats.total} adat megadva
+              {stats.answered} adat ismert · {Math.max(0, stats.total - stats.answered)} tisztázandó
             </p>
           </div>
         ) : null}
@@ -257,21 +289,21 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
         </div>
       ) : null}
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-6 space-y-6">
         {questions.length === 0 ? (
-          <p className="text-sm text-stone-600">Jelenleg nincsenek megválaszolandó kérdések.</p>
+          <p className="text-sm text-stone-600">A jelenlegi adatok alapján nincs további tisztázandó kérdés.</p>
         ) : (
-          questions.map((question) => {
+          questions.map((question, index) => {
             const isEditing = editingKey === question.questionKey;
             const tag = statusTag(question.status);
+            const previous = questions[index - 1];
+            const showSection = !previous || previous.section !== question.section;
 
             return (
-              <div
-                key={question.questionKey}
-                className="rounded-2xl border border-stone-200 bg-white p-4 transition"
-                data-testid="company-profile-question"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-3">
+              <div key={question.questionKey}>
+                {showSection ? <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">{sectionLabel(question.section)}</h3> : null}
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 transition" data-testid="company-profile-question">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="font-semibold text-stone-950">
                       {questionDisplayLabel(question)}
@@ -279,6 +311,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
                     <p className="mt-1 text-sm text-stone-700">
                       {formatQuestionValue(question)}
                     </p>
+                    {question.helpText ? <p className="mt-1 text-xs text-stone-500">{question.helpText}</p> : null}
                   </div>
                   <span
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${tag.className}`}
@@ -292,15 +325,17 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
                     <label className="block text-xs font-semibold uppercase tracking-wider text-stone-600">
                       Érték megadása
                     </label>
-                    <input
-                      type="number"
-                      className={inputClass}
-                      placeholder="Pl. 52"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      disabled={saving}
-                      autoFocus
-                    />
+                    {question.valueType === "BOOLEAN" ? (
+                      <select className={inputClass} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus>
+                        <option value="">Válasszon</option><option value="true">Igen</option><option value="false">Nem</option>
+                      </select>
+                    ) : question.valueType === "ENUM" ? (
+                      <select className={inputClass} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus>
+                        <option value="">Válasszon</option>{(question.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    ) : (
+                      <input type={question.valueType === "NUMBER" ? "number" : question.valueType === "DATE" ? "date" : "text"} className={inputClass} placeholder={question.valueType === "NUMBER" ? "Pl. 52" : undefined} value={editValue} onChange={(e) => setEditValue(e.target.value)} disabled={saving} autoFocus />
+                    )}
                     <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
                       <button
                         type="button"
@@ -339,6 +374,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: Props) {
                     </button>
                   </div>
                 )}
+                  </div>
               </div>
             );
           })

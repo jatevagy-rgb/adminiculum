@@ -32,6 +32,8 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   const createdRequirementIds: string[] = [];
   const originalVersionStates = new Map<string, { title: string; status: string; sourceSupportState: string }>();
   const originalRuleStates = new Map<string, { status: string }>();
+  const createdDependencyIds: string[] = [];
+  const createdDefinitionIds: string[] = [];
 
   async function ensureRequirementChain(key: string, title: string, ruleDigestSeed: string) {
     let req = await db.requirement.findFirst({ where: { key } });
@@ -108,6 +110,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     }
     await db.requirementControlMap.deleteMany({ where: { controlDefinitionId: { in: [portalControlDefinitionId, unknownControlDefinitionId] } } });
     if (createdRuleIds.length > 0) {
+      await db.applicabilityRuleFactDependency.deleteMany({ where: { id: { in: createdDependencyIds } } });
       await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: createdRuleIds } } });
     }
     for (const [id, state] of originalRuleStates) {
@@ -123,6 +126,9 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     await db.controlDefinition.delete({ where: { id: unknownControlDefinitionId } }).catch(() => {});
     if (createdRequirementIds.length > 0) {
       await db.requirement.deleteMany({ where: { id: { in: createdRequirementIds } } });
+    }
+    if (createdDefinitionIds.length > 0) {
+      await db.factDefinition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
     }
     await db.user.delete({ where: { id: adminId } }).catch(() => {});
     await db.complianceDomain.delete({ where: { code: domainCode } }).catch(() => {});
@@ -152,6 +158,94 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     });
     return { applicabilityId, findingId };
   }
+
+  async function createMissingProjection(clientId: string, title: string, definitionId: string, factKey: string) {
+    const versionId = crypto.randomUUID();
+    createdVersionIds.push(versionId);
+    await db.requirementVersion.create({
+      data: {
+        id: versionId,
+        requirementId: sharedReqId,
+        versionKey: `V_${versionId.slice(0, 8)}`,
+        title,
+        normativeStatement: 'Test',
+        effectiveFrom: new Date(Date.now() + createdVersionIds.length * 1000),
+        sourceSupportState: 'SUFFICIENT',
+        specialistRequirement: 'NONE',
+        status: 'APPROVED',
+      },
+    });
+    const ruleId = crypto.randomUUID();
+    createdRuleIds.push(ruleId);
+    await db.applicabilityRuleVersion.create({
+      data: {
+        id: ruleId,
+        requirementVersionId: versionId,
+        ruleVersionKey: `R_${ruleId.slice(0, 8)}`,
+        schemaVersion: 'rule-ast/v1',
+        astJson: { node: 'test' },
+        canonicalDigest: hex64(`projection-${ruleId}`),
+        status: 'APPROVED',
+      },
+    });
+    const dependencyId = crypto.randomUUID();
+    createdDependencyIds.push(dependencyId);
+    await db.applicabilityRuleFactDependency.create({ data: { id: dependencyId, applicabilityRuleVersionId: ruleId, factKey, resolvedFactDefinitionId: definitionId } });
+    const applicabilityId = crypto.randomUUID();
+    await db.requirementApplicability.create({
+      data: {
+        id: applicabilityId,
+        clientId,
+        requirementVersionId: versionId,
+        ruleVersionId: ruleId,
+        ruleDigest: hex64(`projection-app-${applicabilityId}`),
+        outcome: 'INSUFFICIENT_FACTS',
+        scopeType: 'COMPANY',
+        evaluationAt: new Date(),
+        sourceSupportState: 'SUFFICIENT',
+        specialistRequirement: 'NONE',
+        schemaVersion: 'phase6-requirement-applicability/v1',
+        snapshotJson: { missingFactKeys: [factKey] },
+        snapshotDigest: hex64(`projection-snap-${applicabilityId}`),
+      },
+    });
+    await db.assessmentFinding.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId,
+        title,
+        description: 'Description',
+        status: 'OPEN',
+        severity: 'HIGH',
+        createdByUserId: adminId,
+        requirementId: sharedReqId,
+        requirementApplicabilityId: applicabilityId,
+        scopeType: 'COMPANY',
+      },
+    });
+  }
+
+  it('only marks canonical definitions portal-answerable and returns canonical typed metadata', async () => {
+    const canonical = await db.factDefinition.findUnique({ where: { key: 'employee_count' }, select: { id: true, key: true, questionKey: true, valueType: true } });
+    expect(canonical).toMatchObject({ key: 'employee_count', valueType: 'NUMBER' });
+
+    const aliasId = crypto.randomUUID();
+    createdDefinitionIds.push(aliasId);
+    await db.factDefinition.create({ data: { id: aliasId, key: `legacy_employee_count_${suiteSuffix}`, domainCode, valueType: 'NUMBER', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'ALLOW', temporalPolicy: 'OBSERVATION', questionKey: 'employee_count' } });
+
+    const aliasClient = await createTestClient('alias');
+    await createMissingProjection(aliasClient, 'Alias projection', aliasId, `legacy_employee_count_${suiteSuffix}`);
+    const aliasResult = await getClientSafeComplianceReadModel(aliasClient, true, false, db);
+    const aliasMissing = aliasResult.topics[0]?.missingInformation[0];
+    expect(aliasMissing).toMatchObject({ portalAnswerable: false, questionKey: null });
+    expect(aliasMissing?.valueType).toBeUndefined();
+
+    const canonicalClient = await createTestClient('canonical');
+    await createMissingProjection(canonicalClient, 'Canonical projection', canonical!.id, 'employee_count');
+    const canonicalResult = await getClientSafeComplianceReadModel(canonicalClient, true, false, db);
+    const canonicalMissing = canonicalResult.topics[0]?.missingInformation[0];
+    expect(canonicalMissing).toMatchObject({ portalAnswerable: true, questionKey: 'employee_count', valueType: 'NUMBER', label: 'Number of employees', integerOnly: true });
+  });
 
   it('returns configured COMPANY requirement-backed topic as safe DTO', async () => {
     const clientId = await createTestClient('basic');

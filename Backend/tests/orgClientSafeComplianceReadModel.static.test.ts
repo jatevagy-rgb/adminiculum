@@ -165,7 +165,8 @@ describe('Org client safe compliance read model contract', () => {
 
   it('answerability derives from company-profile registry, not questionKey != null', () => {
     const src = read(serviceFile);
-    expect(src).toContain('isCompanyProfileQuestion');
+    expect(src).toContain('getCompanyProfileQuestionForDefinition');
+    expect(src).toContain('resolvedFactDefinition');
     expect(src).not.toMatch(/portalAnswerable:\s*dep\.questionKey\s*!=\s*null/);
     expect(src).not.toMatch(/portalAnswerable:\s*.*questionKey\s*!=\s*null/);
   });

@@ -150,10 +150,11 @@ export interface CaseResponsibleCandidate {
 
 /**
  * Authoritative read projection of users who may be assigned responsibility on
- * this case. Mirrors caseWorkforceEligible exactly: the user must be an active
- * workforce user AND be privileged (ADMIN/PARTNER) or case-related (assigned
- * lawyer, creator, collaborator). The backend remains the sole authority; the
- * frontend must not reproduce these rules.
+ * this case. Includes active workforce users who are privileged (ADMIN/PARTNER)
+ * OR directly case-related (assigned lawyer, creator, collaborator). The UI
+ * presents direct case relations as the primary group and privileged users as a
+ * secondary explicit group. `caseWorkforceEligible` remains the authorization
+ * authority; the frontend must not reproduce these rules.
  */
 export async function listCaseResponsibleCandidates(caseId: string): Promise<CaseResponsibleCandidate[] | null> {
   const caseRow = await prisma.case.findUnique({

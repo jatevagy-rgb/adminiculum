@@ -25,7 +25,7 @@ jest.mock('../src/prisma/prisma.service', () => {
     user: { findUnique: jest.fn() },
     case: { findUnique: jest.fn(), findMany: jest.fn() },
     caseCollaborator: { findFirst: jest.fn() },
-    task: { create: jest.fn(), findMany: jest.fn() },
+    task: { create: jest.fn(), findMany: jest.fn(), findFirst: jest.fn(), update: jest.fn() },
     timelineEvent: { create: jest.fn() },
   };
   mock.$transaction = jest.fn((cb: any) => cb(mock));
@@ -266,5 +266,65 @@ describe('communication case association and canonical case read projection', ()
     expect(response.status).toBe(409);
     expect(response.body.code).toBe('CLIENT_CASE_MISMATCH');
     expect((prisma as any).communication.update).not.toHaveBeenCalled();
+  });
+
+  it('returns CASE_ACCESS_FORBIDDEN when the actor cannot read the currently linked case', async () => {
+    (prisma as any).communication.findUnique.mockResolvedValue({ id: 'comm-1', caseId: 'case-a', clientId: 'client-1', createdById: 'owner' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-a', clientId: 'client-1', assignedLawyerId: 'other', createdById: 'other' });
+    (prisma as any).caseCollaborator.findFirst.mockResolvedValue(null);
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'case-b' } });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('CASE_ACCESS_FORBIDDEN');
+    expect((prisma as any).communication.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps the generic communication guard for another protected route', async () => {
+    (prisma as any).communication.findUnique.mockResolvedValue({ id: 'comm-1', caseId: 'case-a', clientId: 'client-1', createdById: 'owner' });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-a', clientId: 'client-1', assignedLawyerId: 'other', createdById: 'other' });
+    (prisma as any).caseCollaborator.findFirst.mockResolvedValue(null);
+    const response = await requestJson(createApp(), 'GET', '/communications/comm-1');
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('COMMUNICATION_ACCESS_FORBIDDEN');
+  });
+
+  it('keeps the generic communication guard for an unlinked link-case request', async () => {
+    (prisma as any).communication.findUnique.mockResolvedValue({ id: 'comm-1', caseId: null, clientId: 'client-1', createdById: 'owner' });
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'case-b' } });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe('COMMUNICATION_ACCESS_FORBIDDEN');
+  });
+
+  it('reassigns a same-client communication and preserves audit history without changing tasks', async () => {
+    const stored = { id: 'comm-1', caseId: 'case-a', clientId: 'client-1', createdById: 'user-1', subject: 'Subject' };
+    const cases: Record<string, any> = {
+      'case-a': { id: 'case-a', caseNumber: 'A-1', clientId: 'client-1', assignedLawyerId: 'user-1', createdById: 'owner' },
+      'case-b': { id: 'case-b', caseNumber: 'B-1', clientId: 'client-1', assignedLawyerId: 'user-1', createdById: 'owner' },
+    };
+    (prisma as any).communication.findUnique.mockResolvedValue(stored);
+    (prisma as any).case.findUnique.mockImplementation(async ({ where }: any) => cases[where.id] || null);
+    (prisma as any).caseCollaborator.findFirst.mockResolvedValue(null);
+    (prisma as any).task.findFirst.mockResolvedValue(null);
+    (prisma as any).communication.update.mockImplementation(async ({ data }: any) => ({ ...stored, ...data }));
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'case-b' } });
+    expect(response.status).toBe(200);
+    expect(response.body.communication.caseId).toBe('case-b');
+    expect((prisma as any).communication.update).toHaveBeenCalledWith({ where: { id: 'comm-1' }, data: { caseId: 'case-b', clientId: 'client-1' } });
+    expect((prisma as any).timelineEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ payload: expect.objectContaining({ previousCaseId: 'case-a' }) }) }));
+    expect((prisma as any).task.update).not.toHaveBeenCalled();
+  });
+
+  it('blocks reassignment when a source-linked task remains on the old case', async () => {
+    const stored = { id: 'comm-1', caseId: 'case-a', clientId: 'client-1', createdById: 'user-1' };
+    (prisma as any).communication.findUnique.mockResolvedValue(stored);
+    (prisma as any).case.findUnique.mockImplementation(async ({ where }: any) => ({ id: where.id, caseNumber: where.id, clientId: 'client-1', assignedLawyerId: 'user-1', createdById: 'owner' }));
+    (prisma as any).caseCollaborator.findFirst.mockResolvedValue(null);
+    const task = { id: 'task-1', caseId: 'case-a' };
+    (prisma as any).task.findFirst.mockResolvedValue(task);
+    const response = await requestJson(createApp(), 'POST', '/communications/comm-1/link-case', { body: { caseId: 'case-b' } });
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('COMMUNICATION_TASK_CASE_MISMATCH');
+    expect((prisma as any).communication.update).not.toHaveBeenCalled();
+    expect(task.caseId).toBe('case-a');
+    expect((prisma as any).task.update).not.toHaveBeenCalled();
   });
 });
