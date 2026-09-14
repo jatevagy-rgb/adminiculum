@@ -18,7 +18,7 @@ export const COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
   {
     questionKey: 'employee_count',
     factDefinitionKey: 'employee_count',
-    label: 'Foglalkoztatottak létszáma',
+    label: 'Number of employees',
     helpText: 'A vállalkozás jelenlegi munkavállalói létszáma.',
     section: 'PEOPLE',
     scopeType: 'COMPANY',
