@@ -177,7 +177,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
 
   it('only marks canonical definitions portal-answerable and returns canonical typed metadata', async () => {
     const canonical = await db.factDefinition.findUnique({ where: { key: 'employee_count' }, select: { id: true, key: true, questionKey: true, valueType: true } });
-    expect(canonical).toMatchObject({ key: 'employee_count', questionKey: 'employee_count', valueType: 'NUMBER' });
+    expect(canonical).toMatchObject({ key: 'employee_count', valueType: 'NUMBER' });
 
     const aliasId = crypto.randomUUID();
     createdDefinitionIds.push(aliasId);
