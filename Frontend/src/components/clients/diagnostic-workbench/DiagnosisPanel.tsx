@@ -74,7 +74,7 @@ export function DiagnosisPanel({ problems }: DiagnosisPanelProps) {
 
         {!hasDiagnoses ? (
           <div className="rounded-lg border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-6 text-center text-sm text-[var(--adm-text-muted)]">
-            Még nincs feltárt diagnózis.
+            Nincs még feltárt diagnózis.
           </div>
         ) : (
           <div className="space-y-3">

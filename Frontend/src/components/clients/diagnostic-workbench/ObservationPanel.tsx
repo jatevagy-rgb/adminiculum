@@ -80,7 +80,7 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
 
           {!hasObservations ? (
             <div className="rounded-lg border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-6 text-center text-sm text-[var(--adm-text-muted)]">
-              Még nincs deklarált megfigyelési adat.
+              Még nincs deklarált megfigyelés.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -140,7 +140,7 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
               {measuredProv.label}
             </span>
             <span className="text-xs text-[var(--adm-text-muted)]">
-              Determinisztikusan levezetett folyamatmetrikák a folyamatlépésekből és állapotokból.
+              Determinisztikusan számított folyamatmetrikák a folyamatlépésekből (nem azonos a becsült lépésidőkkel).
             </span>
           </div>
 

@@ -85,7 +85,7 @@ function GrowPageContent() {
                           : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
                       }`}
                     >
-                      Diagnosztikai munkaasztal
+                      Diagnosztika
                     </Link>
                   </div>
 

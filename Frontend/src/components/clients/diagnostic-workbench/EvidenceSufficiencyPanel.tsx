@@ -87,6 +87,13 @@ export function EvidenceSufficiencyPanel({
           </div>
         </div>
 
+        {missing.hasConflictingEvidence ? (
+          <div className="rounded-lg border-2 border-rose-300 bg-rose-50 p-3 text-xs text-rose-900 flex items-center gap-2">
+            <span className="font-bold">Figyelem:</span>
+            <span>Ellentmondó bizonyíték észlelve a rendszerben. Felülvizsgálat szükséges!</span>
+          </div>
+        ) : null}
+
         {missing.unresolvedItems && missing.unresolvedItems.length > 0 ? (
           <div className="mt-2 rounded border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-950 space-y-1">
             <span className="font-semibold block">Nyitott / megoldatlan tételek:</span>
@@ -97,6 +104,51 @@ export function EvidenceSufficiencyPanel({
                 </li>
               ))}
             </ul>
+          </div>
+        ) : null}
+
+        {sufficiency && sufficiency.length > 0 ? (
+          <div className="space-y-2 border-t border-[var(--adm-border)] pt-3">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--adm-text)]">
+              Döntési elégségesség (Sufficiency kiértékelések)
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+              {sufficiency.map((s) => {
+                const badge = sufficiencyBadge(s.decision);
+                return (
+                  <div
+                    key={s.recommendationId}
+                    className="rounded-lg border border-[var(--adm-border)] bg-white p-2.5 text-xs space-y-1"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-[var(--adm-text)]">
+                        Javaslat: {s.recommendationId.slice(0, 8)}...
+                      </span>
+                      <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold border ${badge.tone}`}>
+                        {badge.label}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[var(--adm-text-muted)] flex justify-between">
+                      <span>Bizonyítékok száma:</span>
+                      <span className="font-bold">{s.evidenceCount} db</span>
+                    </div>
+                    {s.decision === "NEEDS_MORE_DATA" ? (
+                      <p className="text-[10px] text-amber-800 font-medium">
+                        További adat szükséges a döntéshozatalhoz.
+                      </p>
+                    ) : s.decision === "CONFLICTING_EVIDENCE" ? (
+                      <p className="text-[10px] text-rose-800 font-medium">
+                        Ellentmondó bizonyíték észlelve.
+                      </p>
+                    ) : s.decision === "HUMAN_DOMAIN_REVIEW" ? (
+                      <p className="text-[10px] text-blue-800 font-medium">
+                        Szakértői felülvizsgálat szükséges.
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ) : null}
       </div>
