@@ -2,12 +2,12 @@ import {
   applyDeterministicDerivations,
   assertVisibilityReferencesAreCanonical,
   buildFactStateMap,
-  deriveEuSmeSizeClass,
   questionsOfferingUnknownRoute,
   resolveActiveModules,
   resolveBaselineQuestions,
   resolveVisibleQuestions,
 } from '../src/modules/client-workspace/companyProfileAdaptive';
+import { getCanonicalCompanyFact } from '../src/modules/client-workspace/companyProfileFactCatalog';
 
 const answered = (value: boolean | number | string | readonly string[]) => ({ status: 'ANSWERED' as const, value });
 const unknown = () => ({ status: 'UNKNOWN' as const });
@@ -59,16 +59,33 @@ describe('adaptive company profile visibility', () => {
     expect(review.map((question) => question.questionKey)).toEqual(expect.arrayContaining(['Q-DATA-005', 'Q-DATA-007']));
   });
 
-  it('derives canonical facts deterministically and never guesses sector classes', () => {
+  it('derives only safe facts and fails SME classification closed', () => {
     expect(applyDeterministicDerivations(buildFactStateMap({ employee_count: answered(0) })).has_employees).toMatchObject({ status: 'ANSWERED', value: false, derived: true });
     const b2c = applyDeterministicDerivations(buildFactStateMap({ customer_types: answered(['Fogyasztók (B2C)']) }));
     expect(b2c.b2c_sales).toMatchObject({ status: 'ANSWERED', value: true });
     expect(b2c.public_sector_customer).toMatchObject({ status: 'ANSWERED', value: false });
-    const sme = applyDeterministicDerivations(buildFactStateMap({ employee_count: answered(73), annual_net_revenue_eur: answered(9_000_000) })).eu_sme_size_class;
-    expect(sme).toMatchObject({ status: 'ANSWERED', value: 'KÖZEPES' });
-    expect(deriveEuSmeSizeClass({ employeeCount: 300 })).toBe('NAGY');
-    expect(deriveEuSmeSizeClass({ employeeCount: 73 })).toBeNull();
+    // SME_INCOMPLETE_FACTS_FAIL_CLOSED / SME_NOT_DERIVED_FROM_THREE_FIELDS:
+    // headcount alone must not produce a size class.
+    expect(applyDeterministicDerivations(buildFactStateMap({ employee_count: answered(73) })).eu_sme_size_class).toBeUndefined();
+    // Even with all three raw size facts, no classification is invented.
+    expect(applyDeterministicDerivations(buildFactStateMap({
+      employee_count: answered(73),
+      annual_net_revenue_eur: answered(9_000_000),
+      balance_sheet_total_eur: answered(4_000_000),
+    })).eu_sme_size_class).toBeUndefined();
+    // A huge headcount also must not be classified as LARGE deterministically.
+    expect(applyDeterministicDerivations(buildFactStateMap({ employee_count: answered(5_000) })).eu_sme_size_class).toBeUndefined();
+    // Sector facts are never derived either.
     expect(applyDeterministicDerivations(buildFactStateMap({ employee_count: answered(73) })).nis2_sector).toBeUndefined();
+  });
+
+  it('PARTNER_LINKED_COMPANY_NOT_IGNORED: group/partner facts exist and SME stays legal classification', () => {
+    expect(getCanonicalCompanyFact('group_member')).toBeDefined();
+    expect(getCanonicalCompanyFact('parent_country')).toBeDefined();
+    const sme = getCanonicalCompanyFact('eu_sme_size_class');
+    expect(sme?.determinationMethod).toBe('LEGAL_CLASSIFICATION_REQUIRED');
+    expect(sme?.derivation).toBeNull();
+    expect(sme?.description ?? '').toMatch(/csoport|partner|kapcsolt/i);
   });
 
   it('baseline questions are always available and visibility only references canonical facts', () => {

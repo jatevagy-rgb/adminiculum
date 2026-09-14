@@ -59,9 +59,7 @@ export type CompanyProfileFactDerivation =
   /** customer_types contains the B2C option */
   | 'B2C_SALES'
   /** customer_types contains the public-sector option */
-  | 'PUBLIC_SECTOR_CUSTOMER'
-  /** derived from revenue/balance/headcount thresholds (EU 2003/361/EC classes) */
-  | 'EU_SME_SIZE_CLASS';
+  | 'PUBLIC_SECTOR_CUSTOMER';
 
 export interface CompanyProfileFactDefinition {
   readonly factKey: string;
@@ -113,7 +111,7 @@ const FACT_ROWS: readonly FactRow[] = [
   ['employee_count', 'Munkavállalói létszám', 'PEOPLE', 'NUMBER', 'single', true, false, 'Aktuális foglalkoztatotti létszám.'],
   ['annual_net_revenue_eur', 'Éves nettó árbevétel EUR-ban', 'SIZE', 'NUMBER', 'single', true, false, 'Utolsó lezárt üzleti év.'],
   ['balance_sheet_total_eur', 'Mérlegfőösszeg EUR-ban', 'SIZE', 'NUMBER', 'single', true, false, 'Utolsó lezárt üzleti év.'],
-  ['eu_sme_size_class', 'EU KKV méretkategória', 'SIZE', 'ENUM', 'single', false, true, 'A létszám/árbevétel/mérlegadatokból származtatott.'],
+  ['eu_sme_size_class', 'EU KKV méretkategória', 'SIZE', 'ENUM', 'single', false, true, 'A méretkategória a megadott adatok és a vállalatcsoporti (kapcsolt/partner) vállalkozási kapcsolatok alapján, jogi ellenőrzéssel állapítható meg.'],
   ['public_interest_entity', 'Közérdeklődésre számot tartó gazdálkodó', 'SIZE', 'BOOLEAN', 'single', false, false, 'Számviteli/audit relevancia.'],
   ['customer_types', 'Ügyféltípusok', 'MARKET', 'MULTI_ENUM', 'multi', true, false, 'B2B/B2C/közszféra.'],
   ['b2c_sales', 'Fogyasztóknak értékesít', 'MARKET', 'BOOLEAN', 'single', true, true, 'customer_types alapján származtatható.'],
@@ -213,7 +211,9 @@ const DETERMINISTIC_DERIVATIONS: Readonly<Record<string, CompanyProfileFactDeriv
   has_employees: 'HAS_EMPLOYEES',
   b2c_sales: 'B2C_SALES',
   public_sector_customer: 'PUBLIC_SECTOR_CUSTOMER',
-  eu_sme_size_class: 'EU_SME_SIZE_CLASS',
+  // eu_sme_size_class is deliberately NOT derived: SME classification requires
+  // partner/linked-enterprise aggregation (2003/361/EC), which three raw size
+  // facts cannot establish. It must fail closed to legal classification.
 };
 
 function determinationFor(row: FactRow): CompanyProfileFactDeterminationMethod {
@@ -266,53 +266,159 @@ export const DERIVED_COMPANY_FACT_KEYS: readonly string[] = CANONICAL_COMPANY_FA
 /**
  * RECONCILIATION WITH EXISTING MASTER FACT KEYS
  *
- * The repository already provisions and stores a small set of company-profile
- * fact keys (`fact_definitions` rows created by migration
- * 20260914100000_provision_company_profile_fact_definitions). Those keys are
- * NOT destroyed or renamed. They are declared here as legacy aliases of the
- * canonical workbook fact so that:
+ * The repository already provisions and stores a set of company-profile fact
+ * keys (migration 20260914100000). Those keys, their FactDefinitions and their
+ * stored ClientFact rows are NOT destroyed, renamed or reinterpreted.
  *
- *   - there is still exactly ONE canonical namespace (no parallel fact silo);
- *   - previously stored ClientFact rows keep resolving to a canonical meaning;
- *   - new questions can bind to canonical keys while the legacy keys remain
- *     readable until the portal is migrated.
+ * Legacy and canonical keys are NOT assumed to be aliases. Each legacy key is
+ * classified by its actual semantic relationship to a canonical fact:
  *
- * `employee_count` is already canonical and maps to itself.
+ *   EXACT_EQUIVALENT  identical meaning; the legacy value may resolve
+ *                     transparently to the canonical key.
+ *   SAFE_DERIVATION   the legacy value determines the canonical value with no
+ *                     judgement; resolution is allowed, but recorded as derived.
+ *   PARTIAL_OVERLAP   related but NOT the same scope; the legacy value must
+ *                     never be fed into the canonical fact automatically.
+ *   DIFFERENT         unrelated meaning; never resolves.
+ *
+ * Only EXACT_EQUIVALENT may resolve transparently. PARTIAL_OVERLAP / DIFFERENT
+ * legacy facts stay untouched and the canonical fact always requires its own
+ * answer. A legacy value may at most seed a *clarification hint* (never a
+ * stored canonical value) where explicitly marked safe.
  */
-export const LEGACY_FACT_KEY_ALIASES: Readonly<Record<string, string>> = {
-  employee_count: 'employee_count',
-  company_main_activity: 'primary_teaor25_code',
-  company_operating_country: 'operating_countries',
-  company_regulated_activity: 'regulated_or_licensed_activity',
-  company_sensitive_data_usage: 'special_category_data',
-  company_important_it_system: 'critical_it_dependency',
-  company_ai_usage: 'ai_use',
-  company_export_activity: 'export_outside_eu',
-};
+export type LegacyFactCompatibility = 'EXACT_EQUIVALENT' | 'SAFE_DERIVATION' | 'PARTIAL_OVERLAP' | 'DIFFERENT';
 
-/** Resolves a legacy stored fact key to its canonical workbook key. */
-export function canonicalKeyForLegacyFactKey(factKey: string): string | undefined {
-  return LEGACY_FACT_KEY_ALIASES[factKey];
+export interface LegacyFactRelationship {
+  readonly legacyKey: string;
+  readonly canonicalKey: string;
+  readonly compatibility: LegacyFactCompatibility;
+  readonly rationaleHu: string;
+  /**
+   * True when the legacy value may seed a client-visible clarification hint.
+   * It never authorises automatic canonical resolution.
+   */
+  readonly prefillHintAllowed: boolean;
 }
 
-/** True when the key is a retained legacy alias rather than a canonical key. */
-export function isLegacyFactKeyAlias(factKey: string): boolean {
-  return Object.prototype.hasOwnProperty.call(LEGACY_FACT_KEY_ALIASES, factKey)
-    && LEGACY_FACT_KEY_ALIASES[factKey] !== factKey;
+export const LEGACY_FACT_RELATIONSHIPS: readonly LegacyFactRelationship[] = [
+  {
+    legacyKey: 'employee_count',
+    canonicalKey: 'employee_count',
+    compatibility: 'EXACT_EQUIVALENT',
+    rationaleHu: 'Ugyanaz a munkavállalói létszám fogalom, ugyanazzal a számértékkel.',
+    prefillHintAllowed: false,
+  },
+  {
+    legacyKey: 'company_main_activity',
+    canonicalKey: 'primary_teaor25_code',
+    compatibility: 'DIFFERENT',
+    rationaleHu: 'A korábbi fő tevékenység szabad szöveg; nem érvényesített TEÁOR’25 kód, ezért nem alakítható át kóddá.',
+    prefillHintAllowed: true,
+  },
+  {
+    legacyKey: 'company_operating_country',
+    canonicalKey: 'operating_countries',
+    compatibility: 'PARTIAL_OVERLAP',
+    rationaleHu: 'A korábbi érték egyetlen ország; az új fogalom a ténylegesen működési országok halmaza, ezért nem azonos.',
+    prefillHintAllowed: true,
+  },
+  {
+    legacyKey: 'company_export_activity',
+    canonicalKey: 'export_outside_eu',
+    compatibility: 'PARTIAL_OVERLAP',
+    rationaleHu: 'A korábbi érték általános külföldi értékesítést/tevékenységet jelent, ami tágabb, mint az EU-n kívüli export.',
+    prefillHintAllowed: false,
+  },
+  {
+    legacyKey: 'company_regulated_activity',
+    canonicalKey: 'regulated_or_licensed_activity',
+    compatibility: 'PARTIAL_OVERLAP',
+    rationaleHu: 'A korábbi „szabályozott tevékenység” nem azonos a szélesebb engedélyköteles/nyilvántartás-köteles fogalommal.',
+    prefillHintAllowed: false,
+  },
+  {
+    legacyKey: 'company_sensitive_data_usage',
+    canonicalKey: 'special_category_data',
+    compatibility: 'PARTIAL_OVERLAP',
+    rationaleHu: 'A korábbi „érzékeny adat” gyűjtőfogalom tágabb lehet, mint a jogszabályi különleges adatkategóriák.',
+    prefillHintAllowed: false,
+  },
+  {
+    legacyKey: 'company_important_it_system',
+    canonicalKey: 'critical_it_dependency',
+    compatibility: 'PARTIAL_OVERLAP',
+    rationaleHu: 'A korábbi „fontos IT-rendszer” nem azonos a működést lényegesen befolyásoló kritikus függőséggel.',
+    prefillHintAllowed: false,
+  },
+  {
+    legacyKey: 'company_ai_usage',
+    canonicalKey: 'ai_use',
+    compatibility: 'PARTIAL_OVERLAP',
+    rationaleHu: 'A korábbi MI-használat kérdés megfogalmazása és hatóköre nem garantáltan azonos az új MI-rendszer fogalommal.',
+    prefillHintAllowed: false,
+  },
+];
+
+const RELATIONSHIP_BY_LEGACY_KEY = new Map(LEGACY_FACT_RELATIONSHIPS.map((relationship) => [relationship.legacyKey, relationship]));
+
+/** The full classified relationship for a legacy key, if any. */
+export function legacyFactRelationship(legacyKey: string): LegacyFactRelationship | undefined {
+  return RELATIONSHIP_BY_LEGACY_KEY.get(legacyKey);
 }
 
 /**
- * Guard: every legacy alias must resolve to a real canonical fact, and no alias
- * may shadow a canonical key with a different meaning. This is what prevents
- * the reconciliation from drifting into a second fact silo.
+ * Resolves a legacy stored fact key to a canonical key ONLY when the
+ * relationship is EXACT_EQUIVALENT. Everything else returns undefined so the
+ * canonical fact must be answered on its own.
+ */
+export function canonicalKeyForLegacyFactKey(factKey: string): string | undefined {
+  const relationship = RELATIONSHIP_BY_LEGACY_KEY.get(factKey);
+  if (!relationship) return undefined;
+  if (relationship.compatibility !== 'EXACT_EQUIVALENT') return undefined;
+  return relationship.canonicalKey;
+}
+
+/** True when the legacy value may transitively stand for the canonical fact. */
+export function isLegacyFactKeyAlias(factKey: string): boolean {
+  const relationship = RELATIONSHIP_BY_LEGACY_KEY.get(factKey);
+  if (!relationship) return false;
+  if (relationship.compatibility !== 'EXACT_EQUIVALENT' && relationship.compatibility !== 'SAFE_DERIVATION') return false;
+  return relationship.legacyKey !== relationship.canonicalKey;
+}
+
+export interface LegacyFactClarificationHint {
+  readonly canonicalKey: string;
+  readonly hintHu: string;
+}
+
+/**
+ * A client-visible clarification hint for a PARTIAL_OVERLAP / DIFFERENT legacy
+ * value. It NEVER resolves the canonical fact automatically; it only helps the
+ * client answer the canonical question.
+ */
+export function legacyFactClarificationHint(legacyKey: string): LegacyFactClarificationHint | undefined {
+  const relationship = RELATIONSHIP_BY_LEGACY_KEY.get(legacyKey);
+  if (!relationship || !relationship.prefillHintAllowed) return undefined;
+  return {
+    canonicalKey: relationship.canonicalKey,
+    hintHu: relationship.rationaleHu,
+  };
+}
+
+/**
+ * Guard: every classified relationship must point at a real canonical fact and
+ * no legacy key may be an EXACT_EQUIVALENT of a key it shadows.
  */
 export function assertFactReconciliationIntegrity(): void {
-  for (const [legacyKey, canonicalKey] of Object.entries(LEGACY_FACT_KEY_ALIASES)) {
-    if (!FACT_BY_KEY.has(canonicalKey)) {
-      throw new Error(`Legacy fact alias ${legacyKey} points at unknown canonical fact ${canonicalKey}.`);
+  const seen = new Set<string>();
+  for (const relationship of LEGACY_FACT_RELATIONSHIPS) {
+    if (seen.has(relationship.legacyKey)) throw new Error(`Duplicate legacy fact relationship: ${relationship.legacyKey}`);
+    seen.add(relationship.legacyKey);
+    if (!FACT_BY_KEY.has(relationship.canonicalKey)) {
+      throw new Error(`Legacy fact relationship ${relationship.legacyKey} points at unknown canonical fact ${relationship.canonicalKey}.`);
     }
-    if (legacyKey !== canonicalKey && FACT_BY_KEY.has(legacyKey)) {
-      throw new Error(`Legacy fact alias ${legacyKey} shadows an existing canonical fact key.`);
+    if (relationship.compatibility === 'EXACT_EQUIVALENT' && relationship.legacyKey !== relationship.canonicalKey && FACT_BY_KEY.has(relationship.legacyKey)) {
+      throw new Error(`Legacy fact ${relationship.legacyKey} cannot be an EXACT_EQUIVALENT of ${relationship.canonicalKey} while also being canonical.`);
     }
   }
 }

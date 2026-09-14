@@ -3,11 +3,12 @@ import {
   CANONICAL_COMPANY_FACT_KEYS,
   BASELINE_COMPANY_FACT_KEYS,
   DERIVED_COMPANY_FACT_KEYS,
-  LEGACY_FACT_KEY_ALIASES,
   assertFactReconciliationIntegrity,
   canonicalKeyForLegacyFactKey,
   getCanonicalCompanyFact,
   isLegacyFactKeyAlias,
+  legacyFactClarificationHint,
+  legacyFactRelationship,
 } from '../src/modules/client-workspace/companyProfileFactCatalog';
 import { assertCompanyProfileCatalogIntegrity } from '../src/modules/client-workspace/companyProfileQuestionCatalog';
 
@@ -34,10 +35,13 @@ describe('canonical company fact catalogue', () => {
     }
   });
 
-  it('marks deterministic derivations and routes the rest to classification', () => {
+  it('marks only truly deterministic derivations and fails SME classification closed', () => {
     expect(DERIVED_COMPANY_FACT_KEYS).toEqual(expect.arrayContaining(['has_employees', 'b2c_sales', 'public_sector_customer', 'eu_sme_size_class']));
     expect(getCanonicalCompanyFact('has_employees')?.derivation).toBe('HAS_EMPLOYEES');
-    expect(getCanonicalCompanyFact('eu_sme_size_class')?.determinationMethod).toBe('DERIVED');
+    // SME classification requires partner/linked-enterprise aggregation and must NOT be derived.
+    expect(getCanonicalCompanyFact('eu_sme_size_class')?.determinationMethod).toBe('LEGAL_CLASSIFICATION_REQUIRED');
+    expect(getCanonicalCompanyFact('eu_sme_size_class')?.derivation).toBeNull();
+    expect(DERIVED_COMPANY_FACT_KEYS).not.toContain('sme_size_class');
     // Sector-like facts must not pretend to be deterministically derivable.
     expect(getCanonicalCompanyFact('nis2_sector')?.derivation).toBeNull();
     expect(getCanonicalCompanyFact('nis2_sector')?.determinationMethod).toBe('LEGAL_CLASSIFICATION_REQUIRED');
@@ -49,7 +53,7 @@ describe('canonical company fact catalogue', () => {
     expect(() => assertCompanyProfileCatalogIntegrity()).not.toThrow();
   });
 
-  it('reconciles existing master fact keys instead of creating a second silo', () => {
+  it('reconciles existing master fact keys by classified relationship, not blind aliasing', () => {
     expect(() => assertFactReconciliationIntegrity()).not.toThrow();
     const masterProvisionedKeys = [
       'employee_count',
@@ -62,11 +66,30 @@ describe('canonical company fact catalogue', () => {
       'company_export_activity',
     ];
     for (const key of masterProvisionedKeys) {
-      expect(LEGACY_FACT_KEY_ALIASES[key]).toBeDefined();
-      expect(getCanonicalCompanyFact(LEGACY_FACT_KEY_ALIASES[key])).toBeDefined();
+      const relationship = legacyFactRelationship(key);
+      expect(relationship).toBeDefined();
+      expect(getCanonicalCompanyFact(relationship?.canonicalKey ?? '')).toBeDefined();
     }
-    expect(canonicalKeyForLegacyFactKey('company_main_activity')).toBe('primary_teaor25_code');
-    expect(isLegacyFactKeyAlias('company_ai_usage')).toBe(true);
+
+    // REQUIRED PROOFS: these legacy keys must NOT be treated as aliases.
+    for (const legacyKey of ['company_main_activity', 'company_operating_country', 'company_export_activity']) {
+      expect(canonicalKeyForLegacyFactKey(legacyKey)).toBeUndefined();
+      expect(isLegacyFactKeyAlias(legacyKey)).toBe(false);
+      expect(legacyFactRelationship(legacyKey)?.compatibility).not.toBe('EXACT_EQUIVALENT');
+    }
+    expect(legacyFactRelationship('company_main_activity')?.compatibility).toBe('DIFFERENT');
+    expect(legacyFactRelationship('company_operating_country')?.compatibility).toBe('PARTIAL_OVERLAP');
+    expect(legacyFactRelationship('company_export_activity')?.compatibility).toBe('PARTIAL_OVERLAP');
+    // The four reviewed keys are related but not silently equal.
+    for (const legacyKey of ['company_regulated_activity', 'company_sensitive_data_usage', 'company_important_it_system', 'company_ai_usage']) {
+      expect(legacyFactRelationship(legacyKey)?.compatibility).toBe('PARTIAL_OVERLAP');
+      expect(canonicalKeyForLegacyFactKey(legacyKey)).toBeUndefined();
+    }
+    // Only a genuine identity may resolve transparently.
+    expect(canonicalKeyForLegacyFactKey('employee_count')).toBe('employee_count');
     expect(isLegacyFactKeyAlias('employee_count')).toBe(false);
+    // Hints are allowed for some overlaps but never resolve the canonical fact.
+    expect(legacyFactClarificationHint('company_main_activity')?.canonicalKey).toBe('primary_teaor25_code');
+    expect(legacyFactClarificationHint('company_export_activity')).toBeUndefined();
   });
 });

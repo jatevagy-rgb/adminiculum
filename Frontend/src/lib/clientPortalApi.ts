@@ -837,9 +837,29 @@ export type PortalCompanyProfileQuestion = {
   value: number | string | boolean | string[] | null;
 };
 
+export type PortalCompanyProfileScreen = {
+  screenKey: string;
+  order: number;
+  sectionKey: string;
+  sectionTitleHu: string;
+  titleHu: string;
+  helpTextHu: string;
+  whyHu: string;
+  uiKind: string;
+  factBindings: string[];
+  questionAtomKeys: string[];
+};
+
 export type PortalCompanyProfileDiscovery = {
   client: { name: string | null };
+  capabilities: { teaor25CatalogInstalled: boolean };
+  screens: PortalCompanyProfileScreen[];
   questions: PortalCompanyProfileQuestion[];
+};
+
+export type PortalTeaor25Options = {
+  installed: boolean;
+  options: Array<{ code: string; labelHu: string }>;
 };
 
 export type PortalCompanyProfileAnswerPayload = {
@@ -876,6 +896,31 @@ export async function answerPortalCompanyProfileQuestion(
       authContext: 'customer',
       method: 'PUT',
       body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function answerPortalCompanyProfileScreen(
+  screenKey: string,
+  facts: Record<string, PortalCompanyProfileAnswerPayload>,
+) {
+  return fetchApi<{ screenKey: string; answers: PortalCompanyProfileAnswerResult[] }>(
+    `/client-portal/org/company-profile/screens/${encodeURIComponent(screenKey)}`,
+    {
+      authContext: 'customer',
+      method: 'PUT',
+      body: JSON.stringify({ facts }),
+    },
+  );
+}
+
+export async function getPortalCompanyProfileTeaor25Options(query: string) {
+  return fetchApi<PortalTeaor25Options>(
+    `/client-portal/org/company-profile/teaor25-options?q=${encodeURIComponent(query)}`,
+    {
+      authContext: 'customer',
+      suppressErrorStatuses: [404, 503],
+      suppressErrorLogging: true,
     },
   );
 }

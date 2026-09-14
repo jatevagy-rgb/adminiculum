@@ -51,7 +51,7 @@ export interface ComplianceRuleFamilyDefinition {
   readonly evaluationScopeType: 'COMPANY';
   readonly factDependencies: readonly string[];
   readonly ast: RuleExpression;
-  readonly sourceSupportState: 'SUFFICIENT' | 'INSUFFICIENT';
+  readonly sourceSupportState: 'SUFFICIENT' | 'INCOMPLETE';
   /** `LEGAL_ONLY` => evaluation service returns LEGAL_REVIEW_REQUIRED. */
   readonly specialistRequirement: 'NONE' | 'LEGAL_ONLY';
   readonly controls: readonly ComplianceControlSeed[];

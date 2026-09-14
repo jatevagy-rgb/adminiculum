@@ -70,49 +70,17 @@ function truthyValue(value: CompanyProfileFactValue | undefined): boolean {
 // DETERMINISTIC DERIVATION
 // ============================================================================
 
-const MICRO_TURNOVER = 2_000_000;
-const SMALL_TURNOVER = 10_000_000;
-const MEDIUM_TURNOVER = 50_000_000;
-const MEDIUM_BALANCE = 43_000_000;
-
-/**
- * EU SME size class from headcount / turnover / balance-sheet total, following
- * the Commission Recommendation 2003/361/EC thresholds used across EU law.
- *
- * Returns null when the inputs are insufficient to classify (headcount below
- * the large threshold but financials still missing) — that must surface as a
- * follow-up question, never as a guess.
- */
-export function deriveEuSmeSizeClass(input: {
-  employeeCount?: number;
-  annualNetRevenueEur?: number;
-  balanceSheetTotalEur?: number;
-}): string | null {
-  const { employeeCount, annualNetRevenueEur, balanceSheetTotalEur } = input;
-  if (typeof employeeCount !== 'number' || !Number.isFinite(employeeCount)) return null;
-  if (employeeCount >= 250) return 'NAGY';
-
-  const hasFinancials = typeof annualNetRevenueEur === 'number' || typeof balanceSheetTotalEur === 'number';
-  if (!hasFinancials) return null;
-
-  const within = (limit: number) => (typeof annualNetRevenueEur === 'number' && annualNetRevenueEur <= limit)
-    || (typeof balanceSheetTotalEur === 'number' && balanceSheetTotalEur <= limit);
-
-  if (employeeCount < 10 && within(MICRO_TURNOVER)) return 'MIKRO';
-  if (employeeCount < 50 && within(SMALL_TURNOVER)) return 'KIS';
-  if (employeeCount < 250 && within(MEDIUM_TURNOVER)) return 'KÖZEPES';
-  // Below 250 staff but over the financial ceiling for each band.
-  return within(MEDIUM_BALANCE) ? 'KÖZEPES' : 'NAGY';
-}
-
 /**
  * Applies every derivation the current state fully determines. Derived values
  * never overwrite a directly answered fact.
  *
+ * eu_sme_size_class is deliberately NOT derived. EU SME classification depends
+ * on partner/linked-enterprise aggregation (Commission Recommendation
+ * 2003/361/EC), so three raw size facts cannot establish it. It stays
+ * LEGAL_CLASSIFICATION_REQUIRED and fails closed instead of guessing.
+ *
  * Sector classifications (NIS2 sector, whistleblowing special sector, AML
- * obliged-entity, EU ETS) are intentionally NOT derived here: they require
- * TEÁOR/sector mapping plus legal classification, so they stay user/legal
- * classified rather than guessed.
+ * obliged-entity, EU ETS) are likewise NOT derived here.
  */
 export function applyDeterministicDerivations(state: CompanyProfileFactStateMap): Record<string, CompanyProfileFactState> {
   const out: Record<string, CompanyProfileFactState> = { ...state };
@@ -128,15 +96,6 @@ export function applyDeterministicDerivations(state: CompanyProfileFactStateMap)
     const values = asArray(customerTypes.value) ?? [];
     if (current('b2c_sales')?.status !== 'ANSWERED') out.b2c_sales = answered(values.includes(B2C_OPTION), true);
     if (current('public_sector_customer')?.status !== 'ANSWERED') out.public_sector_customer = answered(values.includes(PUBLIC_SECTOR_OPTION), true);
-  }
-
-  if (current('eu_sme_size_class')?.status !== 'ANSWERED') {
-    const sizeClass = deriveEuSmeSizeClass({
-      employeeCount: typeof employeeState?.value === 'number' ? employeeState.value : undefined,
-      annualNetRevenueEur: numericValue(current('annual_net_revenue_eur')),
-      balanceSheetTotalEur: numericValue(current('balance_sheet_total_eur')),
-    });
-    if (sizeClass) out.eu_sme_size_class = answered(sizeClass, true);
   }
 
   return out;
@@ -187,6 +146,10 @@ function evaluateAtom(atom: CompanyProfileVisibilityAtom, state: CompanyProfileF
       const values = asArray(fact.value);
       if (values) return values.length > 0 && !values.includes(atom.value) ? 'VISIBLE' : 'HIDDEN';
       return fact.value !== atom.value && truthyValue(fact.value) ? 'VISIBLE' : 'HIDDEN';
+    }
+    case 'factUnanswered': {
+      const fact = state[atom.factKey];
+      return !fact || fact.status !== 'ANSWERED' ? 'VISIBLE' : 'HIDDEN';
     }
     case 'anyOf': {
       const results = atom.conditions.map((condition) => evaluateAtom(condition, state));

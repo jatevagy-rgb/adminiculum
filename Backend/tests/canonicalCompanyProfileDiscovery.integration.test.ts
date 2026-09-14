@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
-import { answerCompanyProfileQuestion, getCompanyProfileDiscovery } from '../src/modules/client-workspace/companyProfileAnswerService';
+import { answerCompanyProfileQuestion, answerCompanyProfileScreen, getCompanyProfileDiscovery, searchCompanyProfileTeaor25Options } from '../src/modules/client-workspace/companyProfileAnswerService';
 import { installTeaor25Catalog, resetTeaor25Catalog } from '../src/modules/client-workspace/teaor25Catalog';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
@@ -125,5 +125,69 @@ describeWithDatabase('canonical company profile discovery (PostgreSQL)', () => {
     expect(serialized).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     expect(serialized).not.toContain('snapshotDigest');
     expect(serialized).not.toContain('ruleVersionId');
+  });
+
+  it('GROUPED_CLIENT_SCREENS: discovery returns grouped client screens, not just atoms', async () => {
+    const result = await discovery();
+    const screenKeys = (result.screens as Array<{ screenKey: string }>).map((screen) => screen.screenKey);
+    expect(screenKeys).toContain('SCREEN-INTERNATIONAL-SALES');
+    expect(screenKeys).toContain('SCREEN-DOCUMENTS-INTRO');
+    const international = (result.screens as Array<{ screenKey: string; factBindings: string[] }>).find((screen) => screen.screenKey === 'SCREEN-INTERNATIONAL-SALES');
+    expect(international?.factBindings).toEqual(['cross_border_eu_sales', 'export_outside_eu', 'import_into_eu']);
+  });
+
+  it('TEAOR_NO_CATALOG_REJECTS_WRITE: structured activity fails closed without a catalogue', async () => {
+    resetTeaor25Catalog();
+    await expect(answerCompanyProfileQuestion(representativeId, workspaceId, 'primary_teaor25_code', { status: 'ANSWERED', stringValue: '62.01' }, db)).rejects.toMatchObject({ code: 'TEAOR25_CATALOG_NOT_INSTALLED' });
+    await expect(answerCompanyProfileQuestion(representativeId, workspaceId, 'additional_teaor25_codes', { status: 'ANSWERED', jsonValue: ['62.01'] }, db)).rejects.toMatchObject({ code: 'TEAOR25_CATALOG_NOT_INSTALLED' });
+    const options = await searchCompanyProfileTeaor25Options(representativeId, workspaceId, '62', db);
+    expect(options).toEqual({ installed: false, options: [] });
+    installTeaor25Catalog([
+      { code: '62.01', labelHu: 'Számítógépes programozás' },
+      { code: '62.02', labelHu: 'Információs technológiai szaktanácsadás' },
+    ], 'integration-test');
+  });
+
+  it('TEAOR_AUTOCOMPLETE: returns code with the official Hungarian label', async () => {
+    const options = await searchCompanyProfileTeaor25Options(representativeId, workspaceId, 'szamitogepes', db);
+    expect(options.installed).toBe(true);
+    expect(options.options[0]).toEqual({ code: '62.01', labelHu: 'Számítógépes programozás' });
+  });
+
+  it('LEGACY_MAIN_ACTIVITY_PRESERVED: structured TEÁOR never rewrites the legacy free-text fact', async () => {
+    const legacyDefinition = await db.factDefinition.findUniqueOrThrow({ where: { key: 'company_main_activity' } });
+    expect(legacyDefinition.valueType).toBe('STRING');
+    expect(legacyDefinition.questionKey).toBe('company_main_activity');
+    const before = await db.clientFact.count({ where: { clientId, factDefinition: { key: 'company_main_activity' } } });
+    await answerCompanyProfileQuestion(representativeId, workspaceId, 'primary_teaor25_code', { status: 'ANSWERED', stringValue: '62.02' }, db);
+    expect(await db.clientFact.count({ where: { clientId, factDefinition: { key: 'company_main_activity' } } })).toBe(before);
+  });
+
+  it('MULTI_FACT_SCREEN_ATOMIC_SAVE + REFRESH_PRESERVES_PROGRESS: save all facts at once, or none', async () => {
+    await expect(answerCompanyProfileScreen(representativeId, workspaceId, 'SCREEN-INTERNATIONAL-SALES', { facts: {
+      cross_border_eu_sales: { status: 'ANSWERED', booleanValue: true },
+      import_into_eu: { status: 'ANSWERED' },
+    } }, db)).rejects.toMatchObject({ code: 'CLIENT_PROFILE_ANSWER_INVALID' });
+    expect(await db.clientFact.count({ where: { clientId, factDefinition: { key: 'cross_border_eu_sales' } } })).toBe(0);
+
+    await expect(answerCompanyProfileScreen(representativeId, workspaceId, 'SCREEN-INTERNATIONAL-SALES', { facts: {
+      cross_border_eu_sales: { status: 'ANSWERED', booleanValue: true },
+      export_outside_eu: { status: 'ANSWERED', booleanValue: false },
+      import_into_eu: { status: 'ANSWERED', booleanValue: true },
+    } }, db)).resolves.toMatchObject({ screenKey: 'SCREEN-INTERNATIONAL-SALES' });
+
+    const refreshed = await discovery();
+    expect(refreshed.questions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ questionKey: 'cross_border_eu_sales', status: 'ANSWERED', value: true }),
+      expect.objectContaining({ questionKey: 'import_into_eu', status: 'ANSWERED', value: true }),
+    ]));
+    // Progress survives refresh and the import-dependent screen becomes visible.
+    expect((refreshed.screens as Array<{ screenKey: string }>).map((screen) => screen.screenKey)).toContain('SCREEN-ENVIRONMENT-IMPORT');
+  });
+
+  it('rejects a grouped save that references a fact outside the screen', async () => {
+    await expect(answerCompanyProfileScreen(representativeId, workspaceId, 'SCREEN-INTERNATIONAL-SALES', { facts: {
+      ai_use: { status: 'ANSWERED', booleanValue: true },
+    } }, db)).rejects.toMatchObject({ code: 'CLIENT_PROFILE_ANSWER_INVALID' });
   });
 });

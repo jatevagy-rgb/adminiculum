@@ -52,7 +52,8 @@ import {
   submitGrowAssessment,
 } from '../modules/company-growth/assessments/service';
 import { getClientSafeComplianceReadModel } from '../modules/compliance/clientSafeComplianceService';
-import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../modules/client-workspace/companyProfileAnswerService';
+import { getControlEvidenceJourney, submitControlEvidenceAnswer } from '../modules/client-workspace/companyProfileEvidenceService';
+import { answerCompanyProfileQuestion, answerCompanyProfileScreen, assignCompanyProfileResponsibility, getCompanyProfileDiscovery, searchCompanyProfileTeaor25Options } from '../modules/client-workspace/companyProfileAnswerService';
 import { RelationshipToCase, requireOrganizationWorkspace } from '../modules/client-workspace/organizationalAccessPolicy';
 import { getClientSafeWorkSummary } from '../modules/client-workspace/workSummaryService';
 import {
@@ -675,6 +676,46 @@ router.put('/org/company-profile/questions/:questionKey', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await answerCompanyProfileQuestion(identityId, workspaceId, String(req.params.questionKey), req.body || {}));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.put('/org/company-profile/screens/:screenKey', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await answerCompanyProfileScreen(identityId, workspaceId, String(req.params.screenKey), req.body || {}));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/company-profile/teaor25-options', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await searchCompanyProfileTeaor25Options(identityId, workspaceId, String(req.query.q || '')));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/company-profile/evidence', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getControlEvidenceJourney(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.put('/org/company-profile/evidence/:controlKey', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await submitControlEvidenceAnswer(identityId, workspaceId, String(req.params.controlKey), req.body || {}));
   } catch (error) {
     fail(res, error);
   }

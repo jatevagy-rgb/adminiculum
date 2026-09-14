@@ -1,10 +1,11 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { createTypedFactInTx, reevaluateTypedFactInTx } from '../compliance/typedFactMutationService';
-import { getCompanyProfileQuestion, getCompanyProfileQuestionForDefinition, COMPANY_PROFILE_QUESTIONS, type CompanyProfileQuestion } from './companyProfileQuestionRegistry';
+import { getCompanyProfileQuestion, getCompanyProfileQuestionForDefinition, isCompanyProfileQuestion, COMPANY_PROFILE_QUESTIONS, type CompanyProfileQuestion } from './companyProfileQuestionRegistry';
 import { addPortalResponsibility } from '../client-organization/service';
 import { resolveVisibleQuestions, type CompanyProfileFactState, type CompanyProfileFactValue } from './companyProfileAdaptive';
-import { isTeaor25CatalogInstalled, isValidTeaor25Code } from './teaor25Catalog';
+import { isTeaor25CatalogInstalled, isValidTeaor25Code, searchTeaor25 } from './teaor25Catalog';
+import { COMPANY_PROFILE_SCREEN_SECTION_TITLES, getCompanyProfileScreen, resolveVisibleScreens } from './companyProfileScreenCatalog';
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -12,6 +13,8 @@ type Tx = Prisma.TransactionClient;
 const WRITE_ROLES = new Set(['REPRESENTATIVE', 'APPROVER']);
 const ANSWER_STATUSES = new Set(['ANSWERED', 'UNKNOWN']);
 const MAX_PROFILE_STRING_LENGTH = 500;
+const MAX_TEAOR25_CODE_LENGTH = 32;
+const TEAOR25_UNAVAILABLE_MESSAGE = 'Az ágazati besorolás jelenleg nem érhető el.';
 
 type FactValueShape = {
   numberValue: Prisma.Decimal | null;
@@ -63,10 +66,17 @@ function typedValue(fact: FactValueShape): CompanyProfileFactValue | null {
   return fact.enumValue;
 }
 
-function validateTeaor25String(value: string, field: string): string {
+/**
+ * TEÁOR'25 fails closed. Structured activity is only accepted when the
+ * authoritative catalogue is installed; there is NO silent fallback to
+ * free-text. The legacy free-text activity fact stays separate and untouched.
+ */
+function validateTeaor25String(value: unknown, field: string): string {
+  if (!isTeaor25CatalogInstalled()) error(503, 'TEAOR25_CATALOG_NOT_INSTALLED', TEAOR25_UNAVAILABLE_MESSAGE);
+  if (typeof value !== 'string') error(400, 'CLIENT_PROFILE_ANSWER_INVALID', `${field} must be a string.`);
   const trimmed = value.trim();
-  if (!trimmed || trimmed.length > MAX_PROFILE_STRING_LENGTH) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', `${field} must contain 1-${MAX_PROFILE_STRING_LENGTH} characters after trimming.`);
-  if (isTeaor25CatalogInstalled() && !isValidTeaor25Code(trimmed)) error(400, 'CLIENT_PROFILE_TEAOR25_UNKNOWN', `${field} is not a known TEÁOR'25 code.`);
+  if (!trimmed || trimmed.length > MAX_TEAOR25_CODE_LENGTH) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', `${field} must contain 1-${MAX_TEAOR25_CODE_LENGTH} characters after trimming.`);
+  if (!isValidTeaor25Code(trimmed)) error(400, 'CLIENT_PROFILE_TEAOR25_UNKNOWN', `${field} is not a known TEÁOR'25 code.`);
   return trimmed;
 }
 
@@ -225,6 +235,7 @@ export async function getCompanyProfileDiscovery(
   }
 
   const definitionsByKey = new Map(definitions.map((definition) => [definition.key, definition]));
+  let screenPayload: Array<Record<string, unknown>> = [];
 
   // Canonical Company Profile 2.0 baseline + declarative adaptive gates. This is
   // opt-in so the legacy discovery contract (and its tests) stay unchanged.
@@ -261,6 +272,18 @@ export async function getCompanyProfileDiscovery(
       const question = getCompanyProfileQuestionForDefinition(definition);
       if (question && visibleFactKeys.has(question.factDefinitionKey)) definitionsById.set(definition.id, definition);
     }
+    screenPayload = resolveVisibleScreens(canonicalState).map((screen) => ({
+      screenKey: screen.screenKey,
+      order: screen.order,
+      sectionKey: screen.sectionKey,
+      sectionTitleHu: COMPANY_PROFILE_SCREEN_SECTION_TITLES[screen.sectionKey],
+      titleHu: screen.titleHu,
+      helpTextHu: screen.helpTextHu,
+      whyHu: screen.whyHu,
+      uiKind: screen.uiKind,
+      factBindings: [...screen.factBindings],
+      questionAtomKeys: [...screen.questionAtomKeys],
+    }));
   }
 
   const questionByDefinitionId = new Map<string, CompanyProfileQuestion>();
@@ -282,6 +305,8 @@ export async function getCompanyProfileDiscovery(
   for (const fact of fallbackFacts) fallbackByDefinition.set(fact.factDefinitionId, [...(fallbackByDefinition.get(fact.factDefinitionId) ?? []), fact]);
   return {
     client: { name: (await db.client.findUnique({ where: { id: workspace.clientId }, select: { name: true } }))?.name || null },
+    capabilities: { teaor25CatalogInstalled: isTeaor25CatalogInstalled() },
+    screens: screenPayload,
     questions: [...questionByDefinitionId.entries()].flatMap(([definitionId, question]) => {
       const definition = definitionsById.get(definitionId) || definitionsByKey.get(question.factDefinitionKey);
       if (!definition) return [];
@@ -366,10 +391,58 @@ export async function answerCompanyProfileQuestion(identityId: string, workspace
   throw new Error('Company profile answer transaction exhausted its retry budget.');
 }
 
+/**
+ * Atomic grouped save for one client screen. Every submitted fact must belong to
+ * the screen and be a client-answerable question; all answers commit in a single
+ * transaction, so a partially valid submission persists nothing.
+ */
+export async function answerCompanyProfileScreen(identityId: string, workspaceId: string, screenKey: string, body: Record<string, unknown>, db: Db = defaultPrisma) {
+  const screen = getCompanyProfileScreen(screenKey);
+  if (!screen) error(404, 'CLIENT_PROFILE_SCREEN_NOT_FOUND', 'The requested company profile section is not available.');
+  const facts = body?.facts;
+  if (!facts || typeof facts !== 'object' || Array.isArray(facts)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'facts must be an object of questionKey -> answer.');
+  const entries = Object.entries(facts as Record<string, unknown>);
+  if (!entries.length) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'facts must not be empty.');
+  for (const [factKey, payload] of entries) {
+    if (!screen.factBindings.includes(factKey)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'A submitted value is not part of this section.');
+    if (!isCompanyProfileQuestion(factKey)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'A submitted value is not a client-answerable question.');
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) error(400, 'CLIENT_PROFILE_ANSWER_INVALID', 'Each answer must be an object.');
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const answers = await db.$transaction(async (tx) => {
+        const out: Array<{ questionKey: string; status: string; answered: boolean }> = [];
+        for (const [factKey, payload] of entries) {
+          const state = await answerInTx(identityId, workspaceId, factKey, payload as Record<string, unknown>, tx);
+          out.push({ questionKey: factKey, status: state.status, answered: state.status === 'ANSWERED' });
+        }
+        return out;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      return { screenKey, answers };
+    } catch (caught) {
+      if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2034' && attempt < 2) continue;
+      if (caught instanceof Prisma.PrismaClientKnownRequestError && caught.code === 'P2002') error(409, 'CLIENT_PROFILE_CONCURRENT_UPDATE', 'The company profile changed concurrently; retry the section.');
+      throw caught;
+    }
+  }
+  throw new Error('Company profile section transaction exhausted its retry budget.');
+}
+
 export async function assignCompanyProfileResponsibility(identityId: string, workspaceId: string, body: Record<string, unknown>, db: Db = defaultPrisma) {
   const workspace = await workspaceContext(identityId, workspaceId, db, true);
   if (workspace.membershipRole !== 'APPROVER') error(403, 'ORGANIZATION_RESPONSIBILITY_FORBIDDEN', 'Only an approved organization approver may assign responsibility.');
   const personId = String(body.organizationPersonId || '');
   if (!personId) error(400, 'PERSON_REQUIRED', 'organizationPersonId is required.');
   return addPortalResponsibility(workspace.clientId, personId, body, db);
+}
+
+/**
+ * Client-safe TEÁOR'25 autocomplete. Returns only code + official Hungarian
+ * label. When the catalogue is not installed it reports `installed: false`
+ * with no options and does not expose configuration internals.
+ */
+export async function searchCompanyProfileTeaor25Options(identityId: string, workspaceId: string, query: string, db: Db = defaultPrisma): Promise<{ installed: boolean; options: Array<{ code: string; labelHu: string }> }> {
+  await workspaceContext(identityId, workspaceId, db, false);
+  if (!isTeaor25CatalogInstalled()) return { installed: false, options: [] };
+  return { installed: true, options: searchTeaor25(query, 20).map((entry) => ({ code: entry.code, labelHu: entry.labelHu })) };
 }

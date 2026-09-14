@@ -57,6 +57,8 @@ export type CompanyProfileVisibilityAtom =
   | { readonly kind: 'factTruthy'; readonly factKey: string }
   | { readonly kind: 'factContains'; readonly factKey: string; readonly value: string }
   | { readonly kind: 'factNotContains'; readonly factKey: string; readonly value: string }
+  /** Visible when the fact has no ANSWERED value yet. */
+  | { readonly kind: 'factUnanswered'; readonly factKey: string }
   | { readonly kind: 'allOf'; readonly conditions: readonly CompanyProfileVisibilityAtom[] }
   | { readonly kind: 'anyOf'; readonly conditions: readonly CompanyProfileVisibilityAtom[] };
 
@@ -103,6 +105,7 @@ export const CANONICAL_COMPANY_QUESTIONS: readonly CompanyProfileQuestionDefinit
   { questionKey: 'Q-B-006', module: 'BASE', factKeys: ['sites_count'], labelHu: 'Hány telephelyen/fióktelepen működik?', helpTextHu: '', whyHu: 'A telephelyek száma a munkavédelmi és környezeti kötelezettségeket befolyásolja.', answerType: 'NUMBER', optionsHu: [], baseline: true, showWhen: null, required: false },
   { questionKey: 'Q-B-007', module: 'BASE', factKeys: ['group_member'], labelHu: 'Vállalatcsoport tagja a szervezet?', helpTextHu: '', whyHu: 'A csoporttagság csoportszintű beszámolási és átvilágítási kötelezettségeket hozhat.', answerType: 'BOOLEAN', optionsHu: ['Igen', 'Nem'], baseline: true, showWhen: null, required: false },
   { questionKey: 'Q-B-008', module: 'BASE', factKeys: ['listed_company'], labelHu: 'Tőzsdén jegyzett társaság?', helpTextHu: '', whyHu: 'A tőzsdei jelenlét szigorúbb beszámolási és fenntarthatósági küszöböket jelenthet.', answerType: 'BOOLEAN', optionsHu: ['Igen', 'Nem'], baseline: true, showWhen: null, required: false },
+  { questionKey: 'Q-B-036', module: 'BASE', factKeys: ['parent_country'], labelHu: 'Melyik országban van az anyavállalat?', helpTextHu: 'Csak csoporttagság esetén.', whyHu: 'A csoportszerkezet országonként eltérő követelményeket hozhat.', answerType: 'COUNTRY', optionsHu: [], baseline: false, showWhen: eq('group_member', true), required: false },
   { questionKey: 'Q-B-009', module: 'BASE', factKeys: ['state_or_public_control'], labelHu: 'Állami vagy önkormányzati tulajdon/irányítás alatt áll?', helpTextHu: '', whyHu: 'A közszféra kontroll egyes reziliencia- és átláthatósági szabályokat aktivál.', answerType: 'BOOLEAN', optionsHu: ['Igen', 'Nem'], baseline: true, showWhen: null, required: false },
   { questionKey: 'Q-B-010', module: 'BASE', factKeys: ['employee_count'], labelHu: 'Hány főt foglalkoztat jelenleg?', helpTextHu: 'A munkaviszonyban és egyéb foglalkoztatási jogviszonyban állók számát külön később pontosíthatjuk.', whyHu: 'A létszám számos méretküszöb (bejelentés, kiberbiztonság, beszámolás) alapja.', answerType: 'NUMBER', optionsHu: [], baseline: true, showWhen: null, required: true },
   { questionKey: 'Q-B-011', module: 'BASE', factKeys: ['annual_net_revenue_eur'], labelHu: 'Mekkora volt az utolsó lezárt üzleti év nettó árbevétele?', helpTextHu: 'EUR-ban vagy automatikusan átszámítva.', whyHu: 'Az árbevétel a méretkategória és küszöbszabályok része.', answerType: 'NUMBER', optionsHu: [], baseline: true, showWhen: null, required: false },
