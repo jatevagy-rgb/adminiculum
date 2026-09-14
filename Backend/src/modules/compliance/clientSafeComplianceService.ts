@@ -26,7 +26,10 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
 import { lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
-import { isCompanyProfileQuestion } from '../client-workspace/companyProfileQuestionRegistry';
+import {
+  getCompanyProfileQuestionForDefinition,
+  type CompanyProfileQuestion,
+} from '../client-workspace/companyProfileQuestionRegistry';
 
 type Prisma = typeof defaultPrisma;
 
@@ -41,6 +44,12 @@ export interface MissingInformationItem {
   portalAnswerable: boolean;
   /** Safe question key for in-portal answering if portalAnswerable */
   questionKey?: string | null;
+  /** Typed input metadata for the canonical portal question. */
+  valueType?: CompanyProfileQuestion['valueType'];
+  /** Approved options for an ENUM question, when configured. */
+  options?: string[];
+  /** Whether a NUMBER question accepts only whole numbers. */
+  integerOnly?: boolean;
 }
 
 export interface ClientSafeComplianceTopicDto {
@@ -93,7 +102,8 @@ const SAFE_QUESTION_LABELS: Record<string, string> = {
   company_customer_due_diligence: 'Ügyfél-átvilágítás eljárásrend',
 };
 
-function safeQuestionLabel(questionKey: string | null | undefined): string {
+function safeQuestionLabel(questionKey: string | null | undefined, canonicalQuestion?: CompanyProfileQuestion | null): string {
+  if (canonicalQuestion) return canonicalQuestion.label;
   if (!questionKey) return 'Ügyvédi pontosítás szükséges.';
   return SAFE_QUESTION_LABELS[questionKey] || 'Ügyvédi pontosítás szükséges.';
 }
@@ -159,7 +169,12 @@ function buildNextAction(
 interface BatchedDependency {
   applicabilityId: string;
   factKey: string;
-  questionKey: string | null;
+  resolvedFactDefinition: {
+    key: string;
+    questionKey: string | null;
+    valueType: string;
+    allowedEnumValues: unknown;
+  } | null;
 }
 
 interface BatchedConsumedFact {
@@ -185,7 +200,7 @@ async function batchLoadDependencyData(
       where: { applicabilityRuleVersion: { applicabilitySnapshots: { some: { id: { in: applicabilityIds } } } } },
       select: {
         factKey: true,
-        resolvedFactDefinition: { select: { questionKey: true } },
+        resolvedFactDefinition: { select: { key: true, questionKey: true, valueType: true, allowedEnumValues: true } },
         applicabilityRuleVersion: {
           select: {
             applicabilitySnapshots: { select: { id: true } },
@@ -202,9 +217,8 @@ async function batchLoadDependencyData(
   // Flatten dependencies: each dependency may match multiple applicability snapshots.
   const dependencies: BatchedDependency[] = [];
   for (const raw of rawDependencies) {
-    const questionKey = raw.resolvedFactDefinition?.questionKey ?? null;
     for (const snapshot of raw.applicabilityRuleVersion.applicabilitySnapshots) {
-      dependencies.push({ applicabilityId: snapshot.id, factKey: raw.factKey, questionKey });
+      dependencies.push({ applicabilityId: snapshot.id, factKey: raw.factKey, resolvedFactDefinition: raw.resolvedFactDefinition });
     }
   }
 
@@ -234,11 +248,26 @@ function computeMissingInformation(
   const missing: MissingInformationItem[] = [];
   for (const dep of deps) {
     if (consumedKeys.has(dep.factKey)) continue;
-    const portalAnswerable = isCompanyProfileQuestion(dep.questionKey);
+    const canonicalQuestion = dep.resolvedFactDefinition
+      ? getCompanyProfileQuestionForDefinition(dep.resolvedFactDefinition)
+      : null;
+    const portalAnswerable = Boolean(canonicalQuestion);
+    const options = canonicalQuestion
+      ? (canonicalQuestion.enumOptions?.length
+        ? [...canonicalQuestion.enumOptions]
+        : Array.isArray(dep.resolvedFactDefinition?.allowedEnumValues)
+          ? dep.resolvedFactDefinition.allowedEnumValues.filter((item): item is string => typeof item === 'string')
+          : [])
+      : undefined;
     missing.push({
-      label: safeQuestionLabel(dep.questionKey),
+      label: safeQuestionLabel(dep.resolvedFactDefinition?.questionKey, canonicalQuestion),
       portalAnswerable,
-      questionKey: portalAnswerable ? dep.questionKey : null,
+      questionKey: canonicalQuestion?.questionKey ?? null,
+      ...(canonicalQuestion ? {
+        valueType: canonicalQuestion.valueType,
+        options,
+        ...(canonicalQuestion.integerOnly ? { integerOnly: true } : {}),
+      } : {}),
     });
   }
   return missing;

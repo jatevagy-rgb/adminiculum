@@ -112,18 +112,31 @@ export function OrgComplianceView() {
     [topics],
   );
 
-  const handleSaveAnswer = async (questionKey: string) => {
-    if (!answerInput.trim()) return;
+  const handleSaveAnswer = async (info: PortalComplianceMissingInfo) => {
+    if (!info.questionKey) return;
+    const trimmed = answerInput.trim();
+    if (info.valueType !== "BOOLEAN" && !trimmed) return;
     setSaving(true);
     setActionError(null);
     setActionSuccess(null);
     try {
-      const numVal = Number(answerInput.trim());
-      const isNum = !isNaN(numVal) && answerInput.trim() !== "";
-      await answerPortalCompanyProfileQuestion(questionKey, {
-        status: "ANSWERED",
-        ...(isNum ? { numberValue: numVal } : { stringValue: answerInput.trim() }),
-      });
+      const payload = info.valueType === "BOOLEAN"
+        ? (answerInput === "true" || answerInput === "false"
+          ? { status: "ANSWERED" as const, booleanValue: answerInput === "true" }
+          : null)
+        : info.valueType === "NUMBER"
+          ? (() => {
+            const numberValue = Number(trimmed);
+            if (!Number.isFinite(numberValue) || (info.integerOnly && !Number.isInteger(numberValue))) return null;
+            return { status: "ANSWERED" as const, numberValue };
+          })()
+          : info.valueType === "ENUM"
+            ? (info.options?.includes(trimmed) ? { status: "ANSWERED" as const, enumValue: trimmed } : null)
+            : info.valueType === "DATE"
+              ? { status: "ANSWERED" as const, dateValue: trimmed }
+              : { status: "ANSWERED" as const, stringValue: trimmed };
+      if (!payload) return;
+      await answerPortalCompanyProfileQuestion(info.questionKey, payload);
       setActionSuccess("Adat sikeresen rögzítve.");
       setActiveQuestionKey(null);
       setAnswerInput("");
@@ -250,21 +263,45 @@ export function OrgComplianceView() {
                             {info.portalAnswerable && info.questionKey ? (
                               activeQuestionKey === info.questionKey ? (
                                 <div className="mt-2 w-full space-y-2">
-                                  <input
-                                    type="text"
-                                    className={inputClass}
-                                    placeholder="Érték megadása..."
-                                    value={answerInput}
-                                    onChange={(e) => setAnswerInput(e.target.value)}
-                                    disabled={saving}
-                                  />
+                                  {info.valueType === "BOOLEAN" ? (
+                                    <select
+                                      className={inputClass}
+                                      value={answerInput}
+                                      onChange={(e) => setAnswerInput(e.target.value)}
+                                      disabled={saving}
+                                    >
+                                      <option value="">Válasszon</option>
+                                      <option value="true">Igen</option>
+                                      <option value="false">Nem</option>
+                                    </select>
+                                  ) : info.valueType === "ENUM" ? (
+                                    <select
+                                      className={inputClass}
+                                      value={answerInput}
+                                      onChange={(e) => setAnswerInput(e.target.value)}
+                                      disabled={saving}
+                                    >
+                                      <option value="">Válasszon</option>
+                                      {(info.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      type={info.valueType === "NUMBER" ? "number" : info.valueType === "DATE" ? "date" : "text"}
+                                      step={info.valueType === "NUMBER" ? (info.integerOnly ? 1 : "any") : undefined}
+                                      className={inputClass}
+                                      placeholder="Érték megadása..."
+                                      value={answerInput}
+                                      onChange={(e) => setAnswerInput(e.target.value)}
+                                      disabled={saving}
+                                    />
+                                  )}
                                   {actionError ? (
                                     <p className="text-xs text-rose-600">{actionError}</p>
                                   ) : null}
                                   <div className="flex flex-wrap gap-2">
                                     <button
                                       type="button"
-                                      onClick={() => handleSaveAnswer(info.questionKey!)}
+                                      onClick={() => handleSaveAnswer(info)}
                                       disabled={saving || !answerInput.trim()}
                                       className="rounded-lg bg-stone-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
                                     >
