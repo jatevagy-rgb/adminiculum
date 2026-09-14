@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication internal-case-portal-publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary client-communication-summary demo-kft-text-id-verification demo-kft-identity-binding work-package-schema work-package-admin work-package-case-creation work-package-operational intake-work-package ai-prompts time-attribution time-billing-convergence phase7b compliance-case-work-package phase7cb org-client-safe phase5b document-version task-lifecycle-schema task-review-decision task-submission agenda-deadline agenda-convergence billing-preparation-review invoice-draft-foundation compliance-workspace compliance-reconcile demo-kft-compliance-grow client-lifecycle communication-task-guards dashboard-workload-readback task-role-eligibility client-portal-2-customer-product grow-research grow-customer-survey obs1-ingestion observatory-grow-convergence; do
+          for s in comparison review publication internal-case-portal-publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary client-communication-summary demo-kft-text-id-verification demo-kft-identity-binding work-package-schema work-package-admin work-package-case-creation work-package-operational intake-work-package ai-prompts time-attribution time-billing-convergence phase7b compliance-case-work-package phase7cb org-client-safe phase5b document-version task-lifecycle-schema task-review-decision task-submission agenda-deadline agenda-convergence billing-preparation-review invoice-draft-foundation compliance-workspace compliance-reconcile demo-kft-compliance-grow client-lifecycle communication-task-guards dashboard-workload-readback task-role-eligibility client-portal-2-customer-product grow-research grow-customer-survey grow-customer-assessment obs1-ingestion observatory-grow-convergence; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -556,6 +556,20 @@ jobs:
           sed -i "s/^grow-customer-survey=PENDING$/grow-customer-survey=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Grow customer assessment PG
+        working-directory: Backend
+        env:
+          PORTAL_GROW_ASSESSMENT_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          GROW_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          ENABLE_CLIENT_PORTAL: 'true'
+          ENABLE_CLIENT_PORTAL_READS: 'true'
+        run: |
+          if npx jest --runInBand tests/portalGrowAssessments.integration.test.ts; then rc=0; else rc=$?; fi
+          sed -i "s/^grow-customer-assessment=PENDING$/grow-customer-assessment=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Observatory OBS-1 ingestion PG
         working-directory: Backend
         env:
@@ -832,6 +846,7 @@ jobs:
             [task-role-eligibility]="Task role eligibility"
             [grow-research]="Grow research golden path"
             [grow-customer-survey]="Grow customer survey PG"
+            [grow-customer-assessment]="Grow customer assessment PG"
             [obs1-ingestion]="Observatory OBS-1 ingestion"
             [observatory-grow-convergence]="Observatory to Grow convergence"
             [client-portal-2-customer-product]="Client Portal 2.0 customer product"

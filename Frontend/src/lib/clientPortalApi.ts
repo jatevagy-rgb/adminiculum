@@ -636,6 +636,146 @@ export async function listPortalGrowSurveys() {
   });
 }
 
+// --- GROW CUSTOMER ASSESSMENT JOURNEY -------------------------------------
+
+export type PortalGrowAssessmentResultScope = {
+  processId: string | null;
+  processName: string | null;
+  completedAt: string;
+  findingCount: number;
+  resultAvailable: boolean;
+};
+
+export type PortalGrowAssessmentCatalogueItem = {
+  packKey: string;
+  version: number;
+  titleHu: string;
+  descriptionHu: string;
+  estimatedMinutes: number;
+  questionCount: number;
+  status: 'NOT_STARTED' | 'COMPLETED';
+  latestCompletedAt: string | null;
+  latestFindingCount: number;
+  latestSummaryHu: string | null;
+  latestResultAvailable: boolean;
+  allowsProcessReference: boolean;
+  resultScopes: PortalGrowAssessmentResultScope[];
+};
+
+export type PortalGrowAssessmentFinding = {
+  titleHu: string;
+  summaryHu: string;
+};
+
+export type PortalGrowAssessmentDirection = {
+  labelHu: string;
+};
+
+export type PortalGrowAssessmentEvidence = {
+  title: string;
+  authors: string | null;
+  year: number | null;
+  doi: string | null;
+  locator: string | null;
+  boundedClaim: string | null;
+  limitations: string | null;
+  strengthLabelHu: string;
+};
+
+export type PortalGrowAssessmentResult = {
+  packKey: string;
+  packVersion: number;
+  titleHu: string;
+  completedAt: string;
+  findings: PortalGrowAssessmentFinding[];
+  directions: PortalGrowAssessmentDirection[];
+  evidence: PortalGrowAssessmentEvidence[];
+  attentionAreaCount: number;
+  unknownAreaCount: number;
+  summaryHu: string;
+  noticeHu: string;
+};
+
+export type PortalGrowAssessmentCatalogue = {
+  packs: PortalGrowAssessmentCatalogueItem[];
+  aggregatedFindings: PortalGrowAssessmentFinding[];
+  aggregatedAttentionAreaCount: number;
+  aggregatedUnknownAreaCount: number;
+  noticeHu: string;
+};
+
+export type PortalGrowAssessmentQuestion = {
+  questionKey: string;
+  promptHu: string;
+  helpTextHu: string | null;
+  options: Array<{ value: string; labelHu: string }>;
+};
+
+export type PortalGrowAssessmentDetail = {
+  definition: {
+    packKey: string;
+    version: number;
+    titleHu: string;
+    descriptionHu: string;
+    estimatedMinutes: number;
+    allowsProcessReference: boolean;
+    questions: PortalGrowAssessmentQuestion[];
+  };
+  latestResult: PortalGrowAssessmentResult | null;
+  latestResultAvailable: boolean;
+  resultScope: { processId: string | null; processName: string | null } | null;
+};
+
+export type PortalGrowAssessmentSubmissionResult = {
+  status: number;
+  submission: {
+    packKey: string;
+    packVersion: number;
+    replayed: boolean;
+    completedAt: string;
+  };
+  result: PortalGrowAssessmentResult;
+};
+
+export async function listPortalGrowAssessments() {
+  return fetchApi<PortalGrowAssessmentCatalogue>('/client-portal/org/grow-assessments', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
+
+export async function getPortalGrowAssessment(packKey: string, processId?: string | null) {
+  const query =
+    processId !== undefined && processId !== null && processId !== ''
+      ? `?processId=${encodeURIComponent(processId)}`
+      : '';
+  return fetchApi<PortalGrowAssessmentDetail>(
+    `/client-portal/org/grow-assessments/${encodeURIComponent(packKey)}${query}`,
+    {
+      authContext: 'customer',
+      suppressErrorStatuses: [401, 403, 404, 503],
+      suppressErrorLogging: true,
+    },
+  );
+}
+
+export async function submitPortalGrowAssessment(
+  packKey: string,
+  payload: { answers: Array<{ questionKey: string; answer: string }>; idempotencyKey: string; processId?: string },
+) {
+  return fetchApi<PortalGrowAssessmentSubmissionResult>(
+    `/client-portal/org/grow-assessments/${encodeURIComponent(packKey)}/submissions`,
+    {
+      authContext: 'customer',
+      method: 'POST',
+      body: JSON.stringify(payload),
+      suppressErrorStatuses: [400, 401, 403, 409],
+      suppressErrorLogging: true,
+    },
+  );
+}
+
 export type PortalComplianceMissingInfo = {
   label: string;
   portalAnswerable: boolean;

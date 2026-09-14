@@ -1,0 +1,453 @@
+/**
+ * OBSERVATORY — customer Grow assessment intake (GROW_ASSESSMENT_V1).
+ *
+ * Contract:
+ * - Persists customer self-assessments as DECLARED_SURVEY observations through
+ *   the canonical OBS-1 foundation: a dedicated ExternalSourceConnection
+ *   (sourceType SURVEY) and a DiscoveryRun per submission. There is NO second
+ *   questionnaire store.
+ * - Retry-safe via caller-supplied idempotencyKey with the same replay semantics
+ *   as the structured survey path: same key + same canonical payload replays the
+ *   existing observation; same key + different payload is IDEMPOTENCY_CONFLICT.
+ *   Replay identity is deliberately independent of mutable process status.
+ * - Declared evidence only: never writes findings, recommendations,
+ *   opportunities, initiatives, tasks or cases.
+ * - Exact schema validation: unknown pack/version/question, duplicate question,
+ *   invalid answer, extra arbitrary question and oversized payload are rejected.
+ */
+
+import { ObservationType, Prisma } from '@prisma/client';
+import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+import { canonicalDigest } from '../compliance/canonicalDigest';
+import { InteractionError, InternalActor, safeText } from '../client-interaction/base';
+import { requireOrganizationWorkspace } from '../client-workspace/organizationalAccessPolicy';
+import {
+  AssessmentValidationError,
+  GROW_ASSESSMENT_KIND,
+  GROW_ASSESSMENT_SCHEMA,
+  getAssessmentPack,
+  validateAssessmentSubmission,
+} from '../company-growth/assessments/registry';
+import { ObservatoryIngestionService, type ObservatoryAccessGuard } from './ingestion/service';
+
+const ingestion = new ObservatoryIngestionService();
+
+type Db = typeof defaultPrisma;
+
+const SURVEY_SOURCE_NAME = 'Grow strukturált intake';
+const SURVEY_SOURCE_TYPE = 'SURVEY';
+
+/** Defense-in-depth: the canonical payload is server-constructed and can never
+ * legitimately contain secret-like material. Reject before persisting. */
+const SECRET_LIKE = /(secret|password|passwd|token|api[-_ ]?key|authorization|bearer)/i;
+
+export interface AssessmentAnswerRecord {
+  questionKey: string;
+  answer: string;
+}
+
+export interface SubmitPortalAssessmentInput {
+  answers: unknown;
+  idempotencyKey: string;
+  processId?: string;
+}
+
+export interface PortalAssessmentSubmissionResult {
+  packKey: string;
+  packVersion: number;
+  replayed: boolean;
+  completedAt: string;
+}
+
+/** Customer-safe readback record. No observation/run/connection ids, no raw payload. */
+export interface SafePortalAssessmentSubmission {
+  packKey: string;
+  packVersion: number;
+  answers: AssessmentAnswerRecord[];
+  processId: string | null;
+  /** Customer-visible process name resolved server-side; never the raw id. */
+  processName: string | null;
+  completedAt: string;
+}
+
+interface AuthorizedOrgContext {
+  clientId: string;
+  workspaceId: string;
+  portalActor: InternalActor;
+  portalAccessGuard: ObservatoryAccessGuard;
+}
+
+/**
+ * Server-side authorization equivalent to the canonical survey portal path.
+ * clientId is ALWAYS derived from the resolved workspace, never from the browser.
+ */
+async function resolveAuthorizedOrgContext(
+  identityId: string,
+  workspaceId: string,
+  db: Db,
+): Promise<AuthorizedOrgContext> {
+  if (!identityId) {
+    throw new InteractionError(401, 'CLIENT_PORTAL_AUTH_REQUIRED', 'Client portal authentication is required.');
+  }
+  if (!workspaceId) {
+    throw new InteractionError(409, 'CLIENT_WORKSPACE_SELECTION_REQUIRED', 'Select an authorized workspace.');
+  }
+
+  const identity = await db.clientPortalIdentity.findUnique({
+    where: { id: identityId },
+    select: { status: true },
+  });
+  if (!identity || String(identity.status) !== 'ACTIVE') {
+    throw new InteractionError(403, 'CLIENT_IDENTITY_NOT_ACTIVE', 'Client identity is not active.');
+  }
+
+  const workspace = await requireOrganizationWorkspace(workspaceId, db);
+
+  const membership = await db.clientPortalWorkspaceMembership.findFirst({
+    where: {
+      clientPortalIdentityId: identityId,
+      workspaceId: workspace.id,
+      status: 'ACTIVE',
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+    },
+    select: { id: true },
+  });
+  if (!membership) {
+    throw new InteractionError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
+  }
+
+  const authorizedClientId = workspace.clientId;
+  const portalAccessGuard: ObservatoryAccessGuard = async (_actor, requestedClientId) => {
+    if (requestedClientId !== authorizedClientId) {
+      throw new InteractionError(403, 'CLIENT_WORKSPACE_FORBIDDEN', 'Workspace does not authorize this client.');
+    }
+  };
+  return {
+    clientId: authorizedClientId,
+    workspaceId: workspace.id,
+    portalActor: { userId: identityId, role: 'CLIENT_PORTAL' },
+    portalAccessGuard,
+  };
+}
+
+async function findOrCreateSurveyConnection(
+  actor: InternalActor,
+  clientId: string,
+  accessGuard: ObservatoryAccessGuard,
+) {
+  const existing = await defaultPrisma.externalSourceConnection.findFirst({
+    where: { clientId, sourceType: SURVEY_SOURCE_TYPE },
+  });
+  if (existing) return existing;
+  // Creation goes through the canonical ingestion service so validateNoSecrets
+  // and canonical connection semantics remain active.
+  return ingestion.registerExternalSource(
+    actor,
+    {
+      clientId,
+      sourceType: SURVEY_SOURCE_TYPE,
+      name: SURVEY_SOURCE_NAME,
+      config: { kind: 'structured-survey', version: 1 },
+    },
+    accessGuard,
+  );
+}
+
+interface CanonicalAssessmentPayloadInput {
+  packKey: string;
+  packVersion: number;
+  answers: AssessmentAnswerRecord[];
+  processId: string | null;
+  workspaceId: string;
+  identityId: string;
+}
+
+/** Deterministic canonical payload. Contains no mutable status and no timestamp
+ * (the completion time is carried by observation.observedAt), so identical
+ * requests always produce an identical digest. */
+function buildCanonicalAssessmentPayload(input: CanonicalAssessmentPayloadInput): Record<string, unknown> {
+  return {
+    schema: GROW_ASSESSMENT_SCHEMA,
+    kind: GROW_ASSESSMENT_KIND,
+    packKey: input.packKey,
+    packVersion: input.packVersion,
+    answers: input.answers.map((a) => ({ questionKey: a.questionKey, answer: a.answer })),
+    processId: input.processId,
+    provenance: {
+      channel: 'CLIENT_PORTAL',
+      workspaceId: input.workspaceId,
+      identityId: input.identityId,
+    },
+  };
+}
+
+/**
+ * Validates + persists a customer self-assessment as declared evidence.
+ * Returns the canonical pack identity and completion timestamp.
+ */
+export async function submitPortalGrowAssessment(
+  identityId: string,
+  workspaceId: string,
+  packKey: string,
+  input: SubmitPortalAssessmentInput,
+  db: Db = defaultPrisma,
+): Promise<PortalAssessmentSubmissionResult> {
+  const ctx = await resolveAuthorizedOrgContext(identityId, workspaceId, db);
+
+  const idempotencyKey = safeText(input.idempotencyKey, 'idempotencyKey', 200, true)!;
+
+  let validated;
+  try {
+    // Use the registry pack version instead of a hard-coded 1 so a pack version
+    // bump does not make every submission fail with ASSESSMENT_UNKNOWN_VERSION.
+    const packDefinition = getAssessmentPack(packKey);
+    validated = validateAssessmentSubmission(packKey, packDefinition?.version ?? 1, input.answers);
+  } catch (error) {
+    if (error instanceof AssessmentValidationError) {
+      throw new InteractionError(error.status, error.code, error.message);
+    }
+    throw error;
+  }
+  const pack = validated.pack;
+
+  const requestedProcessId =
+    pack.allowsProcessReference && input.processId ? String(input.processId) : null;
+
+  const canonical = (processId: string | null) =>
+    buildCanonicalAssessmentPayload({
+      packKey: pack.packKey,
+      packVersion: pack.version,
+      answers: validated.answers,
+      processId,
+      workspaceId: ctx.workspaceId,
+      identityId,
+    });
+
+  const guardSecretLike = (payload: Record<string, unknown>) => {
+    if (SECRET_LIKE.test(JSON.stringify(payload))) {
+      throw new InteractionError(400, 'ASSESSMENT_FORBIDDEN_CONTENT', 'A beküldött tartalom nem megengedett.');
+    }
+  };
+
+  const resolveActiveProcessId = async (processId: string | null): Promise<string | null> => {
+    if (!processId) return null;
+    const process = await defaultPrisma.businessProcess.findFirst({
+      where: { id: processId, clientId: ctx.clientId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    return process?.id ?? null;
+  };
+
+  const clientHasActiveProcess = async (): Promise<boolean> => {
+    const existing = await defaultPrisma.businessProcess.findFirst({
+      where: { clientId: ctx.clientId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    return Boolean(existing);
+  };
+
+  const connection = await findOrCreateSurveyConnection(ctx.portalActor, ctx.clientId, ctx.portalAccessGuard);
+
+  // Exact replay must not depend on mutable current process status: compare the
+  // persisted digest against both the raw requested reference and the
+  // currently-validated reference, exactly like the survey boundary.
+  const existing = await defaultPrisma.observation.findUnique({
+    where: { clientId_connectionId_idempotencyKey: { clientId: ctx.clientId, connectionId: connection.id, idempotencyKey } },
+  });
+  if (existing) {
+    if (existing.inputDigest === canonicalDigest(canonical(requestedProcessId))) {
+      return {
+        packKey: pack.packKey,
+        packVersion: pack.version,
+        replayed: true,
+        completedAt: existing.observedAt.toISOString(),
+      };
+    }
+    if (existing.inputDigest === canonicalDigest(canonical(await resolveActiveProcessId(requestedProcessId)))) {
+      return {
+        packKey: pack.packKey,
+        packVersion: pack.version,
+        replayed: true,
+        completedAt: existing.observedAt.toISOString(),
+      };
+    }
+    throw new InteractionError(409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used with a different payload.');
+  }
+
+  // A provided process reference must resolve to an ACTIVE process owned by the
+  // authorized client. A foreign (cross-client) or unknown reference is rejected
+  // instead of silently downgrading the submission to unscoped. Replay above is
+  // intentionally evaluated BEFORE this check so an exact retry of an already
+  // persisted submission is still replayed.
+  const resolvedProcessId = await resolveActiveProcessId(requestedProcessId);
+  if (requestedProcessId && !resolvedProcessId) {
+    throw new InteractionError(
+      400,
+      'ASSESSMENT_PROCESS_REFERENCE_INVALID',
+      'A kiválasztott folyamat nem érhető el ehhez a szervezethez.',
+    );
+  }
+  // Process-oriented packs must not be persisted unscoped while the client has
+  // active processes: unscoped findings would later merge into every matching
+  // process and create unrelated diagnoses. When the client has no active
+  // process there is nothing to scope or leak into, so unscoped is allowed.
+  if (!requestedProcessId && pack.allowsProcessReference && (await clientHasActiveProcess())) {
+    throw new InteractionError(
+      400,
+      'ASSESSMENT_PROCESS_REFERENCE_REQUIRED',
+      'Ehhez a felméréshez válasszon folyamatot.',
+    );
+  }
+
+  const rawPayload = canonical(resolvedProcessId);
+  guardSecretLike(rawPayload);
+  if (JSON.stringify(rawPayload).length > 20000) {
+    throw new InteractionError(400, 'ASSESSMENT_PAYLOAD_TOO_LARGE', 'A beküldött felmérés túl nagy.');
+  }
+
+  const completedAt = new Date();
+  const run = await ingestion.startDiscoveryRun(
+    ctx.portalActor,
+    { clientId: ctx.clientId, connectionId: connection.id },
+    ctx.portalAccessGuard,
+  );
+
+  try {
+    const observation = await ingestion.ingestObservation(
+      ctx.portalActor,
+      {
+        clientId: ctx.clientId,
+        connectionId: connection.id,
+        discoveryRunId: run.id,
+        observationType: ObservationType.DECLARED_SURVEY,
+        idempotencyKey,
+        sourceRecordId: `grow-assessment:${pack.packKey}:${idempotencyKey}`,
+        rawPayload: rawPayload as never,
+        observedAt: completedAt,
+      },
+      ctx.portalAccessGuard,
+    );
+    // The atomic ingestion boundary is authoritative. If it returns an observation
+    // from a DIFFERENT discovery run, a concurrent request with the same
+    // idempotency key won the insert; this request is a replay of that submission
+    // and must not claim a new completion timestamp.
+    const replayed = observation.discoveryRunId !== run.id;
+    await ingestion.completeDiscoveryRun(
+      ctx.portalActor,
+      { clientId: ctx.clientId, runId: run.id },
+      ctx.portalAccessGuard,
+    );
+    return {
+      packKey: pack.packKey,
+      packVersion: pack.version,
+      replayed,
+      completedAt: (replayed ? observation.observedAt : completedAt).toISOString(),
+    };
+  } catch (err: any) {
+    await ingestion.failDiscoveryRun(ctx.portalActor, { clientId: ctx.clientId, runId: run.id }, ctx.portalAccessGuard).catch(() => undefined);
+    if (err?.message === 'IDEMPOTENCY_CONFLICT') {
+      throw new InteractionError(409, 'IDEMPOTENCY_CONFLICT', 'This idempotency key was already used with a different payload.');
+    }
+    throw err;
+  }
+}
+
+function toSafeSubmission(row: {
+  observedAt: Date;
+  rawPayload: Prisma.JsonValue;
+}): SafePortalAssessmentSubmission | null {
+  const payload = row.rawPayload as Record<string, any> | null;
+  if (!payload || payload.schema !== GROW_ASSESSMENT_SCHEMA) return null;
+  const packKey = typeof payload.packKey === 'string' ? payload.packKey : '';
+  const pack = getAssessmentPack(packKey);
+  if (!pack) return null;
+  // Carry the version the submission was RECORDED under, not the current registry
+  // version: relabeling historical rows would re-evaluate old answers with new
+  // rules. A row without a usable version is not safely readable.
+  const recordedVersion =
+    typeof payload.packVersion === 'number' ? payload.packVersion : Number(payload.packVersion);
+  if (!Number.isFinite(recordedVersion)) return null;
+  const answers = Array.isArray(payload.answers)
+    ? payload.answers
+        .filter((a: unknown): a is Record<string, unknown> => a !== null && typeof a === 'object')
+        .map((a: Record<string, unknown>) => ({
+          questionKey: String(a.questionKey ?? ''),
+          answer: String(a.answer ?? ''),
+        }))
+    : [];
+  return {
+    packKey: pack.packKey,
+    packVersion: recordedVersion,
+    answers,
+    processId: typeof payload.processId === 'string' && payload.processId ? payload.processId : null,
+    processName: null,
+    completedAt: row.observedAt.toISOString(),
+  };
+}
+
+/**
+ * Customer-safe, workspace-scoped readback of assessment submissions.
+ * Only THIS authorized portal workspace's submissions on the workspace's client
+ * are returned; internal-workforce rows and other workspaces are excluded.
+ * Returns newest-first; no internal ids, no raw payload.
+ */
+export async function listPortalGrowAssessments(
+  identityId: string,
+  workspaceId: string,
+  db: Db = defaultPrisma,
+): Promise<{ items: SafePortalAssessmentSubmission[] }> {
+  const ctx = await resolveAuthorizedOrgContext(identityId, workspaceId, db);
+
+  const connection = await db.externalSourceConnection.findFirst({
+    where: { clientId: ctx.clientId, sourceType: SURVEY_SOURCE_TYPE },
+  });
+  if (!connection) return { items: [] };
+
+  // Return the LATEST submission per (pack, process) scope, matching the scope
+  // research supersedes at. One row per PACK would hide a workspace's other
+  // process scopes (whose findings still drive research); a global newest-N
+  // window would truncate a completed scope. The `id DESC` tie-breaker makes the
+  // customer-visible latest deterministic and consistent with the research query.
+  const rows = await db.$queryRaw<Array<{ observedAt: Date; rawPayload: Prisma.JsonValue }>>`
+    SELECT DISTINCT ON (
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->>'processId', '')
+    )
+      "observedAt", "rawPayload"
+    FROM "observations"
+    WHERE "clientId" = ${ctx.clientId}
+      AND "connectionId" = ${connection.id}
+      AND "observationType"::text = 'DECLARED_SURVEY'
+      AND "rawPayload"->>'schema' = ${GROW_ASSESSMENT_SCHEMA}
+      AND "rawPayload"->'provenance'->>'channel' = 'CLIENT_PORTAL'
+      AND "rawPayload"->'provenance'->>'workspaceId' = ${ctx.workspaceId}
+    ORDER BY
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->>'processId', ''),
+      "observedAt" DESC,
+      "id" DESC
+  `;
+  rows.sort((a, b) => b.observedAt.getTime() - a.observedAt.getTime());
+
+  const items: SafePortalAssessmentSubmission[] = [];
+  for (const row of rows) {
+    const safe = toSafeSubmission(row);
+    if (safe) items.push(safe);
+  }
+  // Resolve customer-visible process names server-side so the portal never has to
+  // render or receive a raw process id as text.
+  const processIds = [
+    ...new Set(items.map((item) => item.processId).filter((id): id is string => Boolean(id))),
+  ];
+  if (processIds.length > 0) {
+    const processes = await db.businessProcess.findMany({
+      where: { clientId: ctx.clientId, id: { in: processIds } },
+      select: { id: true, name: true },
+    });
+    const namesById = new Map(processes.map((p) => [p.id, p.name]));
+    for (const item of items) {
+      item.processName = item.processId ? namesById.get(item.processId) ?? null : null;
+    }
+  }
+  return { items };
+}
