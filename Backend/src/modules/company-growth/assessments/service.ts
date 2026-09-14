@@ -229,6 +229,25 @@ export async function getGrowAssessmentCatalogue(
   let aggregatedAttentionAreaCount = 0;
   let aggregatedUnknownAreaCount = 0;
 
+  // Aggregate across EVERY latest (pack, process) scope, not only the newest
+  // scope per pack, so a workspace's other process results are not hidden.
+  for (const submission of items) {
+    const result = tryBuildResultDto(
+      submission.packKey,
+      submission.packVersion,
+      submission.answers,
+      submission.completedAt,
+    );
+    if (!result) continue;
+    aggregatedAttentionAreaCount += result.findings.length;
+    aggregatedUnknownAreaCount += result.unknownAreaCount;
+    for (const finding of result.findings) {
+      if (seenFindingTitles.has(finding.titleHu)) continue;
+      seenFindingTitles.add(finding.titleHu);
+      aggregatedFindings.push(finding);
+    }
+  }
+
   for (const pack of listAssessmentPacks()) {
     const submission = latest.get(pack.packKey);
     if (!submission) {
@@ -266,16 +285,6 @@ export async function getGrowAssessmentCatalogue(
       latestSummaryHu: result ? result.summaryHu : null,
       latestResultAvailable: result !== null,
     });
-
-    if (!result) continue;
-
-    aggregatedAttentionAreaCount += result.findings.length;
-    aggregatedUnknownAreaCount += result.unknownAreaCount;
-    for (const finding of result.findings) {
-      if (seenFindingTitles.has(finding.titleHu)) continue;
-      seenFindingTitles.add(finding.titleHu);
-      aggregatedFindings.push(finding);
-    }
   }
 
   const dto: AssessmentCatalogueDto = {

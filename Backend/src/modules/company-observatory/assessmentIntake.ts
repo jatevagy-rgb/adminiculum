@@ -1,5 +1,5 @@
 /**
- * OBSERVATORY â€” customer Grow assessment intake (GROW_ASSESSMENT_V1).
+ * OBSERVATORY — customer Grow assessment intake (GROW_ASSESSMENT_V1).
  *
  * Contract:
  * - Persists customer self-assessments as DECLARED_SURVEY observations through
@@ -26,7 +26,6 @@ import {
   GROW_ASSESSMENT_KIND,
   GROW_ASSESSMENT_SCHEMA,
   getAssessmentPack,
-  listAssessmentPacks,
   validateAssessmentSubmission,
 } from '../company-growth/assessments/registry';
 import { ObservatoryIngestionService, type ObservatoryAccessGuard } from './ingestion/service';
@@ -35,7 +34,7 @@ const ingestion = new ObservatoryIngestionService();
 
 type Db = typeof defaultPrisma;
 
-const SURVEY_SOURCE_NAME = 'Grow strukturĂˇlt intake';
+const SURVEY_SOURCE_NAME = 'Grow strukturált intake';
 const SURVEY_SOURCE_TYPE = 'SURVEY';
 
 /** Defense-in-depth: the canonical payload is server-constructed and can never
@@ -224,7 +223,7 @@ export async function submitPortalGrowAssessment(
 
   const guardSecretLike = (payload: Record<string, unknown>) => {
     if (SECRET_LIKE.test(JSON.stringify(payload))) {
-      throw new InteractionError(400, 'ASSESSMENT_FORBIDDEN_CONTENT', 'A bekĂĽldĂ¶tt tartalom nem megengedett.');
+      throw new InteractionError(400, 'ASSESSMENT_FORBIDDEN_CONTENT', 'A beküldött tartalom nem megengedett.');
     }
   };
 
@@ -301,7 +300,7 @@ export async function submitPortalGrowAssessment(
   const rawPayload = canonical(resolvedProcessId);
   guardSecretLike(rawPayload);
   if (JSON.stringify(rawPayload).length > 20000) {
-    throw new InteractionError(400, 'ASSESSMENT_PAYLOAD_TOO_LARGE', 'A bekĂĽldĂ¶tt felmĂ©rĂ©s tĂşl nagy.');
+    throw new InteractionError(400, 'ASSESSMENT_PAYLOAD_TOO_LARGE', 'A beküldött felmérés túl nagy.');
   }
 
   const completedAt = new Date();
@@ -396,31 +395,30 @@ export async function listPortalGrowAssessments(
   });
   if (!connection) return { items: [] };
 
-  // Fetch the LATEST submission per registered pack instead of the newest N
-  // rows globally. A global `take` truncates before grouping, so once a
-  // workspace accumulates enough submissions the newest row for a completed
-  // pack can fall outside the window and the pack falsely reads NOT_STARTED.
-  // Both consumers (catalogue + detail) only ever need the latest per pack.
-  const rows: Array<{ observedAt: Date; rawPayload: Prisma.JsonValue }> = [];
-  for (const pack of listAssessmentPacks()) {
-    const row = await db.observation.findFirst({
-      where: {
-        clientId: ctx.clientId,
-        connectionId: connection.id,
-        observationType: 'DECLARED_SURVEY',
-        AND: [
-          { rawPayload: { path: ['schema'], equals: GROW_ASSESSMENT_SCHEMA } },
-          { rawPayload: { path: ['provenance', 'channel'], equals: 'CLIENT_PORTAL' } },
-          { rawPayload: { path: ['provenance', 'workspaceId'], equals: ctx.workspaceId } },
-          { rawPayload: { path: ['packKey'], equals: pack.packKey } },
-        ],
-      },
-      orderBy: { observedAt: 'desc' },
-      take: 1,
-      select: { observedAt: true, rawPayload: true },
-    });
-    if (row) rows.push(row as { observedAt: Date; rawPayload: Prisma.JsonValue });
-  }
+  // Return the LATEST submission per (pack, process) scope, matching the scope
+  // research supersedes at. One row per PACK would hide a workspace's other
+  // process scopes (whose findings still drive research); a global newest-N
+  // window would truncate a completed scope. The `id DESC` tie-breaker makes the
+  // customer-visible latest deterministic and consistent with the research query.
+  const rows = await db.$queryRaw<Array<{ observedAt: Date; rawPayload: Prisma.JsonValue }>>`
+    SELECT DISTINCT ON (
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->>'processId', '')
+    )
+      "observedAt", "rawPayload"
+    FROM "observations"
+    WHERE "clientId" = ${ctx.clientId}
+      AND "connectionId" = ${connection.id}
+      AND "observationType"::text = 'DECLARED_SURVEY'
+      AND "rawPayload"->>'schema' = ${GROW_ASSESSMENT_SCHEMA}
+      AND "rawPayload"->'provenance'->>'channel' = 'CLIENT_PORTAL'
+      AND "rawPayload"->'provenance'->>'workspaceId' = ${ctx.workspaceId}
+    ORDER BY
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->>'processId', ''),
+      "observedAt" DESC,
+      "id" DESC
+  `;
   rows.sort((a, b) => b.observedAt.getTime() - a.observedAt.getTime());
 
   const items: SafePortalAssessmentSubmission[] = [];

@@ -630,6 +630,12 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     const assessments = await listPortalGrowAssessments(ids.authorizedIdentity, ids.orgWsA, db);
     const scoped = assessments.items.find((i) => i.packKey === 'PROCESS_AUTOMATION_READINESS');
     expect(scoped?.processId).toBe(processId);
+
+    // Readback returns the latest per (pack, process) scope, not a single row per
+    // pack: the earlier unscoped completion and the scoped one both survive.
+    const samePack = assessments.items.filter((i) => i.packKey === 'PROCESS_AUTOMATION_READINESS');
+    expect(samePack.some((i) => i.processId === processId)).toBe(true);
+    expect(samePack.some((i) => i.processId === null)).toBe(true);
   });
 
   it('U. COMPLETED_ZERO_FINDINGS_AND_UNKNOWN_SUMMARY=PASS', async () => {
