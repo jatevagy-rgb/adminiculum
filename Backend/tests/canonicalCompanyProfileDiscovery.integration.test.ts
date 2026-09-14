@@ -13,11 +13,19 @@ describeWithDatabase('canonical company profile discovery (PostgreSQL)', () => {
   const clientId = crypto.randomUUID();
   const workspaceId = crypto.randomUUID();
   const representativeId = crypto.randomUUID();
+  let ownsEmployeeCountDefinition = false;
 
   const discovery = () => getCompanyProfileDiscovery(representativeId, workspaceId, db, { includeCanonicalBaseline: true });
 
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
+    // employee_count is owned outside the provisioning migration (runtime seed);
+    // ensure it exists without stealing ownership.
+    const existingEmployeeCount = await db.factDefinition.findUnique({ where: { key: 'employee_count' } });
+    if (!existingEmployeeCount) {
+      await db.factDefinition.create({ data: { key: 'employee_count', domainCode: 'CLIENT_COMPANY_PROFILE', valueType: 'NUMBER', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED', overlapPolicy: 'DISALLOW', temporalPolicy: 'OBSERVATION', questionKey: 'employee_count' } });
+      ownsEmployeeCountDefinition = true;
+    }
     await db.user.create({ data: { id: adminId, email: `canonical-profile-${suffix}@fixture.invalid`, name: 'Canonical profile actor', role: 'ADMIN', status: 'ACTIVE', isActive: true, skills: [] } as never });
     await db.client.create({ data: { id: clientId, name: 'Canonical profile fixture' } });
     await db.clientOperatingProfile.create({ data: { clientId, complianceEnrollmentStatus: 'ENROLLED' } });
@@ -38,6 +46,7 @@ describeWithDatabase('canonical company profile discovery (PostgreSQL)', () => {
     await db.clientPortalIdentity.deleteMany({ where: { id: representativeId } });
     await db.clientPortalWorkspace.deleteMany({ where: { id: workspaceId } });
     await db.clientOperatingProfile.deleteMany({ where: { clientId } });
+    if (ownsEmployeeCountDefinition) await db.factDefinition.deleteMany({ where: { key: 'employee_count' } });
     await db.client.delete({ where: { id: clientId } });
     await db.user.delete({ where: { id: adminId } });
     await db.$disconnect();

@@ -41,10 +41,22 @@ export const LEGACY_PROVISIONED_FACT_KEYS: readonly string[] = [
   'company_export_activity',
 ];
 
-const LEGACY_PROVISIONED = new Set(LEGACY_PROVISIONED_FACT_KEYS);
+/**
+ * Facts that already have an owner outside this migration and must NOT be
+ * provisioned here:
+ *   - the seven legacy keys above (20260914100000), and
+ *   - `employee_count`, which is created by the runtime seed and is owned by the
+ *     demo-Kft reconciliation migration (20260911090000). Provisioning it here
+ *     would make that reconciliation see the canonical key pre-existing and
+ *     correctly fail its "already exists on a different id" guard, which the
+ *     migration matrix gate exercises.
+ */
+export const PREEXISTING_COMPANY_FACT_KEYS: readonly string[] = [...LEGACY_PROVISIONED_FACT_KEYS, 'employee_count'];
+
+const PREEXISTING = new Set(PREEXISTING_COMPANY_FACT_KEYS);
 
 export const PROVISIONED_COMPANY_FACTS: readonly CompanyProfileFactProvisioningRow[] = CANONICAL_COMPANY_FACTS
-  .filter((fact) => !LEGACY_PROVISIONED.has(fact.factKey))
+  .filter((fact) => !PREEXISTING.has(fact.factKey))
   .map((fact: CompanyProfileFactDefinition): CompanyProfileFactProvisioningRow => ({
     key: fact.factKey,
     questionKey: fact.factKey,

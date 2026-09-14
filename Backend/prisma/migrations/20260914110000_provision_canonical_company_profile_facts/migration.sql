@@ -23,7 +23,6 @@ BEGIN
       ('parent_country', 'parent_country', 'JURISDICTION', NULL::jsonb, 'USER_PROVIDED', 'DISALLOW'),
       ('listed_company', 'listed_company', 'BOOLEAN', NULL::jsonb, 'USER_PROVIDED', 'DISALLOW'),
       ('state_or_public_control', 'state_or_public_control', 'BOOLEAN', NULL::jsonb, 'USER_PROVIDED', 'DISALLOW'),
-      ('employee_count', 'employee_count', 'NUMBER', NULL::jsonb, 'USER_PROVIDED', 'DISALLOW'),
       ('annual_net_revenue_eur', 'annual_net_revenue_eur', 'NUMBER', NULL::jsonb, 'USER_PROVIDED', 'DISALLOW'),
       ('balance_sheet_total_eur', 'balance_sheet_total_eur', 'NUMBER', NULL::jsonb, 'USER_PROVIDED', 'DISALLOW'),
       ('eu_sme_size_class', 'eu_sme_size_class', 'ENUM', '["MIKRO","KIS","KÖZEPES","NAGY"]'::jsonb, 'DERIVED', 'DISALLOW'),

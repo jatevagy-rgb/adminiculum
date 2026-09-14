@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
-  LEGACY_PROVISIONED_FACT_KEYS,
+  PREEXISTING_COMPANY_FACT_KEYS,
   PROVISIONED_COMPANY_FACTS,
   getProvisionedCompanyFact,
 } from '../src/modules/client-workspace/companyProfileFactProvisioning';
@@ -11,14 +11,18 @@ import { COMPANY_PROFILE_QUESTIONS, LEGACY_COMPANY_PROFILE_QUESTION_KEYS } from 
 const MIGRATION = path.resolve(__dirname, '../prisma/migrations/20260914110000_provision_canonical_company_profile_facts/migration.sql');
 
 describe('canonical company fact provisioning', () => {
-  it('provisions every canonical fact exactly once and never re-provisions legacy keys', () => {
-    expect(PROVISIONED_COMPANY_FACTS).toHaveLength(CANONICAL_COMPANY_FACTS.length);
+  it('provisions every canonical fact exactly once and never re-provisions pre-existing keys', () => {
+    const expectedKeys = CANONICAL_COMPANY_FACTS.filter((fact) => !PREEXISTING_COMPANY_FACT_KEYS.includes(fact.factKey)).map((fact) => fact.factKey);
+    expect(PROVISIONED_COMPANY_FACTS.map((row) => row.key)).toEqual(expectedKeys);
     expect(new Set(PROVISIONED_COMPANY_FACTS.map((row) => row.key)).size).toBe(PROVISIONED_COMPANY_FACTS.length);
-    for (const legacy of LEGACY_PROVISIONED_FACT_KEYS) {
-      expect(getProvisionedCompanyFact(legacy)).toBeUndefined();
+    for (const preexisting of PREEXISTING_COMPANY_FACT_KEYS) {
+      expect(getProvisionedCompanyFact(preexisting)).toBeUndefined();
     }
-    for (const fact of CANONICAL_COMPANY_FACTS) {
-      expect(getProvisionedCompanyFact(fact.factKey)).toBeDefined();
+    // employee_count already exists at runtime and is owned by the demo-Kft
+    // reconciliation migration; provisioning it here would break that guard.
+    expect(getProvisionedCompanyFact('employee_count')).toBeUndefined();
+    for (const row of PROVISIONED_COMPANY_FACTS) {
+      expect(row.key).not.toBe('employee_count');
     }
   });
 
@@ -51,8 +55,8 @@ describe('canonical company fact provisioning', () => {
         expect(provisioned.questionKey).toBe(question.questionKey);
         continue;
       }
-      // Otherwise it must be a legacy key provisioned by the earlier migration.
-      expect(LEGACY_PROVISIONED_FACT_KEYS).toContain(question.factDefinitionKey);
+      // Otherwise it must be a key that already exists outside this migration.
+      expect(PREEXISTING_COMPANY_FACT_KEYS).toContain(question.factDefinitionKey);
       expect(LEGACY_COMPANY_PROFILE_QUESTION_KEYS).toContain(question.questionKey);
     }
   });
