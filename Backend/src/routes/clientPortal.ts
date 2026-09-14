@@ -44,8 +44,16 @@ import { organizationSummary, unitSummary } from '../modules/client-workspace/le
 import { getOrganizationalHome } from '../modules/client-workspace/orgHomeService';
 import { getOrganizationalContracts } from '../modules/client-workspace/orgContractsService';
 import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
+import { getOrganizationalGrow } from '../modules/client-workspace/orgGrowService';
+import { submitPortalSurveyIntake, listPortalSurveyIntakes } from '../modules/company-observatory/intake';
+import {
+  getGrowAssessmentCatalogue,
+  getGrowAssessmentDetail,
+  submitGrowAssessment,
+} from '../modules/company-growth/assessments/service';
+import { getClientSafeComplianceReadModel } from '../modules/compliance/clientSafeComplianceService';
 import { answerCompanyProfileQuestion, assignCompanyProfileResponsibility, getCompanyProfileDiscovery } from '../modules/client-workspace/companyProfileAnswerService';
-import { RelationshipToCase } from '../modules/client-workspace/organizationalAccessPolicy';
+import { RelationshipToCase, requireOrganizationWorkspace } from '../modules/client-workspace/organizationalAccessPolicy';
 import { getClientSafeWorkSummary } from '../modules/client-workspace/workSummaryService';
 import {
   createIntakeDraft,
@@ -514,6 +522,121 @@ router.get('/org/company', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await getOrganizationalCompany(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/grow', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalGrow(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.post(['/org/grow-survey', '/org/grow/survey'], async (req, res) => {
+  try {
+    if (!(await portalIntake(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const result = await submitPortalSurveyIntake(identityId, workspaceId, {
+      categories: req.body?.categories,
+      freeText: req.body?.freeText,
+      processId: req.body?.processId,
+      idempotencyKey: req.body?.idempotencyKey,
+    });
+    const statusCode = result.replayed ? 200 : 201;
+    res.status(statusCode).json({
+      status: statusCode,
+      ...result,
+    });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get(['/org/grow-survey', '/org/grow/survey'], async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const data = await listPortalSurveyIntakes(identityId, workspaceId);
+    res.json(data);
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// GROW CUSTOMER ASSESSMENT JOURNEY — customer-safe assessment catalogue,
+// definition + latest result, and completion. Declared evidence only.
+router.get('/org/grow-assessments', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getGrowAssessmentCatalogue(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/grow-assessments/:packKey', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    // Optional process scope; server-side authority is enforced in the service.
+    const rawProcessId = req.query.processId;
+    const processId =
+      typeof rawProcessId === 'string' && rawProcessId.trim() !== '' ? rawProcessId.trim() : null;
+    res.json(await getGrowAssessmentDetail(identityId, workspaceId, req.params.packKey, processId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.post('/org/grow-assessments/:packKey/submissions', async (req, res) => {
+  try {
+    if (!(await portalIntake(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    const result = await submitGrowAssessment(identityId, workspaceId, req.params.packKey, {
+      answers: req.body?.answers,
+      idempotencyKey: req.body?.idempotencyKey,
+      processId: req.body?.processId,
+    });
+    const statusCode = result.submission.replayed ? 200 : 201;
+    res.status(statusCode).json({ status: statusCode, ...result });
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/compliance', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { workspaceId } = orgContext(req);
+    const workspace = await requireOrganizationWorkspace(workspaceId);
+    const model = await getClientSafeComplianceReadModel(
+      workspace.clientId,
+      process.env.NODE_ENV === 'production',
+      process.env.PORTAL_DEMO_ENABLED === 'true',
+    );
+    res.json(model);
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+router.get('/org/compliance', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { workspaceId } = orgContext(req);
+    const workspace = await requireOrganizationWorkspace(workspaceId);
+    const model = await getClientSafeComplianceReadModel(
+      workspace.clientId,
+      process.env.NODE_ENV === 'production',
+      process.env.PORTAL_DEMO_ENABLED === 'true',
+    );
+    res.json(model);
   } catch (error) {
     fail(res, error);
   }

@@ -118,6 +118,8 @@ model User {
   mailboxConnections                CommunicationMailboxConnection[] @relation("MailboxConnectionOwner")
   emailVerificationChallenges       EmailVerificationChallenge[]     @relation("EmailVerificationChallenges")
   recordedOutcomeMeasurements       OutcomeMeasurement[]
+  ownedClientControls               ClientControl[]              @relation("ClientControlOwner")
+  reviewedEvidenceRecords           EvidenceRecord[]             @relation("EvidenceRecordReviewer")
 
   @@map("users")
 }
@@ -221,6 +223,9 @@ model Client {
   improvementOpportunities ImprovementOpportunity[]
   outcomeMeasurements      OutcomeMeasurement[]
   taskDefinitions          TaskDefinition[]
+  clientControls           ClientControl[]
+  evidenceRecords          EvidenceRecord[]
+  evidenceControlLinks     EvidenceControlLink[]
 
   @@map("clients")
 }
@@ -1413,6 +1418,7 @@ model DocumentVersion {
   canonicalContracts      ContractRecord[]
   obligationEvidence      ClientObligation[]
   personDocumentLinks     OrganizationPersonDocumentLink[]
+  evidenceRecords         EvidenceRecord[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -4615,6 +4621,7 @@ model ClientFact {
   determinationMethod  FactDeterminationMethod?
   supersededAt         DateTime?
   answerState          ClientFactAnswerState?   @relation("ClientFactAnswerStateCurrentFact")
+  evidenceRecords      EvidenceRecord[]
 
   @@index([clientId, type, validFrom])
   @@index([clientId, verificationStatus])
@@ -5478,6 +5485,7 @@ model RequirementVersion {
   citations              RequirementCitation[]
   rules                  ApplicabilityRuleVersion[]
   applicabilitySnapshots RequirementApplicability[]
+  controlMaps             RequirementControlMap[]
 
   @@unique([requirementId, versionKey])
   @@unique([id, requirementId])
@@ -5772,12 +5780,156 @@ model Observation {
   rawPayload      Json
   observedAt      DateTime                 @default(now())
   createdAt       DateTime                 @default(now())
+  evidenceRecords EvidenceRecord[]
 
   @@unique([id, clientId])
   @@unique([clientId, connectionId, idempotencyKey])
   @@index([clientId, observationType])
   @@index([clientId, connectionId, discoveryRunId])
   @@map("observations")
+}
+
+enum ControlDefinitionType {
+  ORGANIZATIONAL
+  TECHNICAL
+  PROCEDURAL
+  LEGAL
+  PHYSICAL
+}
+
+enum ControlDefinitionStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ClientControlImplementationStatus {
+  NOT_ASSESSED
+  PLANNED
+  IMPLEMENTING
+  IMPLEMENTED
+  PARTIAL
+  NOT_IMPLEMENTED
+}
+
+model ControlDefinition {
+  id                       String                  @id @default(uuid())
+  key                      String                  @unique
+  title                    String
+  description              String?
+  type                     ControlDefinitionType
+  status                   ControlDefinitionStatus @default(ACTIVE)
+  defaultReviewCadenceDays Int?
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+
+  clientControls  ClientControl[]
+  requirementMaps RequirementControlMap[]
+
+  @@map("control_definitions")
+}
+
+model ClientControl {
+  id                   String                           @id @default(uuid())
+  clientId             String
+  client               Client                           @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  controlDefinitionId  String
+  controlDefinition    ControlDefinition                @relation(fields: [controlDefinitionId], references: [id], onDelete: Restrict)
+  implementationStatus ClientControlImplementationStatus @default(NOT_ASSESSED)
+  ownerUserId          String?
+  ownerUser           User?                             @relation("ClientControlOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  implementedAt        DateTime?
+  lastReviewedAt       DateTime?
+  nextReviewAt         DateTime?
+  notes                String?                          @db.VarChar(2000)
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+
+  evidenceLinks EvidenceControlLink[]
+
+  @@unique([clientId, controlDefinitionId])
+  @@unique([id, clientId])
+  @@index([clientId, implementationStatus])
+  @@index([controlDefinitionId])
+  @@index([clientId, nextReviewAt])
+  @@map("client_controls")
+}
+
+model RequirementControlMap {
+  id                   String             @id @default(uuid())
+  requirementVersionId String
+  requirementVersion   RequirementVersion @relation(fields: [requirementVersionId], references: [id], onDelete: Cascade)
+  controlDefinitionId  String
+  controlDefinition    ControlDefinition  @relation(fields: [controlDefinitionId], references: [id], onDelete: Restrict)
+  rationale            String?            @db.VarChar(1000)
+  createdAt            DateTime           @default(now())
+
+  @@unique([requirementVersionId, controlDefinitionId])
+  @@index([requirementVersionId])
+  @@index([controlDefinitionId])
+  @@map("requirement_control_maps")
+}
+
+enum EvidenceSourceType {
+  DOCUMENT_VERSION
+  CLIENT_FACT
+  OBSERVATION
+  EXTERNAL_REFERENCE
+}
+
+enum EvidenceReviewStatus {
+  PROVIDED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+model EvidenceRecord {
+  id                String              @id @default(uuid())
+  clientId          String
+  client            Client              @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceType        EvidenceSourceType
+  status            EvidenceReviewStatus @default(PROVIDED)
+  title             String
+  description       String?             @db.VarChar(2000)
+  providedAt        DateTime?
+  reviewedAt        DateTime?
+  reviewedByUserId  String?
+  reviewedBy        User?               @relation("EvidenceRecordReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  validFrom         DateTime?
+  validUntil        DateTime?
+  documentVersionId String?
+  documentVersion   DocumentVersion?    @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  clientFactId      String?
+  clientFact        ClientFact?        @relation(fields: [clientFactId], references: [id], onDelete: Restrict)
+  observationId     String?
+  observation       Observation?       @relation(fields: [observationId], references: [id], onDelete: Restrict)
+  externalReference String?             @db.VarChar(2000)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  controlLinks EvidenceControlLink[]
+
+  @@unique([id, clientId])
+  @@index([clientId, status])
+  @@index([clientId, validUntil])
+  @@index([clientId, sourceType])
+  @@map("evidence_records")
+}
+
+model EvidenceControlLink {
+  id               String         @id @default(uuid())
+  clientId         String
+  evidenceRecordId String
+  clientControlId  String
+  createdAt        DateTime       @default(now())
+  client           Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  evidenceRecord   EvidenceRecord @relation(fields: [evidenceRecordId, clientId], references: [id, clientId], onDelete: Cascade)
+  clientControl    ClientControl  @relation(fields: [clientControlId, clientId], references: [id, clientId], onDelete: Cascade)
+
+  @@unique([evidenceRecordId, clientControlId])
+  @@index([clientId, clientControlId])
+  @@index([clientId, evidenceRecordId])
+  @@map("evidence_control_links")
 }
 
 model ProcessObservationSnapshot {

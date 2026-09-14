@@ -1,4 +1,4 @@
-﻿import { fetchApi } from './api';
+import { fetchApi } from './api';
 
 export type PortalMatter = {
   id: string;
@@ -421,6 +421,28 @@ export type PortalOrgHomeAction = {
   dueAt?: string | null;
   typeLabel: string;
   readOnlyNote: string;
+  area?: 'LEGAL' | 'GROW' | 'COMPLIANCE';
+  actionUrl?: string;
+};
+
+export type PortalOrgHomeGrowSummary = {
+  activeInitiativesCount: number;
+  initiatives: Array<{ id: string; title: string; statusLabel: string; targetState: string | null }>;
+  knownProcessesCount: number;
+};
+
+export type PortalOrgHomeComplianceSummary = {
+  attentionCount: number;
+  inProgressCount: number;
+  noActionExpectedCount: number;
+  topics: Array<{ topicId: string; topicLabel: string; state: string; nextAction: string | null }>;
+};
+
+export type PortalOrgHomeDigitalTwinSummary = {
+  organizationUnitsCount: number;
+  knownProcessesCount: number;
+  knownSystemsCount: number;
+  employeeCount: number | null;
 };
 
 export type PortalOrgHome = {
@@ -430,6 +452,9 @@ export type PortalOrgHome = {
   actions: PortalOrgHomeAction[];
   recentDocuments: PortalOrgHomeDocument[];
   contactSummary: { openCount: number; unreadCount: number; latestPreview: string | null; latestUpdatedAt: string | null };
+  growSummary?: PortalOrgHomeGrowSummary;
+  complianceSummary?: PortalOrgHomeComplianceSummary;
+  digitalTwinSummary?: PortalOrgHomeDigitalTwinSummary;
 };
 
 export async function getPortalOrgHome() {
@@ -471,14 +496,32 @@ export type PortalOrgCompanyVisibleArea = {
   visibleMatterCount: number;
 };
 
+export type PortalOrgCompanySystem = {
+  id: string;
+  name: string;
+  category: string;
+  purpose: string | null;
+};
+
+export type PortalOrgCompanyProcess = {
+  id: string;
+  name: string;
+  category: string;
+  criticality: string;
+  frequency: string;
+};
+
 export type PortalOrgCompany = {
   companyName: string;
   profileHeadline: string | null;
+  employeeCount?: number | null;
   groups: PortalOrgCompanyGroup[];
   visibleMattersByArea: PortalOrgCompanyVisibleArea[];
   totalVisibleMatterCount: number;
   milestones: Array<{ id: string; title: string; date: string | null }>;
   initiatives: Array<{ id: string; title: string; targetState: string | null; statusLabel: string; targetAt: string | null }>;
+  systems?: PortalOrgCompanySystem[];
+  processes?: PortalOrgCompanyProcess[];
 };
 
 export async function getPortalOrganizationContracts() {
@@ -488,9 +531,289 @@ export async function getPortalOrganizationContracts() {
 export async function getPortalOrganizationCompany() {
   return fetchApi<PortalOrgCompany>('/client-portal/org/company', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
+
+export type PortalGrowProcessStep = {
+  id: string;
+  position: number;
+  name: string;
+  stepType: string;
+  isApproval: boolean;
+  systemName: string | null;
+  systemCategory: string | null;
+};
+
+export type PortalGrowProcess = {
+  id: string;
+  name: string;
+  category: string;
+  criticality: string;
+  frequency: string;
+  organizationGroupName: string | null;
+  steps: PortalGrowProcessStep[];
+};
+
+export type PortalGrowInitiative = {
+  id: string;
+  title: string;
+  targetState: string | null;
+  statusLabel: string;
+  targetAt: string | null;
+  hasRelatedMatter: boolean;
+};
+
+export type PortalGrowOutcome = {
+  id: string;
+  basis: 'MEASURED' | 'CALCULATED' | 'ESTIMATED';
+  basisLabel: string;
+  initiativeTitle: string | null;
+  processName: string | null;
+};
+
+export type PortalOrgGrow = {
+  customerName: string;
+  processes: PortalGrowProcess[];
+  initiatives: PortalGrowInitiative[];
+  outcomes: {
+    measured: PortalGrowOutcome[];
+    calculatedOrEstimated: PortalGrowOutcome[];
+  };
+  opportunities: Array<{
+    id: string;
+    title: string;
+    problem: string;
+    direction: string;
+    kind: string;
+    evidenceStrength: string;
+  }>;
+  opportunitiesDeferredNotice: string | null;
+  surveys?: PortalGrowSurveyItem[];
+};
+
+export async function getPortalOrgGrow() {
+  return fetchApi<PortalOrgGrow>('/client-portal/org/grow', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
+
+export type SubmitPortalGrowSurveyInput = {
+  categories: string[];
+  freeText?: string;
+  processId?: string;
+  idempotencyKey: string;
+};
+
+export type PortalGrowSurveyResult = {
+  success: boolean;
+  replayed: boolean;
+  message: string;
+  submittedAt: string;
+};
+
+export type PortalGrowSurveyItem = {
+  submittedAt: string;
+  categoryLabels: string[];
+  freeText: string | null;
+  processName: string | null;
+};
+
+export async function submitPortalGrowSurvey(payload: SubmitPortalGrowSurveyInput) {
+  return fetchApi<PortalGrowSurveyResult>('/client-portal/org/grow-survey', {
+    authContext: 'customer',
+    method: 'POST',
+    body: JSON.stringify(payload),
+    suppressErrorStatuses: [400, 401, 403, 409],
+    suppressErrorLogging: true,
+  });
+}
+
+export async function listPortalGrowSurveys() {
+  return fetchApi<{ items: PortalGrowSurveyItem[] }>('/client-portal/org/grow-survey', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
+
+// --- GROW CUSTOMER ASSESSMENT JOURNEY -------------------------------------
+
+export type PortalGrowAssessmentResultScope = {
+  processId: string | null;
+  processName: string | null;
+  completedAt: string;
+  findingCount: number;
+  resultAvailable: boolean;
+};
+
+export type PortalGrowAssessmentCatalogueItem = {
+  packKey: string;
+  version: number;
+  titleHu: string;
+  descriptionHu: string;
+  estimatedMinutes: number;
+  questionCount: number;
+  status: 'NOT_STARTED' | 'COMPLETED';
+  latestCompletedAt: string | null;
+  latestFindingCount: number;
+  latestSummaryHu: string | null;
+  latestResultAvailable: boolean;
+  allowsProcessReference: boolean;
+  resultScopes: PortalGrowAssessmentResultScope[];
+};
+
+export type PortalGrowAssessmentFinding = {
+  titleHu: string;
+  summaryHu: string;
+};
+
+export type PortalGrowAssessmentDirection = {
+  labelHu: string;
+};
+
+export type PortalGrowAssessmentEvidence = {
+  title: string;
+  authors: string | null;
+  year: number | null;
+  doi: string | null;
+  locator: string | null;
+  boundedClaim: string | null;
+  limitations: string | null;
+  strengthLabelHu: string;
+};
+
+export type PortalGrowAssessmentResult = {
+  packKey: string;
+  packVersion: number;
+  titleHu: string;
+  completedAt: string;
+  findings: PortalGrowAssessmentFinding[];
+  directions: PortalGrowAssessmentDirection[];
+  evidence: PortalGrowAssessmentEvidence[];
+  attentionAreaCount: number;
+  unknownAreaCount: number;
+  summaryHu: string;
+  noticeHu: string;
+};
+
+export type PortalGrowAssessmentCatalogue = {
+  packs: PortalGrowAssessmentCatalogueItem[];
+  aggregatedFindings: PortalGrowAssessmentFinding[];
+  aggregatedAttentionAreaCount: number;
+  aggregatedUnknownAreaCount: number;
+  noticeHu: string;
+};
+
+export type PortalGrowAssessmentQuestion = {
+  questionKey: string;
+  promptHu: string;
+  helpTextHu: string | null;
+  options: Array<{ value: string; labelHu: string }>;
+};
+
+export type PortalGrowAssessmentDetail = {
+  definition: {
+    packKey: string;
+    version: number;
+    titleHu: string;
+    descriptionHu: string;
+    estimatedMinutes: number;
+    allowsProcessReference: boolean;
+    questions: PortalGrowAssessmentQuestion[];
+  };
+  latestResult: PortalGrowAssessmentResult | null;
+  latestResultAvailable: boolean;
+  resultScope: { processId: string | null; processName: string | null } | null;
+};
+
+export type PortalGrowAssessmentSubmissionResult = {
+  status: number;
+  submission: {
+    packKey: string;
+    packVersion: number;
+    replayed: boolean;
+    completedAt: string;
+  };
+  result: PortalGrowAssessmentResult;
+};
+
+export async function listPortalGrowAssessments() {
+  return fetchApi<PortalGrowAssessmentCatalogue>('/client-portal/org/grow-assessments', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
+
+export async function getPortalGrowAssessment(packKey: string, processId?: string | null) {
+  const query =
+    processId !== undefined && processId !== null && processId !== ''
+      ? `?processId=${encodeURIComponent(processId)}`
+      : '';
+  return fetchApi<PortalGrowAssessmentDetail>(
+    `/client-portal/org/grow-assessments/${encodeURIComponent(packKey)}${query}`,
+    {
+      authContext: 'customer',
+      suppressErrorStatuses: [401, 403, 404, 503],
+      suppressErrorLogging: true,
+    },
+  );
+}
+
+export async function submitPortalGrowAssessment(
+  packKey: string,
+  payload: { answers: Array<{ questionKey: string; answer: string }>; idempotencyKey: string; processId?: string },
+) {
+  return fetchApi<PortalGrowAssessmentSubmissionResult>(
+    `/client-portal/org/grow-assessments/${encodeURIComponent(packKey)}/submissions`,
+    {
+      authContext: 'customer',
+      method: 'POST',
+      body: JSON.stringify(payload),
+      suppressErrorStatuses: [400, 401, 403, 409],
+      suppressErrorLogging: true,
+    },
+  );
+}
+
+export type PortalComplianceMissingInfo = {
+  label: string;
+  portalAnswerable: boolean;
+  questionKey?: string | null;
+  valueType?: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "DATE";
+  options?: string[];
+  integerOnly?: boolean;
+};
+
+export type PortalComplianceTopic = {
+  topicId: string;
+  topicLabel: string;
+  state: 'REVIEW_RECOMMENDED' | 'MORE_INFORMATION_NEEDED' | 'LAWYER_REVIEW_REQUIRED' | 'ACTION_IN_PROGRESS' | 'RESOLVED';
+  shortExplanation: string;
+  missingInformation: PortalComplianceMissingInfo[];
+  nextAction: string | null;
+};
+
+export type PortalComplianceReadModel = {
+  topics: PortalComplianceTopic[];
+};
+
+export async function getPortalCompliance() {
+  return fetchApi<PortalComplianceReadModel>('/client-portal/compliance', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
 export type PortalCompanyProfileQuestion = {
   questionKey: string;
   label: string;
+  helpText?: string | null;
+  section: "COMPANY" | "OPERATIONS" | "PEOPLE" | "DATA" | "DIGITAL" | "MARKET" | "SPECIAL";
+  valueType: "NUMBER" | "BOOLEAN" | "STRING" | "ENUM" | "DATE";
+  options?: string[];
+  integerOnly?: boolean;
+  order: number;
   status: "ANSWERED" | "UNKNOWN" | "UNANSWERED";
   value: number | string | boolean | null;
 };
@@ -505,6 +828,8 @@ export type PortalCompanyProfileAnswerPayload = {
   numberValue?: number;
   stringValue?: string;
   booleanValue?: boolean;
+  enumValue?: string;
+  dateValue?: string;
 };
 
 export type PortalCompanyProfileAnswerResult = {

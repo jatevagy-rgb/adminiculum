@@ -25,8 +25,12 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
-import { lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
-import { isCompanyProfileQuestion } from '../client-workspace/companyProfileQuestionRegistry';
+import { lookupSafeControlLabel, lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
+import { isEvidenceCurrent } from './controlEvidenceService';
+import {
+  getCompanyProfileQuestionForDefinition,
+  type CompanyProfileQuestion,
+} from '../client-workspace/companyProfileQuestionRegistry';
 
 type Prisma = typeof defaultPrisma;
 
@@ -39,6 +43,14 @@ export interface MissingInformationItem {
   label: string;
   /** Whether this dependency can be answered through the portal. */
   portalAnswerable: boolean;
+  /** Safe question key for in-portal answering if portalAnswerable */
+  questionKey?: string | null;
+  /** Typed input metadata for the canonical portal question. */
+  valueType?: CompanyProfileQuestion['valueType'];
+  /** Approved options for an ENUM question, when configured. */
+  options?: string[];
+  /** Whether a NUMBER question accepts only whole numbers. */
+  integerOnly?: boolean;
 }
 
 export interface ClientSafeComplianceTopicDto {
@@ -63,6 +75,18 @@ export interface ClientSafeComplianceTopicDto {
 
 export interface ClientSafeComplianceReadModel {
   topics: ClientSafeComplianceTopicDto[];
+  controlsSummary: ClientSafeControlSummaryDto[];
+}
+
+export interface ClientSafeControlSummaryDto {
+  requirementTitle: string;
+  controls: Array<{
+    title: string;
+    implementationStatus: string | null;
+    lastReviewedAt: string | null;
+    nextReviewAt: string | null;
+    evidence: { acceptedCurrent: number; stale: number; missing: boolean };
+  }>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -91,7 +115,8 @@ const SAFE_QUESTION_LABELS: Record<string, string> = {
   company_customer_due_diligence: 'Ügyfél-átvilágítás eljárásrend',
 };
 
-function safeQuestionLabel(questionKey: string | null | undefined): string {
+function safeQuestionLabel(questionKey: string | null | undefined, canonicalQuestion?: CompanyProfileQuestion | null): string {
+  if (canonicalQuestion) return canonicalQuestion.label;
   if (!questionKey) return 'Ügyvédi pontosítás szükséges.';
   return SAFE_QUESTION_LABELS[questionKey] || 'Ügyvédi pontosítás szükséges.';
 }
@@ -157,7 +182,12 @@ function buildNextAction(
 interface BatchedDependency {
   applicabilityId: string;
   factKey: string;
-  questionKey: string | null;
+  resolvedFactDefinition: {
+    key: string;
+    questionKey: string | null;
+    valueType: string;
+    allowedEnumValues: unknown;
+  } | null;
 }
 
 interface BatchedConsumedFact {
@@ -183,7 +213,7 @@ async function batchLoadDependencyData(
       where: { applicabilityRuleVersion: { applicabilitySnapshots: { some: { id: { in: applicabilityIds } } } } },
       select: {
         factKey: true,
-        resolvedFactDefinition: { select: { questionKey: true } },
+        resolvedFactDefinition: { select: { key: true, questionKey: true, valueType: true, allowedEnumValues: true } },
         applicabilityRuleVersion: {
           select: {
             applicabilitySnapshots: { select: { id: true } },
@@ -200,9 +230,8 @@ async function batchLoadDependencyData(
   // Flatten dependencies: each dependency may match multiple applicability snapshots.
   const dependencies: BatchedDependency[] = [];
   for (const raw of rawDependencies) {
-    const questionKey = raw.resolvedFactDefinition?.questionKey ?? null;
     for (const snapshot of raw.applicabilityRuleVersion.applicabilitySnapshots) {
-      dependencies.push({ applicabilityId: snapshot.id, factKey: raw.factKey, questionKey });
+      dependencies.push({ applicabilityId: snapshot.id, factKey: raw.factKey, resolvedFactDefinition: raw.resolvedFactDefinition });
     }
   }
 
@@ -232,7 +261,27 @@ function computeMissingInformation(
   const missing: MissingInformationItem[] = [];
   for (const dep of deps) {
     if (consumedKeys.has(dep.factKey)) continue;
-    missing.push({ label: safeQuestionLabel(dep.questionKey), portalAnswerable: isCompanyProfileQuestion(dep.questionKey) });
+    const canonicalQuestion = dep.resolvedFactDefinition
+      ? getCompanyProfileQuestionForDefinition(dep.resolvedFactDefinition)
+      : null;
+    const portalAnswerable = Boolean(canonicalQuestion);
+    const options = canonicalQuestion
+      ? (canonicalQuestion.enumOptions?.length
+        ? [...canonicalQuestion.enumOptions]
+        : Array.isArray(dep.resolvedFactDefinition?.allowedEnumValues)
+          ? dep.resolvedFactDefinition.allowedEnumValues.filter((item): item is string => typeof item === 'string')
+          : [])
+      : undefined;
+    missing.push({
+      label: safeQuestionLabel(dep.resolvedFactDefinition?.questionKey, canonicalQuestion),
+      portalAnswerable,
+      questionKey: canonicalQuestion?.questionKey ?? null,
+      ...(canonicalQuestion ? {
+        valueType: canonicalQuestion.valueType,
+        options,
+        ...(canonicalQuestion.integerOnly ? { integerOnly: true } : {}),
+      } : {}),
+    });
   }
   return missing;
 }
@@ -327,7 +376,52 @@ export async function getClientSafeComplianceReadModel(
     });
   }
 
-  const result: ClientSafeComplianceReadModel = { topics };
+  const now = new Date();
+  const [applicable, clientControls] = await Promise.all([
+    prisma.requirementApplicability.findMany({
+      where: {
+        clientId,
+        scopeType: 'COMPANY',
+        requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+        ruleVersion: { status: 'APPROVED', supersededById: null },
+      },
+      orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
+      select: { requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true, evaluationAt: true, createdAt: true, requirementVersion: { select: { title: true, requirement: { select: { key: true } }, controlMaps: { include: { controlDefinition: true } } } } },
+    }),
+    prisma.clientControl.findMany({
+      where: { clientId },
+      include: { controlDefinition: true, evidenceLinks: { include: { evidenceRecord: true } } },
+    }),
+  ]);
+  const latest = new Map<string, (typeof applicable)[number]>();
+  for (const row of applicable) {
+    const key = [row.requirementVersionId, row.ruleVersionId, row.scopeType, row.factSubjectId || ''].join(':');
+    if (!latest.has(key)) latest.set(key, row);
+  }
+  const controlByDefinition = new Map(clientControls.map((control) => [control.controlDefinitionId, control]));
+  const controlsSummary = [...latest.values()]
+    .filter((row) => row.outcome === 'APPLIES' && visibleKeys.has(row.requirementVersion.requirement.key))
+    .flatMap((row) => {
+      const topic = lookupSafeTopic(row.requirementVersion.requirement.key, isProduction, demoEnabled);
+      if (!topic) return [];
+      const controls = row.requirementVersion.controlMaps.flatMap((map) => {
+        const title = lookupSafeControlLabel(map.controlDefinition.key);
+        if (!title) return [];
+        const control = controlByDefinition.get(map.controlDefinitionId);
+        const accepted = (control?.evidenceLinks || []).filter((link) => link.evidenceRecord.status === 'ACCEPTED');
+        const current = accepted.filter((link) => isEvidenceCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
+        return {
+          title,
+          implementationStatus: control ? String(control.implementationStatus) : null,
+          lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,
+          nextReviewAt: control?.nextReviewAt?.toISOString() || null,
+          evidence: { acceptedCurrent: current.length, stale: accepted.length - current.length, missing: current.length === 0 },
+        };
+      });
+      return [{ requirementTitle: topic.portalLabel, controls }];
+    });
+
+  const result: ClientSafeComplianceReadModel = { topics, controlsSummary };
   assertClientSafe(result);
   return result;
 }

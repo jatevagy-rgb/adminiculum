@@ -5,6 +5,17 @@ import { RegisterExternalSourceArgs, IngestObservationArgs } from './types';
 
 const prisma = new PrismaClient();
 
+/**
+ * Optional, narrowly scoped authorization capability. When supplied, the caller
+ * has ALREADY authoritatively resolved the tenant boundary and the guard itself
+ * performs the authorization check. When omitted, the canonical internal
+ * `assertClientReadAccess` path is used unchanged. This is never a bypass.
+ */
+export type ObservatoryAccessGuard = (
+  actor: InternalActor,
+  clientId: string,
+) => Promise<void>;
+
 export function validateNoSecrets(config: any) {
   if (config === null || typeof config !== 'object') return;
   const forbiddenKeys = ['accesstoken', 'refreshtoken', 'apikey', 'clientsecret', 'password', 'privatekey'];
@@ -20,8 +31,24 @@ export function validateNoSecrets(config: any) {
 }
 
 export class ObservatoryIngestionService {
-  async registerExternalSource(actor: InternalActor, args: RegisterExternalSourceArgs) {
-    await assertClientReadAccess(actor, args.clientId, prisma);
+  /**
+   * Executes the typed access guard when explicitly supplied; otherwise falls
+   * back to the canonical internal authorization. Default behavior is unchanged.
+   */
+  private async authorizeClient(
+    actor: InternalActor,
+    clientId: string,
+    accessGuard?: ObservatoryAccessGuard,
+  ): Promise<void> {
+    if (accessGuard) {
+      await accessGuard(actor, clientId);
+      return;
+    }
+    await assertClientReadAccess(actor, clientId, prisma);
+  }
+
+  async registerExternalSource(actor: InternalActor, args: RegisterExternalSourceArgs, accessGuard?: ObservatoryAccessGuard) {
+    await this.authorizeClient(actor, args.clientId, accessGuard);
     validateNoSecrets(args.config);
     return await prisma.externalSourceConnection.create({
       data: {
@@ -42,8 +69,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async startDiscoveryRun(actor: InternalActor, args: { clientId: string; connectionId: string }) {
-    await assertClientReadAccess(actor, args.clientId, prisma);
+  async startDiscoveryRun(actor: InternalActor, args: { clientId: string; connectionId: string }, accessGuard?: ObservatoryAccessGuard) {
+    await this.authorizeClient(actor, args.clientId, accessGuard);
     return await prisma.discoveryRun.create({
       data: {
         clientId: args.clientId,
@@ -53,8 +80,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async completeDiscoveryRun(actor: InternalActor, args: { clientId: string; runId: string }) {
-    await assertClientReadAccess(actor, args.clientId, prisma);
+  async completeDiscoveryRun(actor: InternalActor, args: { clientId: string; runId: string }, accessGuard?: ObservatoryAccessGuard) {
+    await this.authorizeClient(actor, args.clientId, accessGuard);
     return await prisma.discoveryRun.update({
       where: { id_clientId: { id: args.runId, clientId: args.clientId } },
       data: {
@@ -64,8 +91,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async failDiscoveryRun(actor: InternalActor, args: { clientId: string; runId: string }) {
-    await assertClientReadAccess(actor, args.clientId, prisma);
+  async failDiscoveryRun(actor: InternalActor, args: { clientId: string; runId: string }, accessGuard?: ObservatoryAccessGuard) {
+    await this.authorizeClient(actor, args.clientId, accessGuard);
     return await prisma.discoveryRun.update({
       where: { id_clientId: { id: args.runId, clientId: args.clientId } },
       data: {
@@ -86,8 +113,8 @@ export class ObservatoryIngestionService {
     });
   }
 
-  async ingestObservation(actor: InternalActor, args: IngestObservationArgs) {
-    await assertClientReadAccess(actor, args.clientId, prisma);
+  async ingestObservation(actor: InternalActor, args: IngestObservationArgs, accessGuard?: ObservatoryAccessGuard) {
+    await this.authorizeClient(actor, args.clientId, accessGuard);
 
     // Verify run and connection belong to client (implied by unique constraints, but explicit check avoids opaque P2025)
     const run = await prisma.discoveryRun.findUnique({

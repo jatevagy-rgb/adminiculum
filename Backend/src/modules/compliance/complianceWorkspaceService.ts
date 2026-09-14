@@ -1,6 +1,6 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { InternalActor, assertClientReadAccess } from '../client-interaction/base';
-import { isCompanyProfileQuestion, getCompanyProfileQuestion } from '../client-workspace/companyProfileQuestionRegistry';
+import { getCompanyProfileQuestionForDefinition } from '../client-workspace/companyProfileQuestionRegistry';
 
 type Prisma = typeof defaultPrisma;
 
@@ -109,9 +109,8 @@ function factDisplayValue(fact: {
   return date ? date.slice(0, 10) : null;
 }
 
-function profileLabel(questionKey: string | null | undefined): string | null {
-  if (!questionKey || !isCompanyProfileQuestion(questionKey)) return null;
-  return getCompanyProfileQuestion(questionKey).label;
+function profileLabel(definition: { key: string; questionKey?: string | null; valueType?: string } | null | undefined): string | null {
+  return definition ? getCompanyProfileQuestionForDefinition(definition)?.label ?? null : null;
 }
 
 /**
@@ -195,7 +194,7 @@ export async function getComplianceWorkspace(
             dependencies: {
               select: {
                 factKey: true,
-                resolvedFactDefinition: { select: { questionKey: true } },
+                resolvedFactDefinition: { select: { key: true, questionKey: true, valueType: true } },
               },
             },
           },
@@ -241,7 +240,7 @@ export async function getComplianceWorkspace(
           moneyAmount: true,
           moneyCurrency: true,
           enumValue: true,
-          factDefinition: { select: { questionKey: true } },
+          factDefinition: { select: { key: true, questionKey: true, valueType: true } },
         },
       })
     : [];
@@ -256,11 +255,12 @@ export async function getComplianceWorkspace(
     );
     const persistedMissingKeys = snapshotMissingFactKeys(row.snapshotJson);
     const missingFacts: ComplianceWorkspaceMissingFact[] = (persistedMissingKeys ?? []).map((factKey) => {
-      const questionKey = dependencies.get(factKey)?.resolvedFactDefinition?.questionKey ?? null;
+      const definition = dependencies.get(factKey)?.resolvedFactDefinition;
+      const question = definition ? getCompanyProfileQuestionForDefinition(definition) : null;
       return {
         factKey,
-        label: profileLabel(questionKey),
-        profileAnswerable: isCompanyProfileQuestion(questionKey),
+        label: profileLabel(definition),
+        profileAnswerable: Boolean(question),
       };
     });
 
@@ -280,7 +280,7 @@ export async function getComplianceWorkspace(
         const clientFact = factById.get(fact.clientFactId);
         return {
           factKey: fact.factKey,
-          label: profileLabel(clientFact?.factDefinition?.questionKey),
+          label: profileLabel(clientFact?.factDefinition),
           value: clientFact ? factDisplayValue(clientFact) : null,
         };
       }),

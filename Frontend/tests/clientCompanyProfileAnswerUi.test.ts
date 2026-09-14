@@ -65,6 +65,19 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     );
   });
 
+  it("renders typed adaptive controls and truthful discovery copy", () => {
+    const src = profileSrc();
+    assert.match(src, /question\.valueType === "BOOLEAN"/);
+    assert.match(src, /question\.valueType === "ENUM"/);
+    assert.match(src, /question\.valueType === "DATE"/);
+    assert.match(src, /question\.valueType === "NUMBER"/);
+    assert.match(src, /question\.valueType === "STRING"/);
+    assert.match(src, /adat ismert ·/);
+    assert.match(src, /A jelenlegi adatok alapján nincs további tisztázandó kérdés\./);
+    assert.doesNotMatch(src, /100% megfelelés|Kitöltöttség/);
+    assert.match(src, /sectionLabel/);
+  });
+
   it("keeps mutation failures distinct from persisted-but-stale refresh failures", () => {
     const src = profileSrc();
     const answered = src.slice(src.indexOf("const handleSaveAnswer"), src.indexOf("const handleMarkUnknown"));

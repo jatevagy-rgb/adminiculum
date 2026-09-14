@@ -38,6 +38,14 @@ import {
 import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
 import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
 import { deriveProcessSignals, selectInterventions } from './interventions';
+import {
+  GROW_ASSESSMENT_SCHEMA,
+  GROW_PAIN_INTAKE_KIND,
+  observationsToGrowSignals,
+  supersedeAssessmentObservations,
+  type GrowSignal,
+  type NormalizableObservation,
+} from './observationSignals';
 import { createInitiative } from '../../client-company/service';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -162,17 +170,13 @@ export const DOMAIN_LABELS_HU: Record<string, { title: string; problem: string; 
   },
 };
 
-/** Survey intake category → problem domain. */
-export const SURVEY_CATEGORY_TO_DOMAIN: Record<string, string> = {
-  MANUAL_ADMIN: 'MANUAL_ADMIN_LOAD',
-  SLOW_APPROVAL: 'APPROVAL_DELAY',
-  DUPLICATE_DATA: 'DUPLICATE_DATA_ENTRY',
-  TOO_MANY_SYSTEMS: 'SYSTEM_SWITCHING',
-  UNCLEAR_OWNERSHIP: 'UNCLEAR_OWNERSHIP',
-  REWORK: 'REWORK',
-  UNMEASURED_COST: 'UNMEASURED_COST',
-  GENERAL_CONCERN: 'GENERAL_FLOW',
-};
+/**
+ * Survey intake category → problem domain.
+ *
+ * Owned by the fail-closed Observation→Grow normalizer and re-exported here so
+ * existing importers keep their contract. There is exactly one canonical map.
+ */
+export { SURVEY_CATEGORY_TO_DOMAIN } from './observationSignals';
 
 // ---------------------------------------------------------------------------
 // Snapshot helpers — work on the T2A metric array persisted in the snapshot.
@@ -340,6 +344,47 @@ export async function runResearchCycle(
   }
 }
 
+interface RawAssessmentObservationRow {
+  id: string;
+  observationType: string;
+  rawPayload: Prisma.JsonValue;
+  observedAt: Date;
+  sourceRecordId: string | null;
+}
+
+/**
+ * Loads exactly one (the latest) GROW_ASSESSMENT_V1 observation per
+ * (packKey, workspaceId, processId) scope, in the database.
+ *
+ * This keeps research correctness AND a hard bound: the result size is the
+ * number of assessment scopes, so neither a growing generic-survey history nor
+ * repeated retakes can truncate a scope or force the entire declared history to
+ * be loaded and sorted in memory on every run.
+ */
+async function loadLatestAssessmentObservations(
+  db: Db,
+  clientId: string,
+): Promise<RawAssessmentObservationRow[]> {
+  return db.$queryRaw<RawAssessmentObservationRow[]>`
+    SELECT DISTINCT ON (
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->'provenance'->>'workspaceId', ''),
+      COALESCE("rawPayload"->>'processId', '')
+    )
+      "id", "observationType", "rawPayload", "observedAt", "sourceRecordId"
+    FROM "observations"
+    WHERE "clientId" = ${clientId}
+      AND "observationType"::text = 'DECLARED_SURVEY'
+      AND "rawPayload"->>'schema' = ${GROW_ASSESSMENT_SCHEMA}
+    ORDER BY
+      "rawPayload"->>'packKey',
+      COALESCE("rawPayload"->'provenance'->>'workspaceId', ''),
+      COALESCE("rawPayload"->>'processId', ''),
+      "observedAt" DESC,
+      "id" DESC
+  `;
+}
+
 async function executeRun(
   actor: InternalActor,
   clientId: string,
@@ -347,10 +392,22 @@ async function executeRun(
   onlyProcessId: string | null,
   db: Db,
 ): Promise<{ diagnosisCount: number; recommendationCount: number }> {
-  const processes = await db.businessProcess.findMany({
-    where: { clientId, status: 'ACTIVE', ...(onlyProcessId ? { id: onlyProcessId } : {}) },
+  // Tenant/process OWNERSHIP, active selection and research SELECTION are three
+  // distinct concerns. Load every client process once (ownership), then narrow
+  // to ACTIVE ones (eligibility) and finally to the requested run scope.
+  // Conflating them would let a targeted run reinterpret another valid
+  // process's declared signal as unscoped, or let an archived process's stale
+  // scoped signal leak tenant-wide.
+  const clientProcesses = await db.businessProcess.findMany({
+    where: { clientId },
     orderBy: { createdAt: 'asc' },
   });
+  const clientProcessIds = new Set(clientProcesses.map((p) => p.id));
+  const clientActiveProcesses = clientProcesses.filter((p) => p.status === 'ACTIVE');
+  const clientActiveProcessIds = new Set(clientActiveProcesses.map((p) => p.id));
+  const processes = onlyProcessId
+    ? clientActiveProcesses.filter((p) => p.id === onlyProcessId)
+    : clientActiveProcesses;
 
   const snapshots = await db.processObservationSnapshot.findMany({
     where: { clientId },
@@ -361,32 +418,99 @@ async function executeRun(
     if (!latestByProcess.has(s.businessProcessId)) latestByProcess.set(s.businessProcessId, s);
   }
 
-  const declaredObs = await db.observation.findMany({
-    where: { clientId, observationType: 'DECLARED_SURVEY' },
+  // Bounded loading that stays correct:
+  // - non-superseded survey observations keep an explicit newest-50 bound and
+  //   are restricted to the canonical pain-intake kind, so assessment rows can
+  //   never fill the window and displace a valid survey (and, per the fail-closed
+  //   normalizer, a non-pain-intake declared survey contributes no signal anyway);
+  // - each assessment scope is reduced to its latest row IN THE DATABASE, so a
+  //   growing survey/retake history can neither truncate an assessment scope nor
+  //   force the whole declared history to be loaded and sorted every cycle.
+  const surveyObs = await db.observation.findMany({
+    where: {
+      clientId,
+      observationType: 'DECLARED_SURVEY',
+      rawPayload: { path: ['kind'], equals: GROW_PAIN_INTAKE_KIND },
+    },
     orderBy: { observedAt: 'desc' },
     take: 50,
   });
+  const assessmentObs = await loadLatestAssessmentObservations(db, clientId);
+  const declaredById = new Map<string, NormalizableObservation>();
+  for (const obs of [...assessmentObs, ...surveyObs]) {
+    declaredById.set(obs.id, {
+      id: obs.id,
+      observationType: obs.observationType,
+      rawPayload: obs.rawPayload,
+      observedAt: obs.observedAt,
+      sourceRecordId: obs.sourceRecordId,
+    });
+  }
+  const declaredObs = [...declaredById.values()];
 
-  const allSurveyCategories: string[] = [];
-  for (const obs of declaredObs) {
-    const payload = obs.rawPayload as { categories?: string[] } | null;
-    if (Array.isArray(payload?.categories)) allSurveyCategories.push(...payload!.categories!.map(String));
+  // Single fail-closed normalization boundary. The research engine no longer
+  // parses source-specific survey payloads or owns a category→domain map.
+  // Assessment observations are first reduced to the LATEST submission per
+  // (pack, workspace, process) scope so a retake supersedes the observation it
+  // corrects; the generic pain-intake survey is intentionally left untouched.
+  const declaredSignals: GrowSignal[] = observationsToGrowSignals(
+    supersedeAssessmentObservations(declaredObs),
+  );
+
+  // Survey categories are attributed PER OBSERVATION, so an outcome only ever
+  // sees the categories of the declarations actually attached to it. Passing
+  // every client category to every outcome would let process B's survey alter
+  // process A's intervention selection.
+  const categoriesByObservation = new Map<string, Set<string>>();
+  for (const signal of declaredSignals) {
+    if (!signal.provenance.categoryKey) continue;
+    let categories = categoriesByObservation.get(signal.observationId);
+    if (!categories) {
+      categories = new Set<string>();
+      categoriesByObservation.set(signal.observationId, categories);
+    }
+    categories.add(signal.provenance.categoryKey);
   }
 
   const metricsBySnapshot = new Map<string, Record<string, number | boolean | null>>();
   for (const s of snapshots) metricsBySnapshot.set(s.id, Object.fromEntries(metricMap(s.metrics)));
 
   const outcomes: DiagnosisRuleOutcome[] = [];
-  const surveyDomainHits = new Map<string, { observationIds: string[] }>();
-  for (const obs of declaredObs) {
-    const payload = obs.rawPayload as { categories?: string[] } | null;
-    const categories = Array.isArray(payload?.categories) ? payload!.categories! : [];
-    for (const cat of categories) {
-      const domain = SURVEY_CATEGORY_TO_DOMAIN[String(cat)] ?? 'GENERAL_FLOW';
-      const hit = surveyDomainHits.get(domain) ?? { observationIds: [] };
-      hit.observationIds.push(obs.id);
-      surveyDomainHits.set(domain, hit);
+
+  // Process-scoped declared survey grouping. A declared problem belongs to a
+  // (domainKey, businessProcessId) pair — never to a domain alone — so evidence
+  // for process B can never collapse into process A's diagnosis. The `null` key
+  // is the existing unscoped bucket (surveys submitted without a process).
+  type SurveyHit = { observationIds: string[]; businessProcessId: string | null };
+  const surveyHitsByDomain = new Map<string, Map<string | null, SurveyHit>>();
+  for (const signal of declaredSignals) {
+    let businessProcessId: string | null;
+    if (!signal.businessProcessId) {
+      // True unscoped survey: existing semantics are preserved unchanged.
+      businessProcessId = null;
+    } else if (!clientProcessIds.has(signal.businessProcessId)) {
+      // Fail-closed tenant binding: a foreign/unknown process reference is not
+      // trusted and is treated as unscoped rather than attaching to any process.
+      businessProcessId = null;
+    } else if (!clientActiveProcessIds.has(signal.businessProcessId)) {
+      // Same-client but no longer ACTIVE: stale scoped evidence is EXCLUDED, not
+      // rewritten to unscoped (which would leak it tenant-wide).
+      continue;
+    } else if (onlyProcessId && signal.businessProcessId !== onlyProcessId) {
+      // Valid ACTIVE same-client process, but outside this targeted run.
+      continue;
+    } else {
+      businessProcessId = signal.businessProcessId;
     }
+
+    let byProcess = surveyHitsByDomain.get(signal.domainKey);
+    if (!byProcess) {
+      byProcess = new Map<string | null, SurveyHit>();
+      surveyHitsByDomain.set(signal.domainKey, byProcess);
+    }
+    const hit = byProcess.get(businessProcessId) ?? { observationIds: [], businessProcessId };
+    if (!hit.observationIds.includes(signal.observationId)) hit.observationIds.push(signal.observationId);
+    byProcess.set(businessProcessId, hit);
   }
 
   for (const process of processes) {
@@ -396,25 +520,51 @@ async function executeRun(
       latest ? { id: latest.id, metrics: latest.metrics } : null,
     );
     for (const d of diags) {
-      const survey = surveyDomainHits.get(d.domainKey);
-      if (survey) {
-        d.declared = true;
-        d.sourceRefs.observationIds.push(...survey.observationIds);
+      const byProcess = surveyHitsByDomain.get(d.domainKey);
+      if (byProcess) {
+        const ids = new Set<string>();
+        // Same-process declared signals converge with this measured diagnosis.
+        const scoped = byProcess.get(process.id);
+        if (scoped) for (const id of scoped.observationIds) ids.add(id);
+        // Unscoped declared signals keep their existing "all measured processes"
+        // semantics.
+        const unscoped = byProcess.get(null);
+        if (unscoped) for (const id of unscoped.observationIds) ids.add(id);
+        if (ids.size) {
+          d.declared = true;
+          d.sourceRefs.observationIds.push(...ids);
+        }
       }
       outcomes.push(d);
     }
   }
 
-  // Survey-declared domains with no measured process counterpart still surface
-  // as declared-only diagnoses (they gate to NEEDS_MORE_DATA at most).
-  for (const [domain, hit] of surveyDomainHits) {
-    if (!outcomes.some((o) => o.domainKey === domain)) {
+  // Declared-only outcomes: one per (domain, process) bucket that did not
+  // converge with a measured diagnosis of the SAME process. A distinct process
+  // is never suppressed by another process's outcome.
+  const domainsWithMeasured = new Set(outcomes.map((o) => o.domainKey));
+  for (const [domain, byProcess] of surveyHitsByDomain) {
+    for (const [businessProcessId, hit] of byProcess) {
+      if (businessProcessId === null) {
+        // Preserve existing unscoped semantics: stand alone only when the domain
+        // has no measured diagnosis at all.
+        if (domainsWithMeasured.has(domain)) continue;
+      } else if (
+        outcomes.some((o) => o.domainKey === domain && o.sourceRefs.businessProcessId === businessProcessId)
+      ) {
+        continue;
+      }
       outcomes.push({
         domainKey: domain,
         measured: false,
         declared: true,
         severity: 'MEDIUM',
-        sourceRefs: { snapshotIds: [], observationIds: hit.observationIds, businessProcessId: null, severity: 'MEDIUM' },
+        sourceRefs: {
+          snapshotIds: [],
+          observationIds: [...hit.observationIds],
+          businessProcessId,
+          severity: 'MEDIUM',
+        },
       });
     }
   }
@@ -489,9 +639,17 @@ async function executeRun(
     const metrics = outcome.sourceRefs.snapshotIds
       .map((id) => metricsBySnapshot.get(id))
       .find((m): m is Record<string, number | boolean | null> => Boolean(m)) ?? {};
+    // Process-scoped categories: only those belonging to observations attached
+    // to THIS outcome. Process B's survey can never change process A's
+    // interventions.
+    const outcomeSurveyCategories = new Set<string>();
+    for (const obsId of outcome.sourceRefs.observationIds) {
+      const categories = categoriesByObservation.get(obsId);
+      if (categories) for (const category of categories) outcomeSurveyCategories.add(category);
+    }
     const signals = deriveProcessSignals({
       metrics,
-      surveyCategories: allSurveyCategories,
+      surveyCategories: [...outcomeSurveyCategories],
       measured: outcome.measured,
       declared: outcome.declared,
     });

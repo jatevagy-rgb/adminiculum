@@ -73,7 +73,10 @@ router.param('id', async (req: Request, res: Response, next: NextFunction, id: s
       return;
     }
     if (!req.user?.userId || !(await userCanReadCommunication(req.user.userId, req.user.role, row))) {
-      res.status(403).json({ status: 403, code: 'COMMUNICATION_ACCESS_FORBIDDEN', message: 'You do not have access to this communication.' });
+      const isLinkedCaseReassignment = req.method === 'POST' && req.path.endsWith('/link-case') && Boolean(row.caseId);
+      res.status(403).json(isLinkedCaseReassignment
+        ? { status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to the currently linked case.' }
+        : { status: 403, code: 'COMMUNICATION_ACCESS_FORBIDDEN', message: 'You do not have access to this communication.' });
       return;
     }
     (req as any).communicationAccess = row;
@@ -626,7 +629,7 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
 
     const current = await prisma.communication.findUnique({
       where: { id: String(id) },
-      select: { id: true, clientId: true },
+      select: { id: true, clientId: true, caseId: true },
     });
     if (!current) {
       res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
@@ -635,6 +638,20 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
     if (current.clientId && current.clientId !== caseData.clientId) {
       res.status(409).json({ status: 409, code: 'CLIENT_CASE_MISMATCH', message: 'Communication client and case client must match.' });
       return;
+    }
+    if (current.caseId && current.caseId !== caseData.id && !(await userCanReadCase(current.caseId, req.user.userId, req.user.role))) {
+      res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to the currently linked case.' });
+      return;
+    }
+    if (current.caseId && current.caseId !== caseData.id) {
+      const conflictingTask = await prisma.task.findFirst({
+        where: { sourceCommunicationId: current.id, caseId: { not: caseData.id } },
+        select: { id: true },
+      });
+      if (conflictingTask) {
+        res.status(409).json({ status: 409, code: 'COMMUNICATION_TASK_CASE_MISMATCH', message: 'A linked task belongs to the current case; move the task relationship before changing the communication case.' });
+        return;
+      }
     }
 
     const communication = await prisma.communication.update({
@@ -651,7 +668,7 @@ router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, asy
         communicationId: communication.id,
         subject: communication.subject,
         action: 'linked_to_case',
-        previousCaseId: null
+        previousCaseId: current.caseId
       }
     });
 

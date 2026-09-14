@@ -38,7 +38,7 @@ describe('compliance workspace read model (static)', () => {
   it('projects missing information only from the persisted snapshot missingFactKeys', () => {
     expect(service).toContain('snapshotMissingFactKeys');
     expect(service).toContain('resolvedFactDefinition');
-    expect(service).toContain('isCompanyProfileQuestion');
+    expect(service).toContain('getCompanyProfileQuestionForDefinition');
     // Unconsumed dependencies must not be treated as proof of a gap.
     expect(service).not.toMatch(/if \(usedKeys\.has/);
   });

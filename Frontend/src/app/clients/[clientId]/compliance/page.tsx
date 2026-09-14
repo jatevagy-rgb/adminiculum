@@ -7,12 +7,13 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import {
   ComplianceOverviewPanel,
+  ComplianceControlsSection,
   ComplianceProposalPanel,
   complianceOutcomeClass,
   complianceOutcomeLabels,
   complianceScopeLabels,
 } from "@/components/clients/compliance/ComplianceOverview";
-import type { ComplianceFindingView, ComplianceApplicabilityStatus } from "@/components/clients/compliance/ComplianceOverview";
+import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlsState } from "@/components/clients/compliance/ComplianceOverview";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
 import { getClient, type Client } from "@/lib/api";
@@ -163,6 +164,7 @@ export default function ClientCompliancePage() {
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(true);
+  const [controlsState, setControlsState] = useState<ComplianceControlsState>({ status: "loading" });
   const [workspace, setWorkspace] = useState<ComplianceWorkspace | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
@@ -186,9 +188,25 @@ export default function ClientCompliancePage() {
   const loadCompliance = useCallback(async () => {
     setComplianceLoading(true);
     setComplianceError(null);
-    try { setComplianceFindings((await complianceOverviewApi.getOverview(clientId)).findings); }
-    catch { setComplianceError("A compliance áttekintés jelenleg nem tölthető be."); }
-    finally { setComplianceLoading(false); }
+    setControlsState({ status: "loading" });
+    try {
+      const [overviewResult, controlsResult] = await Promise.allSettled([
+        complianceOverviewApi.getOverview(clientId),
+        complianceOverviewApi.getControls(clientId),
+      ]);
+      if (overviewResult.status === "fulfilled") {
+        setComplianceFindings(overviewResult.value.findings);
+      } else {
+        setComplianceError("A compliance áttekintés jelenleg nem tölthető be.");
+      }
+      if (controlsResult.status === "fulfilled") {
+        setControlsState({ status: "success", summary: controlsResult.value });
+      } else {
+        setControlsState({ status: "error", message: "Az intézkedések és bizonyítékok jelenleg nem tölthetők be." });
+      }
+    } finally {
+      setComplianceLoading(false);
+    }
   }, [clientId]);
 
   const loadWorkspace = useCallback(async () => {
@@ -361,6 +379,7 @@ export default function ClientCompliancePage() {
                     error={complianceError}
                     onRetry={() => { void loadCompliance(); }}
                   />
+                  <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} />
 
                   {/* 5. Javasolt műveletek */}
                   <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />
