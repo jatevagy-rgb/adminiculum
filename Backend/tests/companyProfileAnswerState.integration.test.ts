@@ -79,7 +79,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
 
     const adaptiveRequirement = await createRequirement({ key: `ANSWER_STATE_BOOLEAN_${suffix}`, jurisdictionCode: 'HU', domainCode: `ANSWER_STATE_${suffix}`, db });
     await db.requirement.update({ where: { id: adaptiveRequirement.id }, data: { id: adaptiveRequirementId } });
-    await createRequirementVersion({ requirementId: adaptiveRequirementId, versionKey: 'V1', title: 'Regulated activity', normativeStatement: 'A regulated activity flag is required.', effectiveFrom: new Date('2026-01-01T00:00:00Z'), db });
+    await createRequirementVersion({ requirementId: adaptiveRequirementId, versionKey: 'V1', title: 'Regulated activity', normativeStatement: 'A regulated activity flag is required.', effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', db });
     await db.requirementVersion.update({ where: { requirementId_versionKey: { requirementId: adaptiveRequirementId, versionKey: 'V1' } }, data: { id: adaptiveRequirementVersionId } });
     await addRequirementCitation({ requirementVersionId: adaptiveRequirementVersionId, legalSourceVersionId: sourceVersionId, supportRole: 'PRIMARY', db });
     await approveRequirementVersion(adaptiveRequirementVersionId, adminId, db);
