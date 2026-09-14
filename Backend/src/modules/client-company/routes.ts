@@ -20,6 +20,7 @@ import {
 } from '../company-growth/observation/processObservationService';
 import { submitSurveyIntake, listSurveyIntakes } from '../company-observatory/intake';
 import { ObservatoryIngestionService } from '../company-observatory/ingestion/service';
+import { getDiagnosticWorkbench } from '../company-growth/diagnostic/workbenchService';
 
 const observatory = new ObservatoryIngestionService();
 
@@ -235,6 +236,9 @@ clientCompanyRouter.get('/clients/:clientId/observatory/runs/:runId/observations
 clientCompanyRouter.get('/clients/:clientId/grow/home', async (req, res) => {
   try { res.json(await research.listGrowHome(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
 });
+clientCompanyRouter.get('/clients/:clientId/grow/diagnostic-workbench', async (req, res) => {
+  try { res.json(await getDiagnosticWorkbench(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
+});
 clientCompanyRouter.get('/clients/:clientId/grow/evidence', async (req, res) => {
   try { res.json({ items: await listEvidence(actor(req), String(req.params.clientId)) }); } catch (e) { fail(res, e); }
 });
@@ -313,4 +317,3 @@ clientCompanyRouter.get('/clients/:clientId/processes/:processId/observations', 
 clientCompanyRouter.get('/clients/:clientId/processes/:processId/observations/latest', async (req, res) => {
   try { res.json(await getLatestProcessObservation(actor(req), String(req.params.clientId), String(req.params.processId))); } catch (e) { fail(res, e); }
 });
-
