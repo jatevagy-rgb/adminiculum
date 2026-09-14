@@ -57,6 +57,7 @@ describe("Universal mailbox frontend contract", () => {
     assert.match(src, /buildReplyAllRecipients/);
     assert.match(src, /buildForwardBody/);
     assert.match(src, /replyToCommunicationId: composerMode === "forward" \? null : item\.id/);
+    assert.match(src, /contextCommunicationId: composerMode === "forward" \? item\.id : null/);
     assert.doesNotMatch(src, /cc: composerMode === "replyAll" && detail\?\.recipientEmail/);
     const sendBlock = src.slice(src.indexOf("await sendMailboxMessage({"), src.indexOf("});", src.indexOf("await sendMailboxMessage({")));
     assert.doesNotMatch(sendBlock, /\b(caseId|clientId)\s*:/);

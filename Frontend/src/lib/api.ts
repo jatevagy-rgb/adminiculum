@@ -4197,6 +4197,7 @@ export async function sendMailboxMessage(data: {
   subject: string;
   bodyText: string;
   replyToCommunicationId?: string | null;
+  contextCommunicationId?: string | null;
 }): Promise<{ communication: CommunicationItem }> {
   const { mailboxId, ...payload } = data;
   return fetchApi<{ communication: CommunicationItem }>(`/mailboxes/${encodeURIComponent(mailboxId)}/send`, {

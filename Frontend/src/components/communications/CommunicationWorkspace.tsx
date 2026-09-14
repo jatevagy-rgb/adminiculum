@@ -662,6 +662,7 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
         subject: `${composerMode === "forward" ? "Fwd" : "Re"}: ${item.subject || "Nincs tárgy"}`,
         bodyText: composerBody.trim(),
         replyToCommunicationId: composerMode === "forward" ? null : item.id,
+        contextCommunicationId: composerMode === "forward" ? item.id : null,
       });
       setComposerFeedback("Az üzenetet elküldtük.");
       setComposerMode(null);
