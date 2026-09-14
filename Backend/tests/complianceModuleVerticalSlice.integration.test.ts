@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { answerCompanyProfileQuestion } from '../src/modules/client-workspace/companyProfileAnswerService';
 import { getControlEvidenceJourney, submitControlEvidenceAnswer } from '../src/modules/client-workspace/companyProfileEvidenceService';
 import { seedComplianceModuleRuleFamilies } from '../src/modules/compliance/complianceModuleSeedingService';
+import { provisionComplianceModuleRules } from '../src/modules/compliance/complianceModuleProvisioning';
 import { createTypedFactInTx } from '../src/modules/compliance/typedFactMutationService';
 
 const databaseUrl = process.env.CLIENT_INTERACTION_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
@@ -69,6 +70,7 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     await db.evidenceControlLink.deleteMany({ where: { clientId } });
     await db.evidenceRecord.deleteMany({ where: { clientId } });
     await db.clientControl.deleteMany({ where: { clientId } });
+    await db.clientDocumentPublication.deleteMany({ where: { clientId } });
     await db.documentVersion.deleteMany({ where: { documentId } });
     await db.document.deleteMany({ where: { id: documentId } });
     await db.case.deleteMany({ where: { id: caseId } });
@@ -176,5 +178,52 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     ]));
     expect(JSON.stringify(journey)).not.toContain('evidenceRecordId');
     expect(JSON.stringify(journey)).not.toContain('clientControlId');
+  });
+
+  it('PRODUCTION_RULE_PROVISIONING: the production entry point is additive and idempotent', async () => {
+    const provisioned = await provisionComplianceModuleRules(db, adminId);
+    expect(provisioned.requirements).toBeGreaterThanOrEqual(5);
+    expect(provisioned.skipped).toBeGreaterThanOrEqual(5);
+    expect(await db.factDefinition.count({ where: { key: 'employee_count' } })).toBeGreaterThanOrEqual(1);
+    expect(await db.applicabilityRuleVersion.count({ where: { requirementVersion: { requirement: { key: { in: ['GDPR_GENERAL_SCOPE', 'WHISTLEBLOWING_INTERNAL_CHANNEL', 'NIS2_SECURITY_CONTROLS'] } } } } })).toBe(3);
+  });
+
+  it('SME_DB_METADATA_CORRECT: eu_sme_size_class is LEGAL_CLASSIFICATION_REQUIRED', async () => {
+    const definition = await db.factDefinition.findUniqueOrThrow({ where: { key: 'eu_sme_size_class' } });
+    expect(String(definition.determinationMethod)).toBe('LEGAL_CLASSIFICATION_REQUIRED');
+  });
+
+  it('EVIDENCE_RELEVANCE_GATING: applies / does-not-apply / insufficient drive visibility', async () => {
+    await answer('personal_data_processing', { status: 'ANSWERED', booleanValue: true });
+    let journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    expect(journey.items.find((item) => item.controlKey === 'C-DATA-002')?.relevance).toBe('APPLIES');
+
+    await answer('personal_data_processing', { status: 'ANSWERED', booleanValue: false });
+    journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    expect(journey.items.find((item) => item.controlKey === 'C-DATA-002')?.relevance).toBe('DOES_NOT_APPLY');
+
+    await answer('personal_data_processing', { status: 'UNKNOWN' });
+    journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    expect(journey.items.find((item) => item.controlKey === 'C-DATA-002')?.relevance).toBe('INSUFFICIENT_FACTS');
+  });
+
+  it('EVIDENCE_FRONTEND_CONTRACT: journey exposes relevance and reusable documents', async () => {
+    await db.clientDocumentPublication.create({
+      data: {
+        caseId,
+        clientId,
+        documentId,
+        documentVersionId,
+        status: 'PUBLISHED',
+        clientFacingTitle: 'Adatkezelési tájékoztató (közzétéve)',
+        preparedById: adminId,
+        audienceSnapshot: {},
+        sourceFingerprint: 'vertical-slice',
+      } as never,
+    });
+    const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    expect(journey.items[0]).toEqual(expect.objectContaining({ controlKey: expect.any(String), questionHu: expect.any(String), relevance: expect.any(String) }));
+    expect(journey.reusableDocuments.some((doc) => doc.documentVersionId === documentVersionId)).toBe(true);
+    expect(journey.reusableDocuments.every((doc) => typeof doc.documentVersionId === 'string' && typeof doc.label === 'string')).toBe(true);
   });
 });

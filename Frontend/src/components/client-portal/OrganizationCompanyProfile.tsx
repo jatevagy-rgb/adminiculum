@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  answerPortalCompanyProfileEvidence,
   answerPortalCompanyProfileScreen,
   getPortalCompanyProfileDiscovery,
+  getPortalCompanyProfileEvidence,
   getPortalCompanyProfileTeaor25Options,
   type PortalCompanyProfileAnswerPayload,
   type PortalCompanyProfileDiscovery,
+  type PortalCompanyProfileEvidenceItem,
+  type PortalCompanyProfileEvidenceJourney,
   type PortalCompanyProfileQuestion,
   type PortalCompanyProfileScreen,
+  type PortalCompanyProfileReusableDocument,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
 
@@ -93,6 +98,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
   const [actionError, setActionError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<PortalCompanyProfileEvidenceJourney | null>(null);
 
   const refreshDiscovery = useCallback(async () => {
     const result = await getPortalCompanyProfileDiscovery();
@@ -100,17 +106,26 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     return result;
   }, []);
 
+  const refreshEvidence = useCallback(async () => {
+    try {
+      setEvidence(await getPortalCompanyProfileEvidence());
+    } catch {
+      setEvidence(null);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       await refreshDiscovery();
+      await refreshEvidence();
     } catch (err) {
       setError(clientSafeError(err));
     } finally {
       setLoading(false);
     }
-  }, [refreshDiscovery]);
+  }, [refreshDiscovery, refreshEvidence]);
 
   useEffect(() => {
     void load();
@@ -216,6 +231,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
       await answerPortalCompanyProfileScreen(activeScreen.screenKey, facts);
       saved = true;
       await refreshDiscovery();
+      await refreshEvidence();
       await onProfileUpdated?.();
       setSuccessMessage("A válaszokat elmentettük.");
       if (advance) setActiveIndex((index) => Math.min(index + 1, Math.max(0, screens.length - 1)));
@@ -411,7 +427,107 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
           </div>
         </div>
       )}
+
+      {evidence ? (
+        <div className="mt-6 border-t border-stone-200 pt-5" data-testid="company-profile-evidence">
+          <h3 className="font-semibold text-stone-950">Dokumentumok és intézkedések</h3>
+          <p className="mt-1 text-sm text-stone-600">
+            A rátok vonatkozó területeken ellenőrizzük, hogy rendelkezésre áll-e a szükséges dokumentum vagy intézkedés.
+          </p>
+          <div className="mt-4 space-y-4">
+            {evidence.items
+              .filter((item) => item.relevance === "APPLIES")
+              .map((item) => (
+                <EvidenceQuestion key={item.controlKey} item={item} documents={evidence.reusableDocuments} onAnswered={() => void refreshEvidence()} />
+              ))}
+            {evidence.items.some((item) => item.relevance === "LEGAL_REVIEW_REQUIRED") ? (
+              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                Egyes területek a tevékenység vagy méret miatt jogi pontosítást igényelnek, ezért azokat ügyvédünk ellenőrzi.
+              </p>
+            ) : null}
+            {evidence.items.length > 0 && evidence.items.every((item) => item.relevance === "INSUFFICIENT_FACTS" || item.relevance === "DOES_NOT_APPLY") ? (
+              <p className="text-sm text-stone-500">A dokumentumokkal kapcsolatos kérdések a vállalati profil kitöltése után jelennek meg.</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function EvidenceQuestion({
+  item,
+  documents,
+  onAnswered,
+}: {
+  item: PortalCompanyProfileEvidenceItem;
+  documents: PortalCompanyProfileReusableDocument[];
+  onAnswered: () => void;
+}) {
+  const [mode, setMode] = useState<"YES" | "NO" | "UNKNOWN" | null>(null);
+  const [documentVersionId, setDocumentVersionId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (answer: "YES" | "NO" | "UNKNOWN") => {
+    if (answer === "YES" && !documentVersionId) {
+      setError("Válassz egy meglévő dokumentumot.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await answerPortalCompanyProfileEvidence(item.controlKey, {
+        answer,
+        ...(answer === "YES" ? { documentVersionId } : {}),
+      });
+      setMode(null);
+      onAnswered();
+    } catch (err) {
+      setError(clientSafeError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-stone-200 p-4">
+      <p className="text-sm font-semibold text-stone-900">{item.questionHu}</p>
+      <p className="mt-1 text-xs text-stone-500">{item.stateHu}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setMode("YES")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
+          Igen
+        </button>
+        <button type="button" onClick={() => void submit("NO")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
+          Nem
+        </button>
+        <button type="button" onClick={() => void submit("UNKNOWN")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">
+          Nem tudom
+        </button>
+      </div>
+      {mode === "YES" ? (
+        <div className="mt-3">
+          {documents.length ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <select className={inputClass} value={documentVersionId} onChange={(event) => setDocumentVersionId(event.target.value)} disabled={busy}>
+                <option value="">Válassz dokumentumot…</option>
+                {documents.map((doc) => (
+                  <option key={doc.documentVersionId} value={doc.documentVersionId}>
+                    {doc.label}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={() => void submit("YES")} disabled={busy || !documentVersionId} className="rounded-full bg-stone-950 px-4 py-1.5 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50">
+                {busy ? "Mentés…" : "Mentés"}
+              </button>
+            </div>
+          ) : (
+            <p className="text-xs text-stone-500">Nincs elérhető dokumentum a kiválasztáshoz.</p>
+          )}
+        </div>
+      ) : null}
+      {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+    </div>
   );
 }
 

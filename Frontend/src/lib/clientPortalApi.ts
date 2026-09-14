@@ -924,3 +924,70 @@ export async function getPortalCompanyProfileTeaor25Options(query: string) {
     },
   );
 }
+
+// --- COMPANY PROFILE 2.0 — CONTROL / EVIDENCE FOLLOW-UP -------------------
+
+export type PortalEvidenceRelevance =
+  | "APPLIES"
+  | "LEGAL_REVIEW_REQUIRED"
+  | "DOES_NOT_APPLY"
+  | "INSUFFICIENT_FACTS";
+
+export type PortalCompanyProfileEvidenceItem = {
+  controlKey: string;
+  module: "DATA" | "WHISTLEBLOWING" | "CYBER";
+  questionHu: string;
+  relevance: PortalEvidenceRelevance;
+  implemented: boolean;
+  evidenceLinked: boolean;
+  stateHu: string;
+};
+
+export type PortalCompanyProfileReusableDocument = {
+  documentVersionId: string;
+  label: string;
+};
+
+export type PortalCompanyProfileEvidenceJourney = {
+  items: PortalCompanyProfileEvidenceItem[];
+  reusableDocuments: PortalCompanyProfileReusableDocument[];
+};
+
+export type PortalCompanyProfileEvidenceAnswer = {
+  answer: "YES" | "NO" | "UNKNOWN";
+  documentVersionId?: string;
+};
+
+export type PortalCompanyProfileEvidenceResult = {
+  controlKey: string;
+  module: string;
+  route: "UPLOAD_OR_REUSE_DOCUMENT" | "MISSING_CONTROL_EVIDENCE" | "LAWYER_REVIEW";
+  messageHu: string;
+  implemented: boolean;
+  documentVersionId: string | null;
+};
+
+export async function getPortalCompanyProfileEvidence() {
+  return fetchApi<PortalCompanyProfileEvidenceJourney>(
+    "/client-portal/org/company-profile/evidence",
+    {
+      authContext: "customer",
+      suppressErrorStatuses: [401, 403, 404, 503],
+      suppressErrorLogging: true,
+    },
+  );
+}
+
+export async function answerPortalCompanyProfileEvidence(
+  controlKey: string,
+  answer: PortalCompanyProfileEvidenceAnswer,
+) {
+  return fetchApi<PortalCompanyProfileEvidenceResult>(
+    `/client-portal/org/company-profile/evidence/${encodeURIComponent(controlKey)}`,
+    {
+      authContext: "customer",
+      method: "PUT",
+      body: JSON.stringify(answer),
+    },
+  );
+}

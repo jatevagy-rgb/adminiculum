@@ -353,6 +353,25 @@ app.use('/api/v1/notifications', notificationsRoutes);
 import sharepointRoutes from './modules/sharepoint/routes';
 app.use('/api/v1/sharepoint', sharepointRoutes);
 
+import { prisma } from './prisma/prisma.service';
+import { provisionComplianceModuleRules } from './modules/compliance/complianceModuleProvisioning';
+
+// Idempotent, additive baseline compliance provisioning. Runs on every boot so a
+// normal deploy surfaces the three representative verticals (GDPR /
+// whistleblowing / NIS2) without a human running a test helper. Failures are
+// logged and self-heal on the next boot rather than taking the API down.
+provisionComplianceModuleRules(prisma)
+  .then((result) => {
+    console.log(
+      `[Startup] compliance module provisioning domains=${result.domains} requirements=${result.requirements} ruleVersions=${result.ruleVersions} controls=${result.controlDefinitions} skipped=${result.skipped}`,
+    );
+  })
+  .catch((error: unknown) => {
+    console.error(
+      `[Startup] compliance module provisioning failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ message: 'Endpoint not found' });
 });
