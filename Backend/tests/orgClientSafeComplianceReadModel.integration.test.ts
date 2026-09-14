@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { getClientSafeComplianceReadModel } from '../src/modules/compliance/clientSafeComplianceService';
+import { createEvidenceRecord, getControlCoverage, linkEvidenceToControl, reviewEvidenceRecord } from '../src/modules/compliance/controlEvidenceService';
 
 const databaseUrl = process.env.PHASE7CB_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -18,6 +19,8 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   let sharedReqId: string;
   let sharedVersionId: string;
   let sharedRuleId: string;
+  let portalControlDefinitionId: string;
+  let unknownControlDefinitionId: string;
 
   let demoReqId: string;
   let demoVersionId: string;
@@ -27,6 +30,8 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   const createdVersionIds: string[] = [];
   const createdRuleIds: string[] = [];
   const createdRequirementIds: string[] = [];
+  const originalVersionStates = new Map<string, { title: string; status: string; sourceSupportState: string }>();
+  const originalRuleStates = new Map<string, { status: string }>();
   const createdDependencyIds: string[] = [];
   const createdDefinitionIds: string[] = [];
 
@@ -42,9 +47,12 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     });
     if (!version) {
       version = await db.requirementVersion.create({
-        data: { id: crypto.randomUUID(), requirementId: req.id, versionKey: 'V1', title, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z') },
+        data: { id: crypto.randomUUID(), requirementId: req.id, versionKey: 'V1', title, normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00Z'), sourceSupportState: 'SUFFICIENT', status: 'APPROVED' },
       });
       createdVersionIds.push(version.id);
+    } else if (version.title !== title || version.status !== 'APPROVED' || version.sourceSupportState !== 'SUFFICIENT') {
+      originalVersionStates.set(version.id, { title: version.title, status: String(version.status), sourceSupportState: String(version.sourceSupportState) });
+      version = await db.requirementVersion.update({ where: { id: version.id }, data: { title, status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
     }
 
     let rule = await db.applicabilityRuleVersion.findFirst({
@@ -52,9 +60,12 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     });
     if (!rule) {
       rule = await db.applicabilityRuleVersion.create({
-        data: { id: crypto.randomUUID(), requirementVersionId: version.id, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(ruleDigestSeed) },
+        data: { id: crypto.randomUUID(), requirementVersionId: version.id, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: hex64(ruleDigestSeed), status: 'APPROVED' },
       });
       createdRuleIds.push(rule.id);
+    } else if (rule.status !== 'APPROVED') {
+      originalRuleStates.set(rule.id, { status: String(rule.status) });
+      rule = await db.applicabilityRuleVersion.update({ where: { id: rule.id }, data: { status: 'APPROVED' } });
     }
 
     return { reqId: req.id, versionId: version.id, ruleId: rule.id };
@@ -65,10 +76,24 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     await db.complianceDomain.create({ data: { code: domainCode, label: 'Org Safe Test' } }).catch(() => {});
     await db.user.upsert({ where: { id: adminId }, create: { id: adminId, email: `orgsafe-admin-${suiteSuffix}@example.invalid`, name: 'OrgSafe Admin', role: 'ADMIN' }, update: {} });
 
-    const shared = await ensureRequirementChain('GDPR_DATA_PROCESSING', 'Adatvédelmi feldolgozás', 'shared-rule');
+    const shared = await ensureRequirementChain('GDPR_DATA_PROCESSING', 'INTERNAL WORKFORCE REQUIREMENT WORDING — MUST NOT LEAK', 'shared-rule');
     sharedReqId = shared.reqId;
     sharedVersionId = shared.versionId;
     sharedRuleId = shared.ruleId;
+    portalControlDefinitionId = crypto.randomUUID();
+    unknownControlDefinitionId = crypto.randomUUID();
+    await db.controlDefinition.create({
+      data: { id: portalControlDefinitionId, key: 'GDPR_DATA_PROCESSING_CONTROL', title: 'INTERNAL CONTROL TITLE — MUST NOT LEAK', type: 'LEGAL' },
+    });
+    await db.controlDefinition.create({
+      data: { id: unknownControlDefinitionId, key: `portal-scope-${suiteSuffix}`, title: 'UNKNOWN INTERNAL CONTROL TITLE — MUST NOT LEAK', type: 'LEGAL' },
+    });
+    await db.requirementControlMap.create({
+      data: { requirementVersionId: sharedVersionId, controlDefinitionId: portalControlDefinitionId },
+    });
+    await db.requirementControlMap.create({
+      data: { requirementVersionId: sharedVersionId, controlDefinitionId: unknownControlDefinitionId },
+    });
 
     const demo = await ensureRequirementChain('DEMO_SAMPLE_TOPIC', 'Demó téma', 'demo-rule');
     demoReqId = demo.reqId;
@@ -80,15 +105,25 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     if (testClients.length > 0) {
       await db.assessmentFinding.deleteMany({ where: { clientId: { in: testClients } } });
       await db.requirementApplicability.deleteMany({ where: { clientId: { in: testClients } } });
+      await db.clientControl.deleteMany({ where: { clientId: { in: testClients } } });
       await db.client.deleteMany({ where: { id: { in: testClients } } });
     }
+    await db.requirementControlMap.deleteMany({ where: { controlDefinitionId: { in: [portalControlDefinitionId, unknownControlDefinitionId] } } });
     if (createdRuleIds.length > 0) {
       await db.applicabilityRuleFactDependency.deleteMany({ where: { id: { in: createdDependencyIds } } });
       await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: createdRuleIds } } });
     }
+    for (const [id, state] of originalRuleStates) {
+      await db.applicabilityRuleVersion.update({ where: { id }, data: { status: state.status as never } });
+    }
     if (createdVersionIds.length > 0) {
       await db.requirementVersion.deleteMany({ where: { id: { in: createdVersionIds } } });
     }
+    for (const [id, state] of originalVersionStates) {
+      await db.requirementVersion.update({ where: { id }, data: { title: state.title, status: state.status as never, sourceSupportState: state.sourceSupportState as never } });
+    }
+    await db.controlDefinition.delete({ where: { id: portalControlDefinitionId } }).catch(() => {});
+    await db.controlDefinition.delete({ where: { id: unknownControlDefinitionId } }).catch(() => {});
     if (createdRequirementIds.length > 0) {
       await db.requirement.deleteMany({ where: { id: { in: createdRequirementIds } } });
     }
@@ -300,6 +335,59 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     const result = await getClientSafeComplianceReadModel(clientId, true, false, db);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('Employee finding');
+  });
+
+  it('PORTAL_COMPANY_SCOPE_ONLY, EMPLOYEE_SCOPE_PORTAL_EXCLUDED, OTHER_SCOPE_PORTAL_EXCLUDED, NO_DUPLICATE_PORTAL_CONTROL_PER_SUBJECT, WORKFORCE_SCOPE_BEHAVIOR_PRESERVED', async () => {
+    const clientId = await createTestClient('control-scopes');
+    await db.clientControl.create({ data: { clientId, controlDefinitionId: portalControlDefinitionId } });
+    await db.clientControl.create({ data: { clientId, controlDefinitionId: unknownControlDefinitionId } });
+    const futureEvidence = await createEvidenceRecord({ userId: adminId, role: 'ADMIN' }, clientId, {
+      sourceType: 'EXTERNAL_REFERENCE',
+      title: 'Future portal evidence',
+      externalReference: 'https://example.invalid/future-portal',
+      validFrom: new Date(Date.now() + 86400000),
+    }, db);
+    await reviewEvidenceRecord({ userId: adminId, role: 'ADMIN' }, clientId, futureEvidence.id, { status: 'ACCEPTED' }, db);
+    const portalControl = await db.clientControl.findFirstOrThrow({ where: { clientId, controlDefinitionId: portalControlDefinitionId } });
+    await linkEvidenceToControl({ userId: adminId, role: 'ADMIN' }, clientId, portalControl.id, futureEvidence.id, db);
+    const scopeSnapshot = (scopeType: 'COMPANY' | 'EMPLOYEE' | 'WORKPLACE_SITE', factSubjectId: string | null, evaluationAt: Date) => ({
+      clientId,
+      requirementVersionId: sharedVersionId,
+      ruleVersionId: sharedRuleId,
+      ruleDigest: hex64(`scope-${scopeType}-${factSubjectId || 'company'}-${clientId}`),
+      outcome: 'APPLIES' as const,
+      scopeType: scopeType as never,
+      factSubjectId,
+      evaluationAt,
+      sourceSupportState: 'SUFFICIENT' as const,
+      specialistRequirement: 'NONE' as const,
+      schemaVersion: 'phase6-requirement-applicability/v1',
+      snapshotJson: {},
+      snapshotDigest: hex64(`scope-snapshot-${scopeType}-${factSubjectId || 'company'}-${clientId}`),
+    });
+    await db.requirementApplicability.createMany({
+      data: [
+        scopeSnapshot('COMPANY', null, new Date('2026-09-14T10:00:00Z')),
+        scopeSnapshot('EMPLOYEE', crypto.randomUUID(), new Date('2026-09-14T10:01:00Z')),
+        scopeSnapshot('WORKPLACE_SITE', crypto.randomUUID(), new Date('2026-09-14T10:02:00Z')),
+      ],
+    });
+
+    const portal = await getClientSafeComplianceReadModel(clientId, true, false, db);
+    expect(portal.controlsSummary).toHaveLength(1);
+    expect(portal.controlsSummary[0].controls).toHaveLength(1);
+    expect(portal.controlsSummary[0].controls[0].evidence.acceptedCurrent).toBe(0);
+    expect(portal.controlsSummary[0].controls[0].evidence.missing).toBe(true);
+    expect(portal.controlsSummary[0].requirementTitle).toBe('Adatvédelmi feldolgozás');
+    expect(portal.controlsSummary[0].controls[0].title).toBe('Adatvédelmi intézkedés');
+    const serialized = JSON.stringify(portal);
+    expect(serialized).not.toContain('INTERNAL WORKFORCE REQUIREMENT WORDING — MUST NOT LEAK');
+    expect(serialized).not.toContain('INTERNAL CONTROL TITLE — MUST NOT LEAK');
+    expect(serialized).not.toContain('UNKNOWN INTERNAL CONTROL TITLE — MUST NOT LEAK');
+    const workforce = await getControlCoverage({ userId: adminId, role: 'ADMIN' }, clientId, db);
+    expect(workforce.requirements).toHaveLength(3);
+    expect(workforce.requirements[0].title).toBe('INTERNAL WORKFORCE REQUIREMENT WORDING — MUST NOT LEAK');
+    expect(workforce.requirements[0].controls.map((control) => control.title)).toContain('INTERNAL CONTROL TITLE — MUST NOT LEAK');
   });
 
   it('maps INSUFFICIENT_FACTS to MORE_INFORMATION_NEEDED', async () => {

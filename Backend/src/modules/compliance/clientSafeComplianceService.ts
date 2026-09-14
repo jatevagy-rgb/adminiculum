@@ -25,7 +25,8 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
-import { lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
+import { lookupSafeControlLabel, lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
+import { isEvidenceCurrent } from './controlEvidenceService';
 import {
   getCompanyProfileQuestionForDefinition,
   type CompanyProfileQuestion,
@@ -74,6 +75,18 @@ export interface ClientSafeComplianceTopicDto {
 
 export interface ClientSafeComplianceReadModel {
   topics: ClientSafeComplianceTopicDto[];
+  controlsSummary: ClientSafeControlSummaryDto[];
+}
+
+export interface ClientSafeControlSummaryDto {
+  requirementTitle: string;
+  controls: Array<{
+    title: string;
+    implementationStatus: string | null;
+    lastReviewedAt: string | null;
+    nextReviewAt: string | null;
+    evidence: { acceptedCurrent: number; stale: number; missing: boolean };
+  }>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -363,7 +376,52 @@ export async function getClientSafeComplianceReadModel(
     });
   }
 
-  const result: ClientSafeComplianceReadModel = { topics };
+  const now = new Date();
+  const [applicable, clientControls] = await Promise.all([
+    prisma.requirementApplicability.findMany({
+      where: {
+        clientId,
+        scopeType: 'COMPANY',
+        requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+        ruleVersion: { status: 'APPROVED', supersededById: null },
+      },
+      orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
+      select: { requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true, evaluationAt: true, createdAt: true, requirementVersion: { select: { title: true, requirement: { select: { key: true } }, controlMaps: { include: { controlDefinition: true } } } } },
+    }),
+    prisma.clientControl.findMany({
+      where: { clientId },
+      include: { controlDefinition: true, evidenceLinks: { include: { evidenceRecord: true } } },
+    }),
+  ]);
+  const latest = new Map<string, (typeof applicable)[number]>();
+  for (const row of applicable) {
+    const key = [row.requirementVersionId, row.ruleVersionId, row.scopeType, row.factSubjectId || ''].join(':');
+    if (!latest.has(key)) latest.set(key, row);
+  }
+  const controlByDefinition = new Map(clientControls.map((control) => [control.controlDefinitionId, control]));
+  const controlsSummary = [...latest.values()]
+    .filter((row) => row.outcome === 'APPLIES' && visibleKeys.has(row.requirementVersion.requirement.key))
+    .flatMap((row) => {
+      const topic = lookupSafeTopic(row.requirementVersion.requirement.key, isProduction, demoEnabled);
+      if (!topic) return [];
+      const controls = row.requirementVersion.controlMaps.flatMap((map) => {
+        const title = lookupSafeControlLabel(map.controlDefinition.key);
+        if (!title) return [];
+        const control = controlByDefinition.get(map.controlDefinitionId);
+        const accepted = (control?.evidenceLinks || []).filter((link) => link.evidenceRecord.status === 'ACCEPTED');
+        const current = accepted.filter((link) => isEvidenceCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
+        return {
+          title,
+          implementationStatus: control ? String(control.implementationStatus) : null,
+          lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,
+          nextReviewAt: control?.nextReviewAt?.toISOString() || null,
+          evidence: { acceptedCurrent: current.length, stale: accepted.length - current.length, missing: current.length === 0 },
+        };
+      });
+      return [{ requirementTitle: topic.portalLabel, controls }];
+    });
+
+  const result: ClientSafeComplianceReadModel = { topics, controlsSummary };
   assertClientSafe(result);
   return result;
 }

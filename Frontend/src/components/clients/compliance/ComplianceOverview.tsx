@@ -26,6 +26,73 @@ export type ComplianceFindingView = {
   subjectLabel?: string | null;
 };
 
+export type ComplianceControlSummary = {
+  requirements: Array<{
+    title: string;
+    controls: Array<{
+      title: string;
+      implementationStatus: string | null;
+      owner: string | null;
+      nextReviewAt: string | null;
+      evidenceSummary: { acceptedCurrent: number; stale: number; missing: boolean };
+    }>;
+  }>;
+};
+
+export type ComplianceControlsState =
+  | { status: "loading" }
+  | { status: "success"; summary: ComplianceControlSummary }
+  | { status: "error"; message: string };
+
+const complianceControlStatusLabels: Record<string, string> = {
+  NOT_ASSESSED: "Nincs felmérve",
+  PLANNED: "Tervezett",
+  IMPLEMENTING: "Bevezetés alatt",
+  IMPLEMENTED: "Bevezetve",
+  PARTIAL: "Részben bevezetve",
+  NOT_IMPLEMENTED: "Nincs bevezetve",
+};
+
+export function ComplianceControlsSection({
+  state,
+  onRetry,
+}: {
+  state: ComplianceControlsState;
+  onRetry: () => void;
+}) {
+  const controls = state.status === "success"
+    ? state.summary.requirements.flatMap((item) => item.controls)
+    : [];
+  return (
+    <section className="mt-4 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5" data-testid="compliance-controls-section">
+      <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Intézkedések és bizonyítékok</h2>
+      {state.status === "loading" ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Intézkedések és bizonyítékok betöltése…</p> : null}
+      {state.status === "error" ? (
+        <div role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          <span>{state.message}</span>
+          <button type="button" onClick={onRetry} className="ml-3 rounded border border-[var(--adm-border)] bg-white px-3 py-1 text-xs text-[var(--adm-text)]">Újrapróbálás</button>
+        </div>
+      ) : null}
+      {state.status === "success" && !controls.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített megfelelési intézkedés.</p> : null}
+      {state.status === "success" && controls.length ? (
+        <ul className="mt-3 space-y-3">
+          {controls.map((control, index) => (
+            <li key={`${control.title}-${index}`} className="rounded border border-[var(--adm-border)] p-3">
+              <p className="font-medium text-[var(--adm-text)]">{control.title}</p>
+              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Állapot: {complianceControlStatusLabels[control.implementationStatus || "NOT_ASSESSED"] || "Nincs felmérve"}</p>
+              {control.owner ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Felelős: {control.owner}</p> : null}
+              <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+                Bizonyíték: {control.evidenceSummary.acceptedCurrent} aktuális · {control.evidenceSummary.stale} felülvizsgálandó
+              </p>
+              {control.nextReviewAt ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Következő felülvizsgálat: {control.nextReviewAt.slice(0, 10)}</p> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
 export const complianceOutcomeLabels: Record<ComplianceApplicabilityStatus, string> = {
   APPLIES: "Belső értékelés szerint releváns",
   DOES_NOT_APPLY: "Nem releváns",
