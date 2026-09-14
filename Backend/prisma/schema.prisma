@@ -1273,6 +1273,7 @@ model Document {
   comments                Comment[]
   timelineEvents          TimelineEvent[]
   taskSubmissionDocuments TaskSubmissionDocument[]
+  complianceDocuments     ComplianceDocument[]
 
   // ---- Document work context (DOCUMENT-WORK-CONTEXT-1) --------------------
   // A filename is not a work instruction. These columns carry the operational
@@ -5455,10 +5456,36 @@ model Requirement {
 
   versions RequirementVersion[]
   findings AssessmentFinding[]
+  complianceDocuments ComplianceDocument[]
 
   @@index([jurisdictionCode, domainCode, status])
   @@index([status])
   @@map("requirements")
+}
+
+enum ComplianceDocumentAudience {
+  INTERNAL_ANALYSIS
+  CLIENT_POLICY
+}
+
+// Links a logical Document to a compliance topic (Requirement) with an explicit
+// audience/purpose. This is the ONLY compliance-topic -> document linkage; it
+// never carries publication state. CLIENT_POLICY documents become client-visible
+// exclusively through the canonical ClientDocumentPublication flow, and
+// INTERNAL_ANALYSIS documents never cross the portal boundary.
+model ComplianceDocument {
+  id            String                     @id @default(uuid())
+  requirementId String
+  requirement   Requirement                @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  documentId    String
+  document      Document                   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  audience      ComplianceDocumentAudience
+  createdAt     DateTime                   @default(now())
+  updatedAt     DateTime                   @updatedAt
+
+  @@unique([requirementId, documentId, audience])
+  @@index([requirementId, audience])
+  @@map("compliance_documents")
 }
 
 model RequirementVersion {

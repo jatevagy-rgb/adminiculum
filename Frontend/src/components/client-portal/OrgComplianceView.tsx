@@ -5,11 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getPortalCompliance,
   answerPortalCompanyProfileQuestion,
+  portalDownloadUrl,
   type PortalComplianceReadModel,
   type PortalComplianceTopic,
   type PortalComplianceMissingInfo,
+  type PortalComplianceDocument,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { formatDate } from "./MatterWorkspace";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const compactState = "min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3";
@@ -45,6 +48,36 @@ function statusTone(state: PortalComplianceTopic["state"]) {
         badgeClass: "bg-stone-100 text-stone-800 border-stone-300",
       };
   }
+}
+
+function TopicDocuments({ documents }: { documents: PortalComplianceDocument[] }) {
+  if (documents.length === 0) return null;
+  return (
+    <div className="mt-4 border-t border-stone-100 pt-3">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-500">Közzétett dokumentumok</p>
+      <ul className="mt-2 space-y-2">
+        {documents.map((doc) => (
+          <li key={doc.publicationId} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-white p-3 text-sm">
+            <div className="min-w-0">
+              <p className="font-medium text-stone-800">{doc.title}</p>
+              <p className="mt-0.5 text-xs text-stone-500">
+                {doc.versionLabel}
+                {doc.publishedAt ? ` · Közzétéve: ${formatDate(doc.publishedAt)}` : ""}
+              </p>
+            </div>
+            {doc.downloadAvailable ? (
+              <a
+                href={portalDownloadUrl(doc.publicationId)}
+                className="rounded-full border border-[#b95e4b] px-3 py-1 text-xs font-semibold text-[#b95e4b] hover:bg-[#fbeae6]"
+              >
+                Letöltés
+              </a>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 export function OrgComplianceView() {
@@ -349,6 +382,7 @@ export function OrgComplianceView() {
                       </ul>
                     </div>
                   ) : null}
+                  <TopicDocuments documents={topic.documents} />
                 </div>
               );
             })}
@@ -399,6 +433,7 @@ export function OrgComplianceView() {
                       <strong>Következő lépés:</strong> {topic.nextAction}
                     </div>
                   ) : null}
+                  <TopicDocuments documents={topic.documents} />
                 </div>
               );
             })}
@@ -445,6 +480,7 @@ export function OrgComplianceView() {
                   </span>
                 </div>
                 <p className="mt-2 text-xs leading-5 text-stone-600">{topic.shortExplanation}</p>
+                <TopicDocuments documents={topic.documents} />
               </div>
             ))}
           </div>

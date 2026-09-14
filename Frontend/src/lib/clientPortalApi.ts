@@ -785,6 +785,14 @@ export type PortalComplianceMissingInfo = {
   integerOnly?: boolean;
 };
 
+export type PortalComplianceDocument = {
+  publicationId: string;
+  title: string;
+  versionLabel: string;
+  publishedAt: string;
+  downloadAvailable: boolean;
+};
+
 export type PortalComplianceTopic = {
   topicId: string;
   topicLabel: string;
@@ -792,6 +800,7 @@ export type PortalComplianceTopic = {
   shortExplanation: string;
   missingInformation: PortalComplianceMissingInfo[];
   nextAction: string | null;
+  documents: PortalComplianceDocument[];
 };
 
 export type PortalComplianceReadModel = {

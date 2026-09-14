@@ -71,6 +71,21 @@ export interface ClientSafeComplianceTopicDto {
   missingInformation: MissingInformationItem[];
   /** Recommended next action for the client. */
   nextAction: string | null;
+  /** Explicitly published client-policy documents (CLIENT_POLICY only). */
+  documents: PortalComplianceDocumentDto[];
+}
+
+export interface PortalComplianceDocumentDto {
+  /** Opaque client-safe publication identifier (canonical download token). */
+  publicationId: string;
+  /** Client-facing title (never the internal document name). */
+  title: string;
+  /** Published version label (e.g. "v3"). */
+  versionLabel: string;
+  /** Explicit publication timestamp. */
+  publishedAt: string;
+  /** Whether the canonical portal download path is available. */
+  downloadAvailable: boolean;
 }
 
 export interface ClientSafeComplianceReadModel {
@@ -291,6 +306,73 @@ function computeMissingInformation(
 /* ------------------------------------------------------------------ */
 
 /**
+ * Loads explicitly published CLIENT_POLICY documents for the given requirement
+ * keys, projected through the canonical client publication mechanism only.
+ * INTERNAL_ANALYSIS documents and unpublished/revoked versions never appear.
+ */
+async function loadPublishedClientPolicyDocuments(
+  requirementKeys: string[],
+  clientId: string,
+  prisma: Prisma,
+): Promise<Map<string, PortalComplianceDocumentDto[]>> {
+  const byRequirement = new Map<string, PortalComplianceDocumentDto[]>();
+  if (requirementKeys.length === 0) return byRequirement;
+
+  const links = await prisma.complianceDocument.findMany({
+    where: { audience: 'CLIENT_POLICY', requirement: { key: { in: requirementKeys } } },
+    select: { requirement: { select: { key: true } }, documentId: true },
+  });
+  const documentIds = [...new Set(links.map((link) => link.documentId))];
+  if (documentIds.length === 0) return byRequirement;
+
+  const publications = await prisma.clientDocumentPublication.findMany({
+    where: {
+      clientId,
+      documentId: { in: documentIds },
+      status: 'PUBLISHED',
+      revokedAt: null,
+    },
+    orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
+    select: {
+      id: true,
+      documentId: true,
+      documentVersionId: true,
+      clientFacingTitle: true,
+      publishedAt: true,
+    },
+  });
+
+  const latestByDocument = new Map<string, (typeof publications)[number]>();
+  for (const publication of publications) {
+    if (!latestByDocument.has(publication.documentId)) latestByDocument.set(publication.documentId, publication);
+  }
+
+  const versionIds = [...new Set([...latestByDocument.values()].map((publication) => publication.documentVersionId))];
+  const versions = await prisma.documentVersion.findMany({
+    where: { id: { in: versionIds } },
+    select: { id: true, version: true },
+  });
+  const versionById = new Map(versions.map((version) => [version.id, version.version]));
+
+  for (const link of links) {
+    const publication = latestByDocument.get(link.documentId);
+    if (!publication || !publication.publishedAt) continue;
+    const requirementKey = link.requirement.key;
+    const versionNumber = versionById.get(publication.documentVersionId);
+    const list = byRequirement.get(requirementKey) ?? [];
+    list.push({
+      publicationId: publication.id,
+      title: publication.clientFacingTitle,
+      versionLabel: versionNumber ? `Közzétett változat ${versionNumber}` : 'Közzétett változat',
+      publishedAt: publication.publishedAt.toISOString(),
+      downloadAvailable: true,
+    });
+    byRequirement.set(requirementKey, list);
+  }
+  return byRequirement;
+}
+
+/**
  * Produce a client-safe compliance read model for the given organizational
  * client. Only requirement-backed, registry-registered, COMPANY-scope,
  * non-DOES_NOT_APPLY findings are projected.
@@ -340,6 +422,7 @@ export async function getClientSafeComplianceReadModel(
   const { dependencies, consumedFacts } = await batchLoadDependencyData(applicabilityIds, prisma);
 
   const topics: ClientSafeComplianceTopicDto[] = [];
+  const topicIdByRequirementKey = new Map<string, string>();
 
   for (const finding of findings) {
     const applicability = finding.requirementApplicability;
@@ -373,7 +456,9 @@ export async function getClientSafeComplianceReadModel(
       shortExplanation,
       missingInformation,
       nextAction,
+      documents: [],
     });
+    topicIdByRequirementKey.set(requirementKey, topic.topicKey);
   }
 
   const now = new Date();
@@ -420,6 +505,21 @@ export async function getClientSafeComplianceReadModel(
       });
       return [{ requirementTitle: topic.portalLabel, controls }];
     });
+
+  // Attach explicitly published CLIENT_POLICY documents to their topics.
+  const documentsByRequirement = await loadPublishedClientPolicyDocuments(
+    [...topicIdByRequirementKey.keys()],
+    clientId,
+    prisma,
+  );
+  for (const topic of topics) {
+    for (const [requirementKey, topicId] of topicIdByRequirementKey.entries()) {
+      if (topicId === topic.topicId) {
+        topic.documents = documentsByRequirement.get(requirementKey) ?? [];
+        break;
+      }
+    }
+  }
 
   const result: ClientSafeComplianceReadModel = { topics, controlsSummary };
   assertClientSafe(result);
