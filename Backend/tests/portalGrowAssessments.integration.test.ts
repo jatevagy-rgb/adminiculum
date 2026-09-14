@@ -545,4 +545,90 @@ d('GROW CUSTOMER ASSESSMENT JOURNEY (PostgreSQL)', () => {
     expect(Array.isArray(grow.body.surveys)).toBe(true);
     expect(grow.body.surveys.some((s: any) => s.freeText === marker)).toBe(true);
   });
+
+  it('S. COMPLETED_PACK_SURVIVES_HIGH_SUBMISSION_VOLUME=PASS', async () => {
+    const reference = await db.observation.findFirst({
+      where: { clientId: ids.clientA, idempotencyKey: processKey },
+    });
+    expect(reference).not.toBeNull();
+    const connection = await db.externalSourceConnection.findFirst({
+      where: { clientId: ids.clientA, sourceType: 'SURVEY' },
+    });
+    expect(connection).not.toBeNull();
+
+    // Push the older completed PROCESS_AUTOMATION_READINESS submission well
+    // outside a newest-50 window by flooding a DIFFERENT pack with newer rows.
+    const answers = answersFor('DIGITAL_MATURITY', {}, 'UNKNOWN');
+    const base = Date.now() + 60_000;
+    const rows = Array.from({ length: 55 }, (_, i) => ({
+      id: crypto.randomUUID(),
+      clientId: ids.clientA,
+      connectionId: connection!.id,
+      discoveryRunId: reference!.discoveryRunId,
+      idempotencyKey: `assess-flood-${seed}-${i}`,
+      inputDigest: crypto.createHash('sha256').update(`flood-${seed}-${i}`).digest('hex'),
+      observationType: 'DECLARED_SURVEY',
+      observedAt: new Date(base + i * 1000),
+      rawPayload: {
+        schema: 'GROW_ASSESSMENT_V1',
+        kind: 'GROW_ASSESSMENT',
+        packKey: 'DIGITAL_MATURITY',
+        packVersion: 1,
+        answers,
+        processId: null,
+        provenance: { channel: 'CLIENT_PORTAL', workspaceId: ids.orgWsA, identityId: ids.authorizedIdentity },
+      },
+    }));
+    await db.observation.createMany({ data: rows as never });
+
+    const catalogue = await httpRequest(app, 'GET', '/api/v1/client-portal/org/grow-assessments', {
+      'x-client-portal-session': sessionAuthA,
+      'x-client-portal-workspace': wsARef,
+    });
+    const older = catalogue.body.packs.find((p: any) => p.packKey === 'PROCESS_AUTOMATION_READINESS');
+    // Must be COMPLETED even though its newest row fell outside the newest 50.
+    expect(older.status).toBe('COMPLETED');
+    expect(older.latestFindingCount).toBeGreaterThan(0);
+
+    const digital = catalogue.body.packs.find((p: any) => p.packKey === 'DIGITAL_MATURITY');
+    expect(digital.status).toBe('COMPLETED');
+  });
+
+  it('T. PROCESS_SCOPED_SUBMISSION_PERSISTS_SELECTED_PROCESS=PASS', async () => {
+    const processId = crypto.randomUUID();
+    await db.businessProcess.create({
+      data: {
+        id: processId,
+        clientId: ids.clientA,
+        name: `Scoped assessment process ${seed}`,
+        status: 'ACTIVE',
+      } as never,
+    });
+
+    const res = await httpRequest(
+      app,
+      'POST',
+      '/api/v1/client-portal/org/grow-assessments/PROCESS_AUTOMATION_READINESS/submissions',
+      {
+        'x-client-portal-session': sessionAuthA,
+        'x-client-portal-workspace': wsARef,
+      },
+      {
+        answers: answersFor('PROCESS_AUTOMATION_READINESS', { ...NEUTRAL_PROCESS, pa_manual_repetitive: 'YES' }),
+        idempotencyKey: `assess-scoped-${seed}`,
+        processId,
+      },
+    );
+    expect(res.status).toBe(201);
+
+    const rows = await db.observation.findMany({
+      where: { clientId: ids.clientA, idempotencyKey: `assess-scoped-${seed}` },
+    });
+    expect(rows).toHaveLength(1);
+    expect((rows[0].rawPayload as any).processId).toBe(processId);
+
+    const assessments = await listPortalGrowAssessments(ids.authorizedIdentity, ids.orgWsA, db);
+    const scoped = assessments.items.find((i) => i.packKey === 'PROCESS_AUTOMATION_READINESS');
+    expect(scoped?.processId).toBe(processId);
+  });
 });

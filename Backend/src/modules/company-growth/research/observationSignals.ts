@@ -269,3 +269,69 @@ export function observationsToGrowSignals(
   for (const observation of observations) out.push(...observationToGrowSignals(observation));
   return out;
 }
+
+/**
+ * Supersede scope for an assessment observation: pack + workspace + optional
+ * process.
+ *
+ * The customer catalogue and result view only ever surface the LATEST
+ * submission per pack (within one authorized workspace), so Grow research must
+ * reason over the same scope. Without this, a retake that fixes a previously
+ * problematic answer keeps emitting the OLD finding from the superseded
+ * observation even though the portal already shows the corrected result.
+ *
+ * Including workspaceId matters: two workspaces of the same client may each
+ * legitimately own an assessment of the same pack, and neither may erase the
+ * other.
+ *
+ * Returns null for anything that is not a GROW_ASSESSMENT_V1 observation, and
+ * for payloads without a usable pack key, so non-assessment observations
+ * (including the generic GROW_PAIN_INTAKE survey) are never affected.
+ */
+function assessmentSupersedeScopeKey(observation: NormalizableObservation): string | null {
+  if (!observation || observation.observationType !== DECLARED_SURVEY_OBSERVATION_TYPE) return null;
+  const payload = observation.rawPayload;
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const record = payload as Record<string, unknown>;
+  if (record.schema !== GROW_ASSESSMENT_SCHEMA) return null;
+  const packKey = typeof record.packKey === 'string' ? record.packKey.trim() : '';
+  if (!packKey) return null;
+  const processId =
+    typeof record.processId === 'string' && record.processId.trim() !== '' ? record.processId.trim() : '';
+  let workspaceId = '';
+  const provenance = record.provenance;
+  if (provenance !== null && typeof provenance === 'object' && !Array.isArray(provenance)) {
+    const ws = (provenance as Record<string, unknown>).workspaceId;
+    if (typeof ws === 'string') workspaceId = ws.trim();
+  }
+  // Components are non-empty-or-empty strings; the NUL separator avoids
+  // accidental key collisions between adjacent components.
+  return `${packKey}\u0000${workspaceId}\u0000${processId}`;
+}
+
+/**
+ * Drops superseded assessment observations, keeping ONLY the newest submission
+ * per (packKey, processId) scope. Input order is irrelevant: the newest
+ * observedAt wins. Non-assessment observations pass through untouched, and the
+ * original relative order is preserved for everything that is kept.
+ */
+export function supersedeAssessmentObservations<T extends NormalizableObservation>(
+  observations: readonly T[],
+): T[] {
+  const latestByScope = new Map<string, T>();
+  for (const observation of observations) {
+    const scope = assessmentSupersedeScopeKey(observation);
+    if (!scope) continue;
+    const current = latestByScope.get(scope);
+    if (!current || observation.observedAt.getTime() > current.observedAt.getTime()) {
+      latestByScope.set(scope, observation);
+    }
+  }
+  if (latestByScope.size === 0) return [...observations];
+  const kept = new Set<T>(latestByScope.values());
+  return observations.filter((observation) => {
+    const scope = assessmentSupersedeScopeKey(observation);
+    if (!scope) return true;
+    return kept.has(observation);
+  });
+}

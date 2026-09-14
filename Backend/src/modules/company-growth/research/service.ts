@@ -38,7 +38,11 @@ import {
 import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
 import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
 import { deriveProcessSignals, selectInterventions } from './interventions';
-import { observationsToGrowSignals, type GrowSignal } from './observationSignals';
+import {
+  observationsToGrowSignals,
+  supersedeAssessmentObservations,
+  type GrowSignal,
+} from './observationSignals';
 import { createInitiative } from '../../client-company/service';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -378,14 +382,19 @@ async function executeRun(
 
   // Single fail-closed normalization boundary. The research engine no longer
   // parses source-specific survey payloads or owns a category→domain map.
+  // Assessment observations are first reduced to the LATEST submission per
+  // (pack, process) scope so a retake supersedes the observation it corrects;
+  // the generic pain-intake survey is intentionally left untouched.
   const declaredSignals: GrowSignal[] = observationsToGrowSignals(
-    declaredObs.map((obs) => ({
-      id: obs.id,
-      observationType: obs.observationType,
-      rawPayload: obs.rawPayload,
-      observedAt: obs.observedAt,
-      sourceRecordId: obs.sourceRecordId,
-    })),
+    supersedeAssessmentObservations(
+      declaredObs.map((obs) => ({
+        id: obs.id,
+        observationType: obs.observationType,
+        rawPayload: obs.rawPayload,
+        observedAt: obs.observedAt,
+        sourceRecordId: obs.sourceRecordId,
+      })),
+    ),
   );
 
   // Survey categories are attributed PER OBSERVATION, so an outcome only ever

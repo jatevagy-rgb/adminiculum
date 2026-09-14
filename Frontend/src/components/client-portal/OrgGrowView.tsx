@@ -95,6 +95,8 @@ export function OrgGrowView() {
   const [assessmentResult, setAssessmentResult] = useState<PortalGrowAssessmentResult | null>(null);
   const [assessmentBusy, setAssessmentBusy] = useState(false);
   const [assessmentError, setAssessmentError] = useState<string | null>(null);
+  const [catalogueError, setCatalogueError] = useState<string | null>(null);
+  const [assessmentProcessId, setAssessmentProcessId] = useState<string>("");
   const assessmentKeyRef = useRef<string>(generateUUID());
 
   const loadSurveys = useCallback(async () => {
@@ -110,12 +112,16 @@ export function OrgGrowView() {
 
   const loadCatalogue = useCallback(async () => {
     try {
+      setCatalogueError(null);
       const res = await listPortalGrowAssessments();
       if (res && Array.isArray(res.packs)) {
         setCatalogue(res);
       }
-    } catch {
-      // non-blocking: the survey/initiatives/outcomes journey still renders
+    } catch (err) {
+      // Non-blocking for the survey/initiatives/outcomes journey, but NEVER
+      // presented as "still loading": a failed catalogue request gets an
+      // explicit unavailable + retry state instead of a permanent spinner.
+      setCatalogueError(clientSafeError(err));
     }
   }, []);
 
@@ -179,6 +185,7 @@ export function OrgGrowView() {
       setRunnerDetail(detail);
       setRunnerIndex(0);
       setRunnerAnswers({});
+      setAssessmentProcessId("");
       assessmentKeyRef.current = generateUUID();
       setAssessmentView({ mode: "runner", packKey });
     } catch (err) {
@@ -223,6 +230,9 @@ export function OrgGrowView() {
       const res = await submitPortalGrowAssessment(runnerDetail.definition.packKey, {
         answers,
         idempotencyKey: assessmentKeyRef.current,
+        // Process-oriented packs must carry the selected process so their
+        // findings are scoped to that process instead of every matching process.
+        processId: assessmentProcessId || undefined,
       });
       setAssessmentResult(res.result);
       setAssessmentView({ mode: "result", packKey: runnerDetail.definition.packKey });
@@ -232,7 +242,7 @@ export function OrgGrowView() {
     } finally {
       setAssessmentBusy(false);
     }
-  }, [runnerDetail, runnerAnswers, loadCatalogue]);
+  }, [runnerDetail, runnerAnswers, assessmentProcessId, loadCatalogue]);
 
   if (loading) {
     return (
@@ -263,6 +273,7 @@ export function OrgGrowView() {
   const estimatedOutcomes = data?.outcomes.calculatedOrEstimated || [];
   const packs = catalogue?.packs || [];
   const aggregatedFindings = catalogue?.aggregatedFindings || [];
+  const hasCompletedPack = packs.some((p) => p.status === "COMPLETED");
 
   const runnerQuestions = runnerDetail?.definition.questions || [];
   const currentQuestion = runnerQuestions[runnerIndex];
@@ -316,6 +327,33 @@ export function OrgGrowView() {
             </h2>
             {currentQuestion.helpTextHu ? (
               <p className="mt-2 text-sm text-stone-600">{currentQuestion.helpTextHu}</p>
+            ) : null}
+
+            {runnerDetail?.definition.allowsProcessReference && processes.length > 0 ? (
+              <div className="mt-5" data-testid="grow-assessment-process-scope">
+                <label
+                  htmlFor="assessment-process"
+                  className="block text-xs font-semibold uppercase tracking-wider text-stone-700 mb-1.5"
+                >
+                  Érintett folyamat (opcionális)
+                </label>
+                <select
+                  id="assessment-process"
+                  value={assessmentProcessId}
+                  onChange={(e) => setAssessmentProcessId(e.target.value)}
+                  className="w-full rounded-xl border border-stone-200 bg-white px-3.5 py-2.5 text-sm text-stone-900 focus:border-[#7a5f18] focus:outline-none"
+                >
+                  <option value="">-- Általános (nem egy konkrét folyamathoz) --</option>
+                  {processes.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-stone-500">
+                  A válaszokat a kiválasztott folyamathoz rendelve értékeljük.
+                </p>
+              </div>
             ) : null}
 
             <div className="mt-5 grid gap-2.5 sm:grid-cols-2" role="group" aria-label="Válaszlehetőségek">
@@ -553,6 +591,21 @@ export function OrgGrowView() {
                   </div>
                 ))}
               </div>
+            ) : catalogueError ? (
+              <div
+                className="mt-5 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-sm text-rose-900"
+                data-testid="grow-assessment-catalogue-error"
+              >
+                <p className="font-semibold">A felmérések most nem érhetők el.</p>
+                <p className="mt-1">{catalogueError}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadCatalogue()}
+                  className="mt-3 rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  Újrapróbálás
+                </button>
+              </div>
             ) : (
               <p className="mt-4 text-sm text-stone-600">A felmérések betöltése folyamatban…</p>
             )}
@@ -582,6 +635,13 @@ export function OrgGrowView() {
               ))}
             </div>
           </>
+        ) : hasCompletedPack ? (
+          <p className="mt-2 text-sm text-stone-600">
+            A kitöltött felmérések alapján jelenleg nem azonosítottunk figyelmet igénylő pontot.
+            {catalogue && catalogue.aggregatedUnknownAreaCount > 0
+              ? ` ${catalogue.aggregatedUnknownAreaCount} területen nincs elég információ a kiértékeléshez.`
+              : ""}
+          </p>
         ) : (
           <p className="mt-2 text-sm text-stone-600">
             Még nincs kitöltött felmérés. Töltse ki az egyik fenti felmérést, és itt összegződnek a megállapítások.

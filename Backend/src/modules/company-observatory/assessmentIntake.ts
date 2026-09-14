@@ -26,6 +26,7 @@ import {
   GROW_ASSESSMENT_KIND,
   GROW_ASSESSMENT_SCHEMA,
   getAssessmentPack,
+  listAssessmentPacks,
   validateAssessmentSubmission,
 } from '../company-growth/assessments/registry';
 import { ObservatoryIngestionService, type ObservatoryAccessGuard } from './ingestion/service';
@@ -353,25 +354,36 @@ export async function listPortalGrowAssessments(
   });
   if (!connection) return { items: [] };
 
-  const rows = await db.observation.findMany({
-    where: {
-      clientId: ctx.clientId,
-      connectionId: connection.id,
-      observationType: 'DECLARED_SURVEY',
-      AND: [
-        { rawPayload: { path: ['schema'], equals: GROW_ASSESSMENT_SCHEMA } },
-        { rawPayload: { path: ['provenance', 'channel'], equals: 'CLIENT_PORTAL' } },
-        { rawPayload: { path: ['provenance', 'workspaceId'], equals: ctx.workspaceId } },
-      ],
-    },
-    orderBy: { observedAt: 'desc' },
-    take: 50,
-    select: { observedAt: true, rawPayload: true },
-  });
+  // Fetch the LATEST submission per registered pack instead of the newest N
+  // rows globally. A global `take` truncates before grouping, so once a
+  // workspace accumulates enough submissions the newest row for a completed
+  // pack can fall outside the window and the pack falsely reads NOT_STARTED.
+  // Both consumers (catalogue + detail) only ever need the latest per pack.
+  const rows: Array<{ observedAt: Date; rawPayload: Prisma.JsonValue }> = [];
+  for (const pack of listAssessmentPacks()) {
+    const row = await db.observation.findFirst({
+      where: {
+        clientId: ctx.clientId,
+        connectionId: connection.id,
+        observationType: 'DECLARED_SURVEY',
+        AND: [
+          { rawPayload: { path: ['schema'], equals: GROW_ASSESSMENT_SCHEMA } },
+          { rawPayload: { path: ['provenance', 'channel'], equals: 'CLIENT_PORTAL' } },
+          { rawPayload: { path: ['provenance', 'workspaceId'], equals: ctx.workspaceId } },
+          { rawPayload: { path: ['packKey'], equals: pack.packKey } },
+        ],
+      },
+      orderBy: { observedAt: 'desc' },
+      take: 1,
+      select: { observedAt: true, rawPayload: true },
+    });
+    if (row) rows.push(row as { observedAt: Date; rawPayload: Prisma.JsonValue });
+  }
+  rows.sort((a, b) => b.observedAt.getTime() - a.observedAt.getTime());
 
   const items: SafePortalAssessmentSubmission[] = [];
   for (const row of rows) {
-    const safe = toSafeSubmission(row as { observedAt: Date; rawPayload: Prisma.JsonValue });
+    const safe = toSafeSubmission(row);
     if (safe) items.push(safe);
   }
   return { items };

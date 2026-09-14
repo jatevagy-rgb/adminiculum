@@ -119,3 +119,24 @@ test('OLD_INITIATIVES_AND_OUTCOMES_PRESERVED=PASS', () => {
   assert.match(src, /estimatedOutcomes/);
   assert.match(src, /Feltérképezett üzleti folyamatok/);
 });
+
+test('process-scoped packs: runner offers and sends the selected process', () => {
+  const src = read(VIEW);
+  assert.match(src, /data-testid="grow-assessment-process-scope"/);
+  assert.match(src, /allowsProcessReference/);
+  assert.match(src, /assessmentProcessId/);
+  assert.match(src, /processId: assessmentProcessId \|\| undefined/);
+});
+
+test('catalogue: failed load shows an unavailable state with retry, not endless loading', () => {
+  const src = read(VIEW);
+  assert.match(src, /data-testid="grow-assessment-catalogue-error"/);
+  assert.match(src, /A felmérések most nem érhetők el/);
+  assert.match(src, /catalogueError/);
+});
+
+test('aggregated: honest empty message is based on completion, not finding count', () => {
+  const src = read(VIEW);
+  assert.match(src, /hasCompletedPack/);
+  assert.match(src, /jelenleg nem azonosítottunk figyelmet igénylő pontot/);
+});
