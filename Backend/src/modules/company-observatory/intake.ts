@@ -297,16 +297,12 @@ export async function submitPortalSurveyIntake(
     throw new InteractionError(403, 'CLIENT_WORKSPACE_MEMBERSHIP_REQUIRED', 'Active workspace membership is required.');
   }
 
-  // Customer-safe process validation: ensure process belongs to this client if specified
-  let validProcessId: string | undefined = undefined;
-  if (input.processId) {
-    const proc = await prisma.businessProcess.findFirst({
-      where: { id: String(input.processId), clientId: workspace.clientId, status: 'ACTIVE' },
-      select: { id: true },
-    });
-    if (proc) validProcessId = proc.id;
-  }
-
+  // The raw requested process reference is carried through to the canonical
+  // persistence boundary, which applies fail-closed same-client/ACTIVE
+  // validation for NEW submissions while preserving exact idempotent replay of
+  // the ORIGINAL request even after the process is deactivated or removed.
+  // Pre-sanitizing here would erase the requested identity and turn an exact
+  // retry into a false IDEMPOTENCY_CONFLICT.
   const submittedAt = new Date().toISOString();
 
   // Server-bound capability: created only AFTER real portal session + workspace
@@ -333,7 +329,7 @@ export async function submitPortalSurveyIntake(
     {
       categories: input.categories,
       freeText: input.freeText,
-      processId: validProcessId,
+      processId: input.processId,
       idempotencyKey: input.idempotencyKey,
     },
     portalAccessGuard,

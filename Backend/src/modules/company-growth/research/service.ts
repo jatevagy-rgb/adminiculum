@@ -344,14 +344,18 @@ async function executeRun(
   onlyProcessId: string | null,
   db: Db,
 ): Promise<{ diagnosisCount: number; recommendationCount: number }> {
-  // Tenant/process VALIDITY and research SELECTION are distinct concerns. Load
-  // every ACTIVE client process once (validity), then narrow to the selected set
-  // for this run (selection). Conflating them would let a targeted run
-  // reinterpret another valid process's declared signal as unscoped.
-  const clientActiveProcesses = await db.businessProcess.findMany({
-    where: { clientId, status: 'ACTIVE' },
+  // Tenant/process OWNERSHIP, active selection and research SELECTION are three
+  // distinct concerns. Load every client process once (ownership), then narrow
+  // to ACTIVE ones (eligibility) and finally to the requested run scope.
+  // Conflating them would let a targeted run reinterpret another valid
+  // process's declared signal as unscoped, or let an archived process's stale
+  // scoped signal leak tenant-wide.
+  const clientProcesses = await db.businessProcess.findMany({
+    where: { clientId },
     orderBy: { createdAt: 'asc' },
   });
+  const clientProcessIds = new Set(clientProcesses.map((p) => p.id));
+  const clientActiveProcesses = clientProcesses.filter((p) => p.status === 'ACTIVE');
   const clientActiveProcessIds = new Set(clientActiveProcesses.map((p) => p.id));
   const processes = onlyProcessId
     ? clientActiveProcesses.filter((p) => p.id === onlyProcessId)
@@ -415,13 +419,16 @@ async function executeRun(
     if (!signal.businessProcessId) {
       // True unscoped survey: existing semantics are preserved unchanged.
       businessProcessId = null;
-    } else if (!clientActiveProcessIds.has(signal.businessProcessId)) {
+    } else if (!clientProcessIds.has(signal.businessProcessId)) {
       // Fail-closed tenant binding: a foreign/unknown process reference is not
       // trusted and is treated as unscoped rather than attaching to any process.
       businessProcessId = null;
+    } else if (!clientActiveProcessIds.has(signal.businessProcessId)) {
+      // Same-client but no longer ACTIVE: stale scoped evidence is EXCLUDED, not
+      // rewritten to unscoped (which would leak it tenant-wide).
+      continue;
     } else if (onlyProcessId && signal.businessProcessId !== onlyProcessId) {
-      // Valid same-client process, but outside this targeted run's selection.
-      // Exclude it instead of nulling it (which would falsely make it unscoped).
+      // Valid ACTIVE same-client process, but outside this targeted run.
       continue;
     } else {
       businessProcessId = signal.businessProcessId;

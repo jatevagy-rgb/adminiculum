@@ -623,4 +623,36 @@ d('Observatory → Grow convergence (PostgreSQL)', () => {
     expect(reworkDiag).toBeDefined();
     expect(reworkDiag!.businessProcessId).toBeNull();
   });
+
+  it('20. STALE_DEACTIVATED_PROCESS_SIGNAL_EXCLUDED=PASS', async () => {
+    const c = crypto.randomUUID();
+    await db.client.create({ data: { id: c, name: `Stale scoped ${suffix}` } });
+    const procA = await createBusinessProcess(admin, c, { name: `Stale A ${suffix}`, category: 'PROCUREMENT', frequency: 'WEEKLY' });
+    await addProcessStep(admin, procA.id, { name: 'Adatrögzítés 1', stepType: 'DATA_ENTRY', estimatedActiveMinutes: 10 });
+    await addProcessStep(admin, procA.id, { name: 'Adatrögzítés 2', stepType: 'DATA_ENTRY', estimatedActiveMinutes: 10 });
+    await addProcessStep(admin, procA.id, { name: 'Adatrögzítés 3', stepType: 'DATA_ENTRY', estimatedActiveMinutes: 10 });
+    await captureProcessObservation(admin, { clientId: c, businessProcessId: procA.id });
+
+    const procB = await createBusinessProcess(admin, c, { name: `Stale B ${suffix}`, category: 'GENERAL', frequency: 'WEEKLY' });
+    const resB = await submitSurveyIntake(admin, c, { categories: ['DUPLICATE_DATA'], processId: procB.id, idempotencyKey: `stale-b-${suffix}` });
+    expect(resB.replayed).toBe(false);
+
+    // B is archived AFTER accepting a survey scoped to it. The stale reference
+    // must be excluded, never rewritten as tenant-wide unscoped evidence.
+    await updateBusinessProcess(admin, procB.id, { status: 'INACTIVE' });
+
+    const run = await runResearchCycle(admin, c, { idempotencyKey: `stale-run-${suffix}` }, db);
+    const diags = await db.diagnosisCandidate.findMany({ where: { clientId: c, runId: run.runId } });
+    for (const diag of diags) {
+      const refs = diag.sourceRefs as any;
+      expect(Array.isArray(refs?.observationIds) ? refs.observationIds.includes(resB.observationId) : false).toBe(false);
+    }
+    expect(diags.some((diag) => diag.businessProcessId === procA.id)).toBe(true);
+
+    const opps = await listGrowOpportunities(admin, c, db);
+    for (const opp of opps) {
+      const detail = await getOpportunityDetail(admin, c, opp.id, db);
+      expect(JSON.stringify(detail.diagnosis?.sourceRefs ?? {})).not.toContain(resB.observationId);
+    }
+  });
 });
