@@ -54,6 +54,40 @@ describe('rehydrateDocument — reversible pseudonymization', () => {
     const items = [{ replacement: '[EMAIL_1]', original: 'secret.person@example.test' }];
     const result = rehydrateDocument('[EMAIL_1] és újra [EMAIL_1].', items);
     expect(result.rehydratedContent).toBe('secret.person@example.test és újra secret.person@example.test.');
+    expect(result.totalTokens).toBe(1);
+    expect(result.resolvedTokens).toBe(1);
+    expect(result.unresolvedTokens).toBe(0);
+  });
+
+  it('counts unique tokens, not occurrences, even when redactedItems repeat', () => {
+    const items = [
+      { replacement: '[EMAIL_1]', original: 'a@b.c' },
+      { replacement: '[EMAIL_1]', original: 'a@b.c' },
+      { replacement: '[EMAIL_1]', original: 'a@b.c' },
+    ];
+    const result = rehydrateDocument('[EMAIL_1] [EMAIL_1] [EMAIL_1].', items);
+    expect(result.rehydratedContent).toBe('a@b.c a@b.c a@b.c.');
+    expect(result.totalTokens).toBe(1);
+    expect(result.resolvedTokens).toBe(1);
+    expect(result.unresolvedTokens).toBe(0);
+  });
+
+  it('restores original values containing $-replacement sequences literally', () => {
+    const items = [
+      { replacement: '[SZEMÉLY_1]', original: `A $& B` },
+      { replacement: '[SZEMÉLY_2]', original: `C $1 D` },
+      { replacement: '[SZEMÉLY_3]', original: `E $\` F` },
+      { replacement: '[SZEMÉLY_4]', original: `G $' H` },
+      { replacement: '[SZEMÉLY_5]', original: `Price $50.00` },
+    ];
+    const result = rehydrateDocument(
+      '[SZEMÉLY_1] | [SZEMÉLY_2] | [SZEMÉLY_3] | [SZEMÉLY_4] | [SZEMÉLY_5]',
+      items,
+    );
+    expect(result.rehydrationStatus).toBe('COMPLETE');
+    expect(result.rehydratedContent).toBe(
+      `A $& B | C $1 D | E $\` F | G $' H | Price $50.00`,
+    );
   });
 
   it('leaves unknown placeholders visible and reports them instead of deleting', () => {
