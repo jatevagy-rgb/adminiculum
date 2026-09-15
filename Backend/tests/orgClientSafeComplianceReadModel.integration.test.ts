@@ -244,7 +244,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     await createMissingProjection(canonicalClient, 'Canonical projection', canonical!.id, 'employee_count');
     const canonicalResult = await getClientSafeComplianceReadModel(canonicalClient, true, false, db);
     const canonicalMissing = canonicalResult.topics[0]?.missingInformation[0];
-    expect(canonicalMissing).toMatchObject({ portalAnswerable: true, questionKey: 'employee_count', valueType: 'NUMBER', label: 'Number of employees', integerOnly: true });
+    expect(canonicalMissing).toMatchObject({ portalAnswerable: true, questionKey: 'employee_count', valueType: 'NUMBER', label: 'Munkavállalók száma', integerOnly: true });
   });
 
   it('returns configured COMPANY requirement-backed topic as safe DTO', async () => {
@@ -441,8 +441,12 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     expect(serialized).not.toContain(sharedReqId);
 
     for (const topic of result.topics) {
-      expect(Object.keys(topic).sort()).toEqual(['missingInformation', 'nextAction', 'shortExplanation', 'state', 'topicId', 'topicLabel']);
+      expect(Object.keys(topic).sort()).toEqual(['documents', 'missingInformation', 'nextAction', 'shortExplanation', 'state', 'topicId', 'topicLabel']);
       expect(topic.topicId).toMatch(/^portal\//);
+      for (const document of topic.documents) {
+        // Only client-safe published-document fields may be projected.
+        expect(Object.keys(document).sort()).toEqual(['downloadAvailable', 'publicationId', 'publishedAt', 'title', 'versionLabel']);
+      }
     }
   });
 

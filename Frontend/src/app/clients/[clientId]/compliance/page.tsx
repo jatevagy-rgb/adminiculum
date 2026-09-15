@@ -14,6 +14,7 @@ import {
   complianceScopeLabels,
 } from "@/components/clients/compliance/ComplianceOverview";
 import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlsState } from "@/components/clients/compliance/ComplianceOverview";
+import { ComplianceDocumentsSection } from "@/components/clients/compliance/ComplianceDocumentsSection";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
 import { getClient, type Client } from "@/lib/api";
@@ -249,6 +250,15 @@ export default function ClientCompliancePage() {
     return [...seen.values()];
   }, [workspace]);
 
+  const requirementOptions = useMemo(() => {
+    if (!workspace) return [] as Array<{ key: string; title: string }>;
+    const seen = new Map<string, string>();
+    for (const area of workspace.areas) {
+      if (area.requirementKey && !seen.has(area.requirementKey)) seen.set(area.requirementKey, area.title);
+    }
+    return [...seen.entries()].map(([key, title]) => ({ key, title }));
+  }, [workspace]);
+
   return (
     <AuthenticatedApp section="clients">
       <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
@@ -352,6 +362,11 @@ export default function ClientCompliancePage() {
                       </ul>
                     </Section>
                   ) : null}
+
+                  {/* Compliance dokumentumok */}
+                  <Section title="Compliance dokumentumok">
+                    <ComplianceDocumentsSection clientId={client.id} requirements={requirementOptions} />
+                  </Section>
 
                   {/* 3. Tisztázandó / hiányzó információ */}
                   {!workspaceLoading && !workspaceError && missingInformation.length ? (

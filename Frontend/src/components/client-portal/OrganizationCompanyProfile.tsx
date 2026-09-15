@@ -16,12 +16,13 @@ import {
   type PortalCompanyProfileReusableDocument,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { companyProfileCompletion } from "@/lib/companyProfileCompletion";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const inputClass =
-  "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm text-stone-900 shadow-sm focus:border-stone-950 focus:outline-none focus:ring-1 focus:ring-stone-950 disabled:bg-stone-50 disabled:text-stone-500";
+  "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm text-stone-900 shadow-sm focus:border-[#b95e4b] focus:outline-none focus:ring-2 focus:ring-[#b95e4b]/25 disabled:bg-stone-50 disabled:text-stone-500";
 const chipBase = "rounded-full px-3 py-1 text-xs font-semibold disabled:opacity-50";
-const chipOn = `${chipBase} bg-stone-950 text-white`;
+const chipOn = `${chipBase} bg-[#b95e4b] text-white`;
 const chipOff = `${chipBase} border border-stone-300 text-stone-700 hover:bg-stone-50`;
 
 const TEAOR_UNAVAILABLE =
@@ -87,6 +88,26 @@ function draftLabel(question: PortalCompanyProfileQuestion, draft: DraftValue | 
   return String(payload.enumValue ?? payload.stringValue ?? "");
 }
 
+// Resolve the next screen index after an adaptive discovery refresh. Prefer the
+// previously-computed "next" screen key; if it disappeared because answers
+// changed visibility, advance to the screen after the current one; if the
+// current one also disappeared, fall back to a clamped position.
+function resolveAdvanceIndex(
+  screens: PortalCompanyProfileScreen[],
+  currentKey: string,
+  nextKey: string | null,
+  fallbackIndex: number,
+): number {
+  const clamp = (index: number) => Math.min(Math.max(0, index), Math.max(0, screens.length - 1));
+  if (nextKey) {
+    const index = screens.findIndex((screen) => screen.screenKey === nextKey);
+    if (index >= 0) return index;
+  }
+  const currentIndex = screens.findIndex((screen) => screen.screenKey === currentKey);
+  if (currentIndex >= 0) return clamp(currentIndex + 1);
+  return clamp(fallbackIndex);
+}
+
 export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpdated?: () => void | Promise<void> }) {
   const [discovery, setDiscovery] = useState<PortalCompanyProfileDiscovery | null>(null);
   const [loading, setLoading] = useState(true);
@@ -141,11 +162,9 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     return index;
   }, [questions]);
 
-  const progress = useMemo(() => {
-    const total = questions.length;
-    const answered = questions.filter((question) => question.status === "ANSWERED").length;
-    return { total, answered, percent: total ? Math.round((answered / total) * 100) : 0 };
-  }, [questions]);
+  // Completion denominator = facts reachable through the current adaptive screens
+  // (not the raw discovery.questions list, which can include hidden facts).
+  const progress = useMemo(() => companyProfileCompletion(questions, screens), [questions, screens]);
 
   const activeScreen: PortalCompanyProfileScreen | undefined = screens[activeIndex];
 
@@ -155,6 +174,8 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
       .map((factKey) => atomsByKey.get(factKey))
       .filter((atom): atom is PortalCompanyProfileQuestion => Boolean(atom));
   }, [activeScreen, atomsByKey]);
+
+  const hasTeaorAtom = activeAtoms.some((atom) => atom.codeCatalog === "TEAOR25");
 
   // Seed drafts from persisted answers, and resolve TEÁOR labels for stored codes.
   useEffect(() => {
@@ -207,6 +228,8 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
 
   const saveActiveScreen = async (advance: boolean) => {
     if (!activeScreen) return;
+    const currentKey = activeScreen.screenKey;
+    const nextKey = screens[activeIndex + 1]?.screenKey ?? null;
     setActionError(null);
     setSuccessMessage(null);
     setRefreshWarning(null);
@@ -222,7 +245,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
       facts[atom.questionKey] = payload;
     }
     if (Object.keys(facts).length === 0) {
-      if (advance) setActiveIndex((index) => Math.min(index + 1, Math.max(0, screens.length - 1)));
+      if (advance) setActiveIndex(resolveAdvanceIndex(screens, currentKey, nextKey, activeIndex));
       return;
     }
     setSaving(true);
@@ -230,11 +253,11 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     try {
       await answerPortalCompanyProfileScreen(activeScreen.screenKey, facts);
       saved = true;
-      await refreshDiscovery();
+      const refreshed = await refreshDiscovery();
       await refreshEvidence();
       await onProfileUpdated?.();
       setSuccessMessage("A válaszokat elmentettük.");
-      if (advance) setActiveIndex((index) => Math.min(index + 1, Math.max(0, screens.length - 1)));
+      if (advance) setActiveIndex(resolveAdvanceIndex(refreshed?.screens ?? screens, currentKey, nextKey, activeIndex));
     } catch (err) {
       if (saved) setRefreshWarning("A mentés megtörtént, de a frissítés nem sikerült. Kérjük, töltse újra az oldalt.");
       else setActionError(clientSafeError(err));
@@ -271,13 +294,13 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
             Segítsen pontosítani, milyen szabályok érintik a vállalkozását.
           </p>
         </div>
-        <div className="rounded-2xl bg-stone-50 px-4 py-3 text-right">
+        <div className="rounded-2xl border border-[#eadfbf] bg-[#fffdf8] px-4 py-3 text-right">
           <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">Kitöltöttség</span>
           <p className="text-lg font-semibold text-stone-900">
             {progress.answered} / {progress.total}
           </p>
           <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-stone-200">
-            <div className="h-full bg-stone-950" style={{ width: `${progress.percent}%` }} />
+            <div className="h-full bg-[#b95e4b]" style={{ width: `${progress.percent}%` }} />
           </div>
         </div>
       </div>
@@ -291,27 +314,36 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
       ) : (
         <div className="mt-6">
           <div className="flex flex-wrap items-center gap-2">
-            {screens.map((screen, index) => (
-              <button
-                key={screen.screenKey}
-                type="button"
-                onClick={() => setActiveIndex(index)}
-                aria-current={index === activeIndex}
-                className={index === activeIndex ? "h-2 w-6 rounded-full bg-stone-950" : "h-2 w-6 rounded-full bg-stone-200 hover:bg-stone-300"}
-                title={screen.sectionTitleHu}
-              >
-                <span className="sr-only">{screen.titleHu}</span>
-              </button>
-            ))}
+            {screens.map((screen, index) => {
+              const isActive = index === activeIndex;
+              const isCompleted = index < activeIndex;
+              return (
+                <button
+                  key={screen.screenKey}
+                  type="button"
+                  onClick={() => setActiveIndex(index)}
+                  aria-current={isActive ? "step" : undefined}
+                  className={`h-2 w-6 rounded-full transition-colors ${
+                    isActive ? "bg-[#b95e4b]" : isCompleted ? "bg-[#d3a08f]" : "bg-stone-200 hover:bg-stone-300"
+                  }`}
+                  title={screen.sectionTitleHu}
+                >
+                  <span className="sr-only">{screen.titleHu}</span>
+                </button>
+              );
+            })}
             <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-stone-500">
               {activeIndex + 1} / {screens.length} · {activeScreen.sectionTitleHu}
             </span>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4" data-testid="company-profile-screen">
+          <div className="mt-4 rounded-2xl border border-[#eadfbf] bg-white p-4" data-testid="company-profile-screen">
             <h3 className="font-semibold text-stone-950">{activeScreen.titleHu}</h3>
             <p className="mt-1 text-sm text-stone-700">{activeScreen.helpTextHu}</p>
             {activeScreen.whyHu ? <p className="mt-1 text-xs text-stone-400">Miért kérdezzük? {activeScreen.whyHu}</p> : null}
+            {hasTeaorAtom && !teaorInstalled ? (
+              <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{TEAOR_UNAVAILABLE}</p>
+            ) : null}
 
             <div className="mt-4 space-y-5">
               {activeAtoms.map((atom) => {
@@ -325,7 +357,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
 
                     <div className="mt-2">
                       {isTeaor && !teaorInstalled ? (
-                        <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{TEAOR_UNAVAILABLE}</p>
+                        <p className="rounded-xl bg-stone-50 p-3 text-xs text-stone-600">A korábban rögzített tevékenységi besorolás megmaradt.</p>
                       ) : isTeaor ? (
                         <TeaorSelector
                           multi={atom.valueType === "MULTI_ENUM"}
@@ -419,7 +451,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
                 type="button"
                 onClick={() => void saveActiveScreen(true)}
                 disabled={saving}
-                className="rounded-full bg-stone-950 px-5 py-2 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50"
+                className="rounded-full bg-[#b95e4b] px-5 py-2 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50"
               >
                 {saving ? "Mentés folyamatban…" : activeIndex >= screens.length - 1 ? "Mentés" : "Mentés és tovább →"}
               </button>
@@ -517,7 +549,7 @@ function EvidenceQuestion({
                   </option>
                 ))}
               </select>
-              <button type="button" onClick={() => void submit("YES")} disabled={busy || !documentVersionId} className="rounded-full bg-stone-950 px-4 py-1.5 text-xs font-semibold text-white hover:bg-stone-800 disabled:opacity-50">
+              <button type="button" onClick={() => void submit("YES")} disabled={busy || !documentVersionId} className="rounded-full bg-[#b95e4b] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50">
                 {busy ? "Mentés…" : "Mentés"}
               </button>
             </div>

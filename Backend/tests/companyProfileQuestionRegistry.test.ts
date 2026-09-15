@@ -23,7 +23,7 @@ describe('company profile question registry', () => {
       expect(COMPANY_PROFILE_QUESTIONS.some((question) => question.questionKey === key)).toBe(true);
     }
     const employees = COMPANY_PROFILE_QUESTIONS.find((question) => question.questionKey === 'employee_count');
-    expect(employees).toMatchObject({ label: 'Number of employees' });
+    expect(employees).toMatchObject({ label: 'Munkavállalók száma' });
     // TEÁOR'25 replaces free-text-only authority as the structured activity path.
     const primaryTeaor = COMPANY_PROFILE_QUESTIONS.find((question) => question.questionKey === 'primary_teaor25_code');
     expect(primaryTeaor).toMatchObject({ valueType: 'STRING', codeCatalog: 'TEAOR25', discoveryBaseline: true, baseline: false });

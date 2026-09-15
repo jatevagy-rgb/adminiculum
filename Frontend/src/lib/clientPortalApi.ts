@@ -785,6 +785,14 @@ export type PortalComplianceMissingInfo = {
   integerOnly?: boolean;
 };
 
+export type PortalComplianceDocument = {
+  publicationId: string;
+  title: string;
+  versionLabel: string;
+  publishedAt: string;
+  downloadAvailable: boolean;
+};
+
 export type PortalComplianceTopic = {
   topicId: string;
   topicLabel: string;
@@ -792,10 +800,24 @@ export type PortalComplianceTopic = {
   shortExplanation: string;
   missingInformation: PortalComplianceMissingInfo[];
   nextAction: string | null;
+  documents: PortalComplianceDocument[];
+};
+
+export type PortalComplianceControlSummary = {
+  requirementTitle: string;
+  controls: Array<{
+    title: string;
+    implementationStatus: string | null;
+    lastReviewedAt: string | null;
+    nextReviewAt: string | null;
+    evidence: { acceptedCurrent: number; stale: number; missing: boolean };
+  }>;
 };
 
 export type PortalComplianceReadModel = {
   topics: PortalComplianceTopic[];
+  // Already-returned client-safe control/checkpoint projection (per requirement).
+  controlsSummary?: PortalComplianceControlSummary[];
 };
 
 export async function getPortalCompliance() {
