@@ -190,7 +190,7 @@ const MOCK_ORG_GROW = {
     ],
   },
   opportunities: [],
-  opportunitiesDeferredNotice: "A javaslatok szakmai elemzése és egyeztetése folyamatban van az irodával.",
+  opportunitiesDeferredNotice: "A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg.",
   surveys: [
     {
       id: "survey-1",
@@ -664,7 +664,7 @@ async function runCustomerGrowBrowserQA() {
       await page.locator("[data-testid='grow-tab-lehetosegek']").click();
       await page.waitForTimeout(400);
       const lehetosegText = await page.evaluate(() => document.body.innerText);
-      if (!lehetosegText.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP") || !lehetosegText.includes("Elemzés és egyeztetés folyamatban")) {
+      if (!lehetosegText.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP") || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
         throw new Error("Dignified fail-closed notice not found on Lehetőségek tab");
       }
       await page.screenshot({ path: path.join(SHOTS, `lehetosegek-${viewport.name}.png`), fullPage: true });
@@ -687,7 +687,7 @@ async function runCustomerGrowBrowserQA() {
       if (!/mért eredmények/i.test(eredmenyText) || !/számított/i.test(eredmenyText)) {
         throw new Error("Outcome distinction (Mért vs Számított) missing on Eredmények tab");
       }
-      if (!/hitelességi standard/i.test(eredmenyText) && !/módszertan/i.test(eredmenyText)) {
+      if (!/forrásmegjelölés/i.test(eredmenyText) && !/módszertan/i.test(eredmenyText)) {
         throw new Error("Methodology note missing on Eredmények tab");
       }
       await page.screenshot({ path: path.join(SHOTS, `eredmenyek-${viewport.name}.png`), fullPage: true });

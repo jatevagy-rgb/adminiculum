@@ -429,7 +429,7 @@ export function OrgGrowView() {
               Fejlesztési Áttekintés
             </h1>
             <p className="mt-2 text-sm leading-6 text-stone-700">
-              Az Adminiculum és a(z) <strong className="text-stone-900">{data?.customerName || "Vállalat"}</strong> közös fejlesztési programjai, feltérképezett üzleti folyamatai és hitelesített eredményei.
+              Az Adminiculum és a(z) <strong className="text-stone-900">{data?.customerName || "Vállalat"}</strong> közös fejlesztési programjai, feltérképezett üzleti folyamatai és rögzített eredményei.
             </p>
           </div>
 
@@ -507,7 +507,7 @@ export function OrgGrowView() {
             <div className="col-span-2 sm:col-span-1 rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Mért eredmény</p>
               <p className="mt-1 text-2xl font-bold text-stone-950">{measuredOutcomes.length}</p>
-              <p className="mt-0.5 text-[11px] text-stone-500">Hitelesített</p>
+              <p className="mt-0.5 text-[11px] text-stone-500">MÉRT alapon rögzített</p>
             </div>
           </div>
 
@@ -1294,21 +1294,21 @@ export function OrgGrowView() {
       {activeTab === "lehetosegek" ? (
         <section className={card} data-testid="grow-opportunities-section">
           <div className="max-w-2xl">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
-              Szakmai felülvizsgálat alatt
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-stone-500" />
+              GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP
             </span>
             <h2 className="mt-3 font-serif text-2xl font-semibold text-stone-950 sm:text-3xl">
-              Fejlesztési lehetőségek kidolgozás alatt
+              Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
             </h2>
             <p className="mt-3 text-sm leading-6 text-stone-700">
-              Az iroda szakértői csapata jelenleg a kitöltött felmérések, feltérképezett folyamatok és működési jelzések alapján dolgozza ki a testreszabott fejlesztési javaslatokat. A jogilag és működésileg jóváhagyott lehetőségek itt válnak elérhetővé közvetlen döntéshozatalra és egyeztetésre.
+              A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg ezen a felületen.
             </p>
 
             <div className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600">
               <p className="font-semibold text-stone-800">Közzétételi állapot: GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP</p>
               <p className="mt-0.5">
-                Jelenleg nincs közvetlen ügyféloldali jóváhagyott fejlesztési lehetőség közzétéve. Elemzés és egyeztetés folyamatban: {data?.opportunitiesDeferredNotice || "Szakmai felülvizsgálat alatt"}.
+                {data?.opportunitiesDeferredNotice || "Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség."}
               </p>
             </div>
 
@@ -1433,7 +1433,7 @@ export function OrgGrowView() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Eredmények és Hatás</p>
           <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Mit értünk el?</h2>
           <p className="mt-1 text-sm text-stone-600">
-            A befejezett fejlesztési intézkedések hitelesített eredményei, felszabadított kapacitásai és mérési adatai.
+            Mérési alapon rögzített eredmények, felszabadított kapacitások és folyamathatások.
           </p>
 
           {measuredOutcomes.length > 0 ? (
@@ -1496,13 +1496,13 @@ export function OrgGrowView() {
             <div className="mt-6 rounded-2xl border border-stone-200 bg-stone-50/50 p-5 text-center">
               <p className="text-sm font-semibold text-stone-800">Jelenleg nincs lezárt mérési eredmény rögzítve.</p>
               <p className="mt-1 text-xs text-stone-500 max-w-md mx-auto">
-                A mért eredmények a befejezett kezdeményezések bevezetése és hatásvizsgálata után jelennek meg itt hitelesített bizonyítékkal.
+                A mért eredmények a fejlesztési intézkedések megvalósítása és mérése után jelennek meg itt mérési alapon rögzítve.
               </p>
             </div>
           ) : null}
 
           <div className="mt-6 rounded-xl border border-stone-200/60 bg-stone-50/40 p-4 text-xs text-stone-500 leading-relaxed">
-            <strong>Hitelességi standard:</strong> Az Adminiculum rendszerében az eredmények szigorú forrásmegjelöléssel (MÉRT, SZÁMÍTOTT, BECSÜLT) szerepelnek. Feltételezések és becslések sosem jelennek meg elért tényként; a szintetikus tesztadatok kizárásra kerülnek.
+            <strong>Forrásmegjelölés és módszertan:</strong> Az eredmények kategóriánként (MÉRT, SZÁMÍTOTT, BECSÜLT) szerepelnek. Feltételezések és becslések nem jelennek meg mérési tényként; a szintetikus tesztadatok kizárásra kerülnek.
           </div>
         </section>
       ) : null}
