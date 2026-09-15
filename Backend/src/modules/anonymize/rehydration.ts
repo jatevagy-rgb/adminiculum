@@ -54,20 +54,32 @@ export function rehydrateDocument(
   aiResponseText: string,
   redactedItems: RehydrationItem[]
 ): RehydrationResult {
+  // Build the replacement→original map and the set of unique mapped tokens
+  // first, so both the early returns and the main path agree on counting
+  // semantics (unique tokens, not per-occurrence counts).
+  const tokenMap = new Map<string, string>();
+  const mappedTokenSet = new Set<string>();
+  for (const item of redactedItems || []) {
+    const normalizedReplacement = item.replacement.toUpperCase().trim();
+    tokenMap.set(normalizedReplacement, item.original);
+    mappedTokenSet.add(normalizedReplacement);
+  }
+  const totalTokens = mappedTokenSet.size;
+
   if (!aiResponseText || aiResponseText.trim().length === 0) {
     return {
       success: false,
       rehydratedContent: null,
       rehydrationStatus: 'FAILED',
       warnings: [{ token: '', reason: 'AI response text is empty' }],
-      totalTokens: redactedItems.length,
+      totalTokens,
       resolvedTokens: 0,
-      unresolvedTokens: redactedItems.length,
+      unresolvedTokens: totalTokens,
       error: 'AI response text is empty',
     };
   }
 
-  if (!redactedItems || redactedItems.length === 0) {
+  if (mappedTokenSet.size === 0) {
     return {
       success: true,
       rehydratedContent: aiResponseText,
@@ -80,23 +92,14 @@ export function rehydrateDocument(
   }
 
   const warnings: RehydrationWarning[] = [];
-  let resolvedCount = 0;
-  let unresolvedCount = 0;
-
-  // Build a map of replacement -> original for fast lookup.
-  // Key is the normalized replacement token (e.g. "[AZONOSÍTÓ_1]", "[MEGBÍZÓ]").
-  const tokenMap = new Map<string, string>();
-  for (const item of redactedItems) {
-    const normalizedReplacement = item.replacement.toUpperCase().trim();
-    tokenMap.set(normalizedReplacement, item.original);
-  }
 
   const placeholderRegex = /\[([^\[\]\r\n]+)\]/g;
 
   let result = aiResponseText;
   let match: RegExpExecArray | null;
 
-  const resolvedTokens = new Set<string>();
+  const resolvedSet = new Set<string>();
+  const unresolvedSet = new Set<string>();
 
   // A bracket token is treated as one of ours if it carries an index suffix
   // (`_1`), a Hungarian accented uppercase letter, or an internal space — the
@@ -106,6 +109,8 @@ export function rehydrateDocument(
     key.includes('_') || /[ÁÉÍÓÖŐÚÜŰ]/.test(key) || key.includes(' ');
 
   // First pass: replace every known placeholder with its original value.
+  // A function replacer is used so `original` is inserted literally — never
+  // interpreted as a replacement pattern (`$&`, `$1`, `$\``, `$'`, ...).
   while ((match = placeholderRegex.exec(aiResponseText)) !== null) {
     const placeholder = match[0];
     const tokenKey = match[1].toUpperCase().trim();
@@ -113,42 +118,41 @@ export function rehydrateDocument(
     const original = tokenMap.get(normalizedKey);
 
     if (original !== undefined) {
-      result = result.replace(new RegExp(escapeRegex(placeholder), 'g'), original);
-      resolvedTokens.add(normalizedKey);
-      resolvedCount++;
+      result = result.replace(new RegExp(escapeRegex(placeholder), 'g'), () => original);
+      resolvedSet.add(normalizedKey);
     } else if (looksLikeKnownToken(tokenKey)) {
       warnings.push({
         token: placeholder,
         reason: 'Token not found in mapping',
         original: undefined,
       });
-      unresolvedCount++;
+      unresolvedSet.add(normalizedKey);
     }
   }
 
-  // Second pass: defensively report any of our own redaction replacements that
-  // are still present in the output (e.g. produced by a partial or malformed
-  // external response), so they are surfaced rather than silently dropped.
-  for (const item of redactedItems) {
-    const normalizedReplacement = item.replacement.toUpperCase().trim();
-
-    if (!resolvedTokens.has(normalizedReplacement)) {
-      if (result.toUpperCase().includes(normalizedReplacement)) {
+  // Second pass: defensively report any mapped token that was never resolved and
+  // is still present in the output (e.g. produced by a partial or malformed
+  // external response), so it is surfaced rather than silently dropped.
+  for (const token of mappedTokenSet) {
+    if (!resolvedSet.has(token) && !unresolvedSet.has(token)) {
+      if (result.toUpperCase().includes(token)) {
         warnings.push({
-          token: item.replacement,
+          token,
           reason: 'Placeholder still present in output - could not resolve',
-          original: item.original,
+          original: tokenMap.get(token),
         });
-        unresolvedCount++;
-        resolvedTokens.add(normalizedReplacement);
+        unresolvedSet.add(token);
       }
     }
   }
 
+  const resolvedTokens = resolvedSet.size;
+  const unresolvedTokens = unresolvedSet.size;
+
   let status: 'COMPLETE' | 'PARTIAL' | 'FAILED';
-  if (unresolvedCount === 0) {
+  if (unresolvedTokens === 0) {
     status = 'COMPLETE';
-  } else if (resolvedCount > 0) {
+  } else if (resolvedTokens > 0) {
     status = 'PARTIAL';
   } else {
     status = 'FAILED';
@@ -159,8 +163,8 @@ export function rehydrateDocument(
     rehydratedContent: result,
     rehydrationStatus: status,
     warnings,
-    totalTokens: redactedItems.length,
-    resolvedTokens: resolvedCount,
-    unresolvedTokens: unresolvedCount,
+    totalTokens,
+    resolvedTokens,
+    unresolvedTokens,
   };
 }
