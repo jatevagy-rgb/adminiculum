@@ -261,6 +261,18 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
       });
     }
 
+    const employeeSubjectId = crypto.randomUUID();
+    await db.factSubject.create({
+      data: {
+        id: employeeSubjectId,
+        clientId: ids.clientA,
+        scopeType: 'EMPLOYEE',
+        subjectKey: `employee-${seed}`,
+      },
+    });
+
+    const employeeCountReferenceNow = new Date();
+
     // Create ClientFact for employee_count = 50 on clientA
     await db.clientFact.create({
       data: {
@@ -269,9 +281,57 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
         factDefinitionId: factDef.id,
         type: 'EMPLOYEE_COUNT',
         value: '50 fő',
-        validFrom: new Date('2026-01-01T00:00:00Z'),
+        validFrom: new Date(employeeCountReferenceNow.getTime() - 24 * 60 * 60 * 1000),
         numberValue: 50,
         verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+      },
+    });
+
+    await db.clientFact.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId: ids.clientA,
+        factDefinitionId: factDef.id,
+        type: 'EMPLOYEE_COUNT',
+        value: '999 fő',
+        validFrom: new Date(employeeCountReferenceNow.getTime() - 24 * 60 * 60 * 1000),
+        numberValue: 999,
+        verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'EMPLOYEE',
+        factSubjectId: employeeSubjectId,
+      },
+    });
+
+    await db.clientFact.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId: ids.clientA,
+        factDefinitionId: factDef.id,
+        type: 'EMPLOYEE_COUNT',
+        value: '777 fő',
+        validFrom: new Date(employeeCountReferenceNow.getTime() - 3 * 24 * 60 * 60 * 1000),
+        validTo: new Date(employeeCountReferenceNow.getTime() - 24 * 60 * 60 * 1000),
+        numberValue: 777,
+        verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+      },
+    });
+
+    await db.clientFact.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId: ids.clientA,
+        factDefinitionId: factDef.id,
+        type: 'EMPLOYEE_COUNT',
+        value: '888 fő',
+        validFrom: new Date(employeeCountReferenceNow.getTime() + 24 * 60 * 60 * 1000),
+        numberValue: 888,
+        verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'COMPANY',
+        factSubjectId: null,
       },
     });
 
@@ -533,16 +593,64 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
   });
 
   // 10. COMPANY_ORG_PROJECTION=PASS
-  it('COMPANY_ORG_PROJECTION=PASS — digital twin projection includes systems, processes, employee count', async () => {
+  it('COMPANY_ORG_PROJECTION=PASS — digital twin projection includes bounded customer-safe summaries', async () => {
     const company = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     expect(company).toBeDefined();
     expect(company.companyName).toBe('Phase5 Org Client A');
     expect(company.employeeCount).toBe(50);
+    expect(company.dataSummary).toBeDefined();
+    expect(company.dataSummary?.answeredCount! + company.dataSummary?.unknownCount! + company.dataSummary?.unansweredCount!)
+      .toBe(company.dataSummary?.relevantQuestionCount);
     expect(company.systems).toBeDefined();
     expect(company.systems?.length).toBe(2);
     expect(company.systems?.map((s) => s.name)).toContain('SAP ERP');
     expect(company.processes).toBeDefined();
     expect(company.processes?.length).toBeGreaterThan(0);
+    expect(company.documentsSummary).toBeDefined();
+    expect(company.complianceSummary).toBeDefined();
+    expect(company.developmentSummary).toBeDefined();
+    expect(company.outcomeSummary).toBeDefined();
+
+    const serialized = JSON.stringify(company).toLowerCase();
+    for (const forbidden of [
+      'rawpayload',
+      'sourceconfig',
+      'secret',
+      'token',
+      'lawyernote',
+      'internalnote',
+      'recommendationcandidate',
+      'diagnosiscandidate',
+      'improvementopportunity',
+      'currentstate',
+      'clientownerperson',
+      'organizationperson',
+      'hr_confidential',
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it('EMPLOYEE_COUNT_FALLBACK_SCOPE_GUARDS=PASS — only current company facts affect the customer employee count', async () => {
+    const facts = await db.clientFact.findMany({
+      where: { clientId: ids.clientA, factDefinition: { key: 'employee_count' } },
+      select: { numberValue: true, scopeType: true, factSubjectId: true, validFrom: true, validTo: true },
+    });
+    const currentCompanyFact = facts.find((fact) => Number(fact.numberValue) === 50);
+    const employeeFact = facts.find((fact) => Number(fact.numberValue) === 999);
+    const expiredCompanyFact = facts.find((fact) => Number(fact.numberValue) === 777);
+    const futureCompanyFact = facts.find((fact) => Number(fact.numberValue) === 888);
+
+    expect(currentCompanyFact).toMatchObject({ scopeType: 'COMPANY', factSubjectId: null });
+    expect(employeeFact).toMatchObject({ scopeType: 'EMPLOYEE' });
+    expect(employeeFact?.factSubjectId).toBeTruthy();
+    expect(expiredCompanyFact).toMatchObject({ scopeType: 'COMPANY', factSubjectId: null });
+    expect(expiredCompanyFact?.validTo?.getTime()).toBeLessThan(Date.now());
+    expect(futureCompanyFact).toMatchObject({ scopeType: 'COMPANY', factSubjectId: null });
+    expect(futureCompanyFact?.validFrom.getTime()).toBeGreaterThan(Date.now());
+
+    const company = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
+    expect(company.employeeCount).toBe(50);
   });
 
   // 11. INDIVIDUAL_PORTAL_ISOLATION=PASS
@@ -766,5 +874,18 @@ describe('Client Portal 2.0 Customer Product Static Verification', () => {
     expect(growSrc).toContain("basis === 'MEASURED'");
     expect(growSrc).toContain('calculatedOrEstimated');
   });
-});
 
+  it('COMPANY_CUSTOMER_SAFE_SOURCES=PASS — Vállalat reuses explicit customer-safe projectors', () => {
+    const companySrc = read('src/modules/client-workspace/orgCompanyService.ts');
+    expect(companySrc).toContain('getCompanyProfileDiscovery');
+    expect(companySrc).toContain('listPortalDocuments');
+    expect(companySrc).toContain('getClientSafeComplianceReadModel');
+    expect(companySrc).toContain('getOrganizationalGrow');
+    expect(companySrc).not.toContain('getComplianceWorkspace');
+  });
+
+  it('COMPANY_READ_ONLY=PASS — Vállalat projection has no persistence mutations', () => {
+    const companySrc = read('src/modules/client-workspace/orgCompanyService.ts');
+    expect(companySrc).not.toMatch(/\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(/);
+  });
+});
