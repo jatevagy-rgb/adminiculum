@@ -335,3 +335,52 @@ test("Regression Proof 5: publication jump is disabled while uploaded-document v
 
   assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalActiveVersion \|\| !canonicalCaseId\}/);
 });
+
+// UX convergence (PR #250): consolidated header + truthful reading toolbar.
+
+test("Canonical header consolidates real work context and offers Download / New version / Comparison / AI preparation", () => {
+  const source = documentPage();
+  const topMatch = source.match(/<section data-testid="canonical-top-region"[\s\S]*?<\/section>/);
+  assert.ok(topMatch, "Top region section must be found");
+  const top = topMatch[0];
+
+  assert.match(top, /data-testid="canonical-document-context-line"/);
+  assert.match(top, /<b>Ügy:<\/b>/);
+  assert.match(top, /<b>Ügyfél:<\/b>/);
+  assert.match(top, /<b>Felelős:<\/b>/);
+  assert.match(top, /<b>Reviewer:<\/b>/);
+  assert.match(top, /<b>Határidő:<\/b>/);
+  assert.match(top, /data-testid="canonical-document-work-instruction"/);
+  // responsibility/reviewer/due date come from the canonical work-context view, never inferred
+  assert.match(top, /activeWorkContextView\?\.owner\?\.name/);
+  assert.match(top, /activeWorkContextView\?\.reviewer\?\.name/);
+  assert.match(top, /activeWorkContextView\?\.dueDateLabel/);
+  // uploader must not be repurposed as Felelős
+  assert.doesNotMatch(top, /<b>Felelős:<\/b>[\s\S]{0,40}uploadedBy/);
+
+  assert.match(top, /handleDownloadUploadedDocument|handleDownload/);
+  assert.match(top, /Új verzió feltöltése/);
+  assert.match(top, /Összehasonlítás/);
+  assert.match(top, /AI előkészítés/);
+});
+
+test("Reading toolbar is truthful: real zoom, real focus mode, no fake page count, no false Word open", () => {
+  const source = documentPage();
+  const centerMatch = source.match(/<main data-testid="canonical-center-reading"[\s\S]*?<\/main>/);
+  assert.ok(centerMatch, "Center reading surface must be found");
+  const center = centerMatch[0];
+
+  assert.match(center, /data-testid="reading-zoom-select"/);
+  assert.match(source, /\{\[75, 90, 100, 110, 125, 150\]\.map/);
+  // zoom changes display only — applied as a style, never to text/state
+  assert.match(center, /style=\{\{ zoom: readerZoom \/ 100 \}\}/);
+  assert.match(center, /data-testid="reading-focus-toggle"/);
+  // focus mode collapses the auxiliary rails and back to a single column
+  assert.match(source, /readingFocus \? " xl:hidden" : ""/);
+  assert.match(source, /readingFocus \? "xl:grid-cols-\[minmax\(0,1fr\)\]"/);
+
+  // no invented pagination and no unproven Word open action
+  assert.doesNotMatch(source, /\b1 \/ 24\b/);
+  assert.doesNotMatch(source, /Megnyitás Wordben/);
+  assert.doesNotMatch(source, /WORD_OPEN/);
+});

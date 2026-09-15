@@ -56,6 +56,8 @@ import {
 } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
+import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
+import { useDocumentWorkContext } from "@/components/documents/workContext/useDocumentWorkContext";
 import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
@@ -279,6 +281,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [uploadedDocuments, setUploadedDocuments] = useState<DocumentItem[]>([]);
   const [modifiedWorkingCopies, setModifiedWorkingCopies] = useState<DocumentItem[]>([]);
   const [ledgerSearch, setLedgerSearch] = useState("");
+  const [aiPreparationOpen, setAiPreparationOpen] = useState(false);
+  const [readingFocus, setReadingFocus] = useState(false);
+  const [readerZoom, setReaderZoom] = useState(100);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
     clientId?: string;
@@ -1231,6 +1236,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   // Safe active version for canonical shell rendering
   const canonicalActiveVersion = selectedVersionBelongsToActiveDocument ? selectedVersion : null;
+  // Read-only work context for the consolidated header. Independent of
+  // annotation/version state and never mutates editor state.
+  const { view: activeWorkContextView } = useDocumentWorkContext(selectedUploadedDocument?.id ?? null, {
+    selectedVersion: canonicalActiveVersion?.versionNumber ?? null,
+  });
 
   // Canonical shell-safe active file type: derived strictly from the active document / version,
   // preventing a stale selectedVersion from another document from leaking its file type.
@@ -1669,6 +1679,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         ) : null}
                         <span><b>Szerkesztő:</b> Microsoft Word (asztali)</span>
                       </div>
+                      <div data-testid="canonical-document-context-line" className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#3D4842]">
+                        <span><b>Ügy:</b> {displayCaseId}</span>
+                        {displayClient ? <span><b>Ügyfél:</b> {displayClient}</span> : null}
+                        <span><b>Felelős:</b> {activeWorkContextView?.owner?.name ?? '—'}</span>
+                        <span><b>Reviewer:</b> {activeWorkContextView?.reviewer?.name ?? '—'}</span>
+                        <span><b>Határidő:</b> {activeWorkContextView?.dueDateLabel ?? '—'}</span>
+                      </div>
+                      {activeWorkContextView?.workInstruction ? (
+                        <p data-testid="canonical-document-work-instruction" className="mt-1 text-xs text-[#3D4842]">
+                          <b>Munkautasítás:</b> {activeWorkContextView.workInstruction}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {selectedUploadedDocument ? (
@@ -1697,6 +1719,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           {isUploadingVersion ? 'Feltöltés...' : 'Új verzió feltöltése'}
                         </AdminButton>
                       ) : null}
+                      {activeDocument ? (
+                        <AdminButton variant="neutral" onClick={() => router.push(metaCompareUrl)}>Összehasonlítás</AdminButton>
+                      ) : null}
+                      {activeDocument ? (
+                        <AdminButton variant="neutral" onClick={() => setAiPreparationOpen(true)}>AI előkészítés</AdminButton>
+                      ) : null}
                       <AdminButton
                         variant="neutral"
                         onClick={() => {
@@ -1710,10 +1738,19 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </div>
                 </section>
 
+                {aiPreparationOpen && activeDocument ? (
+                  <AIPromptPreparationModal
+                    caseId={canonicalCaseId}
+                    documentId={activeDocument.id}
+                    documentVersionId={canonicalActiveVersion?.id}
+                    onClose={() => setAiPreparationOpen(false)}
+                  />
+                ) : null}
+
                 {/* 2. CANONICAL 3-COLUMN WORKSPACE: LEFT (LEDGER) | CENTER (READING) | RIGHT (CONTEXTUAL SHELL) */}
-                <div className="grid min-w-0 grid-cols-1 gap-4 xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]">
+                <div className={`grid min-w-0 grid-cols-1 gap-4 ${readingFocus ? "xl:grid-cols-[minmax(0,1fr)]" : "xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
                   {/* CANONICAL LEFT REGION: Document Ledger */}
-                  <aside data-testid="canonical-left-ledger" className="min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col">
+                  <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " xl:hidden" : ""}`}>
                     <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
                       <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Workspace elemek</h2>
                       <label className="mt-2 block">
@@ -1727,6 +1764,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           className="w-full rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-2.5 py-1.5 text-[12px] text-[var(--adm-text)] placeholder:text-[var(--adm-text-soft)] focus:outline-none focus:border-[var(--adm-green-800)]"
                         />
                       </label>
+                      <div className="mt-2">
+                        <AdminButton
+                          variant="primary"
+                          size="xs"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={!caseRecord?.id || isUploading}
+                        >
+                          {isUploading ? "Hozzáadás..." : "+ Dokumentum hozzáadása"}
+                        </AdminButton>
+                      </div>
                     </div>
                     <div className="max-h-[680px] space-y-4 overflow-y-auto p-3">
                       <section className="space-y-2">
@@ -1816,7 +1863,29 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           Read-only előnézet · Word a szerkesztő
                         </span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="flex items-center gap-1 text-[10px] text-[#3D4842]">
+                          <span className="sr-only">Nagyítás</span>
+                          <select
+                            data-testid="reading-zoom-select"
+                            value={readerZoom}
+                            onChange={(event) => setReaderZoom(Number(event.target.value))}
+                            disabled={!activeDocument}
+                            className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-1.5 py-0.5 text-[10px] disabled:opacity-50"
+                          >
+                            {[75, 90, 100, 110, 125, 150].map((z) => <option key={z} value={z}>{z}%</option>)}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          data-testid="reading-focus-toggle"
+                          aria-pressed={readingFocus}
+                          disabled={!activeDocument}
+                          onClick={() => setReadingFocus((value) => !value)}
+                          className={`rounded border px-2 py-0.5 text-[10px] font-bold disabled:opacity-50 ${readingFocus ? "border-[#D8C58E] bg-[var(--adm-sand-100)] text-[#6D5418]" : "border-[rgba(22,32,26,0.14)] bg-white text-[#3D4842]"}`}
+                        >
+                          {readingFocus ? "Normál nézet" : "Fókusz"}
+                        </button>
                         <AdminBadge tone="neutral">{canonicalShellFileType}</AdminBadge>
                         {canonicalActiveVersion ? <AdminBadge tone={canonicalActiveVersion.isCurrent ? "gold" : "neutral"}>v{canonicalActiveVersion.versionNumber}</AdminBadge> : null}
                       </div>
@@ -1842,6 +1911,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <div
                                   ref={annotationSurfaceRef}
                                   onMouseUp={annotationCapabilities.canCreateTextRange ? handleTextSelectionAnchor : undefined}
+                                  style={{ zoom: readerZoom / 100 }}
                                   className="mx-auto max-w-[840px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border)] bg-white p-8 font-serif text-[15px] leading-7 text-[#1f2a24] shadow-sm"
                                 >
                                   {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
@@ -1857,7 +1927,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </div>
                             ) : documentTextPreview ? (
                               <div className="max-h-[680px] overflow-auto bg-[#efece4] p-4 sm:p-6">
-                                <div data-testid="version-preview-document-text" className="mx-auto max-w-[840px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border)] bg-white p-8 font-serif text-[15px] leading-7 text-[#1f2a24] shadow-sm">
+                                <div data-testid="version-preview-document-text" style={{ zoom: readerZoom / 100 }} className="mx-auto max-w-[840px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border)] bg-white p-8 font-serif text-[15px] leading-7 text-[#1f2a24] shadow-sm">
                                   {documentTextPreview}
                                 </div>
                               </div>
@@ -1895,7 +1965,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </main>
 
                   {/* CANONICAL RIGHT REGION: Contextual Work-Panel Shell */}
-                  <aside data-testid="canonical-right-shell" className="min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col">
+                  <aside data-testid="canonical-right-shell" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " xl:hidden" : ""}`}>
                     <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-3">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">

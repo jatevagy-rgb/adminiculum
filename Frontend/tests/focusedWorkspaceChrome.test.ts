@@ -4,42 +4,47 @@ import { componentHarness, flatten } from './helpers/componentHarness';
 
 function harness() {
   const SidebarMock = () => null;
+  const TopBarMock = () => null;
   const h = componentHarness('src/components/AppShell.tsx', 'AppShell', {
     'next/link': { default: 'a' },
     './Sidebar': { Sidebar: SidebarMock },
-    './TopBar': { TopBar: () => null },
+    './TopBar': { TopBar: TopBarMock },
     './DashboardFocused': { DashboardFocused: () => null },
     './CasesList': { CasesList: () => null },
     '@/lib/uiPack': { useUiPack: () => ['legal_ops_atelier'] },
   });
-  return { h, SidebarMock };
+  return { h, SidebarMock, TopBarMock };
 }
 
-test('focused workspace chrome hides the sidebar and shows the focused nav', () => {
-  const { h, SidebarMock } = harness();
+const has = (tree: any, type: unknown) => flatten(tree).some((n: any) => n.type === type);
+
+test('focused workspace renders exactly one coherent chrome: no Sidebar, no stacked TopBar', () => {
+  const { h, SidebarMock, TopBarMock } = harness();
   const tree = h.render({ onSignOut() {}, section: 'case-detail', workspaceChrome: 'focused', children: 'tartalom' });
+
   assert.equal(tree.props['data-shell-chrome'], 'focused');
-  assert.equal(flatten(tree).some((n: any) => n.type === SidebarMock), false, 'sidebar must be hidden in focused mode');
-  assert.equal(
-    flatten(tree).some((n: any) => n.props?.['data-testid'] === 'focused-workspace-nav'),
-    true,
-    'focused workspace nav (escape back to cases) must be present',
+  assert.equal(has(tree, SidebarMock), false, 'focused chrome must not render the permanent Sidebar');
+  assert.equal(has(tree, TopBarMock), false, 'focused chrome must not stack the global TopBar underneath');
+
+  const chrome = flatten(tree).find((n: any) => n.props?.['data-testid'] === 'focused-workspace-chrome');
+  assert.ok(chrome, 'one focused workspace chrome must render');
+  assert.ok(
+    flatten(tree).some((n: any) => n.props?.['data-testid'] === 'focused-workspace-escape'),
+    'focused chrome must expose an escape back to cases',
   );
+  // sign-out access remains in the focused chrome
+  assert.ok(String(flatten(tree).map((n: any) => n.type === 'button' && n.props?.onClick ? 'button' : '').join('')).length > 0);
 });
 
-test('normal routes still render the existing sidebar', () => {
-  const { h, SidebarMock } = harness();
+test('normal routes keep the existing Sidebar + TopBar unchanged', () => {
+  const { h, SidebarMock, TopBarMock } = harness();
   const tree = h.render({ onSignOut() {}, section: 'cases', children: 'tartalom' });
+
   assert.equal(tree.props['data-shell-chrome'], 'default');
-  assert.equal(flatten(tree).some((n: any) => n.type === SidebarMock), true, 'sidebar must remain on normal routes');
+  assert.equal(has(tree, SidebarMock), true, 'normal routes render the Sidebar');
+  assert.equal(has(tree, TopBarMock), true, 'normal routes render the TopBar');
   assert.equal(
-    flatten(tree).some((n: any) => n.props?.['data-testid'] === 'focused-workspace-nav'),
+    flatten(tree).some((n: any) => n.props?.['data-testid'] === 'focused-workspace-chrome'),
     false,
   );
-});
-
-test('explicit default chrome keeps the sidebar', () => {
-  const { h, SidebarMock } = harness();
-  const tree = h.render({ onSignOut() {}, section: 'dashboard', workspaceChrome: 'default', children: null });
-  assert.equal(flatten(tree).some((n: any) => n.type === SidebarMock), true);
 });
