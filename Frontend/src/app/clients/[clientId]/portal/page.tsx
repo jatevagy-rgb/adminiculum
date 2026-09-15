@@ -8,6 +8,11 @@ import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { getClient, updateClient, type Client } from "@/lib/api";
 import { getClientColorDefinition } from "@/lib/clientColors";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
+import {
+  getClientPublishedContent,
+  type ClientPublishedContentDTO,
+  type ClientPublishedContentItem,
+} from "@/lib/clientPublicationApi";
 import { ClientPortalMemberAdmin } from "@/components/client-portal/ClientPortalMemberAdmin";
 
 const modeLabels: Record<AdminWorkspaceDTO["mode"], string> = {
@@ -22,6 +27,26 @@ const statusLabels: Record<AdminWorkspaceDTO["status"], string> = {
   ARCHIVED: "Archivált",
 };
 
+const publishedTypeLabels: Record<ClientPublishedContentItem["type"], string> = {
+  MATTER: "Ügyállapot",
+  DOCUMENT: "Dokumentum",
+  ACTION_REQUEST: "Teendő",
+  UPDATE: "Frissítés",
+};
+
+function formatPortalDate(value: string | null | undefined): string {
+  return value ? new Date(value).toLocaleString("hu-HU") : "—";
+}
+
+// Canonical deep links into the existing publication workflows: document
+// publication is managed on the Dokumentumok surface, matter progress and the
+// case-level client portal panel on the case Ügyfélportál surface.
+function publishedItemHref(item: ClientPublishedContentItem): string {
+  return item.type === "DOCUMENT"
+    ? `/cases/${encodeURIComponent(item.caseId)}/documents`
+    : `/cases/${encodeURIComponent(item.caseId)}/client-portal`;
+}
+
 export default function ClientPortalContextPage() {
   const params = useParams();
   const clientId = String(params?.clientId || "");
@@ -31,6 +56,8 @@ export default function ClientPortalContextPage() {
   const [error, setError] = useState<string | null>(null);
   const [savingPortal, setSavingPortal] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [published, setPublished] = useState<ClientPublishedContentDTO | null>(null);
+  const [publishedError, setPublishedError] = useState<string | null>(null);
 
   const savePortalSettings = async (patch: Partial<Pick<Client, "relationshipMode" | "portalAccessEnabled" | "connectedSystemState">>) => {
     if (!client) return;
@@ -57,6 +84,20 @@ export default function ClientPortalContextPage() {
       .catch(() => setError("A portál adatai jelenleg nem érhetők el."));
   }, [clientId]);
 
+  // Published-content count/list come from the canonical server-side client
+  // projection. Loaded independently so a publication availability problem never
+  // blocks the rest of the control surface, and never renders a fake count.
+  useEffect(() => {
+    if (!clientId) return;
+    let active = true;
+    setPublished(null);
+    setPublishedError(null);
+    void getClientPublishedContent(clientId)
+      .then((result) => { if (active) setPublished(result); })
+      .catch(() => { if (active) setPublishedError("A publikált tartalom adatai jelenleg nem érhetők el."); });
+    return () => { active = false; };
+  }, [clientId]);
+
   const refreshWorkspaces = async () => {
     const result = await listAdminWorkspaces(clientId);
     setWorkspaces(result.items);
@@ -64,8 +105,6 @@ export default function ClientPortalContextPage() {
 
   const organizationMode = workspace?.mode === "ORGANIZATION" || workspace?.mode === "CASE_RELAY";
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
-  // A numeric count is shown only when the client-scoped case set is complete
-  // (pagination.total covered by fetched items) and terminal statuses are
 
   return (
     <AuthenticatedApp section="clients">
@@ -94,32 +133,50 @@ export default function ClientPortalContextPage() {
                       </>
                     ) : null}
                   </div>
+                  {workspace ? (
+                    <Link href="/portal" target="_blank" rel="noreferrer" className="adm-link-button ml-auto px-4 py-2 text-xs">
+                      Portál megnyitása
+                    </Link>
+                  ) : null}
                 </div>
-                <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A portál státusza és ügyfélnek szánt kapcsolódó felület egy helyen.</p>
+                <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A portál státusza, tagsága, működési módja és az ügyfélnek publikált tartalom egy helyen.</p>
               </header>
 
-
-              {/* 1. Státusz */}
-              <section className="adm-board-panel p-5">
+              {/* KPI — portal state, customer type, active members, published content */}
+              <section className="adm-board-panel p-5" data-testid="portal-center-kpi">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Státusz</p>
                 <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Portál állapota</h2>
-                {workspace ? (
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{statusLabels[workspace.status]}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Státusz</p></div>
-                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{modeLabels[workspace.mode]}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Mód</p></div>
-                    <div className="rounded-xl bg-[var(--adm-surface)] p-4"><p className="text-2xl font-semibold text-[var(--adm-text)]">{workspace.activeMembershipCount}</p><p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív tag</p></div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
+                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{workspace ? statusLabels[workspace.status] : "Nincs portál"}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Portál állapota</p>
                   </div>
-                ) : <p className="mt-4 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs létrehozott portál.</p>}
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
+                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{organizationMode ? "Igen" : "Nem"}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Szervezeti ügyfél</p>
+                  </div>
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
+                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{workspace ? workspace.activeMembershipCount : "—"}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív portál tag</p>
+                  </div>
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
+                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{published ? published.counts.total : "—"}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Publikált tartalom</p>
+                  </div>
+                </div>
+                {!workspace ? (
+                  <p className="mt-4 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs létrehozott portál.</p>
+                ) : null}
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Link href="/client-portal-admin" className="adm-link-button px-4 py-2 text-xs">Portál adminisztráció megnyitása</Link>
                   {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button px-4 py-2 text-xs">Szervezeti kontextus</Link> : null}
                 </div>
               </section>
 
-              {/* 2. Tagság · 3. Meghívások és kérések */}
+              {/* Tagság · meghívások és kérések */}
               <ClientPortalMemberAdmin clientId={clientId} workspaces={workspaces} onRefresh={refreshWorkspaces} />
 
-              {/* 4. Hozzáférés és kapcsolat · 5. Kapcsolt rendszerek */}
+              {/* Hozzáférés és kapcsolat · Kapcsolt rendszerek */}
               <section className="adm-board-panel p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
@@ -181,17 +238,41 @@ export default function ClientPortalContextPage() {
                 )}
               </section>
 
-              {/* 6. Publikált tartalom */}
-              <section className="adm-board-panel p-5">
+              {/* Publikált tartalom */}
+              <section className="adm-board-panel p-5" data-testid="portal-published-content">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Publikált tartalom</p>
                 <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Ügyfélnek látható tartalmak</h2>
-                <p className="mt-3 text-sm text-[var(--adm-text-muted)]">
-                  A dokumentum- és mérföldkő-publikációk ügyszinten készülnek és változatlanul jelennek meg az ügyfélportálon. Új publikáció az ügy dokumentumai közül indítható.
-                </p>
+                {publishedError ? (
+                  <p className="mt-3 text-sm text-[var(--adm-text-muted)]" role="status">{publishedError}</p>
+                ) : !published ? (
+                  <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Publikált tartalom betöltése…</p>
+                ) : published.counts.total === 0 ? (
+                  <p className="mt-3 text-sm text-[var(--adm-text-muted)]">
+                    Jelenleg nincs ügyfélnek publikált tartalom. Új publikáció az ügy dokumentumaiból vagy ügyállapotából indítható.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm text-[var(--adm-text-muted)]">
+                      {published.counts.total} publikált elem · ügyállapot: {published.counts.matters} · dokumentum: {published.counts.documents} · teendő: {published.counts.actionRequests} · frissítés: {published.counts.updates}
+                    </p>
+                    <ul className="mt-3 grid gap-2" data-testid="published-content-list">
+                      {published.items.map((item) => (
+                        <li key={`${item.type}:${item.id}`} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--adm-border)] p-3 text-sm">
+                          <span className="min-w-0">
+                            <span className="rounded-full bg-[var(--adm-bg,#faf8f3)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{publishedTypeLabels[item.type]}</span>
+                            <span className="ml-2 font-semibold text-[var(--adm-text)]">{item.title || "Cím nélküli tartalom"}</span>
+                            <span className="ml-2 text-xs text-[var(--adm-text-muted)]">{formatPortalDate(item.publishedAt)}</span>
+                          </span>
+                          <Link href={publishedItemHref(item)} className="adm-link-button px-3 py-1 text-xs">Megnyitás</Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
                 <Link href={`/cases?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button mt-4 inline-block px-4 py-2 text-xs">Ügyek megnyitása publikációhoz</Link>
               </section>
 
-              {/* 7. Technikai részletek (másodlagos) */}
+              {/* Technikai részletek (másodlagos) */}
               <section className="adm-board-panel p-5">
                 <details>
                   <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)] focus-visible:outline focus-visible:outline-2">Technikai részletek és audit</summary>
@@ -200,7 +281,13 @@ export default function ClientPortalContextPage() {
                     {workspace ? (
                       <div><dt className="font-semibold">Munkatér-azonosító</dt><dd className="font-mono">{workspace.id}</dd></div>
                     ) : null}
+                    {workspace?.publicReference ? (
+                      <div><dt className="font-semibold">Portál nyilvános azonosító</dt><dd className="font-mono">{workspace.publicReference}</dd></div>
+                    ) : null}
                     <div><dt className="font-semibold">Kapcsolati mód (nyers)</dt><dd className="font-mono">{client.relationshipMode || "PORTAL_CENTRIC"}</dd></div>
+                    {workspace ? (
+                      <div><dt className="font-semibold">Munkatér mód (nyers)</dt><dd className="font-mono">{workspace.mode}</dd></div>
+                    ) : null}
                   </dl>
                 </details>
               </section>
