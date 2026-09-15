@@ -441,8 +441,12 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     expect(serialized).not.toContain(sharedReqId);
 
     for (const topic of result.topics) {
-      expect(Object.keys(topic).sort()).toEqual(['missingInformation', 'nextAction', 'shortExplanation', 'state', 'topicId', 'topicLabel']);
+      expect(Object.keys(topic).sort()).toEqual(['documents', 'missingInformation', 'nextAction', 'shortExplanation', 'state', 'topicId', 'topicLabel']);
       expect(topic.topicId).toMatch(/^portal\//);
+      for (const document of topic.documents) {
+        // Only client-safe published-document fields may be projected.
+        expect(Object.keys(document).sort()).toEqual(['downloadAvailable', 'publicationId', 'publishedAt', 'title', 'versionLabel']);
+      }
     }
   });
 
