@@ -138,6 +138,8 @@ export function GrowDiagnosticWorkbench({
         evidence={data.evidence}
         missing={data.missing}
         sufficiency={data.problems.sufficiency}
+        diagnoses={data.problems.diagnoses}
+        recommendations={data.proposed.recommendations}
       />
 
       <InternalRecommendationPanel proposed={data.proposed} />

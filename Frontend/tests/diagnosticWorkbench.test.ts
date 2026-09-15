@@ -112,6 +112,8 @@ test("6. Canonical state renders separately from observations", () => {
   const canonSrc = read(CANONICAL_PANEL);
   assert.match(canonSrc, /data-testid="diagnostic-canonical-state-panel"/);
   assert.match(canonSrc, /Kanonikus vállalati állapot/);
+  assert.match(canonSrc, /Megfelelőségi státusz:/);
+  assert.doesNotMatch(canonSrc, /Megfelelőségi szint/);
   assert.match(canonSrc, /GrowProcessMap/);
   assert.match(canonSrc, /Még nincs elegendő rögzített vállalati adat\./);
 
@@ -151,11 +153,17 @@ test("9. EVIDENCE_RECORD and RESEARCH_EVIDENCE are displayed distinctly", () => 
   assert.match(evSrc, /Még nincs kapcsolt bizonyíték\./);
 });
 
-test("10. Research evidence explanatory disclaimer is present", () => {
+test("10. Research evidence explanatory disclaimer is present and distinguishes linked vs unlinked", () => {
   const evSrc = read(EVIDENCE_PANEL);
+  assert.match(evSrc, /Kapcsolt kutatási háttér/);
   assert.match(
     evSrc,
-    /A kutatási háttér a következtetést támasztja alá; nem a vállalat saját mért adata\./
+    /Ez a kutatási háttér a jelenlegi diagnózis\/javaslat alátámasztásához kapcsolódik; nem a vállalat saját mért adata\./
+  );
+  assert.match(evSrc, /További kutatási corpus/);
+  assert.match(
+    evSrc,
+    /Jelenleg nincs az adott diagnózishoz vagy javaslathoz kapcsolva\./
   );
 });
 
@@ -166,13 +174,15 @@ test("11. Recommendation is marked internal/not customer-visible", () => {
   assert.match(recSrc, /Ügyféloldali közzététel ebben a verzióban nem támogatott\./);
 });
 
-test("12. UNKNOWN remains explicit", () => {
+test("12. UNKNOWN remains explicit and truthful", () => {
   const canonSrc = read(CANONICAL_PANEL);
   assert.match(canonSrc, /fact\.verificationStatus === "UNKNOWN"/);
   assert.equal(verificationStatusLabelHu("UNKNOWN"), "Ismeretlen");
 
   const evSrc = read(EVIDENCE_PANEL);
-  assert.match(evSrc, /Ismeretlen tények \(UNKNOWN\):/);
+  assert.match(evSrc, /Explicit ismeretlen tények \(UNKNOWN\):/);
+  assert.match(evSrc, /Van explicit ismeretlenként jelölt tény\./);
+  assert.match(evSrc, /Nincs explicit UNKNOWN státuszú rögzített tény\./);
 });
 
 test("13. NEEDS_MORE_DATA displays honestly", () => {

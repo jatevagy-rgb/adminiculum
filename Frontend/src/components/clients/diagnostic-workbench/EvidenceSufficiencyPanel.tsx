@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { DiagnosticWorkbenchDto } from "@/lib/diagnosticWorkbenchApi";
 import {
   PROVENANCE_LABELS_HU,
@@ -11,18 +12,46 @@ interface EvidenceSufficiencyPanelProps {
   evidence: DiagnosticWorkbenchDto["evidence"];
   missing: DiagnosticWorkbenchDto["missing"];
   sufficiency: DiagnosticWorkbenchDto["problems"]["sufficiency"];
+  diagnoses?: DiagnosticWorkbenchDto["problems"]["diagnoses"];
+  recommendations?: DiagnosticWorkbenchDto["proposed"]["recommendations"];
 }
 
 export function EvidenceSufficiencyPanel({
   evidence,
   missing,
   sufficiency,
+  diagnoses = [],
+  recommendations = [],
 }: EvidenceSufficiencyPanelProps) {
   const clientProv = PROVENANCE_LABELS_HU.EVIDENCE_RECORD;
   const researchProv = PROVENANCE_LABELS_HU.RESEARCH_EVIDENCE;
 
   const hasClientRecords = evidence.records && evidence.records.length > 0;
   const hasResearch = evidence.research && evidence.research.length > 0;
+
+  // Derive linked research evidence IDs from current diagnoses and recommendations
+  const linkedEvidenceIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const diag of diagnoses || []) {
+      for (const ev of diag.evidence || []) {
+        if (ev.id) ids.add(ev.id);
+      }
+    }
+    for (const rec of recommendations || []) {
+      for (const ev of rec.evidence || []) {
+        if (ev.id) ids.add(ev.id);
+      }
+    }
+    return ids;
+  }, [diagnoses, recommendations]);
+
+  const linkedResearch = useMemo(() => {
+    return (evidence.research || []).filter((r) => linkedEvidenceIds.has(r.id));
+  }, [evidence.research, linkedEvidenceIds]);
+
+  const unlinkedResearch = useMemo(() => {
+    return (evidence.research || []).filter((r) => !linkedEvidenceIds.has(r.id));
+  }, [evidence.research, linkedEvidenceIds]);
 
   return (
     <section
@@ -54,9 +83,11 @@ export function EvidenceSufficiencyPanel({
                 : "border-slate-200 bg-white text-slate-700"
             }`}
           >
-            <span className="font-semibold block">Ismeretlen tények (UNKNOWN):</span>
-            <span className="mt-1 block text-sm">
-              {missing.hasUnknownFacts ? "Van megerősítetlen tény" : "Nincs ismeretlen tény"}
+            <span className="font-semibold block">Explicit ismeretlen tények (UNKNOWN):</span>
+            <span className="mt-1 block text-sm font-medium">
+              {missing.hasUnknownFacts
+                ? "Van explicit ismeretlenként jelölt tény."
+                : "Nincs explicit UNKNOWN státuszú rögzített tény."}
             </span>
           </div>
 
@@ -212,7 +243,7 @@ export function EvidenceSufficiencyPanel({
       </div>
 
       {/* Part B: Research Evidence (Methodological / Benchmark) */}
-      <div className="space-y-3 border-t border-[var(--adm-border)] pt-4">
+      <div className="space-y-4 border-t border-[var(--adm-border)] pt-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-[var(--adm-text)]">
@@ -225,16 +256,8 @@ export function EvidenceSufficiencyPanel({
             </span>
           </div>
           <span className="text-xs text-[var(--adm-text-muted)]">
-            {evidence.research.length} tétel
+            {evidence.research.length} tétel (összesen)
           </span>
-        </div>
-
-        {/* Mandatory Explicit Research Notice */}
-        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-          <p className="font-medium text-slate-900">Módszertani megjegyzés:</p>
-          <p className="mt-0.5">
-            A kutatási háttér a következtetést támasztja alá; nem a vállalat saját mért adata.
-          </p>
         </div>
 
         {!hasResearch ? (
@@ -242,45 +265,133 @@ export function EvidenceSufficiencyPanel({
             Nincs csatolt kutatási háttéranyag.
           </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {evidence.research.map((res) => (
-              <div
-                key={res.id}
-                className="rounded-lg border border-[var(--adm-border)] p-3 text-xs bg-white space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-semibold text-[var(--adm-text)]">{res.title}</span>
-                  <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700">
-                    {res.kind}
+          <div className="space-y-5">
+            {/* Subsection B1: Kapcsolt kutatási háttér (linked to current diagnoses or recommendations) */}
+            <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50/50 p-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                  Kapcsolt kutatási háttér ({linkedResearch.length})
+                </h4>
+                <span className="text-[11px] text-slate-500">
+                  Közvetlenül hivatkozott háttéranyag
+                </span>
+              </div>
+
+              {/* Explanatory sentence for linked research */}
+              <div className="rounded border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-900">
+                <p>
+                  Ez a kutatási háttér a jelenlegi diagnózis/javaslat alátámasztásához kapcsolódik; nem a vállalat saját mért adata.
+                </p>
+              </div>
+
+              {linkedResearch.length === 0 ? (
+                <p className="text-xs text-[var(--adm-text-muted)] italic">
+                  Nincs közvetlenül a jelenlegi diagnózisokhoz vagy javaslatokhoz kapcsolt kutatási háttér.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {linkedResearch.map((res) => (
+                    <div
+                      key={res.id}
+                      className="rounded-lg border border-sky-200 bg-white p-3 text-xs space-y-2 shadow-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-semibold text-[var(--adm-text)]">{res.title}</span>
+                        <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium text-sky-800">
+                          Kapcsolt kutatás
+                        </span>
+                      </div>
+
+                      {res.boundedClaim ? (
+                        <p className="text-[var(--adm-text)] italic text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                          &ldquo;{res.boundedClaim}&rdquo;
+                        </p>
+                      ) : null}
+
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[var(--adm-text-muted)] pt-1">
+                        <span>Eredet: {res.origin || "—"}</span>
+                        <span>Hitelesítés: {verificationStatusLabelHu(res.verificationStatus)}</span>
+                        <span>Erősség: {res.strength}</span>
+                      </div>
+
+                      {res.domainKeys && res.domainKeys.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {res.domainKeys.map((dk) => (
+                            <span
+                              key={dk}
+                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[9.5px] font-mono text-slate-600"
+                            >
+                              {dk}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Subsection B2: További kutatási corpus (not linked to current diagnoses or recommendations) */}
+            {unlinkedResearch.length > 0 ? (
+              <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                    További kutatási corpus ({unlinkedResearch.length})
+                  </h4>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                    Jelenleg nincs az adott diagnózishoz vagy javaslathoz kapcsolva.
                   </span>
                 </div>
 
-                {res.boundedClaim ? (
-                  <p className="text-[var(--adm-text)] italic text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
-                    &ldquo;{res.boundedClaim}&rdquo;
+                <div className="rounded border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-600">
+                  <p>
+                    A háttértárban elérhető módszertani és tudományos kutatási referencia. Jelenleg nincs közvetlenül hozzárendelve a feltárt diagnózisokhoz vagy javaslatokhoz, ezért nem tekintendő közvetlen alátámasztásnak.
                   </p>
-                ) : null}
-
-                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[var(--adm-text-muted)] pt-1">
-                  <span>Eredet: {res.origin || "—"}</span>
-                  <span>Hitelesítés: {verificationStatusLabelHu(res.verificationStatus)}</span>
-                  <span>Erősség: {res.strength}</span>
                 </div>
 
-                {res.domainKeys && res.domainKeys.length > 0 ? (
-                  <div className="flex flex-wrap gap-1 pt-1">
-                    {res.domainKeys.map((dk) => (
-                      <span
-                        key={dk}
-                        className="rounded bg-slate-100 px-1.5 py-0.5 text-[9.5px] font-mono text-slate-600"
-                      >
-                        {dk}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {unlinkedResearch.map((res) => (
+                    <div
+                      key={res.id}
+                      className="rounded-lg border border-slate-200 bg-white p-3 text-xs space-y-2 opacity-85"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-medium text-[var(--adm-text)]">{res.title}</span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
+                          Corpus referencia
+                        </span>
+                      </div>
+
+                      {res.boundedClaim ? (
+                        <p className="text-[var(--adm-text)] italic text-[11px] bg-slate-50 p-2 rounded border border-slate-100">
+                          &ldquo;{res.boundedClaim}&rdquo;
+                        </p>
+                      ) : null}
+
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-[var(--adm-text-muted)] pt-1">
+                        <span>Eredet: {res.origin || "—"}</span>
+                        <span>Hitelesítés: {verificationStatusLabelHu(res.verificationStatus)}</span>
+                        <span>Erősség: {res.strength}</span>
+                      </div>
+
+                      {res.domainKeys && res.domainKeys.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 pt-1">
+                          {res.domainKeys.map((dk) => (
+                            <span
+                              key={dk}
+                              className="rounded bg-slate-100 px-1.5 py-0.5 text-[9.5px] font-mono text-slate-600"
+                            >
+                              {dk}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            ) : null}
           </div>
         )}
       </div>

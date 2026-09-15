@@ -65,7 +65,7 @@ export function CanonicalStatePanel({ client, known }: CanonicalStatePanelProps)
                   </p>
                 </div>
                 <div>
-                  <span className="text-[var(--adm-text-muted)]">Megfelelőségi szint:</span>
+                  <span className="text-[var(--adm-text-muted)]">Megfelelőségi státusz:</span>
                   <p className="font-medium text-[var(--adm-text)]">
                     {client.operatingProfile.complianceEnrollmentStatus || "—"}
                   </p>
