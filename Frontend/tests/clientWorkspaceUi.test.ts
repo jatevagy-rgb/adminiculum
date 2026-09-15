@@ -76,6 +76,14 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(component(), /Operatív áttekintés/);
   });
 
+  it('keeps the legacy operational surface independent from Data Room availability', () => {
+    const src = component();
+    const dataRoomGateEnd = src.indexOf('</> : null}');
+    const legacySection = src.indexOf('data-testid="legacy-operational-overview"');
+    assert.ok(dataRoomGateEnd >= 0, 'Data Room success gate should remain explicit');
+    assert.ok(legacySection > dataRoomGateEnd, 'legacy operations must render outside the Data Room success gate');
+  });
+
   it('does not invent change feeds, scores, or temporal heuristics', () => {
     const src = component();
     assert.doesNotMatch(src, /Date.now/);

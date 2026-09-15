@@ -66,8 +66,8 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
     <nav aria-label="Vállalati működés szekciói" className="flex flex-wrap gap-1 border-b border-[var(--adm-border)] pb-1">
       {tabs.map(([key, label]) => <a key={key} href={`#${key}`} className="rounded px-3 py-2 text-xs font-semibold text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]">{label}</a>)}
     </nav>
-    {loading ? <p className="text-sm text-[var(--adm-text-muted)]">Betöltés…</p> : null}
-    {error ? <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
+    {loading ? <p data-testid="data-room-loading" className="text-sm text-[var(--adm-text-muted)]">Betöltés…</p> : null}
+    {error ? <p data-testid="data-room-error" role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p> : null}
     {!loading && !error && room ? <>
       <Panel id="overview" title="Áttekintés">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -96,11 +96,11 @@ export function ClientCompanyWorkspace({ clientId, clientName }: { clientId: str
       <Panel id="documents" title="Dokumentumok"><div className="grid gap-3 sm:grid-cols-3"><CountCard label="Jogosult dokumentumok" value={room.documents.documentCount} /><CountCard label="Aktuális verziók" value={room.documents.currentVersionCount} /><CountCard label="Bizonyítékhoz kapcsolt rekordok" value={room.documents.evidenceLinkedRecordCount} /></div><Link href="/documents/compare" className="mt-4 inline-block text-xs text-[var(--adm-ochre-500)] hover:underline">Dokumentumtár megnyitása →</Link></Panel>
       <Panel id="compliance" title="Megfelelőség"><p className="text-sm text-[var(--adm-text-muted)]">Ez a jelenlegi, jogosultság-alapú megfelelőségi összesítés.</p><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><CountCard label="Értékelt" value={room.complianceSummary.evaluatedCount} /><CountCard label="Alkalmazandó" value={room.complianceSummary.applies} /><CountCard label="Tényhiányos" value={room.complianceSummary.insufficientFacts} /><CountCard label="Nyitott megállapítás" value={room.complianceSummary.openFindings} /></div><p className="mt-3 text-xs text-[var(--adm-text-muted)]">Értékelés ideje: {dateText(room.complianceSummary.evaluatedAt)}</p><Link href={`/clients/${encodeURIComponent(clientId)}/compliance`} className="mt-3 inline-block text-xs text-[var(--adm-ochre-500)] hover:underline">Részletes megfelelőség →</Link></Panel>
       <Panel id="development" title="Fejlesztés"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><CountCard label="Kezdeményezések" value={room.developmentSummary.initiativeCount} /><CountCard label="Aktív kezdeményezések" value={room.developmentSummary.activeInitiativeCount} /><CountCard label="Mérföldkövek" value={room.developmentSummary.milestoneCount} /><CountCard label="Nem szintetikus kimenetek" value={room.measurementSummary.nonSyntheticOutcomeCount} /></div><div className="mt-4 space-y-2">{room.developmentSummary.initiatives.map((initiative) => <article key={initiative.id} className="rounded border border-[var(--adm-border)] p-3"><div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold">{initiative.title}</h3><span className="text-xs text-[var(--adm-text-muted)]">{humanStatus(initiative.status)}</span></div>{initiative.currentState || initiative.targetState ? <p className="mt-1 text-sm text-[var(--adm-text-muted)]">{initiative.currentState || "Nincs még adat"} → {initiative.targetState || "Nincs még adat"}</p> : null}</article>)}{room.measurementSummary.outcomes.filter((outcome) => outcome.basis === "ASSUMED").map((outcome) => <p key={outcome.id} className="text-xs text-[var(--adm-text-muted)]">Feltételezett kimenet: {outcome.businessProcess?.name || outcome.developmentInitiative?.title || outcome.opportunity?.title || "Nincs megnevezve"}</p>)}</div></Panel>
-      <section id="operational" data-testid="legacy-operational-overview" className="scroll-mt-24 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
-        <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Operatív áttekintés</h2>
-        <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A korábbi operatív munkanézet továbbra is elérhető a részletes ügy-, határidő-, felelősségi és megfelelőségi kontextussal.</p>
-        <div className="mt-4"><ClientCompanyOperationsLegacy clientId={clientId} clientName={clientName} /></div>
-      </section>
     </> : null}
+    <section id="operational" data-testid="legacy-operational-overview" className="scroll-mt-24 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
+      <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Operatív áttekintés</h2>
+      <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A korábbi operatív munkanézet továbbra is elérhető a részletes ügy-, határidő-, felelősségi és megfelelőségi kontextussal.</p>
+      <div className="mt-4"><ClientCompanyOperationsLegacy clientId={clientId} clientName={clientName} /></div>
+    </section>
   </div>;
 }

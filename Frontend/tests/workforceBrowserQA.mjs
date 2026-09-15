@@ -136,8 +136,8 @@ function responseFor(url, mode = "populated") {
         findingCount: 0,
         importantFindings: [],
       }],
-      contracts: [],
-      obligations: [],
+      contracts: [{ id: "qa-contract", title: "QA szerződés", status: "ACTIVE", type: "SERVICE" }],
+      obligations: [{ id: "qa-obligation", title: "QA határidő", status: "OPEN", nextDueDate: "2026-02-01T00:00:00.000Z" }],
       organization: { groupCount: 0, personCount: 0, activePersonCount: 0, keyPersons: [] },
       gaps: {
         contractsWithoutOwnerCount: 0, obligationsWithoutOwnerCount: 0, inactiveOwnerCount: 0,
@@ -145,7 +145,7 @@ function responseFor(url, mode = "populated") {
       },
       initiatives: [],
       milestones: [],
-      cases: [],
+      cases: [{ id: WORKFORCE_FIXTURE.case.id, title: WORKFORCE_FIXTURE.case.title, status: "ACTIVE" }],
       attention: [],
       },
     };
@@ -175,7 +175,6 @@ function responseFor(url, mode = "populated") {
     };
   }
   if (url.includes(`/compliance/clients/${WORKFORCE_FIXTURE.client.id}/overview`)) {
-    if (mode === "unavailable") return { status: 503, body: { status: 503, code: "QA_UNAVAILABLE" } };
     return { status: 200, body: { findings: mode === "empty" ? [] : complianceFindings() } };
   }
   if (url.includes(`/compliance/proposals?clientId=${WORKFORCE_FIXTURE.client.id}`)) return {
@@ -336,7 +335,7 @@ async function assertComplianceMode(browser, mode, viewport) {
     waitUntil: mode === "loading" ? "domcontentloaded" : "networkidle",
   });
   if (mode === "loading") {
-    await qa.page.getByText("Betöltés…").waitFor({ state: "visible", timeout: 5000 });
+    await qa.page.getByTestId("data-room-loading").waitFor({ state: "visible", timeout: 5000 });
     await qa.page.waitForLoadState("networkidle");
   }
   await checkPage(qa.page, target, `Compliance ${mode} ${viewport.width}`);
@@ -354,6 +353,11 @@ async function assertComplianceMode(browser, mode, viewport) {
   }
   if (mode === "unavailable" && !body.includes("A vállalati működés adatai jelenleg nem tölthetők be")) {
     throw new Error("Data Room unavailable state was not rendered");
+  }
+  if (mode === "unavailable") {
+    if (!await qa.page.locator('[data-testid="legacy-operational-overview"]').isVisible()) throw new Error("Legacy operational view disappeared with Data Room failure");
+    if (!body.includes(WORKFORCE_FIXTURE.case.title)) throw new Error("Legacy case context disappeared with Data Room failure");
+    if (!await qa.page.locator('[data-testid="compliance-overview"]').count()) throw new Error("Legacy compliance overview disappeared with Data Room failure");
   }
   await qa.context.close();
 }
