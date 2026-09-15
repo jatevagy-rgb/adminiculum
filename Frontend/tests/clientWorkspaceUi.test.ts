@@ -8,6 +8,7 @@ const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 
 describe('W1C Company Workspace Convergence (structural)', () => {
   const component = () => read('src/components/clients/ClientCompanyWorkspace.tsx');
+  const legacy = () => read('src/components/clients/ClientCompanyOperationsLegacy.tsx');
   const api = () => read('src/lib/clientWorkspaceApi.ts');
   const page = () => read('src/app/clients/[clientId]/vallalati-mukodes/page.tsx');
   const tabs = () => read('src/components/clients/ClientWorkspaceTabs.tsx');
@@ -66,6 +67,13 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(src, /complianceSummary\.currentOnly|complianceSummary\.evaluatedCount/);
     assert.match(src, /Feltételezett/);
     assert.doesNotMatch(src, /getOverview\(clientId\)/);
+  });
+
+  it('keeps the previously working operational capabilities reachable additively', () => {
+    const src = legacy();
+    for (const token of ['getOverview', 'Figyelmet igényel', 'Mi változott?', 'Következő lépés', 'Aktív ügyek', 'Határidők', 'Cégprofil', 'Szerződések / kötelezettségek', 'Kulcsszemélyek', 'ComplianceOverviewPanel', 'ComplianceProposalPanel', 'Szervezeti részletek megtekintése']) assert.match(src, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    assert.match(component(), /ClientCompanyOperationsLegacy/);
+    assert.match(component(), /Operatív áttekintés/);
   });
 
   it('does not invent change feeds, scores, or temporal heuristics', () => {

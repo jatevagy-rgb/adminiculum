@@ -31,7 +31,7 @@ describe("pre-corpus frontend safety boundaries", () => {
 
   it("frames company findings as internal assessments", () => {
     assert.match(read("src/components/clients/ClientCompanyFoundation.tsx"), /Belső értékelési megállapítások/);
-    assert.match(read("src/components/clients/ClientCompanyWorkspace.tsx"), /jelenlegi, jogosultság-alapú megfelelőségi összesítés/);
+    assert.match(read("src/components/clients/ClientCompanyOperationsLegacy.tsx"), /nem igazolt jogi kötelezettségek/);
   });
 
   it("keeps demo policy centralized", () => {

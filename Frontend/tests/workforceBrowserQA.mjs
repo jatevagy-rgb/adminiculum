@@ -145,6 +145,7 @@ function responseFor(url, mode = "populated") {
       },
       initiatives: [],
       milestones: [],
+      cases: [],
       attention: [],
       },
     };
