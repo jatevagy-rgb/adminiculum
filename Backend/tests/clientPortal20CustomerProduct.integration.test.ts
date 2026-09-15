@@ -271,6 +271,8 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
       },
     });
 
+    const employeeCountReferenceNow = new Date();
+
     // Create ClientFact for employee_count = 50 on clientA
     await db.clientFact.create({
       data: {
@@ -279,9 +281,11 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
         factDefinitionId: factDef.id,
         type: 'EMPLOYEE_COUNT',
         value: '50 fő',
-        validFrom: new Date('2026-01-01T00:00:00Z'),
+        validFrom: new Date(employeeCountReferenceNow.getTime() - 24 * 60 * 60 * 1000),
         numberValue: 50,
         verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'COMPANY',
+        factSubjectId: null,
       },
     });
 
@@ -292,7 +296,7 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
         factDefinitionId: factDef.id,
         type: 'EMPLOYEE_COUNT',
         value: '999 fő',
-        validFrom: new Date('2026-01-01T00:00:00Z'),
+        validFrom: new Date(employeeCountReferenceNow.getTime() - 24 * 60 * 60 * 1000),
         numberValue: 999,
         verificationStatus: 'LAW_FIRM_VERIFIED',
         scopeType: 'EMPLOYEE',
@@ -307,8 +311,8 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
         factDefinitionId: factDef.id,
         type: 'EMPLOYEE_COUNT',
         value: '777 fő',
-        validFrom: new Date('2025-01-01T00:00:00Z'),
-        validTo: new Date('2025-12-31T23:59:59Z'),
+        validFrom: new Date(employeeCountReferenceNow.getTime() - 3 * 24 * 60 * 60 * 1000),
+        validTo: new Date(employeeCountReferenceNow.getTime() - 24 * 60 * 60 * 1000),
         numberValue: 777,
         verificationStatus: 'LAW_FIRM_VERIFIED',
         scopeType: 'COMPANY',
@@ -323,7 +327,7 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
         factDefinitionId: factDef.id,
         type: 'EMPLOYEE_COUNT',
         value: '888 fő',
-        validFrom: new Date('2027-01-01T00:00:00Z'),
+        validFrom: new Date(employeeCountReferenceNow.getTime() + 24 * 60 * 60 * 1000),
         numberValue: 888,
         verificationStatus: 'LAW_FIRM_VERIFIED',
         scopeType: 'COMPANY',
@@ -625,6 +629,28 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
     ]) {
       expect(serialized).not.toContain(forbidden);
     }
+  });
+
+  it('EMPLOYEE_COUNT_FALLBACK_SCOPE_GUARDS=PASS — only current company facts affect the customer employee count', async () => {
+    const facts = await db.clientFact.findMany({
+      where: { clientId: ids.clientA, factDefinition: { key: 'employee_count' } },
+      select: { numberValue: true, scopeType: true, factSubjectId: true, validFrom: true, validTo: true },
+    });
+    const currentCompanyFact = facts.find((fact) => Number(fact.numberValue) === 50);
+    const employeeFact = facts.find((fact) => Number(fact.numberValue) === 999);
+    const expiredCompanyFact = facts.find((fact) => Number(fact.numberValue) === 777);
+    const futureCompanyFact = facts.find((fact) => Number(fact.numberValue) === 888);
+
+    expect(currentCompanyFact).toMatchObject({ scopeType: 'COMPANY', factSubjectId: null });
+    expect(employeeFact).toMatchObject({ scopeType: 'EMPLOYEE' });
+    expect(employeeFact?.factSubjectId).toBeTruthy();
+    expect(expiredCompanyFact).toMatchObject({ scopeType: 'COMPANY', factSubjectId: null });
+    expect(expiredCompanyFact?.validTo?.getTime()).toBeLessThan(Date.now());
+    expect(futureCompanyFact).toMatchObject({ scopeType: 'COMPANY', factSubjectId: null });
+    expect(futureCompanyFact?.validFrom.getTime()).toBeGreaterThan(Date.now());
+
+    const company = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
+    expect(company.employeeCount).toBe(50);
   });
 
   // 11. INDIVIDUAL_PORTAL_ISOLATION=PASS
