@@ -244,7 +244,7 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     await createMissingProjection(canonicalClient, 'Canonical projection', canonical!.id, 'employee_count');
     const canonicalResult = await getClientSafeComplianceReadModel(canonicalClient, true, false, db);
     const canonicalMissing = canonicalResult.topics[0]?.missingInformation[0];
-    expect(canonicalMissing).toMatchObject({ portalAnswerable: true, questionKey: 'employee_count', valueType: 'NUMBER', label: 'Number of employees', integerOnly: true });
+    expect(canonicalMissing).toMatchObject({ portalAnswerable: true, questionKey: 'employee_count', valueType: 'NUMBER', label: 'Munkavállalók száma', integerOnly: true });
   });
 
   it('returns configured COMPANY requirement-backed topic as safe DTO', async () => {

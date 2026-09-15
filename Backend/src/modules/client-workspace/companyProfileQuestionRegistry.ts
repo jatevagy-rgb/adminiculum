@@ -50,7 +50,7 @@ const LEGACY_COMPANY_PROFILE_QUESTIONS: readonly CompanyProfileQuestion[] = [
   {
     questionKey: 'employee_count',
     factDefinitionKey: 'employee_count',
-    label: 'Number of employees',
+    label: 'Munkavállalók száma',
     helpText: 'A vállalkozás jelenlegi munkavállalói létszáma.',
     section: 'PEOPLE',
     scopeType: 'COMPANY',
