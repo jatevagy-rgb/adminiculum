@@ -6,15 +6,23 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
   OrgComplianceView,
+  TopicDocuments,
   classifyTopic,
   controlProgressFor,
   filterTopics,
+  hasPortalAnswerableMissingInformation,
+  nextActionFor,
+  primaryBadgeLabel,
   refreshAfterProfileAnswer,
+  secondaryStateNote,
   summarizeTopics,
+  topicStateLabel,
 } from "../src/components/client-portal/OrgComplianceView";
 import { companyProfileCompletion } from "../src/lib/companyProfileCompletion";
+import { portalDownloadUrl } from "../src/lib/clientPortalApi";
 import type {
   PortalComplianceControlSummary,
+  PortalComplianceDocument,
   PortalComplianceMissingInfo,
   PortalComplianceTopic,
 } from "../src/lib/clientPortalApi";
@@ -214,5 +222,196 @@ describe("Compliance Map convergence", () => {
     const internal = readFileSync(path.join(root, "src/components/clients/compliance/ComplianceDocumentsSection.tsx"), "utf8");
     assert.match(internal, /complianceDocumentApi\.link/);
     assert.match(internal, /complianceDocumentApi\.unlink/);
+  });
+});
+
+describe("Compliance Map truthful primary-state convergence", () => {
+  // The exact live reproduction: topic whose backend raw state is lawyer review
+  // while the card simultaneously offers executable customer input.
+  const lawyerWithCustomerInput = (): PortalComplianceTopic =>
+    topic({
+      topicId: "portal/nis2-scope",
+      topicLabel: "Kiberbiztonsági (NIS2) hatály",
+      state: "LAWYER_REVIEW_REQUIRED",
+      shortExplanation: "NIS2 hatályvizsgálat.",
+      missingInformation: [missing()],
+      nextAction: "Ügyvédi áttekintés javasolt.",
+    });
+
+  it("A. executable customer input is the PRIMARY bucket, even under lawyer review", () => {
+    const t = lawyerWithCustomerInput();
+    const bucket = classifyTopic(t);
+    assert.equal(bucket, "CUSTOMER_ACTION");
+    assert.equal(primaryBadgeLabel(t, bucket), "Adatra várunk Öntől");
+    // Raw backend state is preserved, but never as the contradictory primary badge.
+    assert.equal(topicStateLabel(t), "Ügyvédi vizsgálat alatt");
+    assert.notEqual(primaryBadgeLabel(t, bucket), topicStateLabel(t));
+    assert.match(secondaryStateNote(t, bucket) ?? "", /ügyvédi vizsgálat/i);
+    // The immediate next step belongs to the customer, not the lawyer.
+    assert.equal(nextActionFor(t, bucket), "Kérjük, adja meg az alábbi hiányzó adatokat a portálon.");
+  });
+
+  it("A. the card shows the bucket badge and the gated customer CTA", () => {
+    const src = source();
+    assert.match(src, /\{primaryBadgeLabel\(topic, bucket\)\}/);
+    assert.match(src, /Állapot: \{topicStateLabel\(topic\)\}/);
+    assert.match(src, /info\.portalAnswerable && info\.questionKey \?/);
+    assert.match(src, /Adat megadása →/);
+  });
+
+  it("B. once the missing data is supplied the primary bucket becomes LAWYER_REVIEW", () => {
+    const after = topic({ topicId: "portal/nis2-scope", state: "LAWYER_REVIEW_REQUIRED", missingInformation: [] });
+    assert.equal(classifyTopic(after), "LAWYER_REVIEW");
+    assert.equal(primaryBadgeLabel(after, "LAWYER_REVIEW"), "Ügyvédi vizsgálat");
+    assert.equal(secondaryStateNote(after, "LAWYER_REVIEW"), null);
+  });
+
+  it("C. ACTION_IN_PROGRESS with no outstanding customer input stays IN_PROGRESS", () => {
+    const t = topic({ state: "ACTION_IN_PROGRESS", missingInformation: [] });
+    assert.equal(classifyTopic(t), "IN_PROGRESS");
+    assert.equal(primaryBadgeLabel(t, "IN_PROGRESS"), "Folyamatban");
+  });
+
+  it("D. RESOLVED with no missing information is NO_ACTION", () => {
+    const t = topic({ state: "RESOLVED", missingInformation: [] });
+    assert.equal(classifyTopic(t), "NO_ACTION");
+    assert.equal(primaryBadgeLabel(t, "NO_ACTION"), "Nincs jelenlegi teendő");
+  });
+
+  it("E. summary counts exactly match the shared primary buckets (no double counting)", () => {
+    const topics = [
+      lawyerWithCustomerInput(), // lawyer + portal-answerable -> CUSTOMER_ACTION only
+      topic({ topicId: "b", state: "LAWYER_REVIEW_REQUIRED" }),
+      topic({ topicId: "c", state: "ACTION_IN_PROGRESS" }),
+      topic({ topicId: "d", state: "RESOLVED" }),
+      topic({ topicId: "e", state: "REVIEW_RECOMMENDED" }),
+    ];
+    const counts = summarizeTopics(topics);
+    assert.deepEqual(counts, { CUSTOMER_ACTION: 2, IN_PROGRESS: 1, LAWYER_REVIEW: 1, NO_ACTION: 1 });
+    assert.equal(counts.CUSTOMER_ACTION + counts.IN_PROGRESS + counts.LAWYER_REVIEW + counts.NO_ACTION, topics.length);
+    // The conflicted topic is NOT also counted under lawyer review.
+    assert.equal(classifyTopic(topics[0]), "CUSTOMER_ACTION");
+    assert.equal(classifyTopic(topics[1]), "LAWYER_REVIEW");
+  });
+
+  it("F. non-portal-answerable missing info alone never produces a customer CTA", () => {
+    const notAnswerable = topic({
+      state: "LAWYER_REVIEW_REQUIRED",
+      missingInformation: [missing({ portalAnswerable: false, questionKey: null })],
+    });
+    assert.equal(hasPortalAnswerableMissingInformation(notAnswerable), false);
+    assert.equal(classifyTopic(notAnswerable), "LAWYER_REVIEW");
+    assert.notEqual(primaryBadgeLabel(notAnswerable, "LAWYER_REVIEW"), "Adatra várunk Öntől");
+
+    // portalAnswerable without a resolvable questionKey is also not executable.
+    const noKey = topic({
+      state: "LAWYER_REVIEW_REQUIRED",
+      missingInformation: [missing({ portalAnswerable: true, questionKey: null })],
+    });
+    assert.equal(hasPortalAnswerableMissingInformation(noKey), false);
+    assert.equal(classifyTopic(noKey), "LAWYER_REVIEW");
+  });
+
+  it("G. renders published documents and only the canonical download route", () => {
+    const documents: PortalComplianceDocument[] = [
+      { publicationId: "pub-1", title: "Adatkezelési tájékoztató", versionLabel: "v2", publishedAt: "2026-08-01T00:00:00.000Z", downloadAvailable: true },
+    ];
+    const markup = renderToStaticMarkup(createElement(TopicDocuments, { documents }));
+    assert.match(markup, /Adatkezelési tájékoztató/);
+    assert.match(markup, /v2/);
+    assert.match(markup, /Közzétett dokumentumok/);
+    assert.ok(markup.includes(portalDownloadUrl("pub-1")));
+  });
+
+  it("H. invents no document when a topic has none", () => {
+    const markup = renderToStaticMarkup(createElement(TopicDocuments, { documents: [] }));
+    assert.equal(markup, "");
+  });
+
+  it("H. omits the download action when it is not available", () => {
+    const documents: PortalComplianceDocument[] = [
+      { publicationId: "pub-2", title: "Belső szabályzat", versionLabel: "v1", publishedAt: "2026-08-02T00:00:00.000Z", downloadAvailable: false },
+    ];
+    const markup = renderToStaticMarkup(createElement(TopicDocuments, { documents }));
+    assert.match(markup, /Belső szabályzat/);
+    assert.equal(markup.includes("/download"), false);
+  });
+
+  it("I. control progress counts IMPLEMENTED only (1 / 2) and never claims rendezett", () => {
+    const summary: PortalComplianceControlSummary[] = [
+      {
+        requirementTitle: "Általános adatvédelem",
+        controls: [
+          { title: "A", implementationStatus: "IMPLEMENTED", lastReviewedAt: null, nextReviewAt: null, evidence: { acceptedCurrent: 1, stale: 0, missing: false } },
+          { title: "B", implementationStatus: "IMPLEMENTING", lastReviewedAt: null, nextReviewAt: null, evidence: { acceptedCurrent: 0, stale: 0, missing: true } },
+        ],
+      },
+    ];
+    assert.deepEqual(controlProgressFor(topic(), summary), { done: 1, total: 2, nextReviewAt: null });
+    const src = source();
+    assert.match(src, /Implementált kontrollok:/);
+    assert.doesNotMatch(src, /rendezett/i);
+  });
+
+  it("J. invents no control progress without an authoritative projection", () => {
+    assert.equal(controlProgressFor(topic(), undefined), null);
+    assert.equal(controlProgressFor(topic(), []), null);
+    assert.equal(
+      controlProgressFor(topic({ topicLabel: "Nincs ilyen" }), [
+        {
+          requirementTitle: "Más terület",
+          controls: [{ title: "A", implementationStatus: "IMPLEMENTED", lastReviewedAt: null, nextReviewAt: null, evidence: { acceptedCurrent: 1, stale: 0, missing: false } }],
+        },
+      ]),
+      null,
+    );
+    assert.match(source(), /\{progress \? \(/);
+  });
+
+  it("K. search and status filter still work after the card recomposition", () => {
+    const topics = [
+      topic({ topicId: "nis2", topicLabel: "Kiberbiztonsági (NIS2) hatály", shortExplanation: "NIS2", state: "LAWYER_REVIEW_REQUIRED", missingInformation: [missing()] }),
+      topic({ topicId: "gdpr", topicLabel: "Általános adatvédelem", shortExplanation: "GDPR", state: "RESOLVED" }),
+    ];
+    // The conflicted topic filters under CUSTOMER_ACTION, never under lawyer review.
+    assert.deepEqual(filterTopics(topics, "", "CUSTOMER_ACTION").map((t) => t.topicId), ["nis2"]);
+    assert.deepEqual(filterTopics(topics, "", "LAWYER_REVIEW").map((t) => t.topicId), []);
+    assert.deepEqual(filterTopics(topics, "gdpr", "ALL").map((t) => t.topicId), ["gdpr"]);
+    assert.deepEqual(filterTopics(topics, "nis2", "ALL").map((t) => t.topicId), ["nis2"]);
+    assert.deepEqual(filterTopics(topics, "nincs talalat", "ALL"), []);
+  });
+
+  it("L. inline answer refreshes compliance AND profile completion without a reload", async () => {
+    const calls: string[] = [];
+    await refreshAfterProfileAnswer({
+      refreshCompliance: async () => { calls.push("compliance"); },
+      refreshProfileCompletion: async () => { calls.push("profile"); },
+    });
+    assert.deepEqual(calls.sort(), ["compliance", "profile"]);
+
+    const src = source();
+    // Both the ANSWERED and the UNKNOWN paths use the same narrow refresh.
+    assert.equal((src.match(/await refreshAfterProfileAnswer\(/g) ?? []).length, 2);
+    assert.match(src, /refreshCompliance: \(\) => load\(\{ silent: true \}\)/);
+    assert.match(src, /refreshProfileCompletion: loadProfile/);
+    assert.match(src, /const progress = controlProgressFor\(topic, data\?\.controlsSummary\)/);
+  });
+
+  it("keeps REVIEW_RECOMMENDED on its canonical customer-attention mapping", () => {
+    const t = topic({ state: "REVIEW_RECOMMENDED" });
+    assert.equal(classifyTopic(t), "CUSTOMER_ACTION");
+    assert.equal(primaryBadgeLabel(t, "CUSTOMER_ACTION"), "Teendő tőletek");
+    assert.equal(secondaryStateNote(t, "CUSTOMER_ACTION"), null);
+  });
+
+  it("keeps the canonical backend nextAction outside the conflicting case", () => {
+    const lawyer = topic({ state: "LAWYER_REVIEW_REQUIRED", missingInformation: [], nextAction: "Ügyvédi áttekintés javasolt." });
+    assert.equal(nextActionFor(lawyer, "LAWYER_REVIEW"), "Ügyvédi áttekintés javasolt.");
+    const more = topic({
+      state: "MORE_INFORMATION_NEEDED",
+      missingInformation: [missing()],
+      nextAction: "Kérjük, töltse ki a hiányzó információkat a portálon.",
+    });
+    assert.equal(nextActionFor(more, "CUSTOMER_ACTION"), "Kérjük, töltse ki a hiányzó információkat a portálon.");
   });
 });

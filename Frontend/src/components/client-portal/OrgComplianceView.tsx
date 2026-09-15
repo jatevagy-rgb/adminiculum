@@ -38,12 +38,31 @@ const bucketBadge: Record<ComplianceBucket, string> = {
 };
 
 /**
+ * True only when the customer can execute portal input RIGHT NOW: the missing
+ * item is portal-answerable AND carries a resolvable canonical questionKey.
+ * A missing item that is not answerable through the portal must never produce
+ * a customer CTA, so it is deliberately excluded here.
+ */
+export function hasPortalAnswerableMissingInformation(topic: PortalComplianceTopic): boolean {
+  return topic.missingInformation.some(
+    (info) => info.portalAnswerable === true && typeof info.questionKey === "string" && info.questionKey.trim().length > 0,
+  );
+}
+
+/**
  * Assigns each topic to exactly one bucket so the summary tiles never
- * double-count. Precedence preserves the current canonical treatment
- * (lawyer review and in-progress are their own states; review-recommended and
- * portal-answerable missing information remain customer attention).
+ * double-count.
+ *
+ * The immediate next actor decides the PRIMARY customer-facing bucket. When the
+ * customer has executable portal input outstanding, that is CUSTOMER_ACTION even
+ * if the backend raw state also says LAWYER_REVIEW_REQUIRED — the customer is
+ * simply the next actor. The raw backend state is never erased: it stays
+ * available through `topicStateLabel`/`secondaryStateNote` as secondary truthful
+ * context, and only becomes the primary bucket once no customer input is
+ * outstanding. Review-recommended and in-progress keep their canonical meaning.
  */
 export function classifyTopic(topic: PortalComplianceTopic): ComplianceBucket {
+  if (hasPortalAnswerableMissingInformation(topic)) return "CUSTOMER_ACTION";
   if (topic.state === "LAWYER_REVIEW_REQUIRED") return "LAWYER_REVIEW";
   if (topic.state === "ACTION_IN_PROGRESS") return "IN_PROGRESS";
   if (topic.state === "MORE_INFORMATION_NEEDED" || topic.state === "REVIEW_RECOMMENDED" || topic.missingInformation.length > 0) {
@@ -51,6 +70,43 @@ export function classifyTopic(topic: PortalComplianceTopic): ComplianceBucket {
   }
   if (topic.state === "RESOLVED" && topic.missingInformation.length === 0) return "NO_ACTION";
   return "CUSTOMER_ACTION";
+}
+
+/**
+ * Primary badge text for a topic: the bucket label, refined when the customer
+ * specifically owes portal-answerable data. It is always derived from the same
+ * bucket the summary tiles count, so badge and tile can never contradict.
+ */
+export function primaryBadgeLabel(topic: PortalComplianceTopic, bucket: ComplianceBucket): string {
+  if (bucket === "CUSTOMER_ACTION" && hasPortalAnswerableMissingInformation(topic)) {
+    return "Adatra várunk Öntől";
+  }
+  return bucketLabels[bucket];
+}
+
+/**
+ * Secondary, non-contradictory context for the case where the backend raw state
+ * is lawyer review but the immediate next actor is the customer. The raw state
+ * is preserved as subordinate text, never as the primary badge.
+ */
+export function secondaryStateNote(topic: PortalComplianceTopic, bucket: ComplianceBucket): string | null {
+  if (bucket === "CUSTOMER_ACTION" && topic.state === "LAWYER_REVIEW_REQUIRED") {
+    return "Emellett ügyvédi vizsgálat is folyamatban van.";
+  }
+  return null;
+}
+
+/**
+ * The next step shown to the customer. When the raw state is lawyer review but
+ * the customer still owes executable data, the lawyer-oriented backend
+ * `nextAction` must not be presented as the customer's next step; the immediate
+ * step is supplying the data. Every other case keeps the canonical backend text.
+ */
+export function nextActionFor(topic: PortalComplianceTopic, bucket: ComplianceBucket): string | null {
+  if (bucket === "CUSTOMER_ACTION" && topic.state === "LAWYER_REVIEW_REQUIRED" && hasPortalAnswerableMissingInformation(topic)) {
+    return "Kérjük, adja meg az alábbi hiányzó adatokat a portálon.";
+  }
+  return topic.nextAction;
 }
 
 /** Real counts derived only from the returned topic collection. */
@@ -107,7 +163,7 @@ export async function refreshAfterProfileAnswer(deps: {
   await Promise.all([deps.refreshCompliance(), deps.refreshProfileCompletion()]);
 }
 
-function topicStateLabel(topic: PortalComplianceTopic): string {
+export function topicStateLabel(topic: PortalComplianceTopic): string {
   switch (topic.state) {
     case "LAWYER_REVIEW_REQUIRED":
       return "Ügyvédi vizsgálat alatt";
@@ -154,7 +210,7 @@ function TopicGlyph({ kind }: { kind: IconKind }) {
   }
 }
 
-function TopicDocuments({ documents }: { documents: PortalComplianceDocument[] }) {
+export function TopicDocuments({ documents }: { documents: PortalComplianceDocument[] }) {
   if (documents.length === 0) return null;
   return (
     <div>
@@ -345,7 +401,7 @@ export function OrgComplianceView() {
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="min-w-0 max-w-2xl">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9b7b25]">Megfelelés és szabályozás</p>
-            <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950 sm:text-4xl">Compliance térkép</h1>
+            <h1 className="mt-2 font-serif text-3xl font-semibold text-[#1f3a2e] sm:text-4xl">Compliance térkép</h1>
             <p className="mt-3 text-sm leading-6 text-stone-600">
               Ez a térkép a vállalkozás érintett megfelelési területeit, a nyitott teendőket, az ügyvédi vizsgálat
               állapotát és az iroda által közzétett dokumentumokat mutatja. Az állapot kizárólag rögzített tények,
@@ -376,7 +432,7 @@ export function OrgComplianceView() {
 
       {/* SUMMARY TILES */}
       <section className={card}>
-        <h2 className="font-serif text-xl font-semibold text-stone-950">Áttekintés</h2>
+        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Áttekintés</h2>
         <p className="mt-1 text-xs text-stone-500">A csempék a feltárt megfelelési területek valós állapotát összegzik.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {(["CUSTOMER_ACTION", "IN_PROGRESS", "LAWYER_REVIEW", "NO_ACTION"] as ComplianceBucket[]).map((bucket) => (
@@ -395,7 +451,7 @@ export function OrgComplianceView() {
       <section className={card}>
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="font-serif text-xl font-semibold text-stone-950">Megfelelési területek</h2>
+            <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Megfelelési területek</h2>
             <p className="mt-1 text-xs text-stone-500">{visibleTopics.length} megjelenített terület</p>
           </div>
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
@@ -428,9 +484,11 @@ export function OrgComplianceView() {
             {visibleTopics.map((topic) => {
               const bucket = bucketFor.get(topic.topicId) ?? "CUSTOMER_ACTION";
               const progress = controlProgressFor(topic, data?.controlsSummary);
+              const secondaryNote = secondaryStateNote(topic, bucket);
+              const nextAction = nextActionFor(topic, bucket);
               return (
-                <article key={topic.topicId} className="rounded-2xl border border-[#eadfbf] bg-white p-5 shadow-xs">
-                  <div className="grid gap-5 lg:grid-cols-12">
+                <article key={topic.topicId} className="rounded-2xl border border-[#eadfbf] bg-white p-4 shadow-xs sm:p-5">
+                  <div className="grid gap-4 lg:grid-cols-12">
                     {/* LEFT — what this area is */}
                     <div className="lg:col-span-4">
                       <div className="flex items-start gap-3">
@@ -438,32 +496,28 @@ export function OrgComplianceView() {
                           <TopicGlyph kind={iconKind(topic.topicId)} />
                         </span>
                         <div className="min-w-0">
-                          <h3 className="text-lg font-semibold text-stone-950">{topic.topicLabel}</h3>
+                          <h3 className="text-lg font-semibold text-[#1f3a2e]">{topic.topicLabel}</h3>
                           <p className="mt-1 text-sm text-stone-700">{topic.shortExplanation}</p>
                         </div>
                       </div>
                       <Collapsible summary="Részletek megnyitása">
                         <p>{topic.shortExplanation}</p>
-                        {topic.nextAction ? <p className="mt-2"><strong>Következő lépés:</strong> {topic.nextAction}</p> : null}
-                        {progress ? (
-                          <p className="mt-2">
-                            <strong>Implementált kontrollok:</strong> {progress.done} / {progress.total}
-                            {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
-                          </p>
-                        ) : null}
+                        {/* Raw backend state is preserved here as subordinate, truthful context. */}
+                        <p className="mt-2 text-xs text-stone-500">Állapot: {topicStateLabel(topic)}</p>
                       </Collapsible>
                     </div>
 
-                    {/* MIDDLE — current state / next step */}
+                    {/* MIDDLE — primary state and the immediate customer step */}
                     <div className="lg:col-span-5">
                       <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${bucketBadge[bucket]}`}>
-                        {topicStateLabel(topic)}
+                        {primaryBadgeLabel(topic, bucket)}
                       </span>
 
-                      {progress ? (
-                        <div className="mt-3 rounded-xl bg-[#fffdf8] p-3 text-xs text-stone-700">
-                          Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
-                          {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
+                      {secondaryNote ? <p className="mt-2 text-xs text-stone-500">{secondaryNote}</p> : null}
+
+                      {nextAction ? (
+                        <div className="mt-3 rounded-xl bg-[#fff8f6] p-3 text-xs text-[#8a4536]">
+                          <strong>Következő lépés:</strong> {nextAction}
                         </div>
                       ) : null}
 
@@ -555,16 +609,16 @@ export function OrgComplianceView() {
                           </ul>
                         </div>
                       ) : null}
-
-                      {topic.nextAction ? (
-                        <div className="mt-3 rounded-xl bg-[#fff8f6] p-3 text-xs text-[#8a4536]">
-                          <strong>Következő lépés:</strong> {topic.nextAction}
-                        </div>
-                      ) : null}
                     </div>
 
-                    {/* RIGHT — documents */}
+                    {/* RIGHT — authoritative control progress + published documents */}
                     <div className="lg:col-span-3">
+                      {progress ? (
+                        <div className="mb-3 rounded-xl bg-[#fffdf8] p-3 text-xs text-stone-700">
+                          Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
+                          {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
+                        </div>
+                      ) : null}
                       <TopicDocuments documents={topic.documents} />
                     </div>
                   </div>
@@ -577,7 +631,7 @@ export function OrgComplianceView() {
 
       {/* HOW THE MAP IS BUILT */}
       <section className="rounded-3xl border border-[#eadfbf] bg-[#fffdf8] p-6 text-stone-800">
-        <h3 className="font-serif text-xl font-semibold text-stone-950">Hogyan készül a compliance térkép?</h3>
+        <h3 className="font-serif text-xl font-semibold text-[#1f3a2e]">Hogyan készül a compliance térkép?</h3>
         <p className="mt-2 text-sm leading-6 text-stone-700">
           Az Adminiculum a jogi és megfelelési állapotot kizárólag ellenőrizhető tényekre alapozza:
         </p>
