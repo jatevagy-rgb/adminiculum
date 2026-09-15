@@ -162,7 +162,9 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     return index;
   }, [questions]);
 
-  const progress = useMemo(() => companyProfileCompletion(questions), [questions]);
+  // Completion denominator = facts reachable through the current adaptive screens
+  // (not the raw discovery.questions list, which can include hidden facts).
+  const progress = useMemo(() => companyProfileCompletion(questions, screens), [questions, screens]);
 
   const activeScreen: PortalCompanyProfileScreen | undefined = screens[activeIndex];
 

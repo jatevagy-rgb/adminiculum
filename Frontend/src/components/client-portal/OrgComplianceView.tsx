@@ -247,8 +247,9 @@ export function OrgComplianceView() {
   const loadProfile = useCallback(async () => {
     try {
       const discovery = await getPortalCompanyProfileDiscovery();
-      // Canonical completion: only ANSWERED facts count (UNKNOWN does not).
-      const progress = companyProfileCompletion(discovery.questions);
+      // Canonical completion: only ANSWERED facts count (UNKNOWN does not), over
+      // the facts reachable through the current adaptive screens.
+      const progress = companyProfileCompletion(discovery.questions, discovery.screens);
       setProfileCompletion({ answered: progress.answered, total: progress.total });
     } catch {
       // Non-fatal: the profile card falls back to a plain link.
