@@ -220,8 +220,10 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     });
 
     // Microsoft reports a different primary and lists the verified address only as an SMTP alias.
+    // The provider layer has ALREADY parsed/stripped the `smtp:` prefix, so the route receives
+    // plain authoritative email addresses (this is the provider/route contract boundary).
     providerAuthorizedAddress = primary;
-    providerAuthorizedAddresses = [primary, `smtp:${verified}`];
+    providerAuthorizedAddresses = [primary, verified];
     const { createOAuthState } = require('../src/modules/mailbox/oauthState');
     const state = createOAuthState({ userId: ids.owner, connectionId: aliasConnectionId, mailboxAddress: verified, provider: 'MICROSOFT_GRAPH' });
 
