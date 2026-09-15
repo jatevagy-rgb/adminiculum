@@ -11,6 +11,22 @@ export function normalizeMailboxAddress(value: unknown): string {
   return String(value ?? '').trim().toLowerCase();
 }
 
+/**
+ * Canonical exact-identity check: the already-verified mailbox address must match
+ * one member of the provider's authoritative address set after normalization.
+ * Intentionally exact — no domain, tenant, fuzzy or similarity matching.
+ * Authoritative addresses must come from the provider (server-side); client input
+ * is never a valid member here.
+ */
+export function mailboxIdentityMatches(
+  verifiedAddress: unknown,
+  authoritativeAddresses: readonly unknown[],
+): boolean {
+  const target = normalizeMailboxAddress(verifiedAddress);
+  if (!target) return false;
+  return authoritativeAddresses.some((candidate) => normalizeMailboxAddress(candidate) === target);
+}
+
 const PROVIDER_DOMAIN_HINTS: Record<string, MailboxProviderCode> = {
   'gmail.com': 'GOOGLE_GMAIL',
   'googlemail.com': 'GOOGLE_GMAIL',

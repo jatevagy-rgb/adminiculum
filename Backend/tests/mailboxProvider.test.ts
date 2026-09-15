@@ -37,9 +37,10 @@ describe('mailbox provider normalization', () => {
     const result = await new MicrosoftGraphMailboxProvider().exchangeAuthorizationCode({ code: 'code', redirectUri: 'https://app/callback' });
 
     expect(result.authorizedAddress).toBe('Owner@Example.com');
+    expect(result.authorizedAddresses).toEqual(expect.arrayContaining(['Owner@Example.com', 'fallback@example.com']));
     expect(result.providerAccountId).toBe('account-1');
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName',
+      'https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName,proxyAddresses',
       expect.objectContaining({ headers: { authorization: 'Bearer access' } }),
     );
   });

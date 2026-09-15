@@ -46,6 +46,12 @@ export interface MailboxAuthorizationResult {
   providerAccountId?: string;
   providerTenantId?: string;
   authorizedAddress?: string;
+  /**
+   * Authoritative set of exact email identities the provider attributes to the
+   * authorizing account (primary + verified SMTP aliases). Additive and optional:
+   * providers that expose a single identity keep using `authorizedAddress`.
+   */
+  authorizedAddresses?: string[];
   scopesGranted?: string;
 }
 
@@ -112,6 +118,58 @@ export function mailboxProviderConfigStatus() {
 // Microsoft Graph (delegated)
 // ---------------------------------------------------------------------------
 
+const MICROSOFT_SMTP_PROXY_PREFIX = 'SMTP';
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+$/;
+
+function isEmailShaped(value: string): boolean {
+  return EMAIL_SHAPE.test(value);
+}
+
+/**
+ * Microsoft reports mailbox aliases as `proxyAddresses` entries carrying an
+ * address TYPE prefix (`SMTP:`, `smtp:`, `X500:`, `SIP:`, `SPO:`, ...). Only the
+ * SMTP family proves an email identity of the SAME mailbox; every other type and
+ * every malformed value is ignored, so this can never widen acceptance beyond
+ * Microsoft-asserted SMTP addresses.
+ */
+export function parseMicrosoftSmtpProxyAddresses(proxyAddresses: unknown): string[] {
+  if (!Array.isArray(proxyAddresses)) return [];
+  const out: string[] = [];
+  for (const entry of proxyAddresses) {
+    if (typeof entry !== 'string') continue;
+    const separator = entry.indexOf(':');
+    if (separator <= 0) continue;
+    // `SMTP:` and `smtp:` both count; any other prefix is a different identity type.
+    if (entry.slice(0, separator).toUpperCase() !== MICROSOFT_SMTP_PROXY_PREFIX) continue;
+    const candidate = entry.slice(separator + 1).trim();
+    if (!isEmailShaped(candidate)) continue;
+    out.push(candidate);
+  }
+  return out;
+}
+
+/**
+ * Builds the authoritative address set for the authorizing Microsoft identity:
+ * mail, userPrincipalName, plus SMTP/SMTP-alias proxies. Values are returned as
+ * Microsoft supplied them; callers compare with the canonical mailbox-address
+ * normalization, so no client input is ever trusted here.
+ */
+export function microsoftIdentityAddressSet(profile: {
+  mail?: string | null;
+  userPrincipalName?: string | null;
+  proxyAddresses?: unknown;
+}): string[] {
+  const out: string[] = [];
+  const push = (value: unknown): void => {
+    const candidate = typeof value === 'string' ? value.trim() : '';
+    if (candidate && isEmailShaped(candidate)) out.push(candidate);
+  };
+  push(profile.mail);
+  push(profile.userPrincipalName);
+  for (const alias of parseMicrosoftSmtpProxyAddresses(profile.proxyAddresses)) out.push(alias);
+  return [...new Set(out)];
+}
+
 export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
   readonly code: MailboxProviderCode = 'MICROSOFT_GRAPH';
   readonly displayName = 'Microsoft 365';
@@ -148,12 +206,19 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
     if (!res.ok) throw new Error('MAILBOX_OAUTH_EXCHANGE_FAILED');
     const json = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number; scope?: string };
     if (!json.access_token) throw new Error('MAILBOX_OAUTH_EXCHANGE_FAILED');
-    const identity = await fetch('https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName', {
+    const identity = await fetch('https://graph.microsoft.com/v1.0/me?$select=id,mail,userPrincipalName,proxyAddresses', {
       headers: { authorization: `Bearer ${json.access_token}` },
     });
     if (!identity.ok) throw new Error('MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE');
-    const profile = (await identity.json()) as { mail?: string | null; userPrincipalName?: string | null; id?: string };
-    const authorizedAddress = String(profile.mail || profile.userPrincipalName || '').trim();
+    const profile = (await identity.json()) as {
+      mail?: string | null;
+      userPrincipalName?: string | null;
+      proxyAddresses?: unknown;
+      id?: string;
+    };
+    const authorizedAddresses = microsoftIdentityAddressSet(profile);
+    const authorizedAddress =
+      String(profile.mail || profile.userPrincipalName || '').trim() || authorizedAddresses[0] || '';
     if (!authorizedAddress) throw new Error('MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE');
     return {
       secret: {
@@ -164,6 +229,7 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
         scope: json.scope,
       },
       authorizedAddress,
+      authorizedAddresses,
       providerAccountId: profile.id,
     };
   }

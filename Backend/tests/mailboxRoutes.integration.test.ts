@@ -40,7 +40,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
   const clientId = crypto.randomUUID(), caseId = crypto.randomUUID(), taskId = crypto.randomUUID();
   const sentinels = { access: `oauth-access-${suffix}`, refresh: `oauth-refresh-${suffix}`, clientSecret: `oauth-client-secret-${suffix}`, imap: `imap-password-${suffix}`, smtp: `smtp-password-${suffix}`, verification: `verification-code-${suffix}`, provider: `provider-error-${suffix}` };
   let db: PrismaClient; let app: Express; let store: any; let InMemorySecretStore: any; let setProvider: any; let setStore: any; let setTransactionalTransport: any; let sentVerificationCode = '';
-  let providerFailsWithSentinel = false, providerRequiresReauth = false, providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`, refreshCount = 0, transactionalDeliveryFails = false, sentMessageCount = 0;
+  let providerFailsWithSentinel = false, providerRequiresReauth = false, providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`, providerAuthorizedAddresses: string[] | undefined = undefined, refreshCount = 0, transactionalDeliveryFails = false, sentMessageCount = 0;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl!;
@@ -54,7 +54,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     setTransactionalTransport({ sendVerificationCode: async ({ code }: { code: string }) => { if (transactionalDeliveryFails) throw new Error('TLS_REQUIRED'); sentVerificationCode = code; } });
     setProvider('MICROSOFT_GRAPH', {
       code: 'MICROSOFT_GRAPH', displayName: 'route fake', requiresProviderConfiguration: false,
-      buildAuthorizationUrl: () => 'https://provider.invalid/authorize', exchangeAuthorizationCode: async () => ({ authorizedAddress: providerAuthorizedAddress, secret: { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh } }),
+      buildAuthorizationUrl: () => 'https://provider.invalid/authorize', exchangeAuthorizationCode: async () => ({ authorizedAddress: providerAuthorizedAddress, authorizedAddresses: providerAuthorizedAddresses, secret: { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh } }),
       listMessagesSinceCursor: async () => { if (providerRequiresReauth) throw new Error('AUTHORIZATION_REQUIRED'); if (providerFailsWithSentinel) throw new Error(sentinels.provider); return { messages: [], nextCursor: 'route-cursor' }; },
       sendMessage: async () => { if (providerFailsWithSentinel) throw new Error(sentinels.provider); sentMessageCount += 1; return { providerMessageId: `sent-${suffix}-${sentMessageCount}` }; }, refreshAuthorization: async (secret: any) => { refreshCount += 1; return secret; }, disconnect: async () => undefined,
     });
@@ -200,6 +200,45 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     expect(connection.secretReference).toBeNull();
     expect(await db.mailboxAuditEvent.count({ where: { mailboxConnectionId: mismatchConnectionId, eventType: 'MAILBOX_IDENTITY_MISMATCH' } })).toBe(2);
     providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`;
+  });
+
+  it('accepts a verified SMTP alias of the same Microsoft mailbox and persists the secret only after validation', async () => {
+    const verified = `alias-${suffix}@fixture.invalid`;
+    const primary = `primary-${suffix}@fixture.invalid`;
+    const aliasConnectionId = crypto.randomUUID();
+    await db.communicationMailboxConnection.create({
+      data: {
+        id: aliasConnectionId,
+        ownerUserId: ids.owner,
+        mailboxAddress: verified,
+        provider: 'MICROSOFT_GRAPH',
+        status: 'AUTHORIZATION_REQUIRED',
+        verifiedAt: new Date(),
+        readCapability: false,
+        sendCapability: false,
+      } as any,
+    });
+
+    // Microsoft reports a different primary and lists the verified address only as an SMTP alias.
+    providerAuthorizedAddress = primary;
+    providerAuthorizedAddresses = [primary, `smtp:${verified}`];
+    const { createOAuthState } = require('../src/modules/mailbox/oauthState');
+    const state = createOAuthState({ userId: ids.owner, connectionId: aliasConnectionId, mailboxAddress: verified, provider: 'MICROSOFT_GRAPH' });
+
+    const result = await request(app, 'POST', '/mailboxes/oauth/microsoft/callback', undefined, { state, code: 'alias' });
+    expect(result.status).toBe(200);
+
+    const connection = await db.communicationMailboxConnection.findUniqueOrThrow({ where: { id: aliasConnectionId } });
+    expect(connection.status).toBe('CONNECTED');
+    expect(connection.readCapability).toBe(true);
+    expect(connection.sendCapability).toBe(true);
+    // Secret is written only AFTER the authoritative identity set accepted the verified alias.
+    expect(connection.secretReference).not.toBeNull();
+    expect(await store.get(connection.secretReference!)).not.toBeNull();
+
+    await db.communicationMailboxConnection.deleteMany({ where: { id: aliasConnectionId } });
+    providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`;
+    providerAuthorizedAddresses = undefined;
   });
 
   it('allows only the owner to reauthorize a revoked mailbox with a fresh authorization', async () => {
