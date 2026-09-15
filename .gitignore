@@ -37,6 +37,7 @@ Backend/generated/
 output/
 Backend/output/
 Frontend/output/
+Frontend/qa-screenshots-*/
 
 # Database dumps / local DB files
 *.dump
