@@ -25,6 +25,8 @@ function toClientSafeSubmission(row: any) {
     requestId: row.clientRequestId,
     status: row.status,
     customerNote: row.customerNote,
+    unavailableDeclaredAt: row.customerUnavailableDeclaredAt,
+    unavailableReason: row.customerUnavailableReasonSafe,
     submittedAt: row.submittedAt,
     correctionReason: row.correctionReasonSafe,
     files: (row.files || []).map((f: any) => ({
@@ -268,7 +270,55 @@ export async function submitSubmission(ctx: CustomerContext, submissionId: strin
       if (value) validateStructuredAnswer(field, value);
     }
   }
-  return toClientSafeSubmission({ ...await prisma.clientSubmission.update({ where: { id: submissionId }, data: { status: 'SUBMITTED', submittedAt: new Date(), customerNote: safeText(input.customerNote, 'customerNote', 1000), revision: { increment: 1 } } }), files: [], fields: [] });
+  return toClientSafeSubmission({ ...await prisma.clientSubmission.update({ where: { id: submissionId }, data: { status: 'SUBMITTED', submittedAt: new Date(), customerNote: safeText(input.customerNote, 'customerNote', 1000), customerUnavailableReasonSafe: null, customerUnavailableDeclaredAt: null, revision: { increment: 1 } } }), files: [], fields: [] });
+}
+
+/**
+ * Declare that the requested document/information is not available.
+ *
+ * This is a request-domain declaration inside the canonical ClientSubmission
+ * workflow — never a separate request system and never a message thread. The
+ * submission keeps the existing SUBMITTED semantics (no fake file, no fake
+ * structured answer) so the existing internal submission review queue,
+ * correction, rejection and explicit completion flows all apply unchanged.
+ * The declaration never writes the ClientRequest.
+ */
+export async function declareUnavailable(ctx: CustomerContext, requestId: string, input: { reasonSafe?: unknown }, prisma: Prisma = defaultPrisma) {
+  // Terminal / non-open requests are rejected here (COMPLETED, CANCELLED, EXPIRED...).
+  const req = await loadPublishedRequest(ctx, requestId, prisma);
+  if (req.type === 'DOCUMENT_UPLOAD' || req.type === 'MISSING_DOCUMENT_REQUEST' || req.type === 'CORRECTION_REQUEST') requireCapability('DOCUMENT_UPLOADS');
+  else requireCapability('DATA_REQUESTS');
+
+  const reason = safeText(input?.reasonSafe, 'reasonSafe', 1000);
+  const existing = await prisma.clientSubmission.findFirst({
+    where: { clientRequestId: requestId, clientPortalIdentityId: ctx.clientPortalIdentityId, caseId: ctx.caseId },
+    orderBy: { createdAt: 'desc' },
+    include: { files: true, fields: true },
+  });
+
+  // Idempotent: the same declaration is returned unchanged (no duplicate, no overwrite).
+  if (existing && existing.status === 'SUBMITTED' && existing.customerUnavailableDeclaredAt) return toClientSafeSubmission(existing);
+
+  // Never silently overwrite a normally submitted (or otherwise closed) submission.
+  if (existing && ['SUBMITTED', 'UNDER_INTERNAL_REVIEW', 'ACCEPTED_INTO_MATTER', 'REJECTED', 'CANCELLED'].includes(existing.status)) {
+    throw new InteractionError(409, 'SUBMISSION_ALREADY_SUBMITTED', 'A submission has already been sent for this request.');
+  }
+
+  const submission = existing ?? await prisma.clientSubmission.create({
+    data: { clientRequestId: requestId, clientId: ctx.clientId, caseId: ctx.caseId, clientPortalIdentityId: ctx.clientPortalIdentityId, status: 'DRAFT' },
+  });
+  const updated = await prisma.clientSubmission.update({
+    where: { id: submission.id },
+    data: {
+      status: 'SUBMITTED',
+      submittedAt: new Date(),
+      customerUnavailableDeclaredAt: new Date(),
+      customerUnavailableReasonSafe: reason,
+      revision: { increment: 1 },
+    },
+    include: { files: true, fields: true },
+  });
+  return toClientSafeSubmission(updated);
 }
 
 export async function listCustomerSubmissions(ctx: CustomerContext, requestId: string | undefined, prisma: Prisma = defaultPrisma) {

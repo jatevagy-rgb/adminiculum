@@ -23,8 +23,9 @@ import {
   type PortalOrganizationUnit,
   type PortalWorkspace,
 } from "@/lib/clientPortalApi";
-import { clientSafeError } from "@/lib/clientInteractionApi";
+import { clientSafeError, customerInteractionApi, type CustomerRequestDTO, type CustomerSubmissionDTO } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
+import { CustomerRequestDetail } from "./CustomerRequestDetail";
 import { MatterView } from "./MatterWorkspace";
 import { ClientSafeResultCard, DemoContentBanner, PortalPersonHeader, PortalProfileCard } from "./PortalPresentationPrimitives";
 import { OrganizationCompanyProfile } from "./OrganizationCompanyProfile";
@@ -36,11 +37,14 @@ export type OrganizationPortalView = "home" | "matters" | "tasks" | "documents" 
 type Props = {
   view: OrganizationPortalView;
   resourceId?: string;
+  requestId?: string;
   context: PortalIdentityContext;
   workspace: PortalWorkspace;
 };
 
 type FullPortalMatter = Awaited<ReturnType<typeof getPortalMatter>>;
+
+type RequestDetailState = { request: CustomerRequestDTO; submission?: CustomerSubmissionDTO } | null;
 
 type OrgState = {
   units: PortalOrganizationUnit[];
@@ -53,6 +57,8 @@ type OrgState = {
   matter: FullPortalMatter | null;
   matterLoading: boolean;
   matterError: string | null;
+  requestDetail: RequestDetailState;
+  requestUnavailable: boolean;
   loading: boolean;
   message: string | null;
 };
@@ -223,7 +229,7 @@ function OrganizationMatterDetail({
       showDocuments={detail.capabilities.showDocuments}
       showMessages={detail.capabilities.showMessages}
       communicationSection={
-        <CustomerInteractionCard caseId={matter.caseId} allowAsk={detail.capabilities.allowMessages} />
+        <CustomerInteractionCard caseId={matter.caseId} allowAsk={detail.capabilities.allowMessages} matterPublicationId={detail.matterPublicationId} />
       }
     />
   );
@@ -465,13 +471,13 @@ function LeadershipSummary({ units, mode }: { units: PortalLeadershipUnitAggrega
   );
 }
 
-export function OrganizationPortalViews({ view, resourceId, context, workspace }: Props) {
-  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, contracts: [], company: null, detail: null, matter: null, matterLoading: false, matterError: null, loading: true, message: null });
+export function OrganizationPortalViews({ view, resourceId, requestId, context, workspace }: Props) {
+  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, contracts: [], company: null, detail: null, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: true, message: null });
   const communicationDisabled = context.selectedWorkspace?.communicationMode === "EXTERNAL_ONLY";
   const isCaseRelay = context.selectedWorkspace?.mode === "CASE_RELAY";
 
   const load = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, message: null, detail: null, matter: null, matterError: null }));
+    setState((current) => ({ ...current, loading: true, message: null, detail: null, matter: null, matterError: null, requestDetail: null, requestUnavailable: false }));
     try {
       const [unitsPage, casesPage, intakesPage, leadership, contractsPage, company] = await Promise.all([
         getPortalOrganizationUnits(),
@@ -485,12 +491,23 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
         ? (casesPage.items || []).find((item) => item.matterPublicationId === resourceId || item.publicReference === resourceId)?.publicReference || resourceId
         : null;
       const detail = caseReference ? await getPortalOrganizationCase(caseReference).catch(() => null) : null;
-      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, contracts: contractsPage, company, detail, matter: null, matterLoading: false, matterError: null, loading: false, message: null });
+      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, contracts: contractsPage, company, detail, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: false, message: null });
       if (detail?.matterPublicationId) {
         setState((current) => ({ ...current, matterLoading: true }));
         try {
           const matter = await getPortalMatter(detail.matterPublicationId);
           setState((current) => ({ ...current, matter, matterLoading: false }));
+          // The same canonical request detail journey as the individual workspace,
+          // using the canonical matter caseId resolved above.
+          if (view === "matter" && requestId) {
+            try {
+              const request = await customerInteractionApi.getRequest(matter.caseId, requestId);
+              const submissionPage = await customerInteractionApi.listSubmissions(matter.caseId, requestId);
+              setState((current) => ({ ...current, requestDetail: { request, submission: (submissionPage.items || [])[0] }, requestUnavailable: false }));
+            } catch {
+              setState((current) => ({ ...current, requestDetail: null, requestUnavailable: true }));
+            }
+          }
         } catch (error) {
           setState((current) => ({ ...current, matterError: clientSafeError(error), matterLoading: false }));
         }
@@ -498,7 +515,7 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
     } catch (error) {
       setState((current) => ({ ...current, loading: false, message: clientSafeError(error) }));
     }
-  }, [isCaseRelay, resourceId, view]);
+  }, [isCaseRelay, requestId, resourceId, view]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -527,7 +544,27 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       {view === "home" && isCaseRelay ? <><LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /><OrganizationHome state={state} workspace={workspace} showIntakes={false} /></> : null}
       {view === "home" && !isCaseRelay ? <OrganizationHome state={state} workspace={workspace} /> : null}
       {view === "matters" ? <OrganizationMatters cases={state.cases} units={state.units} /> : null}
-      {view === "matter" ? <OrganizationMatterDetail detail={state.detail} matter={state.matter} matterLoading={state.matterLoading} matterError={state.matterError} /> : null}
+      {view === "matter" ? (
+        requestId ? (
+          state.requestDetail && state.matter ? (
+            <CustomerRequestDetail
+              caseId={state.matter.caseId}
+              publicationId={state.detail?.matterPublicationId || resourceId || ""}
+              request={state.requestDetail.request}
+              submission={state.requestDetail.submission}
+              matter={state.matter}
+              canSendMessages={Boolean(state.detail?.capabilities.allowMessages)}
+              onChanged={async () => { await load(); }}
+            />
+          ) : state.requestUnavailable ? (
+            <section className={card}>A bekérés jelenleg nem érhető el ezen az ügyfélfelületen. Előfordulhat, hogy lezárult, vagy nincs hozzá jogosultsága.</section>
+          ) : (
+            <section className={card}>A bekérés betöltése…</section>
+          )
+        ) : (
+          <OrganizationMatterDetail detail={state.detail} matter={state.matter} matterLoading={state.matterLoading} matterError={state.matterError} />
+        )
+      ) : null}
       {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
       {view === "tasks" ? <OrganizationTasks workspace={workspace} /> : null}
