@@ -804,6 +804,7 @@ jobs:
         working-directory: Backend
         env:
           CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
         run: |
           if npm run test:compliance-document-linkage:db; then rc=0; else rc=$?; fi
           sed -i "s/^compliance-document-linkage=PENDING$/compliance-document-linkage=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
