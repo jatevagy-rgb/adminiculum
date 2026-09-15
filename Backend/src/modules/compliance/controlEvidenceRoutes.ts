@@ -4,7 +4,12 @@ import { InteractionError } from '../client-interaction/base';
 import * as service from './controlEvidenceService';
 
 const router = Router();
-router.use(authenticate);
+// Scope authentication to THIS router's own routes. The router is mounted on the
+// bare /api/v1 prefix (Backend/src/index.ts: `app.use('/api/v1', controlEvidenceRoutes)`),
+// so an unscoped `router.use(authenticate)` would also run for every later
+// /api/v1/* route that falls through this router (for example the tokenless
+// mailbox OAuth callbacks) and reject them with 401 before their own router runs.
+router.use('/clients/:clientId/compliance', authenticate);
 
 function actor(req: Request) {
   return { userId: String(req.user?.userId || ''), role: String(req.user?.role || '') };
