@@ -739,6 +739,64 @@ export async function getPublicationOverview(actor: Actor, caseId: string, docum
   };
 }
 
+// Client-scoped, workforce-only read model for the internal Portal Center.
+// It is a pure projection over the canonical publication tables — never a second
+// publication store. Only explicit, current, customer-visible publication rows
+// are counted: drafts, revoked, superseded and expired content are excluded by
+// the status filter. Access is bounded to the cases the actor may already see.
+export type ClientPublishedContentType = 'MATTER' | 'DOCUMENT' | 'ACTION_REQUEST' | 'UPDATE';
+
+export async function getClientPublishedContent(actor: Actor, clientId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  requireFoundation(); requireInternal(actor);
+  const client = await one(db, 'SELECT id, name FROM clients WHERE id=$1', clientId);
+  if (!client) throw new ClientPublicationError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
+  const user = await one(db, 'SELECT id, role::text, status::text, "isActive" FROM users WHERE id=$1', actor.userId);
+  if (!user || user.isActive === false || user.status !== 'ACTIVE') throw new ClientPublicationError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor cannot access this client.');
+  const privileged = ['ADMIN', 'PARTNER'].includes(String(user.role));
+  const caseRows = await many(db, privileged
+    ? 'SELECT id FROM cases WHERE "clientId"=$1'
+    : 'SELECT c.id FROM cases c WHERE c."clientId"=$1 AND (c."createdById"=$2 OR c."assignedLawyerId"=$2 OR EXISTS (SELECT 1 FROM case_collaborators cc WHERE cc."caseId"=c.id AND cc."userId"=$2))',
+    ...(privileged ? [clientId] : [clientId, actor.userId]));
+  const caseIds = caseRows.map((row) => String(row.id));
+  const empty = { clientId, clientName: client.name ?? null, counts: { matters: 0, documents: 0, actionRequests: 0, updates: 0, total: 0 }, items: [] as Row[] };
+  if (!caseIds.length) return empty;
+  const [matters, documents, actions, updates] = await Promise.all([
+    many(db, `SELECT p.id, p."caseId", p."publishedAt", r."clientSafeTitle" AS title
+      FROM client_matter_publications p
+      LEFT JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
+      WHERE p."clientId"=$1 AND p."caseId"=ANY($2::text[]) AND p.status='PUBLISHED'::"ClientPublicationStatus"
+      ORDER BY p."publishedAt" DESC NULLS LAST, p.id ASC`, clientId, caseIds),
+    many(db, `SELECT p.id, p."caseId", p."documentId", p."publishedAt", p."clientFacingTitle" AS title
+      FROM client_document_publications p
+      WHERE p."clientId"=$1 AND p."caseId"=ANY($2::text[]) AND p.status='PUBLISHED'::"ClientPublicationStatus"
+      ORDER BY p."publishedAt" DESC NULLS LAST, p.id ASC`, clientId, caseIds),
+    many(db, `SELECT a.id, a."caseId", a."clientSafeTitle" AS title, a."dueAt", a."updatedAt" AS "publishedAt"
+      FROM client_action_requests a
+      WHERE a."clientId"=$1 AND a."caseId"=ANY($2::text[]) AND a.status='PUBLISHED'::"ClientActionRequestStatus"
+      ORDER BY a."updatedAt" DESC, a.id ASC`, clientId, caseIds),
+    many(db, `SELECT u.id, u."caseId", u.title, u."publishedAt"
+      FROM client_safe_updates u
+      WHERE u."clientId"=$1 AND u."caseId"=ANY($2::text[]) AND u.status='PUBLISHED'::"ClientSafeUpdateStatus"
+      ORDER BY u."publishedAt" DESC NULLS LAST, u.id ASC`, clientId, caseIds),
+  ]);
+  const items: Row[] = [
+    ...matters.map((row) => ({ type: 'MATTER' as const, id: row.id, caseId: row.caseId, documentId: null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+    ...documents.map((row) => ({ type: 'DOCUMENT' as const, id: row.id, caseId: row.caseId, documentId: row.documentId ?? null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+    ...actions.map((row) => ({ type: 'ACTION_REQUEST' as const, id: row.id, caseId: row.caseId, documentId: null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+    ...updates.map((row) => ({ type: 'UPDATE' as const, id: row.id, caseId: row.caseId, documentId: null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+  ].sort((a, b) => {
+    const left = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const right = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return right - left || String(a.id).localeCompare(String(b.id));
+  });
+  return {
+    clientId,
+    clientName: client.name ?? null,
+    counts: { matters: matters.length, documents: documents.length, actionRequests: actions.length, updates: updates.length, total: items.length },
+    items: items.slice(0, 100),
+  };
+}
+
 function buildWarnings(grants: Row[], documents: Row[], actions: Row[]): Row[] {
   const warnings: Row[] = [];
   if (!grants.some((grant) => grant.status === 'ACTIVE')) warnings.push({ level: 'BLOCKING', code: 'NO_ACTIVE_AUDIENCE_GRANT', message: 'No active audience grant exists.' });
