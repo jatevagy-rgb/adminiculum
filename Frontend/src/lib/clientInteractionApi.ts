@@ -165,6 +165,8 @@ export function clientSafeError(error: unknown): string {
 export const customerInteractionApi = {
   listRequests: (caseId: string) =>
     fetchApi<Page<CustomerRequestDTO>>(`/client-interaction/cases/${encodeURIComponent(caseId)}/requests`, { authContext: "customer" }),
+  getRequest: (caseId: string, requestId: string) =>
+    fetchApi<CustomerRequestDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(requestId)}`, { authContext: "customer" }),
   listQuestions: (caseId: string) =>
     fetchApi<Page<CustomerQuestionThreadDTO>>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions`, { authContext: "customer" }),
   getThread: (caseId: string, threadId: string) =>
