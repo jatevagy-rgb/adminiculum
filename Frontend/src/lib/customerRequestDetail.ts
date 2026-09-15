@@ -99,17 +99,13 @@ export function canRespondToRequest(status: string): boolean {
   return !['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(status);
 }
 
-export const NOT_AVAILABLE_PREFIX = 'Nem áll rendelkezésre:';
-
-export function notAvailableSubject(requestTitle: string): string {
-  return `${NOT_AVAILABLE_PREFIX} ${String(requestTitle || '').trim()}`.trim().slice(0, 200);
-}
-
-export function notAvailableBody(requestTitle: string, dueAt?: string | null, customerText?: string): string {
-  const title = String(requestTitle || '').trim() || 'a kérés';
-  const deadline = dueAt ? ` (határidő: ${String(dueAt).slice(0, 10)})` : '';
-  const note = String(customerText || '').trim();
-  const head = `Nem tudom teljesíteni a következő bekérést: ${title}${deadline}. A kért dokumentum vagy adat jelenleg nem áll rendelkezésemre.`;
-  return note ? `${head}\n\nMegjegyzés: ${note}`.slice(0, 4000) : head.slice(0, 4000);
+/**
+ * The "not available" declaration is a request-domain ClientSubmission state
+ * (customerUnavailableDeclaredAt / customerUnavailableReasonSafe), not a message.
+ * Only the bounded customer-safe reason is ever sent to the API.
+ */
+export function boundedUnavailableReason(value: string, limit = 1000): string | undefined {
+  const trimmed = String(value || '').trim();
+  return trimmed ? trimmed.slice(0, limit) : undefined;
 }
 

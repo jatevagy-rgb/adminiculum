@@ -70,6 +70,8 @@ export interface CustomerSubmissionDTO {
   requestId: string;
   status: string;
   customerNote: string | null;
+  unavailableDeclaredAt?: string | null;
+  unavailableReason?: string | null;
   submittedAt: string | null;
   correctionReason: string | null;
   files: Array<{ id: string; fileName: string; sizeBytes: number | null; pageOrSideLabel: string | null; state: string }>;
@@ -179,6 +181,8 @@ export const customerInteractionApi = {
     fetchApi<{ id: string; unreadCount?: number }>(`/client-interaction/cases/${encodeURIComponent(caseId)}/questions/${encodeURIComponent(threadId)}/read`, { method: "POST", body: JSON.stringify({}), authContext: "customer" }),
   createSubmission: (caseId: string, requestId: string) =>
     fetchApi<CustomerSubmissionDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(requestId)}/submissions`, { method: "POST", body: JSON.stringify({}), authContext: "customer" }),
+  declareUnavailable: (caseId: string, requestId: string, reasonSafe?: string) =>
+    fetchApi<CustomerSubmissionDTO>(`/client-interaction/cases/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(requestId)}/unavailable-declaration`, { method: "POST", body: JSON.stringify({ reasonSafe }), authContext: "customer" }),
   submitAnswers: (caseId: string, submissionId: string, answers: Array<{ label: string; value: string }>) =>
     fetchApi<{ count: number }>(`/client-interaction/cases/${encodeURIComponent(caseId)}/submissions/${encodeURIComponent(submissionId)}/answers`, { method: "POST", body: JSON.stringify({ answers }), authContext: "customer" }),
   uploadFile: (caseId: string, submissionId: string, payload: { originalFileName: string; declaredMimeType: string; base64: string; pageOrSideLabel?: string }) =>
@@ -273,6 +277,8 @@ export interface InternalSubmissionDTO {
   caseId: string;
   status: string;
   customerNoteSafe?: string | null;
+  customerUnavailableDeclaredAt?: string | null;
+  customerUnavailableReasonSafe?: string | null;
   acceptedDocumentVersionId: string | null;
   files: InternalSubmissionFileDTO[];
   fields: Array<{ labelSafe?: string; label?: string; valueSafe?: string | null; value?: string | null }>;

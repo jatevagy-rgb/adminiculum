@@ -5,9 +5,8 @@ import { useState } from 'react';
 import { customerInteractionApi, localizedInteractionStatus, clientSafeError, type CustomerRequestDTO, type CustomerSubmissionDTO } from '@/lib/clientInteractionApi';
 import type { PortalDocument, PortalMatter } from '@/lib/clientPortalApi';
 import {
+  boundedUnavailableReason,
   canRespondToRequest,
-  notAvailableBody,
-  notAvailableSubject,
   requestDocumentSpecHints,
   requestStateTone,
   requestTypeLabel,
@@ -18,9 +17,20 @@ import { CustomerInteractionCard, RequestResponseCard } from './CustomerInteract
 
 type DetailMatter = PortalMatter & { documents: PortalDocument[] };
 
-function NotAvailablePanel({ caseId, request, allowAsk }: { caseId: string; request: CustomerRequestDTO; allowAsk: boolean }) {
+function UnavailableDeclarationPanel({
+  caseId,
+  request,
+  submission,
+  onChanged,
+}: {
+  caseId: string;
+  request: CustomerRequestDTO;
+  submission?: CustomerSubmissionDTO;
+  onChanged: () => Promise<void>;
+}) {
+  const declaredAt = submission?.unavailableDeclaredAt || null;
   const [open, setOpen] = useState(false);
-  const [note, setNote] = useState('');
+  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -28,13 +38,11 @@ function NotAvailablePanel({ caseId, request, allowAsk }: { caseId: string; requ
     setBusy(true);
     setMessage(null);
     try {
-      await customerInteractionApi.createQuestion(caseId, {
-        subject: notAvailableSubject(request.title),
-        bodySafe: notAvailableBody(request.title, request.dueAt, note),
-      });
-      setNote('');
+      await customerInteractionApi.declareUnavailable(caseId, request.id, boundedUnavailableReason(reason));
+      setReason('');
       setOpen(false);
-      setMessage('Jelzését elküldtük az irodának. A bekérés állapotát az iroda ellenőrzés után frissíti.');
+      setMessage('Jelzését rögzítettük és elküldtük az irodának. Az iroda az ellenőrzési sorban látja, és ellenőrzés után dönt a további lépésekről.');
+      await onChanged();
     } catch (error) {
       setMessage(clientSafeError(error));
     } finally {
@@ -46,27 +54,32 @@ function NotAvailablePanel({ caseId, request, allowAsk }: { caseId: string; requ
     <Card>
       <h2 className="cp-card-heading">Nem tudom teljesíteni?</h2>
       <p className="cp-subtitle mt-2 text-sm">
-        Ha a kért dokumentum vagy adat nem áll rendelkezésére, jelezze az irodának. A jelzés üzenetként kerül az irodához; a bekérés állapota nem változik automatikusan, az iroda ellenőrzés után dönt a további lépésekről.
+        Ha a kért dokumentum vagy adat nem áll rendelkezésére, jelzéssel rögzítheti az irodánál. A jelzés a beküldés része, ezért az iroda az ellenőrzési sorban látja; a bekérést nem zárja le automatikusan.
       </p>
+      {declaredAt ? (
+        <div className="mt-3 rounded-2xl bg-[var(--adm-ivory-100)] p-3 text-sm text-[var(--adm-text-muted)]" data-testid="unavailable-declaration-state">
+          <p className="font-semibold text-[var(--adm-text)]">Jelezte, hogy a kért dokumentum vagy adat nem áll rendelkezésre.</p>
+          <p className="mt-1">Rögzítve: {formatDate(declaredAt)}</p>
+          {submission?.unavailableReason ? <p className="mt-1 break-words">Megjegyzés: {submission.unavailableReason}</p> : null}
+          <p className="mt-2">Ha időközben mégis elérhetővé válik, a fenti feltöltéssel vagy válasszal beküldheti.</p>
+        </div>
+      ) : null}
       {message ? <p className="mt-3 rounded-2xl bg-[var(--adm-ivory-100)] p-3 text-sm text-[var(--adm-text-muted)]" role="status">{message}</p> : null}
-      {allowAsk ? (
-        open ? (
-          <div className="mt-4">
-            <label className="block text-sm font-medium text-[var(--adm-text)]">
-              Megjegyzés az irodának (opcionális)
-              <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className="mt-1 min-h-24 w-full rounded-xl border border-[var(--adm-border-strong)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]" placeholder="Például: a dokumentum a másik hatóságnál van, várhatóan jövő héten elérhető." />
-            </label>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="rounded-full bg-[var(--adm-blue-950)] px-4 py-2 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void declare()}>Jelzem, hogy nem áll rendelkezésre</button>
-              <button className="rounded-full border border-[var(--adm-border)] px-4 py-2 text-sm text-[var(--adm-text-muted)]" disabled={busy} onClick={() => setOpen(false)}>Mégsem</button>
-            </div>
+      {!declaredAt && open ? (
+        <div className="mt-4">
+          <label className="block text-sm font-medium text-[var(--adm-text)]">
+            Megjegyzés az irodának (opcionális)
+            <textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={1000} className="mt-1 min-h-24 w-full rounded-xl border border-[var(--adm-border-strong)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]" placeholder="Például: a dokumentum a másik hatóságnál van, várhatóan jövő héten elérhető." />
+          </label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button className="rounded-full bg-[var(--adm-blue-950)] px-4 py-2 text-sm text-white disabled:opacity-50" disabled={busy} onClick={() => void declare()}>Jelzem, hogy nem áll rendelkezésre</button>
+            <button className="rounded-full border border-[var(--adm-border)] px-4 py-2 text-sm text-[var(--adm-text-muted)]" disabled={busy} onClick={() => setOpen(false)}>Mégsem</button>
           </div>
-        ) : (
-          <button className="mt-4 rounded-full border border-[var(--adm-border-strong)] px-4 py-2 text-sm font-semibold text-[var(--adm-text)]" onClick={() => setOpen(true)}>Jelzem, hogy nem áll rendelkezésre</button>
-        )
-      ) : (
-        <p className="mt-4 rounded-2xl bg-[var(--adm-ivory-100)] p-3 text-sm text-[var(--adm-text-muted)]">Ezen a felületen a portálon belüli üzenetküldés nincs engedélyezve. Kérjük, vegye fel a kapcsolatot az irodával.</p>
-      )}
+        </div>
+      ) : null}
+      {!declaredAt && !open ? (
+        <button className="mt-4 rounded-full border border-[var(--adm-border-strong)] px-4 py-2 text-sm font-semibold text-[var(--adm-text)]" onClick={() => setOpen(true)}>Jelzem, hogy nem áll rendelkezésre</button>
+      ) : null}
     </Card>
   );
 }
@@ -167,7 +180,7 @@ export function CustomerRequestDetail({
         </div>
       </Card>
 
-      {canRespond ? <NotAvailablePanel caseId={caseId} request={request} allowAsk={canSendMessages} /> : null}
+      {canRespond ? <UnavailableDeclarationPanel caseId={caseId} request={request} submission={submission} onChanged={onChanged} /> : null}
 
       <Card>
         <h2 className="cp-card-heading">Kapcsolódó közzétett dokumentumok</h2>

@@ -1,12 +1,11 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import {
   WHY_MARKER,
+  boundedUnavailableReason,
   canRespondToRequest,
-  notAvailableBody,
-  notAvailableSubject,
   requestDocumentSpecHints,
   requestStateTone,
   requestTypeLabel,
@@ -51,7 +50,7 @@ describe('customer request detail read model', () => {
     assert.deepEqual(requestDocumentSpecHints('not-a-spec'), []);
   });
 
-  it('keeps state, deadline and declaration semantics truthful', () => {
+  it('keeps state and declaration semantics truthful', () => {
     assert.equal(requestStateTone('PUBLISHED'), 'amber');
     assert.equal(requestStateTone('COMPLETED'), 'green');
     assert.equal(requestStateTone('EXPIRED'), 'red');
@@ -60,20 +59,18 @@ describe('customer request detail read model', () => {
     assert.equal(requestTypeLabel('DOCUMENT_UPLOAD'), 'Dokumentum bekérése');
   });
 
-  it('declares non-availability as a persisted, client-safe message payload', () => {
-    assert.match(notAvailableSubject('Aláírt adatfeldolgozói szerződés feltöltése'), /^Nem áll rendelkezésre: /);
-    const body = notAvailableBody('Aláírt adatfeldolgozói szerződés feltöltése', '2026-01-10T00:00:00.000Z', 'A másik cégnél van.');
-    assert.match(body, /nem áll rendelkezésemre/);
-    assert.match(body, /határidő: 2026-01-10/);
-    assert.match(body, /A másik cégnél van\./);
-    assert.ok(notAvailableSubject('x'.repeat(400)).length <= 200);
-    assert.ok(notAvailableBody('x'.repeat(400), null, 'y'.repeat(9000)).length <= 4000);
+  it('bounds the declaration reason to the client-safe 1000-character contract', () => {
+    assert.equal(boundedUnavailableReason(''), undefined);
+    assert.equal(boundedUnavailableReason('   '), undefined);
+    assert.equal(boundedUnavailableReason('  A másik cégnél van.  '), 'A másik cégnél van.');
+    assert.equal(boundedUnavailableReason('x'.repeat(5000))!.length, 1000);
   });
 });
 
 describe('customer request detail surface (source contract)', () => {
   const detail = () => read('src/components/client-portal/CustomerRequestDetail.tsx');
   const shell = () => read('src/components/client-portal/ClientPortalShell.tsx');
+  const orgViews = () => read('src/components/client-portal/OrganizationPortalViews.tsx');
   const interactionApi = () => read('src/lib/clientInteractionApi.ts');
 
   it('has a real customer route for a single published request inside its matter', () => {
@@ -119,27 +116,28 @@ describe('customer request detail surface (source contract)', () => {
     const src = detail();
     assert.match(src, /matter\.documents/);
     assert.match(src, /<DocumentCard key=\{document\.id\} document=\{document\} \/>/);
-    assert.doesNotMatch(src, /\/api\/v1\/documents|caseId=.*documents|documentVersionId/);
+    assert.doesNotMatch(src, /\/api\/v1\/documents|documentVersionId/);
     assert.match(read('src/components/client-portal/MatterWorkspace.tsx'), /href=\{`\/portal\/documents\/\$\{encodeURIComponent\(document\.id\)\}`\}/);
   });
 
-  it('declares non-availability truthfully through the canonical question thread', () => {
-    const src = detail();
-    assert.match(src, /customerInteractionApi\.createQuestion\(caseId/);
-    assert.match(src, /Jelzem, hogy nem áll rendelkezésre/);
-    assert.match(src, /A bekérés állapotát az iroda ellenőrzés után frissíti/);
-    assert.match(src, /notAvailableSubject/);
-    assert.doesNotMatch(src, /completeRequest|cancelRequest|status: 'COMPLETED'|status: 'NOT_AVAILABLE'/);
-    assert.doesNotMatch(src, /questionService|Communication/);
-    const backendRoutes = read('../Backend/src/modules/client-interaction/customerRoutes.ts');
-    assert.doesNotMatch(backendRoutes, /complete|cancel/);
+  it('declares non-availability as a request-domain ClientSubmission, not a message thread', () => {
+    const panel = detail().match(/function UnavailableDeclarationPanel[\s\S]*?\r?\n\}\r?\n/);
+    assert.ok(panel, 'declaration panel not found');
+    assert.match(panel![0], /customerInteractionApi\.declareUnavailable\(caseId, request\.id, boundedUnavailableReason\(reason\)\)/);
+    assert.match(panel![0], /Jelzem, hogy nem áll rendelkezésre/);
+    assert.match(panel![0], /submission\?\.unavailableDeclaredAt/);
+    assert.match(panel![0], /unavailable-declaration-state/);
+    assert.doesNotMatch(panel![0], /createQuestion|ClientQuestion/);
+    assert.doesNotMatch(detail(), /completeRequest|cancelRequest|status: 'NOT_AVAILABLE'/);
+    assert.match(interactionApi(), /declareUnavailable: \(caseId: string, requestId: string, reasonSafe\?: string\)/);
+    assert.match(interactionApi(), /\/requests\/\$\{encodeURIComponent\(requestId\)\}\/unavailable-declaration/);
   });
 
   it('keeps help on the customer-safe thread surface and hides it when messaging is off', () => {
     const src = detail();
     assert.match(src, /scope="questions"/);
     assert.match(src, /allowAsk=\{canSendMessages\}/);
-    assert.match(src, /portálon belüli üzenetküldés nincs engedélyezve/);
+    assert.match(orgViews(), /allowAsk=\{detail\.capabilities\.allowMessages\}/);
   });
 
   it('links every matter request card to its own detail surface', () => {
@@ -148,11 +146,65 @@ describe('customer request detail surface (source contract)', () => {
     assert.match(card, /Bekérés részletei/);
     assert.match(card, /\/portal\/matters\/\$\{encodeURIComponent\(matterPublicationId\)\}\/requests\//);
     assert.match(shell(), /matterPublicationId=\{resourceId\}/);
+    assert.match(orgViews(), /matterPublicationId=\{detail\.matterPublicationId\}/);
   });
 
   it('leaks no internal review or storage fields to the customer surface', () => {
     const src = detail() + read('src/lib/customerRequestDetail.ts');
     assert.doesNotMatch(src, /storageProvider|quarantineStorageReference|scanProvider|scanCodeSafe|reviewedById|acceptedDocumentVersionId|assignedInternalUserId|audienceSnapshot/);
+  });
+});
+
+describe('organization / case-relay request detail (source contract)', () => {
+  const shell = () => read('src/components/client-portal/ClientPortalShell.tsx');
+  const orgViews = () => read('src/components/client-portal/OrganizationPortalViews.tsx');
+
+  it('passes the request id into the existing organization portal architecture', () => {
+    const src = shell();
+    const orgBlock = src.match(/<OrganizationPortalViews[\s\S]*?\/>/);
+    assert.ok(orgBlock, 'OrganizationPortalViews render not found');
+    assert.match(orgBlock![0], /requestId=\{requestId\}/);
+    assert.match(orgBlock![0], /view=\{view as OrganizationPortalView\}/);
+  });
+
+  it('renders the SAME canonical request detail component for organizations', () => {
+    const src = orgViews();
+    assert.match(src, /import \{ CustomerRequestDetail \} from "\.\/CustomerRequestDetail"/);
+    assert.match(src, /requestId\?: string/);
+    assert.match(src, /requestId \? \(/);
+    assert.match(src, /<CustomerRequestDetail/);
+    assert.match(src, /caseId=\{state\.matter\.caseId\}/);
+    assert.match(src, /customerInteractionApi\.getRequest\(matter\.caseId, requestId\)/);
+    assert.match(src, /customerInteractionApi\.listSubmissions\(matter\.caseId, requestId\)/);
+    // one shared component, no second request-detail implementation
+    assert.equal((read('src/components/client-portal/CustomerRequestDetail.tsx').match(/export function CustomerRequestDetail/g) || []).length, 1);
+  });
+
+  it('uses the already-loaded canonical PortalMatter and keeps the mode-agnostic path', () => {
+    const src = orgViews();
+    assert.match(src, /getPortalMatter\(detail\.matterPublicationId\)/);
+    assert.match(src, /canSendMessages=\{Boolean\(state\.detail\?\.capabilities\.allowMessages\)\}/);
+    // The request detail branch must not be limited to a single workspace mode.
+    const branch = src.match(/view === "matter" \? \([\s\S]*?OrganizationMatterDetail/);
+    assert.ok(branch, 'matter branch not found');
+    assert.doesNotMatch(branch![0], /mode === "INDIVIDUAL"|mode === "ORGANIZATION"|mode === "CASE_RELAY"/);
+  });
+
+  it('keeps unauthorized or unavailable request ids honestly unavailable', () => {
+    const src = orgViews();
+    assert.match(src, /state\.requestUnavailable/);
+    assert.match(src, /A bekérés jelenleg nem érhető el ezen az ügyfélfelületen/);
+    assert.match(src, /onChanged=\{async \(\) => \{ await load\(\); \}\}/);
+    // failures are contained: the org case/matter load failure path is preserved
+    assert.match(src, /matterError: clientSafeError\(error\), matterLoading: false/);
+  });
+
+  it('exposes the declaration to the existing internal submission review queue', () => {
+    const src = read('src/components/client-portal/ClientInteractionInternalActions.tsx');
+    assert.match(src, /internal-unavailable-declaration/);
+    assert.match(src, /customerUnavailableDeclaredAt/);
+    assert.match(src, /customerUnavailableReasonSafe/);
+    assert.match(read('src/lib/clientInteractionApi.ts'), /customerUnavailableDeclaredAt\?: string \| null/);
   });
 });
 
@@ -169,6 +221,27 @@ describe('request lifecycle invariants (backend source contract)', () => {
     const requestWrites = src.match(/clientRequest\.update/g) || [];
     assert.equal(requestWrites.length, 1, 'only the intake path may write the request status');
     assert.match(src, /submitIntakeInformationResponseInTransaction/);
+  });
+
+  it('keeps the declaration inside the canonical submission workflow', () => {
+    const src = backendRead('src/modules/client-interaction/submissionService.ts');
+    const declare = src.match(/export async function declareUnavailable[\s\S]*?\r?\n\}\r?\n/);
+    assert.ok(declare, 'declareUnavailable not found');
+    assert.doesNotMatch(declare![0], /clientRequest\.(update|updateMany|create|delete|upsert)/);
+    assert.doesNotMatch(declare![0], /clientQuestion|ClientQuestion|question/i);
+    assert.match(declare![0], /status: 'SUBMITTED'/);
+    assert.match(declare![0], /customerUnavailableDeclaredAt: new Date\(\)/);
+    assert.match(declare![0], /customerUnavailableReasonSafe: reason/);
+    assert.match(declare![0], /SUBMISSION_ALREADY_SUBMITTED/);
+    assert.match(declare![0], /loadPublishedRequest/);
+    assert.match(src, /customerUnavailableReasonSafe: null, customerUnavailableDeclaredAt: null/);
+  });
+
+  it('exposes the declaration route to customers without a completion/cancel route', () => {
+    const customer = backendRead('src/modules/client-interaction/customerRoutes.ts');
+    assert.match(customer, /requests\/:requestId\/unavailable-declaration/);
+    assert.match(customer, /submissions\.declareUnavailable/);
+    assert.doesNotMatch(customer, /complete|cancel|accept|reject/);
   });
 
   it('keeps completion an explicit internal-only decision', () => {
@@ -195,9 +268,14 @@ describe('request lifecycle invariants (backend source contract)', () => {
     assert.match(src, /context\.caseIds/);
   });
 
-  it('records that a structured not-available state is still a documented gap', () => {
-    const src = backendRead('src/modules/client-interaction/submissionService.ts');
-    assert.doesNotMatch(src, /NOT_AVAILABLE|CUSTOMER_CANNOT_SUPPLY/);
-    assert.match(src, /Never trusts the/);
+  it('adds only the approved nullable declaration fields with a migration', () => {
+    const schema = backendRead('prisma/schema.prisma');
+    assert.match(schema, /customerUnavailableReasonSafe String\?/);
+    assert.match(schema, /customerUnavailableDeclaredAt DateTime\?/);
+    assert.equal(existsSync(path.join(root, '..', 'Backend', 'prisma', 'migrations', '20260915090000_client_submission_unavailable_declaration', 'migration.sql')), true);
+    const migration = backendRead('prisma/migrations/20260915090000_client_submission_unavailable_declaration/migration.sql');
+    assert.match(migration, /ADD COLUMN "customerUnavailableReasonSafe" TEXT/);
+    assert.match(migration, /ADD COLUMN "customerUnavailableDeclaredAt" TIMESTAMP\(3\)/);
+    assert.doesNotMatch(migration, /DROP|DELETE|UPDATE /);
   });
 });

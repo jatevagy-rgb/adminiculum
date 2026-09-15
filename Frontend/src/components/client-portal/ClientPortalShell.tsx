@@ -450,6 +450,7 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
+            requestId={requestId}
             context={state.context}
             workspace={state.workspace}
           />

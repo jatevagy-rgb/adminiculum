@@ -129,6 +129,148 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     expect((await submissions.listSubmissionsInternal(unassignedLawyerActor, {}, db)).total).toBe(0);
     expect((await notifications.listNotificationDeliveries(unassignedLawyerActor, {}, db)).total).toBe(0);
   });
+
+  // --- "Jelzem, hogy nem áll rendelkezésre" — request-domain declaration ------
+  const publishDocumentRequest = async (title: string, caseId = ids.case) => {
+    const draft = await requests.createRequestDraft(internalActor, { caseId, type: 'DOCUMENT_UPLOAD', clientSafeTitle: title }, db);
+    await requests.publishRequest(internalActor, draft.id, draft.revision, db);
+    return draft;
+  };
+
+  it('declaration creates a canonical submission with reason + timestamp, without fake files/answers', async () => {
+    const req = await publishDocumentRequest('Nem elérhető irat');
+    const before = await db.clientSubmission.count({ where: { clientRequestId: req.id } });
+    const threadsBefore = await db.clientQuestionThread.count({ where: { caseId: ids.case } });
+
+    const declared = await submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'A másik cégnél van.' }, db);
+
+    expect(declared.status).toBe('SUBMITTED');
+    expect(declared.unavailableDeclaredAt).toBeTruthy();
+    expect(declared.unavailableReason).toBe('A másik cégnél van.');
+    expect(declared.submittedAt).toBeTruthy();
+    expect(declared.files).toHaveLength(0);
+    expect(declared.fields).toHaveLength(0);
+    expect(JSON.stringify(declared)).not.toMatch(/scanCodeSafe|storageProvider|reviewedById|quarantineStorageReference|customerUnavailableReasonSafe/);
+
+    const rows = await db.clientSubmission.findMany({ where: { clientRequestId: req.id } });
+    expect(rows).toHaveLength(before + 1);
+    expect(rows[0].customerUnavailableDeclaredAt).toBeTruthy();
+    expect(rows[0].customerUnavailableReasonSafe).toBe('A másik cégnél van.');
+    expect(rows[0].submittedAt).toBeTruthy();
+
+    // The declaration never completes the request and needs no message thread.
+    const requestRow = await db.clientRequest.findUnique({ where: { id: req.id } });
+    expect(requestRow!.status).toBe('PUBLISHED');
+    expect(requestRow!.completedAt).toBeNull();
+    expect(await db.clientQuestionThread.count({ where: { caseId: ids.case } })).toBe(threadsBefore);
+  });
+
+  it('declaration is idempotent and never silently overwrites the recorded reason', async () => {
+    const req = await publishDocumentRequest('Idempotens jelzés');
+    const first = await submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'Első indok.' }, db);
+    const second = await submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'Második indok.' }, db);
+
+    expect(second.id).toBe(first.id);
+    expect(await db.clientSubmission.count({ where: { clientRequestId: req.id } })).toBe(1);
+    const stored = await db.clientSubmission.findUnique({ where: { id: first.id } });
+    expect(stored!.customerUnavailableReasonSafe).toBe('Első indok.');
+  });
+
+  it('declaration is visible in the existing internal submission review model', async () => {
+    const req = await publishDocumentRequest('Belső láthatóság');
+    const declared = await submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'Belső ellenőrzéshez.' }, db);
+
+    const list: any = await submissions.listSubmissionsInternal(internalActor, { requestId: req.id }, db);
+    const row = list.items.find((item: any) => item.id === declared.id);
+    expect(row).toBeTruthy();
+    expect(row.customerUnavailableDeclaredAt).toBeTruthy();
+    expect(row.customerUnavailableReasonSafe).toBe('Belső ellenőrzéshez.');
+
+    const single: any = await submissions.getSubmissionInternal(internalActor, declared.id, db);
+    expect(single.customerUnavailableDeclaredAt).toBeTruthy();
+    expect(single.customerUnavailableReasonSafe).toBe('Belső ellenőrzéshez.');
+  });
+
+  it('correction may follow the declaration and a later normal submission clears it', async () => {
+    const req = await publishDocumentRequest('Javítás a jelzés után');
+    const declared = await submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'Először nem volt elérhető.' }, db);
+    const declaredRow = await db.clientSubmission.findUnique({ where: { id: declared.id } });
+
+    await submissions.requestCorrection(internalActor, declared.id, { reasonSafe: 'Kérjük, ha mégis elérhető, töltse fel.', expectedRevision: declaredRow!.revision }, db);
+    const reopened = await submissions.createDraftSubmission(await ctx(), req.id, db);
+    expect(reopened.id).toBe(declared.id);
+
+    const added = await submissions.addFile(await ctx(), reopened.id, { originalFileName: 'utolag.pdf', declaredMimeType: 'application/pdf', base64: pdf().toString('base64') }, db);
+    expect(added.state).toBe('RECEIVED');
+    const normal = await submissions.submitSubmission(await ctx(), reopened.id, { customerNote: 'Végül elérhető.' }, db);
+    expect(normal.status).toBe('SUBMITTED');
+
+    const cleared = await db.clientSubmission.findUnique({ where: { id: declared.id } });
+    expect(cleared!.customerUnavailableDeclaredAt).toBeNull();
+    expect(cleared!.customerUnavailableReasonSafe).toBeNull();
+    expect(cleared!.submittedAt).toBeTruthy();
+  });
+
+  it('declaration cannot overwrite a normally submitted submission', async () => {
+    const req = await publishDocumentRequest('Normál beküldés védelme');
+    const sub = await submissions.createDraftSubmission(await ctx(), req.id, db);
+    await submissions.addFile(await ctx(), sub.id, { originalFileName: 'n.pdf', declaredMimeType: 'application/pdf', base64: pdf().toString('base64') }, db);
+    await submissions.submitSubmission(await ctx(), sub.id, {}, db);
+
+    await expect(submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'nem' }, db)).rejects.toMatchObject({ code: 'SUBMISSION_ALREADY_SUBMITTED' });
+    const untouched = await db.clientSubmission.findUnique({ where: { id: sub.id } });
+    expect(untouched!.customerUnavailableDeclaredAt).toBeNull();
+    expect(untouched!.status).toBe('SUBMITTED');
+  });
+
+  it('declaration is denied on a terminal request and for foreign or unknown requests', async () => {
+    const terminal = await publishDocumentRequest('Lezárt bekérés');
+    const terminalRow = await db.clientRequest.findUnique({ where: { id: terminal.id } });
+    await requests.completeRequest(internalActor, terminal.id, terminalRow!.revision, db);
+    await expect(submissions.declareUnavailable(await ctx(), terminal.id, {}, db)).rejects.toMatchObject({ code: 'REQUEST_NOT_OPEN' });
+
+    await expect(submissions.declareUnavailable(await ctx(), crypto.randomUUID(), {}, db)).rejects.toMatchObject({ code: 'REQUEST_NOT_FOUND' });
+
+    const foreignCase = await publishDocumentRequest('Más ügy bekérése', ids.otherCase);
+    await expect(submissions.declareUnavailable(await ctx(), foreignCase.id, {}, db)).rejects.toMatchObject({ code: 'REQUEST_NOT_FOUND' });
+  });
+
+  it('request detail and declaration work for ORGANIZATION and CASE_RELAY grants, and stay denied without a grant', async () => {
+    const req = await publishDocumentRequest('Szervezeti bekérés');
+
+    const makeWorkspace = async (mode: 'ORGANIZATION' | 'CASE_RELAY') => {
+      const identityId = crypto.randomUUID();
+      const workspaceId = crypto.randomUUID();
+      await db.clientPortalIdentity.create({ data: { id: identityId, provider: 'ENTRA_EXTERNAL_ID', issuer: 'iss', subject: `sub-${identityId}`, normalizedEmail: `org-${identityId}@t.io`, emailVerifiedAt: new Date(), displayName: 'Org user', accountType: 'ORGANIZATION_MEMBER', status: 'ACTIVE' } });
+      await db.clientPortalWorkspace.create({ data: { id: workspaceId, clientId: ids.client, name: `WS ${mode}`, mode, publicReference: `ws-${workspaceId}`, createdById: ids.admin } });
+      await db.clientPortalWorkspaceMembership.create({ data: { id: crypto.randomUUID(), clientPortalIdentityId: identityId, workspaceId, status: 'ACTIVE', approvedAt: new Date(), approvedById: ids.admin } });
+      return { identityId, workspaceId };
+    };
+    const addGrant = async (identityId: string, workspaceId: string, caseId: string) =>
+      db.clientPortalGrant.create({ data: { id: crypto.randomUUID(), clientPortalIdentityId: identityId, workspaceId, clientId: ids.client, caseId, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ', 'MESSAGE_READ', 'MESSAGE_SEND'], invitedById: ids.admin, activatedAt: new Date() } as any });
+
+    for (const mode of ['ORGANIZATION', 'CASE_RELAY'] as const) {
+      const authorized = await makeWorkspace(mode);
+      await addGrant(authorized.identityId, authorized.workspaceId, ids.case);
+      const orgCtx = await resolveActiveCustomerGrant(authorized.identityId, ids.case, authorized.workspaceId, db);
+
+      const detail = await requests.getCustomerRequest(orgCtx, req.id, db);
+      expect(detail.id).toBe(req.id);
+      expect(detail.title).toBe('Szervezeti bekérés');
+
+      const declared = await submissions.declareUnavailable(orgCtx, req.id, { reasonSafe: `Nem elérhető (${mode}).` }, db);
+      expect(declared.status).toBe('SUBMITTED');
+      expect(declared.unavailableDeclaredAt).toBeTruthy();
+
+      // same workspace mode, no grant -> denied
+      const unauthorized = await makeWorkspace(mode);
+      await expect(resolveActiveCustomerGrant(unauthorized.identityId, ids.case, unauthorized.workspaceId, db)).rejects.toMatchObject({ code: 'CLIENT_PORTAL_NO_ACTIVE_GRANT' });
+
+      // granted on this case only -> a request from another case is denied
+      const foreign = await publishDocumentRequest(`Idegen ügy (${mode})`, ids.otherCase);
+      await expect(requests.getCustomerRequest(orgCtx, foreign.id, db)).rejects.toMatchObject({ code: 'REQUEST_NOT_FOUND' });
+    }
+  });
 });
 
 
