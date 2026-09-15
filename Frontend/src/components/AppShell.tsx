@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { DashboardFocused } from "./DashboardFocused";
@@ -40,11 +41,20 @@ type AppShellProps = {
    * All other routes keep the default page-scrolling shell.
    */
   fullViewport?: boolean;
+  /**
+   * Chrome mode. "default" renders the full application Sidebar for every
+   * normal route. "focused" is an ADDITIVE document-workbench mode that yields
+   * the Sidebar's horizontal space to the route (wide document reading) while
+   * keeping a slim Adminiculum identity and an escape route back to cases.
+   * Default behaviour is unchanged everywhere else.
+   */
+  workspaceChrome?: "default" | "focused";
 };
 
-export function AppShell({ onSignOut, userProfile, section = "dashboard", children, fullViewport = false }: AppShellProps) {
+export function AppShell({ onSignOut, userProfile, section = "dashboard", children, fullViewport = false, workspaceChrome = "default" }: AppShellProps) {
   const [uiPack] = useUiPack();
   const isSignalOps = uiPack === "signal_tiles_console";
+  const isFocused = workspaceChrome === "focused";
   const profileName = userProfile?.name ?? "Ügyvéd";
   const titleBySection: Record<string, string> = {
     dashboard: "Belső munkapad",
@@ -90,14 +100,28 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
     <div
       data-ui-pack={uiPack}
       data-shell-viewport={fullViewport ? "fixed" : "page"}
-      className={`${rootHeightClass} flex app-shell ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "adm-shell-bg text-[var(--adm-text)] ui-pack-insight-analytics"}`}
+      data-shell-chrome={isFocused ? "focused" : "default"}
+      className={`${rootHeightClass} app-shell flex ${isFocused ? "flex-col" : ""} ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "adm-shell-bg text-[var(--adm-text)] ui-pack-insight-analytics"}`}
     >
-        <Sidebar
-          activeItem={section}
-          profileName={profileName}
-          profileRole={userProfile?.role ?? "Admin"}
-          uiPack={uiPack}
-        />
+        {isFocused ? (
+          <nav
+            data-testid="focused-workspace-nav"
+            className={`flex items-center justify-between gap-3 border-b px-4 py-2 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[var(--adm-border)] bg-[var(--adm-surface)]"}`}
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <Link href="/cases" className={`text-xs font-semibold ${isSignalOps ? "text-[#67E8F9]" : "text-[var(--adm-green-800)]"} hover:underline`}>← Ügyek</Link>
+              <span className={`truncate text-[10px] uppercase tracking-[0.2em] ${isSignalOps ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>Dokumentum munkatér</span>
+            </div>
+            <span className={`hidden truncate text-[11px] sm:block ${isSignalOps ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>{titleBySection[section] || "Műszerfal"}</span>
+          </nav>
+        ) : (
+          <Sidebar
+            activeItem={section}
+            profileName={profileName}
+            profileRole={userProfile?.role ?? "Admin"}
+            uiPack={uiPack}
+          />
+        )}
 
       <div className={`min-w-0 flex-1 flex flex-col min-h-0 app-shell-content ${isSignalOps ? "" : "adm-shell-bg"}`}>
         <TopBar

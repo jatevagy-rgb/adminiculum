@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
 import { resolveVersionTextPlan } from "@/lib/documents/versionTextPlan";
+import { filterLedgerItems } from "@/lib/documents/ledgerSearch";
 import { AnnotationCapabilityToolbar } from "@/components/documents/annotations/AnnotationCapabilityToolbar";
 import { NotPublishedBadge, isClientExplanationDraft } from "@/components/documents/annotations/NotPublishedBadge";
 import {
@@ -241,7 +242,7 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 export default function WrappedDocumentLedgerPage({ params }: DocumentLedgerPageProps) {
   return (
-    <AuthenticatedApp section="case-detail">
+    <AuthenticatedApp section="case-detail" workspaceChrome="focused">
       <DocumentLedgerContent params={params} />
     </AuthenticatedApp>
   );
@@ -277,6 +278,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [contracts, setContracts] = useState<CaseContractListItem[]>([]);
   const [uploadedDocuments, setUploadedDocuments] = useState<DocumentItem[]>([]);
   const [modifiedWorkingCopies, setModifiedWorkingCopies] = useState<DocumentItem[]>([]);
+  const [ledgerSearch, setLedgerSearch] = useState("");
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
     clientId?: string;
@@ -1142,6 +1144,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     : null;
   const modifiedWorkingCopyCount = modifiedWorkingCopies.length;
   const generatedDocumentCount = generatedLedgerItems.length;
+  // Left-rail search filters the already-loaded case document collection only
+  // (no second index, no extra fetch — canonical state only).
+  const ledgerSearchTerm = ledgerSearch.trim().toLowerCase();
+  const filteredUploadedDocuments = filterLedgerItems(uploadedDocuments, ledgerSearch);
+  const filteredModifiedWorkingCopies = filterLedgerItems(modifiedWorkingCopies, ledgerSearch);
+  const filteredGeneratedLedgerItems = filterLedgerItems(generatedLedgerItems, ledgerSearch);
   const selectedDocumentTypeLabel = selectedUploadedDocument
     ? selectedUploadedDocument.documentType === 'MODIFIED_WORKING_COPY'
       ? 'Módosított munkapéldány'
@@ -1708,16 +1716,27 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <aside data-testid="canonical-left-ledger" className="min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col">
                     <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
                       <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Workspace elemek</h2>
+                      <label className="mt-2 block">
+                        <span className="sr-only">Dokumentum keresése</span>
+                        <input
+                          type="search"
+                          value={ledgerSearch}
+                          onChange={(event) => setLedgerSearch(event.target.value)}
+                          placeholder="Dokumentum keresése…"
+                          data-testid="ledger-search-input"
+                          className="w-full rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-2.5 py-1.5 text-[12px] text-[var(--adm-text)] placeholder:text-[var(--adm-text-soft)] focus:outline-none focus:border-[var(--adm-green-800)]"
+                        />
+                      </label>
                     </div>
                     <div className="max-h-[680px] space-y-4 overflow-y-auto p-3">
                       <section className="space-y-2">
                         <div className="flex items-center justify-between">
                           <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Feltöltött dokumentumok</h3>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{uploadedDocuments.length}</span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{filteredUploadedDocuments.length}</span>
                         </div>
                         {uploadedDocuments.length === 0 ? (
                           <p className="adm-board-empty p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs feltöltött dokumentum.</p>
-                        ) : uploadedDocuments.map((doc) => {
+                        ) : filteredUploadedDocuments.map((doc) => {
                           const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
                           return (
                             <AdminDocumentRow
@@ -1737,9 +1756,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <section className={modifiedWorkingCopies.length === 0 ? "hidden" : "space-y-2"}>
                         <div className="flex items-center justify-between">
                           <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Módosított munkapéldányok</h3>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{modifiedWorkingCopyCount}</span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{filteredModifiedWorkingCopies.length}</span>
                         </div>
-                        {modifiedWorkingCopies.map((doc) => {
+                        {filteredModifiedWorkingCopies.map((doc) => {
                           const isSelected = selectedLedgerItem?.kind === "uploaded" && selectedLedgerItem.item.id === doc.id;
                           return (
                             <AdminDocumentRow
@@ -1758,9 +1777,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <section className={generatedLedgerItems.length === 0 ? "hidden" : "space-y-2"}>
                         <div className="flex items-center justify-between">
                           <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Generált / módosított</h3>
-                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{generatedDocumentCount}</span>
+                          <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{filteredGeneratedLedgerItems.length}</span>
                         </div>
-                        {generatedLedgerItems.map((contract) => {
+                        {filteredGeneratedLedgerItems.map((contract) => {
                           const isSelected = selectedLedgerItem?.kind === "generated" && selectedLedgerItem.item.id === contract.id;
                           return (
                             <AdminDocumentRow
@@ -1776,6 +1795,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           );
                         })}
                       </section>
+
+                      {ledgerSearchTerm
+                        && filteredUploadedDocuments.length === 0
+                        && filteredModifiedWorkingCopies.length === 0
+                        && filteredGeneratedLedgerItems.length === 0 ? (
+                        <p data-testid="ledger-search-empty" className="adm-board-empty p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs találat a keresésre.</p>
+                      ) : null}
                     </div>
                   </aside>
 
@@ -1812,12 +1838,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
                               </div>
                             ) : (
-                              <div
-                                ref={annotationSurfaceRef}
-                                onMouseUp={annotationCapabilities.canCreateTextRange ? handleTextSelectionAnchor : undefined}
-                                className="max-h-[680px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]"
-                              >
-                                {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
+                              <div className="max-h-[680px] overflow-auto bg-[#efece4] p-4 sm:p-6">
+                                <div
+                                  ref={annotationSurfaceRef}
+                                  onMouseUp={annotationCapabilities.canCreateTextRange ? handleTextSelectionAnchor : undefined}
+                                  className="mx-auto max-w-[840px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border)] bg-white p-8 font-serif text-[15px] leading-7 text-[#1f2a24] shadow-sm"
+                                >
+                                  {isLoadingVersionText ? 'Szöveges verzió betöltése...' : renderAnnotatedText()}
+                                </div>
                               </div>
                             )
                           ) : versionTextPlan === 'DOCUMENT_TEXT' ? (
@@ -1828,8 +1856,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be read-only előnézetként.</p>
                               </div>
                             ) : documentTextPreview ? (
-                              <div data-testid="version-preview-document-text" className="max-h-[680px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
-                                {documentTextPreview}
+                              <div className="max-h-[680px] overflow-auto bg-[#efece4] p-4 sm:p-6">
+                                <div data-testid="version-preview-document-text" className="mx-auto max-w-[840px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border)] bg-white p-8 font-serif text-[15px] leading-7 text-[#1f2a24] shadow-sm">
+                                  {documentTextPreview}
+                                </div>
                               </div>
                             ) : documentTextFailed ? (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">

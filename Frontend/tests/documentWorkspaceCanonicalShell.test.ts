@@ -41,13 +41,16 @@ test("Canonical left ledger preserves all document categories and upload trigger
   const ledger = ledgerMatch[0];
 
   assert.match(ledger, /Feltöltött dokumentumok/);
-  assert.match(ledger, /uploadedDocuments\.map/);
+  assert.match(ledger, /filteredUploadedDocuments\.map/);
   assert.match(ledger, /Módosított munkapéldányok/);
-  assert.match(ledger, /modifiedWorkingCopies\.map/);
+  assert.match(ledger, /filteredModifiedWorkingCopies\.map/);
   assert.match(ledger, /Generált \/ módosított/);
-  assert.match(ledger, /generatedLedgerItems\.map/);
+  assert.match(ledger, /filteredGeneratedLedgerItems\.map/);
   assert.match(ledger, /scanStatusLabel\(doc\.securityScanStatus\)/);
   assert.match(ledger, /setSelectedLedgerItem/);
+  // Left-rail search is a view filter over the already-loaded collection.
+  assert.match(ledger, /data-testid="ledger-search-input"/);
+  assert.match(ledger, /setLedgerSearch/);
 });
 
 test("Initial-upload control exists and is wired to fileInputRef and uploadCaseDocument", () => {
