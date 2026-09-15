@@ -133,7 +133,7 @@ describeWithDatabase('organization client answer state and discovery (PostgreSQL
     const discovery = (await getCompanyProfileDiscovery(memberId, workspaceA, db)).questions;
     expect(discovery).toHaveLength(3);
     expect(discovery).toEqual(expect.arrayContaining([
-      expect.objectContaining({ questionKey: 'employee_count', label: 'Number of employees', valueType: 'NUMBER', integerOnly: true, status: 'UNANSWERED', value: null }),
+      expect.objectContaining({ questionKey: 'employee_count', label: 'Munkavállalók száma', valueType: 'NUMBER', integerOnly: true, status: 'UNANSWERED', value: null }),
       expect.objectContaining({ questionKey: 'company_main_activity', valueType: 'STRING', status: 'UNANSWERED', value: null }),
       expect.objectContaining({ questionKey: 'company_operating_country', valueType: 'STRING', status: 'UNANSWERED', value: null }),
     ]));

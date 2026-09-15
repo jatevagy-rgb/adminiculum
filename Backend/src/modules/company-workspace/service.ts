@@ -23,13 +23,31 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { Prisma as PrismaTypes } from '@prisma/client';
 import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe, internalCaseScope } from '../client-interaction/base';
 import { getComplianceWorkspace } from '../compliance/complianceWorkspaceService';
+import { buildCanonicalFactState } from '../client-workspace/companyProfileAnswerService';
+import { COMPANY_PROFILE_QUESTIONS } from '../client-workspace/companyProfileQuestionRegistry';
+import { applyDeterministicDerivations, resolveVisibleQuestions, type CompanyProfileFactState } from '../client-workspace/companyProfileAdaptive';
 import { resolveCanonicalTypedFactValue, type CanonicalTypedFactValue } from '../client-workspace/canonicalFactValue';
+import type { ProcessMetricCode, ProcessMetricValue } from '../company-growth/metrics/metricTypes';
 import { hrConfidentialReadAllowed } from '../documents/authorization';
 
 type Prisma = typeof defaultPrisma;
 
 const ACTIVE_PERSON_STATUS = new Set(['ACTIVE', 'ON_LEAVE']);
 const INACTIVE_PERSON_STATUS = new Set(['INACTIVE', 'ENDED']);
+const ALLOWED_SNAPSHOT_METRICS = new Set<ProcessMetricCode>([
+  'TOTAL_ACTIVE_MINUTES',
+  'TOTAL_WAITING_MINUTES',
+  'TOTAL_CYCLE_MINUTES',
+  'WAITING_SHARE',
+  'APPROVAL_STEP_COUNT',
+  'DATA_ENTRY_STEP_COUNT',
+  'HANDOFF_STEP_COUNT',
+  'RESPONSIBLE_PERSON_CHANGE_COUNT',
+  'SYSTEM_COUNT',
+  'SYSTEM_SWITCH_COUNT',
+  'UNASSIGNED_STEP_COUNT',
+  'PROCESS_OWNER_PRESENT',
+]);
 
 /** Deterministic grouping of ClientFact types into understandable categories. */
 const FACT_GROUP_KEYS: Record<string, string> = {
@@ -63,6 +81,32 @@ const FACT_GROUP_LABELS: Record<string, string> = {
 
 function iso(v: Date | null | undefined): string | null {
   return v ? v.toISOString() : null;
+}
+
+function boundedSnapshotMetrics(value: unknown): ProcessMetricValue[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((metric): ProcessMetricValue[] => {
+    if (!metric || typeof metric !== 'object') return [];
+    const candidate = metric as { code?: unknown; value?: unknown; unit?: unknown; metricVersion?: unknown };
+    if (
+      typeof candidate.code !== 'string' ||
+      !ALLOWED_SNAPSHOT_METRICS.has(candidate.code as ProcessMetricCode) ||
+      (typeof candidate.value !== 'number' && typeof candidate.value !== 'boolean' && candidate.value !== null) ||
+      typeof candidate.unit !== 'string' ||
+      typeof candidate.metricVersion !== 'string'
+    ) return [];
+    const metricValue = candidate.value;
+    return [{
+      code: candidate.code as ProcessMetricCode,
+      value: metricValue as number | boolean | null,
+      unit: candidate.unit as ProcessMetricValue['unit'],
+      metricVersion: candidate.metricVersion,
+    }];
+  });
+}
+
+function questionStatus(state: CompanyProfileFactState | undefined): 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED' {
+  return state?.status ?? 'UNANSWERED';
 }
 
 /** Owner display preference: linked OrganizationPerson → legacy label → none. */
@@ -159,6 +203,15 @@ export interface CompanyDataRoomDto {
       unknown: number;
     };
     coverageAvailable: false;
+    relevantDataCoverage: {
+      available: boolean;
+      relevantDefinitionCount: number;
+      answeredCount: number;
+      unknownCount: number;
+      unansweredCount: number;
+      undeterminedCount: number;
+      derivedAnsweredCount: number;
+    };
     stale: null;
     staleAvailable: false;
     conflictingAvailable: false;
@@ -168,8 +221,8 @@ export interface CompanyDataRoomDto {
     activeGroupCount: number;
     personCount: number;
     activePersonCount: number;
-    groups: Array<{ id: string; name: string; status: string; parentGroupId: string | null }>;
-    people: Array<{ id: string; name: string; jobTitle: string | null; employmentStatus: string; organizationGroupId: string | null }>;
+    groups: Array<{ id: string; name: string; description: string | null; status: string; parentGroupId: string | null }>;
+    people: Array<{ id: string; name: string; jobTitle: string | null; employmentStatus: string; organizationGroupId: string | null; organizationGroupName: string | null }>;
   };
   processes: Array<{
     id: string;
@@ -192,6 +245,12 @@ export interface CompanyDataRoomDto {
       estimatedWaitingMinutes: number | null;
       isApproval: boolean;
     }>;
+    latestMeasuredSnapshot: {
+      id: string;
+      observedAt: string;
+      metricVersion: string;
+      metrics: ProcessMetricValue[];
+    } | null;
   }>;
   systems: Array<{
     id: string;
@@ -235,10 +294,43 @@ export interface CompanyDataRoomDto {
     activeInitiativeCount: number;
     milestoneCount: number;
     plannedMilestoneCount: number;
+    initiatives: Array<{
+      id: string;
+      title: string;
+      reason: string | null;
+      currentState: string | null;
+      targetState: string | null;
+      priority: string;
+      status: string;
+      targetAt: string | null;
+      startedAt: string | null;
+      completedAt: string | null;
+      clientOwnerPerson: { id: string; name: string } | null;
+    }>;
+    milestones: Array<{
+      id: string;
+      type: string;
+      title: string;
+      description: string | null;
+      milestoneDate: string | null;
+      targetDate: string | null;
+      status: string;
+      developmentInitiativeId: string | null;
+    }>;
+    opportunityCountsByStatus: Array<{ status: string; count: number }>;
   };
   measurementSummary: {
     nonSyntheticOutcomeCount: number;
     byBasis: Array<{ basis: string; count: number }>;
+    assumedCount: number;
+    outcomes: Array<{
+      id: string;
+      basis: string;
+      businessProcess: { id: string; name: string } | null;
+      developmentInitiative: { id: string; title: string } | null;
+      opportunity: { id: string; title: string } | null;
+      createdAt: string;
+    }>;
   };
 }
 
@@ -272,6 +364,8 @@ export async function getCompanyDataRoom(
     profile,
     facts,
     answerStates,
+    profileDefinitions,
+    profileFacts,
     groups,
     people,
     groupCount,
@@ -293,8 +387,13 @@ export async function getCompanyDataRoom(
     activeInitiativeCount,
     milestoneCount,
     plannedMilestoneCount,
+    initiatives,
+    milestones,
+    opportunityCountsByStatus,
     nonSyntheticOutcomeCount,
     outcomesByBasis,
+    assumedOutcomeCount,
+    outcomes,
   ] = await Promise.all([
     prisma.client.findUnique({
       where: { id: authorizedClient.id },
@@ -375,17 +474,60 @@ export async function getCompanyDataRoom(
         },
       },
     }),
+    prisma.factDefinition.findMany({
+      where: {
+        status: 'ACTIVE',
+        key: { in: COMPANY_PROFILE_QUESTIONS.map((question) => question.factDefinitionKey) },
+      },
+      select: { id: true, key: true, temporalPolicy: true },
+    }),
+    prisma.clientFact.findMany({
+      where: {
+        clientId,
+        factDefinition: { key: { in: COMPANY_PROFILE_QUESTIONS.map((question) => question.factDefinitionKey) } },
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+        supersededAt: null,
+        OR: [{ validTo: null }, { validTo: { gte: now } }],
+        validFrom: { lte: now },
+      },
+      orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        factDefinitionId: true,
+        type: true,
+        value: true,
+        numberValue: true,
+        stringValue: true,
+        booleanValue: true,
+        dateValue: true,
+        datetimeValue: true,
+        moneyAmount: true,
+        moneyCurrency: true,
+        enumValue: true,
+        jsonValue: true,
+        observedAt: true,
+        effectiveAt: true,
+      },
+    }),
     prisma.clientOrganizationGroup.findMany({
       where: { clientId },
       orderBy: { name: 'asc' },
       take: 200,
-      select: { id: true, name: true, status: true, parentGroupId: true },
+      select: { id: true, name: true, descriptionSafe: true, status: true, parentGroupId: true },
     }),
     prisma.organizationPerson.findMany({
       where: { clientId },
       orderBy: { name: 'asc' },
       take: 500,
-      select: { id: true, name: true, jobTitle: true, employmentStatus: true, organizationGroupId: true },
+      select: {
+        id: true,
+        name: true,
+        jobTitle: true,
+        employmentStatus: true,
+        organizationGroupId: true,
+        organizationGroup: { select: { name: true } },
+      },
     }),
     prisma.clientOrganizationGroup.count({ where: { clientId } }),
     prisma.clientOrganizationGroup.count({ where: { clientId, status: 'ACTIVE' } }),
@@ -414,10 +556,20 @@ export async function getCompanyDataRoom(
             name: true,
             stepType: true,
             responsiblePerson: { select: { id: true, name: true } },
-            system: { select: { id: true, name: true, category: true } },
+            system: { select: { id: true, name: true, category: true, status: true } },
             estimatedActiveMinutes: true,
             estimatedWaitingMinutes: true,
             isApproval: true,
+          },
+        },
+        observationSnapshots: {
+          orderBy: [{ observedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+          select: {
+            id: true,
+            observedAt: true,
+            metricVersion: true,
+            metrics: true,
           },
         },
       },
@@ -450,8 +602,60 @@ export async function getCompanyDataRoom(
     prisma.developmentInitiative.count({ where: { clientId, status: 'ACTIVE' } }),
     prisma.companyMilestone.count({ where: { clientId } }),
     prisma.companyMilestone.count({ where: { clientId, status: 'PLANNED' } }),
+    prisma.developmentInitiative.findMany({
+      where: { clientId },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+      take: 100,
+      select: {
+        id: true,
+        title: true,
+        reason: true,
+        currentState: true,
+        targetState: true,
+        priority: true,
+        status: true,
+        targetAt: true,
+        startedAt: true,
+        completedAt: true,
+        clientOwnerPerson: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.companyMilestone.findMany({
+      where: { clientId },
+      orderBy: [{ targetDate: 'asc' }, { milestoneDate: 'desc' }, { id: 'asc' }],
+      take: 200,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        description: true,
+        milestoneDate: true,
+        targetDate: true,
+        status: true,
+        developmentInitiativeId: true,
+      },
+    }),
+    prisma.improvementOpportunity.groupBy({
+      by: ['status'],
+      where: { clientId },
+      _count: { _all: true },
+    }),
     prisma.outcomeMeasurement.count({ where: { clientId, synthetic: false } }),
     prisma.outcomeMeasurement.groupBy({ by: ['basis'], where: { clientId, synthetic: false }, _count: { _all: true } }),
+    prisma.outcomeMeasurement.count({ where: { clientId, synthetic: false, basis: 'ASSUMED' } }),
+    prisma.outcomeMeasurement.findMany({
+      where: { clientId, synthetic: false },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: 100,
+      select: {
+        id: true,
+        basis: true,
+        createdAt: true,
+        businessProcess: { select: { id: true, name: true } },
+        developmentInitiative: { select: { id: true, title: true } },
+        opportunity: { select: { id: true, title: true } },
+      },
+    }),
   ]);
 
   if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
@@ -514,7 +718,50 @@ export async function getCompanyDataRoom(
         validTo: null,
       })),
   ];
-
+  const profileFactState = buildCanonicalFactState({
+    definitions: profileDefinitions,
+    states: answerStates.map((state) => ({
+      factDefinitionId: state.factDefinitionId,
+      status: String(state.status),
+      currentFact: state.currentFact,
+    })),
+    facts: profileFacts,
+    now,
+  });
+  const derivedProfileFactState = applyDeterministicDerivations(profileFactState);
+  const visibility = resolveVisibleQuestions(profileFactState);
+  const relevantFactKeys = new Set(
+    COMPANY_PROFILE_QUESTIONS
+      .filter((question) => question.baseline || question.discoveryBaseline)
+      .map((question) => question.factDefinitionKey),
+  );
+  for (const question of visibility.visible) {
+    for (const factKey of question.factKeys) relevantFactKeys.add(factKey);
+  }
+  const undeterminedQuestionKeys = new Set(visibility.undetermined.map((question) => question.questionKey));
+  const profileDefinitionKeys = new Set(profileDefinitions.map((definition) => definition.key));
+  const relevantDataCoverage = {
+    available: undeterminedQuestionKeys.size === 0 &&
+      [...relevantFactKeys].every((factKey) => profileDefinitionKeys.has(factKey)),
+    relevantDefinitionCount: relevantFactKeys.size,
+    answeredCount: 0,
+    unknownCount: 0,
+    unansweredCount: 0,
+    undeterminedCount: undeterminedQuestionKeys.size,
+    derivedAnsweredCount: 0,
+  };
+  for (const factKey of relevantFactKeys) {
+    const state = derivedProfileFactState[factKey];
+    const status = questionStatus(state);
+    if (status === 'ANSWERED') {
+      relevantDataCoverage.answeredCount += 1;
+      if (state?.derived) relevantDataCoverage.derivedAnsweredCount += 1;
+    } else if (status === 'UNKNOWN') {
+      relevantDataCoverage.unknownCount += 1;
+    } else {
+      relevantDataCoverage.unansweredCount += 1;
+    }
+  }
   const dto: CompanyDataRoomDto = {
     clientIdentity: {
       id: client.id,
@@ -541,6 +788,7 @@ export async function getCompanyDataRoom(
         unknown: answerStates.filter((state) => String(state.status) === 'UNKNOWN').length,
       },
       coverageAvailable: false,
+      relevantDataCoverage,
       stale: null,
       staleAvailable: false,
       conflictingAvailable: false,
@@ -553,6 +801,7 @@ export async function getCompanyDataRoom(
       groups: groups.map((group) => ({
         id: group.id,
         name: group.name,
+        description: group.descriptionSafe,
         status: String(group.status),
         parentGroupId: group.parentGroupId,
       })),
@@ -562,6 +811,7 @@ export async function getCompanyDataRoom(
         jobTitle: person.jobTitle,
         employmentStatus: String(person.employmentStatus),
         organizationGroupId: person.organizationGroupId,
+        organizationGroupName: person.organizationGroup?.name ?? null,
       })),
     },
     processes: processes.map((process) => ({
@@ -585,6 +835,14 @@ export async function getCompanyDataRoom(
         estimatedWaitingMinutes: step.estimatedWaitingMinutes,
         isApproval: step.isApproval,
       })),
+      latestMeasuredSnapshot: process.observationSnapshots[0]
+        ? {
+            id: process.observationSnapshots[0].id,
+            observedAt: process.observationSnapshots[0].observedAt.toISOString(),
+            metricVersion: process.observationSnapshots[0].metricVersion,
+            metrics: boundedSnapshotMetrics(process.observationSnapshots[0].metrics),
+          }
+        : null,
     })),
     systems: systems.map((system) => ({
       id: system.id,
@@ -620,10 +878,51 @@ export async function getCompanyDataRoom(
       activeInitiativeCount,
       milestoneCount,
       plannedMilestoneCount,
+      initiatives: initiatives.map((initiative) => ({
+        id: initiative.id,
+        title: initiative.title,
+        reason: initiative.reason,
+        currentState: initiative.currentState,
+        targetState: initiative.targetState,
+        priority: String(initiative.priority),
+        status: String(initiative.status),
+        targetAt: iso(initiative.targetAt),
+        startedAt: iso(initiative.startedAt),
+        completedAt: iso(initiative.completedAt),
+        clientOwnerPerson: initiative.clientOwnerPerson,
+      })),
+      milestones: milestones.map((milestone) => ({
+        id: milestone.id,
+        type: milestone.type,
+        title: milestone.title,
+        description: milestone.description,
+        milestoneDate: iso(milestone.milestoneDate),
+        targetDate: iso(milestone.targetDate),
+        status: String(milestone.status),
+        developmentInitiativeId: milestone.developmentInitiativeId,
+      })),
+      opportunityCountsByStatus: groupedCount(
+        opportunityCountsByStatus.map((row) => ({ status: row.status, count: row._count._all })),
+        'status',
+      ) as Array<{ status: string; count: number }>,
     },
     measurementSummary: {
       nonSyntheticOutcomeCount,
-      byBasis: groupedCount(outcomesByBasis.map((row) => ({ basis: row.basis, count: row._count._all })), 'basis') as Array<{ basis: string; count: number }>,
+      byBasis: groupedCount(
+        outcomesByBasis
+          .filter((row) => row.basis !== 'ASSUMED')
+          .map((row) => ({ basis: row.basis, count: row._count._all })),
+        'basis',
+      ) as Array<{ basis: string; count: number }>,
+      assumedCount: assumedOutcomeCount,
+      outcomes: outcomes.map((outcome) => ({
+        id: outcome.id,
+        basis: String(outcome.basis),
+        businessProcess: outcome.businessProcess,
+        developmentInitiative: outcome.developmentInitiative,
+        opportunity: outcome.opportunity,
+        createdAt: outcome.createdAt.toISOString(),
+      })),
     },
   };
 

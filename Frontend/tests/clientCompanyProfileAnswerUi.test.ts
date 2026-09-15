@@ -143,6 +143,19 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     const views = viewsSrc();
     assert.match(views, /import \{.*OrganizationCompanyProfile.*\} from "\.\/OrganizationCompanyProfile"/);
     assert.match(views, /<OrganizationCompanyProfile onProfileUpdated=\{onProfileUpdated\} \/>/);
-    assert.match(views, /view === "company" \? <OrganizationCompany company=\{state\.company\} onProfileUpdated=\{load\} \/>/);
+    assert.match(views, /view === "company" \? <OrganizationCompany company=\{state\.company\} onProfileUpdated=\{refreshCompany\} \/>/);
+    // The profile edit callback must never be the full parent `load`, whose
+    // loading=true state unmounts OrganizationCompanyProfile and resets the wizard.
+    assert.doesNotMatch(views, /onProfileUpdated=\{load\}/);
+  });
+
+  it("refreshCompany preserves the previously loaded company summary on failure", () => {
+    const views = viewsSrc();
+    const refresh = views.slice(views.indexOf("const refreshCompany"), views.indexOf("const hasLeadership"));
+    assert.match(refresh, /try\s*\{/);
+    assert.match(refresh, /getPortalOrganizationCompany\(\)/);
+    assert.match(refresh, /catch\s*\{/);
+    assert.doesNotMatch(refresh, /\.catch\(\(\) => null\)/);
+    assert.doesNotMatch(refresh, /company:\s*null/);
   });
 });
