@@ -307,6 +307,52 @@ export async function getPortalUpdates() {
   return fetchApi<{ items: PortalSafeUpdate[] }>('/client-portal/updates', { suppressErrorStatuses: [401, 403, 503], suppressErrorLogging: true });
 }
 
+export type PortalCalendarCategory =
+  | 'MATTER_TARGET'
+  | 'PUBLISHED_DEADLINE'
+  | 'ACTION_REQUEST'
+  | 'CUSTOMER_REQUEST'
+  | 'CONTRACT_DATE'
+  | 'COMPANY_MILESTONE';
+
+export type PortalCalendarStatus = 'OPEN' | 'DONE' | 'INFO';
+
+export type PortalCalendarItem = {
+  id: string;
+  category: PortalCalendarCategory;
+  categoryLabel: string;
+  title: string;
+  date: string;
+  day: string;
+  status: PortalCalendarStatus;
+  href: string;
+  matterTitle?: string | null;
+};
+
+export type PortalCalendar = {
+  from: string;
+  to: string;
+  today: string;
+  items: PortalCalendarItem[];
+  categories: Array<{ key: PortalCalendarCategory; label: string; count: number }>;
+  counts: {
+    total: number;
+    open: number;
+    overdue: number;
+    dueToday: number;
+    dueNext7Days: number;
+    dueNext30Days: number;
+  };
+};
+
+export async function getPortalCalendar(params: { from?: string; to?: string } = {}) {
+  const search = new URLSearchParams();
+  if (params.from) search.set('from', params.from);
+  if (params.to) search.set('to', params.to);
+  const query = search.toString();
+  return fetchApi<PortalCalendar>(`/client-portal/calendar${query ? `?${query}` : ''}`, { suppressErrorStatuses: [400, 401, 403, 503], suppressErrorLogging: true });
+}
+
 export function portalDownloadUrl(publicationId: string) {
   const backendBaseUrl = process.env.NEXT_PUBLIC_BACKEND_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || '';
   const root = backendBaseUrl.replace(/\/+$/, '').replace(/\/api\/v1$/i, '');

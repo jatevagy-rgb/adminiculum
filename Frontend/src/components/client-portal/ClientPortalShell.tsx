@@ -12,6 +12,7 @@ import { PortalOnboarding } from './PortalOnboarding';
 import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import { OrgHomeView } from './OrgHomeView';
+import { PortalCalendarView } from './PortalCalendarView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
 import { ActionCard, Card, formatDate, MatterView, UpdateCard } from './MatterWorkspace';
 import {
@@ -36,7 +37,7 @@ import {
   type PortalIdentityContext,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company' | 'grow' | 'compliance';
+type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'calendar' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company' | 'grow' | 'compliance';
 
 type Props = { view: PortalView; resourceId?: string };
 
@@ -362,6 +363,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       return [
         ['Áttekintés', '/portal'],
         ['Jogi ügyek', '/portal/ugyek'],
+        ['Naptár', '/portal/naptar'],
         ['Fejlesztés', '/portal/fejlesztes'],
         ['Megfelelés', '/portal/megfeleles'],
         ['Üzenetek', '/portal/uzenetek'],
@@ -376,6 +378,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       return [
         capabilities.home ? ['Főoldal', '/portal'] : null,
         capabilities.matters ? ['Ügyek', '/portal/ugyeim'] : null,
+        capabilities.matters || capabilities.tasks ? ['Naptár', '/portal/naptar'] : null,
         capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
         capabilities.messages && communicationEnabled ? ['Kommunikáció', '/portal/uzenetek'] : null,
         ['Együttműködési áttekintés', '/portal/szervezeti-attekintes'],
@@ -386,6 +389,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
       capabilities.home ? ['Főoldal', '/portal'] : null,
       capabilities.matters ? ['Ügyeim', '/portal/ugyeim'] : null,
       capabilities.tasks ? ['Teendőim', '/portal/teendoim'] : null,
+      capabilities.matters || capabilities.tasks ? ['Naptár', '/portal/naptar'] : null,
       capabilities.documents ? ['Dokumentumok', '/portal/dokumentumok'] : null,
       capabilities.messages && communicationEnabled ? ['Üzenetek', '/portal/uzenetek'] : null,
     ].filter(Boolean) as string[][];
@@ -432,7 +436,8 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && view === 'home' && state.context.selectedWorkspace?.mode === 'ORGANIZATION' ? (
           <OrgHomeView identity={state.context.identity} />
         ) : null}
-        {state.status === 'ready' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && !(state.context.selectedWorkspace?.mode === 'ORGANIZATION' && view === 'home') ? (
+        {state.status === 'ready' && view === 'calendar' ? <PortalCalendarView /> : null}
+        {state.status === 'ready' && view !== 'calendar' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && !(state.context.selectedWorkspace?.mode === 'ORGANIZATION' && view === 'home') ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
