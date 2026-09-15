@@ -32,3 +32,7 @@ companyWorkspaceRouter.use(authenticate);
 companyWorkspaceRouter.get('/clients/:clientId/overview', async (req, res) => {
   try { res.json(await workspace.getWorkspaceOverview(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
 });
+
+companyWorkspaceRouter.get('/clients/:clientId/data-room', async (req, res) => {
+  try { res.json(await workspace.getCompanyDataRoom(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
+});

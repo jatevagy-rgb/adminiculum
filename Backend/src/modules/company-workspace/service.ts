@@ -20,7 +20,11 @@
  * and no new company publication scope.
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe } from '../client-interaction/base';
+import { Prisma as PrismaTypes } from '@prisma/client';
+import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe, internalCaseScope } from '../client-interaction/base';
+import { getComplianceWorkspace } from '../compliance/complianceWorkspaceService';
+import { resolveCanonicalTypedFactValue, type CanonicalTypedFactValue } from '../client-workspace/canonicalFactValue';
+import { hrConfidentialReadAllowed } from '../documents/authorization';
 
 type Prisma = typeof defaultPrisma;
 
@@ -116,6 +120,515 @@ export interface WorkspaceCase {
 export interface WorkspaceAttentionItem {
   code: 'OPEN_IMPORTANT_FINDINGS' | 'CONTRACTS_WITHOUT_OWNER' | 'OBLIGATIONS_WITHOUT_OWNER' | 'INACTIVE_OWNER_PERSONS';
   count: number;
+}
+
+export interface CompanyDataRoomDto {
+  clientIdentity: {
+    id: string;
+    name: string;
+    company: string | null;
+    companyRegistrationNumber: string | null;
+    taxNumber: string | null;
+    vatNumber: string | null;
+    address: string | null;
+  };
+  operatingProfile: {
+    status: string | null;
+    complianceEnrollmentStatus: string;
+    summary: string | null;
+    lastReviewedAt: string | null;
+    nextReviewAt: string | null;
+  } | null;
+  facts: Array<{
+    id: string | null;
+    type: string;
+    value: CanonicalTypedFactValue | null;
+    answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
+    factDefinition: { key: string; domainCode: string; valueType: string } | null;
+    scopeType: string | null;
+    factSubjectId: string | null;
+    verificationStatus: string | null;
+    observedAt: string | null;
+    effectiveAt: string | null;
+    validFrom: string | null;
+    validTo: string | null;
+  }>;
+  dataQuality: {
+    answerStateSummary: {
+      answered: number;
+      unknown: number;
+    };
+    coverageAvailable: false;
+    stale: null;
+    staleAvailable: false;
+    conflictingAvailable: false;
+  };
+  organization: {
+    groupCount: number;
+    activeGroupCount: number;
+    personCount: number;
+    activePersonCount: number;
+    groups: Array<{ id: string; name: string; status: string; parentGroupId: string | null }>;
+    people: Array<{ id: string; name: string; jobTitle: string | null; employmentStatus: string; organizationGroupId: string | null }>;
+  };
+  processes: Array<{
+    id: string;
+    name: string;
+    category: string;
+    description: string | null;
+    criticality: string;
+    frequency: string;
+    status: string;
+    owner: { id: string; name: string } | null;
+    organizationGroup: { id: string; name: string } | null;
+    steps: Array<{
+      id: string;
+      position: number;
+      name: string;
+      stepType: string;
+      responsiblePerson: { id: string; name: string } | null;
+      system: { id: string; name: string; category: string } | null;
+      estimatedActiveMinutes: number | null;
+      estimatedWaitingMinutes: number | null;
+      isApproval: boolean;
+    }>;
+  }>;
+  systems: Array<{
+    id: string;
+    name: string;
+    category: string;
+    vendor: string | null;
+    purpose: string | null;
+    status: string;
+    owner: { id: string; name: string } | null;
+    relatedProcessStepCount: number;
+  }>;
+  documents: {
+    documentCount: number;
+    currentVersionCount: number;
+    evidenceLinkedRecordCount: number;
+  };
+  contracts: {
+    totalCount: number;
+    byStatus: Array<{ status: string; count: number }>;
+  };
+  complianceSummary: {
+    currentOnly: true;
+    evaluatedAt: string | null;
+    evaluatedCount: number;
+    applies: number;
+    doesNotApply: number;
+    insufficientFacts: number;
+    legalReviewRequired: number;
+    technicalReviewRequired: number;
+    sourceSupportInsufficient: number;
+    openFindings: number;
+    openProposals: number;
+  };
+  evidenceSummary: {
+    totalCount: number;
+    bySourceType: Array<{ sourceType: string; count: number }>;
+    byStatus: Array<{ status: string; count: number }>;
+  };
+  developmentSummary: {
+    initiativeCount: number;
+    activeInitiativeCount: number;
+    milestoneCount: number;
+    plannedMilestoneCount: number;
+  };
+  measurementSummary: {
+    nonSyntheticOutcomeCount: number;
+    byBasis: Array<{ basis: string; count: number }>;
+  };
+}
+
+function groupedCount<T extends string>(rows: Array<{ [key: string]: T | number }>, key: string): Array<{ [key: string]: string | number }> {
+  return rows.map((row) => ({ [key]: String(row[key]), count: Number(row.count) }));
+}
+
+/**
+ * Internal Company OS / Data Room read model.
+ *
+ * This is an additive projection over existing client-scoped canonical data.
+ * It deliberately returns summaries for documents and contracts rather than
+ * duplicating their full product surfaces or exposing document contents.
+ */
+export async function getCompanyDataRoom(
+  actor: InternalActor,
+  clientId: string,
+  prisma: Prisma = defaultPrisma,
+): Promise<CompanyDataRoomDto> {
+  const authorizedClient = await assertClientReadAccess(actor, clientId, prisma);
+  const now = new Date();
+  const readableCaseIds = await internalCaseScope(actor, prisma);
+  const documentScope: PrismaTypes.DocumentWhereInput = {
+    clientId,
+    ...(readableCaseIds === null ? {} : { caseId: { in: readableCaseIds } }),
+    ...(readableCaseIds === null || hrConfidentialReadAllowed(actor.role) ? {} : { securityClassification: { not: 'HR_CONFIDENTIAL' as const } }),
+  };
+
+  const [
+    client,
+    profile,
+    facts,
+    answerStates,
+    groups,
+    people,
+    groupCount,
+    activeGroupCount,
+    personCount,
+    activePersonCount,
+    processes,
+    systems,
+    documentCount,
+    currentVersionCount,
+    evidenceLinkedDocumentCount,
+    contractCount,
+    contractsByStatus,
+    complianceWorkspace,
+    evidenceCount,
+    evidenceBySourceType,
+    evidenceByStatus,
+    initiativeCount,
+    activeInitiativeCount,
+    milestoneCount,
+    plannedMilestoneCount,
+    nonSyntheticOutcomeCount,
+    outcomesByBasis,
+  ] = await Promise.all([
+    prisma.client.findUnique({
+      where: { id: authorizedClient.id },
+      select: {
+        id: true,
+        name: true,
+        company: true,
+        companyRegistrationNumber: true,
+        taxNumber: true,
+        vatNumber: true,
+        address: true,
+      },
+    }),
+    prisma.clientOperatingProfile.findUnique({
+      where: { clientId },
+      select: {
+        status: true,
+        complianceEnrollmentStatus: true,
+        summary: true,
+        lastReviewedAt: true,
+        nextReviewAt: true,
+      },
+    }),
+    prisma.clientFact.findMany({
+      where: {
+        clientId,
+        supersededAt: null,
+        OR: [{ validTo: null }, { validTo: { gte: now } }],
+        validFrom: { lte: now },
+      },
+      orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
+      take: 200,
+      select: {
+        id: true,
+        type: true,
+        value: true,
+        numberValue: true,
+        stringValue: true,
+        booleanValue: true,
+        dateValue: true,
+        datetimeValue: true,
+        moneyAmount: true,
+        moneyCurrency: true,
+        enumValue: true,
+        jsonValue: true,
+        factDefinition: { select: { id: true, key: true, domainCode: true, valueType: true, temporalPolicy: true } },
+        scopeType: true,
+        factSubjectId: true,
+        verificationStatus: true,
+        observedAt: true,
+        effectiveAt: true,
+        validFrom: true,
+        validTo: true,
+      },
+    }),
+    prisma.clientFactAnswerState.findMany({
+      where: { clientId, scopeType: 'COMPANY', factSubjectId: null },
+      select: {
+        factDefinitionId: true,
+        status: true,
+        currentFactId: true,
+        factDefinition: { select: { key: true, domainCode: true, valueType: true } },
+        currentFact: {
+          select: {
+            id: true,
+            type: true,
+            value: true,
+            numberValue: true,
+            stringValue: true,
+            booleanValue: true,
+            dateValue: true,
+            datetimeValue: true,
+            moneyAmount: true,
+            moneyCurrency: true,
+            enumValue: true,
+            jsonValue: true,
+          },
+        },
+      },
+    }),
+    prisma.clientOrganizationGroup.findMany({
+      where: { clientId },
+      orderBy: { name: 'asc' },
+      take: 200,
+      select: { id: true, name: true, status: true, parentGroupId: true },
+    }),
+    prisma.organizationPerson.findMany({
+      where: { clientId },
+      orderBy: { name: 'asc' },
+      take: 500,
+      select: { id: true, name: true, jobTitle: true, employmentStatus: true, organizationGroupId: true },
+    }),
+    prisma.clientOrganizationGroup.count({ where: { clientId } }),
+    prisma.clientOrganizationGroup.count({ where: { clientId, status: 'ACTIVE' } }),
+    prisma.organizationPerson.count({ where: { clientId } }),
+    prisma.organizationPerson.count({ where: { clientId, employmentStatus: { in: ['ACTIVE', 'ON_LEAVE'] } } }),
+    prisma.businessProcess.findMany({
+      where: { clientId, status: { not: 'ARCHIVED' } },
+      orderBy: { name: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        description: true,
+        criticality: true,
+        frequency: true,
+        status: true,
+        ownerPerson: { select: { id: true, name: true } },
+        organizationGroup: { select: { id: true, name: true } },
+        steps: {
+          orderBy: [{ position: 'asc' }, { id: 'asc' }],
+          take: 200,
+          select: {
+            id: true,
+            position: true,
+            name: true,
+            stepType: true,
+            responsiblePerson: { select: { id: true, name: true } },
+            system: { select: { id: true, name: true, category: true } },
+            estimatedActiveMinutes: true,
+            estimatedWaitingMinutes: true,
+            isApproval: true,
+          },
+        },
+      },
+    }),
+    prisma.businessSystem.findMany({
+      where: { clientId, status: { not: 'ARCHIVED' } },
+      orderBy: { name: 'asc' },
+      take: 100,
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        vendor: true,
+        purpose: true,
+        status: true,
+        ownerPerson: { select: { id: true, name: true } },
+        _count: { select: { processSteps: true } },
+      },
+    }),
+    prisma.document.count({ where: documentScope }),
+    prisma.documentVersion.count({ where: { document: documentScope, isCurrent: true } }),
+    prisma.evidenceRecord.count({ where: { clientId, documentVersionId: { not: null }, documentVersion: { document: documentScope } } }),
+    prisma.contractRecord.count({ where: { clientId } }),
+    prisma.contractRecord.groupBy({ by: ['status'], where: { clientId }, _count: { _all: true } }),
+    getComplianceWorkspace(actor, clientId, prisma),
+    prisma.evidenceRecord.count({ where: { clientId } }),
+    prisma.evidenceRecord.groupBy({ by: ['sourceType'], where: { clientId }, _count: { _all: true } }),
+    prisma.evidenceRecord.groupBy({ by: ['status'], where: { clientId }, _count: { _all: true } }),
+    prisma.developmentInitiative.count({ where: { clientId } }),
+    prisma.developmentInitiative.count({ where: { clientId, status: 'ACTIVE' } }),
+    prisma.companyMilestone.count({ where: { clientId } }),
+    prisma.companyMilestone.count({ where: { clientId, status: 'PLANNED' } }),
+    prisma.outcomeMeasurement.count({ where: { clientId, synthetic: false } }),
+    prisma.outcomeMeasurement.groupBy({ by: ['basis'], where: { clientId, synthetic: false }, _count: { _all: true } }),
+  ]);
+
+  if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
+
+  const answerStateByDefinition = new Map(answerStates.map((state) => [state.factDefinitionId, state]));
+  const projectFact = (
+    fact: typeof facts[number] | NonNullable<typeof answerStates[number]['currentFact']>,
+    factDefinition: { key: string; domainCode: string; valueType: string } | null,
+    answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED',
+    allowLegacyValue: boolean,
+  ) => ({
+    id: 'id' in fact ? fact.id : null,
+    type: fact.type,
+    value: resolveCanonicalTypedFactValue(fact) ?? (allowLegacyValue && 'value' in fact ? fact.value : null),
+    answerStatus,
+    factDefinition,
+    scopeType: 'scopeType' in fact && fact.scopeType ? String(fact.scopeType) : null,
+    factSubjectId: 'factSubjectId' in fact ? fact.factSubjectId : null,
+    verificationStatus: 'verificationStatus' in fact ? String(fact.verificationStatus) : null,
+    observedAt: iso('observedAt' in fact ? fact.observedAt : null),
+    effectiveAt: iso('effectiveAt' in fact ? fact.effectiveAt : null),
+    validFrom: 'validFrom' in fact ? fact.validFrom.toISOString() : null,
+    validTo: iso('validTo' in fact ? fact.validTo : null),
+  });
+  const projectedFacts = [
+    ...facts
+      .filter((fact) => {
+        const definitionId = fact.factDefinition?.id;
+        const state = definitionId ? answerStateByDefinition.get(definitionId) : undefined;
+        if (!state) return true;
+        return String(state.status) === 'ANSWERED' && state.currentFactId === fact.id;
+      })
+      .map((fact) => {
+        const state = fact.factDefinition?.id ? answerStateByDefinition.get(fact.factDefinition.id) : undefined;
+        return projectFact(
+          fact,
+          fact.factDefinition
+            ? { key: fact.factDefinition.key, domainCode: fact.factDefinition.domainCode, valueType: String(fact.factDefinition.valueType) }
+            : null,
+          state ? 'ANSWERED' : 'UNANSWERED',
+          !state,
+        );
+      }),
+    ...answerStates
+      .filter((state) => String(state.status) === 'UNKNOWN')
+      .map((state) => ({
+        id: null,
+        type: 'answer-state',
+        value: null,
+        answerStatus: 'UNKNOWN' as const,
+        factDefinition: state.factDefinition
+          ? { key: state.factDefinition.key, domainCode: state.factDefinition.domainCode, valueType: String(state.factDefinition.valueType) }
+          : null,
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+        verificationStatus: null,
+        observedAt: null,
+        effectiveAt: null,
+        validFrom: null,
+        validTo: null,
+      })),
+  ];
+
+  const dto: CompanyDataRoomDto = {
+    clientIdentity: {
+      id: client.id,
+      name: client.name,
+      company: client.company,
+      companyRegistrationNumber: client.companyRegistrationNumber,
+      taxNumber: client.taxNumber,
+      vatNumber: client.vatNumber,
+      address: client.address,
+    },
+    operatingProfile: profile
+      ? {
+          status: profile.status,
+          complianceEnrollmentStatus: String(profile.complianceEnrollmentStatus),
+          summary: profile.summary,
+          lastReviewedAt: iso(profile.lastReviewedAt),
+          nextReviewAt: iso(profile.nextReviewAt),
+        }
+      : null,
+    facts: projectedFacts,
+    dataQuality: {
+      answerStateSummary: {
+        answered: answerStates.filter((state) => String(state.status) === 'ANSWERED').length,
+        unknown: answerStates.filter((state) => String(state.status) === 'UNKNOWN').length,
+      },
+      coverageAvailable: false,
+      stale: null,
+      staleAvailable: false,
+      conflictingAvailable: false,
+    },
+    organization: {
+      groupCount,
+      activeGroupCount,
+      personCount,
+      activePersonCount,
+      groups: groups.map((group) => ({
+        id: group.id,
+        name: group.name,
+        status: String(group.status),
+        parentGroupId: group.parentGroupId,
+      })),
+      people: people.map((person) => ({
+        id: person.id,
+        name: person.name,
+        jobTitle: person.jobTitle,
+        employmentStatus: String(person.employmentStatus),
+        organizationGroupId: person.organizationGroupId,
+      })),
+    },
+    processes: processes.map((process) => ({
+      id: process.id,
+      name: process.name,
+      category: process.category,
+      description: process.description,
+      criticality: process.criticality,
+      frequency: process.frequency,
+      status: process.status,
+      owner: process.ownerPerson,
+      organizationGroup: process.organizationGroup,
+      steps: process.steps.map((step) => ({
+        id: step.id,
+        position: step.position,
+        name: step.name,
+        stepType: step.stepType,
+        responsiblePerson: step.responsiblePerson,
+        system: step.system,
+        estimatedActiveMinutes: step.estimatedActiveMinutes,
+        estimatedWaitingMinutes: step.estimatedWaitingMinutes,
+        isApproval: step.isApproval,
+      })),
+    })),
+    systems: systems.map((system) => ({
+      id: system.id,
+      name: system.name,
+      category: system.category,
+      vendor: system.vendor,
+      purpose: system.purpose,
+      status: system.status,
+      owner: system.ownerPerson,
+      relatedProcessStepCount: system._count.processSteps,
+    })),
+    documents: {
+      documentCount,
+      currentVersionCount,
+      evidenceLinkedRecordCount: evidenceLinkedDocumentCount,
+    },
+    contracts: {
+      totalCount: contractCount,
+      byStatus: groupedCount(contractsByStatus.map((row) => ({ status: row.status, count: row._count._all })), 'status') as Array<{ status: string; count: number }>,
+    },
+    complianceSummary: {
+      currentOnly: true,
+      evaluatedAt: complianceWorkspace.evaluatedAt,
+      ...complianceWorkspace.summary,
+    },
+    evidenceSummary: {
+      totalCount: evidenceCount,
+      bySourceType: groupedCount(evidenceBySourceType.map((row) => ({ sourceType: row.sourceType, count: row._count._all })), 'sourceType') as Array<{ sourceType: string; count: number }>,
+      byStatus: groupedCount(evidenceByStatus.map((row) => ({ status: row.status, count: row._count._all })), 'status') as Array<{ status: string; count: number }>,
+    },
+    developmentSummary: {
+      initiativeCount,
+      activeInitiativeCount,
+      milestoneCount,
+      plannedMilestoneCount,
+    },
+    measurementSummary: {
+      nonSyntheticOutcomeCount,
+      byBasis: groupedCount(outcomesByBasis.map((row) => ({ basis: row.basis, count: row._count._all })), 'basis') as Array<{ basis: string; count: number }>,
+    },
+  };
+
+  assertClientSafe(dto);
+  return dto;
 }
 
 export async function getWorkspaceOverview(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma) {
