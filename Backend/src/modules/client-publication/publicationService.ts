@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+import { assertClientReadAccess, internalCaseScope } from '../client-interaction/base';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = { userId: string; role?: string; workspaceId?: string };
@@ -748,16 +749,19 @@ export type ClientPublishedContentType = 'MATTER' | 'DOCUMENT' | 'ACTION_REQUEST
 
 export async function getClientPublishedContent(actor: Actor, clientId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
   requireFoundation(); requireInternal(actor);
-  const client = await one(db, 'SELECT id, name FROM clients WHERE id=$1', clientId);
-  if (!client) throw new ClientPublicationError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
-  const user = await one(db, 'SELECT id, role::text, status::text, "isActive" FROM users WHERE id=$1', actor.userId);
-  if (!user || user.isActive === false || user.status !== 'ACTIVE') throw new ClientPublicationError(403, 'CLIENT_ACCESS_FORBIDDEN', 'Actor cannot access this client.');
-  const privileged = ['ADMIN', 'PARTNER'].includes(String(user.role));
-  const caseRows = await many(db, privileged
-    ? 'SELECT id FROM cases WHERE "clientId"=$1'
-    : 'SELECT c.id FROM cases c WHERE c."clientId"=$1 AND (c."createdById"=$2 OR c."assignedLawyerId"=$2 OR EXISTS (SELECT 1 FROM case_collaborators cc WHERE cc."caseId"=c.id AND cc."userId"=$2))',
-    ...(privileged ? [clientId] : [clientId, actor.userId]));
-  const caseIds = caseRows.map((row) => String(row.id));
+  // Canonical internal client authorization — the single source of truth reused
+  // by every client-scoped internal module. It fails closed: a non-privileged
+  // workforce actor with zero Case access to this client is rejected with 403
+  // CLIENT_ACCESS_FORBIDDEN and no client metadata/count payload is produced.
+  // ADMIN/PARTNER keep unrestricted client read. This projection must never
+  // re-implement the client/case ACL.
+  const client = await assertClientReadAccess(actor, clientId, db);
+  const scope = await internalCaseScope(actor, db);
+  const caseRows = await db.case.findMany({
+    where: { clientId, ...(scope === null ? {} : { id: { in: scope } }) },
+    select: { id: true },
+  });
+  const caseIds = caseRows.map((row) => row.id);
   const empty = { clientId, clientName: client.name ?? null, counts: { matters: 0, documents: 0, actionRequests: 0, updates: 0, total: 0 }, items: [] as Row[] };
   if (!caseIds.length) return empty;
   const [matters, documents, actions, updates] = await Promise.all([

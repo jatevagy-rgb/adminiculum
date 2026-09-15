@@ -50,10 +50,25 @@ describe('Portal Center published-content projection', () => {
     expect(projection).not.toMatch(/CREATE TABLE|new (ClientPortalWorkspace|ClientMatterPublication)/);
   });
 
-  it('keeps the actor bounded to cases they may already access', () => {
-    expect(projection).toContain("['ADMIN', 'PARTNER']");
-    expect(projection).toContain('case_collaborators');
-    expect(projection).toContain('CLIENT_ACCESS_FORBIDDEN');
+  it('reuses the canonical internal client authorization and never duplicates the ACL', () => {
+    expect(service).toContain("import { assertClientReadAccess, internalCaseScope } from '../client-interaction/base'");
+    expect(projection).toContain('assertClientReadAccess(actor, clientId');
+    expect(projection).toContain('internalCaseScope(actor');
+    // the hand-rolled ACL must be gone
+    expect(projection).not.toMatch(/case_collaborators/);
+    expect(projection).not.toMatch(/FROM users\b/);
+    expect(projection).not.toMatch(/\[['"]ADMIN['"], *['"]PARTNER['"]\]/);
+  });
+
+  it('fails closed: client metadata is only produced after canonical client read access', () => {
+    const authIndex = projection.indexOf('assertClientReadAccess(actor, clientId');
+    const metadataIndex = projection.indexOf('clientName: client.name');
+    expect(authIndex).toBeGreaterThan(-1);
+    expect(metadataIndex).toBeGreaterThan(-1);
+    // no clientName/counts payload may be constructed before the canonical gate
+    expect(authIndex).toBeLessThan(metadataIndex);
+    // scope resolution is derived from the same canonical helper, not a local list
+    expect(projection.indexOf('internalCaseScope(actor')).toBeLessThan(metadataIndex);
   });
 
   it('preserves the exact-version document publication contract', () => {
