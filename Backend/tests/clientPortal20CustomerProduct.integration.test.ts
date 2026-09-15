@@ -261,6 +261,16 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
       });
     }
 
+    const employeeSubjectId = crypto.randomUUID();
+    await db.factSubject.create({
+      data: {
+        id: employeeSubjectId,
+        clientId: ids.clientA,
+        scopeType: 'EMPLOYEE',
+        subjectKey: `employee-${seed}`,
+      },
+    });
+
     // Create ClientFact for employee_count = 50 on clientA
     await db.clientFact.create({
       data: {
@@ -272,6 +282,52 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
         validFrom: new Date('2026-01-01T00:00:00Z'),
         numberValue: 50,
         verificationStatus: 'LAW_FIRM_VERIFIED',
+      },
+    });
+
+    await db.clientFact.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId: ids.clientA,
+        factDefinitionId: factDef.id,
+        type: 'EMPLOYEE_COUNT',
+        value: '999 fő',
+        validFrom: new Date('2026-01-01T00:00:00Z'),
+        numberValue: 999,
+        verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'EMPLOYEE',
+        factSubjectId: employeeSubjectId,
+      },
+    });
+
+    await db.clientFact.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId: ids.clientA,
+        factDefinitionId: factDef.id,
+        type: 'EMPLOYEE_COUNT',
+        value: '777 fő',
+        validFrom: new Date('2025-01-01T00:00:00Z'),
+        validTo: new Date('2025-12-31T23:59:59Z'),
+        numberValue: 777,
+        verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+      },
+    });
+
+    await db.clientFact.create({
+      data: {
+        id: crypto.randomUUID(),
+        clientId: ids.clientA,
+        factDefinitionId: factDef.id,
+        type: 'EMPLOYEE_COUNT',
+        value: '888 fő',
+        validFrom: new Date('2027-01-01T00:00:00Z'),
+        numberValue: 888,
+        verificationStatus: 'LAW_FIRM_VERIFIED',
+        scopeType: 'COMPANY',
+        factSubjectId: null,
       },
     });
 
