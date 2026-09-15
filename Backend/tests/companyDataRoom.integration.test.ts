@@ -23,8 +23,11 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const caseB = crypto.randomUUID();
   const groupA = crypto.randomUUID();
   const processA = crypto.randomUUID();
+  const processB = crypto.randomUUID();
   const systemA = crypto.randomUUID();
   const snapshotA = crypto.randomUUID();
+  const snapshotB = crypto.randomUUID();
+  const factSubjectA = crypto.randomUUID();
   const standardA2 = crypto.randomUUID();
   const hrA1 = crypto.randomUUID();
   const factDefinition = crypto.randomUUID();
@@ -34,6 +37,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const requirementId = crypto.randomUUID();
   const requirementVersionId = crypto.randomUUID();
   const ruleVersionId = crypto.randomUUID();
+  let createdEmployeeDefinitionId: string | null = null;
 
   const admin = { userId: adminId, role: 'ADMIN' };
   const lawyer = { userId: lawyerId, role: 'LAWYER' };
@@ -55,6 +59,23 @@ d('Company Data Room integration (PostgreSQL)', () => {
         { id: clientB, name: `Data Room Client B ${suffix}`, company: 'Client B Kft.' },
       ],
     });
+    let employeeDefinition = await db.factDefinition.findUnique({ where: { key: 'employee_count' } });
+    if (!employeeDefinition) {
+      employeeDefinition = await db.factDefinition.create({
+        data: {
+          id: crypto.randomUUID(),
+          key: 'employee_count',
+          domainCode: 'CLIENT_COMPANY_PROFILE',
+          valueType: 'NUMBER',
+          allowedScopeTypes: ['COMPANY', 'EMPLOYEE'],
+          determinationMethod: 'USER_PROVIDED',
+          overlapPolicy: 'DISALLOW',
+          temporalPolicy: 'OBSERVATION',
+          questionKey: 'employee_count',
+        } as never,
+      });
+      createdEmployeeDefinitionId = employeeDefinition.id;
+    }
     await db.case.createMany({
       data: [
         { id: caseA, caseNumber: `DATA-ROOM-A-${suffix}`, title: 'Data Room A', caseType: 'OTHER', clientId: clientA, assignedLawyerId: lawyerId, createdById: adminId },
@@ -192,6 +213,28 @@ d('Company Data Room integration (PostgreSQL)', () => {
         status: 'UNKNOWN',
       } as never,
     });
+    await db.factSubject.create({
+      data: {
+        id: factSubjectA,
+        clientId: clientA,
+        scopeType: 'EMPLOYEE',
+        subjectKey: `subject-${suffix}`,
+      } as never,
+    });
+    await db.clientFact.create({
+      data: {
+        clientId: clientA,
+        type: 'EMPLOYEE_COUNT',
+        value: '999',
+        factDefinitionId: employeeDefinition.id,
+        factSubjectId: factSubjectA,
+        scopeType: 'EMPLOYEE',
+        numberValue: 999,
+        validFrom: new Date('2026-01-01T00:00:00.000Z'),
+        observedAt: new Date('2026-01-01T00:00:00.000Z'),
+        verificationStatus: 'CLIENT_PROVIDED',
+      } as never,
+    });
     await db.clientFactAnswerState.create({
       data: {
         clientId: clientA,
@@ -213,6 +256,9 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.businessProcess.create({
       data: { id: processA, clientId: clientA, name: 'A Process', category: 'OPERATIONS', organizationGroupId: groupA },
     });
+    await db.businessProcess.create({
+      data: { id: processB, clientId: clientA, name: 'B Process', category: 'OPERATIONS', organizationGroupId: groupA },
+    });
     await db.businessProcessStep.create({
       data: { clientId: clientA, processId: processA, position: 1, name: 'A Step', systemId: systemA, estimatedActiveMinutes: 10, estimatedWaitingMinutes: 20 },
     });
@@ -229,6 +275,18 @@ d('Company Data Room integration (PostgreSQL)', () => {
           { code: 'TOTAL_ACTIVE_MINUTES', value: 42, unit: 'MINUTES', metricVersion: 'GROW_PROCESS_METRICS_V1' },
           { code: 'UNSAFE_RAW_PAYLOAD', value: 999, unit: 'COUNT', metricVersion: 'GROW_PROCESS_METRICS_V1' },
         ],
+      } as never,
+    });
+    await db.processObservationSnapshot.create({
+      data: {
+        id: snapshotB,
+        clientId: clientA,
+        businessProcessId: processB,
+        metricVersion: 'GROW_PROCESS_METRICS_V1',
+        observedAt: new Date('2026-02-05T00:00:00.000Z'),
+        inputDigest: 'h'.repeat(64),
+        snapshotDigest: 'i'.repeat(64),
+        metrics: [{ code: 'TOTAL_ACTIVE_MINUTES', value: 84, unit: 'MINUTES', metricVersion: 'GROW_PROCESS_METRICS_V1' }],
       } as never,
     });
     const documentA1 = await db.document.create({
@@ -337,6 +395,9 @@ d('Company Data Room integration (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
+    await db?.clientFact.deleteMany({ where: { clientId: clientA, factSubjectId: factSubjectA } });
+    await db?.factSubject.deleteMany({ where: { id: factSubjectA } });
+    if (createdEmployeeDefinitionId) await db?.factDefinition.delete({ where: { id: createdEmployeeDefinitionId } });
     await db?.requirementApplicability.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db?.applicabilityRuleVersion.deleteMany({ where: { id: ruleVersionId } });
     await db?.requirementVersion.deleteMany({ where: { id: requirementVersionId } });
@@ -360,9 +421,10 @@ d('Company Data Room integration (PostgreSQL)', () => {
     expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 1 });
     expect(view.dataQuality.coverageAvailable).toBe(false);
     expect(view.dataQuality.relevantDataCoverage).toEqual(expect.objectContaining({
-      answeredCount: expect.any(Number),
-      unknownCount: expect.any(Number),
+      answeredCount: 0,
+      unknownCount: 0,
       unansweredCount: expect.any(Number),
+      derivedAnsweredCount: 0,
     }));
     expect(view.dataQuality.stale).toBeNull();
     expect(view.dataQuality.staleAvailable).toBe(false);
@@ -376,6 +438,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
         expect.objectContaining({ code: 'TOTAL_ACTIVE_MINUTES', value: 42 }),
       ],
     }));
+    expect(view.processes[1]?.latestMeasuredSnapshot).toEqual(expect.objectContaining({ id: snapshotB }));
     expect(JSON.stringify(view.processes[0]?.latestMeasuredSnapshot)).not.toContain('UNSAFE_RAW_PAYLOAD');
     expect(view.systems[0]?.relatedProcessStepCount).toBe(1);
     expect(view.documents.documentCount).toBe(3);

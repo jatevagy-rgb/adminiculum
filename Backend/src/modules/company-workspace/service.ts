@@ -374,7 +374,6 @@ export async function getCompanyDataRoom(
     activePersonCount,
     processes,
     systems,
-    processSnapshots,
     documentCount,
     currentVersionCount,
     evidenceLinkedDocumentCount,
@@ -486,6 +485,8 @@ export async function getCompanyDataRoom(
       where: {
         clientId,
         factDefinition: { key: { in: COMPANY_PROFILE_QUESTIONS.map((question) => question.factDefinitionKey) } },
+        scopeType: 'COMPANY',
+        factSubjectId: null,
         supersededAt: null,
         OR: [{ validTo: null }, { validTo: { gte: now } }],
         validFrom: { lte: now },
@@ -561,6 +562,16 @@ export async function getCompanyDataRoom(
             isApproval: true,
           },
         },
+        observationSnapshots: {
+          orderBy: [{ observedAt: 'desc' }, { createdAt: 'desc' }],
+          take: 1,
+          select: {
+            id: true,
+            observedAt: true,
+            metricVersion: true,
+            metrics: true,
+          },
+        },
       },
     }),
     prisma.businessSystem.findMany({
@@ -577,12 +588,6 @@ export async function getCompanyDataRoom(
         ownerPerson: { select: { id: true, name: true } },
         _count: { select: { processSteps: true } },
       },
-    }),
-    prisma.processObservationSnapshot.findMany({
-      where: { clientId },
-      orderBy: [{ observedAt: 'desc' }, { createdAt: 'desc' }],
-      take: 500,
-      select: { id: true, businessProcessId: true, observedAt: true, metricVersion: true, metrics: true },
     }),
     prisma.document.count({ where: documentScope }),
     prisma.documentVersion.count({ where: { document: documentScope, isCurrent: true } }),
@@ -757,14 +762,6 @@ export async function getCompanyDataRoom(
       relevantDataCoverage.unansweredCount += 1;
     }
   }
-  const latestSnapshotByProcess = new Map<string, (typeof processSnapshots)[number]>();
-  for (const snapshot of processSnapshots) {
-    if (!processes.some((process) => process.id === snapshot.businessProcessId)) continue;
-    if (!latestSnapshotByProcess.has(snapshot.businessProcessId)) {
-      latestSnapshotByProcess.set(snapshot.businessProcessId, snapshot);
-    }
-  }
-
   const dto: CompanyDataRoomDto = {
     clientIdentity: {
       id: client.id,
@@ -838,12 +835,12 @@ export async function getCompanyDataRoom(
         estimatedWaitingMinutes: step.estimatedWaitingMinutes,
         isApproval: step.isApproval,
       })),
-      latestMeasuredSnapshot: latestSnapshotByProcess.has(process.id)
+      latestMeasuredSnapshot: process.observationSnapshots[0]
         ? {
-            id: latestSnapshotByProcess.get(process.id)!.id,
-            observedAt: latestSnapshotByProcess.get(process.id)!.observedAt.toISOString(),
-            metricVersion: latestSnapshotByProcess.get(process.id)!.metricVersion,
-            metrics: boundedSnapshotMetrics(latestSnapshotByProcess.get(process.id)!.metrics),
+            id: process.observationSnapshots[0].id,
+            observedAt: process.observationSnapshots[0].observedAt.toISOString(),
+            metricVersion: process.observationSnapshots[0].metricVersion,
+            metrics: boundedSnapshotMetrics(process.observationSnapshots[0].metrics),
           }
         : null,
     })),
