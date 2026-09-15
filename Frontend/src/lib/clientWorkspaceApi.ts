@@ -153,9 +153,133 @@ export type CompanyWorkspaceOverview = {
   attention: Array<{ code: WorkspaceAttentionCode; count: number }>;
 };
 
+export type CompanyDataRoom = {
+  clientIdentity: {
+    id: string;
+    name: string;
+    company: string | null;
+    companyRegistrationNumber: string | null;
+    taxNumber: string | null;
+    vatNumber: string | null;
+    address: string | null;
+  };
+  operatingProfile: {
+    status: string | null;
+    complianceEnrollmentStatus: string;
+    summary: string | null;
+    lastReviewedAt: string | null;
+    nextReviewAt: string | null;
+  } | null;
+  facts: Array<{
+    id: string | null;
+    type: string;
+    value: unknown;
+    answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
+    factDefinition: { key: string; domainCode: string; valueType: string } | null;
+    scopeType: string | null;
+    factSubjectId: string | null;
+    verificationStatus: string | null;
+    observedAt: string | null;
+    effectiveAt: string | null;
+    validFrom: string | null;
+    validTo: string | null;
+  }>;
+  dataQuality: {
+    answerStateSummary: { answered: number; unknown: number };
+    coverageAvailable: boolean;
+    relevantDataCoverage: {
+      available: boolean;
+      relevantDefinitionCount: number;
+      answeredCount: number;
+      unknownCount: number;
+      unansweredCount: number;
+      undeterminedCount: number;
+      derivedAnsweredCount: number;
+    };
+    stale: unknown;
+    staleAvailable: boolean;
+    conflictingAvailable: boolean;
+  };
+  organization: {
+    groupCount: number;
+    activeGroupCount: number;
+    personCount: number;
+    activePersonCount: number;
+    groups: Array<{ id: string; name: string; description: string | null; status: string; parentGroupId: string | null }>;
+    people: Array<{ id: string; name: string; jobTitle: string | null; employmentStatus: string; organizationGroupId: string | null; organizationGroupName: string | null }>;
+  };
+  processes: Array<{
+    id: string;
+    name: string;
+    category: string;
+    description: string | null;
+    criticality: string;
+    frequency: string;
+    status: string;
+    owner: { id: string; name: string } | null;
+    organizationGroup: { id: string; name: string } | null;
+    steps: Array<{
+      id: string;
+      position: number;
+      name: string;
+      stepType: string;
+      responsiblePerson: { id: string; name: string } | null;
+      system: { id: string; name: string; category: string } | null;
+      estimatedActiveMinutes: number | null;
+      estimatedWaitingMinutes: number | null;
+      isApproval: boolean;
+    }>;
+    latestMeasuredSnapshot: { id: string; observedAt: string; metricVersion: string; metrics: Array<{ code: string; value: number | boolean | null; unit: string; metricVersion: string }> } | null;
+  }>;
+  systems: Array<{
+    id: string;
+    name: string;
+    category: string;
+    vendor: string | null;
+    purpose: string | null;
+    status: string;
+    owner: { id: string; name: string } | null;
+    relatedProcessStepCount: number;
+  }>;
+  documents: { documentCount: number; currentVersionCount: number; evidenceLinkedRecordCount: number };
+  contracts: { totalCount: number; byStatus: Array<{ status: string; count: number }> };
+  complianceSummary: {
+    currentOnly: true;
+    evaluatedAt: string | null;
+    evaluatedCount: number;
+    applies: number;
+    doesNotApply: number;
+    insufficientFacts: number;
+    legalReviewRequired: number;
+    technicalReviewRequired: number;
+    sourceSupportInsufficient: number;
+    openFindings: number;
+    openProposals: number;
+  };
+  evidenceSummary: { totalCount: number; bySourceType: Array<{ sourceType: string; count: number }>; byStatus: Array<{ status: string; count: number }> };
+  developmentSummary: {
+    initiativeCount: number;
+    activeInitiativeCount: number;
+    milestoneCount: number;
+    plannedMilestoneCount: number;
+    initiatives: Array<{ id: string; title: string; reason: string | null; currentState: string | null; targetState: string | null; priority: string; status: string; targetAt: string | null; startedAt: string | null; completedAt: string | null; clientOwnerPerson: { id: string; name: string } | null }>;
+    milestones: Array<{ id: string; type: string; title: string; description: string | null; milestoneDate: string | null; targetDate: string | null; status: string; developmentInitiativeId: string | null }>;
+    opportunityCountsByStatus: Array<{ status: string; count: number }>;
+  };
+  measurementSummary: {
+    nonSyntheticOutcomeCount: number;
+    byBasis: Array<{ basis: string; count: number }>;
+    assumedCount: number;
+    outcomes: Array<{ id: string; basis: string; businessProcess: { id: string; name: string } | null; developmentInitiative: { id: string; title: string } | null; opportunity: { id: string; title: string } | null; createdAt: string }>;
+  };
+};
+
 export const clientWorkspaceApi = {
   getOverview(clientId: string) {
     return fetchApi<CompanyWorkspaceOverview>(`/company-workspace/clients/${encodeURIComponent(clientId)}/overview`);
+  },
+  getDataRoom(clientId: string) {
+    return fetchApi<CompanyDataRoom>(`/company-workspace/clients/${encodeURIComponent(clientId)}/data-room`);
   },
 };
 

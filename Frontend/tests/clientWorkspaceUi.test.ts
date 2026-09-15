@@ -53,24 +53,26 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(src, /Munkacsoportok/);
   });
 
-  it('enforces the exact first viewport section order in Company Ops', () => {
-    const src = component();
-    const fIdx = src.indexOf('title="Figyelmet igényel"');
-    const mIdx = src.indexOf('title="Mi változott?"');
-    const kIdx = src.indexOf('title="Következő lépés"');
-    const cIdx = src.indexOf('title="Cégprofil"');
-    
-    assert.ok(fIdx !== -1 && mIdx !== -1 && kIdx !== -1 && cIdx !== -1, 'Required titles missing');
-    assert.ok(fIdx < mIdx, 'Figyelmet igényel must be before Mi változott?');
-    assert.ok(mIdx < kIdx, 'Mi változott? must be before Következő lépés');
-    assert.ok(kIdx < cIdx, 'Következő lépés must be before Cégprofil');
+  it('uses the canonical Data Room and exposes the requested read-only sections', () => {
+    const src = component() + api();
+    assert.match(src, /getDataRoom/);
+    for (const label of ['Áttekintés', 'Adatok', 'Szervezet', 'Folyamatok', 'Rendszerek', 'Dokumentumok', 'Megfelelőség', 'Fejlesztés']) assert.match(src, new RegExp(label));
+    assert.match(src, /dataQuality\.relevantDataCoverage\.available/);
+    assert.match(src, /Ismeretlen/);
+    assert.match(src, /Nincs még adat/);
+    assert.match(src, /Becsült értékek/);
+    assert.match(src, /Mért pillanatkép/);
+    assert.match(src, /documents\.documentCount/);
+    assert.match(src, /complianceSummary\.currentOnly|complianceSummary\.evaluatedCount/);
+    assert.match(src, /Feltételezett/);
+    assert.doesNotMatch(src, /getOverview\(clientId\)/);
   });
 
-  it('uses canonical change feed, no Date.now 30-day change heuristic', () => {
+  it('does not invent change feeds, scores, or temporal heuristics', () => {
     const src = component();
     assert.doesNotMatch(src, /Date.now/);
     assert.doesNotMatch(src, /30 * 24/);
-    assert.match(src, /Jelenleg nincs külön változás-összesítő adatforrás/);
+    assert.doesNotMatch(src, /score|percentage|maturity/i);
   });
 
   it('does not duplicate Organization editing or Contract workspace', () => {
@@ -82,9 +84,7 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.doesNotMatch(src, /Form/);
     assert.doesNotMatch(src, /mutate/);
     
-    // Must link to Szervezet for drill-down
-    assert.match(src, /\/szervezet"/);
-    assert.match(src, /Szervezeti részletek megtekintése/);
+    assert.match(src, /href="\/documents\/compare"/);
   });
 
   it('never renders raw UUIDs, Prisma enums or projector terminology in the UI', () => {
@@ -103,10 +103,10 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(api(), /Nincs kijelölt felelős/);
   });
 
-  it('renders the overview attention summary with human wording, never raw codes', () => {
-    const src = component() + api();
-    assert.match(component(), /attentionItemText/);
-    assert.match(api(), /még nincs kijelölt felelős/);
-    assert.match(api(), /nyitott, magas vagy kritikus súlyosságú megállapítás/);
+  it('renders Data Room values without raw technical status codes', () => {
+    const src = component();
+    assert.match(src, /humanStatus/);
+    assert.match(src, /factLabel/);
+    assert.doesNotMatch(src, /OPEN_IMPORTANT_FINDINGS|CONTRACTS_WITHOUT_OWNER/);
   });
 });

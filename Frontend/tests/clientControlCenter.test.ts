@@ -407,7 +407,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     const companyWsSrc = read("src/components/clients/ClientCompanyWorkspace.tsx");
     assert.match(
       companyWsSrc,
-      /<Panel id="compliance" title="Releváns területek">/,
+      /<Panel id="compliance" title="Megfelelőség">/,
       "Existing compliance panel must have stable id='compliance'",
     );
   });
@@ -624,7 +624,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     const companyWsSrc = read("src/components/clients/ClientCompanyWorkspace.tsx");
     assert.match(
       companyWsSrc,
-      /<Panel id="compliance" title="Releváns területek">/,
+      /<Panel id="compliance" title="Megfelelőség">/,
       "Existing compliance panel must have stable id='compliance'",
     );
 

@@ -149,6 +149,30 @@ function responseFor(url, mode = "populated") {
       },
     };
   }
+  if (url.includes(`/company-workspace/clients/${WORKFORCE_FIXTURE.client.id}/data-room`)) {
+    if (mode === "unavailable") return { status: 503, body: { status: 503, code: "QA_UNAVAILABLE" } };
+    const empty = mode === "empty";
+    return {
+      status: 200,
+      body: {
+        clientIdentity: { id: WORKFORCE_FIXTURE.client.id, name: WORKFORCE_FIXTURE.client.name, company: WORKFORCE_FIXTURE.client.name, companyRegistrationNumber: null, taxNumber: null, vatNumber: null, address: null },
+        operatingProfile: { status: "ACTIVE", complianceEnrollmentStatus: "NOT_ENROLLED", summary: null, lastReviewedAt: null, nextReviewAt: null },
+        facts: empty ? [] : [
+          { id: "qa-fact-unknown", type: "EMPLOYEE_COUNT", value: null, answerStatus: "UNKNOWN", factDefinition: { key: "employee_count", domainCode: "COMPANY_PROFILE", valueType: "NUMBER" }, scopeType: "CLIENT", factSubjectId: null, verificationStatus: null, observedAt: null, effectiveAt: null, validFrom: null, validTo: null },
+          { id: "qa-fact-unanswered", type: "MAIN_ACTIVITY", value: null, answerStatus: "UNANSWERED", factDefinition: { key: "main_activity", domainCode: "COMPANY_PROFILE", valueType: "TEXT" }, scopeType: "CLIENT", factSubjectId: null, verificationStatus: null, observedAt: null, effectiveAt: null, validFrom: null, validTo: null },
+        ],
+        dataQuality: { answerStateSummary: { answered: empty ? 0 : 0, unknown: empty ? 0 : 1 }, coverageAvailable: false, relevantDataCoverage: { available: false, relevantDefinitionCount: 0, answeredCount: 0, unknownCount: empty ? 0 : 1, unansweredCount: empty ? 0 : 1, undeterminedCount: 0, derivedAnsweredCount: 0 }, stale: null, staleAvailable: false, conflictingAvailable: false },
+        organization: { groupCount: empty ? 0 : 1, activeGroupCount: empty ? 0 : 1, personCount: empty ? 0 : 1, activePersonCount: empty ? 0 : 1, groups: empty ? [] : [{ id: "qa-group", name: "QA egység", description: null, status: "ACTIVE", parentGroupId: null }], people: empty ? [] : [{ id: "qa-person", name: "QA személy", jobTitle: "Munkatárs", employmentStatus: "ACTIVE", organizationGroupId: "qa-group", organizationGroupName: "QA egység" }] },
+        processes: empty ? [] : [{ id: "qa-process", name: "QA folyamat", category: "OPERATIONS", description: null, criticality: "NORMAL", frequency: "MONTHLY", status: "ACTIVE", owner: null, organizationGroup: null, steps: [{ id: "qa-step", position: 1, name: "QA lépés", stepType: "MANUAL", responsiblePerson: null, system: null, estimatedActiveMinutes: 10, estimatedWaitingMinutes: 5, isApproval: false }], latestMeasuredSnapshot: { id: "qa-snapshot", observedAt: "2026-01-01T00:00:00.000Z", metricVersion: "1", metrics: [{ code: "TOTAL_ACTIVE_MINUTES", value: 10, unit: "MINUTES", metricVersion: "1" }] } }],
+        systems: empty ? [] : [{ id: "qa-system", name: "QA rendszer", category: "OTHER", vendor: null, purpose: null, status: "ACTIVE", owner: null, relatedProcessStepCount: 0 }],
+        documents: { documentCount: empty ? 0 : 1, currentVersionCount: empty ? 0 : 1, evidenceLinkedRecordCount: 0 }, contracts: { totalCount: 0, byStatus: [] },
+        complianceSummary: { currentOnly: true, evaluatedAt: null, evaluatedCount: 0, applies: 0, doesNotApply: 0, insufficientFacts: 0, legalReviewRequired: 0, technicalReviewRequired: 0, sourceSupportInsufficient: 0, openFindings: 0, openProposals: 0 },
+        evidenceSummary: { totalCount: 0, bySourceType: [], byStatus: [] },
+        developmentSummary: { initiativeCount: 0, activeInitiativeCount: 0, milestoneCount: 0, plannedMilestoneCount: 0, initiatives: [], milestones: [], opportunityCountsByStatus: [] },
+        measurementSummary: { nonSyntheticOutcomeCount: 0, byBasis: [], assumedCount: 0, outcomes: [] },
+      },
+    };
+  }
   if (url.includes(`/compliance/clients/${WORKFORCE_FIXTURE.client.id}/overview`)) {
     if (mode === "unavailable") return { status: 503, body: { status: 503, code: "QA_UNAVAILABLE" } };
     return { status: 200, body: { findings: mode === "empty" ? [] : complianceFindings() } };
@@ -211,6 +235,8 @@ function responseFor(url, mode = "populated") {
     })) },
   };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/`)) return { status: 200, body: { items: [] } };
+  if (url.includes(`/client-identity/admin/workspaces?clientId=${WORKFORCE_FIXTURE.client.id}`)) return { status: 200, body: { items: [{ id: "qa-workspace", clientId: WORKFORCE_FIXTURE.client.id, mode: "ORGANIZATION", status: "ACTIVE" }] } };
+  if (url.endsWith(`/clients/${WORKFORCE_FIXTURE.client.id}`)) return { status: 200, body: WORKFORCE_FIXTURE.client };
   if (url.includes("/clients")) return { status: 200, body: { data: [WORKFORCE_FIXTURE.client] } };
   if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workspace`)) return {
     status: 200,
@@ -256,7 +282,7 @@ async function newPage(browser, mode = "populated", viewport = VIEWPORTS[0]) {
   }, { profile: AUTH_ME });
   await page.route("**/api/v1/**", async (route) => {
     const response = responseFor(route.request().url(), mode);
-    if (mode === "loading" && route.request().url().includes("/compliance/clients/")) {
+    if (mode === "loading" && route.request().url().includes("/company-workspace/clients/") && route.request().url().includes("/data-room")) {
       await new Promise((resolve) => setTimeout(resolve, 3000));
     }
     await route.fulfill({ status: response.status, contentType: "application/json", body: JSON.stringify(response.body) });
@@ -309,42 +335,24 @@ async function assertComplianceMode(browser, mode, viewport) {
     waitUntil: mode === "loading" ? "domcontentloaded" : "networkidle",
   });
   if (mode === "loading") {
-    await qa.page.getByText("Megállapítások betöltése…").waitFor({ state: "visible", timeout: 5000 });
+    await qa.page.getByText("Betöltés…").waitFor({ state: "visible", timeout: 5000 });
     await qa.page.waitForLoadState("networkidle");
   }
   await checkPage(qa.page, target, `Compliance ${mode} ${viewport.width}`);
   const body = await qa.page.locator("body").innerText();
     if (mode === "populated") {
-    for (const label of ["Vállalat", "Munkavállaló", "Szerződés", "Munkahelyszín", "Nem azonosított hatókör"]) {
+    for (const label of ["Áttekintés", "Adatok", "Szervezet", "Folyamatok", "Megfelelőség", "Fejlesztés"]) {
       if (!body.includes(label)) throw new Error(`Missing compliance scope label: ${label}`);
     }
-    if (!body.includes("Belső értékelés szerint releváns")) throw new Error("Missing APPLIES framing");
-    if (!body.includes("Nincs elég adat")) throw new Error("Missing insufficient-facts status");
-    if (!body.includes("4 belső értékelési megállapítás")) throw new Error("Compliance attention contract was not applied");
-    const manualGroupCount = await qa.page.locator("button").filter({ hasText: "QA manual finding" }).count();
-    if (manualGroupCount !== 2) throw new Error("Same-title manual findings collapsed");
-    if (!body.includes("Nem releváns")) throw new Error("DOES_NOT_APPLY row missing after disclosure");
-      if (/cikk|joghatóság|citation|sourceVersion|reviewStatus|Teendő indítása/i.test(body)) {
-        throw new Error("Compliance output contains fake provenance or 7B actions");
-      }
-      const proposalRoot = qa.page.getByTestId("compliance-proposals");
-      if (await proposalRoot.count()) {
-        const findingSelect = proposalRoot.getByLabel("Megállapítás");
-        if (await findingSelect.count() !== 1) throw new Error("Proposal finding selector missing");
-        const options = await findingSelect.locator("option", {}).allTextContents({ timeoutMs: 5000 });
-        if (options.some((option) => option.includes("QA manual"))) throw new Error("Manual finding offered as proposal candidate");
-        if (!body.includes("A megerősítéshez előbb ügyet kell hozzárendelni.")) throw new Error("Missing no-case confirmation explanation");
-        const confirm = proposalRoot.getByRole("button", { name: "Megerősítés" }).first();
-        if (await confirm.count() !== 1 || await confirm.isEnabled()) throw new Error("No-case confirmation is not disabled");
-        if (!body.includes("Elavult") || !body.includes("Elutasítva") || !body.includes("Megerősítve")) throw new Error("Proposal terminal statuses missing");
-        if (await proposalRoot.getByText("Kapcsolt feladat megnyitása →").count() !== 1) throw new Error("Confirmed Task link missing");
-      }
+    if (!body.includes("Ismeretlen") || !body.includes("Nincs még adat")) throw new Error("UNKNOWN and UNANSWERED states were not separated");
+    if (!body.includes("Becsült értékek") || !body.includes("Mért pillanatkép")) throw new Error("Estimated and measured values were merged");
+    if (body.match(/score|percentage|maturity|kockázati pontszám/i)) throw new Error("Data Room contains an invented score");
   }
-  if (mode === "empty" && !body.includes("Nincs megjeleníthető belső értékelési megállapítás")) {
-    throw new Error("Compliance empty state was not rendered");
+  if (mode === "empty" && !body.includes("Nincs rögzített folyamat")) {
+    throw new Error("Data Room empty state was not rendered");
   }
-  if (mode === "unavailable" && !body.includes("A compliance áttekintés jelenleg nem tölthető be")) {
-    throw new Error("Compliance unavailable state was not rendered");
+  if (mode === "unavailable" && !body.includes("A vállalati működés adatai jelenleg nem tölthetők be")) {
+    throw new Error("Data Room unavailable state was not rendered");
   }
   await qa.context.close();
 }
