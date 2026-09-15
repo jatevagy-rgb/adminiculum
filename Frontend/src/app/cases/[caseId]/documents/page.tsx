@@ -103,6 +103,17 @@ const TEXT_ANNOTATION_TYPES: DocumentAnnotationType[] = [
   'TASK_NOTE',
 ];
 
+// Compact text-selection quick actions. These only preconfigure the existing
+// canonical annotation composer; TASK_NOTE is an annotation and never creates a
+// real workflow Task.
+const QUICK_ANNOTATION_ACTIONS: Array<{ type: DocumentAnnotationType; label: string; testId: string }> = [
+  { type: 'INTERNAL_NOTE', label: 'Megjegyzés', testId: 'INTERNAL_NOTE' },
+  { type: 'QUESTION', label: 'Kérdés', testId: 'QUESTION' },
+  { type: 'MODIFICATION_REASON', label: 'Módosítás oka', testId: 'MODIFICATION_REASON' },
+  { type: 'DECISION', label: 'Döntés', testId: 'DECISION' },
+  { type: 'TASK_NOTE', label: 'Feladatjelölés', testId: 'TASK_NOTE' },
+];
+
 // Normalize title for fallback grouping (same logic as compare page)
 const normalizeTitle = (value: string): string => {
   if (!value) return '';
@@ -367,6 +378,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // version-scoped offsets/fingerprints, so this text is display-only and must
   // never feed anchor creation, contentFingerprint, or rendererVersion.
   const [documentTextPreview, setDocumentTextPreview] = useState<string | null>(null);
+  const [readerSearch, setReaderSearch] = useState("");
+  const [readerMatchIndex, setReaderMatchIndex] = useState(0);
   const [documentTextUnavailableReason, setDocumentTextUnavailableReason] = useState<string | null>(null);
   const [documentTextFailed, setDocumentTextFailed] = useState(false);
   const [isLoadingDocumentText, setIsLoadingDocumentText] = useState(false);
@@ -1242,6 +1255,53 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedVersion: canonicalActiveVersion?.versionNumber ?? null,
   });
 
+  // Reader search operates ONLY on text actually loaded in the reader: no
+  // backend search. Matches are presentation-only and never mutate the
+  // canonical text or annotation offsets.
+  const readerSearchableText = versionText || documentTextPreview || null;
+  const readerSearchTerm = readerSearch.trim();
+  const readerMatchOffsets = (() => {
+    if (!readerSearchableText || !readerSearchTerm) return [] as number[];
+    const haystack = readerSearchableText.toLowerCase();
+    const needle = readerSearchTerm.toLowerCase();
+    const offsets: number[] = [];
+    let from = 0;
+    while (offsets.length < 500) {
+      const at = haystack.indexOf(needle, from);
+      if (at < 0) break;
+      offsets.push(at);
+      from = at + Math.max(1, needle.length);
+    }
+    return offsets;
+  })();
+  const readerMatchCount = readerMatchOffsets.length;
+  const readerActiveMatch = readerMatchCount > 0 ? Math.min(Math.max(readerMatchIndex, 0), readerMatchCount - 1) : 0;
+
+  // Presentation-only highlighting for the plain extracted-text surface. It is
+  // never applied to the annotation-anchored surface, so canonical annotation
+  // offsets are never touched.
+  const renderReaderHighlights = (text: string): React.ReactNode => {
+    if (!readerSearchTerm || readerMatchCount === 0) return text;
+    const nodes: React.ReactNode[] = [];
+    let cursor = 0;
+    readerMatchOffsets.forEach((offset, index) => {
+      if (offset < cursor) return;
+      nodes.push(text.slice(cursor, offset));
+      nodes.push(
+        <mark
+          key={`reader-match-${index}`}
+          data-testid="reader-search-match"
+          className={index === readerActiveMatch ? 'bg-[#F2CE5A] text-[#1f2a24]' : 'bg-[#FBF0C7] text-[#1f2a24]'}
+        >
+          {text.slice(offset, offset + readerSearchTerm.length)}
+        </mark>,
+      );
+      cursor = offset + readerSearchTerm.length;
+    });
+    nodes.push(text.slice(cursor));
+    return nodes;
+  };
+
   // Canonical shell-safe active file type: derived strictly from the active document / version,
   // preventing a stale selectedVersion from another document from leaking its file type.
   const canonicalShellFileType = (() => {
@@ -1467,6 +1527,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       reviewComment: '',
       clientExplanationDraft: '',
     });
+  };
+
+  // Quick selection actions only preconfigure the canonical composer: they set
+  // the annotation type and reveal the existing Review composer. They never
+  // create an annotation on their own and never call task creation.
+  const applyQuickAnnotationType = (type: DocumentAnnotationType) => {
+    setAnnotationDraft((draft) => ({ ...draft, annotationType: type }));
+    if (typeof document === 'undefined') return;
+    const target = (document.getElementById('document-review') || detailedAnnotationSurfaceRef.current) as HTMLElement | null;
+    if (target && typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   useEffect(() => {
@@ -1719,10 +1791,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           {isUploadingVersion ? 'Feltöltés...' : 'Új verzió feltöltése'}
                         </AdminButton>
                       ) : null}
-                      {activeDocument ? (
+                      {selectedUploadedDocument ? (
                         <AdminButton variant="neutral" onClick={() => router.push(metaCompareUrl)}>Összehasonlítás</AdminButton>
                       ) : null}
-                      {activeDocument ? (
+                      {selectedUploadedDocument ? (
                         <AdminButton variant="neutral" onClick={() => setAiPreparationOpen(true)}>AI előkészítés</AdminButton>
                       ) : null}
                       <AdminButton
@@ -1738,10 +1810,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </div>
                 </section>
 
-                {aiPreparationOpen && activeDocument ? (
+                {aiPreparationOpen && selectedUploadedDocument ? (
                   <AIPromptPreparationModal
                     caseId={canonicalCaseId}
-                    documentId={activeDocument.id}
+                    documentId={selectedUploadedDocument.id}
                     documentVersionId={canonicalActiveVersion?.id}
                     onClose={() => setAiPreparationOpen(false)}
                   />
@@ -1891,6 +1963,49 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </div>
                     </div>
 
+                    <div data-testid="reader-search-bar" className="flex flex-wrap items-center gap-2 border-b border-[rgba(22,32,26,0.10)] bg-white px-4 py-1.5">
+                      <label className="flex items-center gap-1 text-[11px] text-[#3D4842]">
+                        <span className="sr-only">Keresés a betöltött dokumentumszövegben</span>
+                        <input
+                          type="search"
+                          data-testid="reader-search-input"
+                          value={readerSearch}
+                          onChange={(event) => { setReaderSearch(event.target.value); setReaderMatchIndex(0); }}
+                          placeholder="Keresés a betöltött szövegben…"
+                          disabled={!readerSearchableText}
+                          className="w-56 rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[11px] disabled:opacity-50"
+                        />
+                      </label>
+                      <span data-testid="reader-search-status" className="text-[10px] text-[#7B776D]" aria-live="polite">
+                        {!readerSearchableText
+                          ? 'Nincs kereshető szöveg'
+                          : readerSearchTerm
+                            ? (readerMatchCount > 0 ? `${readerActiveMatch + 1} / ${readerMatchCount}` : 'Nincs találat')
+                            : ''}
+                      </span>
+                      <button type="button" data-testid="reader-search-prev" disabled={readerMatchCount === 0} onClick={() => setReaderMatchIndex((index) => (index - 1 + readerMatchCount) % readerMatchCount)} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Előző</button>
+                      <button type="button" data-testid="reader-search-next" disabled={readerMatchCount === 0} onClick={() => setReaderMatchIndex((index) => (index + 1) % readerMatchCount)} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Következő</button>
+                      <button type="button" data-testid="reader-search-clear" disabled={!readerSearch} onClick={() => { setReaderSearch(''); setReaderMatchIndex(0); }} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Törlés</button>
+                    </div>
+
+                    {pendingTextAnchor && annotationCapabilities.canCreateTextRange ? (
+                      <div data-testid="selection-quick-toolbar" className="flex flex-wrap items-center gap-1.5 border-b border-[rgba(22,32,26,0.10)] bg-[var(--adm-sand-100)] px-4 py-2">
+                        <span className="mr-1 text-[10px] uppercase tracking-[0.14em] text-[#3D4842]">Kijelölés</span>
+                        {QUICK_ANNOTATION_ACTIONS.map((action) => (
+                          <button
+                            key={action.type}
+                            type="button"
+                            data-testid={`selection-quick-${action.testId}`}
+                            onClick={() => applyQuickAnnotationType(action.type)}
+                            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${annotationDraft.annotationType === action.type ? 'border-[#D8C58E] bg-white text-[#6D5418]' : 'border-[rgba(22,32,26,0.14)] bg-white text-[#3D4842]'}`}
+                          >
+                            {action.label}
+                          </button>
+                        ))}
+                        <span className="ml-1 max-w-[240px] truncate text-[11px] text-[#7B776D]">{pendingTextAnchor.selectedText}</span>
+                      </div>
+                    ) : null}
+
                     <div className="min-h-[460px] flex-1">
                       {!activeDocument ? (
                         <div className="adm-board-empty flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
@@ -1928,7 +2043,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             ) : documentTextPreview ? (
                               <div className="max-h-[680px] overflow-auto bg-[#efece4] p-4 sm:p-6">
                                 <div data-testid="version-preview-document-text" style={{ zoom: readerZoom / 100 }} className="mx-auto max-w-[840px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border)] bg-white p-8 font-serif text-[15px] leading-7 text-[#1f2a24] shadow-sm">
-                                  {documentTextPreview}
+                                  {renderReaderHighlights(documentTextPreview)}
                                 </div>
                               </div>
                             ) : documentTextFailed ? (

@@ -384,3 +384,50 @@ test("Reading toolbar is truthful: real zoom, real focus mode, no fake page coun
   assert.doesNotMatch(source, /Megnyitás Wordben/);
   assert.doesNotMatch(source, /WORD_OPEN/);
 });
+
+test("AI preparation and comparison header actions are gated to canonical uploaded documents", () => {
+  const source = documentPage();
+  // the AI modal receives a canonical Document id (never a generated-contract id)
+  assert.ok(source.includes("documentId={selectedUploadedDocument.id}"));
+  assert.ok(!source.includes("documentId={activeDocument.id}"));
+  // both actions are gated on an uploaded (canonical Document) row
+  const aiIndex = source.indexOf("setAiPreparationOpen(true)");
+  const compareIndex = source.indexOf("router.push(metaCompareUrl)");
+  assert.ok(aiIndex > 0 && compareIndex > 0);
+  assert.match(source.slice(Math.max(0, aiIndex - 160), aiIndex), /selectedUploadedDocument \?/);
+  assert.match(source.slice(Math.max(0, compareIndex - 160), compareIndex), /selectedUploadedDocument \?/);
+});
+
+test("Selection quick toolbar maps to canonical annotation types and never creates a real task", () => {
+  const source = documentPage();
+  assert.match(source, /data-testid="selection-quick-toolbar"/);
+  for (const testId of ["INTERNAL_NOTE", "QUESTION", "MODIFICATION_REASON", "DECISION", "TASK_NOTE"]) {
+    assert.ok(source.includes(`testId: '${testId}'`), `quick action ${testId} must be present`);
+  }
+  // TASK_NOTE is labelled truthfully as an annotation (not a workflow task)
+  assert.match(source, /type: 'TASK_NOTE', label: 'Feladatjelölés'/);
+  // quick action only preconfigures the existing canonical composer
+  assert.match(source, /const applyQuickAnnotationType = \(type: DocumentAnnotationType\)/);
+  assert.match(source, /setAnnotationDraft\(\(draft\) => \(\{ \.\.\.draft, annotationType: type \}\)\)/);
+  const fnStart = source.indexOf("const applyQuickAnnotationType");
+  const fnBody = source.slice(fnStart, source.indexOf("};", fnStart));
+  assert.doesNotMatch(fnBody, /createTask|createDocumentTask|onCreateTask/);
+});
+
+test("Reader search operates only on loaded text with truthful states and presentation-only highlight", () => {
+  const source = documentPage();
+  assert.match(source, /data-testid="reader-search-input"/);
+  assert.match(source, /data-testid="reader-search-prev"/);
+  assert.match(source, /data-testid="reader-search-next"/);
+  assert.match(source, /data-testid="reader-search-clear"/);
+  // source of searchable text is the already-loaded reader text only
+  assert.match(source, /const readerSearchableText = versionText \|\| documentTextPreview \|\| null/);
+  assert.match(source, /'Nincs kereshető szöveg'/);
+  assert.match(source, /'Nincs találat'/);
+  // presentation-only highlight applied to the plain extracted-text surface
+  assert.match(source, /data-testid="reader-search-match"/);
+  assert.match(source, /renderReaderHighlights\(documentTextPreview\)/);
+  // the annotation-anchored surface stays un-highlighted so offsets are untouched
+  assert.match(source, /renderAnnotatedText\(\)/);
+  assert.doesNotMatch(source, /renderReaderHighlights\(renderAnnotatedText/);
+});
