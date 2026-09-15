@@ -21,6 +21,9 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe } from '../client-interaction/base';
+import { COMPANY_PROFILE_QUESTIONS, getCompanyProfileQuestionForDefinition } from '../client-workspace/companyProfileQuestionRegistry';
+import { applyDeterministicDerivations, resolveVisibleQuestions, type CompanyProfileFactState, type CompanyProfileFactValue } from '../client-workspace/companyProfileAdaptive';
+import { getComplianceWorkspace } from '../compliance/complianceWorkspaceService';
 
 type Prisma = typeof defaultPrisma;
 
@@ -390,6 +393,313 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       responsibleLawyerName: caseRecord.assignedLawyer?.name ?? null,
     })),
     attention,
+  };
+  assertClientSafe(dto);
+  return dto;
+}
+
+/* -------------------------------------------------------------------------- */
+/* GWU-2B.1 — workforce Company OS / Company Data Room read model            */
+/* -------------------------------------------------------------------------- */
+
+export type CompanyDataRoomFactStatus = 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
+
+export interface CompanyDataRoomDto {
+  client: { id: string; name: string };
+  operatingProfile: {
+    status: string | null;
+    complianceEnrollmentStatus: string;
+    summary: string | null;
+    lastReviewedAt: string | null;
+    nextReviewAt: string | null;
+  } | null;
+  facts: Array<{
+    id: string | null;
+    key: string;
+    questionKey: string | null;
+    valueType: string;
+    status: CompanyDataRoomFactStatus;
+    value: CompanyProfileFactValue | null;
+    scopeType: string;
+    verificationStatus: string | null;
+    determinationMethod: string | null;
+    observedAt: string | null;
+    effectiveAt: string | null;
+    validFrom: string | null;
+    validTo: string | null;
+    supersededAt: string | null;
+  }>;
+  coverage: {
+    relevantDefinitionCount: number;
+    answeredCount: number;
+    unknownCount: number;
+    unansweredCount: number;
+    knownCount: number;
+  };
+  organization: {
+    groups: Array<{ id: string; name: string; description: string | null; parentGroupId: string | null; status: string }>;
+    people: Array<{ id: string; name: string; jobTitle: string | null; employmentStatus: string; groupId: string | null; groupName: string | null }>;
+  };
+  processes: Array<{
+    id: string;
+    name: string;
+    category: string;
+    description: string | null;
+    criticality: string;
+    frequency: string;
+    status: string;
+    owner: { id: string; name: string } | null;
+    organizationGroup: { id: string; name: string } | null;
+    steps: Array<{
+      id: string;
+      position: number;
+      name: string;
+      stepType: string;
+      isApproval: boolean;
+      responsiblePerson: { id: string; name: string } | null;
+      system: { id: string; name: string } | null;
+      estimatedActiveMinutes: number | null;
+      estimatedWaitingMinutes: number | null;
+    }>;
+    latestMeasuredSnapshot: { id: string; metricVersion: string; observedAt: string; metrics: Array<{ code: string; value: number | boolean | null; unit: string; metricVersion: string }> } | null;
+  }>;
+  systems: Array<{ id: string; name: string; category: string; vendor: string | null; purpose: string | null; status: string; owner: { id: string; name: string } | null }>;
+  documentsSummary: {
+    total: number;
+    byCategory: Record<string, number>;
+    byWorkStatus: Record<string, number>;
+    recent: Array<{ id: string; name: string; title: string | null; category: string; workStatus: string; updatedAt: string }>;
+  };
+  contractsSummary: {
+    total: number;
+    byStatus: Record<string, number>;
+    items: Array<{ id: string; title: string; contractType: string; status: string; effectiveDate: string | null; expiryDate: string | null; nextCriticalDate: string | null }>;
+  };
+  complianceSummary: {
+    enrollment: string | null;
+    evaluatedCount: number;
+    applies: number;
+    doesNotApply: number;
+    insufficientFacts: number;
+    legalReviewRequired: number;
+    technicalReviewRequired: number;
+    sourceSupportInsufficient: number;
+    openFindings: number;
+    openProposals: number;
+  };
+  evidenceSummary: { total: number; byStatus: Record<string, number>; bySourceType: Record<string, number> };
+  developmentSummary: {
+    initiatives: Array<{ id: string; title: string; status: string; priority: string; targetState: string | null; targetAt: string | null; milestoneCount: number }>;
+    milestones: Array<{ id: string; title: string; type: string; status: string; targetDate: string | null; milestoneDate: string | null }>;
+    opportunitiesByStatus: Record<string, number>;
+  };
+  outcomeSummary: { total: number; measured: number; calculated: number; estimated: number; assumed: number };
+  dataQuality: { stale: 'CONTRACT_GAP'; conflicting: 'CONTRACT_GAP'; notes: string[] };
+}
+
+type ProfileFactRow = {
+  id: string;
+  factDefinitionId: string;
+  validFrom: Date;
+  validTo: Date | null;
+  supersededAt: Date | null;
+  observedAt: Date | null;
+  effectiveAt: Date | null;
+  verificationStatus: string;
+  determinationMethod: string | null;
+  numberValue: any;
+  stringValue: string | null;
+  booleanValue: boolean | null;
+  dateValue: Date | null;
+  datetimeValue: Date | null;
+  enumValue: string | null;
+  jsonValue: unknown;
+};
+
+function profileFactValue(fact: ProfileFactRow | null): CompanyProfileFactValue | null {
+  if (!fact) return null;
+  if (fact.numberValue !== null && fact.numberValue !== undefined) return Number(fact.numberValue);
+  if (fact.stringValue !== null) return fact.stringValue;
+  if (fact.booleanValue !== null) return fact.booleanValue;
+  if (fact.dateValue !== null) return fact.dateValue.toISOString().slice(0, 10);
+  if (fact.datetimeValue !== null) return fact.datetimeValue.toISOString();
+  if (fact.enumValue !== null) return fact.enumValue;
+  if (Array.isArray(fact.jsonValue) && fact.jsonValue.every((item) => typeof item === 'string')) return fact.jsonValue as string[];
+  return null;
+}
+
+function profileFactStateValue(fact: ProfileFactRow | null, status: string): CompanyProfileFactState {
+  if (status === 'UNKNOWN') return { status: 'UNKNOWN' };
+  const value = profileFactValue(fact);
+  return value === null ? { status: 'UNANSWERED' } : { status: 'ANSWERED', value };
+}
+
+function profileFactIsUsable(definition: { temporalPolicy: string }, fact: ProfileFactRow, now: Date): boolean {
+  if (definition.temporalPolicy === 'VALIDITY_INTERVAL') return true;
+  if (definition.temporalPolicy === 'OBSERVATION') return fact.observedAt !== null && fact.observedAt <= now;
+  if (definition.temporalPolicy === 'EFFECTIVE_INSTANT') return fact.effectiveAt !== null && fact.effectiveAt <= now;
+  return false;
+}
+
+const DATA_ROOM_METRIC_CODES = new Set([
+  'TOTAL_ACTIVE_MINUTES', 'TOTAL_WAITING_MINUTES', 'TOTAL_CYCLE_MINUTES', 'WAITING_SHARE',
+  'APPROVAL_STEP_COUNT', 'DATA_ENTRY_STEP_COUNT', 'HANDOFF_STEP_COUNT', 'RESPONSIBLE_PERSON_CHANGE_COUNT',
+  'SYSTEM_COUNT', 'SYSTEM_SWITCH_COUNT', 'UNASSIGNED_STEP_COUNT', 'PROCESS_OWNER_PRESENT',
+]);
+
+function projectDataRoomMetrics(value: unknown): Array<{ code: string; value: number | boolean | null; unit: string; metricVersion: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const row = item as Record<string, unknown>;
+    if (typeof row.code !== 'string' || !DATA_ROOM_METRIC_CODES.has(row.code) || typeof row.unit !== 'string' || typeof row.metricVersion !== 'string') return [];
+    if (row.value !== null && typeof row.value !== 'number' && typeof row.value !== 'boolean') return [];
+    return [{ code: row.code, value: row.value as number | boolean | null, unit: row.unit, metricVersion: row.metricVersion }];
+  });
+}
+
+function increment(map: Record<string, number>, key: string): void {
+  map[key] = (map[key] || 0) + 1;
+}
+
+/**
+ * Bounded workforce-only Company OS projection. Every section is composed from
+ * existing client-scoped models; this function never creates or updates rows.
+ */
+export async function getCompanyDataRoom(actor: InternalActor, clientId: string, prisma: Prisma = defaultPrisma): Promise<CompanyDataRoomDto> {
+  const clientAccess = await assertClientReadAccess(actor, clientId, prisma);
+  const now = new Date();
+  const profileQuestionKeys = COMPANY_PROFILE_QUESTIONS.map((question) => question.factDefinitionKey);
+
+  const [client, profile, definitions, groups, people, processes, systems, documents, contracts, evidence, initiatives, milestones, opportunities, outcomes] = await Promise.all([
+    prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } }),
+    prisma.clientOperatingProfile.findUnique({ where: { clientId }, select: { status: true, complianceEnrollmentStatus: true, summary: true, lastReviewedAt: true, nextReviewAt: true } }),
+    prisma.factDefinition.findMany({ where: { status: 'ACTIVE', key: { in: profileQuestionKeys } }, select: { id: true, key: true, questionKey: true, valueType: true, allowedScopeTypes: true, temporalPolicy: true } }),
+    prisma.clientOrganizationGroup.findMany({ where: { clientId }, orderBy: { name: 'asc' }, select: { id: true, name: true, descriptionSafe: true, parentGroupId: true, status: true } }),
+    prisma.organizationPerson.findMany({ where: { clientId }, orderBy: { name: 'asc' }, select: { id: true, name: true, jobTitle: true, employmentStatus: true, organizationGroupId: true, organizationGroup: { select: { id: true, name: true } } } }),
+    prisma.businessProcess.findMany({ where: { clientId }, orderBy: { name: 'asc' }, include: { ownerPerson: { select: { id: true, name: true } }, organizationGroup: { select: { id: true, name: true } }, steps: { orderBy: { position: 'asc' }, include: { responsiblePerson: { select: { id: true, name: true } }, system: { select: { id: true, name: true } } } } } }),
+    prisma.businessSystem.findMany({ where: { clientId }, orderBy: { name: 'asc' }, include: { ownerPerson: { select: { id: true, name: true } } } }),
+    prisma.document.findMany({ where: { clientId }, orderBy: { updatedAt: 'desc' }, select: { id: true, name: true, title: true, category: true, workStatus: true, updatedAt: true } }),
+    prisma.contractRecord.findMany({ where: { clientId }, orderBy: { updatedAt: 'desc' }, select: { id: true, title: true, contractType: true, status: true, effectiveDate: true, expiryDate: true, nextCriticalDate: true } }),
+    prisma.evidenceRecord.findMany({ where: { clientId }, select: { status: true, sourceType: true } }),
+    prisma.developmentInitiative.findMany({ where: { clientId }, orderBy: { updatedAt: 'desc' }, select: { id: true, title: true, status: true, priority: true, targetState: true, targetAt: true, milestones: { select: { id: true } } } }),
+    prisma.companyMilestone.findMany({ where: { clientId }, orderBy: [{ targetDate: 'asc' }, { createdAt: 'desc' }], select: { id: true, title: true, type: true, status: true, targetDate: true, milestoneDate: true } }),
+    prisma.improvementOpportunity.findMany({ where: { clientId }, select: { status: true } }),
+    prisma.outcomeMeasurement.findMany({ where: { clientId }, select: { basis: true } }),
+  ]);
+  if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
+  if (client.id !== clientAccess.id) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
+
+  const definitionIds = definitions.map((definition) => definition.id);
+  const [states, fallbackFacts, snapshots] = await Promise.all([
+    prisma.clientFactAnswerState.findMany({ where: { clientId, scopeType: 'COMPANY', factSubjectId: null, factDefinitionId: { in: definitionIds } }, include: { currentFact: true } }),
+    prisma.clientFact.findMany({ where: { clientId, factDefinitionId: { in: definitionIds }, scopeType: 'COMPANY', factSubjectId: null, supersededAt: null, validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gt: now } }] }, orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }] }),
+    prisma.processObservationSnapshot.findMany({ where: { clientId }, orderBy: [{ observedAt: 'desc' }, { createdAt: 'desc' }], select: { id: true, businessProcessId: true, metricVersion: true, observedAt: true, metrics: true } }),
+  ]);
+
+  const stateByDefinition = new Map(states.map((state) => [state.factDefinitionId, state]));
+  const factsByDefinition = new Map<string, ProfileFactRow[]>();
+  for (const fact of fallbackFacts as ProfileFactRow[]) factsByDefinition.set(fact.factDefinitionId, [...(factsByDefinition.get(fact.factDefinitionId) || []), fact]);
+  const canonicalState: Record<string, CompanyProfileFactState> = {};
+  const selectedFacts = new Map<string, ProfileFactRow | null>();
+  for (const definition of definitions) {
+    const state = stateByDefinition.get(definition.id);
+    if (state) {
+      const current = state.currentFact as ProfileFactRow | null;
+      canonicalState[definition.key] = profileFactStateValue(current, String(state.status));
+      selectedFacts.set(definition.id, current);
+      continue;
+    }
+    const candidates = factsByDefinition.get(definition.id) || [];
+    const fallback = candidates.length === 1 && profileFactIsUsable(definition, candidates[0], now) ? candidates[0] : null;
+    canonicalState[definition.key] = profileFactStateValue(fallback, fallback ? 'ANSWERED' : 'UNANSWERED');
+    selectedFacts.set(definition.id, fallback);
+  }
+  const derivedState = applyDeterministicDerivations(canonicalState);
+  const visibleKeys = new Set([
+    ...COMPANY_PROFILE_QUESTIONS.filter((question) => question.baseline || question.discoveryBaseline).map((question) => question.factDefinitionKey),
+    ...resolveVisibleQuestions(derivedState).visible.flatMap((question) => question.factKeys),
+  ]);
+  const facts = definitions.flatMap((definition) => {
+    const question = getCompanyProfileQuestionForDefinition(definition);
+    if (!question) return [];
+    const state = derivedState[definition.key] || { status: 'UNANSWERED' as const };
+    const selected = selectedFacts.get(definition.id) || null;
+    const answerState = stateByDefinition.get(definition.id);
+    return [{
+      id: selected?.id || null,
+      key: definition.key,
+      questionKey: question.questionKey || definition.questionKey || null,
+      valueType: String(definition.valueType),
+      status: state.status,
+      value: state.value ?? null,
+      scopeType: 'COMPANY',
+      verificationStatus: selected?.verificationStatus || null,
+      determinationMethod: state.derived ? 'DERIVED' : selected?.determinationMethod || (answerState ? 'USER_PROVIDED' : null),
+      observedAt: selected?.observedAt?.toISOString() || null,
+      effectiveAt: selected?.effectiveAt?.toISOString() || null,
+      validFrom: selected?.validFrom?.toISOString() || null,
+      validTo: selected?.validTo?.toISOString() || null,
+      supersededAt: selected?.supersededAt?.toISOString() || null,
+    } as const];
+  });
+  const visibleFacts = facts.filter((fact) => visibleKeys.has(fact.key));
+  const coverage = {
+    relevantDefinitionCount: visibleFacts.length,
+    answeredCount: visibleFacts.filter((fact) => fact.status === 'ANSWERED').length,
+    unknownCount: visibleFacts.filter((fact) => fact.status === 'UNKNOWN').length,
+    unansweredCount: visibleFacts.filter((fact) => fact.status === 'UNANSWERED').length,
+    knownCount: visibleFacts.filter((fact) => fact.status !== 'UNANSWERED').length,
+  };
+
+  const latestSnapshotByProcess = new Map<string, (typeof snapshots)[number]>();
+  for (const snapshot of snapshots) if (!latestSnapshotByProcess.has(snapshot.businessProcessId)) latestSnapshotByProcess.set(snapshot.businessProcessId, snapshot);
+  const processesDto = processes.map((process) => {
+    const snapshot = latestSnapshotByProcess.get(process.id);
+    return {
+      id: process.id,
+      name: process.name,
+      category: process.category,
+      description: process.description,
+      criticality: process.criticality,
+      frequency: process.frequency,
+      status: process.status,
+      owner: process.ownerPerson ? { id: process.ownerPerson.id, name: process.ownerPerson.name } : null,
+      organizationGroup: process.organizationGroup ? { id: process.organizationGroup.id, name: process.organizationGroup.name } : null,
+      steps: process.steps.map((step) => ({ id: step.id, position: step.position, name: step.name, stepType: step.stepType, isApproval: Boolean(step.isApproval), responsiblePerson: step.responsiblePerson ? { id: step.responsiblePerson.id, name: step.responsiblePerson.name } : null, system: step.system ? { id: step.system.id, name: step.system.name } : null, estimatedActiveMinutes: step.estimatedActiveMinutes, estimatedWaitingMinutes: step.estimatedWaitingMinutes })),
+      latestMeasuredSnapshot: snapshot ? { id: snapshot.id, metricVersion: snapshot.metricVersion, observedAt: snapshot.observedAt.toISOString(), metrics: projectDataRoomMetrics(snapshot.metrics) } : null,
+    };
+  });
+
+  const documentCategories: Record<string, number> = {};
+  const documentStatuses: Record<string, number> = {};
+  for (const document of documents) { increment(documentCategories, String(document.category)); increment(documentStatuses, String(document.workStatus)); }
+  const contractStatuses: Record<string, number> = {};
+  const contractsDto = contracts.map((contract) => { increment(contractStatuses, String(contract.status)); return { id: contract.id, title: contract.title, contractType: contract.contractType, status: String(contract.status), effectiveDate: iso(contract.effectiveDate), expiryDate: iso(contract.expiryDate), nextCriticalDate: iso(contract.nextCriticalDate) }; });
+  const evidenceStatuses: Record<string, number> = {};
+  const evidenceSources: Record<string, number> = {};
+  for (const row of evidence) { increment(evidenceStatuses, String(row.status)); increment(evidenceSources, String(row.sourceType)); }
+  const opportunitiesByStatus: Record<string, number> = {};
+  for (const row of opportunities) increment(opportunitiesByStatus, String(row.status));
+  const outcomesByBasis: Record<string, number> = {};
+  for (const row of outcomes) increment(outcomesByBasis, String(row.basis));
+  const compliance = await getComplianceWorkspace(actor, clientId, prisma);
+
+  const dto: CompanyDataRoomDto = {
+    client: { id: client.id, name: client.name },
+    operatingProfile: profile ? { status: profile.status, complianceEnrollmentStatus: String(profile.complianceEnrollmentStatus), summary: profile.summary, lastReviewedAt: iso(profile.lastReviewedAt), nextReviewAt: iso(profile.nextReviewAt) } : null,
+    facts,
+    coverage,
+    organization: { groups: groups.map((group) => ({ id: group.id, name: group.name, description: group.descriptionSafe, parentGroupId: group.parentGroupId, status: String(group.status) })), people: people.map((person) => ({ id: person.id, name: person.name, jobTitle: person.jobTitle, employmentStatus: String(person.employmentStatus), groupId: person.organizationGroupId, groupName: person.organizationGroup?.name || null })) },
+    processes: processesDto,
+    systems: systems.map((system) => ({ id: system.id, name: system.name, category: system.category, vendor: system.vendor, purpose: system.purpose, status: system.status, owner: system.ownerPerson ? { id: system.ownerPerson.id, name: system.ownerPerson.name } : null })),
+    documentsSummary: { total: documents.length, byCategory: documentCategories, byWorkStatus: documentStatuses, recent: documents.slice(0, 20).map((document) => ({ id: document.id, name: document.name, title: document.title, category: String(document.category), workStatus: String(document.workStatus), updatedAt: document.updatedAt.toISOString() })) },
+    contractsSummary: { total: contracts.length, byStatus: contractStatuses, items: contractsDto },
+    complianceSummary: compliance.summary,
+    evidenceSummary: { total: evidence.length, byStatus: evidenceStatuses, bySourceType: evidenceSources },
+    developmentSummary: { initiatives: initiatives.map((initiative) => ({ id: initiative.id, title: initiative.title, status: String(initiative.status), priority: String(initiative.priority), targetState: initiative.targetState, targetAt: iso(initiative.targetAt), milestoneCount: initiative.milestones.length })), milestones: milestones.map((milestone) => ({ id: milestone.id, title: milestone.title, type: milestone.type, status: String(milestone.status), targetDate: iso(milestone.targetDate), milestoneDate: iso(milestone.milestoneDate) })), opportunitiesByStatus },
+    outcomeSummary: { total: outcomes.length, measured: outcomesByBasis.MEASURED || 0, calculated: outcomesByBasis.CALCULATED || 0, estimated: outcomesByBasis.ESTIMATED || 0, assumed: outcomesByBasis.ASSUMED || 0 },
+    dataQuality: { stale: 'CONTRACT_GAP', conflicting: 'CONTRACT_GAP', notes: ['Freshness policy is not exposed without a canonical temporal decision.', 'Conflict state is not inferred from multiple historical facts.'] },
   };
   assertClientSafe(dto);
   return dto;

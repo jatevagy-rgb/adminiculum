@@ -32,3 +32,9 @@ companyWorkspaceRouter.use(authenticate);
 companyWorkspaceRouter.get('/clients/:clientId/overview', async (req, res) => {
   try { res.json(await workspace.getWorkspaceOverview(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
 });
+
+// GWU-2B.1 workforce Company OS / Data Room projection. This stays inside the
+// existing company-workspace family and is read-only; no customer route exists.
+companyWorkspaceRouter.get('/clients/:clientId/data-room', async (req, res) => {
+  try { res.json(await workspace.getCompanyDataRoom(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
+});
