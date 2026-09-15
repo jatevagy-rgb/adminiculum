@@ -16,6 +16,7 @@ import {
   type PortalCompanyProfileReusableDocument,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { companyProfileCompletion } from "@/lib/companyProfileCompletion";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const inputClass =
@@ -161,11 +162,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     return index;
   }, [questions]);
 
-  const progress = useMemo(() => {
-    const total = questions.length;
-    const answered = questions.filter((question) => question.status === "ANSWERED").length;
-    return { total, answered, percent: total ? Math.round((answered / total) * 100) : 0 };
-  }, [questions]);
+  const progress = useMemo(() => companyProfileCompletion(questions), [questions]);
 
   const activeScreen: PortalCompanyProfileScreen | undefined = screens[activeIndex];
 

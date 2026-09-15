@@ -9,8 +9,10 @@ import {
   classifyTopic,
   controlProgressFor,
   filterTopics,
+  refreshAfterProfileAnswer,
   summarizeTopics,
 } from "../src/components/client-portal/OrgComplianceView";
+import { companyProfileCompletion } from "../src/lib/companyProfileCompletion";
 import type {
   PortalComplianceControlSummary,
   PortalComplianceMissingInfo,
@@ -126,9 +128,67 @@ describe("Compliance Map convergence", () => {
     assert.match(src, /status: "UNKNOWN"/);
     assert.match(src, /Adat megadása →/);
     assert.match(src, /Irodai egyeztetés szükséges/);
-    // Successful save reloads compliance.
+    // Successful save refreshes BOTH compliance and profile completion (narrow).
     assert.match(src, /setActionSuccess\("Adat sikeresen rögzítve\."\)/);
-    assert.match(src, /await load\(\)/);
+    assert.match(src, /await refreshAfterProfileAnswer\(/);
+  });
+
+  it("A. profile completion counts only ANSWERED (UNKNOWN is not provided)", () => {
+    const progress = companyProfileCompletion([
+      { status: "ANSWERED" },
+      { status: "ANSWERED" },
+      { status: "UNKNOWN" },
+      { status: "UNANSWERED" },
+    ]);
+    assert.equal(progress.answered, 2);
+    assert.equal(progress.total, 4);
+  });
+
+  it("B. control progress counts IMPLEMENTED only and copy does not claim rendezett", () => {
+    const summary: PortalComplianceControlSummary[] = [
+      {
+        requirementTitle: "Általános adatvédelem",
+        controls: [
+          { title: "A", implementationStatus: "IMPLEMENTED", lastReviewedAt: null, nextReviewAt: null, evidence: { acceptedCurrent: 0, stale: 0, missing: true } },
+          { title: "B", implementationStatus: "IMPLEMENTING", lastReviewedAt: null, nextReviewAt: null, evidence: { acceptedCurrent: 0, stale: 0, missing: true } },
+        ],
+      },
+    ];
+    const progress = controlProgressFor(topic(), summary);
+    assert.deepEqual(progress, { done: 1, total: 2, nextReviewAt: null });
+
+    const src = source();
+    assert.match(src, /Implementált kontrollok:/);
+    assert.doesNotMatch(src, /rendezett/i);
+  });
+
+  it("C. a successful inline answer refreshes compliance AND profile completion", async () => {
+    let complianceRefreshes = 0;
+    let completion = companyProfileCompletion([
+      { status: "ANSWERED" },
+      { status: "ANSWERED" },
+      { status: "UNKNOWN" },
+      { status: "UNANSWERED" },
+    ]);
+    assert.deepEqual({ answered: completion.answered, total: completion.total }, { answered: 2, total: 4 });
+
+    await refreshAfterProfileAnswer({
+      refreshCompliance: async () => {
+        complianceRefreshes += 1;
+      },
+      refreshProfileCompletion: async () => {
+        // The canonical discovery now returns 3 ANSWERED after the inline answer.
+        completion = companyProfileCompletion([
+          { status: "ANSWERED" },
+          { status: "ANSWERED" },
+          { status: "ANSWERED" },
+          { status: "UNANSWERED" },
+        ]);
+      },
+    });
+
+    assert.equal(complianceRefreshes, 1);
+    assert.deepEqual({ answered: completion.answered, total: completion.total }, { answered: 3, total: 4 });
   });
 
   it("11+12. uses the canonical portal document download route only", () => {

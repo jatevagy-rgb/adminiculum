@@ -14,6 +14,7 @@ import {
   type PortalComplianceControlSummary,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { companyProfileCompletion } from "@/lib/companyProfileCompletion";
 import { formatDate } from "./MatterWorkspace";
 
 const card = "min-w-0 rounded-3xl border border-[#eadfbf] bg-white p-5 shadow-sm sm:p-6";
@@ -90,6 +91,20 @@ export function controlProgressFor(
     .filter((value): value is string => Boolean(value))
     .sort()[0] ?? null;
   return { done, total: entry.controls.length, nextReviewAt };
+}
+
+/**
+ * After a successful inline company-profile answer BOTH the compliance read
+ * model and the canonical company-profile discovery (completion) must refresh,
+ * so the hero's X/Y count never goes stale. Extracted so the orchestration is
+ * testable without a DOM harness, and deliberately narrow: it does not touch
+ * any global loading/unmount state.
+ */
+export async function refreshAfterProfileAnswer(deps: {
+  refreshCompliance: () => Promise<void>;
+  refreshProfileCompletion: () => Promise<void>;
+}): Promise<void> {
+  await Promise.all([deps.refreshCompliance(), deps.refreshProfileCompletion()]);
 }
 
 function topicStateLabel(topic: PortalComplianceTopic): string {
@@ -216,8 +231,8 @@ export function OrgComplianceView() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ComplianceBucket | "ALL">("ALL");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) setLoading(true);
     setError(null);
     try {
       const res = await getPortalCompliance();
@@ -225,16 +240,16 @@ export function OrgComplianceView() {
     } catch (e) {
       setError(clientSafeError(e));
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, []);
 
   const loadProfile = useCallback(async () => {
     try {
       const discovery = await getPortalCompanyProfileDiscovery();
-      const total = discovery.questions.length;
-      const answered = discovery.questions.filter((question) => question.status !== "UNANSWERED").length;
-      setProfileCompletion({ answered, total });
+      // Canonical completion: only ANSWERED facts count (UNKNOWN does not).
+      const progress = companyProfileCompletion(discovery.questions);
+      setProfileCompletion({ answered: progress.answered, total: progress.total });
     } catch {
       // Non-fatal: the profile card falls back to a plain link.
       setProfileCompletion(null);
@@ -286,7 +301,10 @@ export function OrgComplianceView() {
       setActionSuccess("Adat sikeresen rögzítve.");
       setActiveQuestionKey(null);
       setAnswerInput("");
-      await load();
+      await refreshAfterProfileAnswer({
+        refreshCompliance: () => load({ silent: true }),
+        refreshProfileCompletion: loadProfile,
+      });
     } catch (err) {
       setActionError(clientSafeError(err));
     } finally {
@@ -305,7 +323,10 @@ export function OrgComplianceView() {
       setActionSuccess("Jelezve az iroda felé, hogy az adat nem ismert.");
       setActiveQuestionKey(null);
       setAnswerInput("");
-      await load();
+      await refreshAfterProfileAnswer({
+        refreshCompliance: () => load({ silent: true }),
+        refreshProfileCompletion: loadProfile,
+      });
     } catch (err) {
       setActionError(clientSafeError(err));
     } finally {
@@ -425,7 +446,7 @@ export function OrgComplianceView() {
                         {topic.nextAction ? <p className="mt-2"><strong>Következő lépés:</strong> {topic.nextAction}</p> : null}
                         {progress ? (
                           <p className="mt-2">
-                            <strong>Intézkedések és ellenőrzési pontok:</strong> {progress.done} / {progress.total} rendezett
+                            <strong>Implementált kontrollok:</strong> {progress.done} / {progress.total}
                             {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
                           </p>
                         ) : null}
@@ -440,7 +461,7 @@ export function OrgComplianceView() {
 
                       {progress ? (
                         <div className="mt-3 rounded-xl bg-[#fffdf8] p-3 text-xs text-stone-700">
-                          Intézkedések és ellenőrzési pontok: <b>{progress.done} / {progress.total}</b> rendezett
+                          Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
                           {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
                         </div>
                       ) : null}
