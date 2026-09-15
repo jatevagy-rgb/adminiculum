@@ -22,6 +22,8 @@ type Props = {
   caseId: string;
   documentId?: string;
   documentVersionId?: string | null;
+  /** Preselect this canonical template id when the modal opens. */
+  initialTemplateId?: string;
   onClose: () => void;
 };
 
@@ -40,7 +42,7 @@ function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-export function AIPromptPreparationModal({ caseId, documentId, documentVersionId, onClose }: Props) {
+export function AIPromptPreparationModal({ caseId, documentId, documentVersionId, initialTemplateId, onClose }: Props) {
   const [templates, setTemplates] = useState<AiPromptTemplate[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [drafts, setDrafts] = useState<AiPromptDraft[]>([]);
@@ -70,11 +72,15 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
         setTemplates(templateResult.items);
         setDocuments(caseDocuments);
         setDrafts(draftResult.items);
-        setTemplateId(templateResult.items[0]?.id || "");
+        const preselect =
+          initialTemplateId && templateResult.items.some((template) => template.id === initialTemplateId)
+            ? initialTemplateId
+            : templateResult.items[0]?.id || "";
+        setTemplateId(preselect);
         if (!documentId && caseDocuments.length === 1) setSelectedDocumentIds([caseDocuments[0].id]);
       })
       .catch(() => setError("Az AI-előkészítő adatok nem tölthetők be."));
-  }, [caseId, documentId]);
+  }, [caseId, documentId, initialTemplateId]);
 
   const selectedDocuments = useMemo(
     () => documents.filter((document) => selectedDocumentIds.includes(document.id)),

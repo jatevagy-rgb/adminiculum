@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { LEGAL_PROMPT_CATALOG, LegalPromptTemplate } from "./legalPromptCatalog";
 import { listAiPromptTemplates, type AiPromptTemplate } from "@/lib/api";
+import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import type { ClientHouseStyleProfile } from "@/lib/api";
 
 type AIPromptPanelProps = {
@@ -30,53 +31,13 @@ const P1_CATEGORIES = ["modification", "handoff", "communication", "formatting",
 
 const COPY_FAILURE_MESSAGE = "Nem sikerült a vágólapra másolni. Jelöld ki és másold kézzel.";
 
-/**
- * Build a provider-neutral handoff prompt from a canonical Prompt System 2.0
- * template. Deliberately does not call any external AI and never includes raw
- * client data — only the already-anonymized workspace text.
- */
-function buildCanonicalPrompt(
-  template: AiPromptTemplate,
-  input: { documentTitle?: string; caseId?: string; anonymizedText?: string },
-): string {
-  const blocks = Array.isArray(template.blocks)
-    ? template.blocks
-        .map((block) => {
-          const b = block as Record<string, unknown>;
-          const label = String(b?.label ?? "").trim();
-          const content = String(b?.content ?? "").trim();
-          return content ? `${label}\n${content}` : label;
-        })
-        .filter(Boolean)
-    : [];
-  const checklist = Array.isArray(template.verificationChecklist)
-    ? template.verificationChecklist.map((item) => `- ${String(item)}`)
-    : [];
-  const documentBlock = input.anonymizedText?.trim()
-    ? `ANONIMIZÁLT DOKUMENTUM:\n${input.anonymizedText.trim()}`
-    : "ANONIMIZÁLT DOKUMENTUM:\n[Nincs elérhető anonimizált dokumentumszöveg.]";
-
-  return [
-    `Prompt: ${template.title}`,
-    `Prompt ID: ${template.stableKey}`,
-    `Prompt Version: ${template.version}`,
-    `Legal Work Category: ${template.legalWorkCategory}`,
-    "",
-    ...blocks,
-    "",
-    documentBlock,
-    "",
-    "Output instructions",
-    String(template.outputInstructions ?? "").trim(),
-    ...(checklist.length ? ["", "Verification checklist", ...checklist] : []),
-  ].join("\n");
-}
-
 export function AIPromptPanel(props: AIPromptPanelProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [copyError, setCopyError] = useState<string | null>(null);
   const [canonicalTemplates, setCanonicalTemplates] = useState<AiPromptTemplate[]>([]);
   const [canonicalLoaded, setCanonicalLoaded] = useState(false);
+  const [preparationOpen, setPreparationOpen] = useState(false);
+  const [preselectedTemplateId, setPreselectedTemplateId] = useState<string | null>(null);
   const [episodesOpen, setEpisodesOpen] = useState(false);
   const [p1Open, setP1Open] = useState(false);
   const [search, setSearch] = useState("");
@@ -99,6 +60,16 @@ export function AIPromptPanel(props: AIPromptPanelProps) {
       active = false;
     };
   }, []);
+
+  // Canonical Prompt System 2.0 templates never build their external handoff in
+  // the frontend. Selecting one opens the canonical preparation flow, which calls
+  // prepareAiPrompt() and returns the server-generated draft.externalPromptText
+  // that is the only authorized external handoff.
+  const openPreparation = (templateId: string) => {
+    if (!props.caseId) return;
+    setPreselectedTemplateId(templateId);
+    setPreparationOpen(true);
+  };
 
   const p0Templates = LEGAL_PROMPT_CATALOG.filter((t) =>
     P0_CATEGORIES.includes(t.category as typeof P0_CATEGORIES[number])
@@ -131,17 +102,7 @@ export function AIPromptPanel(props: AIPromptPanelProps) {
   );
   const filteredEpisodes = filteredTemplates.filter((t) => t.category === "episode");
 
-  const handleCopyCanonical = async (template: AiPromptTemplate) => {
-    try {
-      await navigator.clipboard.writeText(buildCanonicalPrompt(template, props));
-      setCopiedId(template.id);
-      setCopyError(null);
-      setTimeout(() => setCopiedId(null), 1800);
-    } catch {
-      setCopyError(COPY_FAILURE_MESSAGE);
-    }
-  };
-
+  // Static catalog prompt copy — clipboard-only, clearly fallback/advanced.
   const handleCopy = async (template: LegalPromptTemplate) => {
     try {
       const { buildLegalPrompt } = await import("./legalPromptCatalog");
@@ -175,140 +136,155 @@ export function AIPromptPanel(props: AIPromptPanelProps) {
   );
 
   return (
-    <aside className={`border border-[#DDD7CA] bg-white flex flex-col ${props.className || ""}`}>
-      <div className="p-3 border-b border-[#EEE7D9]">
-        <p className="text-[9px] uppercase tracking-[0.2em] text-[#7B776D]">AI munkafolyamat</p>
-        <h3 className="mt-0.5 text-xs font-semibold text-[#1F2821]">Külső AI promptok</h3>
-        <p className="mt-1 text-[10px] text-[#514D45] leading-snug">
-          Adminiculum nem hív külső AI-t; a promptok vágólapra másolhatók.
-        </p>
-        {hasText && (
-          <p className="mt-1 text-[10px] text-[#7B776D]">
-            A prompt a jelenleg látható anonimizált szöveget is tartalmazza.
+    <>
+      <aside className={`border border-[#DDD7CA] bg-white flex flex-col ${props.className || ""}`}>
+        <div className="p-3 border-b border-[#EEE7D9]">
+          <p className="text-[9px] uppercase tracking-[0.2em] text-[#7B776D]">AI munkafolyamat</p>
+          <h3 className="mt-0.5 text-xs font-semibold text-[#1F2821]">Külső AI promptok</h3>
+          <p className="mt-1 text-[10px] text-[#514D45] leading-snug">
+            Adminiculum nem hív külső AI-t; a promptok vágólapra másolhatók.
           </p>
-        )}
-        {copyError && (
-          <p className="mt-1 text-[10px] text-[#8b3a3a]">{copyError}</p>
-        )}
-      </div>
-
-      <div className="p-3 border-b border-[#EEE7D9] space-y-2">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Prompt keresése..."
-          className="w-full text-[11px] border border-[#DDD7CA] rounded p-1.5 placeholder:text-[#B0AA9E] text-[#1F2821] focus:outline-none focus:border-[#B5A99A]"
-        />
-        <div className="flex gap-1 flex-wrap">
-          {[
-            { key: "all", label: "Mind" },
-            { key: "fo", label: "Fő" },
-            { key: "tovabbi", label: "További" },
-            { key: "halado", label: "Haladó" },
-          ].map((f) => (
-            <button
-              key={f.key}
-              onClick={() => setActiveFilter(f.key)}
-              className={`text-[9px] px-2 py-0.5 rounded border transition-colors ${
-                activeFilter === f.key
-                  ? "bg-[#1F2821] text-white border-[#1F2821]"
-                  : "bg-white text-[#7B776D] border-[#DDD7CA] hover:border-[#B5A99A]"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {/* Canonical Prompt System 2.0 templates — primary workflow */}
-        <div className="space-y-1">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D]">
-            Kanonikus jogi promptok
-          </p>
-          {canonicalTemplates.length > 0 ? (
-            canonicalTemplates.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => handleCopyCanonical(t)}
-                className="w-full text-left border border-[#DDE5DC] p-2 hover:bg-[#F0F5F1] transition-colors rounded"
-              >
-                <span className="block text-[11px] font-semibold text-[#1F2821] leading-snug">
-                  {copiedId === t.id ? "Vágólapra másolva: " : ""}{t.title}
-                </span>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[9px] px-1.5 py-0.5 rounded border border-[#C9D5CB] bg-white text-[#23472F]">
-                    v{t.version}
-                  </span>
-                  <span className="text-[10px] text-[#7B776D] truncate">
-                    {t.description || t.legalWorkCategory}
-                  </span>
-                </div>
-              </button>
-            ))
-          ) : (
-            <p className="text-[10px] text-[#7B776D]">
-              {canonicalLoaded
-                ? "Nincs aktív kanonikus prompt-sablon. Az alábbi egyedi sablonok érhetők el."
-                : "Kanonikus promptok betöltése..."}
-            </p>
+          {copyError && (
+            <p className="mt-1 text-[10px] text-[#8b3a3a]">{copyError}</p>
           )}
         </div>
 
-        {/* Static legal prompt catalog — preserved fallback / advanced prompts */}
-        <div className="space-y-1">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#B0AA9E]">
-            Egyedi prompt-sablonok
-          </p>
+        <div className="p-3 border-b border-[#EEE7D9] space-y-2">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Prompt keresése..."
+            className="w-full text-[11px] border border-[#DDD7CA] rounded p-1.5 placeholder:text-[#B0AA9E] text-[#1F2821] focus:outline-none focus:border-[#B5A99A]"
+          />
+          <div className="flex gap-1 flex-wrap">
+            {[
+              { key: "all", label: "Mind" },
+              { key: "fo", label: "Fő" },
+              { key: "tovabbi", label: "További" },
+              { key: "halado", label: "Haladó" },
+            ].map((f) => (
+              <button
+                key={f.key}
+                onClick={() => setActiveFilter(f.key)}
+                className={`text-[9px] px-2 py-0.5 rounded border transition-colors ${
+                  activeFilter === f.key
+                    ? "bg-[#1F2821] text-white border-[#1F2821]"
+                    : "bg-white text-[#7B776D] border-[#DDD7CA] hover:border-[#B5A99A]"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {filteredP0.length > 0 && (
+        <div className="flex-1 overflow-y-auto p-3 space-y-4">
+          {/* Canonical Prompt System 2.0 templates — primary workflow (prepare + draft lifecycle). */}
           <div className="space-y-1">
             <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D]">
-              Fő munkairatok
+              Kanonikus jogi promptok
             </p>
-            {filteredP0.map(renderCard)}
+            {canonicalTemplates.length > 0 ? (
+              canonicalTemplates.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => openPreparation(t.id)}
+                  disabled={!props.caseId}
+                  className="w-full text-left border border-[#DDE5DC] p-2 hover:bg-[#F0F5F1] transition-colors rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="block text-[11px] font-semibold text-[#1F2821] leading-snug">
+                    {t.title}
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[9px] px-1.5 py-0.5 rounded border border-[#C9D5CB] bg-white text-[#23472F]">
+                      v{t.version}
+                    </span>
+                    <span className="text-[10px] text-[#7B776D] truncate">
+                      {t.description || t.legalWorkCategory}
+                    </span>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <p className="text-[10px] text-[#7B776D]">
+                {canonicalLoaded
+                  ? "Nincs aktív kanonikus prompt-sablon. Az alábbi egyedi sablonok érhetők el."
+                  : "Kanonikus promptok betöltése..."}
+              </p>
+            )}
+            {canonicalTemplates.length > 0 && !props.caseId && (
+              <p className="text-[10px] text-[#7B776D]">
+                A kanonikus előkészítés ügy-kontextusból érhető el.
+              </p>
+            )}
           </div>
-        )}
 
-        {filteredP1.length > 0 && (
+          {/* Static legal prompt catalog — preserved fallback / advanced prompts. */}
           <div className="space-y-1">
-            <button
-              onClick={() => setP1Open((v) => !v)}
-              className="w-full flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D] hover:text-[#1F2821] transition-colors"
-            >
-              <span>{p1Open ? "▾" : "▸"}</span>
-              <span>További munkairatok</span>
-              <span className="text-[10px] normal-case font-normal tracking-wide ml-1">
-                ({p1Templates.length})
-              </span>
-            </button>
-            {p1Open && filteredP1.map(renderCard)}
+            <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#B0AA9E]">
+              Egyedi prompt-sablonok
+            </p>
           </div>
-        )}
 
-        {filteredEpisodes.length > 0 && (
-          <div className="space-y-1">
-            <button
-              onClick={() => setEpisodesOpen((v) => !v)}
-              className="w-full flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D] hover:text-[#1F2821] transition-colors"
-            >
-              <span>{episodesOpen ? "▾" : "▸"}</span>
-              <span>Haladó elemzési epizódok</span>
-              <span className="text-[10px] normal-case font-normal tracking-wide ml-1">
-                ({episodeTemplates.length})
-              </span>
-            </button>
-            {episodesOpen && filteredEpisodes.map(renderCard)}
-          </div>
-        )}
+          {filteredP0.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D]">
+                Fő munkairatok
+              </p>
+              {filteredP0.map(renderCard)}
+            </div>
+          )}
 
-        {filteredP0.length === 0 && filteredP1.length === 0 && filteredEpisodes.length === 0 && (
-          <p className="text-[10px] text-[#7B776D] text-center py-4">Nincs találat.</p>
-        )}
-      </div>
-    </aside>
+          {filteredP1.length > 0 && (
+            <div className="space-y-1">
+              <button
+                onClick={() => setP1Open((v) => !v)}
+                className="w-full flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D] hover:text-[#1F2821] transition-colors"
+              >
+                <span>{p1Open ? "▾" : "▸"}</span>
+                <span>További munkairatok</span>
+                <span className="text-[10px] normal-case font-normal tracking-wide ml-1">
+                  ({p1Templates.length})
+                </span>
+              </button>
+              {p1Open && filteredP1.map(renderCard)}
+            </div>
+          )}
+
+          {filteredEpisodes.length > 0 && (
+            <div className="space-y-1">
+              <button
+                onClick={() => setEpisodesOpen((v) => !v)}
+                className="w-full flex items-center gap-1 text-[9px] font-semibold uppercase tracking-[0.15em] text-[#7B776D] hover:text-[#1F2821] transition-colors"
+              >
+                <span>{episodesOpen ? "▾" : "▸"}</span>
+                <span>Haladó elemzési epizódok</span>
+                <span className="text-[10px] normal-case font-normal tracking-wide ml-1">
+                  ({episodeTemplates.length})
+                </span>
+              </button>
+              {episodesOpen && filteredEpisodes.map(renderCard)}
+            </div>
+          )}
+
+          {filteredP0.length === 0 && filteredP1.length === 0 && filteredEpisodes.length === 0 && (
+            <p className="text-[10px] text-[#7B776D] text-center py-4">Nincs találat.</p>
+          )}
+        </div>
+      </aside>
+
+      {preparationOpen && props.caseId ? (
+        <AIPromptPreparationModal
+          caseId={props.caseId}
+          documentId={props.documentId}
+          initialTemplateId={preselectedTemplateId ?? undefined}
+          onClose={() => {
+            setPreparationOpen(false);
+            setPreselectedTemplateId(null);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

@@ -22,24 +22,34 @@ test("canonical Prompt 2.0 API wrappers include reject, list-drafts, and get-dra
   assert.match(source, /export async function getPromptDraft/);
 });
 
-test("AIPromptPanel loads canonical templates and preserves the static catalog fallback", () => {
+test("AIPromptPanel does not build a canonical prompt locally", () => {
   const source = panel();
-  assert.match(source, /listAiPromptTemplates/);
-  assert.match(source, /Kanonikus jogi promptok/);
-  assert.match(source, /LEGAL_PROMPT_CATALOG/);
-  assert.match(source, /Egyedi prompt-sablonok/);
+  assert.doesNotMatch(source, /buildCanonicalPrompt/, "frontend-built canonical prompt must be removed");
+  assert.doesNotMatch(source, /buildCanonicalPrompt\(/, "no local canonical prompt builder call");
 });
 
-test("AIPromptPreparationModal wires reject, history, and Hungarian status labels", () => {
+test("AIPromptPanel routes canonical templates into the canonical preparation flow", () => {
+  const source = panel();
+  assert.match(source, /listAiPromptTemplates/);
+  assert.match(source, /AIPromptPreparationModal/);
+  assert.match(source, /initialTemplateId/);
+  assert.match(source, /openPreparation/);
+  assert.match(source, /setPreparationOpen\(true\)/);
+  assert.match(source, /Kanonikus jogi promptok/);
+});
+
+test("canonical handoff originates from backend draft.externalPromptText, not a frontend string", () => {
   const source = modal();
-  assert.match(source, /rejectAiPromptDraft/);
-  assert.match(source, /listAiPromptDraftsForCase/);
-  assert.match(source, /STATUS_LABELS/);
-  assert.match(source, /"Előkészítve"/);
-  assert.match(source, /"Jóváhagyva"/);
-  assert.match(source, /"Elutasítva"/);
-  assert.match(source, /Elutasítás/);
-  assert.match(source, /Korábbi prompt-tervezetek/);
+  assert.match(source, /prepareAiPrompt/);
+  assert.match(source, /navigator\.clipboard\.writeText\(draft\.externalPromptText\)/);
+  assert.match(source, /draft\.externalPromptText/);
+});
+
+test("static legal prompt catalog is preserved and labelled as fallback/advanced", () => {
+  const source = panel();
+  assert.match(source, /LEGAL_PROMPT_CATALOG/);
+  assert.match(source, /Egyedi prompt-sablonok/);
+  assert.match(source, /buildLegalPrompt/);
 });
 
 test("AIPromptPanel remains provider-neutral with truthful copy failure feedback", () => {
