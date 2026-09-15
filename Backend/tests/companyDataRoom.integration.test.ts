@@ -19,10 +19,13 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const clientA = crypto.randomUUID();
   const clientB = crypto.randomUUID();
   const caseA = crypto.randomUUID();
+  const caseA2 = crypto.randomUUID();
   const caseB = crypto.randomUUID();
   const groupA = crypto.randomUUID();
   const processA = crypto.randomUUID();
   const systemA = crypto.randomUUID();
+  const standardA2 = crypto.randomUUID();
+  const hrA1 = crypto.randomUUID();
   const factDefinition = crypto.randomUUID();
   const answeredFactDefinition = crypto.randomUUID();
   const answeredFact = crypto.randomUUID();
@@ -54,6 +57,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.case.createMany({
       data: [
         { id: caseA, caseNumber: `DATA-ROOM-A-${suffix}`, title: 'Data Room A', caseType: 'OTHER', clientId: clientA, assignedLawyerId: lawyerId, createdById: adminId },
+        { id: caseA2, caseNumber: `DATA-ROOM-A2-${suffix}`, title: 'Data Room A2 Hidden Case', caseType: 'OTHER', clientId: clientA, assignedLawyerId: otherLawyerId, createdById: adminId },
         { id: caseB, caseNumber: `DATA-ROOM-B-${suffix}`, title: 'Data Room B', caseType: 'OTHER', clientId: clientB, assignedLawyerId: otherLawyerId, createdById: adminId },
       ] as never,
     });
@@ -211,7 +215,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.businessProcessStep.create({
       data: { clientId: clientA, processId: processA, position: 1, name: 'A Step', systemId: systemA, estimatedActiveMinutes: 10, estimatedWaitingMinutes: 20 },
     });
-    await db.document.create({
+    const documentA1 = await db.document.create({
       data: {
         clientId: clientA,
         caseId: caseA,
@@ -220,6 +224,70 @@ d('Company Data Room integration (PostgreSQL)', () => {
         currentVersion: 1,
         currentVersionInt: 1,
       } as never,
+    });
+    const documentA2 = await db.document.create({
+      data: {
+        id: standardA2,
+        clientId: clientA,
+        caseId: caseA2,
+        name: 'STANDARD_A2_HIDDEN_CASE',
+        category: 'EVIDENCE',
+        currentVersion: 1,
+        currentVersionInt: 1,
+      } as never,
+    });
+    const documentHrA1 = await db.document.create({
+      data: {
+        id: hrA1,
+        clientId: clientA,
+        caseId: caseA,
+        name: 'HR_A1_PRIVILEGED_ONLY',
+        category: 'INTERNAL_MEMO',
+        securityClassification: 'HR_CONFIDENTIAL',
+        currentVersion: 1,
+        currentVersionInt: 1,
+      } as never,
+    });
+    const documentVersions = await Promise.all([
+      db.documentVersion.create({
+        data: {
+          documentId: documentA1.id,
+          version: 1,
+          name: 'STANDARD_A1',
+          originalFileName: 'standard-a1.pdf',
+          uploadedById: adminId,
+          isCurrent: true,
+        } as never,
+      }),
+      db.documentVersion.create({
+        data: {
+          documentId: documentA2.id,
+          version: 1,
+          name: 'STANDARD_A2',
+          originalFileName: 'standard-a2.pdf',
+          uploadedById: otherLawyerId,
+          isCurrent: true,
+        } as never,
+      }),
+      db.documentVersion.create({
+        data: {
+          documentId: documentHrA1.id,
+          version: 1,
+          name: 'HR_A1',
+          originalFileName: 'hr-a1.pdf',
+          uploadedById: adminId,
+          isCurrent: true,
+        } as never,
+      }),
+    ]);
+    await db.evidenceRecord.createMany({
+      data: documentVersions.map((version) => ({
+        clientId: clientA,
+        sourceType: 'DOCUMENT_VERSION',
+        title: `Evidence ${version.name}`,
+        status: 'ACCEPTED',
+        documentVersionId: version.id,
+      })) as never,
     });
     await db.contractRecord.create({
       data: { clientId: clientA, title: 'A Contract', contractType: 'SERVICE', status: 'ACTIVE' },
@@ -280,19 +348,32 @@ d('Company Data Room integration (PostgreSQL)', () => {
     expect(view.organization.groupCount).toBe(1);
     expect(view.processes[0]?.steps[0]?.system?.id).toBe(systemA);
     expect(view.systems[0]?.relatedProcessStepCount).toBe(1);
-    expect(view.documents.documentCount).toBe(1);
+    expect(view.documents.documentCount).toBe(3);
+    expect(view.documents.currentVersionCount).toBe(3);
+    expect(view.documents.evidenceLinkedRecordCount).toBe(3);
     expect(view.contracts.totalCount).toBe(1);
     expect(view.complianceSummary.currentOnly).toBe(true);
     expect(view.complianceSummary.evaluatedCount).toBe(1);
     expect(view.complianceSummary.applies).toBe(1);
-    expect(view.evidenceSummary.totalCount).toBe(1);
+    expect(view.evidenceSummary.totalCount).toBe(4);
     expect(JSON.stringify(view)).not.toContain('must-not-escape');
   });
 
   it('allows an authorized lawyer, denies an out-of-scope lawyer, and isolates clients', async () => {
     await expect(getCompanyDataRoom(lawyer, clientA, db)).resolves.toMatchObject({
       clientIdentity: { id: clientA },
+      documents: {
+        documentCount: 1,
+        currentVersionCount: 1,
+        evidenceLinkedRecordCount: 1,
+      },
     });
+    const lawyerView = await getCompanyDataRoom(lawyer, clientA, db);
+    expect(JSON.stringify(lawyerView)).not.toContain('STANDARD_A2_HIDDEN_CASE');
+    expect(JSON.stringify(lawyerView)).not.toContain('HR_A1_PRIVILEGED_ONLY');
+    const privilegedView = await getCompanyDataRoom(admin, clientA, db);
+    expect(privilegedView.documents.documentCount).toBe(3);
+    expect(privilegedView.documents.evidenceLinkedRecordCount).toBe(3);
     await expect(getCompanyDataRoom(otherLawyer, clientA, db)).rejects.toMatchObject({
       status: 403,
       code: 'CLIENT_ACCESS_FORBIDDEN',

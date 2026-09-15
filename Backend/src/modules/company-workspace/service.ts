@@ -20,9 +20,11 @@
  * and no new company publication scope.
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe } from '../client-interaction/base';
+import { Prisma as PrismaTypes } from '@prisma/client';
+import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe, internalCaseScope } from '../client-interaction/base';
 import { getComplianceWorkspace } from '../compliance/complianceWorkspaceService';
 import { resolveCanonicalTypedFactValue, type CanonicalTypedFactValue } from '../client-workspace/canonicalFactValue';
+import { hrConfidentialReadAllowed } from '../documents/authorization';
 
 type Prisma = typeof defaultPrisma;
 
@@ -258,6 +260,12 @@ export async function getCompanyDataRoom(
 ): Promise<CompanyDataRoomDto> {
   const authorizedClient = await assertClientReadAccess(actor, clientId, prisma);
   const now = new Date();
+  const readableCaseIds = await internalCaseScope(actor, prisma);
+  const documentScope: PrismaTypes.DocumentWhereInput = {
+    clientId,
+    ...(readableCaseIds === null ? {} : { caseId: { in: readableCaseIds } }),
+    ...(readableCaseIds === null || hrConfidentialReadAllowed(actor.role) ? {} : { securityClassification: { not: 'HR_CONFIDENTIAL' as const } }),
+  };
 
   const [
     client,
@@ -429,9 +437,9 @@ export async function getCompanyDataRoom(
         _count: { select: { processSteps: true } },
       },
     }),
-    prisma.document.count({ where: { clientId } }),
-    prisma.documentVersion.count({ where: { document: { clientId }, isCurrent: true } }),
-    prisma.evidenceRecord.count({ where: { clientId, documentVersionId: { not: null } } }),
+    prisma.document.count({ where: documentScope }),
+    prisma.documentVersion.count({ where: { document: documentScope, isCurrent: true } }),
+    prisma.evidenceRecord.count({ where: { clientId, documentVersionId: { not: null }, documentVersion: { document: documentScope } } }),
     prisma.contractRecord.count({ where: { clientId } }),
     prisma.contractRecord.groupBy({ by: ['status'], where: { clientId }, _count: { _all: true } }),
     getComplianceWorkspace(actor, clientId, prisma),
