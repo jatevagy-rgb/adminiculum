@@ -208,13 +208,13 @@ export async function getOrganizationalCompany(
   const unknownCount = profileQuestions.filter((question) => question.status === 'UNKNOWN').length;
   const unansweredCount = profileQuestions.filter((question) => question.status === 'UNANSWERED').length;
   const employeeQuestion = profileQuestions.find((question) => question.questionKey === 'employee_count');
-  const employeeCount = employeeQuestion
-    ? employeeQuestion.status === 'ANSWERED' && typeof employeeQuestion.value === 'number'
+  const employeeCount = employeeQuestion?.status === 'UNKNOWN'
+    ? null
+    : employeeQuestion?.status === 'ANSWERED' && typeof employeeQuestion.value === 'number'
       ? employeeQuestion.value
-      : null
-    : employeeFact?.numberValue != null
-      ? Number(employeeFact.numberValue)
-      : null;
+      : employeeFact?.numberValue != null
+        ? Number(employeeFact.numberValue)
+        : null;
   const complianceSummary = compliance
     ? {
         topicCount: compliance.topics.length,
