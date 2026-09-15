@@ -95,7 +95,7 @@ export async function syncMailbox(id: string, ownerUserId: string, store: Secret
   await prisma.communicationMailboxConnection.update({ where: { id }, data: { status: 'SYNCING', lastSyncStatus: 'RUNNING', lastSyncError: null } });
   await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_STARTED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: 'SYNCING' });
   try {
-    const result = await runWithRefresh(connection, store, (secret) => getMailboxProvider(connection.provider).listMessagesSinceCursor({ secret, cursor: connection.syncCursor, maxMessages: 250 }));
+    const result = await runWithRefresh(connection, store, (secret) => getMailboxProvider(connection.provider).listMessagesSinceCursor({ secret, mailboxAddress: connection.mailboxAddress, cursor: connection.syncCursor, maxMessages: 250 }));
     for (const message of result.messages) await persistMessage(connection, message, ownerUserId);
     const updated = await prisma.communicationMailboxConnection.update({ where: { id }, data: { status: connection.sendCapability ? 'CONNECTED' : 'CONNECTED_READ_ONLY', syncCursor: result.nextCursor, syncCursorUpdatedAt: new Date(), lastSyncedAt: new Date(), lastSyncStatus: 'SUCCEEDED' } });
     await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_SUCCEEDED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: updated.status });
@@ -122,6 +122,7 @@ export async function sendMailboxMessage(input: { id: string; ownerUserId: strin
   try {
     sent = await runWithRefresh(connection, store, (secret) => getMailboxProvider(connection.provider).sendMessage({
       secret,
+      mailboxAddress: connection.mailboxAddress,
       to: input.to,
       cc: input.cc,
       bcc: input.bcc,
