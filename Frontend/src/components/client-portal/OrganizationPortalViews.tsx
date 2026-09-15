@@ -502,6 +502,19 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
 
   useEffect(() => { void load(); }, [load]);
 
+  // Narrow silent company-summary refresh for profile edits. Unlike `load`, this
+  // never sets loading=true, so it does not unmount OrganizationCompanyProfile
+  // (which would reset its local activeIndex back to screen 1). A transient
+  // refresh failure must not wipe the already-loaded company summary.
+  const refreshCompany = useCallback(async () => {
+    try {
+      const company = await getPortalOrganizationCompany();
+      setState((current) => ({ ...current, company }));
+    } catch {
+      // Preserve the last successfully loaded company state.
+    }
+  }, []);
+
   const hasLeadership = useMemo(() => Boolean(state.leadership?.length), [state.leadership]);
 
   if (state.loading) return <section className={card}>Szervezeti ügyfélfelület betöltése…</section>;
@@ -519,7 +532,7 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
       {view === "tasks" ? <OrganizationTasks workspace={workspace} /> : null}
       {view === "contracts" ? <OrganizationContracts contracts={state.contracts} /> : null}
-      {view === "company" ? <OrganizationCompany company={state.company} onProfileUpdated={load} /> : null}
+      {view === "company" ? <OrganizationCompany company={state.company} onProfileUpdated={refreshCompany} /> : null}
       {view === "grow" ? <OrgGrowView /> : null}
       {view === "compliance" ? <OrgComplianceView /> : null}
       {view === "intakes" && !isCaseRelay ? <Section title="Megkereséseim" empty={!state.intakes.length}>{state.intakes.map((item) => <IntakeRow key={item.reference} item={item} />)}</Section> : null}

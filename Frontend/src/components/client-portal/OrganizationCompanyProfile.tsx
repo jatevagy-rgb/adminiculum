@@ -87,6 +87,26 @@ function draftLabel(question: PortalCompanyProfileQuestion, draft: DraftValue | 
   return String(payload.enumValue ?? payload.stringValue ?? "");
 }
 
+// Resolve the next screen index after an adaptive discovery refresh. Prefer the
+// previously-computed "next" screen key; if it disappeared because answers
+// changed visibility, advance to the screen after the current one; if the
+// current one also disappeared, fall back to a clamped position.
+function resolveAdvanceIndex(
+  screens: PortalCompanyProfileScreen[],
+  currentKey: string,
+  nextKey: string | null,
+  fallbackIndex: number,
+): number {
+  const clamp = (index: number) => Math.min(Math.max(0, index), Math.max(0, screens.length - 1));
+  if (nextKey) {
+    const index = screens.findIndex((screen) => screen.screenKey === nextKey);
+    if (index >= 0) return index;
+  }
+  const currentIndex = screens.findIndex((screen) => screen.screenKey === currentKey);
+  if (currentIndex >= 0) return clamp(currentIndex + 1);
+  return clamp(fallbackIndex);
+}
+
 export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpdated?: () => void | Promise<void> }) {
   const [discovery, setDiscovery] = useState<PortalCompanyProfileDiscovery | null>(null);
   const [loading, setLoading] = useState(true);
@@ -207,6 +227,8 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
 
   const saveActiveScreen = async (advance: boolean) => {
     if (!activeScreen) return;
+    const currentKey = activeScreen.screenKey;
+    const nextKey = screens[activeIndex + 1]?.screenKey ?? null;
     setActionError(null);
     setSuccessMessage(null);
     setRefreshWarning(null);
@@ -222,7 +244,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
       facts[atom.questionKey] = payload;
     }
     if (Object.keys(facts).length === 0) {
-      if (advance) setActiveIndex((index) => Math.min(index + 1, Math.max(0, screens.length - 1)));
+      if (advance) setActiveIndex(resolveAdvanceIndex(screens, currentKey, nextKey, activeIndex));
       return;
     }
     setSaving(true);
@@ -230,11 +252,11 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     try {
       await answerPortalCompanyProfileScreen(activeScreen.screenKey, facts);
       saved = true;
-      await refreshDiscovery();
+      const refreshed = await refreshDiscovery();
       await refreshEvidence();
       await onProfileUpdated?.();
       setSuccessMessage("A válaszokat elmentettük.");
-      if (advance) setActiveIndex((index) => Math.min(index + 1, Math.max(0, screens.length - 1)));
+      if (advance) setActiveIndex(resolveAdvanceIndex(refreshed?.screens ?? screens, currentKey, nextKey, activeIndex));
     } catch (err) {
       if (saved) setRefreshWarning("A mentés megtörtént, de a frissítés nem sikerült. Kérjük, töltse újra az oldalt.");
       else setActionError(clientSafeError(err));
