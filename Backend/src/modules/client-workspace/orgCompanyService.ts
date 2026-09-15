@@ -157,7 +157,6 @@ export async function getOrganizationalCompany(
   const client = await prisma.client.findUnique({ where: { id: workspace.clientId }, select: { name: true } });
 
   // Organization-wide overview content is loaded only after authorization.
-  const now = new Date();
   const [overview, cases, groups, systems, processes, profile, documents, compliance, grow, employeeFact] = await Promise.all([
     projectCompanyOverviewForCustomer(workspace.clientId, prisma),
     listOrganizationalCases(identityId, workspaceId, { limit: ORG_CASE_LIST_LIMIT }, prisma),
@@ -188,11 +187,7 @@ export async function getOrganizationalCompany(
     prisma.clientFact.findFirst({
       where: {
         clientId: workspace.clientId,
-        scopeType: 'COMPANY',
-        factSubjectId: null,
         supersededAt: null,
-        validFrom: { lte: now },
-        OR: [{ validTo: null }, { validTo: { gt: now } }],
         factDefinition: { key: 'employee_count' },
       },
       select: { numberValue: true },
