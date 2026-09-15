@@ -24,6 +24,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const groupA = crypto.randomUUID();
   const processA = crypto.randomUUID();
   const systemA = crypto.randomUUID();
+  const snapshotA = crypto.randomUUID();
   const standardA2 = crypto.randomUUID();
   const hrA1 = crypto.randomUUID();
   const factDefinition = crypto.randomUUID();
@@ -201,7 +202,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
       } as never,
     });
     await db.clientOrganizationGroup.create({
-      data: { id: groupA, clientId: clientA, name: 'Operations', createdById: adminId },
+      data: { id: groupA, clientId: clientA, name: 'Operations', descriptionSafe: 'Daily operations', createdById: adminId },
     });
     await db.organizationPerson.create({
       data: { clientId: clientA, organizationGroupId: groupA, name: 'A Owner', jobTitle: 'Owner', employmentStatus: 'ACTIVE' },
@@ -214,6 +215,21 @@ d('Company Data Room integration (PostgreSQL)', () => {
     });
     await db.businessProcessStep.create({
       data: { clientId: clientA, processId: processA, position: 1, name: 'A Step', systemId: systemA, estimatedActiveMinutes: 10, estimatedWaitingMinutes: 20 },
+    });
+    await db.processObservationSnapshot.create({
+      data: {
+        id: snapshotA,
+        clientId: clientA,
+        businessProcessId: processA,
+        metricVersion: 'GROW_PROCESS_METRICS_V1',
+        observedAt: new Date('2026-01-05T00:00:00.000Z'),
+        inputDigest: 'f'.repeat(64),
+        snapshotDigest: 'g'.repeat(64),
+        metrics: [
+          { code: 'TOTAL_ACTIVE_MINUTES', value: 42, unit: 'MINUTES', metricVersion: 'GROW_PROCESS_METRICS_V1' },
+          { code: 'UNSAFE_RAW_PAYLOAD', value: 999, unit: 'COUNT', metricVersion: 'GROW_PROCESS_METRICS_V1' },
+        ],
+      } as never,
     });
     const documentA1 = await db.document.create({
       data: {
@@ -343,15 +359,32 @@ d('Company Data Room integration (PostgreSQL)', () => {
     ]));
     expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 1 });
     expect(view.dataQuality.coverageAvailable).toBe(false);
+    expect(view.dataQuality.relevantDataCoverage).toEqual(expect.objectContaining({
+      answeredCount: expect.any(Number),
+      unknownCount: expect.any(Number),
+      unansweredCount: expect.any(Number),
+    }));
     expect(view.dataQuality.stale).toBeNull();
     expect(view.dataQuality.staleAvailable).toBe(false);
     expect(view.organization.groupCount).toBe(1);
+    expect(view.organization.groups[0]?.description).toBe('Daily operations');
+    expect(view.organization.people[0]?.organizationGroupName).toBe('Operations');
     expect(view.processes[0]?.steps[0]?.system?.id).toBe(systemA);
+    expect(view.processes[0]?.latestMeasuredSnapshot).toEqual(expect.objectContaining({
+      id: snapshotA,
+      metrics: [
+        expect.objectContaining({ code: 'TOTAL_ACTIVE_MINUTES', value: 42 }),
+      ],
+    }));
+    expect(JSON.stringify(view.processes[0]?.latestMeasuredSnapshot)).not.toContain('UNSAFE_RAW_PAYLOAD');
     expect(view.systems[0]?.relatedProcessStepCount).toBe(1);
     expect(view.documents.documentCount).toBe(3);
     expect(view.documents.currentVersionCount).toBe(3);
     expect(view.documents.evidenceLinkedRecordCount).toBe(3);
     expect(view.contracts.totalCount).toBe(1);
+    expect(view).not.toHaveProperty('contractDetails');
+    expect(view.developmentSummary.opportunityCountsByStatus).toEqual([]);
+    expect(view.measurementSummary.assumedCount).toBe(0);
     expect(view.complianceSummary.currentOnly).toBe(true);
     expect(view.complianceSummary.evaluatedCount).toBe(1);
     expect(view.complianceSummary.applies).toBe(1);
