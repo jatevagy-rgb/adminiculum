@@ -34,6 +34,10 @@ import { requireOrganizationWorkspace } from './organizationalAccessPolicy';
 import { canViewOrganizationSummary } from './leadershipSummaryService';
 import { listOrganizationalCases } from './organizationalCaseService';
 import { projectCompanyOverviewForCustomer } from '../client-company/projector';
+import { getCompanyProfileDiscovery } from './companyProfileAnswerService';
+import { getOrganizationalGrow } from './orgGrowService';
+import { listPortalDocuments } from '../client-publication/publicationService';
+import { getClientSafeComplianceReadModel } from '../compliance/clientSafeComplianceService';
 
 type Prisma = typeof defaultPrisma;
 
@@ -63,10 +67,48 @@ export interface OrgCompanyProcess {
   frequency: string;
 }
 
+export interface OrgCompanyDataSummary {
+  relevantQuestionCount: number;
+  answeredCount: number;
+  unknownCount: number;
+  unansweredCount: number;
+  needsCompletion: boolean;
+  portalPath: string;
+}
+
+export interface OrgCompanyDocumentsSummary {
+  visibleDocumentCount: number;
+  latestPublishedAt: string | null;
+  portalPath: string;
+}
+
+export interface OrgCompanyComplianceSummary {
+  topicCount: number;
+  moreInformationNeededCount: number;
+  lawyerReviewRequiredCount: number;
+  actionInProgressCount: number;
+  resolvedCount: number;
+  portalPath: string;
+}
+
+export interface OrgCompanyDevelopmentSummary {
+  initiativeCount: number;
+  activeInitiativeCount: number;
+  portalPath: string;
+}
+
+export interface OrgCompanyOutcomeSummary {
+  measuredCount: number;
+  calculatedCount: number;
+  estimatedCount: number;
+  portalPath: string;
+}
+
 export interface OrgCompanyDto {
   companyName: string;
   profileHeadline: string | null;
   employeeCount: number | null;
+  dataSummary: OrgCompanyDataSummary | null;
   groups: OrgCompanyGroup[];
   visibleMattersByArea: OrgCompanyVisibleArea[];
   totalVisibleMatterCount: number;
@@ -74,6 +116,10 @@ export interface OrgCompanyDto {
   initiatives: Array<{ id: string; title: string; targetState: string | null; statusLabel: string; targetAt: string | null }>;
   systems: OrgCompanySystem[];
   processes: OrgCompanyProcess[];
+  documentsSummary: OrgCompanyDocumentsSummary | null;
+  complianceSummary: OrgCompanyComplianceSummary | null;
+  developmentSummary: OrgCompanyDevelopmentSummary | null;
+  outcomeSummary: OrgCompanyOutcomeSummary | null;
 }
 
 const INITIATIVE_STATUS_LABELS: Record<string, string> = {
@@ -111,7 +157,8 @@ export async function getOrganizationalCompany(
   const client = await prisma.client.findUnique({ where: { id: workspace.clientId }, select: { name: true } });
 
   // Organization-wide overview content is loaded only after authorization.
-  const [overview, cases, groups, systems, processes, employeeFact] = await Promise.all([
+  const now = new Date();
+  const [overview, cases, groups, systems, processes, profile, documents, compliance, grow, employeeFact] = await Promise.all([
     projectCompanyOverviewForCustomer(workspace.clientId, prisma),
     listOrganizationalCases(identityId, workspaceId, { limit: ORG_CASE_LIST_LIMIT }, prisma),
     prisma.clientOrganizationGroup.findMany({
@@ -129,10 +176,23 @@ export async function getOrganizationalCompany(
       select: { id: true, name: true, category: true, criticality: true, frequency: true },
       orderBy: { name: 'asc' },
     }),
+    getCompanyProfileDiscovery(identityId, workspaceId, undefined, { includeCanonicalBaseline: true }).catch(() => null),
+    listPortalDocuments({ userId: identityId, role: 'CLIENT_PORTAL', workspaceId }, undefined, prisma).catch(() => null),
+    getClientSafeComplianceReadModel(
+      workspace.clientId,
+      process.env.NODE_ENV === 'production',
+      process.env.NODE_ENV !== 'production' && process.env.ADMINICULUM_DEMO_CONTENT_ENABLED === 'true',
+      prisma,
+    ).catch(() => null),
+    getOrganizationalGrow(identityId, workspaceId, prisma).catch(() => null),
     prisma.clientFact.findFirst({
       where: {
         clientId: workspace.clientId,
+        scopeType: 'COMPANY',
+        factSubjectId: null,
         supersededAt: null,
+        validFrom: { lte: now },
+        OR: [{ validTo: null }, { validTo: { gt: now } }],
         factDefinition: { key: 'employee_count' },
       },
       select: { numberValue: true },
@@ -148,10 +208,72 @@ export async function getOrganizationalCompany(
     byArea.set(area, (byArea.get(area) || 0) + 1);
   }
 
+  const profileQuestions = profile?.questions ?? [];
+  const answeredCount = profileQuestions.filter((question) => question.status === 'ANSWERED').length;
+  const unknownCount = profileQuestions.filter((question) => question.status === 'UNKNOWN').length;
+  const unansweredCount = profileQuestions.filter((question) => question.status === 'UNANSWERED').length;
+  const employeeQuestion = profileQuestions.find((question) => question.questionKey === 'employee_count');
+  const employeeCount = employeeQuestion?.status === 'ANSWERED' && typeof employeeQuestion.value === 'number'
+    ? employeeQuestion.value
+    : profile
+      ? null
+      : employeeFact?.numberValue != null
+        ? Number(employeeFact.numberValue)
+        : null;
+  const complianceSummary = compliance
+    ? {
+        topicCount: compliance.topics.length,
+        moreInformationNeededCount: compliance.topics.filter((topic) => topic.state === 'MORE_INFORMATION_NEEDED').length,
+        lawyerReviewRequiredCount: compliance.topics.filter((topic) => topic.state === 'LAWYER_REVIEW_REQUIRED').length,
+        actionInProgressCount: compliance.topics.filter((topic) => topic.state === 'ACTION_IN_PROGRESS').length,
+        resolvedCount: compliance.topics.filter((topic) => topic.state === 'RESOLVED').length,
+        portalPath: '/portal/megfeleles',
+      }
+    : null;
+  const documentsSummary = documents
+    ? (() => {
+        let latestPublishedAt: string | null = null;
+        for (const item of documents.items) {
+          const publishedAt = typeof item.publishedAt === 'string' ? item.publishedAt : null;
+          if (publishedAt && (!latestPublishedAt || publishedAt > latestPublishedAt)) latestPublishedAt = publishedAt;
+        }
+        return {
+          visibleDocumentCount: documents.items.length,
+          latestPublishedAt,
+          portalPath: '/portal/dokumentumok',
+        };
+      })()
+    : null;
+  const developmentSummary = grow
+    ? {
+        initiativeCount: grow.initiatives.length,
+        activeInitiativeCount: grow.initiatives.filter((initiative) => initiative.statusLabel === 'Folyamatban').length,
+        portalPath: '/portal/fejlesztes',
+      }
+    : null;
+  const outcomeSummary = grow
+    ? {
+        measuredCount: grow.outcomes.measured.length,
+        calculatedCount: grow.outcomes.calculatedOrEstimated.filter((outcome) => outcome.basis === 'CALCULATED').length,
+        estimatedCount: grow.outcomes.calculatedOrEstimated.filter((outcome) => outcome.basis === 'ESTIMATED').length,
+        portalPath: '/portal/fejlesztes',
+      }
+    : null;
+
   const dto: OrgCompanyDto = {
     companyName: client?.name || 'Szervezet',
     profileHeadline: overview.profileHeadline,
-    employeeCount: employeeFact?.numberValue != null ? Number(employeeFact.numberValue) : null,
+    employeeCount,
+    dataSummary: profile
+      ? {
+          relevantQuestionCount: profileQuestions.length,
+          answeredCount,
+          unknownCount,
+          unansweredCount,
+          needsCompletion: unansweredCount > 0,
+          portalPath: '/portal/vallalat/company-profile',
+        }
+      : null,
     groups: groups.map((group) => ({
       id: group.id,
       name: group.name,
@@ -184,6 +306,10 @@ export async function getOrganizationalCompany(
       criticality: p.criticality,
       frequency: p.frequency,
     })),
+    documentsSummary,
+    complianceSummary,
+    developmentSummary,
+    outcomeSummary,
   };
 
   assertClientSafe(dto);

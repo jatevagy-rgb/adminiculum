@@ -533,16 +533,42 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
   });
 
   // 10. COMPANY_ORG_PROJECTION=PASS
-  it('COMPANY_ORG_PROJECTION=PASS — digital twin projection includes systems, processes, employee count', async () => {
+  it('COMPANY_ORG_PROJECTION=PASS — digital twin projection includes bounded customer-safe summaries', async () => {
     const company = await getOrganizationalCompany(ids.authorizedIdentity, ids.orgWsA, db);
     expect(company).toBeDefined();
     expect(company.companyName).toBe('Phase5 Org Client A');
     expect(company.employeeCount).toBe(50);
+    expect(company.dataSummary).toBeDefined();
+    expect(company.dataSummary?.answeredCount! + company.dataSummary?.unknownCount! + company.dataSummary?.unansweredCount!)
+      .toBe(company.dataSummary?.relevantQuestionCount);
     expect(company.systems).toBeDefined();
     expect(company.systems?.length).toBe(2);
     expect(company.systems?.map((s) => s.name)).toContain('SAP ERP');
     expect(company.processes).toBeDefined();
     expect(company.processes?.length).toBeGreaterThan(0);
+    expect(company.documentsSummary).toBeDefined();
+    expect(company.complianceSummary).toBeDefined();
+    expect(company.developmentSummary).toBeDefined();
+    expect(company.outcomeSummary).toBeDefined();
+
+    const serialized = JSON.stringify(company).toLowerCase();
+    for (const forbidden of [
+      'rawpayload',
+      'sourceconfig',
+      'secret',
+      'token',
+      'lawyernote',
+      'internalnote',
+      'recommendationcandidate',
+      'diagnosiscandidate',
+      'improvementopportunity',
+      'currentstate',
+      'clientownerperson',
+      'organizationperson',
+      'hr_confidential',
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
   });
 
   // 11. INDIVIDUAL_PORTAL_ISOLATION=PASS
@@ -766,5 +792,18 @@ describe('Client Portal 2.0 Customer Product Static Verification', () => {
     expect(growSrc).toContain("basis === 'MEASURED'");
     expect(growSrc).toContain('calculatedOrEstimated');
   });
-});
 
+  it('COMPANY_CUSTOMER_SAFE_SOURCES=PASS — Vállalat reuses explicit customer-safe projectors', () => {
+    const companySrc = read('src/modules/client-workspace/orgCompanyService.ts');
+    expect(companySrc).toContain('getCompanyProfileDiscovery');
+    expect(companySrc).toContain('listPortalDocuments');
+    expect(companySrc).toContain('getClientSafeComplianceReadModel');
+    expect(companySrc).toContain('getOrganizationalGrow');
+    expect(companySrc).not.toContain('getComplianceWorkspace');
+  });
+
+  it('COMPANY_READ_ONLY=PASS — Vállalat projection has no persistence mutations', () => {
+    const companySrc = read('src/modules/client-workspace/orgCompanyService.ts');
+    expect(companySrc).not.toMatch(/\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(/);
+  });
+});
