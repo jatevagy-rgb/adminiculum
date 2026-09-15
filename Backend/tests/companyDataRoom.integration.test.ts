@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { getCompanyDataRoom } from '../src/modules/company-workspace/service';
 import { InteractionError } from '../src/modules/client-interaction/base';
+import { COMPANY_PROFILE_QUESTIONS } from '../src/modules/client-workspace/companyProfileQuestionRegistry';
+import { buildFactStateMap, resolveVisibleQuestions } from '../src/modules/client-workspace/companyProfileAdaptive';
 
 const databaseUrl =
   process.env.GROW_TEST_DATABASE_URL ||
@@ -37,7 +39,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const requirementId = crypto.randomUUID();
   const requirementVersionId = crypto.randomUUID();
   const ruleVersionId = crypto.randomUUID();
-  let createdEmployeeDefinitionId: string | null = null;
+  const createdProfileDefinitionIds: string[] = [];
 
   const admin = { userId: adminId, role: 'ADMIN' };
   const lawyer = { userId: lawyerId, role: 'LAWYER' };
@@ -59,22 +61,26 @@ d('Company Data Room integration (PostgreSQL)', () => {
         { id: clientB, name: `Data Room Client B ${suffix}`, company: 'Client B Kft.' },
       ],
     });
-    let employeeDefinition = await db.factDefinition.findUnique({ where: { key: 'employee_count' } });
-    if (!employeeDefinition) {
-      employeeDefinition = await db.factDefinition.create({
-        data: {
-          id: crypto.randomUUID(),
-          key: 'employee_count',
-          domainCode: 'CLIENT_COMPANY_PROFILE',
-          valueType: 'NUMBER',
-          allowedScopeTypes: ['COMPANY', 'EMPLOYEE'],
-          determinationMethod: 'USER_PROVIDED',
-          overlapPolicy: 'DISALLOW',
-          temporalPolicy: 'OBSERVATION',
-          questionKey: 'employee_count',
-        } as never,
-      });
-      createdEmployeeDefinitionId = employeeDefinition.id;
+    const profileDefinitions = new Map<string, { id: string }>();
+    for (const key of ['employee_count', 'personal_data_processing', 'ai_use']) {
+      let definition = await db.factDefinition.findUnique({ where: { key } });
+      if (!definition) {
+        definition = await db.factDefinition.create({
+          data: {
+            id: crypto.randomUUID(),
+            key,
+            domainCode: 'CLIENT_COMPANY_PROFILE',
+            valueType: key === 'employee_count' ? 'NUMBER' : 'BOOLEAN',
+            allowedScopeTypes: ['COMPANY', 'EMPLOYEE'],
+            determinationMethod: 'USER_PROVIDED',
+            overlapPolicy: 'DISALLOW',
+            temporalPolicy: 'OBSERVATION',
+            questionKey: key,
+          } as never,
+        });
+        createdProfileDefinitionIds.push(definition.id);
+      }
+      profileDefinitions.set(key, definition);
     }
     await db.case.createMany({
       data: [
@@ -226,13 +232,34 @@ d('Company Data Room integration (PostgreSQL)', () => {
         clientId: clientA,
         type: 'EMPLOYEE_COUNT',
         value: '999',
-        factDefinitionId: employeeDefinition.id,
+        factDefinitionId: profileDefinitions.get('employee_count')!.id,
         factSubjectId: factSubjectA,
         scopeType: 'EMPLOYEE',
         numberValue: 999,
         validFrom: new Date('2026-01-01T00:00:00.000Z'),
         observedAt: new Date('2026-01-01T00:00:00.000Z'),
         verificationStatus: 'CLIENT_PROVIDED',
+      } as never,
+    });
+    await db.clientFact.create({
+      data: {
+        clientId: clientA,
+        type: 'PERSONAL_DATA_PROCESSING',
+        value: 'false',
+        factDefinitionId: profileDefinitions.get('personal_data_processing')!.id,
+        scopeType: 'COMPANY',
+        booleanValue: false,
+        validFrom: new Date('2026-01-01T00:00:00.000Z'),
+        observedAt: new Date('2026-01-01T00:00:00.000Z'),
+        verificationStatus: 'CLIENT_PROVIDED',
+      } as never,
+    });
+    await db.clientFactAnswerState.create({
+      data: {
+        clientId: clientA,
+        factDefinitionId: profileDefinitions.get('ai_use')!.id,
+        scopeType: 'COMPANY',
+        status: 'UNKNOWN',
       } as never,
     });
     await db.clientFactAnswerState.create({
@@ -395,9 +422,15 @@ d('Company Data Room integration (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
-    await db?.clientFact.deleteMany({ where: { clientId: clientA, factSubjectId: factSubjectA } });
+    const profileDefinitionIds = await db?.factDefinition.findMany({
+      where: { key: { in: ['employee_count', 'personal_data_processing', 'ai_use'] } },
+      select: { id: true },
+    });
+    const profileIds = profileDefinitionIds?.map((definition) => definition.id) ?? [];
+    await db?.clientFactAnswerState.deleteMany({ where: { clientId: clientA, factDefinitionId: { in: profileIds } } });
+    await db?.clientFact.deleteMany({ where: { clientId: clientA, factDefinitionId: { in: profileIds } } });
     await db?.factSubject.deleteMany({ where: { id: factSubjectA } });
-    if (createdEmployeeDefinitionId) await db?.factDefinition.delete({ where: { id: createdEmployeeDefinitionId } });
+    for (const id of createdProfileDefinitionIds) await db?.factDefinition.delete({ where: { id } });
     await db?.requirementApplicability.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db?.applicabilityRuleVersion.deleteMany({ where: { id: ruleVersionId } });
     await db?.requirementVersion.deleteMany({ where: { id: requirementVersionId } });
@@ -422,10 +455,25 @@ d('Company Data Room integration (PostgreSQL)', () => {
     expect(view.dataQuality.coverageAvailable).toBe(false);
     expect(view.dataQuality.relevantDataCoverage).toEqual(expect.objectContaining({
       answeredCount: 0,
-      unknownCount: 0,
+      unknownCount: 1,
       unansweredCount: expect.any(Number),
       derivedAnsweredCount: 0,
     }));
+    const expectedRelevantKeys = new Set(
+      COMPANY_PROFILE_QUESTIONS
+        .filter((question) => question.baseline || question.discoveryBaseline)
+        .map((question) => question.factDefinitionKey),
+    );
+    const visibility = resolveVisibleQuestions(buildFactStateMap({
+      personal_data_processing: { status: 'ANSWERED', value: false },
+      ai_use: { status: 'UNKNOWN' },
+    }));
+    for (const question of visibility.visible) {
+      for (const key of question.factKeys) expectedRelevantKeys.add(key);
+    }
+    expect(view.dataQuality.relevantDataCoverage.relevantDefinitionCount).toBe(expectedRelevantKeys.size);
+    expect(view.dataQuality.relevantDataCoverage.undeterminedCount).toBeGreaterThan(0);
+    expect(view.dataQuality.relevantDataCoverage.available).toBe(false);
     expect(view.dataQuality.stale).toBeNull();
     expect(view.dataQuality.staleAvailable).toBe(false);
     expect(view.organization.groupCount).toBe(1);
