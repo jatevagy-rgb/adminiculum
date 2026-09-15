@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { authenticate } from '../../middleware/auth';
 import { isWorkforceRole, requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
-import { normalizeMailboxAddress } from './dedupe';
+import { mailboxIdentityMatches, normalizeMailboxAddress } from './dedupe';
 import { challengeExpiry, canResend, evaluateVerification, generateVerificationCode } from './verificationCode';
 import { getTransactionalMailTransport, TransactionalMailConfigurationError } from './transactionalMail';
 import { createOAuthState, verifyOAuthState } from './oauthState';
@@ -128,7 +128,14 @@ async function oauthCallback(req: Request, res: Response, expected: MailboxProvi
       await recordMailboxAudit({ eventType: 'MAILBOX_IDENTITY_UNAVAILABLE', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'AUTHORIZATION_REQUIRED', errorCode: 'MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE' });
       throw new MailboxServiceError(502, 'MAILBOX_PROVIDER_IDENTITY_UNAVAILABLE');
     }
-    if (authorizedAddress !== normalizeMailboxAddress(mailbox.mailboxAddress)) {
+    // Providers that expose several authoritative identities (for example Microsoft
+    // mail + userPrincipalName + SMTP aliases) are matched against the whole
+    // server-side set; single-identity providers keep the original exact match.
+    const authoritativeAddresses =
+      authorized.authorizedAddresses && authorized.authorizedAddresses.length > 0
+        ? authorized.authorizedAddresses
+        : [authorized.authorizedAddress];
+    if (!mailboxIdentityMatches(mailbox.mailboxAddress, authoritativeAddresses)) {
       await recordMailboxAudit({ eventType: 'MAILBOX_IDENTITY_MISMATCH', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'AUTHORIZATION_REQUIRED', errorCode: 'MAILBOX_PROVIDER_IDENTITY_MISMATCH' });
       throw new MailboxServiceError(403, 'MAILBOX_PROVIDER_IDENTITY_MISMATCH');
     }
