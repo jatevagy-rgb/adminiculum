@@ -6119,3 +6119,18 @@ export async function returnAiPromptDraft(draftId: string, notes?: string): Prom
     body: JSON.stringify({ notes }),
   });
 }
+
+export async function rejectAiPromptDraft(draftId: string, notes?: string): Promise<AiPromptDraft> {
+  return fetchApi<AiPromptDraft>(`/ai-prompts/drafts/${encodeURIComponent(draftId)}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ notes }),
+  });
+}
+
+export async function listAiPromptDraftsForCase(caseId: string): Promise<{ items: AiPromptDraft[] }> {
+  return fetchApi<{ items: AiPromptDraft[] }>(`/ai-prompts/cases/${encodeURIComponent(caseId)}/drafts`);
+}
+
+export async function getPromptDraft(draftId: string): Promise<AiPromptDraft> {
+  return fetchApi<AiPromptDraft>(`/ai-prompts/drafts/${encodeURIComponent(draftId)}`);
+}
