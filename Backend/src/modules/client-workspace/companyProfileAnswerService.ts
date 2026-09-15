@@ -6,6 +6,11 @@ import { addPortalResponsibility } from '../client-organization/service';
 import { resolveVisibleQuestions, type CompanyProfileFactState, type CompanyProfileFactValue } from './companyProfileAdaptive';
 import { isTeaor25CatalogInstalled, isValidTeaor25Code, searchTeaor25 } from './teaor25Catalog';
 import { COMPANY_PROFILE_SCREEN_SECTION_TITLES, getCompanyProfileScreen, resolveVisibleScreens } from './companyProfileScreenCatalog';
+import {
+  CANONICAL_FACT_VALUE_SELECT,
+  resolveCanonicalTypedFactValue,
+  type CanonicalFactValueShape,
+} from './canonicalFactValue';
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -16,25 +21,8 @@ const MAX_PROFILE_STRING_LENGTH = 500;
 const MAX_TEAOR25_CODE_LENGTH = 32;
 const TEAOR25_UNAVAILABLE_MESSAGE = 'Az ágazati besorolás jelenleg nem érhető el.';
 
-type FactValueShape = {
-  numberValue: Prisma.Decimal | null;
-  stringValue: string | null;
-  booleanValue: boolean | null;
-  dateValue: Date | null;
-  datetimeValue: Date | null;
-  enumValue: string | null;
-  jsonValue?: Prisma.JsonValue | null;
-};
-
-const FACT_VALUE_SELECT = {
-  numberValue: true,
-  stringValue: true,
-  booleanValue: true,
-  dateValue: true,
-  datetimeValue: true,
-  enumValue: true,
-  jsonValue: true,
-} as const;
+type FactValueShape = CanonicalFactValueShape;
+const FACT_VALUE_SELECT = CANONICAL_FACT_VALUE_SELECT;
 
 function error(status: number, code: string, message: string): never {
   throw Object.assign(new Error(message), { status, code });
@@ -57,13 +45,8 @@ async function workspaceContext(identityId: string, workspaceId: string, db: Db 
 }
 
 function typedValue(fact: FactValueShape): CompanyProfileFactValue | null {
-  if (fact.numberValue !== null) return Number(fact.numberValue);
-  if (fact.stringValue !== null) return fact.stringValue;
-  if (fact.booleanValue !== null) return fact.booleanValue;
-  if (fact.dateValue !== null) return fact.dateValue.toISOString().slice(0, 10);
-  if (fact.datetimeValue !== null) return fact.datetimeValue.toISOString();
-  if (fact.jsonValue !== null && fact.jsonValue !== undefined) return fact.jsonValue as CompanyProfileFactValue;
-  return fact.enumValue;
+  const value = resolveCanonicalTypedFactValue(fact);
+  return value && typeof value === 'object' && !Array.isArray(value) ? null : value as CompanyProfileFactValue | null;
 }
 
 /**
@@ -152,7 +135,7 @@ function latestCurrentSnapshots<T extends { requirementVersionId: string; ruleVe
  * Fallback facts (no AnswerState) are only considered when the definition's
  * temporal policy makes them currently valid, matching discovery semantics.
  */
-function buildCanonicalFactState(input: {
+export function buildCanonicalFactState(input: {
   definitions: Array<{ id: string; key: string; temporalPolicy: string }>;
   states: Array<{ factDefinitionId: string; status: string; currentFact: FactValueShape | null }>;
   facts: Array<FactValueShape & { factDefinitionId: string; observedAt: Date | null; effectiveAt: Date | null }>;

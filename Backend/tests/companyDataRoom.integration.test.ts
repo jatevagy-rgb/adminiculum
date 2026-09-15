@@ -24,6 +24,12 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const processA = crypto.randomUUID();
   const systemA = crypto.randomUUID();
   const factDefinition = crypto.randomUUID();
+  const answeredFactDefinition = crypto.randomUUID();
+  const answeredFact = crypto.randomUUID();
+  const complianceDomainCode = `DATA_ROOM_${suffix}`;
+  const requirementId = crypto.randomUUID();
+  const requirementVersionId = crypto.randomUUID();
+  const ruleVersionId = crypto.randomUUID();
 
   const admin = { userId: adminId, role: 'ADMIN' };
   const lawyer = { userId: lawyerId, role: 'LAWYER' };
@@ -54,12 +60,81 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.clientOperatingProfile.create({
       data: { clientId: clientA, status: 'ACTIVE', complianceEnrollmentStatus: 'ENROLLED', summary: 'Bounded company profile' },
     });
+    await db.complianceDomain.create({ data: { code: complianceDomainCode, label: 'Data Room compliance' } });
+    await db.requirement.create({ data: { id: requirementId, key: `DATA_ROOM_REQ_${suffix}`, jurisdictionCode: 'HU', domainCode: complianceDomainCode } });
+    await db.requirementVersion.create({
+      data: {
+        id: requirementVersionId,
+        requirementId,
+        versionKey: 'V1',
+        title: 'Current requirement',
+        normativeStatement: 'Current requirement',
+        effectiveFrom: new Date('2026-01-01T00:00:00.000Z'),
+        status: 'APPROVED',
+        sourceSupportState: 'SUFFICIENT',
+      } as never,
+    });
+    await db.applicabilityRuleVersion.create({
+      data: {
+        id: ruleVersionId,
+        requirementVersionId,
+        ruleVersionKey: 'R1',
+        schemaVersion: 'rule-ast/v1',
+        astJson: { node: 'test' },
+        canonicalDigest: 'a'.repeat(64),
+        status: 'APPROVED',
+      } as never,
+    });
+    await db.requirementApplicability.createMany({
+      data: [
+        {
+          clientId: clientA,
+          requirementVersionId,
+          ruleVersionId,
+          ruleDigest: 'b'.repeat(64),
+          outcome: 'DOES_NOT_APPLY',
+          scopeType: 'COMPANY',
+          evaluationAt: new Date('2026-01-02T00:00:00.000Z'),
+          sourceSupportState: 'SUFFICIENT',
+          specialistRequirement: 'NONE',
+          schemaVersion: 'phase6-requirement-applicability/v1',
+          snapshotJson: {},
+          snapshotDigest: 'c'.repeat(64),
+        },
+        {
+          clientId: clientA,
+          requirementVersionId,
+          ruleVersionId,
+          ruleDigest: 'd'.repeat(64),
+          outcome: 'APPLIES',
+          scopeType: 'COMPANY',
+          evaluationAt: new Date('2026-01-03T00:00:00.000Z'),
+          sourceSupportState: 'SUFFICIENT',
+          specialistRequirement: 'NONE',
+          schemaVersion: 'phase6-requirement-applicability/v1',
+          snapshotJson: {},
+          snapshotDigest: 'e'.repeat(64),
+        },
+      ] as never,
+    });
     await db.factDefinition.create({
       data: {
         id: factDefinition,
         key: `data_room_fact_${suffix}`,
         domainCode: 'COMPANY',
         valueType: 'STRING',
+        allowedScopeTypes: ['COMPANY'],
+        determinationMethod: 'USER_PROVIDED',
+        overlapPolicy: 'DISALLOW',
+        temporalPolicy: 'VALIDITY_INTERVAL',
+      } as never,
+    });
+    await db.factDefinition.create({
+      data: {
+        id: answeredFactDefinition,
+        key: `data_room_boolean_${suffix}`,
+        domainCode: 'COMPANY',
+        valueType: 'BOOLEAN',
         allowedScopeTypes: ['COMPANY'],
         determinationMethod: 'USER_PROVIDED',
         overlapPolicy: 'DISALLOW',
@@ -86,6 +161,16 @@ d('Company Data Room integration (PostgreSQL)', () => {
           factDefinitionId: factDefinition,
         },
         {
+          id: answeredFact,
+          clientId: clientA,
+          type: 'PROFILE_BOOLEAN',
+          value: 'legacy-boolean-must-not-win',
+          validFrom: new Date('2026-01-01T00:00:00.000Z'),
+          verificationStatus: 'CLIENT_PROVIDED',
+          factDefinitionId: answeredFactDefinition,
+          booleanValue: true,
+        },
+        {
           clientId: clientB,
           type: 'LEGAL_NAME',
           value: 'Current B Kft.',
@@ -100,6 +185,15 @@ d('Company Data Room integration (PostgreSQL)', () => {
         factDefinitionId: factDefinition,
         scopeType: 'COMPANY',
         status: 'UNKNOWN',
+      } as never,
+    });
+    await db.clientFactAnswerState.create({
+      data: {
+        clientId: clientA,
+        factDefinitionId: answeredFactDefinition,
+        scopeType: 'COMPANY',
+        status: 'ANSWERED',
+        currentFactId: answeredFact,
       } as never,
     });
     await db.clientOrganizationGroup.create({
@@ -159,6 +253,11 @@ d('Company Data Room integration (PostgreSQL)', () => {
   });
 
   afterAll(async () => {
+    await db?.requirementApplicability.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
+    await db?.applicabilityRuleVersion.deleteMany({ where: { id: ruleVersionId } });
+    await db?.requirementVersion.deleteMany({ where: { id: requirementVersionId } });
+    await db?.requirement.deleteMany({ where: { id: requirementId } });
+    await db?.complianceDomain.deleteMany({ where: { code: complianceDomainCode } });
     await db?.$disconnect();
   });
 
@@ -168,17 +267,24 @@ d('Company Data Room integration (PostgreSQL)', () => {
     expect(view.clientIdentity.id).toBe(clientA);
     expect(view.clientIdentity.company).toBe('Client A Kft.');
     expect(view.operatingProfile?.summary).toBe('Bounded company profile');
-    expect(view.facts.map((fact) => fact.value)).toContain('Current A Kft.');
+    expect(view.facts.map((fact) => fact.value)).not.toContain('Current A Kft.');
     expect(view.facts.map((fact) => fact.value)).not.toContain('Old A Kft.');
-    expect(view.dataQuality.coverage.unknown).toBe(1);
-    expect(view.dataQuality.coverage.unanswered).toBeNull();
-    expect(view.dataQuality.coverage.conflicting).toBeNull();
+    expect(view.facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ answerStatus: 'UNKNOWN', value: null }),
+      expect.objectContaining({ answerStatus: 'ANSWERED', value: true }),
+    ]));
+    expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 1 });
+    expect(view.dataQuality.coverageAvailable).toBe(false);
+    expect(view.dataQuality.stale).toBeNull();
+    expect(view.dataQuality.staleAvailable).toBe(false);
     expect(view.organization.groupCount).toBe(1);
     expect(view.processes[0]?.steps[0]?.system?.id).toBe(systemA);
-    expect(view.systems[0]?.relatedProcessCount).toBe(1);
+    expect(view.systems[0]?.relatedProcessStepCount).toBe(1);
     expect(view.documents.documentCount).toBe(1);
     expect(view.contracts.totalCount).toBe(1);
-    expect(view.complianceSummary.controlCount).toBe(1);
+    expect(view.complianceSummary.currentOnly).toBe(true);
+    expect(view.complianceSummary.evaluatedCount).toBe(1);
+    expect(view.complianceSummary.applies).toBe(1);
     expect(view.evidenceSummary.totalCount).toBe(1);
     expect(JSON.stringify(view)).not.toContain('must-not-escape');
   });
@@ -209,6 +315,9 @@ d('Company Data Room integration (PostgreSQL)', () => {
       db.developmentInitiative.count({ where: { clientId: clientA } }),
       db.task.count({ where: { case: { clientId: clientA } } }),
       db.timeEntry.count({ where: { task: { case: { clientId: clientA } } } }),
+      db.clientFactAnswerState.count({ where: { clientId: clientA } }),
+      db.outcomeMeasurement.count({ where: { clientId: clientA } }),
+      db.evidenceRecord.count({ where: { clientId: clientA } }),
     ]);
     await getCompanyDataRoom(admin, clientA, db);
     const idsAfter = await Promise.all([
@@ -222,6 +331,9 @@ d('Company Data Room integration (PostgreSQL)', () => {
       db.developmentInitiative.count({ where: { clientId: clientA } }),
       db.task.count({ where: { case: { clientId: clientA } } }),
       db.timeEntry.count({ where: { task: { case: { clientId: clientA } } } }),
+      db.clientFactAnswerState.count({ where: { clientId: clientA } }),
+      db.outcomeMeasurement.count({ where: { clientId: clientA } }),
+      db.evidenceRecord.count({ where: { clientId: clientA } }),
     ]);
     expect(idsAfter).toEqual(idsBefore);
 

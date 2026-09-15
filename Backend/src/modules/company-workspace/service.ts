@@ -21,6 +21,8 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { InteractionError, InternalActor, assertClientReadAccess, assertClientSafe } from '../client-interaction/base';
+import { getComplianceWorkspace } from '../compliance/complianceWorkspaceService';
+import { resolveCanonicalTypedFactValue, type CanonicalTypedFactValue } from '../client-workspace/canonicalFactValue';
 
 type Prisma = typeof defaultPrisma;
 
@@ -136,28 +138,28 @@ export interface CompanyDataRoomDto {
     nextReviewAt: string | null;
   } | null;
   facts: Array<{
-    id: string;
+    id: string | null;
     type: string;
-    value: string;
+    value: CanonicalTypedFactValue | null;
+    answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
     factDefinition: { key: string; domainCode: string; valueType: string } | null;
     scopeType: string | null;
     factSubjectId: string | null;
-    verificationStatus: string;
+    verificationStatus: string | null;
     observedAt: string | null;
     effectiveAt: string | null;
-    validFrom: string;
+    validFrom: string | null;
     validTo: string | null;
   }>;
   dataQuality: {
-    coverage: {
+    answerStateSummary: {
       answered: number;
       unknown: number;
-      unanswered: null;
-      stale: number;
-      conflicting: null;
-      unansweredAvailable: false;
-      conflictingAvailable: false;
     };
+    coverageAvailable: false;
+    stale: null;
+    staleAvailable: false;
+    conflictingAvailable: false;
   };
   organization: {
     groupCount: number;
@@ -197,7 +199,7 @@ export interface CompanyDataRoomDto {
     purpose: string | null;
     status: string;
     owner: { id: string; name: string } | null;
-    relatedProcessCount: number;
+    relatedProcessStepCount: number;
   }>;
   documents: {
     documentCount: number;
@@ -209,10 +211,17 @@ export interface CompanyDataRoomDto {
     byStatus: Array<{ status: string; count: number }>;
   };
   complianceSummary: {
-    applicabilityCount: number;
-    applicabilityByOutcome: Array<{ outcome: string; count: number }>;
-    controlCount: number;
-    controlsByStatus: Array<{ status: string; count: number }>;
+    currentOnly: true;
+    evaluatedAt: string | null;
+    evaluatedCount: number;
+    applies: number;
+    doesNotApply: number;
+    insufficientFacts: number;
+    legalReviewRequired: number;
+    technicalReviewRequired: number;
+    sourceSupportInsufficient: number;
+    openFindings: number;
+    openProposals: number;
   };
   evidenceSummary: {
     totalCount: number;
@@ -255,9 +264,12 @@ export async function getCompanyDataRoom(
     profile,
     facts,
     answerStates,
-    staleFactCount,
     groups,
     people,
+    groupCount,
+    activeGroupCount,
+    personCount,
+    activePersonCount,
     processes,
     systems,
     documentCount,
@@ -265,10 +277,7 @@ export async function getCompanyDataRoom(
     evidenceLinkedDocumentCount,
     contractCount,
     contractsByStatus,
-    applicabilityCount,
-    applicabilityByOutcome,
-    controlCount,
-    controlsByStatus,
+    complianceWorkspace,
     evidenceCount,
     evidenceBySourceType,
     evidenceByStatus,
@@ -314,7 +323,16 @@ export async function getCompanyDataRoom(
         id: true,
         type: true,
         value: true,
-        factDefinition: { select: { key: true, domainCode: true, valueType: true } },
+        numberValue: true,
+        stringValue: true,
+        booleanValue: true,
+        dateValue: true,
+        datetimeValue: true,
+        moneyAmount: true,
+        moneyCurrency: true,
+        enumValue: true,
+        jsonValue: true,
+        factDefinition: { select: { id: true, key: true, domainCode: true, valueType: true, temporalPolicy: true } },
         scopeType: true,
         factSubjectId: true,
         verificationStatus: true,
@@ -325,13 +343,28 @@ export async function getCompanyDataRoom(
       },
     }),
     prisma.clientFactAnswerState.findMany({
-      where: { clientId },
-      select: { status: true },
-    }),
-    prisma.clientFact.count({
-      where: {
-        clientId,
-        OR: [{ supersededAt: { not: null } }, { validTo: { lt: now } }],
+      where: { clientId, scopeType: 'COMPANY', factSubjectId: null },
+      select: {
+        factDefinitionId: true,
+        status: true,
+        currentFactId: true,
+        factDefinition: { select: { key: true, domainCode: true, valueType: true } },
+        currentFact: {
+          select: {
+            id: true,
+            type: true,
+            value: true,
+            numberValue: true,
+            stringValue: true,
+            booleanValue: true,
+            dateValue: true,
+            datetimeValue: true,
+            moneyAmount: true,
+            moneyCurrency: true,
+            enumValue: true,
+            jsonValue: true,
+          },
+        },
       },
     }),
     prisma.clientOrganizationGroup.findMany({
@@ -346,6 +379,10 @@ export async function getCompanyDataRoom(
       take: 500,
       select: { id: true, name: true, jobTitle: true, employmentStatus: true, organizationGroupId: true },
     }),
+    prisma.clientOrganizationGroup.count({ where: { clientId } }),
+    prisma.clientOrganizationGroup.count({ where: { clientId, status: 'ACTIVE' } }),
+    prisma.organizationPerson.count({ where: { clientId } }),
+    prisma.organizationPerson.count({ where: { clientId, employmentStatus: { in: ['ACTIVE', 'ON_LEAVE'] } } }),
     prisma.businessProcess.findMany({
       where: { clientId, status: { not: 'ARCHIVED' } },
       orderBy: { name: 'asc' },
@@ -397,15 +434,12 @@ export async function getCompanyDataRoom(
     prisma.evidenceRecord.count({ where: { clientId, documentVersionId: { not: null } } }),
     prisma.contractRecord.count({ where: { clientId } }),
     prisma.contractRecord.groupBy({ by: ['status'], where: { clientId }, _count: { _all: true } }),
-    prisma.requirementApplicability.count({ where: { clientId } }),
-    prisma.requirementApplicability.groupBy({ by: ['outcome'], where: { clientId }, _count: { _all: true } }),
-    prisma.clientControl.count({ where: { clientId } }),
-    prisma.clientControl.groupBy({ by: ['implementationStatus'], where: { clientId }, _count: { _all: true } }),
+    getComplianceWorkspace(actor, clientId, prisma),
     prisma.evidenceRecord.count({ where: { clientId } }),
     prisma.evidenceRecord.groupBy({ by: ['sourceType'], where: { clientId }, _count: { _all: true } }),
     prisma.evidenceRecord.groupBy({ by: ['status'], where: { clientId }, _count: { _all: true } }),
     prisma.developmentInitiative.count({ where: { clientId } }),
-    prisma.developmentInitiative.count({ where: { clientId, status: { in: ['BACKLOG', 'PLANNED', 'ACTIVE', 'ON_HOLD'] } } }),
+    prisma.developmentInitiative.count({ where: { clientId, status: 'ACTIVE' } }),
     prisma.companyMilestone.count({ where: { clientId } }),
     prisma.companyMilestone.count({ where: { clientId, status: 'PLANNED' } }),
     prisma.outcomeMeasurement.count({ where: { clientId, synthetic: false } }),
@@ -413,6 +447,65 @@ export async function getCompanyDataRoom(
   ]);
 
   if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
+
+  const answerStateByDefinition = new Map(answerStates.map((state) => [state.factDefinitionId, state]));
+  const projectFact = (
+    fact: typeof facts[number] | NonNullable<typeof answerStates[number]['currentFact']>,
+    factDefinition: { key: string; domainCode: string; valueType: string } | null,
+    answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED',
+    allowLegacyValue: boolean,
+  ) => ({
+    id: 'id' in fact ? fact.id : null,
+    type: fact.type,
+    value: resolveCanonicalTypedFactValue(fact) ?? (allowLegacyValue && 'value' in fact ? fact.value : null),
+    answerStatus,
+    factDefinition,
+    scopeType: 'scopeType' in fact && fact.scopeType ? String(fact.scopeType) : null,
+    factSubjectId: 'factSubjectId' in fact ? fact.factSubjectId : null,
+    verificationStatus: 'verificationStatus' in fact ? String(fact.verificationStatus) : null,
+    observedAt: iso('observedAt' in fact ? fact.observedAt : null),
+    effectiveAt: iso('effectiveAt' in fact ? fact.effectiveAt : null),
+    validFrom: 'validFrom' in fact ? fact.validFrom.toISOString() : null,
+    validTo: iso('validTo' in fact ? fact.validTo : null),
+  });
+  const projectedFacts = [
+    ...facts
+      .filter((fact) => {
+        const definitionId = fact.factDefinition?.id;
+        const state = definitionId ? answerStateByDefinition.get(definitionId) : undefined;
+        if (!state) return true;
+        return String(state.status) === 'ANSWERED' && state.currentFactId === fact.id;
+      })
+      .map((fact) => {
+        const state = fact.factDefinition?.id ? answerStateByDefinition.get(fact.factDefinition.id) : undefined;
+        return projectFact(
+          fact,
+          fact.factDefinition
+            ? { key: fact.factDefinition.key, domainCode: fact.factDefinition.domainCode, valueType: String(fact.factDefinition.valueType) }
+            : null,
+          state ? 'ANSWERED' : 'UNANSWERED',
+          !state,
+        );
+      }),
+    ...answerStates
+      .filter((state) => String(state.status) === 'UNKNOWN')
+      .map((state) => ({
+        id: null,
+        type: 'answer-state',
+        value: null,
+        answerStatus: 'UNKNOWN' as const,
+        factDefinition: state.factDefinition
+          ? { key: state.factDefinition.key, domainCode: state.factDefinition.domainCode, valueType: String(state.factDefinition.valueType) }
+          : null,
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+        verificationStatus: null,
+        observedAt: null,
+        effectiveAt: null,
+        validFrom: null,
+        validTo: null,
+      })),
+  ];
 
   const dto: CompanyDataRoomDto = {
     clientIdentity: {
@@ -433,41 +526,22 @@ export async function getCompanyDataRoom(
           nextReviewAt: iso(profile.nextReviewAt),
         }
       : null,
-    facts: facts.map((fact) => ({
-      id: fact.id,
-      type: fact.type,
-      value: fact.value,
-      factDefinition: fact.factDefinition
-        ? {
-            key: fact.factDefinition.key,
-            domainCode: fact.factDefinition.domainCode,
-            valueType: String(fact.factDefinition.valueType),
-          }
-        : null,
-      scopeType: fact.scopeType ? String(fact.scopeType) : null,
-      factSubjectId: fact.factSubjectId,
-      verificationStatus: String(fact.verificationStatus),
-      observedAt: iso(fact.observedAt),
-      effectiveAt: iso(fact.effectiveAt),
-      validFrom: fact.validFrom.toISOString(),
-      validTo: iso(fact.validTo),
-    })),
+    facts: projectedFacts,
     dataQuality: {
-      coverage: {
+      answerStateSummary: {
         answered: answerStates.filter((state) => String(state.status) === 'ANSWERED').length,
         unknown: answerStates.filter((state) => String(state.status) === 'UNKNOWN').length,
-        unanswered: null,
-        stale: staleFactCount,
-        conflicting: null,
-        unansweredAvailable: false,
-        conflictingAvailable: false,
       },
+      coverageAvailable: false,
+      stale: null,
+      staleAvailable: false,
+      conflictingAvailable: false,
     },
     organization: {
-      groupCount: groups.length,
-      activeGroupCount: groups.filter((group) => String(group.status) === 'ACTIVE').length,
-      personCount: people.length,
-      activePersonCount: people.filter((person) => ['ACTIVE', 'ON_LEAVE'].includes(String(person.employmentStatus))).length,
+      groupCount,
+      activeGroupCount,
+      personCount,
+      activePersonCount,
       groups: groups.map((group) => ({
         id: group.id,
         name: group.name,
@@ -512,7 +586,7 @@ export async function getCompanyDataRoom(
       purpose: system.purpose,
       status: system.status,
       owner: system.ownerPerson,
-      relatedProcessCount: system._count.processSteps,
+      relatedProcessStepCount: system._count.processSteps,
     })),
     documents: {
       documentCount,
@@ -524,10 +598,9 @@ export async function getCompanyDataRoom(
       byStatus: groupedCount(contractsByStatus.map((row) => ({ status: row.status, count: row._count._all })), 'status') as Array<{ status: string; count: number }>,
     },
     complianceSummary: {
-      applicabilityCount,
-      applicabilityByOutcome: groupedCount(applicabilityByOutcome.map((row) => ({ outcome: row.outcome, count: row._count._all })), 'outcome') as Array<{ outcome: string; count: number }>,
-      controlCount,
-      controlsByStatus: groupedCount(controlsByStatus.map((row) => ({ status: row.implementationStatus, count: row._count._all })), 'status') as Array<{ status: string; count: number }>,
+      currentOnly: true,
+      evaluatedAt: complianceWorkspace.evaluatedAt,
+      ...complianceWorkspace.summary,
     },
     evidenceSummary: {
       totalCount: evidenceCount,
