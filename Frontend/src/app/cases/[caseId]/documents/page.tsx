@@ -1,11 +1,20 @@
 "use client";
 
-import { useState, use, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, use, useEffect, useCallback, useMemo, useReducer, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
 import { resolveVersionTextPlan } from "@/lib/documents/versionTextPlan";
 import { filterLedgerItems } from "@/lib/documents/ledgerSearch";
+import {
+  EMPTY_READER_SEARCH,
+  buildReaderHighlightSegments,
+  findReaderMatchOffsets,
+  isReaderSearchSupported,
+  readerSearchReducer,
+  resolveReaderSearchSurface,
+} from "@/lib/documents/readerSearch";
 import { AnnotationCapabilityToolbar } from "@/components/documents/annotations/AnnotationCapabilityToolbar";
 import { NotPublishedBadge, isClientExplanationDraft } from "@/components/documents/annotations/NotPublishedBadge";
 import {
@@ -378,8 +387,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // version-scoped offsets/fingerprints, so this text is display-only and must
   // never feed anchor creation, contentFingerprint, or rendererVersion.
   const [documentTextPreview, setDocumentTextPreview] = useState<string | null>(null);
-  const [readerSearch, setReaderSearch] = useState("");
-  const [readerMatchIndex, setReaderMatchIndex] = useState(0);
+  const [readerSearchState, readerSearchDispatch] = useReducer(readerSearchReducer, EMPTY_READER_SEARCH);
   const [documentTextUnavailableReason, setDocumentTextUnavailableReason] = useState<string | null>(null);
   const [documentTextFailed, setDocumentTextFailed] = useState(false);
   const [isLoadingDocumentText, setIsLoadingDocumentText] = useState(false);
@@ -1255,52 +1263,57 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedVersion: canonicalActiveVersion?.versionNumber ?? null,
   });
 
-  // Reader search operates ONLY on text actually loaded in the reader: no
-  // backend search. Matches are presentation-only and never mutate the
-  // canonical text or annotation offsets.
-  const readerSearchableText = versionText || documentTextPreview || null;
-  const readerSearchTerm = readerSearch.trim();
-  const readerMatchOffsets = (() => {
-    if (!readerSearchableText || !readerSearchTerm) return [] as number[];
-    const haystack = readerSearchableText.toLowerCase();
-    const needle = readerSearchTerm.toLowerCase();
-    const offsets: number[] = [];
-    let from = 0;
-    while (offsets.length < 500) {
-      const at = haystack.indexOf(needle, from);
-      if (at < 0) break;
-      offsets.push(at);
-      from = at + Math.max(1, needle.length);
-    }
-    return offsets;
-  })();
+  // Reader search is enabled only on the surface where matches can actually be
+  // highlighted and navigated (the plain extracted-text surface). The
+  // annotation-anchored surface is deliberately not searchable so canonical
+  // annotation offsets are never at risk. No backend search.
+  const readerSearchSurface = resolveReaderSearchSurface({
+    hasAnnotatedText: Boolean(canRenderTextVersion && selectedVersionBelongsToActiveDocument && versionText),
+    hasPlainText: Boolean(documentTextPreview),
+  });
+  const readerSearchSupported = isReaderSearchSupported(readerSearchSurface);
+  const readerSearchableText = readerSearchSupported ? documentTextPreview : null;
+  const readerSearchTerm = readerSearchState.query.trim();
+  const readerMatchOffsets = findReaderMatchOffsets(readerSearchableText, readerSearchTerm);
   const readerMatchCount = readerMatchOffsets.length;
-  const readerActiveMatch = readerMatchCount > 0 ? Math.min(Math.max(readerMatchIndex, 0), readerMatchCount - 1) : 0;
+  const readerActiveMatch = readerMatchCount > 0
+    ? Math.min(Math.max(readerSearchState.activeIndex, 0), readerMatchCount - 1)
+    : 0;
+  const readerSearchActiveRef = useRef<HTMLElement | null>(null);
 
-  // Presentation-only highlighting for the plain extracted-text surface. It is
-  // never applied to the annotation-anchored surface, so canonical annotation
-  // offsets are never touched.
+  // Presentation-only highlighting for the supported plain surface. Rejoining
+  // the segments yields the original text byte-for-byte; annotation offsets are
+  // never touched because this path carries no text-range anchors.
   const renderReaderHighlights = (text: string): React.ReactNode => {
     if (!readerSearchTerm || readerMatchCount === 0) return text;
-    const nodes: React.ReactNode[] = [];
-    let cursor = 0;
-    readerMatchOffsets.forEach((offset, index) => {
-      if (offset < cursor) return;
-      nodes.push(text.slice(cursor, offset));
-      nodes.push(
+    return buildReaderHighlightSegments(text, readerMatchOffsets, readerSearchTerm.length).map((segment, index) => {
+      if (segment.matchIndex === null) return segment.text;
+      const isActive = segment.matchIndex === readerActiveMatch;
+      return (
         <mark
-          key={`reader-match-${index}`}
+          key={`reader-segment-${index}`}
           data-testid="reader-search-match"
-          className={index === readerActiveMatch ? 'bg-[#F2CE5A] text-[#1f2a24]' : 'bg-[#FBF0C7] text-[#1f2a24]'}
+          data-reader-search-index={segment.matchIndex}
+          ref={isActive ? readerSearchActiveRef : undefined}
+          className={isActive ? 'bg-[#F2CE5A] text-[#1f2a24]' : 'bg-[#FBF0C7] text-[#1f2a24]'}
         >
-          {text.slice(offset, offset + readerSearchTerm.length)}
-        </mark>,
+          {segment.text}
+        </mark>
       );
-      cursor = offset + readerSearchTerm.length;
     });
-    nodes.push(text.slice(cursor));
-    return nodes;
   };
+
+  // Navigate the reading surface to the active match (scoped scroll only).
+  useEffect(() => {
+    const node = readerSearchActiveRef.current;
+    if (!node || typeof node.scrollIntoView !== 'function') return;
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [readerActiveMatch, readerMatchCount]);
+
+  // A previous document's/version's query and active match must not leak.
+  useEffect(() => {
+    readerSearchDispatch({ type: 'RESET' });
+  }, [selectedUploadedDocument?.id, selectedVersion?.id]);
 
   // Canonical shell-safe active file type: derived strictly from the active document / version,
   // preventing a stale selectedVersion from another document from leaking its file type.
@@ -1715,6 +1728,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 <section data-testid="canonical-top-region" className="adm-board-panel overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4 shadow-sm">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="min-w-0 flex-1">
+                      <div data-testid="document-workspace-case-breadcrumb" className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
+                        <Link
+                          data-testid="document-workspace-case-return"
+                          href={`/cases/${encodeURIComponent(canonicalCaseId)}`}
+                          className="font-semibold text-[var(--adm-green-800)] hover:underline"
+                        >
+                          ← Ügy áttekintése
+                        </Link>
+                        {displayMatterName ? <span className="truncate text-[var(--adm-text-muted)]">· {displayMatterName}</span> : null}
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">
                           Kanonikus dokumentum felület
@@ -1969,23 +1992,23 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <input
                           type="search"
                           data-testid="reader-search-input"
-                          value={readerSearch}
-                          onChange={(event) => { setReaderSearch(event.target.value); setReaderMatchIndex(0); }}
+                          value={readerSearchState.query}
+                          onChange={(event) => readerSearchDispatch({ type: 'SET_QUERY', query: event.target.value })}
                           placeholder="Keresés a betöltött szövegben…"
-                          disabled={!readerSearchableText}
+                          disabled={!readerSearchSupported}
                           className="w-56 rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[11px] disabled:opacity-50"
                         />
                       </label>
                       <span data-testid="reader-search-status" className="text-[10px] text-[#7B776D]" aria-live="polite">
-                        {!readerSearchableText
-                          ? 'Nincs kereshető szöveg'
+                        {!readerSearchSupported
+                          ? (readerSearchSurface === 'ANNOTATED' ? 'Keresés ezen a felületen nem támogatott' : 'Nincs kereshető szöveg')
                           : readerSearchTerm
                             ? (readerMatchCount > 0 ? `${readerActiveMatch + 1} / ${readerMatchCount}` : 'Nincs találat')
                             : ''}
                       </span>
-                      <button type="button" data-testid="reader-search-prev" disabled={readerMatchCount === 0} onClick={() => setReaderMatchIndex((index) => (index - 1 + readerMatchCount) % readerMatchCount)} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Előző</button>
-                      <button type="button" data-testid="reader-search-next" disabled={readerMatchCount === 0} onClick={() => setReaderMatchIndex((index) => (index + 1) % readerMatchCount)} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Következő</button>
-                      <button type="button" data-testid="reader-search-clear" disabled={!readerSearch} onClick={() => { setReaderSearch(''); setReaderMatchIndex(0); }} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Törlés</button>
+                      <button type="button" data-testid="reader-search-prev" disabled={readerMatchCount === 0} onClick={() => readerSearchDispatch({ type: 'STEP', direction: -1, count: readerMatchCount })} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Előző</button>
+                      <button type="button" data-testid="reader-search-next" disabled={readerMatchCount === 0} onClick={() => readerSearchDispatch({ type: 'STEP', direction: 1, count: readerMatchCount })} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Következő</button>
+                      <button type="button" data-testid="reader-search-clear" disabled={!readerSearchState.query} onClick={() => readerSearchDispatch({ type: 'RESET' })} className="rounded border border-[rgba(22,32,26,0.14)] bg-white px-2 py-0.5 text-[10px] disabled:opacity-50">Törlés</button>
                     </div>
 
                     {pendingTextAnchor && annotationCapabilities.canCreateTextRange ? (

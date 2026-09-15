@@ -414,16 +414,23 @@ test("Selection quick toolbar maps to canonical annotation types and never creat
   assert.doesNotMatch(fnBody, /createTask|createDocumentTask|onCreateTask/);
 });
 
-test("Reader search operates only on loaded text with truthful states and presentation-only highlight", () => {
+test("Reader search is truthful: plain-surface only, real scroll navigation, no annotation risk", () => {
   const source = documentPage();
   assert.match(source, /data-testid="reader-search-input"/);
   assert.match(source, /data-testid="reader-search-prev"/);
   assert.match(source, /data-testid="reader-search-next"/);
   assert.match(source, /data-testid="reader-search-clear"/);
-  // source of searchable text is the already-loaded reader text only
-  assert.match(source, /const readerSearchableText = versionText \|\| documentTextPreview \|\| null/);
+  // search is enabled only on the surface that can highlight + navigate
+  assert.match(source, /const readerSearchSupported = isReaderSearchSupported\(readerSearchSurface\)/);
+  assert.match(source, /const readerSearchableText = readerSearchSupported \? documentTextPreview : null/);
+  assert.match(source, /'Keresés ezen a felületen nem támogatott'/);
   assert.match(source, /'Nincs kereshető szöveg'/);
   assert.match(source, /'Nincs találat'/);
+  // active match scrolls into view via a stable presentation index
+  assert.match(source, /data-reader-search-index=\{segment\.matchIndex\}/);
+  assert.match(source, /scrollIntoView\(/);
+  // stale query/active match is reset on document/version switch
+  assert.match(source, /readerSearchDispatch\(\{ type: 'RESET' \}\)/);
   // presentation-only highlight applied to the plain extracted-text surface
   assert.match(source, /data-testid="reader-search-match"/);
   assert.match(source, /renderReaderHighlights\(documentTextPreview\)/);
