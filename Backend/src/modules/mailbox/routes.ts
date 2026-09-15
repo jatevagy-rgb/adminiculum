@@ -135,16 +135,46 @@ async function oauthCallback(req: Request, res: Response, expected: MailboxProvi
       authorized.authorizedAddresses && authorized.authorizedAddresses.length > 0
         ? authorized.authorizedAddresses
         : [authorized.authorizedAddress];
-    if (!mailboxIdentityMatches(mailbox.mailboxAddress, authoritativeAddresses)) {
-      await recordMailboxAudit({ eventType: 'MAILBOX_IDENTITY_MISMATCH', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'AUTHORIZATION_REQUIRED', errorCode: 'MAILBOX_PROVIDER_IDENTITY_MISMATCH' });
-      throw new MailboxServiceError(403, 'MAILBOX_PROVIDER_IDENTITY_MISMATCH');
+    const identityMatch = mailboxIdentityMatches(mailbox.mailboxAddress, authoritativeAddresses);
+    // Shared/delegated target: the verified target is not an identity of the
+    // authorizing account. Prove real delegated READ access to the exact target
+    // mailbox through the provider. Never accept same-domain, same-tenant,
+    // display-name, frontend or fuzzy claims.
+    let sendCapability = true;
+    let connectedStatus: 'CONNECTED' | 'CONNECTED_READ_ONLY' = 'CONNECTED';
+    if (!identityMatch) {
+      const probe = typeof adapter.probeTargetMailboxAccess === 'function'
+        ? await adapter.probeTargetMailboxAccess({ secret: authorized.secret, mailboxAddress: mailbox.mailboxAddress })
+        : null;
+      if (!probe) {
+        await recordMailboxAudit({ eventType: 'MAILBOX_IDENTITY_MISMATCH', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'AUTHORIZATION_REQUIRED', errorCode: 'MAILBOX_PROVIDER_IDENTITY_MISMATCH' });
+        throw new MailboxServiceError(403, 'MAILBOX_PROVIDER_IDENTITY_MISMATCH');
+      }
+      if (probe.ok === false) {
+        if (probe.reason === 'DENIED') {
+          await recordMailboxAudit({ eventType: 'MAILBOX_TARGET_ACCESS_DENIED', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'AUTHORIZATION_REQUIRED', errorCode: 'MAILBOX_TARGET_MAILBOX_ACCESS_DENIED' });
+          throw new MailboxServiceError(403, 'MAILBOX_TARGET_MAILBOX_ACCESS_DENIED');
+        }
+        if (probe.reason === 'NOT_FOUND') {
+          await recordMailboxAudit({ eventType: 'MAILBOX_TARGET_NOT_FOUND', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'AUTHORIZATION_REQUIRED', errorCode: 'MAILBOX_TARGET_MAILBOX_NOT_FOUND' });
+          throw new MailboxServiceError(404, 'MAILBOX_TARGET_MAILBOX_NOT_FOUND');
+        }
+        await recordMailboxAudit({ eventType: 'MAILBOX_TARGET_UNAVAILABLE', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'AUTHORIZATION_REQUIRED', errorCode: 'MAILBOX_TARGET_MAILBOX_UNAVAILABLE' });
+        throw new MailboxServiceError(502, 'MAILBOX_TARGET_MAILBOX_UNAVAILABLE');
+      }
+      // Delegated READ is proven. Sending from the shared mailbox additionally needs
+      // Exchange Send As / Send on Behalf, which is not proven here, so the first
+      // slice connects read-only rather than rejecting a readable mailbox.
+      sendCapability = false;
+      connectedStatus = 'CONNECTED_READ_ONLY';
+      await recordMailboxAudit({ eventType: 'MAILBOX_SHARED_TARGET_AUTHORIZED', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'CONNECTED_READ_ONLY' });
     }
     const secretReference = `mailbox-${crypto.randomUUID()}`;
     await getSecretStore().put(secretReference, authorized.secret);
-    await prisma.communicationMailboxConnection.update({ where: { id: mailbox.id }, data: { secretReference, status: 'CONNECTED', readCapability: true, sendCapability: true, providerAccountId: authorized.providerAccountId ?? null, providerTenantId: authorized.providerTenantId ?? null } });
-    await recordMailboxAudit({ eventType: 'MAILBOX_CONNECTED', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: 'CONNECTED' });
+    await prisma.communicationMailboxConnection.update({ where: { id: mailbox.id }, data: { secretReference, status: connectedStatus, readCapability: true, sendCapability, providerAccountId: authorized.providerAccountId ?? null, providerTenantId: authorized.providerTenantId ?? null } });
+    await recordMailboxAudit({ eventType: 'MAILBOX_CONNECTED', actorUserId: state.userId, mailboxConnectionId: mailbox.id, provider: mailbox.provider, status: connectedStatus });
     if (req.method === 'GET') return redirectBrowser(res, 'connected');
-    res.json({ status: 'CONNECTED' });
+    res.json({ status: connectedStatus });
   } catch (e) {
     if (req.method === 'GET') return redirectBrowser(res, 'error', e);
     safeError(res, e);

@@ -20,7 +20,7 @@ describe('mailbox provider normalization', () => {
     const previousClientId = process.env.MICROSOFT_MAILBOX_CLIENT_ID;
     process.env.MICROSOFT_MAILBOX_SCOPES = 'offline_access Mail.Read Mail.Send';
     process.env.MICROSOFT_MAILBOX_CLIENT_ID = 'client';
-    expect(() => new MicrosoftGraphMailboxProvider().buildAuthorizationUrl({ state: 'state', redirectUri: 'https://app/callback' })).toThrow('MAILBOX_MICROSOFT_SCOPES_INSUFFICIENT:User.Read');
+    expect(() => new MicrosoftGraphMailboxProvider().buildAuthorizationUrl({ state: 'state', redirectUri: 'https://app/callback' })).toThrow('MAILBOX_MICROSOFT_SCOPES_INSUFFICIENT:User.Read,Mail.Read.Shared');
     if (previousScope === undefined) delete process.env.MICROSOFT_MAILBOX_SCOPES;
     else process.env.MICROSOFT_MAILBOX_SCOPES = previousScope;
     if (previousClientId === undefined) delete process.env.MICROSOFT_MAILBOX_CLIENT_ID;
