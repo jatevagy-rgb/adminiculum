@@ -66,8 +66,8 @@ describe('7C-A compliance overview foundation (structural)', () => {
 
   it('uses the dedicated overview API only in the full workspace surface', () => {
     assert.equal(existsSync(path.join(root, 'src/components/clients/compliance/ComplianceOverview.tsx')), true);
-    assert.match(read('src/components/clients/ClientCompanyWorkspace.tsx'), /ComplianceOverviewPanel/);
-    assert.match(read('src/components/clients/ClientCompanyWorkspace.tsx'), /complianceOverviewApi/);
+    assert.match(read('src/components/clients/ClientCompanyOperationsLegacy.tsx'), /ComplianceOverviewPanel/);
+    assert.match(read('src/components/clients/ClientCompanyOperationsLegacy.tsx'), /complianceOverviewApi/);
     assert.doesNotMatch(read('src/components/clients/ClientCompanyFoundation.tsx'), /ComplianceOverviewPanel|listFindings/);
     assert.match(read('src/components/clients/ClientCompanyFoundation.tsx'), /Compliance áttekintés megnyitása/);
   });

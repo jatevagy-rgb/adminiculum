@@ -77,12 +77,12 @@ describe('Dedicated client compliance workspace (structural)', () => {
     assert.doesNotMatch(tabsArray, /compliance/i);
   });
 
-  it('preserves the embedded compliance section inside ClientCompanyWorkspace', () => {
+  it('preserves the current-only compliance summary and canonical deep link', () => {
     const workspace = read('src/components/clients/ClientCompanyWorkspace.tsx');
     assert.match(workspace, /id="compliance"/);
-    assert.match(workspace, /Releváns területek/);
-    assert.match(workspace, /ComplianceOverviewPanel/);
-    assert.match(workspace, /ComplianceProposalPanel/);
+    assert.match(workspace, /title="Megfelelőség"/);
+    assert.match(workspace, /complianceSummary\.currentOnly|complianceSummary\.evaluatedCount/);
+    assert.match(workspace, /\/compliance/);
   });
 
   it('surfaces engine applicability state separately from findings via the workspace read model', () => {
