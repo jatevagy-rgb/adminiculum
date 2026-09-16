@@ -674,6 +674,12 @@ async function runCustomerGrowBrowserQA() {
       if (emptyStateCount === 0 || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
         throw new Error("Normal empty state not found on Lehetőségek tab");
       }
+      if (!lehetosegText.includes("jóváhagyást követően")) {
+        throw new Error("Missing supported wording 'jóváhagyást követően' in empty state");
+      }
+      if (lehetosegText.includes("szakértői felülvizsgálat után") || lehetosegText.includes("Szakértői felülvizsgálat alapján")) {
+        throw new Error("EXPERT_REVIEW_CLAIM_WITHOUT_CANONICAL_PROOF: Unproven expert review claim found in empty state");
+      }
       if (gapCodeAttr > 0) {
         throw new Error("STALE_GAP_CODE_PRESENT: data-publication-code attribute with obsolete gap token found");
       }
@@ -821,6 +827,15 @@ async function runCustomerGrowBrowserQA() {
       const listText = await pubPage.evaluate(() => document.body.innerText);
       if (!listText.includes("Közzétett lehetőségek: 2")) {
         throw new Error("Missing or incorrect published opportunity count KPI badge");
+      }
+      if (!listText.includes("jóváhagyást követően tettük közzé")) {
+        throw new Error("Missing supported wording 'jóváhagyást követően tettük közzé' in opportunities list");
+      }
+      if (!listText.includes("Ügyféloldalra közzétéve")) {
+        throw new Error("Missing card footer 'Ügyféloldalra közzétéve' in opportunities list");
+      }
+      if (listText.includes("szakértői felülvizsgálat után") || listText.includes("Szakértői felülvizsgálat alapján")) {
+        throw new Error("EXPERT_REVIEW_CLAIM_WITHOUT_CANONICAL_PROOF: Unproven expert review claim found in list");
       }
 
       // Verify internal publicationId is NOT visibly rendered as text to customer

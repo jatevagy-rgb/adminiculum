@@ -1679,7 +1679,7 @@ export function OrgGrowView() {
                       Fejlesztési lehetőségek
                     </h2>
                     <p className="mt-2 text-xs sm:text-sm text-stone-600 max-w-2xl leading-relaxed">
-                      Az itt megjelenő lehetőségeket szakértői felülvizsgálat után tettük közzé az Ön szervezete számára.
+                      Az itt megjelenő lehetőségeket jóváhagyást követően tettük közzé az Ön szervezete számára.
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1734,7 +1734,7 @@ export function OrgGrowView() {
                           Részletek →
                         </button>
                         <span className="text-[11px] text-stone-400">
-                          Szakértői felülvizsgálat alapján
+                          Ügyféloldalra közzétéve
                         </span>
                       </div>
                     </article>
@@ -1755,7 +1755,7 @@ export function OrgGrowView() {
                   Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-stone-700">
-                  Ha egy fejlesztési irány szakértői felülvizsgálat után közzétételre kerül, itt fog megjelenni.
+                  Ha egy fejlesztési irány jóváhagyást követően ügyféloldali közzétételre kerül, itt fog megjelenni.
                 </p>
 
                 <div className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600">

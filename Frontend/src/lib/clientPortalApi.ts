@@ -619,7 +619,7 @@ export type PortalGrowOpportunity = {
   publicationId: string;
   title: string;
   summary: string;
-  direction?: string | null;
+  direction: string | null;
   publishedAt: string;
 };
 

@@ -264,6 +264,7 @@ test('truthful semantic doctrine: declared observations, observations vs facts, 
 
 test('PUB-3 opportunity experience: list, detail, zero-published normal empty state, and URL state', () => {
   const src = read(VIEW);
+  const apiSrc = read(API);
 
   // GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP_FRONTEND_REFERENCES=0
   // STALE_CAPABILITY_GAP_ASSUMPTION_PRESENT=NO
@@ -272,7 +273,18 @@ test('PUB-3 opportunity experience: list, detail, zero-published normal empty st
   // ZERO_PUBLISHED_IS_NORMAL_EMPTY_STATE=YES
   assert.match(src, /Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség\./);
   assert.match(src, /data-testid="grow-opportunities-empty"/);
-  assert.match(src, /Ha egy fejlesztési irány szakértői felülvizsgálat után közzétételre kerül, itt fog megjelenni\./);
+  assert.match(src, /Ha egy fejlesztési irány jóváhagyást követően ügyféloldali közzétételre kerül, itt fog megjelenni\./);
+
+  // EXPERT_REVIEW_CLAIM_WITHOUT_CANONICAL_PROOF=0
+  // Proves that opportunity list and empty state do not make unproven expert-review claims
+  assert.doesNotMatch(src, /szakértői felülvizsgálat után/);
+  assert.doesNotMatch(src, /Szakértői felülvizsgálat alapján/);
+  assert.match(src, /Az itt megjelenő lehetőségeket jóváhagyást követően tettük közzé az Ön szervezete számára\./);
+  assert.match(src, /Ügyféloldalra közzétéve/);
+
+  // PUB2_DIRECTION_REQUIRED_NULLABLE=YES
+  assert.match(apiSrc, /direction:\s*string\s*\|\s*null;/);
+  assert.doesNotMatch(apiSrc, /direction\?:\s*string\s*\|\s*null;/);
 
   // PUBLISHED_OPPORTUNITY_LIST=YES
   assert.match(src, /data\?\.opportunities && data\.opportunities\.length > 0/);
