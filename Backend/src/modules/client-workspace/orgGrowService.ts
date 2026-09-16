@@ -61,6 +61,14 @@ export interface OrgGrowOutcome {
   processName: string | null;
 }
 
+export interface OrgGrowOpportunity {
+  publicationId: string;
+  title: string;
+  summary: string;
+  direction: string | null;
+  publishedAt: string;
+}
+
 export interface OrgGrowDto {
   customerName: string;
   processes: OrgGrowProcess[];
@@ -69,14 +77,7 @@ export interface OrgGrowDto {
     measured: OrgGrowOutcome[];
     calculatedOrEstimated: OrgGrowOutcome[];
   };
-  opportunities: Array<{
-    id: string;
-    title: string;
-    problem: string;
-    direction: string;
-    kind: string;
-    evidenceStrength: string;
-  }>;
+  opportunities: OrgGrowOpportunity[];
   opportunitiesDeferredNotice: string | null;
   surveys: SafePortalSurveyReadback[];
 }
@@ -96,6 +97,61 @@ const OUTCOME_BASIS_LABELS: Record<string, string> = {
   CALCULATED: 'Számított eredmény / kapacitás',
   ESTIMATED: 'Becsült érték',
 };
+
+async function listPublishedOpportunities(
+  workspaceId: string,
+  clientId: string,
+  prisma: Prisma,
+): Promise<OrgGrowOpportunity[]> {
+  const publications = await prisma.clientImprovementOpportunityPublication.findMany({
+    where: {
+      workspaceId,
+      clientId,
+      status: 'PUBLISHED',
+      revokedAt: null,
+      currentRevisionId: { not: null },
+    },
+    select: {
+      id: true,
+      currentRevisionId: true,
+      publishedAt: true,
+      revisions: {
+        select: {
+          id: true,
+          publicationId: true,
+          clientSafeTitle: true,
+          clientSafeSummary: true,
+          clientSafeDirection: true,
+        },
+      },
+    },
+    orderBy: [{ publishedAt: 'desc' }, { id: 'asc' }],
+  });
+
+  const opportunities: OrgGrowOpportunity[] = [];
+  for (const publication of publications) {
+    if (!publication.currentRevisionId || !publication.publishedAt) continue;
+    const revision = publication.revisions.find(
+      (candidate) => candidate.id === publication.currentRevisionId && candidate.publicationId === publication.id,
+    );
+    if (!revision || !revision.clientSafeTitle.trim() || !revision.clientSafeSummary.trim()) continue;
+
+    const item: OrgGrowOpportunity = {
+      publicationId: publication.id,
+      title: revision.clientSafeTitle,
+      summary: revision.clientSafeSummary,
+      direction: revision.clientSafeDirection || null,
+      publishedAt: publication.publishedAt.toISOString(),
+    };
+    try {
+      assertClientSafe(item);
+      opportunities.push(item);
+    } catch {
+      // Malformed or unsafe snapshots are fail-closed and never projected.
+    }
+  }
+  return opportunities;
+}
 
 export async function getOrganizationalGrow(
   identityId: string,
@@ -218,8 +274,9 @@ export async function getOrganizationalGrow(
   }
 
   // 4. Opportunities:
-  // SECURITY (Correction 2): ImprovementOpportunity has no customer publication flag in schema.
-  // Per Correction 2: DO NOT expose raw rows. Report gap and truthful empty.
+  // Only immutable, workforce-approved customer-safe publication snapshots are
+  // projected. Raw ImprovementOpportunity rows are never read on this path.
+  const opportunities = await listPublishedOpportunities(workspace.id, workspace.clientId, prisma);
   // 5. Surveys (safe customer readback of DECLARED_SURVEY submissions).
   const surveyList = await listPortalSurveyIntakes(identityId, workspace.id, prisma);
 
@@ -231,8 +288,8 @@ export async function getOrganizationalGrow(
       measured,
       calculatedOrEstimated,
     },
-    opportunities: [],
-    opportunitiesDeferredNotice: 'GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP',
+    opportunities,
+    opportunitiesDeferredNotice: null,
     surveys: surveyList.items,
   };
 
