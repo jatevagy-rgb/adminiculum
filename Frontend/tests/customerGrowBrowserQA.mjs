@@ -664,7 +664,8 @@ async function runCustomerGrowBrowserQA() {
       await page.locator("[data-testid='grow-tab-lehetosegek']").click();
       await page.waitForTimeout(400);
       const lehetosegText = await page.evaluate(() => document.body.innerText);
-      if (!lehetosegText.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP") || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
+      const gapCodeAttr = await page.locator("[data-publication-code='GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP']").count();
+      if (gapCodeAttr === 0 || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
         throw new Error("Dignified fail-closed notice not found on Lehetőségek tab");
       }
       await page.screenshot({ path: path.join(SHOTS, `lehetosegek-${viewport.name}.png`), fullPage: true });

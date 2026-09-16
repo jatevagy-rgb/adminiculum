@@ -1294,9 +1294,12 @@ export function OrgGrowView() {
       {activeTab === "lehetosegek" ? (
         <section className={card} data-testid="grow-opportunities-section">
           <div className="max-w-2xl">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700">
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700"
+              data-publication-code="GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP"
+            >
               <span className="h-1.5 w-1.5 rounded-full bg-stone-500" />
-              GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP
+              Közzétételi állapot
             </span>
             <h2 className="mt-3 font-serif text-2xl font-semibold text-stone-950 sm:text-3xl">
               Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
@@ -1305,8 +1308,11 @@ export function OrgGrowView() {
               A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg ezen a felületen.
             </p>
 
-            <div className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600">
-              <p className="font-semibold text-stone-800">Közzétételi állapot: GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP</p>
+            <div
+              className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600"
+              data-publication-code="GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP"
+            >
+              <p className="font-semibold text-stone-800">Közzétételi állapot: Jóváhagyásra vár</p>
               <p className="mt-0.5">
                 {data?.opportunitiesDeferredNotice || "Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség."}
               </p>

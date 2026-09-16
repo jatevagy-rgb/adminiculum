@@ -144,7 +144,12 @@ export const clientCompanyApi = {
 };
 
 export function companyFactTypeLabel(type: string): string {
+  const normalized = (type || '').trim();
+  const upperKey = normalized.toUpperCase().replace(/[-\s]/g, '_');
+  const lowerKey = normalized.toLowerCase().replace(/[-\s]/g, '_');
+
   const labels: Record<string, string> = {
+    // Upper case enum keys (legacy / DB)
     EMPLOYEE_COUNT: 'Létszám',
     REVENUE_BAND: 'Bevételi sáv',
     MAIN_ACTIVITY: 'Fő tevékenység',
@@ -161,9 +166,97 @@ export function companyFactTypeLabel(type: string): string {
     SENSITIVE_DATA_USAGE: 'Érzékeny adatok kezelése',
     AI_USAGE: 'AI-használat',
     CERTIFICATION: 'Tanúsítvány',
+
+    // Canonical Company Profile 2.0 keys
+    employee_count: 'Létszám',
+    annual_net_revenue_eur: 'Éves nettó árbevétel',
+    balance_sheet_total_eur: 'Mérlegfőösszeg',
+    eu_sme_size_class: 'EU KKV méretkategória',
+    public_interest_entity: 'Közérdeklődésre számot tartó gazdálkodó',
+    company_legal_form: 'Jogi forma',
+    registered_country: 'Bejegyzés országa',
+    operating_countries: 'Működési országok',
+    primary_teaor25_code: "Fő TEÁOR'25 kód",
+    additional_teaor25_codes: "További TEÁOR'25 kódok",
+    sites_count: 'Telephelyek száma',
+    group_member: 'Vállalatcsoport tagja',
+    parent_country: 'Anyavállalat országa',
+    listed_company: 'Tőzsdei jelenlét',
+    state_or_public_control: 'Állami/önkormányzati kontroll',
+    customer_types: 'Ügyféltípusok',
+    b2c_sales: 'Fogyasztóknak értékesít',
+    distance_sales: 'Távértékesítés',
+    off_premises_sales: 'Üzlethelyiségen kívüli értékesítés',
+    ecommerce_site: 'Webshop / online rendelés',
+    digital_service_provider: 'Digitális szolgáltatás nyújtása',
+    online_intermediary_service: 'Online platform szolgáltatás',
+    public_sector_customer: 'Közszféra ügyfél',
+    public_procurement_activity: 'Közbeszerzési részvétel',
+    cross_border_eu_sales: 'EU-n belüli értékesítés',
+    export_outside_eu: 'EU-n kívüli export',
+    import_into_eu: 'EU-importőr szerep',
+    personal_data_processing: 'Személyes adatok kezelése',
+    special_category_data: 'Különleges adatok kezelése',
+    criminal_data: 'Bűnügyi személyes adatok',
+    children_data: 'Gyermekek adatainak kezelése',
+    employee_monitoring: 'Munkavállalói megfigyelés',
+    cctv_monitoring: 'Kamerás megfigyelés',
+    systematic_monitoring: 'Rendszeres megfigyelés',
+    large_scale_processing: 'Nagy léptékű adatkezelés',
+    third_country_data_transfer: 'EGT-n kívüli adattovábbítás',
+    processor_for_clients: 'Adatfeldolgozóként jár el',
+    direct_marketing: 'Direkt marketing',
+    critical_it_dependency: 'Kritikus IT-függőség',
+    cloud_or_saas_use: 'Cloud/SaaS használat',
+    managed_it_service_provider: 'IT/MSP szolgáltató',
+    data_center_or_cloud_provider: 'Adatközpont/felhő szolgáltató',
+    nis2_sector: 'NIS2 érintett ágazat',
+    ai_use: 'AI használata',
+    ai_role: 'MI szerepkör',
+    ai_high_risk_context: 'MI nagy kockázatú kontextus',
+    ai_customer_facing: 'Ügyféllel közvetlen interakcióba lépő MI',
+    has_employees: 'Foglalkoztató',
+    temporary_agency_work: 'Munkaerő-kölcsönzés',
+    posted_workers: 'Kiküldött munkavállalók',
+    whistle_special_sector: 'Speciális visszaélés-bejelentési ágazat',
+    financial_service_activity: 'Pénzügyi szolgáltatás',
+    payment_service_activity: 'Pénzforgalmi szolgáltatás',
+    investment_service_activity: 'Befektetési szolgáltatás',
+    insurance_activity: 'Biztosítási tevékenység',
+    crypto_asset_activity: 'Kriptoeszköz-szolgáltatás',
+    aml_obliged_entity: 'Pmt. szerinti kötelezett',
+    sanctions_exposure: 'Szankciós kitettség',
+    product_market_role: 'Termékpiaci szerep',
+    consumer_products: 'Fogyasztói termék forgalmazása',
+    environmental_permit_required: 'Környezetvédelmi engedélyköteles',
+    hazardous_material_handling: 'Veszélyes anyagok kezelése',
+    waste_producer_or_handler: 'Hulladékkezelő vagy termelő',
+    packaging_obligation_epr: 'EPR / csomagolási kötelezettség',
+    energy_intensive_activity: 'Energiaintenzív tevékenység',
+    esg_reporting_obligation: 'ESG beszámolási kötelezettség',
+    cbam_affected: 'CBAM érintett termékek',
+    eu_deforestation_regulation: 'EUDR érintettség',
+    founded_year: 'Alapítás éve',
+    company_name: 'Cégnév',
+    registration_number: 'Cégjegyzékszám',
+    tax_number: 'Adószám',
   };
-  return labels[type] || type;
+
+  if (labels[upperKey]) return labels[upperKey];
+  if (labels[lowerKey]) return labels[lowerKey];
+  if (labels[normalized]) return labels[normalized];
+
+  // Secondary humanized fallback rather than generic wall of "Rögzített adat"
+  if (normalized.includes('_') || normalized.includes('-')) {
+    const parts = normalized.split(/[_-]+/).filter(Boolean);
+    if (parts.length > 0) {
+      return parts.map((p, i) => i === 0 ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : p.toLowerCase()).join(' ');
+    }
+  }
+
+  return normalized || 'Rögzített adat';
 }
+
 
 export function factVerificationLabel(status: string): string {
   const labels: Record<string, string> = {
