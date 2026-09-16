@@ -39,12 +39,12 @@ CREATE TABLE "client_improvement_opportunity_publication_revisions" (
     CONSTRAINT "client_improvement_opportunity_publication_revisions_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "client_improvement_opportunity_publications_clientId_status_idx" ON "client_improvement_opportunity_publications"("clientId", "status");
-CREATE INDEX "client_improvement_opportunity_publications_workspaceId_status_idx" ON "client_improvement_opportunity_publications"("workspaceId", "status");
-CREATE INDEX "client_improvement_opportunity_publications_opportunityId_status_idx" ON "client_improvement_opportunity_publications"("opportunityId", "status");
-CREATE UNIQUE INDEX "client_improvement_opportunity_publications_opportunityId_workspaceId_key" ON "client_improvement_opportunity_publications"("opportunityId", "workspaceId");
-CREATE INDEX "client_improvement_opportunity_publication_revisions_publicationId_idx" ON "client_improvement_opportunity_publication_revisions"("publicationId");
-CREATE UNIQUE INDEX "client_improvement_opportunity_publication_revisions_publicationId_revisionNumber_key" ON "client_improvement_opportunity_publication_revisions"("publicationId", "revisionNumber");
+CREATE INDEX "grow_opp_pub_client_status_idx" ON "client_improvement_opportunity_publications"("clientId", "status");
+CREATE INDEX "grow_opp_pub_workspace_status_idx" ON "client_improvement_opportunity_publications"("workspaceId", "status");
+CREATE INDEX "grow_opp_pub_opp_status_idx" ON "client_improvement_opportunity_publications"("opportunityId", "status");
+CREATE UNIQUE INDEX "grow_opp_pub_opp_ws_key" ON "client_improvement_opportunity_publications"("opportunityId", "workspaceId");
+CREATE INDEX "grow_opp_pub_rev_pub_idx" ON "client_improvement_opportunity_publication_revisions"("publicationId");
+CREATE UNIQUE INDEX "grow_opp_pub_rev_pub_rev_key" ON "client_improvement_opportunity_publication_revisions"("publicationId", "revisionNumber");
 
 ALTER TABLE "client_improvement_opportunity_publication_revisions" ADD CONSTRAINT "client_improvement_opportunity_publication_revisions_publicationId_fkey" FOREIGN KEY ("publicationId") REFERENCES "client_improvement_opportunity_publications"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

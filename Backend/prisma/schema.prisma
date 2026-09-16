@@ -3170,10 +3170,10 @@ model ClientImprovementOpportunityPublication {
 
   revisions ClientImprovementOpportunityPublicationRevision[]
 
-  @@unique([opportunityId, workspaceId])
-  @@index([clientId, status])
-  @@index([workspaceId, status])
-  @@index([opportunityId, status])
+  @@unique([opportunityId, workspaceId], map: "grow_opp_pub_opp_ws_key")
+  @@index([clientId, status], map: "grow_opp_pub_client_status_idx")
+  @@index([workspaceId, status], map: "grow_opp_pub_workspace_status_idx")
+  @@index([opportunityId, status], map: "grow_opp_pub_opp_status_idx")
   @@map("client_improvement_opportunity_publications")
 }
 
@@ -3192,8 +3192,8 @@ model ClientImprovementOpportunityPublicationRevision {
 
   publication ClientImprovementOpportunityPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
 
-  @@unique([publicationId, revisionNumber])
-  @@index([publicationId])
+  @@unique([publicationId, revisionNumber], map: "grow_opp_pub_rev_pub_rev_key")
+  @@index([publicationId], map: "grow_opp_pub_rev_pub_idx")
   @@map("client_improvement_opportunity_publication_revisions")
 }
 
