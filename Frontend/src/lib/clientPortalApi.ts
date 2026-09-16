@@ -615,6 +615,14 @@ export type PortalGrowOutcome = {
   processName: string | null;
 };
 
+export type PortalGrowOpportunity = {
+  publicationId: string;
+  title: string;
+  summary: string;
+  direction: string | null;
+  publishedAt: string;
+};
+
 export type PortalOrgGrow = {
   customerName: string;
   processes: PortalGrowProcess[];
@@ -623,17 +631,7 @@ export type PortalOrgGrow = {
     measured: PortalGrowOutcome[];
     calculatedOrEstimated: PortalGrowOutcome[];
   };
-  opportunities: Array<{
-    publicationId?: string;
-    title: string;
-    summary?: string;
-    direction?: string | null;
-    publishedAt?: string;
-    id?: string;
-    problem?: string;
-    kind?: string;
-    evidenceStrength?: string;
-  }>;
+  opportunities: PortalGrowOpportunity[];
   opportunitiesDeferredNotice: string | null;
   surveys?: PortalGrowSurveyItem[];
 };

@@ -58,6 +58,9 @@ export function OrgGrowView() {
   // Active navigation tab
   const [activeTab, setActiveTab] = useState<GrowTab>("attekintes");
 
+  // Selected opportunity for detail view (?tab=lehetosegek&opportunity=<publicationId>)
+  const [selectedPublicationId, setSelectedPublicationId] = useState<string | null>(null);
+
   // Survey questionnaire state
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedProcessId, setSelectedProcessId] = useState<string>("");
@@ -143,23 +146,34 @@ export function OrgGrowView() {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab") as GrowTab | null;
+    const oppParam = params.get("opportunity");
     if (
       tabParam &&
       ["attekintes", "felmeresek", "folyamatok", "lehetosegek", "kezdemenyezesek", "eredmenyek"].includes(tabParam)
     ) {
       setActiveTab(tabParam);
+      if (tabParam === "lehetosegek" && oppParam) {
+        setSelectedPublicationId(oppParam);
+      }
     }
 
     const handlePopState = () => {
       const p = new URLSearchParams(window.location.search);
       const t = p.get("tab") as GrowTab | null;
+      const opp = p.get("opportunity");
       if (
         t &&
         ["attekintes", "felmeresek", "folyamatok", "lehetosegek", "kezdemenyezesek", "eredmenyek"].includes(t)
       ) {
         setActiveTab(t);
+        if (t === "lehetosegek" && opp) {
+          setSelectedPublicationId(opp);
+        } else {
+          setSelectedPublicationId(null);
+        }
       } else {
         setActiveTab("attekintes");
+        setSelectedPublicationId(null);
       }
     };
     window.addEventListener("popstate", handlePopState);
@@ -168,9 +182,35 @@ export function OrgGrowView() {
 
   const handleTabChange = useCallback((tab: GrowTab) => {
     setActiveTab(tab);
+    if (tab !== "lehetosegek") {
+      setSelectedPublicationId(null);
+    }
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("tab", tab);
+      if (tab !== "lehetosegek") {
+        url.searchParams.delete("opportunity");
+      }
+      window.history.pushState({}, "", url.toString());
+    }
+  }, []);
+
+  const handleSelectOpportunity = useCallback((pubId: string) => {
+    setSelectedPublicationId(pubId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "lehetosegek");
+      url.searchParams.set("opportunity", pubId);
+      window.history.pushState({}, "", url.toString());
+    }
+  }, []);
+
+  const handleBackToOpportunities = useCallback(() => {
+    setSelectedPublicationId(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "lehetosegek");
+      url.searchParams.delete("opportunity");
       window.history.pushState({}, "", url.toString());
     }
   }, []);
@@ -1538,89 +1578,214 @@ export function OrgGrowView() {
         </section>
       ) : null}
 
-      {/* TAB 4: LEHETŐSÉGEK — FAIL-CLOSED GUARDED BOUNDARY */}
+      {/* TAB 4: LEHETŐSÉGEK — NORTH STAR OPPORTUNITY EXPERIENCE */}
       {activeTab === "lehetosegek" ? (
-        <section className={card} data-testid="grow-opportunities-section">
-          {data?.opportunities && data.opportunities.length > 0 ? (
-            <div className="space-y-4" data-testid="grow-opportunities-list">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">
-                  Fejlesztési lehetőségek
-                </p>
-                <h2 className="mt-1 font-serif text-2xl font-semibold text-[#1b382b]">
-                  Közzétett fejlesztési lehetőségek
-                </h2>
-                <p className="mt-1 text-xs text-stone-600">
-                  Az alábbi lehetőségek szakértői értékelést követően kerültek ügyféloldali közzétételre.
-                </p>
-              </div>
-              <div className="space-y-3">
-                {data.opportunities.map((opp) => (
-                  <article
-                    key={opp.publicationId || opp.id || opp.title}
-                    className="rounded-2xl border border-[#e8ded1] bg-white p-5 shadow-xs"
-                    data-testid="grow-opportunity-item"
+        (() => {
+          const activeOpportunity =
+            selectedPublicationId && data?.opportunities
+              ? data.opportunities.find((opp) => opp.publicationId === selectedPublicationId) ?? null
+              : null;
+
+          if (activeOpportunity) {
+            return (
+              <section className={card} data-testid="grow-opportunity-detail">
+                <div className="flex items-center justify-between gap-4 border-b border-stone-200/80 pb-4">
+                  <button
+                    type="button"
+                    onClick={handleBackToOpportunities}
+                    data-testid="grow-opportunity-detail-back"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1b382b] hover:text-[#2d5a43] transition"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="font-serif text-base font-bold text-[#1b382b]">{opp.title}</h3>
-                      {opp.publishedAt ? (
-                        <span className="text-[11px] text-stone-500">
-                          {new Date(opp.publishedAt).toLocaleDateString("hu-HU")}
-                        </span>
-                      ) : null}
-                    </div>
-                    {opp.summary ? (
-                      <p className="mt-2 text-xs leading-relaxed text-stone-700">{opp.summary}</p>
-                    ) : null}
-                    {opp.direction ? (
-                      <p className="mt-2 text-xs italic text-[#2d5a43]">
-                        Irány: {opp.direction}
+                    ← Vissza a lehetőségekhez
+                  </button>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[11px] font-semibold text-stone-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#2d5a43]" />
+                    Közzétett lehetőség
+                  </span>
+                </div>
+
+                <div className="mt-6 max-w-3xl">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">
+                    Fejlesztési lehetőség
+                  </p>
+                  <h2
+                    className="mt-2 font-serif text-2xl sm:text-3xl font-bold text-[#1b382b] leading-tight"
+                    data-testid="grow-opportunity-detail-title"
+                  >
+                    {activeOpportunity.title}
+                  </h2>
+                  {activeOpportunity.publishedAt ? (
+                    <p className="mt-2 text-xs text-stone-500">
+                      Közzétéve:{" "}
+                      {new Date(activeOpportunity.publishedAt).toLocaleDateString("hu-HU", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  ) : null}
+
+                  <div className="mt-8 space-y-6">
+                    <div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">
+                        Összefoglaló
+                      </h3>
+                      <p className="mt-2 text-sm sm:text-base leading-relaxed text-stone-700 whitespace-pre-line">
+                        {activeOpportunity.summary}
                       </p>
+                    </div>
+
+                    {activeOpportunity.direction ? (
+                      <div className="rounded-2xl border border-[#d8e5dc] bg-[#f4f7f4] p-5">
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-[#244b38]">
+                          Javasolt irány
+                        </h3>
+                        <p className="mt-1.5 text-sm sm:text-base text-[#1b382b] font-medium leading-relaxed">
+                          {activeOpportunity.direction}
+                        </p>
+                      </div>
                     ) : null}
-                  </article>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="max-w-2xl" data-testid="grow-opportunities-empty">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-stone-500" />
-                Közzétételi állapot
-              </span>
-              <h2 className="mt-3 font-serif text-2xl font-semibold text-[#1b382b] sm:text-3xl">
-                Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
-              </h2>
-              <p className="mt-3 text-sm leading-6 text-stone-700">
-                A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg ezen a felületen.
-              </p>
+                  </div>
 
-              <div className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600">
-                <p className="font-semibold text-stone-800">
+                  <div className="mt-10 flex flex-wrap items-center gap-3 pt-6 border-t border-stone-200/80">
+                    <button
+                      type="button"
+                      onClick={handleBackToOpportunities}
+                      className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50 transition"
+                    >
+                      ← Vissza a lehetőségekhez
+                    </button>
+                    <Link
+                      href="/portal/megkeresesek"
+                      className="rounded-full bg-[#1b382b] px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[#2d4a3e]"
+                    >
+                      Kérdése van a fejlesztési lehetőségről? Írjon az irodának →
+                    </Link>
+                  </div>
+                </div>
+              </section>
+            );
+          }
+
+          if (data?.opportunities && data.opportunities.length > 0) {
+            return (
+              <section className={card} data-testid="grow-opportunities-section">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200/80 pb-5">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">
+                      Fejlesztési lehetőségek
+                    </p>
+                    <h2 className="mt-1 font-serif text-2xl font-bold text-[#1b382b] sm:text-3xl">
+                      Fejlesztési lehetőségek
+                    </h2>
+                    <p className="mt-2 text-xs sm:text-sm text-stone-600 max-w-2xl leading-relaxed">
+                      Az itt megjelenő lehetőségeket jóváhagyást követően tettük közzé az Ön szervezete számára.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d8e5dc] bg-[#f4f7f4] px-3 py-1 text-xs font-semibold text-[#1b382b]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#2d5a43]" />
+                      Közzétett lehetőségek: {data.opportunities.length}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-4" data-testid="grow-opportunities-list">
+                  {data.opportunities.map((opp) => (
+                    <article
+                      key={opp.publicationId || opp.title}
+                      className="group rounded-2xl border border-[#e8ded1] bg-white p-5 sm:p-6 shadow-xs transition hover:border-[#2d5a43]/40 hover:shadow-sm"
+                      data-testid="grow-opportunity-item"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <h3
+                          onClick={() => handleSelectOpportunity(opp.publicationId)}
+                          className="font-serif text-lg font-bold text-[#1b382b] group-hover:text-[#244b38] transition cursor-pointer"
+                        >
+                          {opp.title}
+                        </h3>
+                        {opp.publishedAt ? (
+                          <span className="text-xs text-stone-500 whitespace-nowrap">
+                            {new Date(opp.publishedAt).toLocaleDateString("hu-HU", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        ) : null}
+                      </div>
+                      {opp.summary ? (
+                        <p className="mt-2 text-xs sm:text-sm leading-relaxed text-stone-700">
+                          {opp.summary}
+                        </p>
+                      ) : null}
+                      {opp.direction ? (
+                        <div className="mt-3 inline-block rounded-xl border border-[#d8e5dc] bg-[#f4f7f4] px-3 py-1.5 text-xs text-[#244b38]">
+                          <span className="font-semibold text-[#1b382b]">Irány:</span> {opp.direction}
+                        </div>
+                      ) : null}
+                      <div className="mt-4 flex items-center justify-between gap-4 pt-3 border-t border-stone-100">
+                        <button
+                          type="button"
+                          onClick={() => handleSelectOpportunity(opp.publicationId)}
+                          data-testid="grow-opportunity-open-detail"
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1b382b] hover:text-[#2d5a43] transition"
+                        >
+                          Részletek →
+                        </button>
+                        <span className="text-[11px] text-stone-400">
+                          Ügyféloldalra közzétéve
+                        </span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            );
+          }
+
+          return (
+            <section className={card} data-testid="grow-opportunities-section">
+              <div className="max-w-2xl" data-testid="grow-opportunities-empty">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-stone-500" />
+                  Közzétételi állapot
+                </span>
+                <h2 className="mt-3 font-serif text-2xl font-semibold text-[#1b382b] sm:text-3xl">
                   Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-stone-700">
+                  Ha egy fejlesztési irány jóváhagyást követően ügyféloldali közzétételre kerül, itt fog megjelenni.
                 </p>
-                <p className="mt-0.5">
-                  {data?.opportunitiesDeferredNotice || "A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg."}
-                </p>
-              </div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                <Link
-                  href="/portal/megkeresesek"
-                  className="rounded-full bg-[#1b382b] px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[#2d4a3e]"
-                >
-                  Kérdése van a vizsgálatról? Írjon az irodának →
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => handleTabChange("felmeresek")}
-                  className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
-                >
-                  Felmérések megnyitása
-                </button>
+                <div className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600">
+                  <p className="font-semibold text-stone-800">
+                    Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
+                  </p>
+                  <p className="mt-0.5">
+                    {data?.opportunitiesDeferredNotice || "A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg."}
+                  </p>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link
+                    href="/portal/megkeresesek"
+                    className="rounded-full bg-[#1b382b] px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[#2d4a3e]"
+                  >
+                    Kérdése van a vizsgálatról? Írjon az irodának →
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("felmeresek")}
+                    className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+                  >
+                    Felmérések megnyitása
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </section>
+            </section>
+          );
+        })()
       ) : null}
 
       {/* TAB 5: KEZDEMÉNYEZÉSEK */}
