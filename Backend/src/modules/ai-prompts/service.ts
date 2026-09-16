@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import type { Request } from 'express';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { detectCandidates, runAnonymization, type SanitizedExternalPackage } from '../anonymization';
+import { rehydrateDocument, type RehydrationItem, type RehydrationWarning } from '../anonymize/rehydration';
 import { userCanManageCase, userCanReadCase } from '../cases/authorization';
 
 export const AI_PROMPT_DRAFT_STATUS = [
@@ -510,18 +511,68 @@ export async function preparePromptDraft(
   return draft as unknown as PromptDraftRecord;
 }
 
-function rehydrateResponse(text: string, mapping: Array<{ original: string; replacement: string }>): { text: string; warnings: string[] } {
-  const warnings: string[] = [];
-  let out = text;
-  for (const entry of mapping) {
-    out = out.split(entry.replacement).join(entry.original);
+const UNKNOWN_PLACEHOLDER_WARNING_PREFIX = 'unknown placeholder retained';
+
+/**
+ * Adapter over the repaired canonical rehydrator
+ * (`Backend/src/modules/anonymize/rehydration.ts`).
+ *
+ * The Prompt System stores its mapping as the anonymizer's
+ * `{ category, original, replacement }` triplets, while the canonical
+ * rehydrator consumes `{ replacement, original }` items. This adapter is the
+ * ONLY conversion between the two shapes: matching, replacement, `$`-safety,
+ * accented/space-bearing token handling, unresolved detection and the
+ * COMPLETE / PARTIAL / FAILED result stay canonical and are not re-implemented
+ * here.
+ *
+ * Persisted shape is intentionally unchanged (no schema change in this repair):
+ * - `text` is always a string (canonical content, or '' when the canonical
+ *   result carries no content);
+ * - `warnings` stays a list of human-readable strings rendered by the review UI.
+ * `rehydrationStatus` and the token counts are import-time semantics; they are
+ * not persisted and are consumed by callers/tests directly.
+ */
+export function rehydratePromptResponse(
+  aiResponseText: string,
+  rehydrationMap: Array<{ category?: string | null; original: string; replacement: string }> | null | undefined,
+): {
+  text: string;
+  warnings: string[];
+  rehydrationStatus: 'COMPLETE' | 'PARTIAL' | 'FAILED';
+  totalTokens: number;
+  resolvedTokens: number;
+  unresolvedTokens: number;
+} {
+  const items: RehydrationItem[] = [];
+  for (const entry of rehydrationMap ?? []) {
+    const replacement = typeof entry?.replacement === 'string' ? entry.replacement : '';
+    const original = typeof entry?.original === 'string' ? entry.original : '';
+    // A persisted mapping row without a usable token cannot match anything and
+    // must not inflate the canonical token counts.
+    if (!replacement.trim()) continue;
+    items.push({ replacement, original });
   }
-  const placeholderPattern = /\[[^\]\r\n]+\]/g;
-  for (const match of out.matchAll(placeholderPattern)) {
-    const token = match[0];
-    if (!mapping.some((entry) => entry.replacement === token)) warnings.push(`unknown placeholder retained: ${token}`);
+  const canonical = rehydrateDocument(aiResponseText, items);
+  return {
+    text: canonical.rehydratedContent ?? '',
+    warnings: canonical.warnings.map(promptRehydrationWarning),
+    rehydrationStatus: canonical.rehydrationStatus,
+    totalTokens: canonical.totalTokens,
+    resolvedTokens: canonical.resolvedTokens,
+    unresolvedTokens: canonical.unresolvedTokens,
+  };
+}
+
+/**
+ * Keeps the existing review-UI wording for the class of warning the Prompt
+ * System already produced, and passes every other canonical reason through
+ * verbatim rather than inventing a new meaning.
+ */
+function promptRehydrationWarning(warning: RehydrationWarning): string {
+  if (warning.reason === 'Token not found in mapping') {
+    return `${UNKNOWN_PLACEHOLDER_WARNING_PREFIX}: ${warning.token}`;
   }
-  return { text: out, warnings };
+  return warning.token ? `${warning.reason}: ${warning.token}` : warning.reason;
 }
 
 async function loadDraftOrFail(id: string, prismaClient: PrismaLike): Promise<PromptDraftRecord | null> {
@@ -546,7 +597,7 @@ export async function importPromptResponse(
   if (!draft) throw Object.assign(new Error('PROMPT_DRAFT_NOT_FOUND'), { status: 404, code: 'PROMPT_DRAFT_NOT_FOUND' });
   await requireCaseAccess({ user: actor } as Request, draft.caseId, 'manage');
   requireDraftStatus(draft, ['PREPARED', 'RETURNED_FOR_CORRECTION']);
-  const rehydrated = rehydrateResponse(importedResponse, draft.rehydrationMap);
+  const rehydrated = rehydratePromptResponse(importedResponse, draft.rehydrationMap);
   const saved = await prismaClient.aiPromptDraft.update({
     where: { id: draftId },
     data: {
