@@ -48,6 +48,13 @@ const caseIdentifier = (row: ComplianceClauseAnchorRow): string | null => row.ca
 const authorityLocators = (row: ComplianceClauseAnchorRow): string | null =>
   [row.authorityLocator, row.locator].filter(Boolean).join(" · ") || null;
 
+/**
+ * A hyperlink-transported TV reference has no CELEX by construction, so its
+ * unresolved binding is stated as such instead of being presented as a malformed
+ * CELEX identifier. CELEX rows keep the unchanged wording below.
+ */
+const TV_REFERENCE_BINDING_REASON = "TV-hivatkozás; C3A CELEX-kötés nem alkalmazható";
+
 /** Neutral Hungarian labels for the internal binding outcome reasons. */
 const bindingReasonLabels: Record<string, string> = {
   NO_CELEX: "nincs CELEX azonosító",
@@ -87,7 +94,11 @@ function bindingLine(row: ComplianceClauseAnchorRow) {
   return (
     <p className="mt-1 text-xs text-[var(--adm-text-muted)]" data-testid="clause-anchor-binding-unresolved">
       Kanónikus forrás: nincs egyedi találat
-      {row.bindingReason ? ` — ${bindingReasonLabels[row.bindingReason] ?? "nem oldható fel"}` : ""}
+      {row.canonicalReference
+        ? ` — ${TV_REFERENCE_BINDING_REASON}`
+        : row.bindingReason
+          ? ` — ${bindingReasonLabels[row.bindingReason] ?? "nem oldható fel"}`
+          : ""}
     </p>
   );
 }
@@ -159,6 +170,9 @@ function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
       ) : null}
 
       <div className="mt-2 border-t border-[var(--adm-border)] pt-2">
+        {row.canonicalReference
+          ? metaField({ label: "Figyelési azonosító", value: row.canonicalReference, mono: true })
+          : null}
         {row.anchorKey ? (
           metaField({ label: "Stabil hivatkozás-azonosító", value: row.anchorKey, mono: true })
         ) : (

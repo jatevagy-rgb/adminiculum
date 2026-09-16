@@ -8,6 +8,10 @@
  */
 import { createHash } from 'node:crypto';
 import {
+  CANONICAL_REFERENCE_ANCHOR_KEY_PREFIX,
+  parseCanonicalLegalReference,
+} from './canonicalLegalReference';
+import {
   KNOWN_RELATION_TYPES,
   MAX_RELATION_TYPE_LENGTH,
   UNSPECIFIED_RELATION_TYPE,
@@ -36,6 +40,13 @@ export interface NormalizedClauseAnchorRow {
   authorityLocator: string | null;
   sourceUrl: string | null;
   rationale: string | null;
+  /**
+   * C4A canonical reference (`TV/<year>/<act>[/<opaque-tail>]`) when the row was
+   * anchored through a hyperlink target instead of an ADM anchor control. It is
+   * carried in `anchorKey` (`LEGAL|REF=<canonicalReference>`), so no storage
+   * column is needed for it.
+   */
+  canonicalReference: string | null;
   warnings: string[];
 }
 
@@ -80,6 +91,11 @@ export function normalizeRelationType(raw: string | null | undefined): {
 export interface AnchorKeyInput {
   anchorType: ComplianceAnchorTypeValue;
   anchorStableId: string | null;
+  /**
+   * C4A hyperlink transport. Optional so every existing ADM call site is
+   * unchanged: when absent/null the key keeps the legacy precedence exactly.
+   */
+  canonicalReference?: string | null;
   eli: string | null;
   celex: string | null;
   locator: string | null;
@@ -95,18 +111,26 @@ export interface AnchorKeyInput {
  *
  * Precedence (approved rule):
  *   1. the explicit stable anchor id the document transports in the control tag
- *   2. LEGAL     ELI + locator, otherwise CELEX + locator
+ *   2. LEGAL     canonical hyperlink reference (C4A), otherwise ELI + locator,
+ *                otherwise CELEX + locator
  *      CASE      ECLI, otherwise caseId, plus caseLocator
  *      AUTHORITY decisionId, plus authorityLocator
  *   3. null — the row is still preserved, with an unresolved-anchor warning.
  *
  * `sourceUrl` is supporting metadata and deliberately never forms the key.
+ * A canonicalReference is only used after it has been revalidated, so a
+ * malformed value can never become an anchor key.
  */
 export function buildAnchorKey(input: AnchorKeyInput): { key: string | null; warnings: string[] } {
   const warnings: string[] = [];
   const stableId = collapseWhitespace(input.anchorStableId);
   if (stableId) {
     return { key: `${input.anchorType}|SID=${stableId}`, warnings };
+  }
+
+  const canonical = parseCanonicalLegalReference(input.canonicalReference);
+  if (input.anchorType === 'LEGAL' && canonical) {
+    return { key: `${CANONICAL_REFERENCE_ANCHOR_KEY_PREFIX}${canonical.canonicalReference}`, warnings };
   }
 
   const eli = collapseWhitespace(input.eli);
@@ -182,9 +206,14 @@ export function computeRowDigest(row: NormalizedClauseAnchorRow): string {
 export function normalizeExtractedRow(row: ExtractedClauseAnchorRow): NormalizedClauseAnchorRow {
   const relation = normalizeRelationType(row.relationTypeRaw);
   const warnings = [...row.warnings, ...relation.warnings];
+  // Revalidated, so only an exact canonical reference reaches the key. It stays
+  // OUT of the digest payload: the digest fields are unchanged, so every
+  // already-ingested version keeps byte-identical digests.
+  const canonical = parseCanonicalLegalReference(row.canonicalReference);
   const anchor = buildAnchorKey({
     anchorType: row.anchorType,
     anchorStableId: row.anchorStableId,
+    canonicalReference: canonical ? canonical.canonicalReference : null,
     eli: row.eli,
     celex: row.celex,
     locator: row.locator,
@@ -215,6 +244,7 @@ export function normalizeExtractedRow(row: ExtractedClauseAnchorRow): Normalized
     authorityLocator: collapseWhitespace(row.authorityLocator),
     sourceUrl: collapseWhitespace(row.sourceUrl),
     rationale: collapseWhitespace(row.rationale),
+    canonicalReference: canonical ? canonical.canonicalReference : null,
     warnings: [...new Set(warnings)].sort(),
   };
 }

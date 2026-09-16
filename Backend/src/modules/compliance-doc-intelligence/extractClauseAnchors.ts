@@ -7,6 +7,7 @@
  * invented from its display text.
  */
 import { readDocxContentControlRows, type ContentControlReadResult } from './contentControls';
+import { parseCanonicalLegalReference } from './canonicalLegalReference';
 import {
   ADM_TAG_PREFIX,
   ANCHOR_CONTROL_KIND,
@@ -60,6 +61,14 @@ function relationTypeText(control: ParsedControl): { value: string; label: strin
   return { value: controlText(control).value, label: null };
 }
 
+/** The row's ADM-RELTYPE relation, if the row transports one. */
+function relationOf(admControls: ParsedControl[]): { value: string | null; label: string | null } {
+  const control = admControls.find((item) => item.kind === RELATION_TYPE_CONTROL_KIND);
+  if (!control) return { value: null, label: null };
+  const relation = relationTypeText(control);
+  return { value: relation.value || null, label: relation.label };
+}
+
 export function extractClauseAnchorRows(read: ContentControlReadResult): DocxParseOutcome {
   const warnings: string[] = [...read.warnings];
   const addWarning = (code: string): void => {
@@ -71,6 +80,7 @@ export function extractClauseAnchorRows(read: ContentControlReadResult): DocxPar
     rowsWithoutAnchor: 0,
     rowsWithoutClause: 0,
     controlsOutsideTableRow: read.looseControls.filter(isAdmControl).length,
+    hyperlinkLegalAnchors: 0,
   };
   if (stats.controlsOutsideTableRow > 0) addWarning(WARNING.CONTROL_OUTSIDE_TABLE_ROW);
 
@@ -126,15 +136,76 @@ export function extractClauseAnchorRows(read: ContentControlReadResult): DocxPar
       Object.prototype.hasOwnProperty.call(ANCHOR_CONTROL_KIND, control.kind),
     );
     if (anchorControls.length === 0) {
-      stats.rowsWithoutAnchor += 1;
-      addWarning(`${WARNING.ROW_WITHOUT_ANCHOR_CONTROL}:row=${row.index}`);
+      // C4A: an ALTERNATIVE legal-anchor transport. Only a row with NO ADM anchor
+      // control may derive LEGAL anchors from canonical hyperlink targets, and
+      // only from the structural target — never from the visible text. Ordinary
+      // http(s) links stay ordinary content and produce nothing here.
+      const derived: Array<{ canonicalReference: string; locator: string | null; display: string }> = [];
+      const seenReferences = new Set<string>();
+      for (const hyperlink of row.cells.flatMap((cell) => cell.hyperlinks)) {
+        if (hyperlink.relationshipId && !hyperlink.target) {
+          addWarning(`${WARNING.HYPERLINK_RELATIONSHIP_UNRESOLVED}:row=${row.index}`);
+          continue;
+        }
+        const parsed = parseCanonicalLegalReference(hyperlink.target);
+        if (!parsed) continue;
+        if (!hyperlink.text) {
+          addWarning(`${WARNING.HYPERLINK_LEGAL_ANCHOR_NO_DISPLAY}:row=${row.index}`);
+          continue;
+        }
+        // Deterministic: the first occurrence of a reference wins, and one
+        // canonical hyperlink produces exactly one relation.
+        if (seenReferences.has(parsed.canonicalReference)) continue;
+        seenReferences.add(parsed.canonicalReference);
+        derived.push({ canonicalReference: parsed.canonicalReference, locator: parsed.locator, display: hyperlink.text });
+      }
+      if (derived.length === 0) {
+        stats.rowsWithoutAnchor += 1;
+        addWarning(`${WARNING.ROW_WITHOUT_ANCHOR_CONTROL}:row=${row.index}`);
+        continue;
+      }
+
+      addWarning(WARNING.HYPERLINK_LEGAL_ANCHOR_USED);
+      const derivedRelation = relationOf(admControls);
+      if (derivedRelation.label) {
+        addWarning(`${WARNING.RELATION_TYPE_SOURCE_LABEL}:${derivedRelation.label}`);
+      }
+      for (const item of derived) {
+        if (rows.length >= MAX_ROWS_PER_DOCUMENT) {
+          addWarning(WARNING.ROW_LIMIT_REACHED);
+          return { rows, warnings, stats };
+        }
+        const rowWarnings: string[] = [];
+        if (clause.fromAlias) rowWarnings.push(WARNING.CLAUSE_VALUE_FROM_ALIAS);
+        rows.push({
+          clauseRef: clause.value,
+          clauseTitle: clauseControl.alias && clauseControl.alias !== clause.value ? clauseControl.alias : null,
+          clauseStableId: clauseControl.stableId,
+          relationTypeRaw: derivedRelation.value,
+          anchorType: 'LEGAL',
+          anchorDisplay: item.display,
+          anchorStableId: null,
+          eli: null,
+          celex: null,
+          locator: item.locator,
+          ecli: null,
+          caseId: null,
+          caseLocator: null,
+          decisionId: null,
+          authorityLocator: null,
+          sourceUrl: null,
+          rationale,
+          canonicalReference: item.canonicalReference,
+          warnings: rowWarnings,
+        });
+        stats.hyperlinkLegalAnchors += 1;
+      }
       continue;
     }
 
-    const relationControl = admControls.find((control) => control.kind === RELATION_TYPE_CONTROL_KIND);
-    const relation = relationControl ? relationTypeText(relationControl) : null;
-    const relationTypeRaw = relation ? relation.value || null : null;
-    if (relation && relation.label) {
+    const relation = relationOf(admControls);
+    const relationTypeRaw = relation.value;
+    if (relation.label) {
       addWarning(`${WARNING.RELATION_TYPE_SOURCE_LABEL}:${relation.label}`);
     }
 

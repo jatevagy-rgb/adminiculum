@@ -26,11 +26,16 @@
 import JSZip from 'jszip';
 import {
   DOCX_MAIN_PART,
+  DOCX_RELS_PART,
   MAX_DOCUMENT_XML_BYTES,
+  MAX_HYPERLINKS_PER_DOCUMENT,
+  MAX_RELATIONSHIPS_PER_DOCUMENT,
+  MAX_RELS_XML_BYTES,
   MAX_ROWS_PER_DOCUMENT,
   WARNING,
   WORDPROCESSINGML_NAMESPACE,
   type ParsedControl,
+  type ParsedHyperlink,
   type ParsedRow,
 } from './types';
 
@@ -79,6 +84,12 @@ interface MutableCell {
   index: number;
   rawPlain: string;
   controls: ParsedControl[];
+  hyperlinks: ParsedHyperlink[];
+}
+
+interface MutableHyperlink {
+  relationshipId: string | null;
+  text: string;
 }
 
 interface MutableRow {
@@ -94,7 +105,24 @@ interface MutableControl {
   inContent: boolean;
 }
 
-type FrameRole = 'row' | 'cell' | 'control' | 'controlProps' | 'controlContent' | 'text' | 'other';
+type FrameRole =
+  | 'row'
+  | 'cell'
+  | 'control'
+  | 'controlProps'
+  | 'controlContent'
+  | 'hyperlink'
+  | 'text'
+  | 'other';
+
+export interface ContentControlReadOptions {
+  /**
+   * Relationship id -> target map of `word/_rels/document.xml.rels`. A
+   * hyperlink without a resolvable target keeps a null target and is never
+   * promoted to a machine identity.
+   */
+  relationships?: Map<string, string>;
+}
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
@@ -144,7 +172,10 @@ export async function readDocxMainDocumentXml(buffer: Buffer): Promise<string> {
  * so it does not depend on the `w:` prefix specifically. Element text is only
  * collected from `w:t` descendants of a control's `w:sdtContent`.
  */
-export function readContentControlRows(xml: string): ContentControlReadResult {
+export function readContentControlRows(
+  xml: string,
+  options: ContentControlReadOptions = {},
+): ContentControlReadResult {
   // Strict XML parsing with preserved case: OOXML element names such as
   // `w:sdtPr` and attribute names such as `w:val` are case-sensitive, and sax
   // upper/lower-cases names in loose mode. Real WordprocessingML is well formed,
@@ -163,17 +194,21 @@ export function readContentControlRows(xml: string): ContentControlReadResult {
     if (warnings.length < 32 && !warnings.includes(code)) warnings.push(code);
   };
 
+  const relationships = options.relationships ?? new Map<string, string>();
   const rows: ParsedRow[] = [];
   const looseControls: ParsedControl[] = [];
   const frames: FrameRole[] = [];
   const cellStack: MutableCell[] = [];
   const controlStack: MutableControl[] = [];
+  const hyperlinkStack: MutableHyperlink[] = [];
 
   let currentRow: MutableRow | null = null;
   let rowCounter = 0;
   let cellCounter = 0;
   let textDepth = 0;
   let rowLimitReached = false;
+  let hyperlinkCounter = 0;
+  let hyperlinkLimitReached = false;
 
   const topControl = (): MutableControl | null =>
     controlStack.length ? controlStack[controlStack.length - 1] : null;
@@ -228,7 +263,7 @@ export function readContentControlRows(xml: string): ContentControlReadResult {
       case 'tc': {
         if (currentRow) {
           cellCounter += 1;
-          const cell: MutableCell = { index: cellCounter - 1, rawPlain: '', controls: [] };
+          const cell: MutableCell = { index: cellCounter - 1, rawPlain: '', controls: [], hyperlinks: [] };
           currentRow.cells.push(cell);
           cellStack.push(cell);
           frames.push('cell');
@@ -272,6 +307,25 @@ export function readContentControlRows(xml: string): ContentControlReadResult {
         frames.push('other');
         return;
       }
+      case 'hyperlink': {
+        // Structural hyperlink: only the relationship id is read here; the
+        // target is resolved through the relationship table and the visible text
+        // is display only.
+        if (hyperlinkLimitReached) {
+          frames.push('other');
+          return;
+        }
+        hyperlinkCounter += 1;
+        if (hyperlinkCounter > MAX_HYPERLINKS_PER_DOCUMENT) {
+          hyperlinkLimitReached = true;
+          warn(WARNING.HYPERLINK_LIMIT_REACHED);
+          frames.push('other');
+          return;
+        }
+        hyperlinkStack.push({ relationshipId: attrValue(tag, 'r:id'), text: '' });
+        frames.push('hyperlink');
+        return;
+      }
       case 't': {
         textDepth += 1;
         frames.push('text');
@@ -300,6 +354,8 @@ export function readContentControlRows(xml: string): ContentControlReadResult {
 
   parser.ontext = (text) => {
     if (!text || textDepth === 0) return;
+    const hyperlink = hyperlinkStack.length ? hyperlinkStack[hyperlinkStack.length - 1] : null;
+    if (hyperlink) hyperlink.text += text;
     const control = topControl();
     if (control && control.inContent) {
       control.rawValue += text;
@@ -320,6 +376,7 @@ export function readContentControlRows(xml: string): ContentControlReadResult {
               index: cell.index,
               plainText: collapseWhitespace(cell.rawPlain),
               controls: cell.controls,
+              hyperlinks: cell.hyperlinks,
             })),
           });
           currentRow = null;
@@ -343,6 +400,23 @@ export function readContentControlRows(xml: string): ContentControlReadResult {
       case 'controlContent': {
         const control = topControl();
         if (control) control.inContent = false;
+        return;
+      }
+      case 'hyperlink': {
+        const hyperlink = hyperlinkStack.pop();
+        if (hyperlink) {
+          const target = hyperlink.relationshipId
+            ? relationships.get(hyperlink.relationshipId) ?? null
+            : null;
+          const cell = cellStack.length ? cellStack[cellStack.length - 1] : null;
+          if (cell) {
+            cell.hyperlinks.push({
+              relationshipId: hyperlink.relationshipId,
+              target,
+              text: collapseWhitespace(hyperlink.text),
+            });
+          }
+        }
         return;
       }
       case 'text': {
@@ -372,8 +446,66 @@ export function readContentControlRows(xml: string): ContentControlReadResult {
   return { rows, looseControls, warnings };
 }
 
-/** Convenience: DOCX buffer -> grouped content-control rows. */
+/**
+ * Parse `word/_rels/document.xml.rels` into an id -> target map.
+ *
+ * A missing relationships part is normal (a document without hyperlinks) and
+ * yields an empty map. An over-large part throws a bounded error that callers
+ * treat as non-fatal.
+ */
+export async function readDocxRelationships(buffer: Buffer): Promise<Map<string, string>> {
+  const zip = await JSZip.loadAsync(buffer);
+  const entry = zip.file(DOCX_RELS_PART);
+  if (!entry) return new Map();
+  const xml = await entry.async('string');
+  if (xml.length > MAX_RELS_XML_BYTES) {
+    throw new Error('DOCX_RELS_PART_TOO_LARGE');
+  }
+  return parseRelationshipsXml(xml);
+}
+
+/** Structural, namespace-aware read of the relationship table. */
+export function parseRelationshipsXml(xml: string): Map<string, string> {
+  const parser = sax.parser(true, {
+    xmlns: true,
+    lowercase: false,
+    trim: false,
+    normalize: false,
+    position: false,
+  });
+  const map = new Map<string, string>();
+  let count = 0;
+  parser.onopentag = (tag) => {
+    if ((tag.local || '') !== 'Relationship') return;
+    if (count >= MAX_RELATIONSHIPS_PER_DOCUMENT) return;
+    const id = attrValue(tag, 'Id');
+    const target = attrValue(tag, 'Target');
+    if (!id || !target) return;
+    count += 1;
+    map.set(id, target);
+  };
+  parser.onerror = (error) => {
+    void error;
+    (parser as unknown as { error: unknown }).error = null;
+  };
+  parser.write(xml).close();
+  return map;
+}
+
+/**
+ * Convenience: DOCX buffer -> grouped content-control rows.
+ *
+ * The relationship part is read too so `w:hyperlink` targets resolve. A
+ * relationship read problem is non-fatal: rows are still produced and the
+ * hyperlinks keep a null target.
+ */
 export async function readDocxContentControlRows(buffer: Buffer): Promise<ContentControlReadResult> {
   const xml = await readDocxMainDocumentXml(buffer);
-  return readContentControlRows(xml);
+  let relationships = new Map<string, string>();
+  try {
+    relationships = await readDocxRelationships(buffer);
+  } catch {
+    relationships = new Map();
+  }
+  return readContentControlRows(xml, { relationships });
 }

@@ -26,6 +26,12 @@ export type ComplianceClauseAnchorRow = {
   anchorStableId: string | null;
   /** Stable anchor identity. Null when the document transports no machine metadata for it. */
   anchorKey: string | null;
+  /**
+   * C4A derived canonical legal reference (`TV/<year>/<act>[/<opaque-tail>]`) when
+   * the row was anchored through a canonical hyperlink target. Derived from
+   * anchorKey on the internal read model; never a database column. INTERNAL ONLY.
+   */
+  canonicalReference?: string | null;
   eli: string | null;
   celex: string | null;
   locator: string | null;
