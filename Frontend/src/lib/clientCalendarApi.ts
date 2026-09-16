@@ -12,7 +12,8 @@ export type ClientCalendarSourceType =
   | 'COMPANY_MILESTONE'
   | 'CASE_DEADLINE'
   | 'TASK'
-  | 'CASE_INTAKE_DEADLINE';
+  | 'CASE_INTAKE_DEADLINE'
+  | 'OBLIGATION_OCCURRENCE';
 
 export type ClientCalendarDateKind =
   | 'SIGNATURE'
@@ -25,7 +26,8 @@ export type ClientCalendarDateKind =
   | 'MILESTONE_DATE'
   | 'DEADLINE'
   | 'DUE_DATE'
-  | 'INTAKE_DUE';
+  | 'INTAKE_DUE'
+  | 'OCCURRENCE_DUE';
 
 export type ClientCalendarItem = {
   id: string;
@@ -46,7 +48,13 @@ export type ClientCalendarResponse = {
   items: ClientCalendarItem[];
 };
 
-export async function getClientCalendar(clientId: string, range: { from: string; to: string }): Promise<ClientCalendarResponse> {
+export async function getClientCalendar(
+  clientId: string,
+  range: { from: string; to: string },
+  contractId?: string | null,
+): Promise<ClientCalendarResponse> {
   const params = new URLSearchParams({ from: range.from, to: range.to });
+  // Optional contract scope. Omitted => the exact unscoped client calendar.
+  if (contractId) params.set("contractId", contractId);
   return fetchApi<ClientCalendarResponse>(`/client-calendar/clients/${encodeURIComponent(clientId)}?${params.toString()}`);
 }

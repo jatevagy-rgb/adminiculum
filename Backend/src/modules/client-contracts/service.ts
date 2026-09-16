@@ -19,6 +19,7 @@ import {
   isContractType,
   isEntitlementType,
   isObligationFrequency,
+  isObligationOccurrenceType,
   isObligationSourceType,
   isObligationTriggerType,
   isPartyRole,
@@ -143,6 +144,35 @@ async function assertLawFirmOwner(prisma: Prisma, userId: string | null): Promis
   }
 }
 
+function parseSequence(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) throw new InteractionError(400, 'OCCURRENCE_SEQUENCE_INVALID', 'sequence must be a non-negative integer.');
+  return n;
+}
+
+function parseAmount(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) throw new InteractionError(400, 'OCCURRENCE_AMOUNT_INVALID', 'expectedAmount must be a non-negative number.');
+  return String(n);
+}
+
+function parseCurrency(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const code = String(value).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) throw new InteractionError(400, 'OCCURRENCE_CURRENCY_INVALID', 'currency must be a 3-letter ISO code.');
+  return code;
+}
+
+function sameInstant(a: Date | null | undefined, b: Date | null | undefined): boolean {
+  if (!a || !b) return !a && !b;
+  return a.getTime() === b.getTime();
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === 'P2002';
+}
+
 function validateSecurityClassification(value: unknown): 'STANDARD' | 'RESTRICTED' {
   const classification = String(value || 'STANDARD');
   if (classification !== 'STANDARD' && classification !== 'RESTRICTED') {
@@ -238,6 +268,32 @@ export function toEntitlementDTO(row: any): any {
     sourceReference: row.sourceReference,
     exerciseByDate: iso(row.exerciseByDate),
     status: row.status,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+  return dto;
+}
+
+export function toOccurrenceDTO(row: any): any {
+  const dto = {
+    id: row.id,
+    clientId: row.clientId,
+    contractId: row.contractId,
+    obligationId: row.obligationId,
+    occurrenceKey: row.occurrenceKey,
+    sequence: row.sequence,
+    occurrenceType: row.occurrenceType,
+    title: row.title,
+    dueDate: iso(row.dueDate),
+    expectedAmount: row.expectedAmount == null ? null : String(row.expectedAmount),
+    currency: row.currency,
+    status: row.status,
+    satisfiedAt: iso(row.satisfiedAt),
+    evidenceDocumentVersionId: row.evidenceDocumentVersionId,
+    relatedTaskId: row.relatedTaskId,
+    sourceReference: row.sourceReference,
+    internalNote: row.internalNote ?? null,
+    revision: row.revision,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -634,4 +690,242 @@ export async function transitionEntitlement(actor: InternalActor, entitlementId:
   assertTransition(String(row.status), target, ENTITLEMENT_TRANSITIONS);
   const updated = await prisma.contractEntitlement.update({ where: { id: entitlementId }, data: { status: target as any } });
   return toEntitlementDTO(updated);
+}
+
+/* -------------------------------------------------------------------------- */
+/* ClientObligationOccurrence (Contract Watch CW1)                            */
+/* -------------------------------------------------------------------------- */
+
+const OCCURRENCE_ORDER = [{ sequence: 'asc' as const }, { dueDate: 'asc' as const }, { occurrenceKey: 'asc' as const }];
+
+function assertOccurrenceStatus(target: string): void {
+  if (!OBLIGATION_STATUS.has(target)) throw new InteractionError(400, 'OCCURRENCE_STATUS_INVALID', 'Invalid obligation occurrence status.');
+}
+
+/**
+ * The normalized, caller-controlled CREATE facts of an occurrence. A stable
+ * occurrenceKey means "this request represents the same occurrence", NOT "any
+ * payload carrying this key may silently reuse the existing row". Idempotent
+ * replay is therefore valid only when ALL of these semantic facts are equal.
+ * Database-generated fields (id, createdAt, updatedAt, revision, status) are
+ * never part of semantic identity.
+ */
+interface OccurrenceCreateFacts {
+  sequence: number;
+  occurrenceType: string;
+  title: string;
+  dueDate: Date | null;
+  expectedAmount: string | null;
+  currency: string | null;
+  sourceReference: string | null;
+  internalNote: string | null;
+  evidenceDocumentVersionId: string | null;
+  relatedTaskId: string | null;
+}
+
+/** Canonical decimal string (trailing zeros / sign normalized) for comparison. */
+function canonicalDecimal(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const raw = String(value).trim();
+  if (!/^[+-]?\d+(\.\d+)?$/.test(raw)) return raw;
+  const negative = raw.startsWith('-');
+  const [intPart, fracPart = ''] = raw.replace(/^[+-]/, '').split('.');
+  const frac = fracPart.replace(/0+$/, '');
+  const normalizedInt = intPart.replace(/^0+(?=\d)/, '') || '0';
+  const out = frac ? `${normalizedInt}.${frac}` : normalizedInt;
+  return negative && out !== '0' ? `-${out}` : out;
+}
+
+function nullableString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value);
+  return text === '' ? null : text;
+}
+
+/**
+ * ONE bounded semantic comparator, shared by the normal replay pre-check AND the
+ * P2002 race recovery, so the two paths cannot diverge.
+ */
+function occurrenceFactsMatch(existing: any, facts: OccurrenceCreateFacts): boolean {
+  return (
+    Number(existing.sequence ?? 0) === facts.sequence
+    && String(existing.occurrenceType) === facts.occurrenceType
+    && String(existing.title) === facts.title
+    && sameInstant(existing.dueDate, facts.dueDate)
+    && canonicalDecimal(existing.expectedAmount) === facts.expectedAmount
+    && nullableString(existing.currency) === facts.currency
+    && nullableString(existing.sourceReference) === facts.sourceReference
+    && nullableString(existing.internalNote) === facts.internalNote
+    && nullableString(existing.evidenceDocumentVersionId) === facts.evidenceDocumentVersionId
+    && nullableString(existing.relatedTaskId) === facts.relatedTaskId
+  );
+}
+
+/**
+ * Idempotent replay guard: an existing occurrence with the same key is returned
+ * ONLY when every normalized create-time factual field matches. Any drift in a
+ * semantic field must go through the explicit update/revision path — never a
+ * silent reuse of a different payload.
+ */
+function resolveExistingOccurrence(existing: any, facts: OccurrenceCreateFacts) {
+  if (!occurrenceFactsMatch(existing, facts)) {
+    throw new InteractionError(409, 'OCCURRENCE_KEY_CONFLICT', 'An occurrence with this key already exists with different factual data; use the explicit update path.');
+  }
+  return { occurrence: toOccurrenceDTO(existing), replayed: true };
+}
+
+export async function listObligationOccurrences(actor: InternalActor, obligationId: string, opts: { status?: string } = {}, prisma: Prisma = defaultPrisma) {
+  const obligation = await prisma.clientObligation.findUnique({ where: { id: obligationId }, select: { id: true, clientId: true } });
+  if (!obligation) throw new InteractionError(404, 'OBLIGATION_NOT_FOUND', 'Obligation not found.');
+  await assertClientReadAccess(actor, obligation.clientId, prisma);
+  const rows = await prisma.clientObligationOccurrence.findMany({
+    where: { obligationId, ...(opts.status ? { status: opts.status as any } : {}) },
+    orderBy: OCCURRENCE_ORDER,
+  });
+  const dto = rows.map(toOccurrenceDTO);
+  assertClientSafe(dto);
+  return { items: dto };
+}
+
+export async function listContractOccurrences(actor: InternalActor, contractId: string, opts: { status?: string } = {}, prisma: Prisma = defaultPrisma) {
+  const contract = await prisma.contractRecord.findUnique({ where: { id: contractId }, select: { id: true, clientId: true } });
+  if (!contract) throw new InteractionError(404, 'CONTRACT_NOT_FOUND', 'Contract not found.');
+  await assertClientReadAccess(actor, contract.clientId, prisma);
+  const rows = await prisma.clientObligationOccurrence.findMany({
+    where: { contractId, ...(opts.status ? { status: opts.status as any } : {}) },
+    orderBy: OCCURRENCE_ORDER,
+  });
+  const dto = rows.map(toOccurrenceDTO);
+  assertClientSafe(dto);
+  return { items: dto };
+}
+
+/**
+ * Create (or idempotently replay) ONE occurrence of an existing obligation. The
+ * contract is DERIVED from the parent obligation, so an occurrence can never be
+ * attached to a different client's or a different contract's obligation.
+ */
+export async function createObligationOccurrence(actor: InternalActor, obligationId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const obligation = await prisma.clientObligation.findUnique({
+    where: { id: obligationId },
+    select: { id: true, clientId: true, sourceContractId: true },
+  });
+  if (!obligation) throw new InteractionError(404, 'OBLIGATION_NOT_FOUND', 'Obligation not found.');
+  await assertClientReadAccess(actor, obligation.clientId, prisma);
+  if (!obligation.sourceContractId) {
+    throw new InteractionError(400, 'OCCURRENCE_OBLIGATION_CONTRACT_REQUIRED', 'Occurrences require an obligation that belongs to a contract.');
+  }
+  const contractId = String(obligation.sourceContractId);
+  if (input.contractId != null && String(input.contractId) !== contractId) {
+    throw new InteractionError(400, 'OCCURRENCE_CONTRACT_MISMATCH', 'contractId must match the parent obligation contract.');
+  }
+  const contract = await prisma.contractRecord.findUnique({ where: { id: contractId }, select: { id: true, clientId: true } });
+  if (!contract) throw new InteractionError(404, 'CONTRACT_NOT_FOUND', 'Contract not found.');
+  if (contract.clientId !== obligation.clientId) {
+    throw new InteractionError(403, 'CROSS_CLIENT_CONTRACT', 'Contract belongs to another client.');
+  }
+  const occurrenceType = String(input.occurrenceType || 'OTHER');
+  if (!isObligationOccurrenceType(occurrenceType)) throw new InteractionError(400, 'OCCURRENCE_TYPE_UNKNOWN', 'Unknown obligation occurrence type.');
+  const occurrenceKey = safeText(input.occurrenceKey, 'occurrenceKey', 120, true)!;
+  const dueDate = parseDate(input.dueDate, 'dueDate');
+  const sequence = input.sequence == null || input.sequence === '' ? 0 : parseSequence(input.sequence);
+  const expectedAmount = parseAmount(input.expectedAmount);
+  const currency = parseCurrency(input.currency);
+  if (input.relatedTaskId) await assertSameClientTask(prisma, obligation.clientId, String(input.relatedTaskId));
+  if (input.evidenceDocumentVersionId) await assertSameClientDocumentVersion(prisma, obligation.clientId, String(input.evidenceDocumentVersionId));
+
+  // ONE normalized fact set drives BOTH the replay comparison and the INSERT, so
+  // the compared values are exactly the persisted ones and the P2002 recovery
+  // cannot use looser semantics than the normal pre-check.
+  const facts: OccurrenceCreateFacts = {
+    sequence,
+    occurrenceType,
+    title: safeText(input.title, 'title', 240, true)!,
+    dueDate,
+    expectedAmount: canonicalDecimal(expectedAmount),
+    currency,
+    sourceReference: safeText(input.sourceReference, 'sourceReference', 240, false),
+    internalNote: safeText(input.internalNote, 'internalNote', 2000, false),
+    evidenceDocumentVersionId: input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null,
+    relatedTaskId: input.relatedTaskId ? String(input.relatedTaskId) : null,
+  };
+
+  const existing = await prisma.clientObligationOccurrence.findUnique({
+    where: { obligationId_occurrenceKey: { obligationId, occurrenceKey } },
+  });
+  if (existing) return resolveExistingOccurrence(existing, facts);
+
+  try {
+    const row = await prisma.clientObligationOccurrence.create({
+      data: {
+        clientId: obligation.clientId,
+        contractId,
+        obligationId,
+        occurrenceKey,
+        status: 'OPEN',
+        ...facts,
+      },
+    });
+    return { occurrence: toOccurrenceDTO(row), replayed: false };
+  } catch (error) {
+    if (isUniqueViolation(error)) {
+      const raced = await prisma.clientObligationOccurrence.findUnique({
+        where: { obligationId_occurrenceKey: { obligationId, occurrenceKey } },
+      });
+      // Same comparator as the pre-check path — identical replay/conflict semantics.
+      if (raced) return resolveExistingOccurrence(raced, facts);
+    }
+    throw error;
+  }
+}
+
+/** Explicit factual update path (bumps revision). occurrenceKey is immutable. */
+export async function updateObligationOccurrence(actor: InternalActor, occurrenceId: string, input: Record<string, unknown>, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const row = await prisma.clientObligationOccurrence.findUnique({ where: { id: occurrenceId } });
+  if (!row) throw new InteractionError(404, 'OCCURRENCE_NOT_FOUND', 'Obligation occurrence not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+  if (input.occurrenceKey !== undefined && String(input.occurrenceKey) !== row.occurrenceKey) {
+    throw new InteractionError(400, 'OCCURRENCE_KEY_IMMUTABLE', 'occurrenceKey cannot be changed.');
+  }
+  const data: any = { revision: { increment: 1 } };
+  if (input.title !== undefined) data.title = safeText(input.title, 'title', 240, true)!;
+  if (input.sequence !== undefined) data.sequence = parseSequence(input.sequence);
+  if (input.occurrenceType !== undefined) {
+    if (!isObligationOccurrenceType(String(input.occurrenceType))) throw new InteractionError(400, 'OCCURRENCE_TYPE_UNKNOWN', 'Unknown obligation occurrence type.');
+    data.occurrenceType = String(input.occurrenceType);
+  }
+  if (input.dueDate !== undefined) data.dueDate = parseDate(input.dueDate, 'dueDate');
+  if (input.expectedAmount !== undefined) data.expectedAmount = parseAmount(input.expectedAmount);
+  if (input.currency !== undefined) data.currency = parseCurrency(input.currency);
+  if (input.sourceReference !== undefined) data.sourceReference = safeText(input.sourceReference, 'sourceReference', 240, false);
+  if (input.internalNote !== undefined) data.internalNote = safeText(input.internalNote, 'internalNote', 2000, false);
+  if (input.relatedTaskId !== undefined) {
+    if (input.relatedTaskId) await assertSameClientTask(prisma, row.clientId, String(input.relatedTaskId));
+    data.relatedTaskId = input.relatedTaskId ? String(input.relatedTaskId) : null;
+  }
+  if (input.evidenceDocumentVersionId !== undefined) {
+    if (input.evidenceDocumentVersionId) await assertSameClientDocumentVersion(prisma, row.clientId, String(input.evidenceDocumentVersionId));
+    data.evidenceDocumentVersionId = input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null;
+  }
+  const updated = await prisma.clientObligationOccurrence.update({ where: { id: occurrenceId }, data });
+  return toOccurrenceDTO(updated);
+}
+
+export async function transitionObligationOccurrence(actor: InternalActor, occurrenceId: string, status: unknown, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const target = String(status || '');
+  assertOccurrenceStatus(target);
+  const row = await prisma.clientObligationOccurrence.findUnique({ where: { id: occurrenceId } });
+  if (!row) throw new InteractionError(404, 'OCCURRENCE_NOT_FOUND', 'Obligation occurrence not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+  assertTransition(String(row.status), target, OBLIGATION_TRANSITIONS);
+  const data: any = {
+    status: target as any,
+    revision: { increment: 1 },
+    satisfiedAt: target === 'SATISFIED' ? (row.satisfiedAt ?? new Date()) : null,
+  };
+  const updated = await prisma.clientObligationOccurrence.update({ where: { id: occurrenceId }, data });
+  return toOccurrenceDTO(updated);
 }

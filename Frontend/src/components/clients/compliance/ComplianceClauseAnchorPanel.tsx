@@ -48,6 +48,50 @@ const caseIdentifier = (row: ComplianceClauseAnchorRow): string | null => row.ca
 const authorityLocators = (row: ComplianceClauseAnchorRow): string | null =>
   [row.authorityLocator, row.locator].filter(Boolean).join(" · ") || null;
 
+/** Neutral Hungarian labels for the internal binding outcome reasons. */
+const bindingReasonLabels: Record<string, string> = {
+  NO_CELEX: "nincs CELEX azonosító",
+  INVALID_CELEX: "a CELEX azonosító nem a támogatott formátumú",
+  SOURCE_NOT_FOUND: "nincs ilyen egyedi kanónikus forrás",
+  NO_BINDABLE_VERSION: "nincs jóváhagyott, aktív forrásverzió",
+  AMBIGUOUS_BINDABLE_VERSION: "több egyedi találat, ezért nem oldható fel",
+};
+
+/**
+ * Truthful canonical binding line (INTERNAL only).
+ *
+ * A resolved binding shows the stored canonical citation/title when the registry
+ * actually has one; otherwise it shows the canonical source KEY built from the
+ * row's own CELEX, never a fabricated legal name.
+ */
+function bindingLine(row: ComplianceClauseAnchorRow) {
+  const status = row.legalSourceBindingStatus;
+  if (!status) return null;
+
+  if (status === "RESOLVED") {
+    const label = row.canonicalTitle || row.canonicalCitation || (row.celex ? `EU-${row.celex}` : null);
+    if (!label) return null;
+    return (
+      <p className="mt-1 text-xs text-[var(--adm-text)]" data-testid="clause-anchor-binding">
+        Kanónikus forrás: <b>{label}</b>
+        {row.canonicalTitle && row.canonicalCitation ? ` · ${row.canonicalCitation}` : ""}
+        {row.bindingOrigin === "READ_TIME_EXACT_CELEX" ? (
+          <span className="ml-1 text-[var(--adm-text-muted)]">(CELEX egyezés, nem tárolt)</span>
+        ) : (
+          <span className="ml-1 text-[var(--adm-text-muted)]">(verzió feldolgozásakor rögzítve)</span>
+        )}
+      </p>
+    );
+  }
+
+  return (
+    <p className="mt-1 text-xs text-[var(--adm-text-muted)]" data-testid="clause-anchor-binding-unresolved">
+      Kanónikus forrás: nincs egyedi találat
+      {row.bindingReason ? ` — ${bindingReasonLabels[row.bindingReason] ?? "nem oldható fel"}` : ""}
+    </p>
+  );
+}
+
 function metaField({ label, value, mono = false, href = null }: { label: string; value: string | null; mono?: boolean; href?: string | null }) {
   if (!value) return null;
   return (
@@ -122,6 +166,7 @@ function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
             Nincs stabil hivatkozás-azonosító: a dokumentum nem tartalmaz ehhez elég gépi azonosítót.
           </p>
         )}
+        {bindingLine(row)}
         {warnings.length ? (
           <div className="mt-2" data-testid="clause-anchor-warnings">
             <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Belső feldolgozási jelzés</p>

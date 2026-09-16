@@ -49,6 +49,7 @@ type Fixture = {
   contracts: Row[];
   obligations: Row[];
   entitlements: Row[];
+  occurrences: Row[];
   milestones: Row[];
   tasks: Row[];
   intakeDeadlines: Row[];
@@ -67,6 +68,7 @@ function fakePrisma(fx: Fixture) {
     contractRecord: { findMany: findMany(fx.contracts) },
     clientObligation: { findMany: findMany(fx.obligations) },
     contractEntitlement: { findMany: findMany(fx.entitlements) },
+    clientObligationOccurrence: { findMany: findMany(fx.occurrences) },
     companyMilestone: { findMany: findMany(fx.milestones) },
     task: { findMany: findMany(fx.tasks) },
     caseIntakeDeadline: { findMany: findMany(fx.intakeDeadlines) },
@@ -116,6 +118,9 @@ function fixture(): Fixture {
       { id: 'en-a1', clientId: CLIENT_A, contractId: 'contract-a1', title: 'Vételi jog', status: 'ACTIVE', exerciseByDate: new Date('2028-12-31T00:00:00.000Z') },
       { id: 'en-b1', clientId: CLIENT_B, contractId: 'contract-b1', title: 'B jogosultság', status: 'ACTIVE', exerciseByDate: new Date('2028-01-01T00:00:00.000Z') },
     ],
+    // Occurrences are exercised in clientCalendarOccurrence.test.ts; this fixture
+    // keeps the original projection assertions unchanged.
+    occurrences: [],
     milestones: [
       { id: 'ms-a1', clientId: CLIENT_A, title: 'Törzstőke-emelés', status: 'PLANNED', type: 'CAPITAL', targetDate: new Date('2027-06-30T00:00:00.000Z'), milestoneDate: new Date('2027-06-30T00:00:00.000Z') },
       { id: 'ms-b1', clientId: CLIENT_B, title: 'B mérföldkő', status: 'PLANNED', type: 'OTHER', targetDate: new Date('2027-01-01T00:00:00.000Z'), milestoneDate: null },

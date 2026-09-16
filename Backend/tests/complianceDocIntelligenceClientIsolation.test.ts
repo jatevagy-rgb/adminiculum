@@ -44,6 +44,14 @@ const INTERNAL_TOKENS = [
   'ingestWarnings',
   'rowDigest',
   'compliance-doc-intelligence',
+  // C3A canonical binding metadata (internal-only).
+  'legalSourceBindingStatus',
+  'canonicalLegalSourceVersionId',
+  'canonicalCitation',
+  'canonicalTitle',
+  'bindingOrigin',
+  'bindingReason',
+  'legalSourceBinding',
 ];
 
 describe('CDI-1 client isolation — structural boundary', () => {

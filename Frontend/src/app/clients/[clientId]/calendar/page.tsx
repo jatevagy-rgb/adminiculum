@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { getClient, type Client } from "@/lib/api";
+import { clientContractsApi, contractStatusLabel, type ContractRecordDTO } from "@/lib/clientContractsApi";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
 import {
   getClientCalendar,
@@ -42,6 +43,7 @@ const sourceLabels: Record<ClientCalendarSourceType, string> = {
   CASE_DEADLINE: "Ügy határideje",
   TASK: "Feladat",
   CASE_INTAKE_DEADLINE: "Ügyfelvételi határidő",
+  OBLIGATION_OCCURRENCE: "Kötelezettség-esedék",
 };
 
 const dateKindLabels: Record<ClientCalendarDateKind, string> = {
@@ -56,6 +58,7 @@ const dateKindLabels: Record<ClientCalendarDateKind, string> = {
   DEADLINE: "Határidő",
   DUE_DATE: "Esedékesség",
   INTAKE_DUE: "Határidő",
+  OCCURRENCE_DUE: "Esedékesség",
 };
 
 // Restrained, stable category markers — deliberately independent from the
@@ -68,6 +71,7 @@ const sourceDotClass: Record<ClientCalendarSourceType, string> = {
   CASE_DEADLINE: "bg-red-600",
   TASK: "bg-sky-600",
   CASE_INTAKE_DEADLINE: "bg-slate-500",
+  OBLIGATION_OCCURRENCE: "bg-teal-600",
 };
 
 
@@ -93,6 +97,8 @@ function ClientCalendarContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [contracts, setContracts] = useState<ContractRecordDTO[]>([]);
+  const [selectedContractId, setSelectedContractId] = useState<string>(() => searchParams?.get("contractId") || "");
 
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
 
@@ -118,15 +124,21 @@ function ClientCalendarContent() {
     const paramsNext = new URLSearchParams();
     paramsNext.set("view", view);
     paramsNext.set("date", dateKey(anchor));
+    if (selectedContractId) paramsNext.set("contractId", selectedContractId);
     router.replace(`${pathname}?${paramsNext.toString()}`);
-  }, [view, anchor, router, pathname]);
+  }, [view, anchor, selectedContractId, router, pathname]);
 
   useEffect(() => {
     if (!clientId) return;
-    void Promise.all([getClient(clientId), listAdminWorkspaces(clientId).catch(() => ({ items: [] }))])
-      .then(([clientResult, workspaces]) => {
+    void Promise.all([
+      getClient(clientId),
+      listAdminWorkspaces(clientId).catch(() => ({ items: [] })),
+      clientContractsApi.listContracts(clientId).catch(() => ({ items: [] })),
+    ])
+      .then(([clientResult, workspaces, contractResult]) => {
         setClient(clientResult);
         setOrganizationMode(workspaces.items.some((item) => item.mode !== "INDIVIDUAL" && item.status !== "ARCHIVED"));
+        setContracts(contractResult.items || []);
       })
       .catch(() => setError("Az ügyfél adatai jelenleg nem érhetők el."));
   }, [clientId]);
@@ -136,12 +148,12 @@ function ClientCalendarContent() {
     const range = rangeForView(view, anchor);
     setLoading(true);
     setCalendarError(null);
-    void getClientCalendar(clientId, range)
+    void getClientCalendar(clientId, range, selectedContractId || null)
       .then((result) => { setItems(result.items || []); setCalendarError(null); })
       // A failed load must never render as a truthful "no events" state.
       .catch(() => setCalendarError("A naptáradatok most nem érhetők el."))
       .finally(() => setLoading(false));
-  }, [clientId, view, anchor]);
+  }, [clientId, view, anchor, selectedContractId]);
 
   const itemsByDay = useMemo(() => {
     const map = new Map<string, ClientCalendarItem[]>();
@@ -385,6 +397,23 @@ function ClientCalendarContent() {
                     <button type="button" onClick={() => { const t = new Date(); setAnchor(t); setSelectedDay(dateKey(t)); }} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">Ma</button>
                     <button type="button" onClick={() => stepPeriod(1)} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]" aria-label="Következő időszak">→</button>
                   </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--adm-border)] pt-3">
+                  <label htmlFor="calendar-contract" className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Szerződés</label>
+                  <select
+                    id="calendar-contract"
+                    value={selectedContractId}
+                    onChange={(event) => setSelectedContractId(event.target.value)}
+                    className="max-w-full rounded border border-[var(--adm-border)] bg-white px-2 py-1.5 text-xs text-[var(--adm-text)]"
+                  >
+                    <option value="">Minden szerződés</option>
+                    {contracts.map((contract) => (
+                      <option key={contract.id} value={contract.id}>
+                        {contract.title} · {contractStatusLabel(contract.status)}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="text-[10px] text-[var(--adm-text-muted)]">A választás csak szűri a nézetet, adatot nem módosít.</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-3 border-t border-[var(--adm-border)] pt-3" aria-label="Kategória jelmagyarázat">
                   {(Object.keys(sourceLabels) as ClientCalendarSourceType[]).map((key) => (
