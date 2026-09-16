@@ -28,6 +28,7 @@ import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../c
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
 import { retryDocumentVersionScan, securityScanBlock } from './securityScan.service';
+import { scheduleInternalAnalysisIngestion } from '../compliance-doc-intelligence/service';
 import {
   createDocumentComment,
   DocumentCommentError,
@@ -592,6 +593,16 @@ router.post('/:id/versions', authenticate, requireDocumentManageAccess, async (r
     }
 
     const versions = await documentsService.listDocumentVersions(id);
+
+    // CDI-1: a new version of an INTERNAL_ANALYSIS-linked compliance master feeds
+    // derived internal clause/anchor intelligence. Fire-and-forget and non-fatal:
+    // it can never fail this upload. CLIENT_POLICY documents are skipped inside.
+    try {
+      scheduleInternalAnalysisIngestion(id, { buffer: fileBuffer });
+    } catch {
+      // Derived internal processing must never break the upload response.
+    }
+
     res.status(201).json({ document: result, currentVersion: versions.find((version) => version.isCurrent) || null, versions });
   } catch (error) {
     console.error('Upload immutable version error:', error);
@@ -886,6 +897,13 @@ router.post('/:id/version', authenticate, requireDocumentObjectManageAccess, asy
         message: 'Failed to upload version' 
       });
       return;
+    }
+
+    // CDI-1: same non-fatal derived ingestion as the immutable-version path.
+    try {
+      scheduleInternalAnalysisIngestion(id, { buffer: fileBuffer });
+    } catch {
+      // Derived internal processing must never break the upload response.
     }
 
     res.json(result);

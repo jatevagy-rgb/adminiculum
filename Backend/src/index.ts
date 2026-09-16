@@ -302,6 +302,11 @@ app.use('/api/v1/compliance', complianceDocumentRoutes);
 import controlEvidenceRoutes from './modules/compliance/controlEvidenceRoutes';
 app.use('/api/v1', controlEvidenceRoutes);
 
+// CDI-1: derived INTERNAL-ONLY clause x anchor intelligence for INTERNAL_ANALYSIS
+// compliance masters. Never mounted on a client-portal path.
+import complianceDocIntelligenceRoutes from './modules/compliance-doc-intelligence/routes';
+app.use('/api/v1/compliance-intelligence', complianceDocIntelligenceRoutes);
+
 import contractsRoutes from './modules/contracts/routes';
 app.use('/api/v1/contracts', contractsRoutes);
 
