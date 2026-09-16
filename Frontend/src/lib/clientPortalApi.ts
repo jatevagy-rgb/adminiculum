@@ -624,12 +624,15 @@ export type PortalOrgGrow = {
     calculatedOrEstimated: PortalGrowOutcome[];
   };
   opportunities: Array<{
-    id: string;
+    publicationId?: string;
     title: string;
-    problem: string;
-    direction: string;
-    kind: string;
-    evidenceStrength: string;
+    summary?: string;
+    direction?: string | null;
+    publishedAt?: string;
+    id?: string;
+    problem?: string;
+    kind?: string;
+    evidenceStrength?: string;
   }>;
   opportunitiesDeferredNotice: string | null;
   surveys?: PortalGrowSurveyItem[];

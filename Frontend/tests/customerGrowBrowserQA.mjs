@@ -9,7 +9,7 @@
  *  5. Assessment runner opens, shows step progress, offers explicit UNKNOWN option, and advances.
  *  6. Assessment results render findings, directions, and ResearchEvidence ("Mi alapján?").
  *  7. Folyamatok tab renders mapped processes, step indicators, system tags, and company link.
- *  8. Lehetőségek tab renders dignified fail-closed state (GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP).
+ *  8. Lehetőségek tab renders normal empty state ("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség").
  *  9. Kezdeményezések tab renders status filter chips and initiative cards with safe fields only.
  * 10. Eredmények tab renders provenance-grounded outcomes (Mért vs Számított/becsült) with methodology note.
  * 11. Zero fake numbers, zero fake percentages, no ASSUMED/synthetic outcomes presented as achieved.
@@ -190,7 +190,7 @@ const MOCK_ORG_GROW = {
     ],
   },
   opportunities: [],
-  opportunitiesDeferredNotice: "GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP",
+  opportunitiesDeferredNotice: null,
   surveys: [
     {
       id: "survey-1",
@@ -588,6 +588,11 @@ async function runCustomerGrowBrowserQA() {
 
       await page.screenshot({ path: path.join(SHOTS, `felmeresek-${viewport.name}.png`), fullPage: true });
 
+      const expandedRow = page.locator("[data-testid='grow-assessment-row-pack-operational']");
+      if ((await expandedRow.count()) > 0) {
+        await expandedRow.screenshot({ path: path.join(SHOTS, `expanded-assessment-${viewport.name}.png`) });
+      }
+
       // 5. Interactive Assessment Runner & UNKNOWN Choice
       console.log("5. Testing interactive assessment runner...");
       const startButton = page.locator("[data-testid='grow-assessment-start-pack-operational']");
@@ -659,14 +664,18 @@ async function runCustomerGrowBrowserQA() {
       }
       await page.screenshot({ path: path.join(SHOTS, `folyamatok-${viewport.name}.png`), fullPage: true });
 
-      // 8. Lehetőségek Tab (Dignified Guarded Fail-Closed State)
-      console.log("8. Inspecting Lehetőségek guarded state...");
+      // 8. Lehetőségek Tab (Normal Truthful Empty State)
+      console.log("8. Inspecting Lehetőségek normal empty state...");
       await page.locator("[data-testid='grow-tab-lehetosegek']").click();
       await page.waitForTimeout(400);
       const lehetosegText = await page.evaluate(() => document.body.innerText);
+      const emptyStateCount = await page.locator("[data-testid='grow-opportunities-empty']").count();
       const gapCodeAttr = await page.locator("[data-publication-code='GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP']").count();
-      if (gapCodeAttr === 0 || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
-        throw new Error("Dignified fail-closed notice not found on Lehetőségek tab");
+      if (emptyStateCount === 0 || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
+        throw new Error("Normal empty state not found on Lehetőségek tab");
+      }
+      if (gapCodeAttr > 0) {
+        throw new Error("STALE_GAP_CODE_PRESENT: data-publication-code attribute with obsolete gap token found");
       }
       if (lehetosegText.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP")) {
         throw new Error("RAW_PUBLICATION_CODE_VISIBLE_TO_CUSTOMER: Raw gap code leaked into visible human UI text");
@@ -675,6 +684,9 @@ async function runCustomerGrowBrowserQA() {
         throw new Error("OPPORTUNITY_WORKFLOW_STATE_INVENTED: Invented workflow state displayed to customer");
       }
       await page.screenshot({ path: path.join(SHOTS, `lehetosegek-${viewport.name}.png`), fullPage: true });
+      if (viewport.name === "desktop") {
+        await page.screenshot({ path: path.join(SHOTS, "opportunities-empty-desktop.png"), fullPage: true });
+      }
 
       // 9. Kezdeményezések Tab
       console.log("9. Inspecting Kezdeményezések tab...");
@@ -735,6 +747,33 @@ async function runCustomerGrowBrowserQA() {
 
       await context.close();
     }
+
+    // Capture published opportunities basic compatibility screenshot
+    console.log("Capturing published opportunities basic compatibility screenshot...");
+    const { context: pubContext, page: pubPage } = await createQaPage(browser, { width: 1440, height: 900, name: "desktop" });
+    await pubPage.route("**/api/v1/client-portal/org/grow", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...MOCK_ORG_GROW,
+          opportunities: [
+            {
+              publicationId: "pub-opp-1",
+              title: "Automatizált jóváhagyási folyamat bevezetése",
+              summary: "A manuális jóváhagyási lépések kiváltása digitális munkafolyamattal a megrendelés-feldolgozásban.",
+              direction: "Automatizálás és átfutási idő csökkentése",
+              publishedAt: "2026-03-15T08:30:00.000Z",
+            },
+          ],
+          opportunitiesDeferredNotice: null,
+        }),
+      });
+    });
+    await pubPage.goto(`${BASE_URL}/portal/fejlesztes?tab=lehetosegek`, { waitUntil: "networkidle" });
+    await pubPage.waitForSelector("[data-testid='grow-opportunities-section']", { timeout: 10000 });
+    await pubPage.screenshot({ path: path.join(SHOTS, "opportunities-published-basic-desktop.png"), fullPage: true });
+    await pubContext.close();
 
     console.log("\n===============================================================");
     console.log("ALL BROWSER QA TESTS COMPLETED SUCCESSFULLY (EXIT CODE 0)");

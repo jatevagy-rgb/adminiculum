@@ -18,6 +18,7 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
 import { parseComplianceMasterDocx } from './extractClauseAnchors';
+import { resolveCelexBindings, type CelexBindingDecision } from './legalSourceBinding';
 import { computeRowDigest, normalizeExtractedRow, type NormalizedClauseAnchorRow } from './normalize';
 import { MAX_WARNINGS_PER_RESULT, type IngestResult } from './types';
 
@@ -37,9 +38,10 @@ export interface IngestDeps {
   /** Resolve the DOCX bytes of a version. Defaults to the SharePoint storage. */
   loadVersionContent?: (version: VersionContentSubject) => Promise<Buffer | null>;
   /**
-   * Optional exact binding to the canonical legal-source registry. Ingestion
-   * NEVER creates LegalSource / LegalSourceVersion rows, and no resolver exists
-   * yet, so the default returns null instead of guessing a binding.
+   * Optional override for the canonical binding of a row, applied ONLY at row
+   * creation for a new DocumentVersion. When omitted, the default C3A resolver
+   * binds on an exact CELEX match and otherwise leaves the binding null.
+   * Ingestion never creates or updates LegalSource / LegalSourceVersion rows.
    */
   resolveLegalSourceVersionId?: (row: NormalizedClauseAnchorRow) => string | null;
   log?: (message: string, detail?: Record<string, unknown>) => void;
@@ -174,7 +176,28 @@ export async function ingestClauseAnchorsForVersion(
     });
   }
 
-  const resolveLegalSourceVersionId = deps.resolveLegalSourceVersionId ?? (() => null);
+  // C3A: canonical binding is decided ONLY here, while rows for a genuinely new
+  // DocumentVersion are being created. It is never applied to existing rows:
+  // this code path runs after the UNCHANGED / INGEST_DRIFT returns above, and the
+  // insert below can only create, never update.
+  let bindingByDigest: Map<string, string | null> | null = null;
+  if (deps.resolveLegalSourceVersionId) {
+    bindingByDigest = new Map(
+      [...byDigest.entries()].map(([rowDigest, row]) => [rowDigest, deps.resolveLegalSourceVersionId!(row)]),
+    );
+  } else {
+    const bindings = await resolveCelexBindings(
+      [...byDigest.entries()].map(([key, row]) => ({ key, row })),
+      prisma,
+    );
+    bindingByDigest = new Map(
+      [...bindings.entries()].map(([rowDigest, decision]) => [
+        rowDigest,
+        decision.status === 'RESOLVED' ? decision.legalSourceVersionId : null,
+      ]),
+    );
+  }
+
   const data = [...byDigest.entries()].map(([rowDigest, row]) => ({
     documentVersionId: version.id,
     clauseRef: row.clauseRef,
@@ -195,7 +218,7 @@ export async function ingestClauseAnchorsForVersion(
     authorityLocator: row.authorityLocator,
     sourceUrl: row.sourceUrl,
     rationale: row.rationale,
-    legalSourceVersionId: resolveLegalSourceVersionId(row),
+    legalSourceVersionId: bindingByDigest.get(rowDigest) ?? null,
     ingestWarnings: row.warnings,
     rowDigest,
   }));
@@ -387,6 +410,116 @@ export async function listClauseAnchorsForDocument(
       version: version.version,
       isCurrent: version.isCurrent,
       rows: rows.filter((row) => row.documentVersionId === version.id),
+    })),
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  C3A — canonical binding metadata on the INTERNAL projection only.  */
+/* ------------------------------------------------------------------ */
+
+export type LegalSourceBindingStatus = 'RESOLVED' | 'UNRESOLVED';
+
+/** Where a binding came from: fixed at ingest, or resolved read-only now. */
+export type LegalSourceBindingOrigin = 'PERSISTED_AT_INGEST' | 'READ_TIME_EXACT_CELEX';
+
+export interface ClauseAnchorBindingView {
+  legalSourceBindingStatus: LegalSourceBindingStatus;
+  canonicalLegalSourceVersionId?: string;
+  canonicalCitation?: string | null;
+  canonicalTitle?: string | null;
+  /** Internal diagnostic only; never a legal statement. */
+  bindingOrigin?: LegalSourceBindingOrigin;
+  bindingReason?: string;
+}
+
+type AnchorRow = Awaited<ReturnType<typeof listClauseAnchorsForDocument>>['versions'][number]['rows'][number];
+
+/**
+ * Internal read projection: every anchor row of a document plus its canonical
+ * binding state.
+ *
+ * - A row whose binding was fixed at ingest (`legalSourceVersionId`) reports that
+ *   stored id.
+ * - A historical row without a stored id is resolved read-time on the exact CELEX
+ *   match. The result is DTO-only: no anchor row is ever written by this path, so
+ *   historical rows stay byte-faithful to ingest time.
+ * - Anything else is UNRESOLVED, including an ambiguous match.
+ */
+export async function listClauseAnchorsForDocumentWithBinding(
+  documentId: string,
+  prisma: Prisma = defaultPrisma,
+) {
+  const base = await listClauseAnchorsForDocument(documentId, prisma);
+  const allRows: AnchorRow[] = base.versions.flatMap((version) => version.rows);
+
+  const persistedVersionIds = [
+    ...new Set(allRows.map((row) => row.legalSourceVersionId).filter((id): id is string => Boolean(id))),
+  ];
+  const persistedVersions = persistedVersionIds.length
+    ? await prisma.legalSourceVersion.findMany({
+        where: { id: { in: persistedVersionIds } },
+        select: {
+          id: true,
+          legalSource: { select: { sourceKey: true, canonicalCitation: true, title: true } },
+        },
+      })
+    : [];
+  const persistedById = new Map(persistedVersions.map((version) => [version.id, version]));
+
+  // Only rows without a stored binding need a read-time decision.
+  const readTimeCandidates = allRows
+    .filter((row) => !row.legalSourceVersionId)
+    .map((row) => ({ key: row.id, row }));
+  const readTimeBindings = readTimeCandidates.length
+    ? await resolveCelexBindings(readTimeCandidates, prisma)
+    : new Map<string, CelexBindingDecision>();
+
+  const viewFor = (row: AnchorRow): ClauseAnchorBindingView => {
+    if (row.legalSourceVersionId) {
+      const version = persistedById.get(row.legalSourceVersionId);
+      return {
+        legalSourceBindingStatus: 'RESOLVED',
+        canonicalLegalSourceVersionId: row.legalSourceVersionId,
+        canonicalCitation: version?.legalSource?.canonicalCitation ?? null,
+        canonicalTitle: version?.legalSource?.title ?? null,
+        bindingOrigin: 'PERSISTED_AT_INGEST',
+        bindingReason: 'PERSISTED_BINDING',
+      };
+    }
+
+    const decision = readTimeBindings.get(row.id);
+    if (decision && decision.status === 'RESOLVED') {
+      return {
+        legalSourceBindingStatus: 'RESOLVED',
+        canonicalLegalSourceVersionId: decision.legalSourceVersionId,
+        canonicalCitation: decision.canonicalCitation,
+        canonicalTitle: decision.canonicalTitle,
+        bindingOrigin: 'READ_TIME_EXACT_CELEX',
+        bindingReason: `EXACT_CELEX_MATCH:${decision.normalizedCelex}`,
+      };
+    }
+
+    if (decision && decision.status === 'UNRESOLVED') {
+      return {
+        legalSourceBindingStatus: 'UNRESOLVED',
+        bindingReason: decision.reason,
+      };
+    }
+
+    return {
+      legalSourceBindingStatus: 'UNRESOLVED',
+      bindingReason: 'NO_CELEX',
+    };
+  };
+
+  return {
+    documentId: base.documentId,
+    versions: base.versions.map((version) => ({
+      documentVersionId: version.documentVersionId,
+      version: version.version,
+      isCurrent: version.isCurrent,
+      rows: version.rows.map((row) => ({ ...row, ...viewFor(row) })),
     })),
   };
 }

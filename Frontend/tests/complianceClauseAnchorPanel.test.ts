@@ -254,6 +254,74 @@ test('reports a bounded load failure with a retry affordance', async () => {
   assert.ok(flatten(alert).find((node) => node.type === 'button' && textOf(node).includes('Újrapróbálás')));
 });
 
+test('surfaces the canonical source binding truthfully, or says it is unresolved', async () => {
+  const h = await mount({
+    documentId: 'document-1',
+    versions: [
+      {
+        documentVersionId: 'version-1',
+        version: 1,
+        isCurrent: true,
+        rows: [
+          baseRow({
+            id: 'bind-1',
+            clauseRef: '4.1.',
+            legalSourceBindingStatus: 'RESOLVED',
+            canonicalLegalSourceVersionId: 'canonical-version-1',
+            canonicalCitation: 'Regulation (EU) 2016/679',
+            canonicalTitle: 'GDPR',
+            bindingOrigin: 'PERSISTED_AT_INGEST',
+            bindingReason: 'PERSISTED_BINDING',
+          }),
+          baseRow({
+            id: 'bind-2',
+            clauseRef: '4.2.',
+            celex: '32019R1234',
+            eli: null,
+            legalSourceBindingStatus: 'RESOLVED',
+            canonicalLegalSourceVersionId: 'canonical-version-2',
+            canonicalCitation: null,
+            canonicalTitle: null,
+            bindingOrigin: 'READ_TIME_EXACT_CELEX',
+            bindingReason: 'EXACT_CELEX_MATCH:32019R1234',
+          }),
+          baseRow({
+            id: 'bind-3',
+            clauseRef: '4.3.',
+            anchorKey: null,
+            legalSourceBindingStatus: 'UNRESOLVED',
+            bindingReason: 'AMBIGUOUS_BINDABLE_VERSION',
+          }),
+          baseRow({
+            id: 'bind-4',
+            clauseRef: '4.4.',
+            celex: null,
+            eli: null,
+            legalSourceBindingStatus: 'UNRESOLVED',
+            bindingReason: 'NO_CELEX',
+          }),
+        ],
+      },
+    ],
+  });
+  const tree = rerender(h);
+  const text = textOf(tree);
+  const compact = text.replace(/\s+/g, ' ');
+  const bindings = flatten(tree).filter((node) => node.props?.['data-testid'] === 'clause-anchor-binding');
+
+  // A resolved binding shows the canonical identity the registry actually has.
+  assert.match(compact, /Kanónikus forrás: GDPR · Regulation \(EU\) 2016\/679/);
+  assert.match(compact, /verzió feldolgozásakor rögzítve/);
+  // With no canonical label stored, the truthful CELEX-derived source key is shown
+  // instead of an invented legal name, and it says the match was not persisted.
+  assert.match(compact, /EU-32019R1234/);
+  assert.match(compact, /CELEX egyezés, nem tárolt/);
+  assert.equal(bindings.length, 2);
+  // Unresolved stays unresolved, with a neutral reason.
+  assert.match(compact, /Kanónikus forrás: nincs egyedi találat — több egyedi találat, ezért nem oldható fel/);
+  assert.match(compact, /Kanónikus forrás: nincs egyedi találat — nincs CELEX azonosító/);
+});
+
 test('states provenance without any legal conclusion or AI wording', async () => {
   const h = await mount({
     documentId: 'document-1',
