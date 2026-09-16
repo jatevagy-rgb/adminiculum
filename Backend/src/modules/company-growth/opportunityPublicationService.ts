@@ -114,6 +114,9 @@ export async function createOpportunityPublicationDraft(actor: InternalActor, cl
     const existing = await (tx as any).clientImprovementOpportunityPublication.findUnique({ where: { opportunityId_workspaceId: { opportunityId: opportunity.id, workspaceId: String(input.workspaceId) } } });
     if (existing) {
       requireExpected(existing, input.expectedRevision);
+      if (String(existing.status) === 'PUBLISHED') {
+        throw new InteractionError(409, 'PUBLICATION_REVOKE_REQUIRED', 'Published opportunity publications require explicit revocation before republishing.');
+      }
       if (['DRAFT', 'READY_FOR_APPROVAL', 'APPROVED'].includes(String(existing.status))) {
         throw new InteractionError(409, 'PUBLICATION_ALREADY_IN_PROGRESS', 'An opportunity publication is already in progress.');
       }
@@ -143,12 +146,15 @@ export async function createOpportunityPublicationDraft(actor: InternalActor, cl
   });
 }
 
-async function transition(actor: InternalActor, publicationId: string, input: TransitionInput, action: 'submit' | 'approve' | 'publish' | 'revoke', db: PrismaClient): Promise<Record<string, unknown>> {
+async function transition(actor: InternalActor, clientId: string, publicationId: string, input: TransitionInput, action: 'submit' | 'approve' | 'publish' | 'revoke', db: PrismaClient): Promise<Record<string, unknown>> {
   if (action !== 'submit') publisher(actor);
+  await assertClientReadAccess(actor, clientId, db as any);
   const current = await publicationRow(db, publicationId);
-  await assertClientReadAccess(actor, current.clientId, db as any);
-  await opportunityForClient(db, current.opportunityId, current.clientId);
-  await workspaceClient(db, current.workspaceId, current.clientId);
+  if (current.clientId !== clientId) {
+    throw new InteractionError(403, 'PUBLICATION_CLIENT_MISMATCH', 'Opportunity publication is outside the selected client.');
+  }
+  await opportunityForClient(db, current.opportunityId, clientId);
+  await workspaceClient(db, current.workspaceId, clientId);
   requireExpected(current, input.expectedRevision);
   const from = String(current.status);
   const next = action === 'submit' && from === 'DRAFT' ? 'READY_FOR_APPROVAL'
@@ -175,14 +181,29 @@ async function transition(actor: InternalActor, publicationId: string, input: Tr
     });
     const revisionNumber = current.revisions?.[0]?.revisionNumber;
     if (next === 'PUBLISHED' && Number(revisionNumber) > 1) {
-      await audit(tx, row, actor.userId, 'SUPERSEDED', from, next, revisionNumber);
+      await (tx as any).clientPublicationEvent.create({
+        data: {
+          id: crypto.randomUUID(),
+          action: 'SUPERSEDED',
+          actorId: actor.userId,
+          clientId: row.clientId,
+          improvementOpportunityPublicationId: row.id,
+          fromStatus: null,
+          toStatus: null,
+          metadataSafe: {
+            domain: 'GROW_OPPORTUNITY_PUBLICATION',
+            supersededRevisionNumber: Number(revisionNumber) - 1,
+            replacementRevisionNumber: Number(revisionNumber),
+          },
+        },
+      });
     }
     await audit(tx, row, actor.userId, next === 'READY_FOR_APPROVAL' ? 'SUBMITTED_FOR_APPROVAL' : next, from, next, revisionNumber);
     return dto(row, current.revisions?.[0]);
   });
 }
 
-export const submitOpportunityPublication = (actor: InternalActor, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, id, input, 'submit', db);
-export const approveOpportunityPublication = (actor: InternalActor, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, id, input, 'approve', db);
-export const publishOpportunityPublication = (actor: InternalActor, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, id, input, 'publish', db);
-export const revokeOpportunityPublication = (actor: InternalActor, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, id, input, 'revoke', db);
+export const submitOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'submit', db);
+export const approveOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'approve', db);
+export const publishOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'publish', db);
+export const revokeOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'revoke', db);

@@ -45,9 +45,9 @@ describeWithDatabase('Grow opportunity customer publication (PostgreSQL)', () =>
 
   async function publishFor(userId: string, role: string, workspaceId: string) {
     const created = await createOpportunityPublicationDraft(actor(userId, role), ids.clientA, safeInput(workspaceId), db);
-    const submitted = await submitOpportunityPublication(actor(userId, role), String(created.id), { expectedRevision: created.revision }, db);
-    const approved = await approveOpportunityPublication(actor(userId, role), String(created.id), { expectedRevision: submitted.revision }, db);
-    return publishOpportunityPublication(actor(userId, role), String(created.id), { expectedRevision: approved.revision }, db);
+    const submitted = await submitOpportunityPublication(actor(userId, role), ids.clientA, String(created.id), { expectedRevision: created.revision }, db);
+    const approved = await approveOpportunityPublication(actor(userId, role), ids.clientA, String(created.id), { expectedRevision: submitted.revision }, db);
+    return publishOpportunityPublication(actor(userId, role), ids.clientA, String(created.id), { expectedRevision: approved.revision }, db);
   }
 
   beforeAll(async () => {
@@ -106,6 +106,10 @@ describeWithDatabase('Grow opportunity customer publication (PostgreSQL)', () =>
     expect(firstRevision.clientSafeTitle).toBe('Ügyféloldali fejlesztési lehetőség');
     const snapshotBefore = JSON.parse(JSON.stringify(firstRevision));
 
+    await expect(createOpportunityPublicationDraft(actor(ids.admin, 'ADMIN'), ids.clientA, safeInput(ids.workspaceAdmin), db)).rejects.toMatchObject({ code: 'PUBLICATION_REVOKE_REQUIRED' });
+    expect((await db.clientImprovementOpportunityPublication.findUniqueOrThrow({ where: { id: publication.id } })).status).toBe('PUBLISHED');
+    await expect(submitOpportunityPublication(actor(ids.admin, 'ADMIN'), ids.clientB, String(publication.id), { expectedRevision: published.revision }, db)).rejects.toMatchObject({ code: 'PUBLICATION_CLIENT_MISMATCH' });
+
     await db.improvementOpportunity.update({ where: { id: ids.opportunityId }, data: { title: 'Changed internal title', problem: 'Changed internal problem' } });
     expect(JSON.parse(JSON.stringify(await db.clientImprovementOpportunityPublicationRevision.findUniqueOrThrow({ where: { id: firstRevision.id } })))).toEqual(snapshotBefore);
 
@@ -118,15 +122,23 @@ describeWithDatabase('Grow opportunity customer publication (PostgreSQL)', () =>
     await expect(createOpportunityPublicationDraft(actor(ids.admin, 'ADMIN'), ids.clientA, safeInput(ids.workspaceB), db)).rejects.toMatchObject({ code: 'WORKSPACE_CLIENT_MISMATCH' });
     expect(await db.clientImprovementOpportunityPublication.findUnique({ where: { opportunityId_workspaceId: { opportunityId: ids.opportunityId, workspaceId: ids.workspaceOther } } })).toBeNull();
 
-    await revokeOpportunityPublication(actor(ids.admin, 'ADMIN'), String(publication.id), { expectedRevision: published.revision }, db);
+    await revokeOpportunityPublication(actor(ids.admin, 'ADMIN'), ids.clientA, String(publication.id), { expectedRevision: published.revision }, db);
     expect((await db.clientImprovementOpportunityPublication.findUniqueOrThrow({ where: { id: publication.id } })).status).toBe('REVOKED');
     const republishedDraft = await createOpportunityPublicationDraft(actor(ids.admin, 'ADMIN'), ids.clientA, safeInput(ids.workspaceAdmin), db);
-    const republishedSubmitted = await submitOpportunityPublication(actor(ids.admin, 'ADMIN'), String(republishedDraft.id), { expectedRevision: republishedDraft.revision }, db);
-    const republishedApproved = await approveOpportunityPublication(actor(ids.admin, 'ADMIN'), String(republishedDraft.id), { expectedRevision: republishedSubmitted.revision }, db);
-    expect((await publishOpportunityPublication(actor(ids.admin, 'ADMIN'), String(republishedDraft.id), { expectedRevision: republishedApproved.revision }, db)).status).toBe('PUBLISHED');
-    expect(await db.clientImprovementOpportunityPublicationRevision.count({ where: { publicationId: publication.id } })).toBe(2);
-    const actions = await db.clientPublicationEvent.findMany({ where: { improvementOpportunityPublicationId: publication.id }, select: { action: true } });
+    const republishedSubmitted = await submitOpportunityPublication(actor(ids.admin, 'ADMIN'), ids.clientA, String(republishedDraft.id), { expectedRevision: republishedDraft.revision }, db);
+    const republishedApproved = await approveOpportunityPublication(actor(ids.admin, 'ADMIN'), ids.clientA, String(republishedDraft.id), { expectedRevision: republishedSubmitted.revision }, db);
+    expect((await publishOpportunityPublication(actor(ids.admin, 'ADMIN'), ids.clientA, String(republishedDraft.id), { expectedRevision: republishedApproved.revision }, db)).status).toBe('PUBLISHED');
+    const revisions = await db.clientImprovementOpportunityPublicationRevision.findMany({ where: { publicationId: publication.id }, orderBy: { revisionNumber: 'asc' } });
+    expect(revisions).toHaveLength(2);
+    expect(JSON.parse(JSON.stringify(revisions[0]))).toEqual(snapshotBefore);
+    expect(revisions[1].revisionNumber).toBe(2);
+    const actions = await db.clientPublicationEvent.findMany({ where: { improvementOpportunityPublicationId: publication.id }, select: { action: true, fromStatus: true, toStatus: true, metadataSafe: true } });
     expect(actions.map((event) => String(event.action))).toEqual(expect.arrayContaining(['DRAFT_CREATED', 'SUBMITTED_FOR_APPROVAL', 'APPROVED', 'PUBLISHED', 'REVOKED', 'SUPERSEDED']));
+    const superseded = actions.find((event) => String(event.action) === 'SUPERSEDED');
+    expect(superseded).toMatchObject({ fromStatus: null, toStatus: null });
+    expect(superseded?.metadataSafe).toMatchObject({ supersededRevisionNumber: 1, replacementRevisionNumber: 2 });
+    const publishedEvents = actions.filter((event) => String(event.action) === 'PUBLISHED');
+    expect(publishedEvents.some((event) => event.fromStatus === 'APPROVED' && event.toStatus === 'PUBLISHED')).toBe(true);
 
     const afterSideEffects = {
       initiatives: await db.developmentInitiative.count({ where: { clientId: ids.clientA } }),

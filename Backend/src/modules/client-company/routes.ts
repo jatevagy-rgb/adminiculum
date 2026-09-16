@@ -327,7 +327,7 @@ for (const [action, handler] of [
   ['revoke', revokeOpportunityPublication],
 ] as const) {
   clientCompanyRouter.post(`/clients/:clientId/grow/opportunity-publications/:publicationId/${action}`, async (req, res) => {
-    try { res.json(await handler(actor(req), String(req.params.publicationId), { expectedRevision: req.body?.expectedRevision })); } catch (e) { fail(res, e); }
+    try { res.json(await handler(actor(req), String(req.params.clientId), String(req.params.publicationId), { expectedRevision: req.body?.expectedRevision })); } catch (e) { fail(res, e); }
   });
 }
 
