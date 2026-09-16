@@ -539,7 +539,7 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
     const grow = await getOrganizationalGrow(ids.authorizedIdentity, ids.orgWsA, db);
     // Opportunities require publication approval and are not exposed blindly
     expect(grow.opportunities).toEqual([]);
-    expect(grow.opportunitiesDeferredNotice).toContain('GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP');
+    expect(grow.opportunitiesDeferredNotice).toBeNull();
     // Assessment findings and internal fields must NOT leak anywhere in the serialized DTO
     const jsonString = JSON.stringify(grow);
     expect((grow as any).findings).toBeUndefined();
@@ -550,6 +550,108 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
     expect(jsonString).not.toContain('metricsSummary');
     expect(jsonString).not.toContain('estimatedWaitingMinutes');
     expect(jsonString).not.toContain('Internal auditor evaluation notes');
+  });
+
+  it('PUB2_CUSTOMER_OPPORTUNITY_PROJECTION=PASS — projects only published workspace snapshots and fails closed', async () => {
+    const prefix = crypto.randomUUID().replace(/-/g, '');
+    const publicationIds = Array.from({ length: 7 }, (_, index) => `${prefix}-publication-${index}`);
+    const revisionIds = Array.from({ length: 7 }, (_, index) => `${prefix}-revision-${index}`);
+    const publishedAt = new Date('2026-08-01T00:00:00.000Z');
+    const createPublication = async (index: number, input: {
+      workspaceId?: string;
+      clientId?: string;
+      status?: 'DRAFT' | 'PUBLISHED';
+      revokedAt?: Date | null;
+      currentRevisionId?: string | null;
+      title?: string;
+      summary?: string;
+      direction?: string | null;
+      publishedAt?: Date;
+    } = {}) => {
+      const publicationId = publicationIds[index];
+      const revisionId = revisionIds[index];
+      await db.clientImprovementOpportunityPublication.create({
+        data: {
+          id: publicationId,
+          opportunityId: `${prefix}-opportunity-${index}`,
+          clientId: input.clientId || ids.clientA,
+          workspaceId: input.workspaceId || ids.orgWsA,
+          status: input.status || 'PUBLISHED',
+          currentRevisionId: input.currentRevisionId === undefined ? revisionId : input.currentRevisionId,
+          preparedById: ids.adminId,
+          approvedById: ids.adminId,
+          publishedById: ids.adminId,
+          publishedAt: input.status === 'DRAFT' ? null : (input.publishedAt || publishedAt),
+          revokedAt: input.revokedAt || null,
+          revision: 1,
+        },
+      });
+      if (input.status !== 'DRAFT') {
+        await db.clientImprovementOpportunityPublicationRevision.create({
+          data: {
+            id: revisionId,
+            publicationId,
+            revisionNumber: 1,
+            clientSafeTitle: input.title || `Published opportunity ${index}`,
+            clientSafeSummary: input.summary || `Safe customer summary ${index}`,
+            clientSafeDirection: input.direction === undefined ? 'Operational direction' : input.direction,
+            sourceFingerprint: 'a'.repeat(64),
+            audienceSnapshot: { workspaceId: input.workspaceId || ids.orgWsA, clientId: input.clientId || ids.clientA },
+            createdById: ids.adminId,
+          },
+        });
+      }
+      return { publicationId, revisionId };
+    };
+
+    try {
+      // One valid snapshot is visible; unpublished, revoked, wrong-workspace,
+      // wrong-client and malformed-current-revision rows remain invisible.
+      const valid = await createPublication(0, { title: 'Approved customer opportunity', summary: 'Snapshot summary' });
+      const validSecond = await createPublication(6, {
+        title: 'Second approved opportunity',
+        summary: 'Second snapshot summary',
+        publishedAt: new Date('2026-07-01T00:00:00.000Z'),
+      });
+      await createPublication(1, { status: 'DRAFT' });
+      await createPublication(2, { revokedAt: new Date('2026-08-02T00:00:00.000Z') });
+      await createPublication(3, { workspaceId: ids.orgWsB });
+      await createPublication(4, { clientId: ids.clientB });
+      const malformed = await createPublication(5);
+      await db.clientImprovementOpportunityPublication.update({
+        where: { id: malformed.publicationId },
+        data: { currentRevisionId: revisionIds[0] },
+      });
+
+      const first = await getOrganizationalGrow(ids.authorizedIdentity, ids.orgWsA, db);
+      expect(first.opportunities).toEqual([
+        {
+          publicationId: valid.publicationId,
+          title: 'Approved customer opportunity',
+          summary: 'Snapshot summary',
+          direction: 'Operational direction',
+          publishedAt: publishedAt.toISOString(),
+        },
+        {
+          publicationId: validSecond.publicationId,
+          title: 'Second approved opportunity',
+          summary: 'Second snapshot summary',
+          direction: 'Operational direction',
+          publishedAt: '2026-07-01T00:00:00.000Z',
+        },
+      ]);
+      expect(first.opportunitiesDeferredNotice).toBeNull();
+      const serialized = JSON.stringify(first.opportunities);
+      for (const forbiddenField of ['opportunityId', 'evidenceStrength', 'diagnosis', 'reviewer', 'observation', 'taskId', 'caseId', 'documentId']) {
+        expect(serialized).not.toContain(forbiddenField);
+      }
+
+      // The projection is snapshot-only: changing no source row can add any
+      // internal fields or alter the approved customer-safe shape.
+      expect(Object.keys(first.opportunities[0]).sort()).toEqual(['direction', 'publishedAt', 'publicationId', 'summary', 'title']);
+    } finally {
+      await db.clientImprovementOpportunityPublication.deleteMany({ where: { id: { in: publicationIds } } });
+    }
   });
 
   // 7. COMPLIANCE_SAFE_PROJECTION=PASS
@@ -709,7 +811,7 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
   it('IMPROVEMENT_OPPORTUNITY_INTERNAL_BY_DEFAULT=PASS — improvement opportunities withheld by default', async () => {
     const grow = await getOrganizationalGrow(ids.authorizedIdentity, ids.orgWsA, db);
     expect(grow.opportunities).toHaveLength(0);
-    expect(grow.opportunitiesDeferredNotice).toContain('GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP');
+    expect(grow.opportunitiesDeferredNotice).toBeNull();
   });
 
   // 13. ASSESSMENT_FINDING_INTERNAL_BY_DEFAULT=PASS
@@ -809,8 +911,9 @@ describe('Client Portal 2.0 Customer Product Static Verification', () => {
 
   it('GROW_INTERNAL_DATA_HIDDEN=PASS — defers internal improvement opportunities and findings', () => {
     const growSrc = read('src/modules/client-workspace/orgGrowService.ts');
-    expect(growSrc).toContain('GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP');
-    expect(growSrc).toContain('opportunities: []');
+    expect(growSrc).toContain('listPublishedOpportunities');
+    expect(growSrc).toContain('ImprovementOpportunityPublication');
+    expect(growSrc).not.toContain('improvementOpportunity.findMany');
   });
 
   it('COMPLIANCE_SAFE_PROJECTION=PASS — projects safe topics with portalAnswerable question keys', () => {
@@ -846,7 +949,7 @@ describe('Client Portal 2.0 Customer Product Static Verification', () => {
 
   it('IMPROVEMENT_OPPORTUNITY_INTERNAL_BY_DEFAULT=PASS — improvement opportunities withheld by default', () => {
     const growSrc = read('src/modules/client-workspace/orgGrowService.ts');
-    expect(growSrc).toContain('GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP');
+    expect(growSrc).toContain('opportunitiesDeferredNotice: null');
   });
 
   it('ASSESSMENT_FINDING_INTERNAL_BY_DEFAULT=PASS — raw assessment findings excluded from customer DTOs', () => {
