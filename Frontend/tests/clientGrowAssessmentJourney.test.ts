@@ -261,3 +261,25 @@ test('truthful semantic doctrine: declared observations, observations vs facts, 
   assert.doesNotMatch(src, /igazolt hatás|igazolt eredmény/);
   assert.doesNotMatch(journeySrc, /igazolt hatás|igazolt eredmény/);
 });
+
+test('PUB-2 opportunity compatibility: zero-published normal empty state, no stale gap code, published data not hidden', () => {
+  const src = read(VIEW);
+
+  // GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP_FRONTEND_REFERENCES=0
+  // STALE_CAPABILITY_GAP_ASSUMPTION_PRESENT=NO
+  assert.doesNotMatch(src, /GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP/);
+
+  // ZERO_PUBLISHED_IS_NORMAL_EMPTY_STATE=YES
+  assert.match(src, /Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség\./);
+  assert.match(src, /data-testid="grow-opportunities-empty"/);
+
+  // PUBLISHED_OPPORTUNITY_DATA_HIDDEN=NO
+  // Proves that when opportunities.length > 0, it renders the published items list
+  assert.match(src, /data\?\.opportunities && data\.opportunities\.length > 0/);
+  assert.match(src, /data-testid="grow-opportunities-list"/);
+  assert.match(src, /opp\.publicationId \|\| opp\.id \|\| opp\.title/);
+  assert.match(src, /opp\.title/);
+  assert.match(src, /opp\.summary/);
+  assert.match(src, /opp\.direction/);
+  assert.match(src, /opp\.publishedAt/);
+});

@@ -9,7 +9,7 @@
  *  5. Assessment runner opens, shows step progress, offers explicit UNKNOWN option, and advances.
  *  6. Assessment results render findings, directions, and ResearchEvidence ("Mi alapján?").
  *  7. Folyamatok tab renders mapped processes, step indicators, system tags, and company link.
- *  8. Lehetőségek tab renders dignified fail-closed state (GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP).
+ *  8. Lehetőségek tab renders normal empty state ("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség").
  *  9. Kezdeményezések tab renders status filter chips and initiative cards with safe fields only.
  * 10. Eredmények tab renders provenance-grounded outcomes (Mért vs Számított/becsült) with methodology note.
  * 11. Zero fake numbers, zero fake percentages, no ASSUMED/synthetic outcomes presented as achieved.
@@ -190,7 +190,7 @@ const MOCK_ORG_GROW = {
     ],
   },
   opportunities: [],
-  opportunitiesDeferredNotice: "GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP",
+  opportunitiesDeferredNotice: null,
   surveys: [
     {
       id: "survey-1",
@@ -664,14 +664,18 @@ async function runCustomerGrowBrowserQA() {
       }
       await page.screenshot({ path: path.join(SHOTS, `folyamatok-${viewport.name}.png`), fullPage: true });
 
-      // 8. Lehetőségek Tab (Dignified Guarded Fail-Closed State)
-      console.log("8. Inspecting Lehetőségek guarded state...");
+      // 8. Lehetőségek Tab (Normal Truthful Empty State)
+      console.log("8. Inspecting Lehetőségek normal empty state...");
       await page.locator("[data-testid='grow-tab-lehetosegek']").click();
       await page.waitForTimeout(400);
       const lehetosegText = await page.evaluate(() => document.body.innerText);
+      const emptyStateCount = await page.locator("[data-testid='grow-opportunities-empty']").count();
       const gapCodeAttr = await page.locator("[data-publication-code='GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP']").count();
-      if (gapCodeAttr === 0 || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
-        throw new Error("Dignified fail-closed notice not found on Lehetőségek tab");
+      if (emptyStateCount === 0 || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
+        throw new Error("Normal empty state not found on Lehetőségek tab");
+      }
+      if (gapCodeAttr > 0) {
+        throw new Error("STALE_GAP_CODE_PRESENT: data-publication-code attribute with obsolete gap token found");
       }
       if (lehetosegText.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP")) {
         throw new Error("RAW_PUBLICATION_CODE_VISIBLE_TO_CUSTOMER: Raw gap code leaked into visible human UI text");
