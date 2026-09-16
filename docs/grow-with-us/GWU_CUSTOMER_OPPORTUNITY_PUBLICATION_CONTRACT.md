@@ -13,6 +13,13 @@ but returns an empty opportunity list with
 GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP. An internal ImprovementOpportunity
 is therefore not customer-visible by implication.
 
+This token describes the current absence of a publication capability. It is not
+the empty-state reason for a future workspace after publication is implemented.
+After PUB-1 and PUB-2 exist, zero published opportunities is a normal empty
+state, with no capability-gap token and no internal opportunity count leakage.
+Customer copy may say: “Jelenleg nincs ügyféloldalon közzétett fejlesztési
+lehetőség.”
+
 The existing customer route is GET /client-portal/org/grow, consumed by
 /portal/fejlesztes?tab=lehetosegek. Workforce opportunity routes remain under
 /clients/:clientId/grow/opportunities.
@@ -348,8 +355,9 @@ REGRESSION_INVENTORY:
   opportunity;
 - existing processes, initiatives, outcomes, surveys and assessment packs
   retain their current safe DTOs;
-- GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP is removed only when a real
-  publication path exists and remains truthful for the no-publication case;
+- GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP is removed once the real
+  publication path exists; zero published rows then return a normal empty state
+  (not a capability-gap token), without exposing internal opportunity counts;
 - no RecommendationCandidate, diagnosis, raw observation, evidence or
   internal scoring reaches the portal;
 - revoked, superseded, wrong-workspace and wrong-client rows remain invisible.
@@ -449,7 +457,8 @@ route:
    opportunity.
 5. A second explicit publication creates a new revision and a redacted audit
    trail.
-6. A client with no published rows receives an empty opportunity list without
+6. After publication capability exists, a client with no published rows receives
+   a normal empty opportunity list and no capability-gap token, without
    learning the number of internal opportunities.
 7. The existing portal membership and workspace authorization remains the only
    customer access boundary.
