@@ -177,8 +177,11 @@ export function ClientPortalMemberAdmin({ clientId, workspaces, onRefresh }: { c
                       </span>
                     </div>
                     <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      {roleLabel(member.role, selected.mode)} · meghívva: {formatPortalDate(member.invitedAt)}
-                      {member.approvedAt ? ` · jóváhagyva: ${formatPortalDate(member.approvedAt)}` : ""}
+                      {roleLabel(member.role, selected.mode)}
+                      {member.invitedByName ? ` · meghívta: ${member.invitedByName}` : ""}
+                      {member.invitedAt ? ` · meghívva: ${formatPortalDate(member.invitedAt)}` : ""}
+                      {member.approvedAt ? ` · elfogadva: ${formatPortalDate(member.approvedAt)}` : ""}
+                      {member.expiresAt ? ` · lejár: ${formatPortalDate(member.expiresAt)}` : ""}
                     </p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       {member.status === "PENDING_APPROVAL" || member.status === "SUSPENDED" ? (
