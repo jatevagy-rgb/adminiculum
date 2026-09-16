@@ -703,13 +703,73 @@ function assertOccurrenceStatus(target: string): void {
 }
 
 /**
- * Idempotent replay guard: an existing occurrence with the same key is returned
- * ONLY when the requested dueDate matches. A differing factual date must go
- * through the explicit update/revision path — never a silent upsert rewrite.
+ * The normalized, caller-controlled CREATE facts of an occurrence. A stable
+ * occurrenceKey means "this request represents the same occurrence", NOT "any
+ * payload carrying this key may silently reuse the existing row". Idempotent
+ * replay is therefore valid only when ALL of these semantic facts are equal.
+ * Database-generated fields (id, createdAt, updatedAt, revision, status) are
+ * never part of semantic identity.
  */
-function resolveExistingOccurrence(existing: any, requestedDueDate: Date | null) {
-  if (!sameInstant(existing.dueDate, requestedDueDate)) {
-    throw new InteractionError(409, 'OCCURRENCE_KEY_CONFLICT', 'An occurrence with this key already exists with a different dueDate; use the explicit update path.');
+interface OccurrenceCreateFacts {
+  sequence: number;
+  occurrenceType: string;
+  title: string;
+  dueDate: Date | null;
+  expectedAmount: string | null;
+  currency: string | null;
+  sourceReference: string | null;
+  internalNote: string | null;
+  evidenceDocumentVersionId: string | null;
+  relatedTaskId: string | null;
+}
+
+/** Canonical decimal string (trailing zeros / sign normalized) for comparison. */
+function canonicalDecimal(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const raw = String(value).trim();
+  if (!/^[+-]?\d+(\.\d+)?$/.test(raw)) return raw;
+  const negative = raw.startsWith('-');
+  const [intPart, fracPart = ''] = raw.replace(/^[+-]/, '').split('.');
+  const frac = fracPart.replace(/0+$/, '');
+  const normalizedInt = intPart.replace(/^0+(?=\d)/, '') || '0';
+  const out = frac ? `${normalizedInt}.${frac}` : normalizedInt;
+  return negative && out !== '0' ? `-${out}` : out;
+}
+
+function nullableString(value: unknown): string | null {
+  if (value == null) return null;
+  const text = String(value);
+  return text === '' ? null : text;
+}
+
+/**
+ * ONE bounded semantic comparator, shared by the normal replay pre-check AND the
+ * P2002 race recovery, so the two paths cannot diverge.
+ */
+function occurrenceFactsMatch(existing: any, facts: OccurrenceCreateFacts): boolean {
+  return (
+    Number(existing.sequence ?? 0) === facts.sequence
+    && String(existing.occurrenceType) === facts.occurrenceType
+    && String(existing.title) === facts.title
+    && sameInstant(existing.dueDate, facts.dueDate)
+    && canonicalDecimal(existing.expectedAmount) === facts.expectedAmount
+    && nullableString(existing.currency) === facts.currency
+    && nullableString(existing.sourceReference) === facts.sourceReference
+    && nullableString(existing.internalNote) === facts.internalNote
+    && nullableString(existing.evidenceDocumentVersionId) === facts.evidenceDocumentVersionId
+    && nullableString(existing.relatedTaskId) === facts.relatedTaskId
+  );
+}
+
+/**
+ * Idempotent replay guard: an existing occurrence with the same key is returned
+ * ONLY when every normalized create-time factual field matches. Any drift in a
+ * semantic field must go through the explicit update/revision path — never a
+ * silent reuse of a different payload.
+ */
+function resolveExistingOccurrence(existing: any, facts: OccurrenceCreateFacts) {
+  if (!occurrenceFactsMatch(existing, facts)) {
+    throw new InteractionError(409, 'OCCURRENCE_KEY_CONFLICT', 'An occurrence with this key already exists with different factual data; use the explicit update path.');
   }
   return { occurrence: toOccurrenceDTO(existing), replayed: true };
 }
@@ -775,10 +835,26 @@ export async function createObligationOccurrence(actor: InternalActor, obligatio
   if (input.relatedTaskId) await assertSameClientTask(prisma, obligation.clientId, String(input.relatedTaskId));
   if (input.evidenceDocumentVersionId) await assertSameClientDocumentVersion(prisma, obligation.clientId, String(input.evidenceDocumentVersionId));
 
+  // ONE normalized fact set drives BOTH the replay comparison and the INSERT, so
+  // the compared values are exactly the persisted ones and the P2002 recovery
+  // cannot use looser semantics than the normal pre-check.
+  const facts: OccurrenceCreateFacts = {
+    sequence,
+    occurrenceType,
+    title: safeText(input.title, 'title', 240, true)!,
+    dueDate,
+    expectedAmount: canonicalDecimal(expectedAmount),
+    currency,
+    sourceReference: safeText(input.sourceReference, 'sourceReference', 240, false),
+    internalNote: safeText(input.internalNote, 'internalNote', 2000, false),
+    evidenceDocumentVersionId: input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null,
+    relatedTaskId: input.relatedTaskId ? String(input.relatedTaskId) : null,
+  };
+
   const existing = await prisma.clientObligationOccurrence.findUnique({
     where: { obligationId_occurrenceKey: { obligationId, occurrenceKey } },
   });
-  if (existing) return resolveExistingOccurrence(existing, dueDate);
+  if (existing) return resolveExistingOccurrence(existing, facts);
 
   try {
     const row = await prisma.clientObligationOccurrence.create({
@@ -787,17 +863,8 @@ export async function createObligationOccurrence(actor: InternalActor, obligatio
         contractId,
         obligationId,
         occurrenceKey,
-        sequence,
-        occurrenceType,
-        title: safeText(input.title, 'title', 240, true)!,
-        dueDate,
-        expectedAmount,
-        currency,
         status: 'OPEN',
-        sourceReference: safeText(input.sourceReference, 'sourceReference', 240, false),
-        internalNote: safeText(input.internalNote, 'internalNote', 2000, false),
-        relatedTaskId: input.relatedTaskId ? String(input.relatedTaskId) : null,
-        evidenceDocumentVersionId: input.evidenceDocumentVersionId ? String(input.evidenceDocumentVersionId) : null,
+        ...facts,
       },
     });
     return { occurrence: toOccurrenceDTO(row), replayed: false };
@@ -806,7 +873,8 @@ export async function createObligationOccurrence(actor: InternalActor, obligatio
       const raced = await prisma.clientObligationOccurrence.findUnique({
         where: { obligationId_occurrenceKey: { obligationId, occurrenceKey } },
       });
-      if (raced) return resolveExistingOccurrence(raced, dueDate);
+      // Same comparator as the pre-check path — identical replay/conflict semantics.
+      if (raced) return resolveExistingOccurrence(raced, facts);
     }
     throw error;
   }

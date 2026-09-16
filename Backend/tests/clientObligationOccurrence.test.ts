@@ -292,3 +292,144 @@ describe('ClientObligationOccurrence — client / contract invariants', () => {
       .rejects.toMatchObject({ status: 409, code: 'INVALID_STATUS_TRANSITION' });
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Semantic idempotency — a stable key must not silently absorb payload drift. */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Simulates a true unique-key race: the first key lookup misses the concurrent
+ * writer, the INSERT collides with P2002, and the recovery lookup finds the
+ * winner row. Proves both replay paths share one comparator.
+ */
+function raceDb(fx: Fx, racedRow: Row) {
+  const db: any = fakePrisma(fx);
+  let keyLookups = 0;
+  const originalFindUnique = db.clientObligationOccurrence.findUnique;
+  db.clientObligationOccurrence.findUnique = async (args: any) => {
+    if (args?.where?.obligationId_occurrenceKey) {
+      keyLookups += 1;
+      if (keyLookups === 1) return null;
+    }
+    return originalFindUnique(args);
+  };
+  db.clientObligationOccurrence.create = async () => {
+    fx.occurrences.push(racedRow);
+    const error: any = new Error('Unique constraint failed on the fields: (obligationId, occurrenceKey)');
+    error.code = 'P2002';
+    throw error;
+  };
+  return db;
+}
+
+const FULL_PAYLOAD: Row = {
+  occurrenceKey: 'payment-1',
+  occurrenceType: 'PAYMENT',
+  title: 'Részlet 1',
+  sequence: 2,
+  dueDate: '2026-12-15',
+  expectedAmount: '1500000.00',
+  currency: 'huf',
+  sourceReference: '3.2 pont',
+  internalNote: 'Belső megjegyzés',
+  evidenceDocumentVersionId: 'doc-a',
+  relatedTaskId: 'task-a',
+};
+
+describe('ClientObligationOccurrence — semantic replay identity', () => {
+  it('replays an identical complete payload', async () => {
+    const fx = fixture();
+    const db = fakePrisma(fx);
+    const first = await createObligationOccurrence(manager, OBLIGATION_A, { ...FULL_PAYLOAD }, db);
+    const replay = await createObligationOccurrence(manager, OBLIGATION_A, { ...FULL_PAYLOAD }, db);
+    expect(first.replayed).toBe(false);
+    expect(replay.replayed).toBe(true);
+    expect(replay.occurrence.id).toBe(first.occurrence.id);
+    // Normalization: lowercase currency and trailing-zero amount are canonically equal.
+    expect(replay.occurrence.currency).toBe('HUF');
+    expect(replay.occurrence.expectedAmount).toBe('1500000');
+    expect(fx.occurrences).toHaveLength(1);
+  });
+
+  it('conflicts (409) on ANY differing semantic field, never silently reusing the row', async () => {
+    const variants: Array<[string, Row]> = [
+      ['dueDate', { dueDate: '2027-01-15' }],
+      ['occurrenceType', { occurrenceType: 'MILESTONE' }],
+      ['expectedAmount', { expectedAmount: '2000000' }],
+      ['currency', { currency: 'eur' }],
+      ['title', { title: 'Más cím' }],
+      ['sequence', { sequence: 9 }],
+      ['sourceReference', { sourceReference: '4.1 pont' }],
+      ['relatedTaskId', { relatedTaskId: null }],
+      ['internalNote', { internalNote: 'Más megjegyzés' }],
+    ];
+    for (const [label, override] of variants) {
+      const fx = fixture();
+      const db = fakePrisma(fx);
+      // Seed with a payload that already omits evidence/task so the only delta is
+      // the overridden field (keeps each case a single-variable comparison).
+      const base = { ...FULL_PAYLOAD, evidenceDocumentVersionId: null, relatedTaskId: 'task-a' };
+      const seeded = await createObligationOccurrence(manager, OBLIGATION_A, { ...base }, db);
+      await expect(createObligationOccurrence(manager, OBLIGATION_A, { ...base, ...override }, db))
+        .rejects.toMatchObject({ status: 409, code: 'OCCURRENCE_KEY_CONFLICT' });
+      const after = await listObligationOccurrences(admin, OBLIGATION_A, {}, db);
+      expect(after.items).toHaveLength(1);
+      expect(after.items[0].id).toBe(seeded.occurrence.id);
+    }
+  });
+
+  it('treats a provided evidence document as part of semantic identity', async () => {
+    const fx = fixture();
+    const db = fakePrisma(fx);
+    await createObligationOccurrence(manager, OBLIGATION_A, { ...FULL_PAYLOAD, relatedTaskId: null }, db);
+    await expect(createObligationOccurrence(manager, OBLIGATION_A, { ...FULL_PAYLOAD, relatedTaskId: null, evidenceDocumentVersionId: null }, db))
+      .rejects.toMatchObject({ status: 409, code: 'OCCURRENCE_KEY_CONFLICT' });
+  });
+
+  it('P2002 race recovery uses the SAME comparator: identical => replay', async () => {
+    const fx = fixture();
+    const racedRow = {
+      id: 'occ-race',
+      clientId: CLIENT_A, contractId: CONTRACT_A, obligationId: OBLIGATION_A,
+      occurrenceKey: 'payment-1', sequence: 2, occurrenceType: 'PAYMENT', title: 'Részlet 1',
+      dueDate: new Date('2026-12-15T00:00:00.000Z'), expectedAmount: '1500000', currency: 'HUF',
+      status: 'OPEN', satisfiedAt: null, sourceReference: '3.2 pont', internalNote: 'Belső megjegyzés',
+      evidenceDocumentVersionId: 'doc-a', relatedTaskId: 'task-a', revision: 0, createdAt: new Date(), updatedAt: new Date(),
+    };
+    const db = raceDb(fx, racedRow);
+    const result = await createObligationOccurrence(manager, OBLIGATION_A, { ...FULL_PAYLOAD }, db);
+    expect(result.replayed).toBe(true);
+    expect(result.occurrence.id).toBe('occ-race');
+  });
+
+  it('P2002 race recovery uses the SAME comparator: mismatch => 409', async () => {
+    const fx = fixture();
+    const racedRow = {
+      id: 'occ-race',
+      clientId: CLIENT_A, contractId: CONTRACT_A, obligationId: OBLIGATION_A,
+      occurrenceKey: 'payment-1', sequence: 2, occurrenceType: 'PAYMENT', title: 'A verseny írta',
+      dueDate: new Date('2026-12-15T00:00:00.000Z'), expectedAmount: '1500000', currency: 'HUF',
+      status: 'OPEN', satisfiedAt: null, sourceReference: '3.2 pont', internalNote: 'Belső megjegyzés',
+      evidenceDocumentVersionId: 'doc-a', relatedTaskId: 'task-a', revision: 0, createdAt: new Date(), updatedAt: new Date(),
+    };
+    const db = raceDb(fx, racedRow);
+    await expect(createObligationOccurrence(manager, OBLIGATION_A, { ...FULL_PAYLOAD }, db))
+      .rejects.toMatchObject({ status: 409, code: 'OCCURRENCE_KEY_CONFLICT' });
+  });
+
+  it('explicit PATCH still changes allowed factual fields and bumps revision', async () => {
+    const fx = fixture();
+    const db = fakePrisma(fx);
+    const created = await createObligationOccurrence(manager, OBLIGATION_A, { ...FULL_PAYLOAD }, db);
+    expect(created.occurrence.revision).toBe(0);
+    const patched = await updateObligationOccurrence(manager, created.occurrence.id, { title: 'Javított cím', expectedAmount: '1750000.50', currency: 'eur', dueDate: '2027-02-01' }, db);
+    expect(patched.title).toBe('Javított cím');
+    expect(patched.expectedAmount).toBe('1750000.5');
+    expect(patched.currency).toBe('EUR');
+    expect(patched.dueDate).toBe('2027-02-01T00:00:00.000Z');
+    expect(patched.revision).toBe(1); // one explicit PATCH => one revision bump
+    // The immutability + status guards still hold after the repair.
+    await expect(updateObligationOccurrence(manager, created.occurrence.id, { occurrenceKey: 'other' }, db))
+      .rejects.toMatchObject({ status: 400, code: 'OCCURRENCE_KEY_IMMUTABLE' });
+  });
+});
