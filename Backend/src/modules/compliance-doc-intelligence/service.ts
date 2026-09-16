@@ -63,6 +63,20 @@ function boundedWarnings(warnings: string[]): string[] {
   return warnings.slice(0, MAX_WARNINGS_PER_RESULT);
 }
 
+/**
+ * Bounded internal failure code for an unusable document.
+ *
+ * A parser or library error message is never surfaced as-is: this module's own
+ * throw sites already use stable tokens (`DOCX_MAIN_PART_MISSING`,
+ * `DOCX_MAIN_PART_TOO_LARGE`), and anything else collapses to one generic code so
+ * no internal library text can reach a caller or a log line.
+ */
+export function classifyParseFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : '';
+  const token = (message.split(':')[0] || '').trim();
+  return /^[A-Z0-9_]{1,64}$/.test(token) ? token : 'DOCX_PACKAGE_UNREADABLE';
+}
+
 function baseResult(
   version: VersionContentSubject | null,
   partial: Partial<IngestResult> & Pick<IngestResult, 'status'>,
@@ -99,9 +113,9 @@ export async function ingestClauseAnchorsForVersion(
     parseWarnings = parsed.warnings;
     normalizedRows = parsed.rows.map(normalizeExtractedRow);
   } catch (error) {
-    const code = error instanceof Error ? error.message : 'DOCX_PARSE_FAILED';
+    const code = classifyParseFailure(error);
     logInternal(deps, 'parse failed', { documentVersionId: version.id, code });
-    return baseResult(version, { status: 'FAILED', code: code.slice(0, 64) });
+    return baseResult(version, { status: 'FAILED', code });
   }
 
   const byDigest = new Map<string, NormalizedClauseAnchorRow>();

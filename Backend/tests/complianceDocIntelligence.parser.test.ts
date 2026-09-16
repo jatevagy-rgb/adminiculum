@@ -28,6 +28,10 @@ import {
 } from '../src/modules/compliance-doc-intelligence/extractClauseAnchors';
 import { readContentControlRows } from '../src/modules/compliance-doc-intelligence/contentControls';
 import {
+  classifyParseFailure,
+  ingestClauseAnchorsForVersion,
+} from '../src/modules/compliance-doc-intelligence/service';
+import {
   authorityRowXml,
   caseRowXml,
   cell,
@@ -36,6 +40,7 @@ import {
   esc,
   legalRowXml,
   masterDocxBuffer,
+  notADocxBuffer,
   relationRowXml,
   sdt,
   sdtTwoLine,
@@ -411,6 +416,28 @@ describe('CDI-1 structural extraction', () => {
     zip.file('word/styles.xml', '<w:styles/>');
     const buffer = await zip.generateAsync({ type: 'nodebuffer' });
     await expect(parseComplianceMasterDocx(buffer)).rejects.toThrow('DOCX_MAIN_PART_MISSING');
+  });
+
+  it('maps an unusable package to a bounded internal failure code', () => {
+    expect(classifyParseFailure(new Error('DOCX_MAIN_PART_MISSING'))).toBe('DOCX_MAIN_PART_MISSING');
+    expect(classifyParseFailure(new Error('DOCX_MAIN_PART_TOO_LARGE'))).toBe('DOCX_MAIN_PART_TOO_LARGE');
+    // A parser or library message is never surfaced as an internal code.
+    expect(
+      classifyParseFailure(new Error("Can't find end of central directory : is this a zip file ?")),
+    ).toBe('DOCX_PACKAGE_UNREADABLE');
+    expect(classifyParseFailure(undefined)).toBe('DOCX_PACKAGE_UNREADABLE');
+  });
+
+  it('returns a bounded FAILED result instead of throwing for an unreadable package', async () => {
+    // Fails before any persistence call, so this is a database-free proof that a
+    // document ingestion problem is reported and not thrown.
+    const result = await ingestClauseAnchorsForVersion(
+      { id: 'version-1', documentId: 'document-1', spItemId: null },
+      notADocxBuffer(),
+    );
+    expect(result.status).toBe('FAILED');
+    expect(result.code).toBe('DOCX_PACKAGE_UNREADABLE');
+    expect(result.insertedRows).toBe(0);
   });
 
   it('produces a stable digest across repeated normalization of the same row', async () => {

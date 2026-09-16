@@ -72,6 +72,25 @@ describeWithDatabase('CDI-1 compliance document intelligence (vertical slice)', 
     spItemId,
   });
 
+  /**
+   * Mirrors the real upload path: a document has exactly one current version
+   * (partial unique index `document_versions_one_current_per_document_key`), so
+   * the previous current version is demoted before the new one is inserted.
+   */
+  const addDocumentVersion = async (documentId: string, version: number, name: string) => {
+    await db.documentVersion.updateMany({ where: { documentId, isCurrent: true }, data: { isCurrent: false } });
+    return db.documentVersion.create({
+      data: {
+        documentId,
+        version,
+        name,
+        uploadedById: adminId,
+        isCurrent: true,
+        spItemId: `sp-${documentId}-${version}`,
+      } as never,
+    });
+  };
+
   const rowsForVersion = (documentVersionId: string) =>
     db.complianceDocumentClauseAnchor.findMany({
       where: { documentVersionId },
@@ -216,9 +235,7 @@ describeWithDatabase('CDI-1 compliance document intelligence (vertical slice)', 
 
   it('creates independent provenance for a new DocumentVersion', async () => {
     const previousDigests = await digestsForVersion(internalVersionId);
-    const second = await db.documentVersion.create({
-      data: { documentId: internalDocumentId, version: 2, name: 'GDPR belső elemzés v2', uploadedById: adminId, isCurrent: true, spItemId: `sp-${internalDocumentId}-2` } as never,
-    });
+    const second = await addDocumentVersion(internalDocumentId, 2, 'GDPR belső elemzés v2');
 
     const buffer = await internalAnalysisMasterBuffer();
     const result = await ingestClauseAnchorsForVersion(versionSubject(internalDocumentId, second.id, null), buffer);
@@ -269,7 +286,7 @@ describeWithDatabase('CDI-1 compliance document intelligence (vertical slice)', 
       notADocxBuffer(),
     );
     expect(result.status).toBe('FAILED');
-    expect(String(result.code)).toMatch(/^[A-Z_]+$/);
+    expect(result.code).toBe('DOCX_PACKAGE_UNREADABLE');
     // The existing provenance is untouched by a failed attempt.
     expect(await rowsForVersion(internalVersionId)).toHaveLength(3);
   });
@@ -290,9 +307,7 @@ describeWithDatabase('CDI-1 compliance document intelligence (vertical slice)', 
   });
 
   it('ingests a newly uploaded version of an already-linked document', async () => {
-    const second = await db.documentVersion.create({
-      data: { documentId: unlinkedDocumentId, version: 2, name: 'Önálló compliance master v2', uploadedById: adminId, isCurrent: true, spItemId: `sp-${unlinkedDocumentId}-2` } as never,
-    });
+    const second = await addDocumentVersion(unlinkedDocumentId, 2, 'Önálló compliance master v2');
     const buffer = await masterDocxBuffer(legalRowXml() + authorityRowXml());
 
     // This is the call the document upload routes make after a version commit.
@@ -328,9 +343,7 @@ describeWithDatabase('CDI-1 compliance document intelligence (vertical slice)', 
   });
 
   it('writes only the derived relation table and leaves existing compliance tables unchanged', async () => {
-    const third = await db.documentVersion.create({
-      data: { documentId: internalDocumentId, version: 3, name: 'GDPR belső elemzés v3', uploadedById: adminId, isCurrent: true, spItemId: `sp-${internalDocumentId}-3` } as never,
-    });
+    const third = await addDocumentVersion(internalDocumentId, 3, 'GDPR belső elemzés v3');
 
     const countAll = async () => ({
       requirementCitation: await db.requirementCitation.count(),
