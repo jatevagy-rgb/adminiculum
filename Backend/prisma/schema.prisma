@@ -4437,6 +4437,8 @@ model ClientSubmission {
   clientPortalIdentityId    String
   status                    ClientSubmissionStatus @default(DRAFT)
   customerNote              String?
+  customerUnavailableReasonSafe String?
+  customerUnavailableDeclaredAt DateTime?
   submittedAt               DateTime?
   reviewedById              String?
   reviewedAt                DateTime?

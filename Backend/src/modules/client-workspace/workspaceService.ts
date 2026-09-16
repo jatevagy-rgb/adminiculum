@@ -399,6 +399,14 @@ export async function listAdminWorkspaces(actor: InternalActor, clientId?: strin
     select: { id: true, normalizedEmail: true, displayName: true, status: true },
   });
   const identityById = new Map(identities.map((identity) => [identity.id, identity]));
+  // "Invited by" is stored canonically as an internal user id on the membership
+  // row. Resolve it to a safe display name in this read model only — no schema
+  // change, no new membership/invitation system.
+  const invitedByIds = [...new Set(memberships.map((membership) => membership.invitedById).filter((value): value is string => Boolean(value)))];
+  const invitedByUsers = invitedByIds.length
+    ? await db.user.findMany({ where: { id: { in: invitedByIds } }, select: { id: true, name: true } })
+    : [];
+  const invitedByNameById = new Map(invitedByUsers.map((user) => [user.id, user.name]));
   const clientNames = new Map(clients.map((client) => [client.id, client.name]));
   return { items: workspaces.map((workspace) => ({
     ...workspace,
@@ -424,6 +432,7 @@ export async function listAdminWorkspaces(actor: InternalActor, clientId?: strin
         identityEmail: identity?.normalizedEmail ?? null,
         identityDisplayName: identity?.displayName ?? null,
         identityStatus: identity ? String(identity.status) : null,
+        invitedByName: membership.invitedById ? invitedByNameById.get(membership.invitedById) ?? null : null,
       };
     }),
     events: events.filter((event) => event.workspaceId === workspace.id),

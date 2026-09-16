@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import {
   clientSafeError,
@@ -80,7 +81,7 @@ function FieldInput({ field, value, onChange }: { field: ClientRequestFieldDTO; 
   return <input value={value} onChange={(event) => onChange(event.target.value)} maxLength={field.maxLength || 500} className={common} />;
 }
 
-function RequestResponseCard({
+export function RequestResponseCard({
   caseId,
   request,
   submission,
@@ -89,6 +90,7 @@ function RequestResponseCard({
   onAnswer,
   onNote,
   onReload,
+  detailHref,
 }: {
   caseId: string;
   request: CustomerRequestDTO;
@@ -98,6 +100,7 @@ function RequestResponseCard({
   onAnswer: (fieldId: string, value: string) => void;
   onNote: (value: string) => void;
   onReload: () => Promise<void>;
+  detailHref?: string;
 }) {
   const [items, dispatch] = useReducer(uploadReducer, [] as UploadItem[]);
   const [busy, setBusy] = useState(false);
@@ -188,6 +191,7 @@ function RequestResponseCard({
         <div>
           <p className="font-semibold text-[var(--adm-text)]">{request.title}</p>
           <p className="mt-1 text-sm text-[var(--adm-text-muted)]">{localizedInteractionStatus(request.status)} · Határidő: {formatDate(request.dueAt)}</p>
+          {detailHref ? <Link className="mt-1 inline-flex text-sm font-semibold text-[var(--adm-blue-700)] hover:underline" href={detailHref}>Bekérés részletei →</Link> : null}
         </div>
         {submission ? <span className="rounded-full bg-white px-3 py-1 text-xs text-[var(--adm-text-muted)]">{localizedInteractionStatus(submission.status)}</span> : null}
       </div>
@@ -296,7 +300,19 @@ function QuestionThreadRow({ caseId, thread }: { caseId: string; thread: Custome
   );
 }
 
-export function CustomerInteractionCard({ caseId, allowAsk = true }: { caseId: string; allowAsk?: boolean }) {
+export function CustomerInteractionCard({
+  caseId,
+  allowAsk = true,
+  scope = 'all',
+  matterPublicationId,
+  heading,
+}: {
+  caseId: string;
+  allowAsk?: boolean;
+  scope?: 'all' | 'questions';
+  matterPublicationId?: string;
+  heading?: string;
+}) {
   const [requests, setRequests] = useState<CustomerRequestDTO[]>([]);
   const [questions, setQuestions] = useState<CustomerQuestionThreadDTO[]>([]);
   const [submissions, setSubmissions] = useState<CustomerSubmissionDTO[]>([]);
@@ -336,9 +352,40 @@ export function CustomerInteractionCard({ caseId, allowAsk = true }: { caseId: s
     }
   };
 
+  const questionsPanel = allowAsk ? (
+    <div className="rounded-2xl border border-[var(--adm-border)] p-4">
+      <h3 className="font-semibold text-[var(--adm-text)]">Kérdés küldése</h3>
+      <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} className="mt-3 w-full rounded-xl border border-[var(--adm-border-strong)] bg-white px-3 py-2 text-[var(--adm-text)]" placeholder="Tárgy" />
+      <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} className="mt-2 min-h-28 w-full rounded-xl border border-[var(--adm-border-strong)] bg-white px-3 py-2 text-[var(--adm-text)]" placeholder="Kérdés szövege" />
+      <button className="mt-2 rounded-full bg-[var(--adm-blue-950)] px-4 py-2 text-white disabled:opacity-50" disabled={busy || !subject.trim() || !body.trim()} onClick={sendQuestion}>Kérdés beküldése</button>
+      <div className="mt-4 space-y-2">
+        {questions.length ? questions.map((thread) => <QuestionThreadRow key={thread.id} caseId={caseId} thread={thread} />) : <p className="text-sm text-[var(--adm-text-muted)]">Még nincs kérdésszál.</p>}
+      </div>
+    </div>
+  ) : (
+    <div className="rounded-2xl border border-[var(--adm-border)] p-4">
+      <h3 className="font-semibold text-[var(--adm-text)]">Kérdések és válaszok</h3>
+      <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Az üzenetváltást itt megtekintheti.</p>
+      <div className="mt-4 space-y-2">
+        {questions.length ? questions.map((thread) => <QuestionThreadRow key={thread.id} caseId={caseId} thread={thread} />) : <p className="text-sm text-[var(--adm-text-muted)]">Még nincs kérdésszál.</p>}
+      </div>
+    </div>
+  );
+
+  if (scope === 'questions') {
+    return (
+      <Card>
+        <h2 className="cp-card-heading">{heading || 'Segítség és kapcsolat'}</h2>
+        <p className="cp-subtitle mt-2 text-sm">Itt kérdezhet az irodától, és itt jelennek meg az iroda elküldött válaszai.</p>
+        {message ? <p className="mt-3 rounded-2xl bg-[var(--adm-ivory-100)] p-3 text-sm text-[var(--adm-text-muted)]">{message}</p> : null}
+        <div className="mt-4">{questionsPanel}</div>
+      </Card>
+    );
+  }
+
   return (
     <Card>
-      <h2 className="cp-card-heading">Üzenetek</h2>
+      <h2 className="cp-card-heading">{heading || 'Üzenetek'}</h2>
       <p className="cp-subtitle mt-2 text-sm">Itt jelennek meg az ehhez az ügyhöz tartozó kérdések és az iroda válaszai.</p>
       {message ? <p className="mt-3 rounded-2xl bg-[var(--adm-ivory-100)] p-3 text-sm text-[var(--adm-text-muted)]">{message}</p> : null}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -356,29 +403,12 @@ export function CustomerInteractionCard({ caseId, allowAsk = true }: { caseId: s
                 onAnswer={(fieldId, value) => setAnswersByRequest((current) => ({ ...current, [request.id]: { ...(current[request.id] || {}), [fieldId]: value } }))}
                 onNote={(value) => setNotesByRequest((current) => ({ ...current, [request.id]: value }))}
                 onReload={load}
+                detailHref={matterPublicationId ? `/portal/matters/${encodeURIComponent(matterPublicationId)}/requests/${encodeURIComponent(request.id)}` : undefined}
               />
             )) : <p className="text-sm text-[var(--adm-text-muted)]">Nincs aktív dokumentum- vagy adatbekérés.</p>}
           </div>
         </div>
-        {allowAsk ? (
-          <div className="rounded-2xl border border-[var(--adm-border)] p-4">
-            <h3 className="font-semibold text-[var(--adm-text)]">Kérdés küldése</h3>
-            <input value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} className="mt-3 w-full rounded-xl border border-[var(--adm-border-strong)] bg-white px-3 py-2 text-[var(--adm-text)]" placeholder="Tárgy" />
-            <textarea value={body} onChange={(event) => setBody(event.target.value)} maxLength={4000} className="mt-2 min-h-28 w-full rounded-xl border border-[var(--adm-border-strong)] bg-white px-3 py-2 text-[var(--adm-text)]" placeholder="Kérdés szövege" />
-            <button className="mt-2 rounded-full bg-[var(--adm-blue-950)] px-4 py-2 text-white disabled:opacity-50" disabled={busy || !subject.trim() || !body.trim()} onClick={sendQuestion}>Kérdés beküldése</button>
-            <div className="mt-4 space-y-2">
-              {questions.length ? questions.map((thread) => <QuestionThreadRow key={thread.id} caseId={caseId} thread={thread} />) : <p className="text-sm text-[var(--adm-text-muted)]">Még nincs kérdésszál.</p>}
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-2xl border border-[var(--adm-border)] p-4">
-            <h3 className="font-semibold text-[var(--adm-text)]">Kérdések és válaszok</h3>
-            <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Az üzenetváltást itt megtekintheti.</p>
-            <div className="mt-4 space-y-2">
-              {questions.length ? questions.map((thread) => <QuestionThreadRow key={thread.id} caseId={caseId} thread={thread} />) : <p className="text-sm text-[var(--adm-text-muted)]">Még nincs kérdésszál.</p>}
-            </div>
-          </div>
-        )}
+        {questionsPanel}
       </div>
     </Card>
   );

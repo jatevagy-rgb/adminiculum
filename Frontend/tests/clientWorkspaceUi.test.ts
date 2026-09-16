@@ -123,6 +123,8 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     const src = component();
     assert.match(src, /humanStatus/);
     assert.match(src, /factLabel/);
+    assert.match(src, /fact\.factDefinition\?\.labelHu/);
+    assert.match(src, /companyFactTypeLabel\(technicalKey\)/);
     assert.doesNotMatch(src, /OPEN_IMPORTANT_FINDINGS|CONTRACTS_WITHOUT_OWNER/);
   });
 });

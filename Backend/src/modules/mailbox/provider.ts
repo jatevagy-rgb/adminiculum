@@ -10,6 +10,7 @@
  */
 
 import type { MailboxProviderCode, MailboxSecretPayload } from './types';
+import { mailboxIdentityMatches } from './dedupe';
 import { SecretStoreNotConfiguredError } from './secretStore';
 import { ImapFlow } from 'imapflow';
 import nodemailer from 'nodemailer';
@@ -68,11 +69,15 @@ export interface MailboxProviderAdapter {
   }): Promise<MailboxAuthorizationResult>;
   listMessagesSinceCursor(input: {
     secret: MailboxSecretPayload;
+    /** Target mailbox for this connection; when absent/own the adapter uses /me. */
+    mailboxAddress?: string | null;
     cursor: string | null;
     maxMessages: number;
   }): Promise<{ messages: MailboxMessage[]; nextCursor: string | null }>;
   sendMessage(input: {
     secret: MailboxSecretPayload;
+    /** Target mailbox for this connection; when absent/own the adapter uses /me. */
+    mailboxAddress?: string | null;
     to: Array<{ name?: string | null; email: string }>;
     cc?: Array<{ name?: string | null; email: string }>;
     bcc?: Array<{ name?: string | null; email: string }>;
@@ -82,9 +87,22 @@ export interface MailboxProviderAdapter {
     inReplyTo?: string | null;
     references?: string | null;
   }): Promise<{ providerMessageId: string; internetMessageId?: string | null; providerConversationId?: string | null }>;
+  /**
+   * Optional: proves delegated/shared access to an exact target mailbox that is
+   * NOT an identity of the authorizing account. Providers that cannot prove
+   * delegated access omit this, and the callback keeps the exact identity check.
+   */
+  probeTargetMailboxAccess?(input: {
+    secret: MailboxSecretPayload;
+    mailboxAddress: string;
+  }): Promise<MailboxTargetAccessProbeResult>;
   refreshAuthorization(secret: MailboxSecretPayload): Promise<MailboxSecretPayload>;
   disconnect(secret: MailboxSecretPayload): Promise<void>;
 }
+
+export type MailboxTargetAccessProbeResult =
+  | { ok: true }
+  | { ok: false; reason: 'DENIED' | 'NOT_FOUND' | 'UNAVAILABLE' };
 
 function env(name: string): string {
   return String(process.env[name] || '').trim();
@@ -96,7 +114,7 @@ function requireEnv(name: string): string {
   return v;
 }
 
-export const MICROSOFT_REQUIRED_SCOPES = ['offline_access', 'User.Read', 'Mail.Read', 'Mail.Send'] as const;
+export const MICROSOFT_REQUIRED_SCOPES = ['offline_access', 'User.Read', 'Mail.Read', 'Mail.Send', 'Mail.Read.Shared'] as const;
 
 function microsoftScopes(): string {
   const scopes = (env('MICROSOFT_MAILBOX_SCOPES') || MICROSOFT_REQUIRED_SCOPES.join(' ')).split(/\s+/).filter(Boolean);
@@ -234,7 +252,55 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
     };
   }
 
-  async listMessagesSinceCursor(input: { secret: MailboxSecretPayload; cursor: string | null; maxMessages: number }) {
+  /**
+   * Own mailbox (or its SMTP alias) stays on /me. Any other target is addressed
+   * through the canonical Graph mailbox resource /users/{id-or-UPN}, which is the
+   * documented delegated/shared route (Mail.Read.Shared). No directory read is used.
+   */
+  private async mailboxBase(token: string, mailboxAddress?: string | null): Promise<string> {
+    const target = String(mailboxAddress ?? '').trim();
+    if (!target) return 'https://graph.microsoft.com/v1.0/me';
+    try {
+      const res = await fetch('https://graph.microsoft.com/v1.0/me?$select=mail,userPrincipalName,proxyAddresses', {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const profile = (await res.json()) as {
+          mail?: string | null;
+          userPrincipalName?: string | null;
+          proxyAddresses?: unknown;
+        };
+        if (mailboxIdentityMatches(target, microsoftIdentityAddressSet(profile))) {
+          return 'https://graph.microsoft.com/v1.0/me';
+        }
+      }
+    } catch {
+      // Fall through to the explicit target mailbox resource.
+    }
+    return `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(target)}`;
+  }
+
+  async probeTargetMailboxAccess(input: {
+    secret: MailboxSecretPayload;
+    mailboxAddress: string;
+  }): Promise<MailboxTargetAccessProbeResult> {
+    const token = input.secret.accessToken;
+    if (!token) throw new Error('MAILBOX_AUTHORIZATION_REQUIRED');
+    const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(input.mailboxAddress)}/mailFolders/inbox?$select=id&$top=1`;
+    const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
+    if (res.ok) return { ok: true };
+    if (res.status === 401) throw new Error('MAILBOX_AUTHORIZATION_REQUIRED');
+    if (res.status === 403) return { ok: false, reason: 'DENIED' };
+    if (res.status === 404) return { ok: false, reason: 'NOT_FOUND' };
+    return { ok: false, reason: 'UNAVAILABLE' };
+  }
+
+  async listMessagesSinceCursor(input: {
+    secret: MailboxSecretPayload;
+    mailboxAddress?: string | null;
+    cursor: string | null;
+    maxMessages: number;
+  }) {
     const token = input.secret.accessToken;
     if (!token) throw new Error('MAILBOX_AUTHORIZATION_REQUIRED');
     const top = Math.min(Math.max(input.maxMessages, 1), 250);
@@ -242,9 +308,11 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
       ? JSON.parse(input.cursor) as { inbox?: string | null; sent?: string | null }
       : { inbox: input.cursor, sent: null };
     const select = 'id,internetMessageId,conversationId,subject,receivedDateTime,sentDateTime,from,toRecipients,ccRecipients,bccRecipients,body,hasAttachments,internetMessageHeaders';
+    const base = await this.mailboxBase(token, input.mailboxAddress);
     const pages = await Promise.all([
-      this.fetchGraphPage(token, cursor.inbox ?? `https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=${Math.ceil(top / 2)}&$select=${select}`, 'INBOUND'),
-      this.fetchGraphPage(token, cursor.sent ?? `https://graph.microsoft.com/v1.0/me/mailFolders/sentitems/messages?$top=${Math.ceil(top / 2)}&$select=${select}`, 'OUTBOUND'),
+      this.fetchGraphPage(token, cursor.inbox ?? `${base}/mailFolders/inbox/messages?$top=${Math.ceil(top / 2)}&$select=${select}`, 'INBOUND'),
+      // Sent Items is best-effort: a shared mailbox may expose Inbox but not Sent Items.
+      this.fetchGraphPage(token, cursor.sent ?? `${base}/mailFolders/sentitems/messages?$top=${Math.ceil(top / 2)}&$select=${select}`, 'OUTBOUND', true),
     ]);
     const messages: MailboxMessage[] = pages.flatMap((page) => page.messages).slice(0, top);
     const nextCursor = pages.some((page) => page.nextCursor)
@@ -253,9 +321,12 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
     return { messages, nextCursor };
   }
 
-  private async fetchGraphPage(token: string, url: string, direction: 'INBOUND' | 'OUTBOUND') {
+  private async fetchGraphPage(token: string, url: string, direction: 'INBOUND' | 'OUTBOUND', optional = false) {
     const res = await fetch(url, { headers: { authorization: `Bearer ${token}` } });
-    if (!res.ok) throw new Error(res.status === 401 || res.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_READ_FAILED');
+    if (!res.ok) {
+      if (optional && res.status !== 401) return { messages: [] as MailboxMessage[], nextCursor: null };
+      throw new Error(res.status === 401 || res.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_READ_FAILED');
+    }
     const json = (await res.json()) as { value?: Array<Record<string, unknown>>; '@odata.nextLink'?: string };
     const messages: MailboxMessage[] = (json.value ?? []).map((m) => {
       const body = (m.body as { contentType?: string; content?: string } | undefined) ?? {};
@@ -289,6 +360,7 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
 
   async sendMessage(input: {
     secret: MailboxSecretPayload;
+    mailboxAddress?: string | null;
     to: Array<{ name?: string | null; email: string }>;
     cc?: Array<{ name?: string | null; email: string }>;
     bcc?: Array<{ name?: string | null; email: string }>;
@@ -300,11 +372,12 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
   }) {
     const token = input.secret.accessToken;
     if (!token) throw new Error('MAILBOX_AUTHORIZATION_REQUIRED');
+    const base = await this.mailboxBase(token, input.mailboxAddress);
     const internetMessageHeaders = [
       ...(input.inReplyTo ? [{ name: 'In-Reply-To', value: input.inReplyTo }] : []),
       ...(input.references ? [{ name: 'References', value: input.references }] : []),
     ];
-    const draftRes = await fetch('https://graph.microsoft.com/v1.0/me/messages', {
+    const draftRes = await fetch(`${base}/messages`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -321,7 +394,7 @@ export class MicrosoftGraphMailboxProvider implements MailboxProviderAdapter {
     if (!draftRes.ok) throw new Error(draftRes.status === 401 || draftRes.status === 403 ? 'MAILBOX_AUTHORIZATION_REQUIRED' : 'MAILBOX_PROVIDER_SEND_FAILED');
     const draft = (await draftRes.json()) as { id?: string; internetMessageId?: string | null; conversationId?: string | null };
     if (!draft.id) throw new Error('MAILBOX_PROVIDER_SEND_FAILED');
-    const sendRes = await fetch(`https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(draft.id)}/send`, {
+    const sendRes = await fetch(`${base}/messages/${encodeURIComponent(draft.id)}/send`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}` },
     });
@@ -440,7 +513,7 @@ export class GmailMailboxProvider implements MailboxProviderAdapter {
     };
   }
 
-  async listMessagesSinceCursor(input: { secret: MailboxSecretPayload; cursor: string | null; maxMessages: number }) {
+  async listMessagesSinceCursor(input: { secret: MailboxSecretPayload; mailboxAddress?: string | null; cursor: string | null; maxMessages: number }) {
     const token = input.secret.accessToken;
     if (!token) throw new Error('MAILBOX_AUTHORIZATION_REQUIRED');
     const max = Math.min(Math.max(input.maxMessages, 1), 250);
@@ -486,6 +559,7 @@ export class GmailMailboxProvider implements MailboxProviderAdapter {
 
   async sendMessage(input: {
     secret: MailboxSecretPayload;
+    mailboxAddress?: string | null;
     to: Array<{ name?: string | null; email: string }>;
     cc?: Array<{ name?: string | null; email: string }>;
     bcc?: Array<{ name?: string | null; email: string }>;
@@ -566,7 +640,7 @@ export class ImapSmtpMailboxProvider implements MailboxProviderAdapter {
     throw new SecretStoreNotConfiguredError();
   }
 
-  async listMessagesSinceCursor(input: { secret: MailboxSecretPayload; cursor: string | null; maxMessages: number }): Promise<{ messages: MailboxMessage[]; nextCursor: string | null }> {
+  async listMessagesSinceCursor(input: { secret: MailboxSecretPayload; mailboxAddress?: string | null; cursor: string | null; maxMessages: number }): Promise<{ messages: MailboxMessage[]; nextCursor: string | null }> {
     if (env('GENERIC_IMAP_ENABLED') !== 'true') throw new SecretStoreNotConfiguredError();
     if (!input.secret.imapHost || !input.secret.username || !input.secret.password) throw new Error('MAILBOX_GENERIC_IMAP_CONFIGURATION_INVALID');
     if (input.secret.imapTls === 'NONE' && env('MAILBOX_ALLOW_INSECURE_GENERIC_DEVELOPMENT') !== 'true') throw new Error('MAILBOX_GENERIC_TLS_REQUIRED');
@@ -585,7 +659,7 @@ export class ImapSmtpMailboxProvider implements MailboxProviderAdapter {
     } finally { await client.logout().catch(() => undefined); }
   }
 
-  async sendMessage(input: { secret: MailboxSecretPayload; to: Array<{ name?: string | null; email: string }>; cc?: Array<{ name?: string | null; email: string }>; subject: string; bodyText: string; bodyHtml?: string | null; inReplyTo?: string | null; references?: string | null }): Promise<{ providerMessageId: string; internetMessageId?: string | null; providerConversationId?: string | null }> {
+  async sendMessage(input: { secret: MailboxSecretPayload; mailboxAddress?: string | null; to: Array<{ name?: string | null; email: string }>; cc?: Array<{ name?: string | null; email: string }>; subject: string; bodyText: string; bodyHtml?: string | null; inReplyTo?: string | null; references?: string | null }): Promise<{ providerMessageId: string; internetMessageId?: string | null; providerConversationId?: string | null }> {
     if (env('GENERIC_SMTP_ENABLED') !== 'true') throw new SecretStoreNotConfiguredError(); const s = input.secret;
     if (!s.smtpHost || !s.username || !s.password) throw new Error('MAILBOX_GENERIC_SMTP_CONFIGURATION_INVALID');
     if (s.smtpTls === 'NONE' && env('MAILBOX_ALLOW_INSECURE_GENERIC_DEVELOPMENT') !== 'true') throw new Error('MAILBOX_GENERIC_TLS_REQUIRED');

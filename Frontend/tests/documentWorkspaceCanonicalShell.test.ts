@@ -41,13 +41,16 @@ test("Canonical left ledger preserves all document categories and upload trigger
   const ledger = ledgerMatch[0];
 
   assert.match(ledger, /Feltöltött dokumentumok/);
-  assert.match(ledger, /uploadedDocuments\.map/);
+  assert.match(ledger, /filteredUploadedDocuments\.map/);
   assert.match(ledger, /Módosított munkapéldányok/);
-  assert.match(ledger, /modifiedWorkingCopies\.map/);
+  assert.match(ledger, /filteredModifiedWorkingCopies\.map/);
   assert.match(ledger, /Generált \/ módosított/);
-  assert.match(ledger, /generatedLedgerItems\.map/);
+  assert.match(ledger, /filteredGeneratedLedgerItems\.map/);
   assert.match(ledger, /scanStatusLabel\(doc\.securityScanStatus\)/);
   assert.match(ledger, /setSelectedLedgerItem/);
+  // Left-rail search is a view filter over the already-loaded collection.
+  assert.match(ledger, /data-testid="ledger-search-input"/);
+  assert.match(ledger, /setLedgerSearch/);
 });
 
 test("Initial-upload control exists and is wired to fileInputRef and uploadCaseDocument", () => {
@@ -331,4 +334,107 @@ test("Regression Proof 5: publication jump is disabled while uploaded-document v
   const shell = shellMatch[0];
 
   assert.match(shell, /disabled=\{!selectedUploadedDocument \|\| !canonicalActiveVersion \|\| !canonicalCaseId\}/);
+});
+
+// UX convergence (PR #250): consolidated header + truthful reading toolbar.
+
+test("Canonical header consolidates real work context and offers Download / New version / Comparison / AI preparation", () => {
+  const source = documentPage();
+  const topMatch = source.match(/<section data-testid="canonical-top-region"[\s\S]*?<\/section>/);
+  assert.ok(topMatch, "Top region section must be found");
+  const top = topMatch[0];
+
+  assert.match(top, /data-testid="canonical-document-context-line"/);
+  assert.match(top, /<b>Ügy:<\/b>/);
+  assert.match(top, /<b>Ügyfél:<\/b>/);
+  assert.match(top, /<b>Felelős:<\/b>/);
+  assert.match(top, /<b>Reviewer:<\/b>/);
+  assert.match(top, /<b>Határidő:<\/b>/);
+  assert.match(top, /data-testid="canonical-document-work-instruction"/);
+  // responsibility/reviewer/due date come from the canonical work-context view, never inferred
+  assert.match(top, /activeWorkContextView\?\.owner\?\.name/);
+  assert.match(top, /activeWorkContextView\?\.reviewer\?\.name/);
+  assert.match(top, /activeWorkContextView\?\.dueDateLabel/);
+  // uploader must not be repurposed as Felelős
+  assert.doesNotMatch(top, /<b>Felelős:<\/b>[\s\S]{0,40}uploadedBy/);
+
+  assert.match(top, /handleDownloadUploadedDocument|handleDownload/);
+  assert.match(top, /Új verzió feltöltése/);
+  assert.match(top, /Összehasonlítás/);
+  assert.match(top, /AI előkészítés/);
+});
+
+test("Reading toolbar is truthful: real zoom, real focus mode, no fake page count, no false Word open", () => {
+  const source = documentPage();
+  const centerMatch = source.match(/<main data-testid="canonical-center-reading"[\s\S]*?<\/main>/);
+  assert.ok(centerMatch, "Center reading surface must be found");
+  const center = centerMatch[0];
+
+  assert.match(center, /data-testid="reading-zoom-select"/);
+  assert.match(source, /\{\[75, 90, 100, 110, 125, 150\]\.map/);
+  // zoom changes display only — applied as a style, never to text/state
+  assert.match(center, /style=\{\{ zoom: readerZoom \/ 100 \}\}/);
+  assert.match(center, /data-testid="reading-focus-toggle"/);
+  // focus mode collapses the auxiliary rails and back to a single column
+  assert.match(source, /readingFocus \? " xl:hidden" : ""/);
+  assert.match(source, /readingFocus \? "xl:grid-cols-\[minmax\(0,1fr\)\]"/);
+
+  // no invented pagination and no unproven Word open action
+  assert.doesNotMatch(source, /\b1 \/ 24\b/);
+  assert.doesNotMatch(source, /Megnyitás Wordben/);
+  assert.doesNotMatch(source, /WORD_OPEN/);
+});
+
+test("AI preparation and comparison header actions are gated to canonical uploaded documents", () => {
+  const source = documentPage();
+  // the AI modal receives a canonical Document id (never a generated-contract id)
+  assert.ok(source.includes("documentId={selectedUploadedDocument.id}"));
+  assert.ok(!source.includes("documentId={activeDocument.id}"));
+  // both actions are gated on an uploaded (canonical Document) row
+  const aiIndex = source.indexOf("setAiPreparationOpen(true)");
+  const compareIndex = source.indexOf("router.push(metaCompareUrl)");
+  assert.ok(aiIndex > 0 && compareIndex > 0);
+  assert.match(source.slice(Math.max(0, aiIndex - 160), aiIndex), /selectedUploadedDocument \?/);
+  assert.match(source.slice(Math.max(0, compareIndex - 160), compareIndex), /selectedUploadedDocument \?/);
+});
+
+test("Selection quick toolbar maps to canonical annotation types and never creates a real task", () => {
+  const source = documentPage();
+  assert.match(source, /data-testid="selection-quick-toolbar"/);
+  for (const testId of ["INTERNAL_NOTE", "QUESTION", "MODIFICATION_REASON", "DECISION", "TASK_NOTE"]) {
+    assert.ok(source.includes(`testId: '${testId}'`), `quick action ${testId} must be present`);
+  }
+  // TASK_NOTE is labelled truthfully as an annotation (not a workflow task)
+  assert.match(source, /type: 'TASK_NOTE', label: 'Feladatjelölés'/);
+  // quick action only preconfigures the existing canonical composer
+  assert.match(source, /const applyQuickAnnotationType = \(type: DocumentAnnotationType\)/);
+  assert.match(source, /setAnnotationDraft\(\(draft\) => \(\{ \.\.\.draft, annotationType: type \}\)\)/);
+  const fnStart = source.indexOf("const applyQuickAnnotationType");
+  const fnBody = source.slice(fnStart, source.indexOf("};", fnStart));
+  assert.doesNotMatch(fnBody, /createTask|createDocumentTask|onCreateTask/);
+});
+
+test("Reader search is truthful: plain-surface only, real scroll navigation, no annotation risk", () => {
+  const source = documentPage();
+  assert.match(source, /data-testid="reader-search-input"/);
+  assert.match(source, /data-testid="reader-search-prev"/);
+  assert.match(source, /data-testid="reader-search-next"/);
+  assert.match(source, /data-testid="reader-search-clear"/);
+  // search is enabled only on the surface that can highlight + navigate
+  assert.match(source, /const readerSearchSupported = isReaderSearchSupported\(readerSearchSurface\)/);
+  assert.match(source, /const readerSearchableText = readerSearchSupported \? documentTextPreview : null/);
+  assert.match(source, /'Keresés ezen a felületen nem támogatott'/);
+  assert.match(source, /'Nincs kereshető szöveg'/);
+  assert.match(source, /'Nincs találat'/);
+  // active match scrolls into view via a stable presentation index
+  assert.match(source, /data-reader-search-index=\{segment\.matchIndex\}/);
+  assert.match(source, /scrollIntoView\(/);
+  // stale query/active match is reset on document/version switch
+  assert.match(source, /readerSearchDispatch\(\{ type: 'RESET' \}\)/);
+  // presentation-only highlight applied to the plain extracted-text surface
+  assert.match(source, /data-testid="reader-search-match"/);
+  assert.match(source, /renderReaderHighlights\(documentTextPreview\)/);
+  // the annotation-anchored surface stays un-highlighted so offsets are untouched
+  assert.match(source, /renderAnnotatedText\(\)/);
+  assert.doesNotMatch(source, /renderReaderHighlights\(renderAnnotatedText/);
 });

@@ -110,6 +110,13 @@ function SubmissionAction({ row, onDone }: { row: InternalInteractionRow; onDone
       {open ? (
         <div className="mt-2 space-y-2">
           {!detail ? <p className="text-[var(--adm-text-muted)]">Betöltés…</p> : null}
+          {detail?.customerUnavailableDeclaredAt ? (
+            <div className="rounded border border-amber-300 bg-[#fff4da] p-2" data-testid="internal-unavailable-declaration">
+              <p className="font-semibold text-[#8a5a06]">Ügyfél jelzése: a kért dokumentum vagy adat nem áll rendelkezésre.</p>
+              <p className="mt-1 text-[var(--adm-text-muted)]">Rögzítve: {new Date(detail.customerUnavailableDeclaredAt).toLocaleDateString("hu-HU")}</p>
+              {detail.customerUnavailableReasonSafe ? <p className="mt-1 break-words">Megjegyzés: {detail.customerUnavailableReasonSafe}</p> : null}
+            </div>
+          ) : null}
           {detail?.files.map((f) => {
             const acceptable = isFileAcceptable(f.status);
             return (

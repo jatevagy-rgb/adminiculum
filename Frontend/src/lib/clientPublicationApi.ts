@@ -118,6 +118,32 @@ export async function getClientPublicationOverview(caseId: string, documentId?: 
   return fetchApi<ClientPublicationOverviewDTO>(`/client-publications/cases/${encodeURIComponent(caseId)}/overview${query}`, { cache: "no-store" });
 }
 
+// Client-scoped published-content projection for the internal Portal Center.
+// Counts and items are computed server-side from the canonical publication
+// tables (drafts/revoked/superseded/unpublished excluded) — the frontend never
+// reproduces publication authorization or visibility rules.
+export type ClientPublishedContentType = "MATTER" | "DOCUMENT" | "ACTION_REQUEST" | "UPDATE";
+
+export interface ClientPublishedContentItem {
+  type: ClientPublishedContentType;
+  id: string;
+  caseId: string;
+  documentId: string | null;
+  title: string | null;
+  publishedAt: string | null;
+}
+
+export interface ClientPublishedContentDTO {
+  clientId: string;
+  clientName: string | null;
+  counts: { matters: number; documents: number; actionRequests: number; updates: number; total: number };
+  items: ClientPublishedContentItem[];
+}
+
+export async function getClientPublishedContent(clientId: string): Promise<ClientPublishedContentDTO> {
+  return fetchApi<ClientPublishedContentDTO>(`/client-publications/clients/${encodeURIComponent(clientId)}/published-content`, { cache: "no-store" });
+}
+
 export async function createClientPortalGrant(payload: { caseId: string; clientId: string; clientUserId: string; validUntil?: string | null }) {
   return fetchApi<ClientPortalGrantSummaryDTO>("/client-publications/grants", { method: "POST", body: JSON.stringify({ ...payload, permissions: ["MATTER_READ", "DOCUMENT_READ", "DOCUMENT_DOWNLOAD", "ACTION_REQUEST_READ", "UPDATE_READ"] }) });
 }

@@ -29,6 +29,7 @@ import {
   portalHomeSnapshot,
 } from '../modules/client-publication/publicationService';
 import { resolveActiveCustomerGrant } from '../modules/client-interaction/base';
+import { getCustomerCalendar } from '../modules/client-portal-calendar/service';
 import { listCustomerRequests } from '../modules/client-interaction/requestService';
 import { listCustomerSubmissions } from '../modules/client-interaction/submissionService';
 import { listCustomerThreads } from '../modules/client-interaction/questionService';
@@ -376,6 +377,20 @@ router.get('/action-requests/:requestId', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
     res.json(await getPortalActionRequest(actor(req), String(req.params.requestId)));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// Customer-safe calendar projection. Composed only from explicitly published /
+// customer-visible sources; the internal workforce /client-calendar projection
+// (Task.dueDate, Case.deadline, CaseIntakeDeadline, unpublished contracts) is
+// never exposed here.
+router.get('/calendar', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getCustomerCalendar(identityId, workspaceId, { from: req.query.from, to: req.query.to }));
   } catch (error) {
     fail(res, error);
   }
