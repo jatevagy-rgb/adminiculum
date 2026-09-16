@@ -648,7 +648,7 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
 
       // The projection is snapshot-only: changing no source row can add any
       // internal fields or alter the approved customer-safe shape.
-      expect(Object.keys(first.opportunities[0]).sort()).toEqual(['direction', 'publishedAt', 'publicationId', 'summary', 'title']);
+      expect(Object.keys(first.opportunities[0]).sort()).toEqual(['direction', 'publicationId', 'publishedAt', 'summary', 'title']);
     } finally {
       await db.clientImprovementOpportunityPublication.deleteMany({ where: { id: { in: publicationIds } } });
     }
