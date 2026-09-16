@@ -228,8 +228,11 @@ function OrganizationMatterDetail({
       matter={matter}
       showDocuments={detail.capabilities.showDocuments}
       showMessages={detail.capabilities.showMessages}
+      requestsSection={
+        <CustomerInteractionCard caseId={matter.caseId} matterPublicationId={detail.matterPublicationId} scope="requests" />
+      }
       communicationSection={
-        <CustomerInteractionCard caseId={matter.caseId} allowAsk={detail.capabilities.allowMessages} matterPublicationId={detail.matterPublicationId} />
+        <CustomerInteractionCard caseId={matter.caseId} allowAsk={detail.capabilities.allowMessages} matterPublicationId={detail.matterPublicationId} scope="questions" />
       }
     />
   );

@@ -479,7 +479,8 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'matter' && !state.requestDetail && !state.requestUnavailable && state.matter ? (
           <MatterView
             matter={state.matter}
-            communicationSection={<CustomerInteractionCard caseId={state.matter.caseId} allowAsk={Boolean(state.matter.messageCapabilities?.canSend)} matterPublicationId={resourceId} />}
+            requestsSection={<CustomerInteractionCard caseId={state.matter.caseId} matterPublicationId={resourceId} scope="requests" />}
+            communicationSection={<CustomerInteractionCard caseId={state.matter.caseId} allowAsk={Boolean(state.matter.messageCapabilities?.canSend)} matterPublicationId={resourceId} scope="questions" />}
           />
         ) : null}
         {state.status === 'ready' && view === 'document' && state.document ? <DocumentView document={state.document} /> : null}
