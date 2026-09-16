@@ -6,7 +6,7 @@
  * PostgreSQL, or production data.
  */
 import { chromium } from "playwright";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,7 +49,13 @@ function startServer() {
 
 function stopServer() {
   if (!server) return;
-  server.kill();
+  try {
+    if (process.platform === "win32" && server.pid) {
+      spawnSync("taskkill", ["/F", "/T", "/PID", String(server.pid)], { stdio: "ignore" });
+    } else {
+      server.kill("SIGKILL");
+    }
+  } catch {}
   server = undefined;
 }
 
@@ -388,6 +394,84 @@ async function main() {
         await assertComplianceMode(browser, mode, viewport);
       }
     }
+
+    // 4. Test real section tab navigation & browser back/forward on Company Workspace
+    console.log("Verifying real tab cockpit navigation and history state...");
+    const navQa = await newPage(browser, "populated", VIEWPORTS[0]);
+    const cwTarget = `/clients/${WORKFORCE_FIXTURE.client.id}/vallalati-mukodes`;
+    await navQa.page.goto(`${BASE_URL}${cwTarget}`, { waitUntil: "networkidle" });
+
+    // Verify default active section is overview
+    const initialUrl = navQa.page.url();
+    if (!initialUrl.includes("section=overview") && initialUrl.includes("section=")) {
+      throw new Error("Default section should be overview");
+    }
+    if (!await navQa.page.locator('[data-section-id="overview"]').isVisible()) {
+      throw new Error("Overview panel should be visible by default");
+    }
+    // Verify other panels are not in DOM / not visible
+    if (await navQa.page.locator('[data-section-id="processes"]').isVisible()) {
+      throw new Error("Processes panel should NOT be visible when overview is active");
+    }
+
+    // Click on Adatok tab
+    await navQa.page.locator('button[data-testid="workspace-tab-data"]').click();
+    await navQa.page.waitForTimeout(300);
+    if (!navQa.page.url().includes("section=data")) {
+      throw new Error("URL query parameter did not update to section=data");
+    }
+    if (!await navQa.page.locator('[data-section-id="data"]').isVisible()) {
+      throw new Error("Data panel did not become visible after clicking tab");
+    }
+    if (await navQa.page.locator('[data-section-id="overview"]').isVisible()) {
+      throw new Error("Overview panel should NOT be visible when data is active");
+    }
+
+    // Verify typed fact rendering on Adatok tab (no raw JSON)
+    const dataPanelText = await navQa.page.locator('[data-section-id="data"]').innerText();
+    if (dataPanelText.includes("{") && dataPanelText.includes("}")) {
+      throw new Error("Adatok section contains raw JSON formatting");
+    }
+
+    // Click on Folyamatok tab
+    await navQa.page.locator('button[data-testid="workspace-tab-processes"]').click();
+    await navQa.page.waitForTimeout(300);
+    if (!navQa.page.url().includes("section=processes")) {
+      throw new Error("URL query parameter did not update to section=processes");
+    }
+    if (!await navQa.page.locator('[data-section-id="processes"]').isVisible()) {
+      throw new Error("Processes panel did not become visible after clicking tab");
+    }
+
+    // Test Browser Back button
+    await navQa.page.goBack();
+    await navQa.page.waitForTimeout(300);
+    if (!navQa.page.url().includes("section=data")) {
+      throw new Error("Browser Back did not restore section=data in URL");
+    }
+    if (!await navQa.page.locator('[data-section-id="data"]').isVisible()) {
+      throw new Error("Browser Back did not restore visible Data section");
+    }
+
+    // Test Browser Forward button
+    await navQa.page.goForward();
+    await navQa.page.waitForTimeout(300);
+    if (!navQa.page.url().includes("section=processes")) {
+      throw new Error("Browser Forward did not restore section=processes in URL");
+    }
+    if (!await navQa.page.locator('[data-section-id="processes"]').isVisible()) {
+      throw new Error("Browser Forward did not restore visible Processes section");
+    }
+
+    // Switch to Operatív áttekintés tab
+    await navQa.page.locator('button[data-testid="workspace-tab-operational"]').click();
+    await navQa.page.waitForTimeout(300);
+    if (!await navQa.page.locator('[data-testid="legacy-operational-overview"]').isVisible()) {
+      throw new Error("Legacy operational overview should be visible when operational tab is selected");
+    }
+
+    await navQa.context.close();
+
     console.log("MOCK_WORKFORCE_QA=PASSED");
     console.log("SCREENSHOT_EVIDENCE=" + SHOTS);
     console.log("COMPLIANCE_OVERVIEW=POPULATED_LOADING_EMPTY_UNAVAILABLE_PASSED");
