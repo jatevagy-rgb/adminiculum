@@ -87,6 +87,13 @@ export interface WorkspaceMembershipDTO {
   revision: number;
   invitedAt: string | null;
   approvedAt: string | null;
+  // Canonical internal invite actor (id + read-model display name). Null when
+  // the membership was created by a path that did not record an inviter.
+  invitedById?: string | null;
+  invitedByName?: string | null;
+  expiresAt?: string | null;
+  suspendedAt?: string | null;
+  revokedAt?: string | null;
   identityEmail?: string | null;
   identityDisplayName?: string | null;
   identityStatus?: string | null;
@@ -97,6 +104,8 @@ export interface AdminWorkspaceDTO {
   clientId: string;
   clientName: string | null;
   name: string;
+  /** Canonical customer-facing workspace reference (publicReference). */
+  publicReference?: string;
   mode: 'INDIVIDUAL' | 'ORGANIZATION' | 'CASE_RELAY';
   status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
   communicationMode: 'PORTAL_PRIMARY' | 'EMAIL_LINKED' | 'EXTERNAL_ONLY';

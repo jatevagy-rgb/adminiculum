@@ -32,7 +32,7 @@
     "test": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js",
     "test:comparison:db": "jest --runInBand tests/comparisonPersistence.integration.test.ts",
     "test:review:db": "jest --runInBand tests/documentReviewWorkflow.integration.test.ts tests/documentReviewLegacyTransition.integration.test.ts",
-    "test:publication:db": "jest --runInBand tests/clientPublicationFoundation.integration.test.ts",
+    "test:publication:db": "jest --runInBand tests/clientPublicationFoundation.integration.test.ts tests/clientPortalCenterPublishedContent.integration.test.ts",
     "test:internal-case-portal-publication:db": "jest --runInBand tests/internalCasePortalPublication.integration.test.ts",
     "test:automation:l1": "set DOTENV_CONFIG_PATH=.env.test&& node -r dotenv/config ./node_modules/jest/bin/jest.js --runInBand tests/automationSuggestions.accept.integration.test.ts",
     "azure:build": "npm run build",
@@ -121,6 +121,7 @@
     "pg": "^8.18.0",
     "pizzip": "^3.1.7",
     "prisma": "^5.22.0",
+    "sax": "^1.6.1",
     "swagger-ui-express": "^5.0.1",
     "typescript": "^5.9.3",
     "yamljs": "^0.3.0"

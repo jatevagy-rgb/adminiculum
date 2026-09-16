@@ -43,6 +43,11 @@ clientInteractionCustomerRouter.get('/cases/:caseId/requests/:requestId', async 
 clientInteractionCustomerRouter.post('/cases/:caseId/requests/:requestId/submissions', async (req, res) => {
   try { res.status(201).json(await submissions.createDraftSubmission(await ctxFor(req), String(req.params.requestId))); } catch (e) { fail(res, e); }
 });
+// Request-domain declaration ("Jelzem, hogy nem áll rendelkezésre"): reuses /
+// creates the canonical submission and uses the existing SUBMITTED semantics.
+clientInteractionCustomerRouter.post('/cases/:caseId/requests/:requestId/unavailable-declaration', async (req, res) => {
+  try { res.json(await submissions.declareUnavailable(await ctxFor(req), String(req.params.requestId), req.body || {})); } catch (e) { fail(res, e); }
+});
 clientInteractionCustomerRouter.post('/cases/:caseId/submissions/:submissionId/answers', async (req, res) => {
   try { res.json(await submissions.addStructuredAnswers(await ctxFor(req), String(req.params.submissionId), req.body?.answers || [])); } catch (e) { fail(res, e); }
 });

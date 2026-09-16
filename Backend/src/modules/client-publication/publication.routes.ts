@@ -11,6 +11,7 @@ import {
   createMatterPublication,
   createSafeUpdate,
   ClientPublicationError,
+  getClientPublishedContent,
   getMilestoneDraft,
   getPublicationOverview,
   listEligibleMilestoneSteps,
@@ -60,6 +61,12 @@ clientPublicationRouter.use(authenticate);
 
 clientPublicationRouter.get('/cases/:caseId/overview', async (req, res) => {
   try { res.json(await getPublicationOverview(actor(req), String(req.params.caseId), req.query.documentId ? String(req.query.documentId) : null)); }
+  catch (error) { fail(res, error); }
+});
+
+// Client-scoped published-content projection for the internal Portal Center.
+clientPublicationRouter.get('/clients/:clientId/published-content', async (req, res) => {
+  try { res.json(await getClientPublishedContent(actor(req), String(req.params.clientId))); }
   catch (error) { fail(res, error); }
 });
 

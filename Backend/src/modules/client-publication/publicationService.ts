@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+import { assertClientReadAccess, internalCaseScope } from '../client-interaction/base';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = { userId: string; role?: string; workspaceId?: string };
@@ -736,6 +737,67 @@ export async function getPublicationOverview(actor: Actor, caseId: string, docum
     actionRequests: actions,
     safeUpdates: updates,
     history: await getPublicationHistory(actor, caseId, db),
+  };
+}
+
+// Client-scoped, workforce-only read model for the internal Portal Center.
+// It is a pure projection over the canonical publication tables — never a second
+// publication store. Only explicit, current, customer-visible publication rows
+// are counted: drafts, revoked, superseded and expired content are excluded by
+// the status filter. Access is bounded to the cases the actor may already see.
+export type ClientPublishedContentType = 'MATTER' | 'DOCUMENT' | 'ACTION_REQUEST' | 'UPDATE';
+
+export async function getClientPublishedContent(actor: Actor, clientId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+  requireFoundation(); requireInternal(actor);
+  // Canonical internal client authorization — the single source of truth reused
+  // by every client-scoped internal module. It fails closed: a non-privileged
+  // workforce actor with zero Case access to this client is rejected with 403
+  // CLIENT_ACCESS_FORBIDDEN and no client metadata/count payload is produced.
+  // ADMIN/PARTNER keep unrestricted client read. This projection must never
+  // re-implement the client/case ACL.
+  const client = await assertClientReadAccess(actor, clientId, db);
+  const scope = await internalCaseScope(actor, db);
+  const caseRows = await db.case.findMany({
+    where: { clientId, ...(scope === null ? {} : { id: { in: scope } }) },
+    select: { id: true },
+  });
+  const caseIds = caseRows.map((row) => row.id);
+  const empty = { clientId, clientName: client.name ?? null, counts: { matters: 0, documents: 0, actionRequests: 0, updates: 0, total: 0 }, items: [] as Row[] };
+  if (!caseIds.length) return empty;
+  const [matters, documents, actions, updates] = await Promise.all([
+    many(db, `SELECT p.id, p."caseId", p."publishedAt", r."clientSafeTitle" AS title
+      FROM client_matter_publications p
+      LEFT JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
+      WHERE p."clientId"=$1 AND p."caseId"=ANY($2::text[]) AND p.status='PUBLISHED'::"ClientPublicationStatus"
+      ORDER BY p."publishedAt" DESC NULLS LAST, p.id ASC`, clientId, caseIds),
+    many(db, `SELECT p.id, p."caseId", p."documentId", p."publishedAt", p."clientFacingTitle" AS title
+      FROM client_document_publications p
+      WHERE p."clientId"=$1 AND p."caseId"=ANY($2::text[]) AND p.status='PUBLISHED'::"ClientPublicationStatus"
+      ORDER BY p."publishedAt" DESC NULLS LAST, p.id ASC`, clientId, caseIds),
+    many(db, `SELECT a.id, a."caseId", a."clientSafeTitle" AS title, a."dueAt", a."updatedAt" AS "publishedAt"
+      FROM client_action_requests a
+      WHERE a."clientId"=$1 AND a."caseId"=ANY($2::text[]) AND a.status='PUBLISHED'::"ClientActionRequestStatus"
+      ORDER BY a."updatedAt" DESC, a.id ASC`, clientId, caseIds),
+    many(db, `SELECT u.id, u."caseId", u.title, u."publishedAt"
+      FROM client_safe_updates u
+      WHERE u."clientId"=$1 AND u."caseId"=ANY($2::text[]) AND u.status='PUBLISHED'::"ClientSafeUpdateStatus"
+      ORDER BY u."publishedAt" DESC NULLS LAST, u.id ASC`, clientId, caseIds),
+  ]);
+  const items: Row[] = [
+    ...matters.map((row) => ({ type: 'MATTER' as const, id: row.id, caseId: row.caseId, documentId: null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+    ...documents.map((row) => ({ type: 'DOCUMENT' as const, id: row.id, caseId: row.caseId, documentId: row.documentId ?? null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+    ...actions.map((row) => ({ type: 'ACTION_REQUEST' as const, id: row.id, caseId: row.caseId, documentId: null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+    ...updates.map((row) => ({ type: 'UPDATE' as const, id: row.id, caseId: row.caseId, documentId: null, title: row.title ?? null, publishedAt: row.publishedAt ?? null })),
+  ].sort((a, b) => {
+    const left = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const right = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return right - left || String(a.id).localeCompare(String(b.id));
+  });
+  return {
+    clientId,
+    clientName: client.name ?? null,
+    counts: { matters: matters.length, documents: documents.length, actionRequests: actions.length, updates: updates.length, total: items.length },
+    items: items.slice(0, 100),
   };
 }
 
