@@ -5,6 +5,7 @@
 import prisma from '../../config/database.js';
 import { extractText } from '../documents/textExtractor.js';
 import { default as driveService } from '../sharepoint/driveService.js';
+import { rehydrateDocument, type RehydrationWarning } from './rehydration.js';
 
 const TimelineType = {
   CASE_CREATED: 'CASE_CREATED',
@@ -737,150 +738,9 @@ export async function listAnonymousDocumentsBySource(sourceDocId: string) {
   });
 }
 
-// ============================================================================
-// Rehydration types
-// ============================================================================
-
-interface RehydrationWarning {
-  token: string;
-  reason: string;
-  original?: string;
-}
-
-interface RehydrationResult {
-  success: boolean;
-  rehydratedContent: string | null;
-  rehydrationStatus: 'COMPLETE' | 'PARTIAL' | 'FAILED';
-  warnings: RehydrationWarning[];
-  totalTokens: number;
-  resolvedTokens: number;
-  unresolvedTokens: number;
-  error?: string;
-}
-
-// ============================================================================
-// Rehydrate document using stored token mapping
-// ============================================================================
-
-function rehydrateDocument(
-  aiResponseText: string,
-  redactedItems: RedactionItem[]
-): RehydrationResult {
-  if (!aiResponseText || aiResponseText.trim().length === 0) {
-    return {
-      success: false,
-      rehydratedContent: null,
-      rehydrationStatus: 'FAILED',
-      warnings: [{ token: '', reason: 'AI response text is empty' }],
-      totalTokens: redactedItems.length,
-      resolvedTokens: 0,
-      unresolvedTokens: redactedItems.length,
-      error: 'AI response text is empty'
-    };
-  }
-
-  if (!redactedItems || redactedItems.length === 0) {
-    return {
-      success: true,
-      rehydratedContent: aiResponseText,
-      rehydrationStatus: 'COMPLETE',
-      warnings: [],
-      totalTokens: 0,
-      resolvedTokens: 0,
-      unresolvedTokens: 0
-    };
-  }
-
-  const warnings: RehydrationWarning[] = [];
-  let resolvedCount = 0;
-  let unresolvedCount = 0;
-
-  // Build a map of replacement -> original for fast lookup
-  // Key is the replacement token (e.g., "[NOVAK_JANOS]")
-  const tokenMap = new Map<string, string>();
-
-  for (const item of redactedItems) {
-    const normalizedReplacement = item.replacement.toUpperCase().trim();
-    tokenMap.set(normalizedReplacement, item.original);
-  }
-
-  // Find all placeholders in the AI response using regex
-  // Format: [TOKEN_NAME] with alphanumeric and underscore
-  const placeholderRegex = /\[([A-Z0-9_]+)\]/g;
-
-  let result = aiResponseText;
-  let match;
-
-  // Track which tokens we've resolved
-  const resolvedTokens = new Set<string>();
-
-  // First pass: try exact replacement for placeholders in [TOKEN] format
-  while ((match = placeholderRegex.exec(aiResponseText)) !== null) {
-    const placeholder = match[0]; // e.g., "[NOVAK_JANOS]"
-    const tokenKey = match[1].toUpperCase(); // e.g., "NOVAK_JANOS"
-
-    const normalizedKey = `[${tokenKey}]`;
-    const original = tokenMap.get(normalizedKey);
-
-    if (original) {
-      result = result.replace(new RegExp(escapeRegex(placeholder), 'g'), original);
-      resolvedTokens.add(normalizedKey);
-      resolvedCount++;
-    } else {
-      // Check if this looks like one of our tokens (all caps with underscores)
-      if (tokenKey.includes('_') || /^[A-Z]{2,}$/.test(tokenKey)) {
-        warnings.push({
-          token: placeholder,
-          reason: 'Token not found in mapping',
-          original: undefined
-        });
-        unresolvedCount++;
-      }
-    }
-  }
-
-  // Second pass: check for any unresolved tokens by looking for common patterns
-  for (const item of redactedItems) {
-    const normalizedReplacement = item.replacement.toUpperCase().trim();
-
-    if (!resolvedTokens.has(normalizedReplacement)) {
-      // Check if we see our placeholder pattern anywhere unresolved
-      const remainingPlaceholders = result.match(/\[([A-Z0-9_]+)\]/g) || [];
-      for (const ph of remainingPlaceholders) {
-        const phKey = ph.toUpperCase().trim();
-        if (phKey === normalizedReplacement && !resolvedTokens.has(phKey)) {
-          warnings.push({
-            token: ph,
-            reason: 'Placeholder still present in output - could not resolve',
-            original: item.original
-          });
-          unresolvedCount++;
-          resolvedTokens.add(phKey);
-        }
-      }
-    }
-  }
-
-  // Determine overall status
-  let status: 'COMPLETE' | 'PARTIAL' | 'FAILED';
-  if (unresolvedCount === 0) {
-    status = 'COMPLETE';
-  } else if (resolvedCount > 0) {
-    status = 'PARTIAL';
-  } else {
-    status = 'FAILED';
-  }
-
-  return {
-    success: status !== 'FAILED',
-    rehydratedContent: result,
-    rehydrationStatus: status,
-    warnings,
-    totalTokens: redactedItems.length,
-    resolvedTokens: resolvedCount,
-    unresolvedTokens: unresolvedCount
-  };
-}
+// Rehydration types and `rehydrateDocument` live in ./rehydration.ts (pure,
+// isolated, unit-testable). The live service re-exports nothing here; it calls
+// the imported helper directly from importAIResponse.
 
 // ============================================================================
 // Save rehydrated result as a document

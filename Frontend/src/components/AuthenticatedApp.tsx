@@ -87,9 +87,15 @@ type AuthenticatedAppProps = {
   children?: React.ReactNode;
   /** Viewport-bound workbench shell (professional editor route only). */
   fullViewport?: boolean;
+  /**
+   * Additive route-specific chrome. "focused" yields the permanent Sidebar's
+   * horizontal space to the document workbench while keeping authentication and
+   * a slim Adminiculum navigation. Default behaviour is unchanged elsewhere.
+   */
+  workspaceChrome?: "default" | "focused";
 };
 
-export function AuthenticatedApp({ section = "dashboard", children, fullViewport = false }: AuthenticatedAppProps) {
+export function AuthenticatedApp({ section = "dashboard", children, fullViewport = false, workspaceChrome = "default" }: AuthenticatedAppProps) {
   const { instance, accounts, inProgress } = useMsal();
   const searchParams = useSearchParams();
   const account = pickAccountByTenant(accounts, resolvedWorkforceTenantId);
@@ -431,5 +437,5 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
     );
   }
 
-  return <AppShell onSignOut={signOut} userProfile={profile} section={section} fullViewport={fullViewport}>{children}</AppShell>;
+  return <AppShell onSignOut={signOut} userProfile={profile} section={section} fullViewport={fullViewport} workspaceChrome={workspaceChrome}>{children}</AppShell>;
 }
