@@ -1541,51 +1541,93 @@ export function OrgGrowView() {
       {/* TAB 4: LEHETŐSÉGEK — FAIL-CLOSED GUARDED BOUNDARY */}
       {activeTab === "lehetosegek" ? (
         <section className={card} data-testid="grow-opportunities-section">
-          <div className="max-w-2xl">
-            <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700"
-              data-publication-code="GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP"
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-stone-500" />
-              Közzétételi állapot
-            </span>
-            <h2 className="mt-3 font-serif text-2xl font-semibold text-[#1b382b] sm:text-3xl">
-              Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-stone-700">
-              A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg ezen a felületen.
-            </p>
-
-            <div
-              className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600"
-              data-publication-code="GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP"
-            >
-              <p className="font-semibold text-stone-800">
+          {data?.opportunities && data.opportunities.length > 0 ? (
+            <div className="space-y-4" data-testid="grow-opportunities-list">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">
+                  Fejlesztési lehetőségek
+                </p>
+                <h2 className="mt-1 font-serif text-2xl font-semibold text-[#1b382b]">
+                  Közzétett fejlesztési lehetőségek
+                </h2>
+                <p className="mt-1 text-xs text-stone-600">
+                  Az alábbi lehetőségek szakértői értékelést követően kerültek ügyféloldali közzétételre.
+                </p>
+              </div>
+              <div className="space-y-3">
+                {data.opportunities.map((opp) => (
+                  <article
+                    key={opp.publicationId || opp.id || opp.title}
+                    className="rounded-2xl border border-[#e8ded1] bg-white p-5 shadow-xs"
+                    data-testid="grow-opportunity-item"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-serif text-base font-bold text-[#1b382b]">{opp.title}</h3>
+                      {opp.publishedAt ? (
+                        <span className="text-[11px] text-stone-500">
+                          {new Date(opp.publishedAt).toLocaleDateString("hu-HU")}
+                        </span>
+                      ) : null}
+                    </div>
+                    {opp.summary ? (
+                      <p className="mt-2 text-xs leading-relaxed text-stone-700">{opp.summary}</p>
+                    ) : null}
+                    {opp.direction ? (
+                      <p className="mt-2 text-xs italic text-[#2d5a43]">
+                        Irány: {opp.direction}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="max-w-2xl">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-700"
+                data-publication-code="GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-stone-500" />
+                Közzétételi állapot
+              </span>
+              <h2 className="mt-3 font-serif text-2xl font-semibold text-[#1b382b] sm:text-3xl">
                 Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-stone-700">
+                A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg ezen a felületen.
               </p>
-              <p className="mt-0.5">
-                {data?.opportunitiesDeferredNotice && !data.opportunitiesDeferredNotice.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP")
-                  ? data.opportunitiesDeferredNotice
-                  : "A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg."}
-              </p>
-            </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href="/portal/megkeresesek"
-                className="rounded-full bg-[#1b382b] px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[#2d4a3e]"
+              <div
+                className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600"
+                data-publication-code="GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP"
               >
-                Kérdése van a vizsgálatról? Írjon az irodának →
-              </Link>
-              <button
-                type="button"
-                onClick={() => handleTabChange("felmeresek")}
-                className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
-              >
-                Felmérések megnyitása
-              </button>
+                <p className="font-semibold text-stone-800">
+                  Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
+                </p>
+                <p className="mt-0.5">
+                  {data?.opportunitiesDeferredNotice && !data.opportunitiesDeferredNotice.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP")
+                    ? data.opportunitiesDeferredNotice
+                    : "A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg."}
+                </p>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href="/portal/megkeresesek"
+                  className="rounded-full bg-[#1b382b] px-5 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-[#2d4a3e]"
+                >
+                  Kérdése van a vizsgálatról? Írjon az irodának →
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("felmeresek")}
+                  className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50"
+                >
+                  Felmérések megnyitása
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </section>
       ) : null}
 

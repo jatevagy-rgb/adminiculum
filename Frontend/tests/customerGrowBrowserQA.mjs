@@ -680,6 +680,9 @@ async function runCustomerGrowBrowserQA() {
         throw new Error("OPPORTUNITY_WORKFLOW_STATE_INVENTED: Invented workflow state displayed to customer");
       }
       await page.screenshot({ path: path.join(SHOTS, `lehetosegek-${viewport.name}.png`), fullPage: true });
+      if (viewport.name === "desktop") {
+        await page.screenshot({ path: path.join(SHOTS, "opportunities-empty-desktop.png"), fullPage: true });
+      }
 
       // 9. Kezdeményezések Tab
       console.log("9. Inspecting Kezdeményezések tab...");
@@ -740,6 +743,33 @@ async function runCustomerGrowBrowserQA() {
 
       await context.close();
     }
+
+    // Capture published opportunities basic compatibility screenshot
+    console.log("Capturing published opportunities basic compatibility screenshot...");
+    const { context: pubContext, page: pubPage } = await createQaPage(browser, { width: 1440, height: 900, name: "desktop" });
+    await pubPage.route("**/api/v1/client-portal/org/grow", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...MOCK_ORG_GROW,
+          opportunities: [
+            {
+              publicationId: "pub-opp-1",
+              title: "Automatizált jóváhagyási folyamat bevezetése",
+              summary: "A manuális jóváhagyási lépések kiváltása digitális munkafolyamattal a megrendelés-feldolgozásban.",
+              direction: "Automatizálás és átfutási idő csökkentése",
+              publishedAt: "2026-03-15T08:30:00.000Z",
+            },
+          ],
+          opportunitiesDeferredNotice: null,
+        }),
+      });
+    });
+    await pubPage.goto(`${BASE_URL}/portal/fejlesztes?tab=lehetosegek`, { waitUntil: "networkidle" });
+    await pubPage.waitForSelector("[data-testid='grow-opportunities-section']", { timeout: 10000 });
+    await pubPage.screenshot({ path: path.join(SHOTS, "opportunities-published-basic-desktop.png"), fullPage: true });
+    await pubContext.close();
 
     console.log("\n===============================================================");
     console.log("ALL BROWSER QA TESTS COMPLETED SUCCESSFULLY (EXIT CODE 0)");
