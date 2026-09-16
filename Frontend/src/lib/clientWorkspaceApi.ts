@@ -175,7 +175,7 @@ export type CompanyDataRoom = {
     type: string;
     value: unknown;
     answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
-    factDefinition: { key: string; domainCode: string; valueType: string } | null;
+    factDefinition: { key: string; domainCode: string; valueType: string; labelHu?: string | null } | null;
     scopeType: string | null;
     factSubjectId: string | null;
     verificationStatus: string | null;

@@ -126,7 +126,7 @@ function renderFactValue(fact: CompanyDataRoom["facts"][number]): ReactNode {
 
 function factLabel(fact: CompanyDataRoom["facts"][number]): string {
   const technicalKey = fact.factDefinition?.key || fact.type;
-  return companyFactTypeLabel(technicalKey);
+  return fact.factDefinition?.labelHu || companyFactTypeLabel(technicalKey);
 }
 
 function FactCard({ fact }: { fact: CompanyDataRoom["facts"][number] }) {

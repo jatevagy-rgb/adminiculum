@@ -25,6 +25,7 @@ import { InteractionError, InternalActor, assertClientReadAccess, assertClientSa
 import { getComplianceWorkspace } from '../compliance/complianceWorkspaceService';
 import { buildCanonicalFactState } from '../client-workspace/companyProfileAnswerService';
 import { COMPANY_PROFILE_QUESTIONS } from '../client-workspace/companyProfileQuestionRegistry';
+import { getCanonicalCompanyFact } from '../client-workspace/companyProfileFactCatalog';
 import { applyDeterministicDerivations, resolveVisibleQuestions, type CompanyProfileFactState } from '../client-workspace/companyProfileAdaptive';
 import { resolveCanonicalTypedFactValue, type CanonicalTypedFactValue } from '../client-workspace/canonicalFactValue';
 import type { ProcessMetricCode, ProcessMetricValue } from '../company-growth/metrics/metricTypes';
@@ -188,7 +189,7 @@ export interface CompanyDataRoomDto {
     type: string;
     value: CanonicalTypedFactValue | null;
     answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
-    factDefinition: { key: string; domainCode: string; valueType: string } | null;
+    factDefinition: { key: string; domainCode: string; valueType: string; labelHu?: string | null } | null;
     scopeType: string | null;
     factSubjectId: string | null;
     verificationStatus: string | null;
@@ -661,6 +662,15 @@ export async function getCompanyDataRoom(
   if (!client) throw new InteractionError(404, 'CLIENT_NOT_FOUND', 'Client not found.');
 
   const answerStateByDefinition = new Map(answerStates.map((state) => [state.factDefinitionId, state]));
+  const projectFactDefinition = (factDefinition: { key: string; domainCode: string; valueType: string } | null) => {
+    if (!factDefinition) return null;
+    return {
+      key: factDefinition.key,
+      domainCode: factDefinition.domainCode,
+      valueType: factDefinition.valueType,
+      labelHu: getCanonicalCompanyFact(factDefinition.key)?.labelHu ?? null,
+    };
+  };
   const projectFact = (
     fact: typeof facts[number] | NonNullable<typeof answerStates[number]['currentFact']>,
     factDefinition: { key: string; domainCode: string; valueType: string } | null,
@@ -671,7 +681,7 @@ export async function getCompanyDataRoom(
     type: fact.type,
     value: resolveCanonicalTypedFactValue(fact) ?? (allowLegacyValue && 'value' in fact ? fact.value : null),
     answerStatus,
-    factDefinition,
+    factDefinition: projectFactDefinition(factDefinition),
     scopeType: 'scopeType' in fact && fact.scopeType ? String(fact.scopeType) : null,
     factSubjectId: 'factSubjectId' in fact ? fact.factSubjectId : null,
     verificationStatus: 'verificationStatus' in fact ? String(fact.verificationStatus) : null,
@@ -706,9 +716,9 @@ export async function getCompanyDataRoom(
         type: 'answer-state',
         value: null,
         answerStatus: 'UNKNOWN' as const,
-        factDefinition: state.factDefinition
+        factDefinition: projectFactDefinition(state.factDefinition
           ? { key: state.factDefinition.key, domainCode: state.factDefinition.domainCode, valueType: String(state.factDefinition.valueType) }
-          : null,
+          : null),
         scopeType: 'COMPANY',
         factSubjectId: null,
         verificationStatus: null,
