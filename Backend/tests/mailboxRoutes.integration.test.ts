@@ -40,7 +40,7 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
   const clientId = crypto.randomUUID(), caseId = crypto.randomUUID(), taskId = crypto.randomUUID();
   const sentinels = { access: `oauth-access-${suffix}`, refresh: `oauth-refresh-${suffix}`, clientSecret: `oauth-client-secret-${suffix}`, imap: `imap-password-${suffix}`, smtp: `smtp-password-${suffix}`, verification: `verification-code-${suffix}`, provider: `provider-error-${suffix}` };
   let db: PrismaClient; let app: Express; let store: any; let InMemorySecretStore: any; let setProvider: any; let setStore: any; let setTransactionalTransport: any; let sentVerificationCode = '';
-  let providerFailsWithSentinel = false, providerRequiresReauth = false, providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`, providerAuthorizedAddresses: string[] | undefined = undefined, refreshCount = 0, transactionalDeliveryFails = false, sentMessageCount = 0;
+  let providerFailsWithSentinel = false, providerRequiresReauth = false, providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`, providerAuthorizedAddresses: string[] | undefined = undefined, providerTargetProbe: 'OK' | 'DENIED' | 'NOT_FOUND' | 'UNAVAILABLE' = 'DENIED', providerSyncMessages: any[] = [], refreshCount = 0, transactionalDeliveryFails = false, sentMessageCount = 0;
 
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl!;
@@ -55,7 +55,8 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     setProvider('MICROSOFT_GRAPH', {
       code: 'MICROSOFT_GRAPH', displayName: 'route fake', requiresProviderConfiguration: false,
       buildAuthorizationUrl: () => 'https://provider.invalid/authorize', exchangeAuthorizationCode: async () => ({ authorizedAddress: providerAuthorizedAddress, authorizedAddresses: providerAuthorizedAddresses, secret: { kind: 'OAUTH2', accessToken: sentinels.access, refreshToken: sentinels.refresh } }),
-      listMessagesSinceCursor: async () => { if (providerRequiresReauth) throw new Error('AUTHORIZATION_REQUIRED'); if (providerFailsWithSentinel) throw new Error(sentinels.provider); return { messages: [], nextCursor: 'route-cursor' }; },
+      probeTargetMailboxAccess: async () => (providerTargetProbe === 'OK' ? { ok: true } : { ok: false, reason: providerTargetProbe }),
+      listMessagesSinceCursor: async () => { if (providerRequiresReauth) throw new Error('AUTHORIZATION_REQUIRED'); if (providerFailsWithSentinel) throw new Error(sentinels.provider); return { messages: providerSyncMessages, nextCursor: 'route-cursor' }; },
       sendMessage: async () => { if (providerFailsWithSentinel) throw new Error(sentinels.provider); sentMessageCount += 1; return { providerMessageId: `sent-${suffix}-${sentMessageCount}` }; }, refreshAuthorization: async (secret: any) => { refreshCount += 1; return secret; }, disconnect: async () => undefined,
     });
     setProvider('GOOGLE_GMAIL', {
@@ -185,20 +186,123 @@ describeWithDatabase('universal mailbox route ownership and redaction PostgreSQL
     expect(events.map((event) => event.eventType)).toEqual(expect.arrayContaining(['MAILBOX_AUTHORIZATION_STARTED', 'MAILBOX_CONNECTED', 'MAILBOX_DISCONNECTED', 'MAILBOX_REVOKED']));
   });
 
-  it('rejects a provider identity mismatch before secret persistence or connection', async () => {
+  it('rejects a target mailbox the authorizing account cannot access, before secret persistence or connection', async () => {
     providerAuthorizedAddress = `different-${suffix}@fixture.invalid`;
+    providerAuthorizedAddresses = undefined;
+    providerTargetProbe = 'DENIED';
     const { createOAuthState } = require('../src/modules/mailbox/oauthState');
     const state = createOAuthState({ userId: ids.owner, connectionId: mismatchConnectionId, mailboxAddress: `verified-${suffix}@fixture.invalid`, provider: 'MICROSOFT_GRAPH' });
     const browserResult = await request(app, 'GET', `/mailboxes/oauth/microsoft/callback?state=${encodeURIComponent(state)}&code=safe`);
     expect(browserResult.status).toBe(303);
-    expect(browserResult.headers.location).toBe('https://adminiculum.example.test/communications/mailboxes?mailbox=error&error=MAILBOX_PROVIDER_IDENTITY_MISMATCH');
+    expect(browserResult.headers.location).toBe('https://adminiculum.example.test/communications/mailboxes?mailbox=error&error=MAILBOX_TARGET_MAILBOX_ACCESS_DENIED');
     const apiResult = await request(app, 'POST', '/mailboxes/oauth/microsoft/callback', undefined, { state, code: 'safe' });
     expect(apiResult.status).toBe(403);
-    expect(apiResult.body.code).toBe('MAILBOX_PROVIDER_IDENTITY_MISMATCH');
+    expect(apiResult.body.code).toBe('MAILBOX_TARGET_MAILBOX_ACCESS_DENIED');
     const connection = await db.communicationMailboxConnection.findUniqueOrThrow({ where: { id: mismatchConnectionId } });
     expect(connection.status).toBe('AUTHORIZATION_REQUIRED');
     expect(connection.secretReference).toBeNull();
-    expect(await db.mailboxAuditEvent.count({ where: { mailboxConnectionId: mismatchConnectionId, eventType: 'MAILBOX_IDENTITY_MISMATCH' } })).toBe(2);
+    expect(await db.mailboxAuditEvent.count({ where: { mailboxConnectionId: mismatchConnectionId, eventType: 'MAILBOX_TARGET_ACCESS_DENIED' } })).toBe(2);
+    providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`;
+  });
+
+  it('connects a readable shared mailbox read-only and syncs the TARGET mailbox into canonical Communication', async () => {
+    const target = `adminiculum-${suffix}@fixture.invalid`;
+    const identity = `gyula-${suffix}@fixture.invalid`;
+    const sharedId = crypto.randomUUID();
+    await db.communicationMailboxConnection.create({
+      data: {
+        id: sharedId,
+        ownerUserId: ids.owner,
+        mailboxAddress: target,
+        provider: 'MICROSOFT_GRAPH',
+        status: 'AUTHORIZATION_REQUIRED',
+        verifiedAt: new Date(),
+        readCapability: false,
+        sendCapability: false,
+      } as any,
+    });
+    providerAuthorizedAddress = identity;
+    providerAuthorizedAddresses = [identity];
+    providerTargetProbe = 'OK';
+    providerSyncMessages = [
+      {
+        providerMessageId: `shared-msg-${suffix}`,
+        internetMessageId: `<shared-${suffix}@fixture.invalid>`,
+        inReplyTo: null,
+        references: null,
+        direction: 'INBOUND',
+        from: { email: 'sender@fixture.invalid', name: null },
+        to: [{ email: target, name: null }],
+        cc: [],
+        bcc: [],
+        subject: 'Shared mailbox message',
+        bodyText: 'Hello from the shared mailbox',
+        bodyHtml: null,
+        receivedAt: new Date(),
+        sentAt: null,
+        providerConversationId: 'shared-conv',
+        attachments: [],
+      },
+    ];
+    const { createOAuthState } = require('../src/modules/mailbox/oauthState');
+    const state = createOAuthState({ userId: ids.owner, connectionId: sharedId, mailboxAddress: target, provider: 'MICROSOFT_GRAPH' });
+
+    const result = await request(app, 'POST', '/mailboxes/oauth/microsoft/callback', undefined, { state, code: 'shared' });
+    expect(result.status).toBe(200);
+
+    const connection = await db.communicationMailboxConnection.findUniqueOrThrow({ where: { id: sharedId } });
+    expect(connection.status).toBe('CONNECTED_READ_ONLY');
+    expect(connection.readCapability).toBe(true);
+    expect(connection.sendCapability).toBe(false);
+    expect(connection.secretReference).not.toBeNull();
+
+    // CONNECTED_READ_ONLY remains syncable and imports with the TARGET mailbox provenance.
+    const sync = await request(app, 'POST', `/mailboxes/${sharedId}/sync`, ids.owner);
+    expect(sync.status).toBe(200);
+    expect(sync.body.mailbox.status).toBe('CONNECTED_READ_ONLY');
+    const persisted = await db.communication.findMany({ where: { mailboxConnectionId: sharedId } });
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].mailboxAddress).toBe(target);
+
+    await db.communication.deleteMany({ where: { mailboxConnectionId: sharedId } });
+    await db.communicationMailboxConnection.deleteMany({ where: { id: sharedId } });
+    providerTargetProbe = 'DENIED';
+    providerAuthorizedAddresses = undefined;
+    providerSyncMessages = [];
+    providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`;
+  });
+
+  it('reports a truthful target-not-found failure for an unresolvable shared mailbox', async () => {
+    const target = `missing-${suffix}@fixture.invalid`;
+    const missingId = crypto.randomUUID();
+    await db.communicationMailboxConnection.create({
+      data: {
+        id: missingId,
+        ownerUserId: ids.owner,
+        mailboxAddress: target,
+        provider: 'MICROSOFT_GRAPH',
+        status: 'AUTHORIZATION_REQUIRED',
+        verifiedAt: new Date(),
+        readCapability: false,
+        sendCapability: false,
+      } as any,
+    });
+    providerAuthorizedAddress = `identity-${suffix}@fixture.invalid`;
+    providerAuthorizedAddresses = [providerAuthorizedAddress];
+    providerTargetProbe = 'NOT_FOUND';
+    const { createOAuthState } = require('../src/modules/mailbox/oauthState');
+    const state = createOAuthState({ userId: ids.owner, connectionId: missingId, mailboxAddress: target, provider: 'MICROSOFT_GRAPH' });
+
+    const result = await request(app, 'POST', '/mailboxes/oauth/microsoft/callback', undefined, { state, code: 'missing' });
+    expect(result.status).toBe(404);
+    expect(result.body.code).toBe('MAILBOX_TARGET_MAILBOX_NOT_FOUND');
+    const connection = await db.communicationMailboxConnection.findUniqueOrThrow({ where: { id: missingId } });
+    expect(connection.status).toBe('AUTHORIZATION_REQUIRED');
+    expect(connection.secretReference).toBeNull();
+
+    await db.communicationMailboxConnection.deleteMany({ where: { id: missingId } });
+    providerTargetProbe = 'DENIED';
+    providerAuthorizedAddresses = undefined;
     providerAuthorizedAddress = `oauth-${suffix}@fixture.invalid`;
   });
 
