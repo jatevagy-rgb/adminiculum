@@ -274,6 +274,14 @@ export async function submitSubmission(ctx: CustomerContext, submissionId: strin
 }
 
 /**
+ * A normal response the customer already started in this submission. Used only to
+ * protect that content: a declaration never deletes files, answers or drafts.
+ */
+function hasCustomerProvidedContent(submission: { files?: unknown[]; fields?: unknown[] }): boolean {
+  return (submission.files?.length || 0) > 0 || (submission.fields?.length || 0) > 0;
+}
+
+/**
  * Declare that the requested document/information is not available.
  *
  * This is a request-domain declaration inside the canonical ClientSubmission
@@ -282,6 +290,12 @@ export async function submitSubmission(ctx: CustomerContext, submissionId: strin
  * structured answer) so the existing internal submission review queue,
  * correction, rejection and explicit completion flows all apply unchanged.
  * The declaration never writes the ClientRequest.
+ *
+ * A first-time declaration may only use a newly created or pristine DRAFT: an
+ * in-flight upload/scanning lifecycle, or a draft that already carries customer
+ * files or structured answers, is refused truthfully and left untouched.
+ * CORRECTION_REQUESTED keeps its existing semantics — historical content from the
+ * previous review attempt is preserved, never destructively deleted.
  */
 export async function declareUnavailable(ctx: CustomerContext, requestId: string, input: { reasonSafe?: unknown }, prisma: Prisma = defaultPrisma) {
   // Terminal / non-open requests are rejected here (COMPLETED, CANCELLED, EXPIRED...).
@@ -302,6 +316,16 @@ export async function declareUnavailable(ctx: CustomerContext, requestId: string
   // Never silently overwrite a normally submitted (or otherwise closed) submission.
   if (existing && ['SUBMITTED', 'UNDER_INTERNAL_REVIEW', 'ACCEPTED_INTO_MATTER', 'REJECTED', 'CANCELLED'].includes(existing.status)) {
     throw new InteractionError(409, 'SUBMISSION_ALREADY_SUBMITTED', 'A submission has already been sent for this request.');
+  }
+
+  // An in-flight upload / scanning lifecycle must never be converted in place.
+  if (existing && ['UPLOADING', 'SCANNING', 'RECEIVED'].includes(existing.status)) {
+    throw new InteractionError(409, 'SUBMISSION_IN_PROGRESS', 'A submission is already in progress for this request.');
+  }
+
+  // A draft that already holds a normal response is preserved: send it instead.
+  if (existing && existing.status === 'DRAFT' && hasCustomerProvidedContent(existing)) {
+    throw new InteractionError(409, 'SUBMISSION_HAS_CUSTOMER_CONTENT', 'A draft with uploaded files or answers already exists; send it before declaring unavailability.');
   }
 
   const submission = existing ?? await prisma.clientSubmission.create({

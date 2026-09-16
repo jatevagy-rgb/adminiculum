@@ -235,6 +235,92 @@ d('client portal interaction foundation (PostgreSQL)', () => {
     await expect(submissions.declareUnavailable(await ctx(), foreignCase.id, {}, db)).rejects.toMatchObject({ code: 'REQUEST_NOT_FOUND' });
   });
 
+  it('A: a pristine draft is reused for the declaration', async () => {
+    const req = await publishDocumentRequest('Pristine piszkozat');
+    const draft = await submissions.createDraftSubmission(await ctx(), req.id, db);
+    expect(draft.status).toBe('DRAFT');
+
+    const declared = await submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'Nem elérhető.' }, db);
+    expect(declared.id).toBe(draft.id);
+    expect(declared.status).toBe('SUBMITTED');
+    expect(declared.unavailableDeclaredAt).toBeTruthy();
+    expect(await db.clientSubmission.count({ where: { clientRequestId: req.id } })).toBe(1);
+  });
+
+  it('B: a draft holding a customer file is rejected and the file is preserved', async () => {
+    const req = await publishDocumentRequest('Fájlt tartalmazó piszkozat');
+    const draft = await submissions.createDraftSubmission(await ctx(), req.id, db);
+    // An unsupported upload records the customer's file while the submission stays DRAFT.
+    const recorded = await submissions.addFile(await ctx(), draft.id, {
+      originalFileName: 'jegyzet.docx',
+      declaredMimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      base64: Buffer.from('nem-tamogatott-tartalom').toString('base64'),
+    }, db);
+    expect(recorded.state).toBe('REJECTED');
+    expect((await db.clientSubmission.findUnique({ where: { id: draft.id } }))!.status).toBe('DRAFT');
+
+    await expect(submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'nem' }, db)).rejects.toMatchObject({ code: 'SUBMISSION_HAS_CUSTOMER_CONTENT' });
+
+    const after = await db.clientSubmission.findUnique({ where: { id: draft.id } });
+    expect(after!.status).toBe('DRAFT');
+    expect(after!.customerUnavailableDeclaredAt).toBeNull();
+    expect(after!.customerUnavailableReasonSafe).toBeNull();
+    expect(await db.clientSubmissionFile.count({ where: { submissionId: draft.id } })).toBe(1);
+  });
+
+  it('C: a draft holding a structured answer is rejected and the answer is preserved', async () => {
+    const draft = await requests.createRequestDraft(internalActor, { caseId: ids.case, type: 'DATA_FORM', clientSafeTitle: 'Kitöltött piszkozat', fields: [{ label: 'Név', type: 'SHORT_TEXT', required: true }] }, db);
+    await requests.publishRequest(internalActor, draft.id, draft.revision, db);
+    const submission = await submissions.createDraftSubmission(await ctx(), draft.id, db);
+    await submissions.addStructuredAnswers(await ctx(), submission.id, [{ label: 'Név', value: 'Teszt Elek' }], db);
+
+    await expect(submissions.declareUnavailable(await ctx(), draft.id, { reasonSafe: 'nem' }, db)).rejects.toMatchObject({ code: 'SUBMISSION_HAS_CUSTOMER_CONTENT' });
+
+    const after = await db.clientSubmission.findUnique({ where: { id: submission.id } });
+    expect(after!.status).toBe('DRAFT');
+    expect(after!.customerUnavailableDeclaredAt).toBeNull();
+    const answers = await db.clientSubmissionField.findMany({ where: { submissionId: submission.id } });
+    expect(answers).toHaveLength(1);
+    expect(answers[0].valueSafe).toBe('Teszt Elek');
+    expect(await db.clientSubmissionField.count({ where: { submissionId: submission.id } })).toBe(1);
+  });
+
+  it('D: an active upload/scanning lifecycle is never converted into a declaration', async () => {
+    const req = await publishDocumentRequest('Aktív feltöltés');
+    const draft = await submissions.createDraftSubmission(await ctx(), req.id, db);
+    const added = await submissions.addFile(await ctx(), draft.id, { originalFileName: 'id.pdf', declaredMimeType: 'application/pdf', base64: pdf().toString('base64') }, db);
+    expect(added.state).toBe('RECEIVED');
+    expect((await db.clientSubmission.findUnique({ where: { id: draft.id } }))!.status).toBe('UPLOADING');
+
+    await expect(submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'nem' }, db)).rejects.toMatchObject({ code: 'SUBMISSION_IN_PROGRESS' });
+
+    for (const status of ['SCANNING', 'RECEIVED'] as const) {
+      await db.clientSubmission.update({ where: { id: draft.id }, data: { status } });
+      await expect(submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'nem' }, db)).rejects.toMatchObject({ code: 'SUBMISSION_IN_PROGRESS' });
+    }
+
+    const after = await db.clientSubmission.findUnique({ where: { id: draft.id } });
+    expect(after!.customerUnavailableDeclaredAt).toBeNull();
+    expect(await db.clientSubmissionFile.count({ where: { submissionId: draft.id } })).toBe(1);
+  });
+
+  it('F: a CORRECTION_REQUESTED submission may still be declared unavailable, preserving history', async () => {
+    const req = await publishDocumentRequest('Javítás utáni jelzés');
+    const draft = await submissions.createDraftSubmission(await ctx(), req.id, db);
+    await submissions.addFile(await ctx(), draft.id, { originalFileName: 'elso.pdf', declaredMimeType: 'application/pdf', base64: pdf().toString('base64') }, db);
+    await submissions.submitSubmission(await ctx(), draft.id, { customerNote: 'Első változat.' }, db);
+    const submittedRow = await db.clientSubmission.findUnique({ where: { id: draft.id } });
+    await submissions.requestCorrection(internalActor, draft.id, { reasonSafe: 'Kérjük az olvasható változatot.', expectedRevision: submittedRow!.revision }, db);
+
+    const declared = await submissions.declareUnavailable(await ctx(), req.id, { reasonSafe: 'A kért változat nem áll rendelkezésre.' }, db);
+    expect(declared.id).toBe(draft.id);
+    expect(declared.status).toBe('SUBMITTED');
+    expect(declared.unavailableDeclaredAt).toBeTruthy();
+    // history from the previous review attempt is preserved, never deleted
+    expect(await db.clientSubmissionFile.count({ where: { submissionId: draft.id } })).toBe(1);
+    expect((await db.clientSubmission.findUnique({ where: { id: draft.id } }))!.customerNote).toBe('Első változat.');
+  });
+
   it('request detail and declaration work for ORGANIZATION and CASE_RELAY grants, and stay denied without a grant', async () => {
     const req = await publishDocumentRequest('Szervezeti bekérés');
 

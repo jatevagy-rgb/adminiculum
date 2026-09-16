@@ -237,6 +237,23 @@ describe('request lifecycle invariants (backend source contract)', () => {
     assert.match(src, /customerUnavailableReasonSafe: null, customerUnavailableDeclaredAt: null/);
   });
 
+  it('guards a partially completed draft and an active upload lifecycle', () => {
+    const src = backendRead('src/modules/client-interaction/submissionService.ts');
+    const declare = src.match(/export async function declareUnavailable[\s\S]*?\r?\n\}\r?\n/);
+    assert.ok(declare, 'declareUnavailable not found');
+    // active upload/scanning/ingest lifecycle is never converted
+    assert.match(declare![0], /\['UPLOADING', 'SCANNING', 'RECEIVED'\]\.includes\(existing\.status\)/);
+    assert.match(declare![0], /SUBMISSION_IN_PROGRESS/);
+    // a draft that already carries customer content is preserved, not converted
+    assert.match(declare![0], /existing\.status === 'DRAFT' && hasCustomerProvidedContent\(existing\)/);
+    assert.match(declare![0], /SUBMISSION_HAS_CUSTOMER_CONTENT/);
+    assert.match(src, /function hasCustomerProvidedContent/);
+    // the guard never deletes customer data
+    assert.doesNotMatch(declare![0], /delete|deleteMany|remove/i);
+    // CORRECTION_REQUESTED is never part of a rejection list in this function
+    assert.doesNotMatch(declare![0], /CORRECTION_REQUESTED/);
+  });
+
   it('exposes the declaration route to customers without a completion/cancel route', () => {
     const customer = backendRead('src/modules/client-interaction/customerRoutes.ts');
     assert.match(customer, /requests\/:requestId\/unavailable-declaration/);
