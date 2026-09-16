@@ -190,7 +190,7 @@ const MOCK_ORG_GROW = {
     ],
   },
   opportunities: [],
-  opportunitiesDeferredNotice: "A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg.",
+  opportunitiesDeferredNotice: "GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP",
   surveys: [
     {
       id: "survey-1",
@@ -667,6 +667,12 @@ async function runCustomerGrowBrowserQA() {
       const gapCodeAttr = await page.locator("[data-publication-code='GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP']").count();
       if (gapCodeAttr === 0 || !lehetosegText.includes("Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség")) {
         throw new Error("Dignified fail-closed notice not found on Lehetőségek tab");
+      }
+      if (lehetosegText.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP")) {
+        throw new Error("RAW_PUBLICATION_CODE_VISIBLE_TO_CUSTOMER: Raw gap code leaked into visible human UI text");
+      }
+      if (lehetosegText.includes("Jóváhagyásra vár")) {
+        throw new Error("OPPORTUNITY_WORKFLOW_STATE_INVENTED: Invented workflow state displayed to customer");
       }
       await page.screenshot({ path: path.join(SHOTS, `lehetosegek-${viewport.name}.png`), fullPage: true });
 

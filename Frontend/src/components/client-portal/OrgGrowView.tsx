@@ -1312,9 +1312,13 @@ export function OrgGrowView() {
               className="mt-6 rounded-2xl border border-stone-200/80 bg-stone-50/60 p-4 text-xs leading-5 text-stone-600"
               data-publication-code="GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP"
             >
-              <p className="font-semibold text-stone-800">Közzétételi állapot: Jóváhagyásra vár</p>
+              <p className="font-semibold text-stone-800">
+                Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség.
+              </p>
               <p className="mt-0.5">
-                {data?.opportunitiesDeferredNotice || "Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség."}
+                {data?.opportunitiesDeferredNotice && !data.opportunitiesDeferredNotice.includes("GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP")
+                  ? data.opportunitiesDeferredNotice
+                  : "A fejlesztési lehetőségek csak jóváhagyott ügyféloldali közzétételi folyamaton keresztül jelenhetnek meg."}
               </p>
             </div>
 
