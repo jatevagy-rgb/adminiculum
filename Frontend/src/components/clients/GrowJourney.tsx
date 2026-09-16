@@ -349,7 +349,7 @@ function GrowHomeScreen({
         ) : null}
 
         <p className="mt-3 text-[11px] text-[#788274]">
-          Nincs érettségi pontszám — csak mérhető megfigyelések és ellenőrzött források alapján jelölt területek.
+          Nincs érettségi pontszám. A rendszer rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve.
         </p>
       </div>
 
@@ -422,7 +422,7 @@ function GrowHomeScreen({
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Adminiculum Módszertan</p>
             <h3 className="mt-1 font-serif text-xl font-bold text-[#1b382b]">A fejlődés 5 mérföldköve</h3>
             <p className="mt-2 text-xs text-[#556052] leading-relaxed">
-              Hogyan alakítjuk a megfigyelt működési réseket mérhető, igazolt üzleti eredménnyé:
+              Hogyan alakítjuk a megfigyelt működési réseket mérhető, rögzített üzleti eredménnyé:
             </p>
 
             <div className="mt-6 space-y-4">
@@ -471,7 +471,7 @@ function GrowHomeScreen({
                 <div>
                   <h4 className="text-xs font-bold text-[#1b382b]">Eredmények</h4>
                   <p className="mt-0.5 text-xs text-[#556052] leading-relaxed">
-                    Mért előtte/utána változások és igazolt hatás rögzítése.
+                    Rögzített előtte/utána mérések és azok változása.
                   </p>
                 </div>
               </div>
@@ -952,7 +952,7 @@ function GrowProgressScreen({
 
 function GrowResultsScreen({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) {
   return (
-    <Panel title="Mit értünk el?" kicker="Igazolt eredmények és hatások">
+    <Panel title="Mit értünk el?" kicker="Rögzített eredmények és hatások">
       {outcomes.length === 0 ? (
         <div className="rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/50 p-6 text-sm text-[#556052] leading-relaxed">
           Még nincs rögzített eredmény. Az eredmények az elfogadott lehetőségek előtte/utána méréséből származnak — ugyanannál a cégnél, ugyanahhoz a folyamathoz.

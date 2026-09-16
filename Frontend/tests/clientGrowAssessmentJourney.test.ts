@@ -234,3 +234,30 @@ test('P2 summary availability: derived from every completed scope', () => {
   // All unavailable → honest summary rather than a healthy claim.
   assert.match(src, /A kitöltött felmérések eredménye jelenleg nem jeleníthető meg\./);
 });
+
+test('truthful semantic doctrine: declared observations, observations vs facts, non-universal research, measured vs verified', () => {
+  const src = read(VIEW);
+  const journeySrc = read('Frontend/src/components/clients/GrowJourney.tsx');
+
+  // 1. DECLARED_OBSERVATION_ERASED=NO
+  // Proves declared observations, survey answers, and measurements are integrated with separated sources
+  assert.match(src, /rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve/);
+  assert.match(journeySrc, /rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve/);
+
+  // 2. OBSERVATION_PRESENTED_AS_CANONICAL_FACT=NO
+  // Proves survey answers are observations rather than canonical facts
+  assert.match(src, /A felmérések a vállalat által megadott válaszokat és működési megfigyeléseket rendszerezik/);
+  assert.doesNotMatch(src, /kizárólag a vállalat által megerősített tényeket/);
+
+  // 3. RESEARCH_SUPPORT_UNIVERSALIZED=NO
+  // Proves interventions are not universally claimed as scientifically validated
+  assert.match(src, /Az elérhető szakirodalmi és egyéb bizonyítékokat is figyelembe vevő, szakértői felülvizsgálattal kialakított fejlesztési irányok/);
+  assert.doesNotMatch(src, /tudományos bizonyítékokkal alátámasztott beavatkozási javaslatok/);
+
+  // 4. MEASURED_PRESENTED_AS_VERIFIED=NO
+  // Proves measured is not presented as verified / igazolt
+  assert.match(src, /Mért eredményként csak MEASURED alapú eredmény jelenik meg/);
+  assert.doesNotMatch(src, /igazolt, mérhető megfigyelések/);
+  assert.doesNotMatch(src, /igazolt hatás|igazolt eredmény/);
+  assert.doesNotMatch(journeySrc, /igazolt hatás|igazolt eredmény/);
+});

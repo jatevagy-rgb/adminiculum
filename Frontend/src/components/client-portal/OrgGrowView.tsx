@@ -405,7 +405,7 @@ export function OrgGrowView() {
               Megmutatjuk, hol érdemes körülnézni, és miért{data?.customerName ? <> — <strong className="text-stone-900">{data.customerName}</strong></> : ""}.
             </p>
             <p className="mt-2 text-xs italic text-stone-600 max-w-2xl">
-              A fejlődés nem egyetlen nagy átalakulás, hanem apró, igazolható lépések sorozata: feltárás, diagnózis, célzott beavatkozás és mérhető hatás.
+              A fejlődés nem egyetlen nagy átalakulás, hanem apró, rögzíthető lépések sorozata: feltárás, diagnózis, célzott beavatkozás és mérhető hatás.
             </p>
           </div>
 
@@ -416,7 +416,7 @@ export function OrgGrowView() {
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#7a5f18]">Módszertani alapelv</p>
               </div>
               <p className="mt-1.5 text-xs italic text-stone-700 leading-relaxed">
-                Nincs elméleti érettségi besorolás — csak mérhető megfigyelések és ellenőrzött források alapján jelölt területek.
+                Nincs elméleti érettségi besorolás. A rendszer rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve.
               </p>
             </div>
             <Link
@@ -567,7 +567,7 @@ export function OrgGrowView() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Módszertan</p>
               <h2 className="mt-1 font-serif text-2xl font-semibold text-[#1b382b]">A Grow folyamat</h2>
               <p className="mt-1 text-xs text-stone-600">
-                Hogyan jutunk el a működési jelzéstől az igazolt, mérhető eredményig?
+                Hogyan jutunk el a működési jelzéstől a mért és számított eredményekig?
               </p>
               <div className="mt-4 space-y-2.5">
                 {[
@@ -1286,7 +1286,7 @@ export function OrgGrowView() {
                         <div>
                           <h4 className="text-xs font-bold text-[#1b382b]">Fejlesztési lehetőségek kijelölése</h4>
                           <p className="mt-0.5 text-xs text-stone-600 leading-relaxed">
-                            Célzott, tudományos bizonyítékokkal alátámasztott beavatkozási javaslatok meghatározása szakértői felülvizsgálattal.
+                            Az elérhető szakirodalmi és egyéb bizonyítékokat is figyelembe vevő, szakértői felülvizsgálattal kialakított fejlesztési irányok.
                           </p>
                         </div>
                       </div>
@@ -1298,14 +1298,14 @@ export function OrgGrowView() {
                         <div>
                           <h4 className="text-xs font-bold text-[#1b382b]">Mérhető eredmények követése</h4>
                           <p className="mt-0.5 text-xs text-stone-600 leading-relaxed">
-                            A megvalósult lépések hatását konkrét kapacitás-, idő- és folyamatmérésekkel ellenőrizzük és igazoljuk.
+                            A megvalósult lépések hatását konkrét kapacitás-, idő- és folyamatmérésekkel ellenőrizzük és rögzítjük.
                           </p>
                         </div>
                       </div>
                     </div>
 
                     <div className="rounded-2xl border border-[#e8ded1] bg-white/80 p-3.5 text-[11px] text-stone-600 leading-relaxed">
-                      <strong className="text-[#1b382b]">Módszertani garancia:</strong> A felmérések nem rögzítenek spekulatív értékeket, kizárólag a vállalat által megerősített tényeket és megfigyeléseket rendszerezik.
+                      <strong className="text-[#1b382b]">Módszertani alapelv:</strong> A felmérések a vállalat által megadott válaszokat és működési megfigyeléseket rendszerezik; ezek további szakértői értékelés és más adatforrások mellett használhatók fel.
                     </div>
                   </div>
                 </div>
@@ -1763,7 +1763,7 @@ export function OrgGrowView() {
           <div className="mt-6 rounded-2xl border border-stone-200/60 bg-stone-50/40 p-4 text-xs leading-5 text-stone-500">
             <p className="font-semibold text-stone-700">Módszertan és forrásmegjelölés</p>
             <p className="mt-0.5">
-              Csak az igazolt, mérhető megfigyelések kerülnek feltüntetésre mért eredményként. A becsült hatások külön kategóriában, átlátható módon jelennek meg.
+              Mért eredményként csak MEASURED alapú eredmény jelenik meg. Számított és becsült hatások külön kategóriában szerepelnek.
             </p>
           </div>
         </section>
