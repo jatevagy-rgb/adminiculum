@@ -53,6 +53,21 @@ export const OBLIGATION_FREQUENCIES = new Set([
   'CUSTOM',
 ]);
 
+/** Contract Watch CW1 — occurrence kinds of ONE ClientObligation. STRING codes
+ *  (not Prisma enums) so new kinds need no migration, matching the rest of the
+ *  contract-library taxonomies. */
+export const OBLIGATION_OCCURRENCE_TYPES = new Set([
+  'INSTALLMENT',
+  'ADVANCE',
+  'MILESTONE',
+  'PAYMENT',
+  'PERFORMANCE',
+  'INVOICE',
+  'NOTICE',
+  'OPTION',
+  'OTHER',
+]);
+
 export const ENTITLEMENT_TYPES = new Set([
   'PRICE_INDEXATION',
   'AUDIT_RIGHT',
@@ -77,6 +92,9 @@ export function isObligationTriggerType(code: unknown): boolean {
 }
 export function isObligationFrequency(code: unknown): boolean {
   return typeof code === 'string' && OBLIGATION_FREQUENCIES.has(code);
+}
+export function isObligationOccurrenceType(code: unknown): boolean {
+  return typeof code === 'string' && OBLIGATION_OCCURRENCE_TYPES.has(code);
 }
 export function isEntitlementType(code: unknown): boolean {
   return typeof code === 'string' && ENTITLEMENT_TYPES.has(code);

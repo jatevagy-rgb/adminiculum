@@ -33,6 +33,8 @@ export const CALENDAR_SOURCE_TYPES = [
   'CASE_DEADLINE',
   'TASK',
   'CASE_INTAKE_DEADLINE',
+  // Contract Watch CW1 — independently tracked occurrences of one obligation.
+  'OBLIGATION_OCCURRENCE',
 ] as const;
 
 export type CalendarSourceType = (typeof CALENDAR_SOURCE_TYPES)[number];
@@ -49,6 +51,7 @@ export const CALENDAR_DATE_KINDS = [
   'DEADLINE',
   'DUE_DATE',
   'INTAKE_DUE',
+  'OCCURRENCE_DUE',
 ] as const;
 
 export type CalendarDateKind = (typeof CALENDAR_DATE_KINDS)[number];
@@ -76,6 +79,8 @@ export interface ClientCalendarResponse {
 export interface ClientCalendarQuery {
   from?: unknown;
   to?: unknown;
+  /** Optional contract scope. Absent/blank keeps the exact unscoped behavior. */
+  contractId?: unknown;
 }
 
 /**
@@ -140,21 +145,35 @@ export async function getClientCalendar(
   const caseWhere = caseScope === null ? { clientId } : { clientId, id: { in: caseScope } };
   const range = { gte: from, lte: to };
 
-  const [contracts, obligations, entitlements, milestones, cases, tasks, intakeDeadlines] = await Promise.all([
+  // Optional contract scope. Only CONTRACT / OBLIGATION / ENTITLEMENT /
+  // OBLIGATION_OCCURRENCE rows are scoped; all other sources stay client-level.
+  const contractId = query.contractId == null || query.contractId === '' ? null : String(query.contractId);
+  if (contractId) {
+    const scoped = await prisma.contractRecord.findUnique({ where: { id: contractId }, select: { clientId: true } });
+    if (!scoped) throw new InteractionError(404, 'CONTRACT_NOT_FOUND', 'Contract not found.');
+    if (scoped.clientId !== clientId) throw new InteractionError(403, 'CROSS_CLIENT_CONTRACT', 'Contract belongs to another client.');
+  }
+
+  const [contracts, obligations, entitlements, occurrences, milestones, cases, tasks, intakeDeadlines] = await Promise.all([
     prisma.contractRecord.findMany({
       where: {
         clientId,
+        ...(contractId ? { id: contractId } : {}),
         OR: [{ signatureDate: range }, { effectiveDate: range }, { expiryDate: range }, { nextCriticalDate: range }],
       },
       select: { id: true, title: true, status: true, signatureDate: true, effectiveDate: true, expiryDate: true, nextCriticalDate: true },
     }),
     prisma.clientObligation.findMany({
-      where: { clientId, nextDueDate: range },
+      where: { clientId, nextDueDate: range, ...(contractId ? { sourceContractId: contractId } : {}) },
       select: { id: true, title: true, status: true, nextDueDate: true, sourceContractId: true },
     }),
     prisma.contractEntitlement.findMany({
-      where: { clientId, exerciseByDate: range },
+      where: { clientId, exerciseByDate: range, ...(contractId ? { contractId } : {}) },
       select: { id: true, title: true, status: true, exerciseByDate: true, contractId: true },
+    }),
+    prisma.clientObligationOccurrence.findMany({
+      where: { clientId, dueDate: range, ...(contractId ? { contractId } : {}) },
+      select: { id: true, title: true, status: true, dueDate: true, contractId: true },
     }),
     prisma.companyMilestone.findMany({
       where: { clientId, OR: [{ targetDate: range }, { milestoneDate: range }] },
@@ -228,6 +247,21 @@ export async function getClientCalendar(
       date: entitlement.exerciseByDate.toISOString(),
       status: entitlement.status,
       contractId: entitlement.contractId,
+    });
+  }
+
+  for (const occurrence of occurrences) {
+    // Nullable dueDate produces NO item — occurrence dates are never invented.
+    if (!occurrence.dueDate) continue;
+    items.push({
+      id: `OBLIGATION_OCCURRENCE:${occurrence.id}:OCCURRENCE_DUE`,
+      sourceType: 'OBLIGATION_OCCURRENCE',
+      sourceId: occurrence.id,
+      dateKind: 'OCCURRENCE_DUE',
+      title: occurrence.title,
+      date: occurrence.dueDate.toISOString(),
+      status: occurrence.status,
+      contractId: occurrence.contractId,
     });
   }
 

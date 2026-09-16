@@ -27,7 +27,7 @@ clientCalendarRouter.use(authenticate);
 
 clientCalendarRouter.get('/clients/:clientId', async (req, res) => {
   try {
-    res.json(await getClientCalendar(actor(req), String(req.params.clientId), { from: req.query.from, to: req.query.to }));
+    res.json(await getClientCalendar(actor(req), String(req.params.clientId), { from: req.query.from, to: req.query.to, contractId: req.query.contractId }));
   } catch (e) {
     fail(res, e);
   }
