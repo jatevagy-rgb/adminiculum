@@ -8,6 +8,7 @@ import {
   type ComplianceDocumentsReadModel,
 } from "@/lib/complianceDocumentApi";
 import { searchDocuments, type DocumentSearchItem } from "@/lib/api";
+import { ComplianceClauseAnchorPanel } from "@/components/clients/compliance/ComplianceClauseAnchorPanel";
 
 function formatDate(value: string | null): string {
   if (!value) return "—";
@@ -18,7 +19,10 @@ function formatDate(value: string | null): string {
   }
 }
 
-function LinkRow({ link, audience, onUnlink, busy }: { link: ComplianceDocumentLink; audience: ComplianceDocumentAudience; onUnlink: (id: string) => void; busy: boolean }) {
+function LinkRow({ link, audience, onUnlink, busy, clientId }: { link: ComplianceDocumentLink; audience: ComplianceDocumentAudience; onUnlink: (id: string) => void; busy: boolean; clientId: string }) {
+  // CDI-1: the structured legal matrix is INTERNAL analysis provenance, so it is
+  // only offered on INTERNAL_ANALYSIS links and is loaded on demand.
+  const [matrixOpen, setMatrixOpen] = useState(false);
   return (
     <li className="rounded border border-[var(--adm-border)] bg-white p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -37,15 +41,30 @@ function LinkRow({ link, audience, onUnlink, busy }: { link: ComplianceDocumentL
             <p className="mt-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Csak az iroda számára</p>
           )}
         </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => onUnlink(link.id)}
-          className="shrink-0 rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-xs text-[var(--adm-text-muted)] hover:text-red-700 disabled:opacity-50"
-        >
-          Eltávolítás
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {audience === "INTERNAL_ANALYSIS" ? (
+            <button
+              type="button"
+              aria-expanded={matrixOpen}
+              onClick={() => setMatrixOpen((value) => !value)}
+              className="rounded border border-[var(--adm-green-800)] bg-white px-2 py-1 text-xs font-medium text-[var(--adm-green-800)]"
+            >
+              {matrixOpen ? "Jogi mátrix elrejtése" : "Jogi mátrix"}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onUnlink(link.id)}
+            className="rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-xs text-[var(--adm-text-muted)] hover:text-red-700 disabled:opacity-50"
+          >
+            Eltávolítás
+          </button>
+        </div>
       </div>
+      {audience === "INTERNAL_ANALYSIS" && matrixOpen ? (
+        <ComplianceClauseAnchorPanel clientId={clientId} documentId={link.documentId} />
+      ) : null}
     </li>
   );
 }
@@ -232,7 +251,7 @@ export function ComplianceDocumentsSection({
                   <div className="mt-2">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Belső megfelelőségi elemzés</p>
                     <ul className="mt-1 space-y-1">
-                      {topic.internalAnalysis.map((link) => <LinkRow key={link.id} link={link} audience="INTERNAL_ANALYSIS" onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
+                      {topic.internalAnalysis.map((link) => <LinkRow key={link.id} link={link} audience="INTERNAL_ANALYSIS" clientId={clientId} onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
                     </ul>
                   </div>
                 ) : null}
@@ -240,7 +259,7 @@ export function ComplianceDocumentsSection({
                   <div className="mt-2">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyfélnek szánt szabályzat</p>
                     <ul className="mt-1 space-y-1">
-                      {topic.clientPolicy.map((link) => <LinkRow key={link.id} link={link} audience="CLIENT_POLICY" onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
+                      {topic.clientPolicy.map((link) => <LinkRow key={link.id} link={link} audience="CLIENT_POLICY" clientId={clientId} onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
                     </ul>
                   </div>
                 ) : null}
