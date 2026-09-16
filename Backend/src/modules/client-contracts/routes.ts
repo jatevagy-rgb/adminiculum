@@ -73,6 +73,28 @@ clientContractsRouter.post('/obligations/:obligationId/status', async (req, res)
   try { res.json(await contracts.transitionObligation(actor(req), String(req.params.obligationId), req.body?.status)); } catch (e) { fail(res, e); }
 });
 
+// ClientObligationOccurrence (Contract Watch CW1) — additive child of an
+// obligation. Creation derives the contract from the parent obligation, so an
+// occurrence can never cross a client or contract boundary.
+clientContractsRouter.get('/obligations/:obligationId/occurrences', async (req, res) => {
+  try { res.json(await contracts.listObligationOccurrences(actor(req), String(req.params.obligationId), { status: req.query.status as string })); } catch (e) { fail(res, e); }
+});
+clientContractsRouter.post('/obligations/:obligationId/occurrences', async (req, res) => {
+  try {
+    const result = await contracts.createObligationOccurrence(actor(req), String(req.params.obligationId), req.body || {});
+    res.status(result.replayed ? 200 : 201).json(result.occurrence);
+  } catch (e) { fail(res, e); }
+});
+clientContractsRouter.get('/contracts/:contractId/occurrences', async (req, res) => {
+  try { res.json(await contracts.listContractOccurrences(actor(req), String(req.params.contractId), { status: req.query.status as string })); } catch (e) { fail(res, e); }
+});
+clientContractsRouter.patch('/occurrences/:occurrenceId', async (req, res) => {
+  try { res.json(await contracts.updateObligationOccurrence(actor(req), String(req.params.occurrenceId), req.body || {})); } catch (e) { fail(res, e); }
+});
+clientContractsRouter.post('/occurrences/:occurrenceId/status', async (req, res) => {
+  try { res.json(await contracts.transitionObligationOccurrence(actor(req), String(req.params.occurrenceId), req.body?.status)); } catch (e) { fail(res, e); }
+});
+
 // ContractEntitlement
 clientContractsRouter.get('/contracts/:contractId/entitlements', async (req, res) => {
   try { res.json(await contracts.listEntitlements(actor(req), String(req.params.contractId), { status: req.query.status as string })); } catch (e) { fail(res, e); }

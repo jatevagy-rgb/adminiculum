@@ -120,9 +120,11 @@ test("anchor and selectedDay stay synchronized across navigation and view switch
   // Year-view month selection keeps a deterministic valid day in the new month.
   assert.match(src, /setAnchor\(new Date\(y, monthIndex, 1\)\); setView\("month"\); setSelectedDay\(`\$\{monthKey\}-01`\)/);
   // Month-cell clicks only move the selected day inside the already-fetched
-  // range — the fetch effect depends on anchor/view, never selectedDay.
-  assert.match(src, /\}, \[clientId, view, anchor\]\);/);
-  assert.doesNotMatch(src, /\[clientId, view, anchor, selectedDay\]|selectedDay.*getClientCalendar/);
+  // range — the fetch effect depends on anchor/view (plus the read-only CW1
+  // contract selector), never selectedDay.
+  assert.match(src, /\}, \[clientId, view, anchor, selectedContractId\]\);/);
+  assert.doesNotMatch(src, /\[[^\]]*selectedDay[^\]]*\]\);/);
+  assert.doesNotMatch(src, /selectedDay.*getClientCalendar/);
   // No raw setView/setAnchor bypass paths on the navigation controls.
   assert.doesNotMatch(src, /onClick=\{\(\) => setView\(key\)\}/);
   assert.doesNotMatch(src, /onClick=\{\(\) => setAnchor\(stepAnchor/);

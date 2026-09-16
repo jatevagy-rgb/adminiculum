@@ -203,6 +203,7 @@ model Client {
   complianceProposals        ComplianceProposal[]
   obligations                ClientObligation[] // Contract library (Phase 2)
   entitlements               ContractEntitlement[] // Contract library (Phase 2)
+  obligationOccurrences      ClientObligationOccurrence[] // Contract Watch CW1
   organizationPersons        OrganizationPerson[] // Organization (Phase 3)
   factSubjects               FactSubject[]
   businessProcesses          BusinessProcess[]
@@ -1418,6 +1419,7 @@ model DocumentVersion {
   assessmentItemEvidence  AssessmentItem[]
   canonicalContracts      ContractRecord[]
   obligationEvidence      ClientObligation[]
+  obligationOccurrenceEvidence ClientObligationOccurrence[]
   personDocumentLinks     OrganizationPersonDocumentLink[]
   evidenceRecords         EvidenceRecord[]
   complianceClauseAnchors ComplianceDocumentClauseAnchor[]
@@ -1931,6 +1933,7 @@ model Task {
   remediationFindings   AssessmentFinding[]
   complianceProposal    ComplianceProposal?
   obligationRelated     ClientObligation[]
+  obligationOccurrences ClientObligationOccurrence[]
 
   @@index([complexityScore], map: "tasks_complexityScore_idx")
   @@index([maturityStage], map: "tasks_maturityStage_idx")
@@ -5019,6 +5022,7 @@ model ContractRecord {
   parties                    ContractParty[]
   obligations                ClientObligation[]
   entitlements               ContractEntitlement[]
+  obligationOccurrences      ClientObligationOccurrence[]
   factSubjects               FactSubject[]                  @relation("FactSubjectContract")
   businessOwnerPersonId      String?
   businessOwnerPerson        OrganizationPerson?            @relation(fields: [businessOwnerPersonId], references: [id], onDelete: SetNull)
@@ -5080,6 +5084,7 @@ model ClientObligation {
   evidenceDocumentVersion   DocumentVersion?       @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
   ownerPersonId             String?
   ownerPerson               OrganizationPerson?    @relation(fields: [ownerPersonId], references: [id], onDelete: SetNull)
+  occurrences               ClientObligationOccurrence[]
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
 
@@ -5089,6 +5094,50 @@ model ClientObligation {
   @@index([relatedTaskId])
   @@index([ownerPersonId])
   @@map("client_obligations")
+}
+
+/// Contract Watch CW1 — additive child of ClientObligation. ONE independently
+/// tracked occurrence (installment / milestone / payment or performance date)
+/// of a single contractual obligation, with its own state. ClientObligation
+/// remains authoritative for the legacy single nextDueDate; contract-level
+/// facts (effectiveDate / expiryDate / nextCriticalDate) stay on ContractRecord
+/// and are never duplicated here. No CalendarEvent persistence: the internal
+/// calendar projects occurrence.dueDate directly. occurrenceType is a validated
+/// STRING registry code (no Prisma enum). Status reuses ClientObligationStatus.
+model ClientObligationOccurrence {
+  id                        String                 @id @default(uuid())
+  clientId                  String
+  client                    Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  contractId                String
+  contract                  ContractRecord         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  obligationId              String
+  obligation                ClientObligation       @relation(fields: [obligationId], references: [id], onDelete: Cascade)
+  occurrenceKey             String
+  sequence                  Int                    @default(0)
+  occurrenceType            String
+  title                     String
+  dueDate                   DateTime?
+  expectedAmount            Decimal?               @db.Decimal(19, 2)
+  currency                  String?                @db.VarChar(3)
+  status                    ClientObligationStatus @default(OPEN)
+  satisfiedAt               DateTime?
+  evidenceDocumentVersionId String?
+  evidenceDocumentVersion   DocumentVersion?       @relation(fields: [evidenceDocumentVersionId], references: [id], onDelete: SetNull)
+  relatedTaskId             String?
+  relatedTask               Task?                  @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
+  sourceReference           String?
+  internalNote              String?
+  revision                  Int                    @default(0)
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  @@unique([obligationId, occurrenceKey])
+  @@index([clientId, dueDate])
+  @@index([contractId, status])
+  @@index([obligationId, status])
+  @@index([evidenceDocumentVersionId])
+  @@index([relatedTaskId])
+  @@map("client_obligation_occurrences")
 }
 
 enum ContractEntitlementStatus {
