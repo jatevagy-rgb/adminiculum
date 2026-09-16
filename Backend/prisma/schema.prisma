@@ -3129,6 +3129,7 @@ model ClientPublicationEvent {
   documentPublicationId String?
   actionRequestId       String?
   safeUpdateId          String?
+  improvementOpportunityPublicationId String?
   documentVersionId     String?
   fromStatus            String?
   toStatus              String?
@@ -3140,7 +3141,60 @@ model ClientPublicationEvent {
   @@index([grantId])
   @@index([matterPublicationId])
   @@index([documentPublicationId])
+  @@index([improvementOpportunityPublicationId])
   @@map("client_publication_events")
+}
+
+/// Workforce-approved, workspace-scoped publication of an ImprovementOpportunity.
+/// Source relationships are verified server-side; scalar ids preserve the
+/// additive, legacy-compatible publication boundary.
+model ClientImprovementOpportunityPublication {
+  id              String                  @id @default(uuid())
+  opportunityId   String
+  clientId        String
+  workspaceId     String
+  status          ClientPublicationStatus @default(DRAFT)
+  currentRevisionId String?
+  preparedById    String
+  approvedById    String?
+  publishedById   String?
+  revokedById     String?
+  approvedAt      DateTime?
+  publishedAt     DateTime?
+  revokedAt       DateTime?
+  supersededAt    DateTime?
+  supersededById  String?
+  revision        Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  revisions ClientImprovementOpportunityPublicationRevision[]
+
+  @@unique([opportunityId, workspaceId])
+  @@index([clientId, status])
+  @@index([workspaceId, status])
+  @@index([opportunityId, status])
+  @@map("client_improvement_opportunity_publications")
+}
+
+/// Immutable customer-safe snapshot; internal source content is never copied.
+model ClientImprovementOpportunityPublicationRevision {
+  id                 String   @id @default(uuid())
+  publicationId      String
+  revisionNumber     Int
+  clientSafeTitle    String
+  clientSafeSummary  String
+  clientSafeDirection String?
+  sourceFingerprint  String   @db.VarChar(64)
+  audienceSnapshot   Json
+  createdById        String
+  createdAt          DateTime @default(now())
+
+  publication ClientImprovementOpportunityPublication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@unique([publicationId, revisionNumber])
+  @@index([publicationId])
+  @@map("client_improvement_opportunity_publication_revisions")
 }
 
 // ============================================================================

@@ -21,6 +21,13 @@ import {
 import { submitSurveyIntake, listSurveyIntakes } from '../company-observatory/intake';
 import { ObservatoryIngestionService } from '../company-observatory/ingestion/service';
 import { getDiagnosticWorkbench } from '../company-growth/diagnostic/workbenchService';
+import {
+  createOpportunityPublicationDraft,
+  submitOpportunityPublication,
+  approveOpportunityPublication,
+  publishOpportunityPublication,
+  revokeOpportunityPublication,
+} from '../company-growth/opportunityPublicationService';
 
 const observatory = new ObservatoryIngestionService();
 
@@ -299,6 +306,30 @@ clientCompanyRouter.post('/clients/:clientId/grow/opportunities/:opportunityId/o
 clientCompanyRouter.get('/clients/:clientId/grow/outcomes', async (req, res) => {
   try { res.json({ items: await research.listOutcomeMeasurements(actor(req), String(req.params.clientId)) }); } catch (e) { fail(res, e); }
 });
+
+// Grow customer-opportunity publication (workforce-only; no customer read route).
+clientCompanyRouter.post('/clients/:clientId/grow/opportunity-publications', async (req, res) => {
+  try {
+    res.status(201).json(await createOpportunityPublicationDraft(actor(req), String(req.params.clientId), {
+      opportunityId: String(req.body?.opportunityId || ''),
+      workspaceId: String(req.body?.workspaceId || ''),
+      title: req.body?.title,
+      summary: req.body?.summary,
+      direction: req.body?.direction,
+      expectedRevision: req.body?.expectedRevision,
+    }));
+  } catch (e) { fail(res, e); }
+});
+for (const [action, handler] of [
+  ['submit', submitOpportunityPublication],
+  ['approve', approveOpportunityPublication],
+  ['publish', publishOpportunityPublication],
+  ['revoke', revokeOpportunityPublication],
+] as const) {
+  clientCompanyRouter.post(`/clients/:clientId/grow/opportunity-publications/:publicationId/${action}`, async (req, res) => {
+    try { res.json(await handler(actor(req), String(req.params.publicationId), { expectedRevision: req.body?.expectedRevision })); } catch (e) { fail(res, e); }
+  });
+}
 
 // Process observation snapshots (T2B) — exposed for before/after measurement.
 clientCompanyRouter.post('/clients/:clientId/processes/:processId/observations', async (req, res) => {
