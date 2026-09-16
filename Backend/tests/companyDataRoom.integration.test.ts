@@ -62,7 +62,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
       ],
     });
     const profileDefinitions = new Map<string, { id: string }>();
-    for (const key of ['employee_count', 'personal_data_processing', 'ai_use']) {
+    for (const key of ['employee_count', 'annual_net_revenue_eur', 'personal_data_processing', 'ai_use']) {
       let definition = await db.factDefinition.findUnique({ where: { key } });
       if (!definition) {
         definition = await db.factDefinition.create({
@@ -70,7 +70,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
             id: crypto.randomUUID(),
             key,
             domainCode: 'CLIENT_COMPANY_PROFILE',
-            valueType: key === 'employee_count' ? 'NUMBER' : 'BOOLEAN',
+            valueType: ['employee_count', 'annual_net_revenue_eur'].includes(key) ? 'NUMBER' : 'BOOLEAN',
             allowedScopeTypes: ['COMPANY', 'EMPLOYEE'],
             determinationMethod: 'USER_PROVIDED',
             overlapPolicy: 'DISALLOW',
@@ -236,6 +236,19 @@ d('Company Data Room integration (PostgreSQL)', () => {
         factSubjectId: factSubjectA,
         scopeType: 'EMPLOYEE',
         numberValue: 999,
+        validFrom: new Date('2026-01-01T00:00:00.000Z'),
+        observedAt: new Date('2026-01-01T00:00:00.000Z'),
+        verificationStatus: 'CLIENT_PROVIDED',
+      } as never,
+    });
+    await db.clientFact.create({
+      data: {
+        clientId: clientA,
+        type: 'ANNUAL_NET_REVENUE_EUR',
+        value: '123456',
+        factDefinitionId: profileDefinitions.get('annual_net_revenue_eur')!.id,
+        scopeType: 'COMPANY',
+        numberValue: 123456,
         validFrom: new Date('2026-01-01T00:00:00.000Z'),
         observedAt: new Date('2026-01-01T00:00:00.000Z'),
         verificationStatus: 'CLIENT_PROVIDED',
@@ -451,6 +464,13 @@ d('Company Data Room integration (PostgreSQL)', () => {
       expect.objectContaining({ answerStatus: 'UNKNOWN', value: null }),
       expect.objectContaining({ answerStatus: 'ANSWERED', value: true }),
     ]));
+    expect(view.facts.find((fact) => fact.factDefinition?.key === 'employee_count')?.factDefinition?.labelHu)
+      .toBe('Munkavállalói létszám');
+    expect(view.facts.find((fact) => fact.factDefinition?.key === 'annual_net_revenue_eur')?.factDefinition?.labelHu)
+      .toBe('Éves nettó árbevétel EUR-ban');
+    const unknownFact = view.facts.find((fact) => fact.factDefinition?.key === `data_room_fact_${suffix}`);
+    expect(unknownFact).toEqual(expect.objectContaining({ answerStatus: 'UNKNOWN', value: null }));
+    expect(unknownFact?.factDefinition?.labelHu).toBeNull();
     expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 1 });
     expect(view.dataQuality.coverageAvailable).toBe(false);
     expect(view.dataQuality.relevantDataCoverage).toEqual(expect.objectContaining({
