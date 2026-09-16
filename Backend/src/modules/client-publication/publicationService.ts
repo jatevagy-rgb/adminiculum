@@ -19,6 +19,11 @@ const FORBIDDEN_PATTERNS = [
   /audit(Row|Event)|activityFeed/i, /ai(Prompt|Response)|token|secret/i,
 ];
 
+/** Canonical workforce authority for publication approval and publishing. */
+export function isClientPublicationPublisherRole(role: string | null | undefined): boolean {
+  return PUBLISHER_ROLES.has(String(role || ''));
+}
+
 export const CLIENT_PUBLICATION_GATES = {
   foundation: () => envFlag('CLIENT_PUBLICATION_FOUNDATION_ENABLED', true),
   portalRead: () => envFlag('CLIENT_PORTAL_READ_ENABLED', false),
