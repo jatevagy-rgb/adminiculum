@@ -14,6 +14,7 @@ import {
   assertClientReadAccess,
   requireInternal,
 } from '../client-interaction/base';
+import { scheduleInternalAnalysisIngestion } from '../compliance-doc-intelligence/service';
 
 type Prisma = typeof defaultPrisma;
 
@@ -47,6 +48,18 @@ export async function linkComplianceDocument(
     data: { requirementId: requirement.id, documentId: input.documentId, audience: input.audience as ComplianceDocumentAudience },
     select: { id: true },
   });
+
+  // A document that has just become linked for internal analysis gets its current
+  // version ingested (CDI-1). Derived, non-fatal, fire-and-forget: a parsing or
+  // storage problem must never fail the linkage. CLIENT_POLICY never triggers it.
+  if (input.audience === 'INTERNAL_ANALYSIS') {
+    try {
+      scheduleInternalAnalysisIngestion(input.documentId, { audienceConfirmedInternal: true });
+    } catch {
+      // Never surface ingestion scheduling problems to the linkage caller.
+    }
+  }
+
   return { id: created.id, requirementKey: requirement.key, audience: input.audience as ComplianceDocumentAudience };
 }
 

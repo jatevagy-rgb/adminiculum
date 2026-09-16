@@ -1420,6 +1420,7 @@ model DocumentVersion {
   obligationEvidence      ClientObligation[]
   personDocumentLinks     OrganizationPersonDocumentLink[]
   evidenceRecords         EvidenceRecord[]
+  complianceClauseAnchors ComplianceDocumentClauseAnchor[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -5361,6 +5362,7 @@ model LegalSourceVersion {
 
   captures  LegalSourceCapture[]
   citations RequirementCitation[]
+  clauseAnchors ComplianceDocumentClauseAnchor[]
 
   @@unique([legalSourceId, legalVersionKey])
   @@unique([id, legalSourceId])
@@ -5486,6 +5488,102 @@ model ComplianceDocument {
   @@unique([requirementId, documentId, audience])
   @@index([requirementId, audience])
   @@map("compliance_documents")
+}
+
+// ============================================================================
+// COMPLIANCE DOCUMENT INTELLIGENCE — DOCUMENT CLAUSE × LEGAL/CASE/AUTHORITY
+// ANCHOR RELATIONS (CDI-1)
+//
+// Derived, INTERNAL-ONLY structural metadata extracted from an INTERNAL_ANALYSIS
+// compliance master DOCX that uses Word Developer Content Controls (ADM-* tags).
+//
+// PROVENANCE: every row is scoped to ONE immutable DocumentVersion. Re-ingesting
+// the same version is a no-op; changed content must arrive as a NEW
+// DocumentVersion and produces its own row set. Historical rows are never
+// rewritten or re-pointed.
+//
+// CLIENT BOUNDARY: this is internal analysis metadata. It is never projected
+// through clientSafeComplianceService, the client portal, or any customer DTO,
+// and CLIENT_POLICY documents never trigger ingestion.
+// ============================================================================
+
+/// Anchor source-type vocabulary. Closed by the document convention:
+/// ADM-LEGALANCHOR -> LEGAL, ADM-CASEANCHOR -> CASE,
+/// ADM-AUTHORITYANCHOR -> AUTHORITY.
+enum ComplianceAnchorType {
+  LEGAL
+  CASE
+  AUTHORITY
+}
+
+model ComplianceDocumentClauseAnchor {
+  id String @id @default(uuid())
+
+  // Provenance subject. Version-scoped on purpose: a relation can never claim
+  // provenance it does not have.
+  documentVersionId String
+  documentVersion   DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+
+  // ADM-CLAUSE. clauseRef is the exact clause value printed in the master
+  // (e.g. "1.1."). clauseStableId preserves the document's own machine identity
+  // carried by the ADM-CLAUSE:<id> tag, when the document transports one.
+  clauseRef      String
+  clauseTitle    String?
+  clauseStableId String?
+
+  // ADM-RELTYPE. A bounded machine token (e.g. MANDATORY_BASIS, LEGAL_LIMIT),
+  // deliberately NOT a Prisma enum: the relation vocabulary evolves and a new
+  // syntactically valid value must never require a database migration. Values
+  // are preserved verbatim and never rewritten into another meaning.
+  relationType String @db.VarChar(64)
+
+  anchorType     ComplianceAnchorType
+  anchorDisplay  String
+  anchorStableId String?
+  /// Monitoring lookup key. NULL when the document transports no machine
+  /// metadata sufficient to build one — it is never derived from display text.
+  anchorKey      String?
+
+  eli    String?
+  celex  String?
+  locator String?
+
+  ecli        String?
+  caseId      String?
+  caseLocator String?
+
+  decisionId       String?
+  authorityLocator String?
+
+  sourceUrl String?
+  rationale String?
+
+  // Optional binding to the canonical legal-source registry. Never created by
+  // document ingestion; set only when an exact existing version resolves.
+  // LegalSourceVersion already determines its LegalSource.
+  legalSourceVersionId String?
+  legalSourceVersion   LegalSourceVersion? @relation(fields: [legalSourceVersionId], references: [id], onDelete: SetNull)
+
+  /// Internal-only parser observations for this row (e.g. incomplete machine
+  /// metadata). Never exposed through a customer surface.
+  ingestWarnings String[] @default([])
+
+  /// sha256 over the normalized extracted semantic row — the idempotency and
+  /// same-version drift identity. Never over raw XML formatting.
+  rowDigest  String   @db.VarChar(64)
+  ingestedAt DateTime @default(now())
+
+  @@unique([documentVersionId, rowDigest])
+  @@index([documentVersionId])
+  @@index([documentVersionId, clauseRef])
+  @@index([anchorKey])
+  @@index([anchorStableId])
+  @@index([legalSourceVersionId])
+  @@index([anchorType])
+  @@index([eli])
+  @@index([celex])
+  @@index([ecli])
+  @@map("compliance_document_clause_anchors")
 }
 
 model RequirementVersion {
