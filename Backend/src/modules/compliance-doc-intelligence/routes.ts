@@ -18,7 +18,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { InteractionError, assertClientReadAccess, requireInternal } from '../client-interaction/base';
 import {
   findClauseAnchorReferencesByAnchorKey,
-  listClauseAnchorsForDocument,
+  listClauseAnchorsForDocumentWithBinding,
   summarizeClauseAnchorsForDocument,
 } from './service';
 
@@ -56,7 +56,9 @@ router.get('/clients/:clientId/documents/:documentId/clause-anchors', async (req
     const documentId = String(req.params.documentId);
     await assertClientReadAccess(internal, clientId);
     await assertDocumentBelongsToClient(clientId, documentId);
-    res.json(await listClauseAnchorsForDocument(documentId));
+    // C3A: includes internal canonical binding metadata (stored-at-ingest or
+    // resolved read-time on an exact CELEX match). Nothing is written here.
+    res.json(await listClauseAnchorsForDocumentWithBinding(documentId));
   } catch (error) {
     respond(error, res, 'COMPLIANCE_INTELLIGENCE_LIST_ERROR');
   }

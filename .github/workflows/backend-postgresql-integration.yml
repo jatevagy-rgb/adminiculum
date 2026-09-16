@@ -67,7 +67,7 @@ jobs:
 
       - name: Initialize suite result tracking
         run: |
-          for s in comparison review publication internal-case-portal-publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary client-communication-summary demo-kft-text-id-verification demo-kft-identity-binding work-package-schema work-package-admin work-package-case-creation work-package-operational intake-work-package ai-prompts time-attribution time-billing-convergence phase7b compliance-case-work-package phase7cb org-client-safe compliance-document-linkage phase5b document-version task-lifecycle-schema task-review-decision task-submission agenda-deadline agenda-convergence billing-preparation-review invoice-draft-foundation compliance-workspace compliance-reconcile demo-kft-compliance-grow client-lifecycle communication-task-guards dashboard-workload-readback task-role-eligibility client-portal-2-customer-product grow-research grow-opportunity-publication grow-customer-survey grow-customer-assessment obs1-ingestion observatory-grow-convergence compliance-doc-intelligence compliance-doc-intelligence-unit; do
+          for s in comparison review publication internal-case-portal-publication identity interaction workspace company contracts organization org-access cp1-external intake onboarding milestone workflow lifecycle zero-grant phase5-fixture phase6-slice-a phase6-slice-b phase6-slice-c2 phase6-slice-d phase7-slice-7a phase7d answer-state case-attention client-safe-work-summary client-communication-summary demo-kft-text-id-verification demo-kft-identity-binding work-package-schema work-package-admin work-package-case-creation work-package-operational intake-work-package ai-prompts time-attribution time-billing-convergence phase7b compliance-case-work-package phase7cb org-client-safe compliance-document-linkage phase5b document-version task-lifecycle-schema task-review-decision task-submission agenda-deadline agenda-convergence billing-preparation-review invoice-draft-foundation compliance-workspace compliance-reconcile demo-kft-compliance-grow client-lifecycle communication-task-guards dashboard-workload-readback task-role-eligibility client-portal-2-customer-product grow-research grow-opportunity-publication grow-customer-survey grow-customer-assessment obs1-ingestion observatory-grow-convergence compliance-doc-intelligence compliance-doc-intelligence-unit compliance-c3a-celex-binding; do
             echo "$s=PENDING" >> "$RUNNER_TEMP/ci-suite-results.txt"
           done
 
@@ -840,6 +840,17 @@ jobs:
           sed -i "s/^compliance-doc-intelligence-unit=PENDING$/compliance-doc-intelligence-unit=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Compliance C3A exact CELEX binding (unit + PG)
+        working-directory: Backend
+        env:
+          CLIENT_INTERACTION_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: |
+          if npx jest --runInBand complianceCelexBinding.test.ts complianceCelexBinding.integration.test.ts; then rc=0; else rc=$?; fi
+          sed -i "s/^compliance-c3a-celex-binding=PENDING$/compliance-c3a-celex-binding=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
+          exit "$rc"
+
       - name: Backend PostgreSQL integration summary
         if: always()
         continue-on-error: true
@@ -912,6 +923,7 @@ jobs:
             [client-portal-2-customer-product]="Client Portal 2.0 customer product"
             [compliance-doc-intelligence]="Compliance document intelligence (clause x anchor)"
             [compliance-doc-intelligence-unit]="Compliance document intelligence unit + client isolation"
+            [compliance-c3a-celex-binding]="Compliance C3A exact CELEX legal source binding"
           )
           {
             echo "### Backend PostgreSQL Integration"

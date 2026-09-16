@@ -54,6 +54,13 @@ const INTERNAL_TOKENS = [
   'anchorStableId',
   'ingestWarnings',
   'rowDigest',
+  // C3A canonical binding metadata (internal-only).
+  'legalSourceBindingStatus',
+  'canonicalLegalSourceVersionId',
+  'canonicalCitation',
+  'canonicalTitle',
+  'bindingOrigin',
+  'bindingReason',
 ];
 
 function assertCleanOfInternalTokens(files: string[], label: string) {

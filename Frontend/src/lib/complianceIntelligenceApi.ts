@@ -10,6 +10,10 @@ import { fetchApi } from './api';
  */
 export type ComplianceAnchorType = 'LEGAL' | 'CASE' | 'AUTHORITY';
 
+/** C3A canonical binding state (INTERNAL only). */
+export type LegalSourceBindingStatus = 'RESOLVED' | 'UNRESOLVED';
+export type LegalSourceBindingOrigin = 'PERSISTED_AT_INGEST' | 'READ_TIME_EXACT_CELEX';
+
 export type ComplianceClauseAnchorRow = {
   id: string;
   documentVersionId: string;
@@ -36,6 +40,16 @@ export type ComplianceClauseAnchorRow = {
   ingestWarnings: string[];
   rowDigest: string;
   ingestedAt: string;
+  /**
+   * C3A canonical binding, exact CELEX match only. Present on the internal
+   * projection; never part of a customer-safe payload.
+   */
+  legalSourceBindingStatus?: LegalSourceBindingStatus;
+  canonicalLegalSourceVersionId?: string;
+  canonicalCitation?: string | null;
+  canonicalTitle?: string | null;
+  bindingOrigin?: LegalSourceBindingOrigin;
+  bindingReason?: string;
 };
 
 export type ComplianceClauseAnchorVersion = {
