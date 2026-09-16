@@ -748,32 +748,218 @@ async function runCustomerGrowBrowserQA() {
       await context.close();
     }
 
-    // Capture published opportunities basic compatibility screenshot
-    console.log("Capturing published opportunities basic compatibility screenshot...");
-    const { context: pubContext, page: pubPage } = await createQaPage(browser, { width: 1440, height: 900, name: "desktop" });
-    await pubPage.route("**/api/v1/client-portal/org/grow", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ...MOCK_ORG_GROW,
-          opportunities: [
-            {
-              publicationId: "pub-opp-1",
-              title: "Automatizált jóváhagyási folyamat bevezetése",
-              summary: "A manuális jóváhagyási lépések kiváltása digitális munkafolyamattal a megrendelés-feldolgozásban.",
-              direction: "Automatizálás és átfutási idő csökkentése",
-              publishedAt: "2026-03-15T08:30:00.000Z",
-            },
-          ],
-          opportunitiesDeferredNotice: null,
-        }),
+    // -------------------------------------------------------------
+    // PUB-3 Opportunity Experience QA: Published List, Detail, URL State, Back/Forward, Mobile
+    // -------------------------------------------------------------
+    console.log("\n===============================================================");
+    console.log("Testing PUB-3 Published Opportunity Experience (Desktop + Mobile)");
+    console.log("===============================================================");
+
+    const MOCK_PUBLISHED_OPPORTUNITIES = [
+      {
+        publicationId: "pub-opp-erp-automation",
+        title: "Automatizált jóváhagyási folyamat bevezetése",
+        summary: "A manuális jóváhagyási lépések kiváltása digitális munkafolyamattal a megrendelés-feldolgozásban.",
+        direction: "Automatizálás és átfutási idő csökkentése",
+        publishedAt: "2026-03-15T08:30:00.000Z",
+      },
+      {
+        publicationId: "pub-opp-crm-integration",
+        title: "CRM és számlázási adatkapcsolat kialakítása",
+        summary: "Közvetlen integráció az ügyfélkezelő és a pénzügyi nyilvántartó között a kettős adatrögzítés megszüntetésére.",
+        direction: "Rendszerintegráció",
+        publishedAt: "2026-03-14T14:00:00.000Z",
+      },
+    ];
+
+    // Check FORBIDDEN FIELDS in mock payload
+    const forbiddenFields = [
+      "evidenceStrength",
+      "diagnosis",
+      "reviewer",
+      "observation",
+      "caseId",
+      "taskId",
+      "documentId",
+      "recommendationId",
+    ];
+    for (const opp of MOCK_PUBLISHED_OPPORTUNITIES) {
+      for (const field of forbiddenFields) {
+        if (field in opp) {
+          throw new Error(`FORBIDDEN_FIELD_PRESENT: Opportunity contains forbidden field: ${field}`);
+        }
+      }
+    }
+
+    // 1. Desktop PUB-3 Testing
+    {
+      const { context: pubContext, page: pubPage } = await createQaPage(browser, { width: 1440, height: 900, name: "desktop" });
+      await pubPage.route("**/api/v1/client-portal/org/grow", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ...MOCK_ORG_GROW,
+            opportunities: MOCK_PUBLISHED_OPPORTUNITIES,
+            opportunitiesDeferredNotice: null,
+          }),
+        });
       });
-    });
-    await pubPage.goto(`${BASE_URL}/portal/fejlesztes?tab=lehetosegek`, { waitUntil: "networkidle" });
-    await pubPage.waitForSelector("[data-testid='grow-opportunities-section']", { timeout: 10000 });
-    await pubPage.screenshot({ path: path.join(SHOTS, "opportunities-published-basic-desktop.png"), fullPage: true });
-    await pubContext.close();
+
+      // Navigate to list
+      console.log("PUB-3: Navigating to ?tab=lehetosegek (multiple published opportunities)...");
+      await pubPage.goto(`${BASE_URL}/portal/fejlesztes?tab=lehetosegek`, { waitUntil: "networkidle" });
+      await pubPage.waitForSelector("[data-testid='grow-opportunities-list']", { timeout: 10000 });
+
+      // Verify list items count
+      const itemCount = await pubPage.locator("[data-testid='grow-opportunity-item']").count();
+      if (itemCount !== 2) {
+        throw new Error(`Expected 2 published opportunity cards, found: ${itemCount}`);
+      }
+
+      // Verify KPI badge
+      const listText = await pubPage.evaluate(() => document.body.innerText);
+      if (!listText.includes("Közzétett lehetőségek: 2")) {
+        throw new Error("Missing or incorrect published opportunity count KPI badge");
+      }
+
+      // Verify internal publicationId is NOT visibly rendered as text to customer
+      if (listText.includes("pub-opp-erp-automation") || listText.includes("pub-opp-crm-integration")) {
+        throw new Error("RAW_INTERNAL_ID_VISIBLE: Raw publicationId leaked into visible human UI text");
+      }
+
+      // Verify forbidden field names are not rendered
+      for (const field of forbiddenFields) {
+        if (listText.toLowerCase().includes(field.toLowerCase())) {
+          throw new Error(`FORBIDDEN_FIELD_RENDERED: Forbidden term found in rendered text: ${field}`);
+        }
+      }
+
+      // Save list screenshot
+      await pubPage.screenshot({ path: path.join(SHOTS, "opportunities-list-desktop.png"), fullPage: true });
+
+      // Click "Részletek →" on first card
+      console.log("PUB-3: Opening detail view for first opportunity...");
+      await pubPage.locator("[data-testid='grow-opportunity-open-detail']").first().click();
+      await pubPage.waitForTimeout(400);
+
+      // Verify URL updated to include ?tab=lehetosegek&opportunity=pub-opp-erp-automation
+      if (!pubPage.url().includes("opportunity=pub-opp-erp-automation")) {
+        throw new Error(`URL did not update with opportunity param on detail select, got: ${pubPage.url()}`);
+      }
+
+      // Verify Detail view rendered
+      await pubPage.waitForSelector("[data-testid='grow-opportunity-detail']", { timeout: 5000 });
+      const detailTitle = await pubPage.locator("[data-testid='grow-opportunity-detail-title']").innerText();
+      if (!detailTitle.includes("Automatizált jóváhagyási folyamat bevezetése")) {
+        throw new Error(`Unexpected detail title: ${detailTitle}`);
+      }
+      const detailText = await pubPage.locator("[data-testid='grow-opportunity-detail']").textContent();
+      if (!/összefoglaló/i.test(detailText) || !/javasolt irány/i.test(detailText) || !/közzétéve/i.test(detailText)) {
+        throw new Error(`Missing required detail sections (Összefoglaló, Javasolt irány, Közzétéve), got: ${detailText}`);
+      }
+
+      // Save detail screenshot
+      await pubPage.screenshot({ path: path.join(SHOTS, "opportunity-detail-desktop.png"), fullPage: true });
+
+      // Test Browser Back -> returns to list
+      console.log("PUB-3: Testing browser back from detail...");
+      await pubPage.goBack();
+      await pubPage.waitForTimeout(400);
+      if (pubPage.url().includes("opportunity=")) {
+        throw new Error(`Browser goBack did not remove opportunity param from URL: ${pubPage.url()}`);
+      }
+      const backToListCount = await pubPage.locator("[data-testid='grow-opportunities-list']").count();
+      if (backToListCount === 0) {
+        throw new Error("Browser goBack failed to restore published opportunities list view");
+      }
+
+      // Test Browser Forward -> restores detail
+      console.log("PUB-3: Testing browser forward to detail...");
+      await pubPage.goForward();
+      await pubPage.waitForTimeout(400);
+      if (!pubPage.url().includes("opportunity=pub-opp-erp-automation")) {
+        throw new Error(`Browser goForward did not restore opportunity param in URL: ${pubPage.url()}`);
+      }
+      const forwardDetailCount = await pubPage.locator("[data-testid='grow-opportunity-detail']").count();
+      if (forwardDetailCount === 0) {
+        throw new Error("Browser goForward failed to restore published opportunity detail view");
+      }
+
+      // Test "Vissza a lehetőségekhez" button -> returns to list
+      console.log("PUB-3: Testing 'Vissza a lehetőségekhez' button...");
+      await pubPage.locator("[data-testid='grow-opportunity-detail-back']").click();
+      await pubPage.waitForTimeout(400);
+      if (pubPage.url().includes("opportunity=")) {
+        throw new Error(`Back button did not clear opportunity param from URL: ${pubPage.url()}`);
+      }
+
+      // Test Direct URL to specific opportunity
+      console.log("PUB-3: Testing direct URL to specific opportunity...");
+      await pubPage.goto(`${BASE_URL}/portal/fejlesztes?tab=lehetosegek&opportunity=pub-opp-crm-integration`, { waitUntil: "networkidle" });
+      await pubPage.waitForSelector("[data-testid='grow-opportunity-detail']", { timeout: 5000 });
+      const directDetailTitle = await pubPage.locator("[data-testid='grow-opportunity-detail-title']").innerText();
+      if (!directDetailTitle.includes("CRM és számlázási adatkapcsolat kialakítása")) {
+        throw new Error(`Direct URL opened wrong opportunity: ${directDetailTitle}`);
+      }
+
+      // Test Invalid / Nonexistent opportunity ID -> fails closed to list
+      console.log("PUB-3: Testing invalid opportunity ID fails closed to list...");
+      await pubPage.goto(`${BASE_URL}/portal/fejlesztes?tab=lehetosegek&opportunity=nonexistent-invalid-id`, { waitUntil: "networkidle" });
+      await pubPage.waitForSelector("[data-testid='grow-opportunities-list']", { timeout: 5000 });
+      const failClosedListCount = await pubPage.locator("[data-testid='grow-opportunity-item']").count();
+      if (failClosedListCount !== 2) {
+        throw new Error("Invalid opportunity ID did not fail closed to the published opportunities list");
+      }
+
+      // Test switching to another tab clears opportunity param
+      console.log("PUB-3: Testing switching tabs clears opportunity param...");
+      await pubPage.locator("[data-testid='grow-tab-attekintes']").click();
+      await pubPage.waitForTimeout(400);
+      if (pubPage.url().includes("opportunity=")) {
+        throw new Error(`Switching tab failed to clear opportunity param: ${pubPage.url()}`);
+      }
+
+      await pubContext.close();
+    }
+
+    // 2. Mobile PUB-3 Testing
+    {
+      console.log("PUB-3: Testing Mobile viewport (390x844)...");
+      const { context: mobContext, page: mobPage } = await createQaPage(browser, { width: 390, height: 844, name: "mobile" });
+      await mobPage.route("**/api/v1/client-portal/org/grow", async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            ...MOCK_ORG_GROW,
+            opportunities: MOCK_PUBLISHED_OPPORTUNITIES,
+            opportunitiesDeferredNotice: null,
+          }),
+        });
+      });
+
+      // Mobile list
+      await mobPage.goto(`${BASE_URL}/portal/fejlesztes?tab=lehetosegek`, { waitUntil: "networkidle" });
+      await mobPage.waitForSelector("[data-testid='grow-opportunities-list']", { timeout: 10000 });
+      const mobileListOverflow = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 2);
+      if (mobileListOverflow) {
+        throw new Error("Mobile opportunities list has horizontal overflow!");
+      }
+      await mobPage.screenshot({ path: path.join(SHOTS, "opportunities-list-mobile.png"), fullPage: true });
+
+      // Mobile detail
+      await mobPage.locator("[data-testid='grow-opportunity-open-detail']").first().click();
+      await mobPage.waitForTimeout(400);
+      await mobPage.waitForSelector("[data-testid='grow-opportunity-detail']", { timeout: 5000 });
+      const mobileDetailOverflow = await mobPage.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 2);
+      if (mobileDetailOverflow) {
+        throw new Error("Mobile opportunity detail has horizontal overflow!");
+      }
+      await mobPage.screenshot({ path: path.join(SHOTS, "opportunity-detail-mobile.png"), fullPage: true });
+
+      await mobContext.close();
+    }
 
     console.log("\n===============================================================");
     console.log("ALL BROWSER QA TESTS COMPLETED SUCCESSFULLY (EXIT CODE 0)");

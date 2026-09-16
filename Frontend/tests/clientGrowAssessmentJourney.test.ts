@@ -262,7 +262,7 @@ test('truthful semantic doctrine: declared observations, observations vs facts, 
   assert.doesNotMatch(journeySrc, /igazolt hatás|igazolt eredmény/);
 });
 
-test('PUB-2 opportunity compatibility: zero-published normal empty state, no stale gap code, published data not hidden', () => {
+test('PUB-3 opportunity experience: list, detail, zero-published normal empty state, and URL state', () => {
   const src = read(VIEW);
 
   // GROW_OPPORTUNITY_CUSTOMER_PUBLICATION_GAP_FRONTEND_REFERENCES=0
@@ -272,14 +272,32 @@ test('PUB-2 opportunity compatibility: zero-published normal empty state, no sta
   // ZERO_PUBLISHED_IS_NORMAL_EMPTY_STATE=YES
   assert.match(src, /Jelenleg nincs ügyféloldalon közzétett fejlesztési lehetőség\./);
   assert.match(src, /data-testid="grow-opportunities-empty"/);
+  assert.match(src, /Ha egy fejlesztési irány szakértői felülvizsgálat után közzétételre kerül, itt fog megjelenni\./);
 
-  // PUBLISHED_OPPORTUNITY_DATA_HIDDEN=NO
-  // Proves that when opportunities.length > 0, it renders the published items list
+  // PUBLISHED_OPPORTUNITY_LIST=YES
   assert.match(src, /data\?\.opportunities && data\.opportunities\.length > 0/);
   assert.match(src, /data-testid="grow-opportunities-list"/);
-  assert.match(src, /opp\.publicationId \|\| opp\.id \|\| opp\.title/);
+  assert.match(src, /data-testid="grow-opportunity-item"/);
+  assert.match(src, /data-testid="grow-opportunity-open-detail"/);
   assert.match(src, /opp\.title/);
   assert.match(src, /opp\.summary/);
   assert.match(src, /opp\.direction/);
   assert.match(src, /opp\.publishedAt/);
+
+  // PUBLISHED_OPPORTUNITY_DETAIL=YES
+  assert.match(src, /data-testid="grow-opportunity-detail"/);
+  assert.match(src, /data-testid="grow-opportunity-detail-title"/);
+  assert.match(src, /data-testid="grow-opportunity-detail-back"/);
+  assert.match(src, /Vissza a lehetőségekhez/);
+  assert.match(src, /Összefoglaló/);
+  assert.match(src, /Javasolt irány/);
+
+  // DETAIL_URL_STATE=YES
+  assert.match(src, /url\.searchParams\.set\("opportunity",/);
+  assert.match(src, /url\.searchParams\.delete\("opportunity"\)/);
+
+  // FORBIDDEN_FIELDS_ABSENT=YES
+  // Does not use forbidden internal fields in opportunity presentation
+  assert.doesNotMatch(src, /evidenceStrength/);
+  assert.doesNotMatch(src, /recommendationId/);
 });
