@@ -144,7 +144,12 @@ export const clientCompanyApi = {
 };
 
 export function companyFactTypeLabel(type: string): string {
+  const normalized = (type || '').trim();
+  const upperKey = normalized.toUpperCase().replace(/[-\s]/g, '_');
+  const lowerKey = normalized.toLowerCase().replace(/[-\s]/g, '_');
+
   const labels: Record<string, string> = {
+    // Upper case enum keys (legacy / DB)
     EMPLOYEE_COUNT: 'Létszám',
     REVENUE_BAND: 'Bevételi sáv',
     MAIN_ACTIVITY: 'Fő tevékenység',
@@ -162,8 +167,22 @@ export function companyFactTypeLabel(type: string): string {
     AI_USAGE: 'AI-használat',
     CERTIFICATION: 'Tanúsítvány',
   };
-  return labels[type] || type;
+
+  if (labels[upperKey]) return labels[upperKey];
+  if (labels[lowerKey]) return labels[lowerKey];
+  if (labels[normalized]) return labels[normalized];
+
+  // Secondary humanized fallback rather than generic wall of "Rögzített adat"
+  if (normalized.includes('_') || normalized.includes('-')) {
+    const parts = normalized.split(/[_-]+/).filter(Boolean);
+    if (parts.length > 0) {
+      return parts.map((p, i) => i === 0 ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : p.toLowerCase()).join(' ');
+    }
+  }
+
+  return normalized || 'Rögzített adat';
 }
+
 
 export function factVerificationLabel(status: string): string {
   const labels: Record<string, string> = {
