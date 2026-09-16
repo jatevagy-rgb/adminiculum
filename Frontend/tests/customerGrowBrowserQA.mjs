@@ -588,6 +588,11 @@ async function runCustomerGrowBrowserQA() {
 
       await page.screenshot({ path: path.join(SHOTS, `felmeresek-${viewport.name}.png`), fullPage: true });
 
+      const expandedRow = page.locator("[data-testid='grow-assessment-row-pack-operational']");
+      if ((await expandedRow.count()) > 0) {
+        await expandedRow.screenshot({ path: path.join(SHOTS, `expanded-assessment-${viewport.name}.png`) });
+      }
+
       // 5. Interactive Assessment Runner & UNKNOWN Choice
       console.log("5. Testing interactive assessment runner...");
       const startButton = page.locator("[data-testid='grow-assessment-start-pack-operational']");

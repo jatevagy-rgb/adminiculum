@@ -523,7 +523,18 @@ export function OrganizationPortalViews({ view, resourceId, context, workspace }
 
   return (
     <div className="space-y-6" data-testid="organization-client-portal">
-      <OrganizationContextHeader context={context} units={state.units} />
+      {view !== "grow" ? (
+        <OrganizationContextHeader context={context} units={state.units} />
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500 pb-1" data-testid="org-context-minimal">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-stone-700">{context.selectedWorkspace?.clientDisplayName || "Szervezet"}</span>
+            <span>·</span>
+            <span>{context.selectedWorkspace?.name}</span>
+          </div>
+          {state.units.length > 0 ? <span>{state.units.map((u) => u.name).join(" · ")}</span> : null}
+        </div>
+      )}
       {view === "home" && isCaseRelay ? <><LeadershipSummary units={state.leadership} mode={context.selectedWorkspace?.mode} /><OrganizationHome state={state} workspace={workspace} showIntakes={false} /></> : null}
       {view === "home" && !isCaseRelay ? <OrganizationHome state={state} workspace={workspace} /> : null}
       {view === "matters" ? <OrganizationMatters cases={state.cases} units={state.units} /> : null}
