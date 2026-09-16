@@ -13,7 +13,9 @@ import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import { OrgHomeView } from './OrgHomeView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
+import { CustomerRequestDetail } from './CustomerRequestDetail';
 import { ActionCard, Card, formatDate, MatterView, UpdateCard } from './MatterWorkspace';
+import { customerInteractionApi, type CustomerRequestDTO, type CustomerSubmissionDTO } from '@/lib/clientInteractionApi';
 import {
   getPortalActionRequest,
   getPortalDocument,
@@ -38,7 +40,7 @@ import {
 
 type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company' | 'grow' | 'compliance';
 
-type Props = { view: PortalView; resourceId?: string };
+type Props = { view: PortalView; resourceId?: string; requestId?: string };
 
 type LoadState =
   | { status: 'loading' }
@@ -49,7 +51,7 @@ type LoadState =
   | { status: 'workspace-empty'; context: PortalIdentityContext }
   | { status: 'denied'; message: string }
   | { status: 'service-error' }
-  | { status: 'ready'; context: PortalIdentityContext; home: PortalHome; workspace: PortalWorkspace; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest };
+  | { status: 'ready'; context: PortalIdentityContext; home: PortalHome; workspace: PortalWorkspace; matter?: PortalMatter & { documents: PortalDocument[]; actionRequests: PortalActionRequest[]; updates: PortalSafeUpdate[] }; document?: PortalDocument; action?: PortalActionRequest; requestDetail?: { request: CustomerRequestDTO; submission?: CustomerSubmissionDTO }; requestUnavailable?: boolean };
 
 function SectionHeader({ kicker, title, link, linkLabel }: { kicker?: string; title: string; link?: string; linkLabel?: string }) {
   return (
@@ -277,7 +279,7 @@ function ActionView({ action }: { action: PortalActionRequest }) {
   );
 }
 
-export function ClientPortalShell({ view, resourceId }: Props) {
+export function ClientPortalShell({ view, resourceId, requestId }: Props) {
   const { instance, accounts, inProgress } = useMsal();
   const account = pickAccountByTenant(accounts, customerTenantId);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -328,7 +330,19 @@ export function ClientPortalShell({ view, resourceId }: Props) {
         }
         const [home, workspace] = await Promise.all([getPortalHome(), getPortalWorkspace()]);
         let detail = {};
-        if (view === 'matter' && resourceId && !isCollaborationWorkspace) detail = { matter: await getPortalMatter(resourceId) };
+        if (view === 'matter' && resourceId && !isCollaborationWorkspace) {
+          const matter = await getPortalMatter(resourceId);
+          detail = { matter };
+          if (requestId) {
+            try {
+              const request = await customerInteractionApi.getRequest(matter.caseId, requestId);
+              const submissionPage = await customerInteractionApi.listSubmissions(matter.caseId, requestId);
+              detail = { matter, requestDetail: { request, submission: (submissionPage.items || [])[0] } };
+            } catch {
+              detail = { matter, requestUnavailable: true };
+            }
+          }
+        }
         if (view === 'document' && resourceId) detail = { document: await getPortalDocument(resourceId) };
         if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };
         if (!cancelled) setState({ status: 'ready', context, home, workspace, ...detail });
@@ -351,7 +365,7 @@ export function ClientPortalShell({ view, resourceId }: Props) {
     }
     load();
     return () => { cancelled = true; };
-  }, [account, inProgress, instance, resourceId, selectedReference, view, reloadNonce]);
+  }, [account, inProgress, instance, requestId, resourceId, selectedReference, view, reloadNonce]);
 
   const nav = useMemo(() => {
     if (state.status !== 'ready' || !state.context.selectedWorkspace) return [];
@@ -436,16 +450,31 @@ export function ClientPortalShell({ view, resourceId }: Props) {
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
+            requestId={requestId}
             context={state.context}
             workspace={state.workspace}
           />
         ) : null}
         {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'home' ? <HomeView home={state.home} workspace={state.workspace} /> : null}
         {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && (view === 'matters' || view === 'tasks' || view === 'documents' || view === 'messages') ? <ListView view={view} home={state.home} workspace={state.workspace} /> : null}
-        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'matter' && state.matter ? (
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'matter' && state.requestDetail && state.matter ? (
+          <CustomerRequestDetail
+            caseId={state.matter.caseId}
+            publicationId={resourceId || ''}
+            request={state.requestDetail.request}
+            submission={state.requestDetail.submission}
+            matter={state.matter}
+            canSendMessages={Boolean(state.matter.messageCapabilities?.canSend)}
+            onChanged={async () => { setReloadNonce((value) => value + 1); }}
+          />
+        ) : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'matter' && state.requestUnavailable && !state.requestDetail ? (
+          <Card><h1 className="cp-title text-3xl">A bekérés jelenleg nem érhető el</h1><p className="cp-subtitle mt-3">Előfordulhat, hogy a bekérés lezárult vagy visszavonásra került. Kérjük, ellenőrizze az ügy részleteit.</p></Card>
+        ) : null}
+        {state.status === 'ready' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' && state.context.selectedWorkspace?.mode !== 'CASE_RELAY' && view === 'matter' && !state.requestDetail && !state.requestUnavailable && state.matter ? (
           <MatterView
             matter={state.matter}
-            communicationSection={<CustomerInteractionCard caseId={state.matter.caseId} allowAsk={Boolean(state.matter.messageCapabilities?.canSend)} />}
+            communicationSection={<CustomerInteractionCard caseId={state.matter.caseId} allowAsk={Boolean(state.matter.messageCapabilities?.canSend)} matterPublicationId={resourceId} />}
           />
         ) : null}
         {state.status === 'ready' && view === 'document' && state.document ? <DocumentView document={state.document} /> : null}
