@@ -1,0 +1,334 @@
+"use client";
+
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  complianceIntelligenceApi,
+  type ComplianceAnchorType,
+  type ComplianceClauseAnchorReadModel,
+  type ComplianceClauseAnchorRow,
+} from "@/lib/complianceIntelligenceApi";
+
+/**
+ * INTERNAL compliance workspace — structured legal matrix of one compliance
+ * master document.
+ *
+ * This panel only DISPLAYS document-authored structured provenance that CDI-1
+ * extracted from the document's own Word content controls. It deliberately makes
+ * no legal statement: it never says a clause is compliant, non-compliant,
+ * obsolete, or that a source changed. There is no monitoring and no AI
+ * conclusion in this surface.
+ *
+ * INTERNAL ONLY: rendered only for INTERNAL_ANALYSIS links in the internal
+ * compliance workspace. Nothing here is projected to the customer portal.
+ */
+
+const anchorTypeLabels: Record<ComplianceAnchorType, string> = {
+  LEGAL: "Jogszabály",
+  CASE: "Bírósági döntés",
+  AUTHORITY: "Hatósági döntés",
+};
+
+const anchorTypeOrder: ComplianceAnchorType[] = ["LEGAL", "CASE", "AUTHORITY"];
+
+/** An absolute http(s) value is the only thing rendered as a link. */
+export function isHttpUrl(value: string | null | undefined): boolean {
+  return typeof value === "string" && /^https?:\/\//i.test(value.trim());
+}
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleDateString("hu-HU");
+  } catch {
+    return value;
+  }
+}
+
+const caseIdentifier = (row: ComplianceClauseAnchorRow): string | null => row.caseId || row.caseLocator;
+const authorityLocators = (row: ComplianceClauseAnchorRow): string | null =>
+  [row.authorityLocator, row.locator].filter(Boolean).join(" · ") || null;
+
+function metaField({ label, value, mono = false, href = null }: { label: string; value: string | null; mono?: boolean; href?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="min-w-0" key={label}>
+      <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{label}</p>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          className={`block break-all text-xs text-[var(--adm-green-800)] underline ${mono ? "font-mono" : ""}`}
+        >
+          {value}
+        </a>
+      ) : (
+        <p className={`break-words text-xs text-[var(--adm-text)] ${mono ? "font-mono" : ""}`}>{value}</p>
+      )}
+    </div>
+  );
+}
+
+function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
+  const warnings = row.ingestWarnings ?? [];
+  return (
+    <li
+      key={row.id}
+      className="rounded border border-[var(--adm-border)] bg-white p-3"
+      data-testid="clause-anchor-row"
+      data-anchor-type={row.anchorType}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="font-mono text-sm font-medium text-[var(--adm-text)]">{row.clauseRef}</p>
+          {row.clauseTitle ? <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">{row.clauseTitle}</p> : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 font-mono text-[10px] text-[var(--adm-text)]">
+            {row.relationType}
+          </span>
+          <span className="rounded border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
+            {anchorTypeLabels[row.anchorType] ?? row.anchorType}
+          </span>
+        </div>
+      </div>
+
+      <p className="mt-2 text-sm text-[var(--adm-text)]">{row.anchorDisplay}</p>
+
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        {metaField({ label: "ELI", value: row.eli, mono: true, href: isHttpUrl(row.eli) ? row.eli : null })}
+        {metaField({ label: "CELEX", value: row.celex, mono: true })}
+        {metaField({ label: "Norma helye (locator)", value: row.locator, mono: true })}
+        {metaField({ label: "ECLI", value: row.ecli, mono: true })}
+        {metaField({ label: "Ügyszám", value: caseIdentifier(row), mono: true })}
+        {metaField({ label: "Bírósági hely", value: row.caseLocator, mono: true })}
+        {metaField({ label: "Döntés azonosítója", value: row.decisionId, mono: true })}
+        {metaField({ label: "Hatósági hely", value: authorityLocators(row), mono: true })}
+        {metaField({ label: "Forrás URL", value: row.sourceUrl, href: isHttpUrl(row.sourceUrl) ? row.sourceUrl : null })}
+      </div>
+
+      {row.rationale ? (
+        <div className="mt-2">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kapcsolat / indok</p>
+          <p className="mt-0.5 text-xs text-[var(--adm-text)]">{row.rationale}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-2 border-t border-[var(--adm-border)] pt-2">
+        {row.anchorKey ? (
+          metaField({ label: "Stabil hivatkozás-azonosító", value: row.anchorKey, mono: true })
+        ) : (
+          <p className="text-xs text-[var(--adm-ochre-500)]" data-testid="anchor-key-unresolved">
+            Nincs stabil hivatkozás-azonosító: a dokumentum nem tartalmaz ehhez elég gépi azonosítót.
+          </p>
+        )}
+        {warnings.length ? (
+          <div className="mt-2" data-testid="clause-anchor-warnings">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Belső feldolgozási jelzés</p>
+            <ul className="mt-0.5 space-y-0.5">
+              {warnings.map((warning) => (
+                <li key={warning} className="font-mono text-[10px] text-[var(--adm-text-muted)]">{warning}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function versionProvenance({
+  versions,
+  selectedDocumentVersionId,
+  onSelect,
+}: {
+  versions: ComplianceClauseAnchorReadModel["versions"];
+  selectedDocumentVersionId: string;
+  onSelect: (documentVersionId: string) => void;
+}) {
+  const selected = versions.find((version) => version.documentVersionId === selectedDocumentVersionId);
+  if (!selected) return null;
+  const ingestedAt = selected.rows.reduce<string | null>((latest, row) => {
+    if (!row.ingestedAt) return latest;
+    return !latest || row.ingestedAt > latest ? row.ingestedAt : latest;
+  }, null);
+  return (
+    <div className="flex flex-wrap items-end justify-between gap-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+      <label className="block">
+        <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Dokumentumverzió</span>
+        <select
+          className="mt-1 rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-xs text-[var(--adm-text)]"
+          value={selected.documentVersionId}
+          onChange={(event) => onSelect(event.target.value)}
+        >
+          {versions.map((version) => (
+            <option key={version.documentVersionId} value={version.documentVersionId}>
+              {`v${version.version} · ${version.rows.length} tétel${version.isCurrent ? " · aktuális" : ""}`}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p className="text-[10px] text-[var(--adm-text-muted)]">
+        Kinyerve: {formatDate(ingestedAt)} · A verziók külön provenance-t őriznek, a korábbi verzió tételei nem íródnak át.
+      </p>
+    </div>
+  );
+}
+
+export function ComplianceClauseAnchorPanel({ clientId, documentId }: { clientId: string; documentId: string }) {
+  const [data, setData] = useState<ComplianceClauseAnchorReadModel | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  const [clauseQuery, setClauseQuery] = useState("");
+  const [relationType, setRelationType] = useState("");
+  const [anchorType, setAnchorType] = useState("");
+  const [unresolvedOnly, setUnresolvedOnly] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const model = await complianceIntelligenceApi.clauseAnchors(clientId, documentId);
+      setData(model);
+      const versions = model.versions ?? [];
+      const preferred =
+        versions.find((version) => version.isCurrent && version.rows.length) ||
+        versions.find((version) => version.rows.length) ||
+        versions[0] ||
+        null;
+      setSelectedVersionId(preferred ? preferred.documentVersionId : null);
+    } catch {
+      setError("A dokumentum jogi mátrixa jelenleg nem tölthető be.");
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId, documentId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const versions = useMemo(() => data?.versions ?? [], [data]);
+  const selectedVersion = useMemo(
+    () => versions.find((version) => version.documentVersionId === selectedVersionId) ?? versions[0] ?? null,
+    [versions, selectedVersionId],
+  );
+  const rows = useMemo(() => selectedVersion?.rows ?? [], [selectedVersion]);
+
+  const relationTypes = useMemo(() => Array.from(new Set(rows.map((row) => row.relationType))).sort(), [rows]);
+  const unresolvedCount = useMemo(() => rows.filter((row) => !row.anchorKey).length, [rows]);
+  const warnedCount = useMemo(() => rows.filter((row) => (row.ingestWarnings ?? []).length > 0).length, [rows]);
+
+  const visibleRows = useMemo(() => {
+    const query = clauseQuery.trim().toLowerCase();
+    return rows.filter((row) => {
+      if (query) {
+        const haystack = `${row.clauseRef} ${row.clauseTitle ?? ""}`.toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      if (relationType && row.relationType !== relationType) return false;
+      if (anchorType && row.anchorType !== anchorType) return false;
+      if (unresolvedOnly && row.anchorKey) return false;
+      return true;
+    });
+  }, [rows, clauseQuery, relationType, anchorType, unresolvedOnly]);
+
+  const hasAnyRows = versions.some((version) => version.rows.length > 0);
+
+  return (
+    <div className="mt-2 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3" data-testid="compliance-clause-anchor-panel">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">
+          Jogi hivatkozások mátrixa
+        </p>
+        <p className="text-[10px] text-[var(--adm-text-muted)]">
+          A dokumentum saját, gépi azonosítóval jelölt hivatkozásai. Ez nem jogi értékelés.
+        </p>
+      </div>
+
+      {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés…</p> : null}
+      {!loading && error ? (
+        <div role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800">
+          {error}
+          <button type="button" onClick={() => void load()} className="ml-3 rounded border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
+            Újrapróbálás
+          </button>
+        </div>
+      ) : null}
+
+      {!loading && !error && !hasAnyRows ? (
+        <div className="mt-3 text-xs text-[var(--adm-text-muted)]" data-testid="clause-anchor-empty">
+          <p>Ehhez a dokumentumhoz még nincs kinyert jogi hivatkozás-mátrix.</p>
+          <p className="mt-1">
+            A mátrix csak olyan belső elemzési master dokumentumból készül, amely gépi azonosítóval jelölt hivatkozásokat
+            tartalmaz. A csak szövegként megadott hivatkozásokat tartalmazó dokumentumokból nem készül mátrix.
+          </p>
+        </div>
+      ) : null}
+
+      {!loading && !error && hasAnyRows ? (
+        <div className="mt-3 space-y-3">
+          {selectedVersion
+            ? versionProvenance({ versions, selectedDocumentVersionId: selectedVersion.documentVersionId, onSelect: setSelectedVersionId })
+            : null}
+
+          <div className="grid gap-2 sm:grid-cols-4">
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Tétel keresése</span>
+              <input
+                type="text"
+                className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-xs text-[var(--adm-text)]"
+                placeholder="pl. 1.1."
+                value={clauseQuery}
+                onChange={(event) => setClauseQuery(event.target.value)}
+              />
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kapcsolat típusa</span>
+              <select
+                className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-xs text-[var(--adm-text)]"
+                value={relationType}
+                onChange={(event) => setRelationType(event.target.value)}
+              >
+                <option value="">Összes</option>
+                {relationTypes.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Hivatkozás fajtája</span>
+              <select
+                className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-xs text-[var(--adm-text)]"
+                value={anchorType}
+                onChange={(event) => setAnchorType(event.target.value)}
+              >
+                <option value="">Összes</option>
+                {anchorTypeOrder.map((type) => (
+                  <option key={type} value={type}>{anchorTypeLabels[type]}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-end gap-2 pb-1">
+              <input type="checkbox" checked={unresolvedOnly} onChange={(event) => setUnresolvedOnly(event.target.checked)} />
+              <span className="text-xs text-[var(--adm-text)]">Csak azonosító nélküli tételek</span>
+            </label>
+          </div>
+
+          <p className="text-[10px] text-[var(--adm-text-muted)]" data-testid="clause-anchor-counts">
+            {`Megjelenítve: ${visibleRows.length} / ${rows.length} tétel · Azonosító nélkül: ${unresolvedCount} · Feldolgozási jelzéssel: ${warnedCount}`}
+          </p>
+
+          {rows.length === 0 ? (
+            <p className="text-xs text-[var(--adm-text-muted)]" data-testid="clause-anchor-version-empty">
+              Ehhez a verzióhoz nincs kinyert tétel.
+            </p>
+          ) : visibleRows.length === 0 ? (
+            <p className="text-xs text-[var(--adm-text-muted)]">Nincs a szűrésnek megfelelő tétel.</p>
+          ) : (
+            <ul className="space-y-2">{visibleRows.map((row) => clauseAnchorRow(row))}</ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
