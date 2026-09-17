@@ -112,39 +112,41 @@ describeWithDatabase('C4B compliance monitoring manifest (PostgreSQL)', () => {
   it('H/I/K/L. includes only current INTERNAL_ANALYSIS demand and deduplicates across clients', async () => {
     const actor = { userId: adminId, role: 'ADMIN' };
 
-    // Client A — current INTERNAL_ANALYSIS document.
+    // Client A — v1 is HISTORICAL (isCurrent=false), v2 is the CURRENT version.
     const a = await createDocumentWithVersion(clientAId, caseAId, 'C4B A internal');
     await linkComplianceDocument(actor, { clientId: clientAId, requirementKey: 'GDPR_GENERAL_SCOPE', documentId: a.documentId, audience: 'INTERNAL_ANALYSIS' });
-    await addAnchor(a.versionId, { anchorKey: `LEGAL|REF=${MAIN_SOURCE}/1/1` });
-    await addAnchor(a.versionId, { anchorKey: `LEGAL|REF=${MAIN_SOURCE}/2/2` });
-    // Legacy NJT ELI — same TV source, different locator syntax (L).
-    await addAnchor(a.versionId, { eli: `https://njt.jog.gov.hu/eli/${MAIN_SOURCE}`, locator: 'sec=9;par=1' });
-    // Valid CELEX through the strict C3A normalizer.
-    await addAnchor(a.versionId, { celex: SYNTHETIC_CELEX, locator: 'art=28;par=3' });
-    // Unsupported ELI + invalid CELEX are accounted for, never invented.
-    await addAnchor(a.versionId, { eli: 'https://example.com/eli/TV/2026/1' });
-    await addAnchor(a.versionId, { celex: 'not-a-celex' });
 
-    // H. Historical (non-current) version of the same document: excluded.
+    // Demote v1 and give it a HISTORICAL-ONLY anchor: it must never create demand.
     await db.documentVersion.updateMany({ where: { documentId: a.documentId, isCurrent: true }, data: { isCurrent: false } });
-    const historical = await db.documentVersion.create({
-      data: { documentId: a.documentId, version: 2, name: 'C4B A historical', uploadedById: adminId, isCurrent: false, spItemId: `sp-${a.documentId}-2` } as never,
-    });
-    await addAnchor(historical.id, { anchorKey: `LEGAL|REF=TV/2026/${actHistorical}/9` });
+    await addAnchor(a.versionId, { anchorKey: `LEGAL|REF=TV/2026/${actHistorical}/9` });
 
-    // I. CLIENT_POLICY-only document: excluded even though it is current.
+    // v2 is the document's single current version and carries the CURRENT anchors.
+    const a2 = await db.documentVersion.create({
+      data: { documentId: a.documentId, version: 2, name: 'C4B A internal v2', uploadedById: adminId, isCurrent: true, spItemId: `sp-${a.documentId}-2` } as never,
+    });
+    await addAnchor(a2.id, { anchorKey: `LEGAL|REF=${MAIN_SOURCE}/1/1` });
+    await addAnchor(a2.id, { anchorKey: `LEGAL|REF=${MAIN_SOURCE}/2/2` });
+    // Legacy NJT ELI — same TV source, different locator syntax (L).
+    await addAnchor(a2.id, { eli: `https://njt.jog.gov.hu/eli/${MAIN_SOURCE}`, locator: 'sec=9;par=1' });
+    // Valid CELEX through the strict C3A normalizer.
+    await addAnchor(a2.id, { celex: SYNTHETIC_CELEX, locator: 'art=28;par=3' });
+    // Unsupported ELI + invalid CELEX are accounted for, never invented.
+    await addAnchor(a2.id, { eli: 'https://example.com/eli/TV/2026/1' });
+    await addAnchor(a2.id, { celex: 'not-a-celex' });
+
+    // I. CLIENT_POLICY-only document (current) is excluded.
     const policy = await createDocumentWithVersion(clientAId, caseAId, 'C4B A policy');
     await linkComplianceDocument(actor, { clientId: clientAId, requirementKey: 'GDPR_GENERAL_SCOPE', documentId: policy.documentId, audience: 'CLIENT_POLICY' });
     await addAnchor(policy.versionId, { anchorKey: `LEGAL|REF=TV/2026/${actPolicy}/5` });
 
-    // K. Another client references the SAME source: one deduplicated source.
+    // K. Another client references the SAME source through its current version.
     const b = await createDocumentWithVersion(clientBId, caseBId, 'C4B B internal');
     await linkComplianceDocument(actor, { clientId: clientBId, requirementKey: 'GDPR_GENERAL_SCOPE', documentId: b.documentId, audience: 'INTERNAL_ANALYSIS' });
     await addAnchor(b.versionId, { anchorKey: `LEGAL|REF=${MAIN_SOURCE}/3/3` });
 
     const manifest = await buildComplianceMonitoringManifest(db);
 
-    // Cross-client deduplication: A's and B's references collapse into one source.
+    // Cross-client deduplication across current versions: one source, four usages.
     const main = manifest.sources.find(
       (source) => source.identifierFamily === 'TV' && source.sourceIdentifier === MAIN_SOURCE,
     );
@@ -159,10 +161,10 @@ describeWithDatabase('C4B compliance monitoring manifest (PostgreSQL)', () => {
       ),
     ).toBe(true);
 
-    // H. Superseded version contributes nothing.
-    expect(manifest.sources.some((source) => source.sourceIdentifier.includes(actHistorical))).toBe(false);
-    // I. CLIENT_POLICY contributes nothing.
-    expect(manifest.sources.some((source) => source.sourceIdentifier.includes(actPolicy))).toBe(false);
+    // H. The superseded version's anchor creates no demand at all.
+    expect(manifest.sources.some((source) => source.sourceIdentifier === `TV/2026/${actHistorical}`)).toBe(false);
+    // I. CLIENT_POLICY creates no demand.
+    expect(manifest.sources.some((source) => source.sourceIdentifier === `TV/2026/${actPolicy}`)).toBe(false);
 
     // Unresolved references are accounted for (aggregate only).
     expect(manifest.unresolvedSummary.count).toBeGreaterThanOrEqual(2);
