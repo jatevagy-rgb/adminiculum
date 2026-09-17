@@ -226,3 +226,86 @@ describe('C4B route boundary', () => {
     expect(handler).not.toContain('assertClientReadAccess');
   });
 });
+
+describe('C4B identifier precedence — FIRST_VALID_SUPPORTED', () => {
+  it('1. falls through a malformed C4A reference to a valid CELEX', () => {
+    expect(extractMonitoringIdentifier(row({ anchorKey: 'LEGAL|REF=TV/foo/bar', celex: '32016R0679' }))).toEqual({
+      resolved: true,
+      family: 'CELEX',
+      sourceIdentifier: '32016R0679',
+      locator: null,
+    });
+  });
+
+  it('2. falls through an unsupported ELI to a valid CELEX', () => {
+    expect(
+      extractMonitoringIdentifier(row({ eli: 'https://example.com/eli/TV/2015/57', celex: '32016R0679' })),
+    ).toEqual({ resolved: true, family: 'CELEX', sourceIdentifier: '32016R0679', locator: null });
+  });
+
+  it('3. resolves the first VALID supported identifier (NJT ELI) after a malformed C4A reference', () => {
+    expect(
+      extractMonitoringIdentifier(
+        row({
+          anchorKey: 'LEGAL|REF=TV/foo/bar',
+          eli: 'https://njt.jog.gov.hu/eli/TV/2015/57',
+          celex: '32016R0679',
+        }),
+      ),
+    ).toEqual({ resolved: true, family: 'TV', sourceIdentifier: 'TV/2015/57', locator: null });
+  });
+
+  it('4. keeps C4A ahead of ELI and CELEX when all are valid', () => {
+    expect(
+      extractMonitoringIdentifier(
+        row({
+          anchorKey: 'LEGAL|REF=TV/2001/108/5/2/b',
+          eli: 'https://njt.jog.gov.hu/eli/TV/2015/57',
+          celex: '32016R0679',
+          locator: 'sec=1',
+        }),
+      ),
+    ).toEqual({ resolved: true, family: 'TV', sourceIdentifier: 'TV/2001/108', locator: '5/2/b' });
+  });
+
+  it('5. reports MALFORMED_CANONICAL_REFERENCE when nothing valid resolves', () => {
+    expect(
+      extractMonitoringIdentifier(
+        row({ anchorKey: 'LEGAL|REF=TV/foo/bar', eli: 'https://example.com/x', celex: 'not-a-celex' }),
+      ),
+    ).toEqual({ resolved: false, reason: 'MALFORMED_CANONICAL_REFERENCE' });
+  });
+
+  it('6. reports UNSUPPORTED_ELI when only the ELI family is present but invalid', () => {
+    expect(
+      extractMonitoringIdentifier(row({ eli: 'https://example.com/x', celex: 'not-a-celex' })),
+    ).toEqual({ resolved: false, reason: 'UNSUPPORTED_ELI' });
+  });
+
+  it('7. reports INVALID_CELEX when only an invalid CELEX is present', () => {
+    expect(extractMonitoringIdentifier(row({ celex: 'not-a-celex' }))).toEqual({
+      resolved: false,
+      reason: 'INVALID_CELEX',
+    });
+  });
+
+  it('8. reports NO_MACHINE_IDENTIFIER when no supported identifier field exists', () => {
+    expect(extractMonitoringIdentifier(row({ anchorKey: 'LEGAL|SID=la_x' }))).toEqual({
+      resolved: false,
+      reason: 'NO_MACHINE_IDENTIFIER',
+    });
+  });
+
+  it('does not count a row as unresolved when a lower-priority identifier resolves', () => {
+    const manifest = project([
+      row({ anchorKey: 'LEGAL|REF=TV/foo/bar', celex: '32016R0679', locator: 'art=1' }),
+      row({ eli: 'https://example.com/x', celex: '39999X9999' }),
+    ]);
+
+    expect(manifest.sources.map((source) => `${source.identifierFamily}:${source.sourceIdentifier}`)).toEqual([
+      'CELEX:32016R0679',
+      'CELEX:39999X9999',
+    ]);
+    expect(manifest.unresolvedSummary).toEqual({ count: 0, reasons: {} });
+  });
+});

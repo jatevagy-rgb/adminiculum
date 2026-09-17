@@ -80,9 +80,20 @@ type IdentifierExtraction =
   | { resolved: true; family: MonitoringIdentifierFamily; sourceIdentifier: string; locator: string | null }
   | { resolved: false; reason: MonitoringUnresolvedReason };
 
-/** Deterministic precedence: C4A TV reference → exact NJT ELI → CELEX. */
+/**
+ * Deterministic FIRST_VALID_SUPPORTED precedence: C4A TV reference → exact NJT ELI
+ * → CELEX.
+ *
+ * Presence alone is NOT authoritative: a malformed C4A reference or an
+ * unsupported ELI must never suppress a valid lower-priority supported
+ * identifier on the same row. A row is unresolved only when NO valid supported
+ * identifier can be extracted; in that case the reported reason follows the
+ * failure precedence MALFORMED_CANONICAL_REFERENCE → UNSUPPORTED_ELI →
+ * INVALID_CELEX → NO_MACHINE_IDENTIFIER.
+ */
 export function extractMonitoringIdentifier(row: MonitoringAnchorRow): IdentifierExtraction {
   const anchorKey = typeof row.anchorKey === 'string' ? row.anchorKey.trim() : '';
+  let failureReason: MonitoringUnresolvedReason | null = null;
 
   // 1. C4A canonical reference (LEGAL|REF=TV/...).
   if (anchorKey.startsWith(CANONICAL_REFERENCE_KEY_PREFIX)) {
@@ -91,26 +102,32 @@ export function extractMonitoringIdentifier(row: MonitoringAnchorRow): Identifie
     if (parsed) {
       return { resolved: true, family: 'TV', sourceIdentifier: parsed.sourceReference, locator: parsed.locator };
     }
-    return { resolved: false, reason: 'MALFORMED_CANONICAL_REFERENCE' };
+    failureReason = 'MALFORMED_CANONICAL_REFERENCE';
   }
 
   // 2. Exact legacy NJT ELI. The persisted locator is preserved verbatim.
   const eli = typeof row.eli === 'string' ? row.eli.trim() : '';
   if (eli) {
     const match = NJT_ELI_TV.exec(eli);
-    if (!match) return { resolved: false, reason: 'UNSUPPORTED_ELI' };
-    const locator = typeof row.locator === 'string' && row.locator.trim() ? row.locator.trim() : null;
-    return { resolved: true, family: 'TV', sourceIdentifier: `TV/${match[1]}/${match[2]}`, locator };
+    if (match) {
+      const locator = typeof row.locator === 'string' && row.locator.trim() ? row.locator.trim() : null;
+      return { resolved: true, family: 'TV', sourceIdentifier: `TV/${match[1]}/${match[2]}`, locator };
+    }
+    if (!failureReason) failureReason = 'UNSUPPORTED_ELI';
   }
 
   // 3. Strict C3A CELEX normalization only.
   const celexRaw = typeof row.celex === 'string' ? row.celex.trim() : '';
   if (celexRaw) {
     const normalized = normalizeCelex(celexRaw);
-    if (!normalized) return { resolved: false, reason: 'INVALID_CELEX' };
-    const locator = typeof row.locator === 'string' && row.locator.trim() ? row.locator.trim() : null;
-    return { resolved: true, family: 'CELEX', sourceIdentifier: normalized, locator };
+    if (normalized) {
+      const locator = typeof row.locator === 'string' && row.locator.trim() ? row.locator.trim() : null;
+      return { resolved: true, family: 'CELEX', sourceIdentifier: normalized, locator };
+    }
+    if (!failureReason) failureReason = 'INVALID_CELEX';
   }
+
+  if (failureReason) return { resolved: false, reason: failureReason };
 
   // CASE / AUTHORITY anchors are machine identifiers, but not monitoring
   // families in schemaVersion 1: they are accounted for, never invented.
