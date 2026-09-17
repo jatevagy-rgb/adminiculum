@@ -21,6 +21,7 @@ import {
   listClauseAnchorsForDocumentWithBinding,
   summarizeClauseAnchorsForDocument,
 } from './service';
+import { buildComplianceMonitoringManifest } from './monitoringManifest';
 
 const router = Router();
 
@@ -93,6 +94,25 @@ router.get('/clients/:clientId/anchor-keys/:anchorKey', async (req: Request, res
     res.json({ anchorKey, references });
   } catch (error) {
     respond(error, res, 'COMPLIANCE_INTELLIGENCE_ANCHOR_LOOKUP_ERROR');
+  }
+});
+
+/**
+ * C4B — read-only compliance monitoring manifest.
+ *
+ * CROSS-CLIENT AGGREGATE BY DESIGN: it returns deduplicated legal-source
+ * monitoring demand (identifier family, source identifier, locators, reference
+ * count) and deliberately carries NO client, matter, case, document, clause or
+ * rationale identity. It is therefore gated by this module's existing internal
+ * authorization only (authenticate + requireInternal). Pure projection:
+ * nothing is written, no clientId scoping is faked.
+ */
+router.get('/monitoring-manifest', async (req: Request, res: Response): Promise<void> => {
+  try {
+    requireInternal(actor(req));
+    res.json(await buildComplianceMonitoringManifest());
+  } catch (error) {
+    respond(error, res, 'COMPLIANCE_INTELLIGENCE_MONITORING_MANIFEST_ERROR');
   }
 });
 
