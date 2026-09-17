@@ -235,3 +235,59 @@ export async function legacyMasterBuffer(): Promise<Buffer> {
 export function notADocxBuffer(): Buffer {
   return Buffer.from('this is not a docx package', 'utf8');
 }
+
+/* ------------------------------------------------------------------ */
+/*  C4A — hyperlinked transport fixtures (additive)                    */
+/* ------------------------------------------------------------------ */
+
+/** A cell whose paragraph also carries raw (already-built) XML children. */
+export function cellWithRaw(prefix: string, rawXml: string): string {
+  return `<w:tc><w:p><w:r><w:t>${esc(prefix)}</w:t></w:r>${rawXml}</w:p></w:tc>`;
+}
+
+/** A structural Word hyperlink resolved through `r:id`. */
+export function hyperlink(relationshipId: string, text: string): string {
+  return `<w:hyperlink r:id="${esc(relationshipId)}"><w:r><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:hyperlink>`;
+}
+
+export interface RelationshipEntry {
+  id: string;
+  target: string;
+  targetMode?: 'External';
+}
+
+/** `word/_rels/document.xml.rels` for the given hyperlink relationships. */
+export function documentRelsXml(entries: RelationshipEntry[]): string {
+  const relationships = entries
+    .map(
+      (entry) =>
+        `<Relationship Id="${esc(entry.id)}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="${esc(entry.target)}"${entry.targetMode ? ` TargetMode="${entry.targetMode}"` : ''}/>`,
+    )
+    .join('');
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships}</Relationships>`
+  );
+}
+
+/** A DOCX package with the given body XML and relationship table. */
+export async function buildDocxBufferWithRels(bodyXml: string, relsXml: string): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file(
+    '[Content_Types].xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+  );
+  zip.file('word/_rels/document.xml.rels', relsXml);
+  zip.file(
+    'word/document.xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+      `<w:body>${bodyXml}</w:body></w:document>`,
+  );
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
+/** A matrix-table DOCX with a relationship table (hyperlink rows only). */
+export async function masterDocxBufferWithRels(rowsXml: string, relsXml: string): Promise<Buffer> {
+  return buildDocxBufferWithRels(`<w:tbl>${rowsXml}</w:tbl>`, relsXml);
+}

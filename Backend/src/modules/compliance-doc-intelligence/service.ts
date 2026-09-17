@@ -19,6 +19,7 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
 import { parseComplianceMasterDocx } from './extractClauseAnchors';
 import { resolveCelexBindings, type CelexBindingDecision } from './legalSourceBinding';
+import { canonicalReferenceFromAnchorKey } from './canonicalLegalReference';
 import { computeRowDigest, normalizeExtractedRow, type NormalizedClauseAnchorRow } from './normalize';
 import { MAX_WARNINGS_PER_RESULT, type IngestResult } from './types';
 
@@ -377,14 +378,24 @@ export function scheduleInternalAnalysisIngestion(
 /*  Internal queries — the persisted relations must be queryable.      */
 /* ------------------------------------------------------------------ */
 
+/**
+ * C4A: the internal read model derives `canonicalReference` from the stored
+ * anchorKey. No database column is added for it, and a malformed key yields
+ * null rather than a partial reference.
+ */
+function withCanonicalReference<T extends { anchorKey: string | null }>(row: T): T & { canonicalReference: string | null } {
+  return { ...row, canonicalReference: canonicalReferenceFromAnchorKey(row.anchorKey) };
+}
+
 export async function listClauseAnchorsForVersion(
   documentVersionId: string,
   prisma: Prisma = defaultPrisma,
 ) {
-  return prisma.complianceDocumentClauseAnchor.findMany({
+  const rows = await prisma.complianceDocumentClauseAnchor.findMany({
     where: { documentVersionId },
     orderBy: [{ clauseRef: 'asc' }, { anchorKey: 'asc' }, { id: 'asc' }],
   });
+  return rows.map(withCanonicalReference);
 }
 
 export async function listClauseAnchorsForDocument(
@@ -409,7 +420,7 @@ export async function listClauseAnchorsForDocument(
       documentVersionId: version.id,
       version: version.version,
       isCurrent: version.isCurrent,
-      rows: rows.filter((row) => row.documentVersionId === version.id),
+      rows: rows.filter((row) => row.documentVersionId === version.id).map(withCanonicalReference),
     })),
   };
 }

@@ -20,6 +20,13 @@ export const WORDPROCESSINGML_NAMESPACE =
 /** Part that carries the compliance master matrix. */
 export const DOCX_MAIN_PART = 'word/document.xml';
 
+/** Relationships part of the main document. Resolves `w:hyperlink r:id`. */
+export const DOCX_RELS_PART = 'word/_rels/document.xml.rels';
+
+/** OpenXML relationships namespace (the `r:` attribute prefix). */
+export const RELATIONSHIPS_NAMESPACE =
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+
 /** Every compliance control tag starts with this prefix. */
 export const ADM_TAG_PREFIX = 'ADM-';
 
@@ -83,6 +90,10 @@ export const MAX_RELATION_TYPE_LENGTH = 64;
 export const MAX_DOCUMENT_XML_BYTES = 40 * 1024 * 1024;
 export const MAX_ROWS_PER_DOCUMENT = 5000;
 export const MAX_WARNINGS_PER_RESULT = 64;
+/** Bounded relationship-part read and hyperlink collection (same order as rows). */
+export const MAX_RELS_XML_BYTES = 4 * 1024 * 1024;
+export const MAX_RELATIONSHIPS_PER_DOCUMENT = 5000;
+export const MAX_HYPERLINKS_PER_DOCUMENT = 5000;
 
 /**
  * Documented + OBSERVED relation vocabulary (106 distinct tokens read from 23
@@ -223,6 +234,11 @@ export const WARNING = {
   RELATION_TYPE_SOURCE_LABEL: 'RELATION_TYPE_SOURCE_LABEL',
   ROW_LIMIT_REACHED: 'ROW_LIMIT_REACHED',
   XML_UNCLOSED_ELEMENTS: 'XML_UNCLOSED_ELEMENTS',
+  // C4A hyperlink transport (internal observations only).
+  HYPERLINK_LEGAL_ANCHOR_USED: 'HYPERLINK_LEGAL_ANCHOR_USED',
+  HYPERLINK_LEGAL_ANCHOR_NO_DISPLAY: 'HYPERLINK_LEGAL_ANCHOR_NO_DISPLAY',
+  HYPERLINK_RELATIONSHIP_UNRESOLVED: 'HYPERLINK_RELATIONSHIP_UNRESOLVED',
+  HYPERLINK_LIMIT_REACHED: 'HYPERLINK_LIMIT_REACHED',
 } as const;
 
 export type WarningCode = (typeof WARNING)[keyof typeof WARNING];
@@ -246,11 +262,27 @@ export interface ParsedControl {
   lines: string[];
 }
 
+/**
+ * One Word hyperlink as found in the document body. The target is resolved
+ * structurally through the relationship table; the visible text is display only
+ * and is never parsed for identity.
+ */
+export interface ParsedHyperlink {
+  /** `r:id` of the relationship, when the hyperlink carries one. */
+  relationshipId: string | null;
+  /** Resolved relationship target, or null when it cannot be resolved. */
+  target: string | null;
+  /** Visible hyperlink text, whitespace-collapsed and trimmed. */
+  text: string;
+}
+
 export interface ParsedTableCell {
   index: number;
   /** Cell text that is NOT inside any content control. */
   plainText: string;
   controls: ParsedControl[];
+  /** Hyperlinks that appear in the cell, in document order. */
+  hyperlinks: ParsedHyperlink[];
 }
 
 export interface ParsedRow {
@@ -279,6 +311,12 @@ export interface ExtractedClauseAnchorRow {
   authorityLocator: string | null;
   sourceUrl: string | null;
   rationale: string | null;
+  /**
+   * C4A: canonical reference derived from a row hyperlink target
+   * (`TV/<year>/<act>/<opaque-tail>`), when the row carries no ADM anchor
+   * control. Null for every legacy ADM transport.
+   */
+  canonicalReference?: string | null;
   warnings: string[];
 }
 
@@ -291,6 +329,8 @@ export interface DocxParseStats {
   rowsWithoutClause: number;
   /** Controls found outside any table row. */
   controlsOutsideTableRow: number;
+  /** C4A: legal anchors derived from canonical hyperlink targets. */
+  hyperlinkLegalAnchors: number;
 }
 
 export interface DocxParseOutcome {
