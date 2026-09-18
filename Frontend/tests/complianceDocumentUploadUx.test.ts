@@ -103,7 +103,7 @@ test('R/S. cancel clears the ambiguity state and zero options show a truthful no
 test('stale selection surfaces a specific bounded error without a silent re-choice', () => {
   const src = read(VIEW);
   assert.match(src, /A feltöltés a kiválasztott üggyel nem sikerült/);
-  assert.match(src, /error instanceof ApiError && error\.code/);
+  assert.match(src, /const code = error instanceof ApiError \? error\.code : undefined;/);
 });
 
 test('the API wrapper exposes the safe option read model and the optional caseId', () => {
@@ -128,6 +128,61 @@ test('R1. the ambiguous retry resends the FROZEN requirement, not the live selec
 
   // UX guard only — correctness never depends on it.
   assert.match(src, /disabled=\{pendingUpload !== null\}/);
+});
+
+test('R2. a pending ambiguity choice disables BOTH primary upload actions', () => {
+  const src = read(VIEW);
+  const matches = src.match(/disabled=\{uploadBusy \|\| pendingUpload !== null \|\| !requirementKey\}/g) ?? [];
+  // One guard per primary intent button.
+  assert.equal(matches.length, 2);
+});
+
+test('R3/R4. one shared option loader is reused and the chooser can refresh the list', () => {
+  const src = read(VIEW);
+  assert.match(src, /const loadAmbiguityCaseOptions = useCallback\(async \(\) => \{/);
+  // Initial ambiguity and the manual refresh both use the same helper.
+  assert.match(src, /setPendingUpload\(payload\);\s*await loadAmbiguityCaseOptions\(\);/);
+  assert.match(src, /Ügylista frissítése/);
+  assert.match(src, /onClick=\{\(\) => void loadAmbiguityCaseOptions\(\)\}/);
+  // The helper itself never uploads.
+  const helper = src.slice(src.indexOf('const loadAmbiguityCaseOptions ='), src.indexOf('const runUpload ='));
+  assert.doesNotMatch(helper, /runUpload|complianceDocumentApi\.upload/);
+});
+
+test('R5/R7. refreshing clears only the selection and never rebuilds or uploads the frozen payload', () => {
+  const src = read(VIEW);
+  const helper = src.slice(src.indexOf('const loadAmbiguityCaseOptions ='), src.indexOf('const runUpload ='));
+  assert.match(helper, /setSelectedCaseId\(""\)/);
+  assert.doesNotMatch(helper, /setPendingUpload/);
+  assert.doesNotMatch(helper, /fileContent/);
+});
+
+test('R6. bounded stale-selection errors keep the frozen upload pending', () => {
+  const src = read(VIEW);
+  assert.match(src, /const RECOVERABLE_CASE_SELECTION_CODES = new Set\(\[/);
+  for (const code of [
+    'COMPLIANCE_UPLOAD_CASE_NOT_FOUND',
+    'COMPLIANCE_UPLOAD_CASE_CLIENT_MISMATCH',
+    'COMPLIANCE_UPLOAD_CASE_NOT_REUSABLE',
+    'COMPLIANCE_UPLOAD_CASE_NOT_ELIGIBLE',
+    'CASE_ACCESS_FORBIDDEN',
+  ]) {
+    assert.match(src, new RegExp(`"${code}"`));
+  }
+  assert.match(src, /RECOVERABLE_CASE_SELECTION_CODES\.has\(code\)/);
+  assert.match(src, /A kiválasztott ügy már nem alkalmas\. Frissítse az ügylistát, és válasszon másikat\./);
+  // The recoverable branch must not clear the pending upload.
+  const catchBlock = src.slice(src.indexOf('RECOVERABLE_CASE_SELECTION_CODES.has(code)'));
+  assert.doesNotMatch(catchBlock.slice(0, 400), /setPendingUpload\(null\)/);
+});
+
+test('R8. cancel still clears the complete ambiguity state', () => {
+  const src = read(VIEW);
+  const cancel = src.slice(src.indexOf('const cancelAmbiguousUpload ='), src.indexOf('  const topics ='));
+  assert.match(cancel, /setPendingUpload\(null\)/);
+  assert.match(cancel, /setCaseOptions\(\[\]\)/);
+  assert.match(cancel, /setSelectedCaseId\(""\)/);
+  assert.match(cancel, /setAmbiguityMessage\(null\)/);
 });
 
 test('the canonical upload API wrapper targets the orchestration endpoint with the intent', () => {

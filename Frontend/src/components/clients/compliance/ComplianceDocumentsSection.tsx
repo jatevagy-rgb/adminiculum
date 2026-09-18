@@ -43,6 +43,19 @@ type PendingUpload = {
 };
 
 /**
+ * Bounded explicit-case failures that leave the chooser recoverable: the frozen
+ * upload stays pending and the user may refresh the option list instead of
+ * re-selecting the file. The backend remains authoritative.
+ */
+const RECOVERABLE_CASE_SELECTION_CODES = new Set([
+  "COMPLIANCE_UPLOAD_CASE_NOT_FOUND",
+  "COMPLIANCE_UPLOAD_CASE_CLIENT_MISMATCH",
+  "COMPLIANCE_UPLOAD_CASE_NOT_REUSABLE",
+  "COMPLIANCE_UPLOAD_CASE_NOT_ELIGIBLE",
+  "CASE_ACCESS_FORBIDDEN",
+]);
+
+/**
  * A linked internal document renders its legal matrix automatically: the anchor
  * provenance is persisted at ingestion and never depends on the panel being
  * open, so there is no activation button and no click-controlled monitoring.
@@ -158,6 +171,27 @@ export function ComplianceDocumentsSection({
     await load();
   };
 
+  const loadAmbiguityCaseOptions = useCallback(async () => {
+    // Refresh path: replaces the option list and clears only the SELECTED case.
+    // It never touches the frozen prepared upload.
+    setAmbiguityLoading(true);
+    setAmbiguityMessage(null);
+    setSelectedCaseId("");
+    try {
+      const options = await complianceDocumentApi.caseOptions(clientId);
+      const items = options.items ?? [];
+      setCaseOptions(items);
+      if (items.length === 0) {
+        setAmbiguityMessage("Több compliance ügy létezik, de egyikhez sincs megfelelő hozzáférése.");
+      }
+    } catch {
+      setCaseOptions([]);
+      setAmbiguityMessage("A választható compliance ügyek jelenleg nem tölthetők be.");
+    } finally {
+      setAmbiguityLoading(false);
+    }
+  }, [clientId]);
+
   const runUpload = (payload: PendingUpload, caseId?: string) =>
     complianceDocumentApi.upload(clientId, {
       // Frozen prepared payload: never the live selector state.
@@ -205,20 +239,7 @@ export function ComplianceDocumentsSection({
       if (error instanceof ApiError && error.status === 409 && error.code === "COMPLIANCE_CASE_AMBIGUOUS") {
         // Bounded conflict: preserve the prepared payload and offer the exceptional chooser.
         setPendingUpload(payload);
-        setAmbiguityLoading(true);
-        try {
-          const options = await complianceDocumentApi.caseOptions(clientId);
-          const items = options.items ?? [];
-          setCaseOptions(items);
-          if (items.length === 0) {
-            setAmbiguityMessage("Több compliance ügy létezik, de egyikhez sincs megfelelő hozzáférése.");
-          }
-        } catch {
-          setCaseOptions([]);
-          setAmbiguityMessage("A választható compliance ügyek jelenleg nem tölthetők be.");
-        } finally {
-          setAmbiguityLoading(false);
-        }
+        await loadAmbiguityCaseOptions();
       } else {
         setActionError("A dokumentum feltöltése jelenleg nem sikerült.");
       }
@@ -240,12 +261,16 @@ export function ComplianceDocumentsSection({
       setAmbiguityMessage(null);
       await applyUploadResult(payload.intent, result);
     } catch (error) {
-      // Stale selection / lost access / eligibility change: safe, specific, no silent re-choice.
-      setActionError(
-        error instanceof ApiError && error.code
-          ? `A feltöltés a kiválasztott üggyel nem sikerült (${error.code}).`
-          : "A feltöltés a kiválasztott üggyel nem sikerült.",
-      );
+      // Stale selection / lost access / eligibility change: keep the frozen upload
+      // pending and let the user refresh the option list. Never re-choose silently.
+      const code = error instanceof ApiError ? error.code : undefined;
+      if (code && RECOVERABLE_CASE_SELECTION_CODES.has(code)) {
+        setAmbiguityMessage("A kiválasztott ügy már nem alkalmas. Frissítse az ügylistát, és válasszon másikat.");
+      } else {
+        setActionError(
+          code ? `A feltöltés a kiválasztott üggyel nem sikerült (${code}).` : "A feltöltés a kiválasztott üggyel nem sikerült.",
+        );
+      }
     } finally {
       setBusyIntent(null);
     }
@@ -337,7 +362,7 @@ export function ComplianceDocumentsSection({
         <div className="mt-3 flex flex-wrap gap-3">
           <button
             type="button"
-            disabled={uploadBusy || !requirementKey}
+            disabled={uploadBusy || pendingUpload !== null || !requirementKey}
             onClick={() => clientPolicyInputRef.current?.click()}
             className="rounded border border-[var(--adm-green-800)] bg-white px-4 py-2 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-50"
           >
@@ -345,7 +370,7 @@ export function ComplianceDocumentsSection({
           </button>
           <button
             type="button"
-            disabled={uploadBusy || !requirementKey}
+            disabled={uploadBusy || pendingUpload !== null || !requirementKey}
             onClick={() => internalAnalysisInputRef.current?.click()}
             className="rounded border border-[var(--adm-green-800)] bg-white px-4 py-2 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-50"
           >
@@ -409,6 +434,14 @@ export function ComplianceDocumentsSection({
                 className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-50"
               >
                 Feltöltés a kiválasztott ügyhöz
+              </button>
+              <button
+                type="button"
+                disabled={ambiguityLoading}
+                onClick={() => void loadAmbiguityCaseOptions()}
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs text-[var(--adm-text)] disabled:opacity-50"
+              >
+                Ügylista frissítése
               </button>
               <button
                 type="button"
