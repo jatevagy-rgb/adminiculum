@@ -3,6 +3,7 @@ import { authenticate } from '../../middleware/auth';
 import { InteractionError } from '../client-interaction/base';
 import { linkComplianceDocument, listComplianceDocuments, unlinkComplianceDocument } from './complianceDocumentService';
 import { uploadComplianceDocument } from './complianceUploadService';
+import { listComplianceCaseOptions } from './complianceCaseResolver';
 
 const router = Router();
 
@@ -29,9 +30,22 @@ router.get('/clients/:clientId/documents', async (req: Request, res: Response): 
 });
 
 /**
+ * Safe option list for the EXCEPTIONAL ambiguity chooser: only actor-accessible
+ * eligible compliance cases, and only id/caseNumber/title/status.
+ */
+router.get('/clients/:clientId/document-case-options', async (req: Request, res: Response): Promise<void> => {
+  try {
+    res.json({ items: await listComplianceCaseOptions(actor(req), String(req.params.clientId)) });
+  } catch (error) {
+    respond(error, res, 'COMPLIANCE_CASE_OPTIONS_ERROR');
+  }
+});
+
+/**
  * Canonical compliance upload: resolves/reuses/creates the compliance Case, uploads
  * the document once, links it with the chosen intent, and (CLIENT_POLICY) enters the
- * canonical DRAFT publication lifecycle. The UI never supplies a caseId.
+ * canonical DRAFT publication lifecycle. The UI never supplies a caseId except in the
+ * exceptional ambiguity retry, where it is validated server-side.
  */
 router.post('/clients/:clientId/documents/upload', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -44,6 +58,7 @@ router.post('/clients/:clientId/documents/upload', async (req: Request, res: Res
       mimeType: req.body?.mimeType ?? null,
       fileContent: typeof raw === 'string' ? Buffer.from(raw, 'base64') : Buffer.alloc(0),
       title: req.body?.title ?? null,
+      caseId: req.body?.caseId ?? null,
     }));
   } catch (error) {
     respond(error, res, 'COMPLIANCE_UPLOAD_ERROR');

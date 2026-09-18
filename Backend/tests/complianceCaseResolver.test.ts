@@ -17,6 +17,7 @@ jest.mock('../src/modules/client-interaction/base', () => {
     requireInternal: jest.fn(),
     assertClientReadAccess: jest.fn(async () => undefined),
     assertInternalCaseAccess: jest.fn(async () => ({ id: 'case-1', clientId: 'client-1' })),
+    internalCaseScope: jest.fn(async () => null),
   };
 });
 
@@ -26,11 +27,13 @@ jest.mock('../src/modules/cases/services', () => ({
 }));
 
 import casesService from '../src/modules/cases/services';
-import { InteractionError, assertInternalCaseAccess } from '../src/modules/client-interaction/base';
+import { InteractionError, assertInternalCaseAccess, internalCaseScope } from '../src/modules/client-interaction/base';
 import {
   COMPLIANCE_CASE_MAX_RETRIES,
   isCaseNumberUniqueCollision,
   isCaseResolutionSerializationFailure,
+  listComplianceCaseOptions,
+  resolveExplicitComplianceCase,
   resolveOrCreateComplianceCase,
 } from '../src/modules/compliance/complianceCaseResolver';
 
@@ -49,7 +52,7 @@ function p2034(): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError('Transaction failed', { code: 'P2034', clientVersion: 'test' });
 }
 
-function fakeDb(caseRowsPerAttempt: Array<Array<{ id: string }>>) {
+function fakeDb(caseRowsPerAttempt: Array<Array<{ id: string }>>, caseById?: Record<string, unknown> | null) {
   let attempt = 0;
   const tx = {
     caseTypeDefinition: { findMany: jest.fn(async () => [{ id: 'ctd-compliance' }]) },
@@ -59,6 +62,7 @@ function fakeDb(caseRowsPerAttempt: Array<Array<{ id: string }>>) {
         const rows = caseRowsPerAttempt[Math.min(attempt - 1, caseRowsPerAttempt.length - 1)] ?? [];
         return rows;
       }),
+      findUnique: jest.fn(async () => (caseById === undefined ? null : caseById)),
     },
     client: { findUnique: jest.fn(async () => ({ name: 'Acme Kft.' })) },
   };
@@ -175,5 +179,84 @@ describe('resolveOrCreateComplianceCase', () => {
     await resolveOrCreateComplianceCase(ACTOR, 'client-1', db as never);
     const where = (db.__tx.case.findMany as any).mock.calls[0][0].where;
     expect(where.status.notIn).toEqual(expect.arrayContaining(['FINAL', 'CANCELLED', 'ARCHIVED']));
+  });
+});
+
+const OPTION_ROWS = [
+  { id: 'case-a', caseNumber: 'CASE-2026-001', title: 'Compliance A', status: 'DRAFT' },
+  { id: 'case-b', caseNumber: 'CASE-2026-002', title: 'Compliance B', status: 'IN_REVIEW' },
+];
+
+describe('listComplianceCaseOptions (safe ambiguity chooser read model)', () => {
+  beforeEach(() => {
+    (internalCaseScope as any).mockImplementation?.(async () => null);
+  });
+
+  it('A. ADMIN receives every eligible case as a safe DTO', async () => {
+    const db = fakeDb([OPTION_ROWS]);
+    const items = await listComplianceCaseOptions({ userId: 'admin-1', role: 'ADMIN' }, 'client-1', db as never);
+    expect(items).toEqual(OPTION_ROWS);
+    // Only the four safe fields are exposed.
+    expect(Object.keys(items[0]).sort()).toEqual(['caseNumber', 'id', 'status', 'title']);
+  });
+
+  it('B. LAWYER receives only the cases they may access', async () => {
+    (internalCaseScope as any).mockImplementation?.(async () => ['case-b']);
+    const db = fakeDb([OPTION_ROWS]);
+    const items = await listComplianceCaseOptions({ userId: 'lawyer-1', role: 'LAWYER' }, 'client-1', db as never);
+    expect(items.map((item) => item.id)).toEqual(['case-b']);
+  });
+
+  it('C/D. exposes no metadata for inaccessible cases and returns an empty list when none are accessible', async () => {
+    (internalCaseScope as any).mockImplementation?.(async () => ['some-other-case']);
+    const db = fakeDb([OPTION_ROWS]);
+    const items = await listComplianceCaseOptions({ userId: 'lawyer-1', role: 'LAWYER' }, 'client-1', db as never);
+    expect(items).toEqual([]);
+    expect(JSON.stringify(items)).not.toContain('case-a');
+    expect(JSON.stringify(items)).not.toContain('Compliance A');
+  });
+});
+
+describe('resolveExplicitComplianceCase (exceptional retry validation)', () => {
+  const eligibleRow = { id: 'case-b', clientId: 'client-1', status: 'DRAFT', matterType: 'OTHER', caseTypeDefinitionId: 'ctd-compliance' };
+
+  it('E. accepts a valid, eligible, accessible case without creating another', async () => {
+    const db = fakeDb([[eligibleRow]], eligibleRow);
+    await expect(resolveExplicitComplianceCase(ACTOR, 'client-1', 'case-b', db as never)).resolves.toEqual({ caseId: 'case-b' });
+    expect(createCase).not.toHaveBeenCalled();
+  });
+
+  it('F. rejects a case belonging to another client', async () => {
+    const db = fakeDb([[eligibleRow]], { ...eligibleRow, clientId: 'client-other' });
+    await expect(resolveExplicitComplianceCase(ACTOR, 'client-1', 'case-b', db as never)).rejects.toMatchObject({
+      code: 'COMPLIANCE_UPLOAD_CASE_CLIENT_MISMATCH',
+    });
+    expect(createCase).not.toHaveBeenCalled();
+  });
+
+  it('G/H/I. rejects terminal cases (FINAL, CANCELLED, ARCHIVED)', async () => {
+    for (const status of ['FINAL', 'CANCELLED', 'ARCHIVED']) {
+      const db = fakeDb([[eligibleRow]], { ...eligibleRow, status });
+      await expect(resolveExplicitComplianceCase(ACTOR, 'client-1', 'case-b', db as never)).rejects.toMatchObject({
+        code: 'COMPLIANCE_UPLOAD_CASE_NOT_REUSABLE',
+      });
+    }
+  });
+
+  it('J. rejects a non-eligible (non-compliance) case', async () => {
+    const db = fakeDb([[]], eligibleRow);
+    await expect(resolveExplicitComplianceCase(ACTOR, 'client-1', 'case-b', db as never)).rejects.toMatchObject({
+      code: 'COMPLIANCE_UPLOAD_CASE_NOT_ELIGIBLE',
+    });
+  });
+
+  it('K. proves access BEFORE any other validation', async () => {
+    (assertInternalCaseAccess as any).mockImplementation(async () => {
+      throw new InteractionError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access this case.');
+    });
+    const db = fakeDb([[eligibleRow]], eligibleRow);
+    await expect(resolveExplicitComplianceCase(ACTOR, 'client-1', 'case-b', db as never)).rejects.toMatchObject({
+      code: 'CASE_ACCESS_FORBIDDEN',
+    });
   });
 });

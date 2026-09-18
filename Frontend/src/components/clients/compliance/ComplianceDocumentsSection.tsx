@@ -3,11 +3,12 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   complianceDocumentApi,
+  type ComplianceCaseOption,
   type ComplianceDocumentAudience,
   type ComplianceDocumentLink,
   type ComplianceDocumentsReadModel,
 } from "@/lib/complianceDocumentApi";
-import { searchDocuments, type DocumentSearchItem } from "@/lib/api";
+import { ApiError, searchDocuments, type DocumentSearchItem } from "@/lib/api";
 import { ComplianceClauseAnchorPanel } from "@/components/clients/compliance/ComplianceClauseAnchorPanel";
 
 function formatDate(value: string | null): string {
@@ -31,6 +32,13 @@ function readFileAsBase64(file: File): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+type PendingUpload = {
+  intent: ComplianceDocumentAudience;
+  fileName: string;
+  mimeType: string;
+  fileContent: string;
+};
 
 /**
  * A linked internal document renders its legal matrix automatically: the anchor
@@ -91,6 +99,13 @@ export function ComplianceDocumentsSection({
   const [busyIntent, setBusyIntent] = useState<ComplianceDocumentAudience | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [freshDocumentId, setFreshDocumentId] = useState<string | null>(null);
+  // Exceptional ambiguity retry: the prepared upload is preserved so the user
+  // never has to pick the file again.
+  const [pendingUpload, setPendingUpload] = useState<PendingUpload | null>(null);
+  const [caseOptions, setCaseOptions] = useState<ComplianceCaseOption[]>([]);
+  const [selectedCaseId, setSelectedCaseId] = useState("");
+  const [ambiguityLoading, setAmbiguityLoading] = useState(false);
+  const [ambiguityMessage, setAmbiguityMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const clientPolicyInputRef = useRef<HTMLInputElement | null>(null);
   const internalAnalysisInputRef = useRef<HTMLInputElement | null>(null);
@@ -118,6 +133,39 @@ export function ComplianceDocumentsSection({
 
   useEffect(() => { void load(); }, [load]);
 
+  const applyUploadResult = async (
+    intent: ComplianceDocumentAudience,
+    result: { documentId: string; publication?: { status: string; publicationId: string | null; code?: string } | null },
+  ) => {
+    if (intent === "INTERNAL_ANALYSIS") {
+      setFreshDocumentId(result.documentId);
+      setNotice("Feltöltve – a jogi mátrix feldolgozása folyamatban.");
+    } else if (result.publication?.status === "PUBLISHED") {
+      setNotice("Ügyfélnek közzétéve.");
+    } else if (result.publication?.status === "DRAFT" && result.publication?.publicationId) {
+      setNotice("Feltöltve – jóváhagyásra vár.");
+    } else {
+      // The document + linkage exist, but no canonical publication draft does.
+      // Never claim "approval pending", and never suggest re-uploading.
+      setNotice(
+        result.publication?.code === "NO_ACTIVE_AUDIENCE_GRANT"
+          ? "Dokumentum feltöltve és összekapcsolva, de az ügyfélközzétételi tervezet nem jött létre: ehhez aktív ügyfél-hozzáférés szükséges."
+          : "Dokumentum feltöltve és összekapcsolva, de az ügyfélközzétételi tervezet nem jött létre.",
+      );
+    }
+    await load();
+  };
+
+  const runUpload = (payload: PendingUpload, caseId?: string) =>
+    complianceDocumentApi.upload(clientId, {
+      requirementKey,
+      intent: payload.intent,
+      fileName: payload.fileName,
+      mimeType: payload.mimeType,
+      fileContent: payload.fileContent,
+      ...(caseId ? { caseId } : {}),
+    });
+
   const handleUpload = async (intent: ComplianceDocumentAudience, file: File | null) => {
     if (!file) return;
     if (!requirementKey) {
@@ -127,38 +175,84 @@ export function ComplianceDocumentsSection({
     setBusyIntent(intent);
     setActionError(null);
     setNotice(null);
+    setPendingUpload(null);
+    setCaseOptions([]);
+    setSelectedCaseId("");
+    setAmbiguityMessage(null);
+
+    let payload: PendingUpload;
     try {
-      const base64 = await readFileAsBase64(file);
-      const result = await complianceDocumentApi.upload(clientId, {
-        requirementKey,
+      payload = {
         intent,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
-        fileContent: base64,
-      });
-      if (intent === "INTERNAL_ANALYSIS") {
-        setFreshDocumentId(result.documentId);
-        setNotice("Feltöltve – a jogi mátrix feldolgozása folyamatban.");
-      } else if (result.publication?.status === "PUBLISHED") {
-        setNotice("Ügyfélnek közzétéve.");
-      } else if (result.publication?.status === "DRAFT" && result.publication?.publicationId) {
-        setNotice("Feltöltve – jóváhagyásra vár.");
-      } else {
-        // The document + linkage exist, but no canonical publication draft does.
-        // Never claim "approval pending", and never suggest re-uploading (the
-        // document already exists).
-        setNotice(
-          result.publication?.code === "NO_ACTIVE_AUDIENCE_GRANT"
-            ? "Dokumentum feltöltve és összekapcsolva, de az ügyfélközzétételi tervezet nem jött létre: ehhez aktív ügyfél-hozzáférés szükséges."
-            : "Dokumentum feltöltve és összekapcsolva, de az ügyfélközzétételi tervezet nem jött létre.",
-        );
-      }
-      await load();
+        fileContent: await readFileAsBase64(file),
+      };
     } catch {
-      setActionError("A dokumentum feltöltése jelenleg nem sikerült.");
+      setBusyIntent(null);
+      setActionError("A fájl beolvasása nem sikerült.");
+      return;
+    }
+
+    try {
+      const result = await runUpload(payload);
+      await applyUploadResult(intent, result);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 409 && error.code === "COMPLIANCE_CASE_AMBIGUOUS") {
+        // Bounded conflict: preserve the prepared payload and offer the exceptional chooser.
+        setPendingUpload(payload);
+        setAmbiguityLoading(true);
+        try {
+          const options = await complianceDocumentApi.caseOptions(clientId);
+          const items = options.items ?? [];
+          setCaseOptions(items);
+          if (items.length === 0) {
+            setAmbiguityMessage("Több compliance ügy létezik, de egyikhez sincs megfelelő hozzáférése.");
+          }
+        } catch {
+          setCaseOptions([]);
+          setAmbiguityMessage("A választható compliance ügyek jelenleg nem tölthetők be.");
+        } finally {
+          setAmbiguityLoading(false);
+        }
+      } else {
+        setActionError("A dokumentum feltöltése jelenleg nem sikerült.");
+      }
     } finally {
       setBusyIntent(null);
     }
+  };
+
+  const confirmAmbiguousUpload = async () => {
+    if (!pendingUpload || !selectedCaseId) return;
+    const payload = pendingUpload;
+    setBusyIntent(payload.intent);
+    setActionError(null);
+    try {
+      const result = await runUpload(payload, selectedCaseId);
+      setPendingUpload(null);
+      setCaseOptions([]);
+      setSelectedCaseId("");
+      setAmbiguityMessage(null);
+      await applyUploadResult(payload.intent, result);
+    } catch (error) {
+      // Stale selection / lost access / eligibility change: safe, specific, no silent re-choice.
+      setActionError(
+        error instanceof ApiError && error.code
+          ? `A feltöltés a kiválasztott üggyel nem sikerült (${error.code}).`
+          : "A feltöltés a kiválasztott üggyel nem sikerült.",
+      );
+    } finally {
+      setBusyIntent(null);
+    }
+  };
+
+  const cancelAmbiguousUpload = () => {
+    setPendingUpload(null);
+    setCaseOptions([]);
+    setSelectedCaseId("");
+    setAmbiguityMessage(null);
+    setActionError(null);
   };
 
   const handleSearch = async (value: string) => {
@@ -273,6 +367,52 @@ export function ComplianceDocumentsSection({
         />
         {notice ? <p role="status" className="mt-3 text-xs text-[var(--adm-green-800)]">{notice}</p> : null}
         {actionError ? <p role="alert" className="mt-3 text-xs text-red-800">{actionError}</p> : null}
+        {pendingUpload ? (
+          <div
+            data-testid="compliance-case-chooser"
+            className="mt-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"
+          >
+            <p className="text-xs text-[var(--adm-text)]">
+              Több alkalmas compliance ügy található. Válassza ki, melyik ügyhöz kerüljön a dokumentum.
+            </p>
+            {ambiguityLoading ? <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Betöltés…</p> : null}
+            {ambiguityMessage ? <p role="alert" className="mt-2 text-xs text-amber-800">{ambiguityMessage}</p> : null}
+            {caseOptions.length ? (
+              <ul className="mt-2 space-y-1">
+                {caseOptions.map((option) => (
+                  <li key={option.id}>
+                    <label className="flex items-center gap-2 text-sm text-[var(--adm-text)]">
+                      <input
+                        type="radio"
+                        name="compliance-case-option"
+                        checked={selectedCaseId === option.id}
+                        onChange={() => setSelectedCaseId(option.id)}
+                      />
+                      <span>{option.caseNumber} · {option.title}</span>
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!selectedCaseId || busyIntent !== null}
+                onClick={() => void confirmAmbiguousUpload()}
+                className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-1.5 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-50"
+              >
+                Feltöltés a kiválasztott ügyhöz
+              </button>
+              <button
+                type="button"
+                onClick={cancelAmbiguousUpload}
+                className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs text-[var(--adm-text-muted)]"
+              >
+                Mégse
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5">

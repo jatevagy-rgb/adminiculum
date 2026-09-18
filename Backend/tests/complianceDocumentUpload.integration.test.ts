@@ -241,6 +241,73 @@ describeWithDatabase('Compliance document upload (PostgreSQL)', () => {
     expect(row.publishedAt ?? null).toBeNull();
   });
 
+  it('EXPLICIT. reuses a selected eligible case; rejects another-client, terminal and inaccessible selections before upload', async () => {
+    const [eligible] = await casesForClient();
+    const before = await documentCountForClient();
+
+    // Valid explicit selection → reused, one upload.
+    const ok = await uploadComplianceDocument(
+      adminActor as never,
+      {
+        clientId,
+        requirementKey,
+        intent: 'INTERNAL_ANALYSIS',
+        fileName: `explicit-${randomUUID()}.docx`,
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        fileContent: Buffer.from('collected-fixture-bytes'),
+        caseId: eligible.id,
+      } as never,
+      db as never,
+    );
+    expect(ok.caseId).toBe(eligible.id);
+    expect(ok.caseCreated).toBe(false);
+    expect(await documentCountForClient()).toBe(before + 1);
+
+    // Another client's case → rejected, no document.
+    const otherClientCase = await db.case.create({
+      data: {
+        id: `c4up-other-${suffix}`,
+        caseNumber: `C4UP-O-${suffix}`,
+        title: 'Other client case',
+        clientName: 'C4 Upload Client B',
+        matterType: eligible.matterType as never,
+        caseType: 'OTHER' as never,
+        status: 'DRAFT' as never,
+        clientId: clientBId,
+        createdById: adminId,
+      } as never,
+    });
+    await expect(
+      uploadComplianceDocument(
+        adminActor as never,
+        { clientId, requirementKey, intent: 'INTERNAL_ANALYSIS', fileName: 'x.docx', mimeType: 'application/octet-stream', fileContent: Buffer.from('x'), caseId: otherClientCase.id } as never,
+        db as never,
+      ),
+    ).rejects.toMatchObject({ code: 'COMPLIANCE_UPLOAD_CASE_CLIENT_MISMATCH' });
+    expect(await documentCountForClient()).toBe(before + 1);
+
+    // Terminal explicit case → rejected, no document.
+    await db.case.update({ where: { id: eligible.id }, data: { status: 'CANCELLED' } });
+    await expect(
+      uploadComplianceDocument(
+        adminActor as never,
+        { clientId, requirementKey, intent: 'INTERNAL_ANALYSIS', fileName: 'y.docx', mimeType: 'application/octet-stream', fileContent: Buffer.from('y'), caseId: eligible.id } as never,
+        db as never,
+      ),
+    ).rejects.toMatchObject({ code: 'COMPLIANCE_UPLOAD_CASE_NOT_REUSABLE' });
+    await db.case.update({ where: { id: eligible.id }, data: { status: 'DRAFT' } });
+
+    // Inaccessible explicit case for a lawyer → rejected before upload.
+    await expect(
+      uploadComplianceDocument(
+        lawyerActor as never,
+        { clientId, requirementKey, intent: 'INTERNAL_ANALYSIS', fileName: 'z.docx', mimeType: 'application/octet-stream', fileContent: Buffer.from('z'), caseId: eligible.id } as never,
+        db as never,
+      ),
+    ).rejects.toMatchObject({ code: 'CASE_ACCESS_FORBIDDEN' });
+    expect(await documentCountForClient()).toBe(before + 1);
+  });
+
   it('J. concurrent zero-case resolution never silently creates two reusable compliance Cases', async () => {
     const concurrentClientId = `c4up-concurrent-${suffix}`;
     await db.client.create({ data: { id: concurrentClientId, name: 'C4 Upload Concurrent' } });

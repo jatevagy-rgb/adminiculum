@@ -41,19 +41,21 @@ jest.mock('../src/modules/compliance/complianceDocumentService', () => ({
 jest.mock('../src/modules/compliance/complianceCaseResolver', () => ({
   __esModule: true,
   resolveOrCreateComplianceCase: jest.fn(),
+  resolveExplicitComplianceCase: jest.fn(),
 }));
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import documentsService from '../src/modules/documents/services';
 import { createDocumentPublication } from '../src/modules/client-publication/publicationService';
 import { linkComplianceDocument } from '../src/modules/compliance/complianceDocumentService';
-import { resolveOrCreateComplianceCase } from '../src/modules/compliance/complianceCaseResolver';
+import { resolveOrCreateComplianceCase, resolveExplicitComplianceCase } from '../src/modules/compliance/complianceCaseResolver';
 import { uploadComplianceDocument } from '../src/modules/compliance/complianceUploadService';
 
 const createDocument: any = documentsService.createDocument;
 const linkDocument: any = linkComplianceDocument;
 const createPublication: any = createDocumentPublication;
 const resolveCase: any = resolveOrCreateComplianceCase;
+const resolveExplicit: any = resolveExplicitComplianceCase;
 
 const ACTOR = { userId: 'user-1', role: 'ADMIN' };
 
@@ -126,6 +128,39 @@ describe('uploadComplianceDocument — exactly-once external upload', () => {
     expect(result.audience).toBe('INTERNAL_ANALYSIS');
     expect(result.internalAnalysis).toEqual({ matrixScheduled: true });
     expect(result.publication).toBeNull();
+    expect(createPublication).not.toHaveBeenCalled();
+  });
+});
+
+describe('uploadComplianceDocument — exceptional explicit case retry', () => {
+  it('E. reuses the explicitly selected case without creating or auto-resolving another', async () => {
+    const db = fakeDb(true);
+    resolveExplicit.mockReset().mockResolvedValue({ caseId: 'case-selected' });
+
+    const result = await uploadComplianceDocument(
+      ACTOR,
+      { ...BASE_INPUT, caseId: 'case-selected' } as never,
+      db as never,
+    );
+
+    expect(resolveExplicit).toHaveBeenCalledTimes(1);
+    expect(resolveCase).not.toHaveBeenCalled();
+    expect(result.caseId).toBe('case-selected');
+    expect(result.caseCreated).toBe(false);
+    expect(createDocument).toHaveBeenCalledTimes(1);
+    expect(linkDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('F–K. a rejected explicit case performs ZERO external side effects', async () => {
+    const db = fakeDb(true);
+    resolveExplicit.mockReset().mockRejectedValue(Object.assign(new Error('terminal'), { code: 'COMPLIANCE_UPLOAD_CASE_NOT_REUSABLE' }));
+
+    await expect(
+      uploadComplianceDocument(ACTOR, { ...BASE_INPUT, caseId: 'case-closed' } as never, db as never),
+    ).rejects.toMatchObject({ code: 'COMPLIANCE_UPLOAD_CASE_NOT_REUSABLE' });
+
+    expect(createDocument).not.toHaveBeenCalled();
+    expect(linkDocument).not.toHaveBeenCalled();
     expect(createPublication).not.toHaveBeenCalled();
   });
 });

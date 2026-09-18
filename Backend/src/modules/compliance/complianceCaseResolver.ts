@@ -40,6 +40,7 @@ import {
   InteractionError,
   assertClientReadAccess,
   assertInternalCaseAccess,
+  internalCaseScope,
 } from '../client-interaction/base';
 import casesService from '../cases/services';
 import { resolveComplianceCaseType } from './complianceCaseTypeResolver';
@@ -79,8 +80,11 @@ export function isCaseNumberUniqueCollision(error: unknown): boolean {
   return serialized.includes('caseNumber');
 }
 
-interface EligibleCase {
+export interface ComplianceCaseOption {
   id: string;
+  caseNumber: string;
+  title: string;
+  status: string;
 }
 
 interface ComplianceCaseResolution {
@@ -89,26 +93,109 @@ interface ComplianceCaseResolution {
   caseReused: boolean;
 }
 
-async function findEligibleComplianceCases(
+/**
+ * The SINGLE canonical eligibility scope, shared by automatic resolution, the
+ * safe option list and explicit-case validation, so the three can never drift.
+ */
+function complianceCaseScope(recommended: { caseTypeDefinitionId: string | null; matterType: string }) {
+  return recommended.caseTypeDefinitionId
+    ? { caseTypeDefinitionId: recommended.caseTypeDefinitionId }
+    : { matterType: recommended.matterType as never };
+}
+
+/**
+ * Eligible = same client + canonical compliance scope + non-terminal status.
+ * Caller-agnostic: access filtering happens separately (see listComplianceCaseOptions).
+ */
+export async function findEligibleComplianceCases(
   tx: Prisma.TransactionClient,
   clientId: string,
   recommended: { caseTypeDefinitionId: string | null; matterType: string },
-): Promise<EligibleCase[]> {
-  // Canonical Case Type when one is usable; otherwise fall back to the canonical
-  // matterType fact (never to the case title).
-  const scope = recommended.caseTypeDefinitionId
-    ? { caseTypeDefinitionId: recommended.caseTypeDefinitionId }
-    : { matterType: recommended.matterType as never };
-
+): Promise<Array<{ id: string; caseNumber: string; title: string; status: string }>> {
   return tx.case.findMany({
     where: {
       clientId,
       status: { notIn: TERMINAL_CASE_STATUSES as never },
-      ...scope,
+      ...complianceCaseScope(recommended),
     },
-    select: { id: true },
+    select: { id: true, caseNumber: true, title: true, status: true },
     orderBy: { createdAt: 'asc' },
   });
+}
+
+/**
+ * Safe read model for the exceptional ambiguity chooser. Global ambiguity is
+ * unchanged; this list exposes ONLY cases the actor may actually access, and
+ * only the four safe fields (no work package, tasks, notes or metadata).
+ */
+export async function listComplianceCaseOptions(
+  actor: InternalActor,
+  clientId: string,
+  db: PrismaLike = defaultPrisma,
+): Promise<ComplianceCaseOption[]> {
+  await assertClientReadAccess(actor, clientId, db);
+
+  const rows = await db.$transaction(
+    async (tx) => {
+      const recommended = await resolveComplianceCaseType(tx, COMPLIANCE_DOCUMENT_KIND as never);
+      return findEligibleComplianceCases(tx, clientId, recommended);
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
+
+  // ADMIN/PARTNER receive every eligible case; lawyers only what they may access.
+  const scope = await internalCaseScope(actor, db);
+  if (scope === null) return rows;
+
+  const allowed = new Set(scope);
+  return rows.filter((row) => allowed.has(row.id));
+}
+
+/**
+ * Explicit-case path for the exceptional ambiguity retry. Validates the
+ * user-selected Case BEFORE any external effect and NEVER creates or auto-resolves
+ * another Case. Never trust a frontend caseId.
+ */
+export async function resolveExplicitComplianceCase(
+  actor: InternalActor,
+  clientId: string,
+  caseId: string,
+  db: PrismaLike = defaultPrisma,
+): Promise<{ caseId: string }> {
+  await assertClientReadAccess(actor, clientId, db);
+  const requested = String(caseId || '').trim();
+  if (!requested) {
+    throw new InteractionError(400, 'COMPLIANCE_UPLOAD_CASE_REQUIRED', 'A compliance case must be selected.');
+  }
+
+  return db.$transaction(
+    async (tx) => {
+      // 1 + 2 + 3 + 5: existence, canonical internal Case access, client binding, status.
+      await assertInternalCaseAccess(actor, requested, tx as never);
+      const row = await tx.case.findUnique({
+        where: { id: requested },
+        select: { id: true, clientId: true, status: true, matterType: true, caseTypeDefinitionId: true },
+      });
+      if (!row) {
+        throw new InteractionError(404, 'COMPLIANCE_UPLOAD_CASE_NOT_FOUND', 'Case not found.');
+      }
+      if (row.clientId !== clientId) {
+        throw new InteractionError(400, 'COMPLIANCE_UPLOAD_CASE_CLIENT_MISMATCH', 'The selected case belongs to another client.');
+      }
+      if ((TERMINAL_CASE_STATUSES as readonly string[]).includes(String(row.status))) {
+        throw new InteractionError(409, 'COMPLIANCE_UPLOAD_CASE_NOT_REUSABLE', 'The selected case is closed and cannot receive new documents.');
+      }
+
+      // 4: the case must still match the canonical compliance eligibility scope.
+      const recommended = await resolveComplianceCaseType(tx, COMPLIANCE_DOCUMENT_KIND as never);
+      const eligible = await findEligibleComplianceCases(tx, clientId, recommended);
+      if (!eligible.some((candidate) => candidate.id === row.id)) {
+        throw new InteractionError(409, 'COMPLIANCE_UPLOAD_CASE_NOT_ELIGIBLE', 'The selected case is not an eligible compliance case.');
+      }
+      return { caseId: row.id };
+    },
+    { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+  );
 }
 
 /**

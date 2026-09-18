@@ -63,6 +63,57 @@ test('auto matrix refresh is bounded and stops when rows arrive', () => {
   assert.match(src, /autoRefreshWhileEmpty=\{freshDocumentId === link\.documentId\}/);
 });
 
+test('M/N. the chooser appears ONLY for 409 COMPLIANCE_CASE_AMBIGUOUS', () => {
+  const src = read(VIEW);
+  assert.match(src, /error instanceof ApiError && error\.status === 409 && error\.code === "COMPLIANCE_CASE_AMBIGUOUS"/);
+  assert.match(src, /data-testid="compliance-case-chooser"/);
+  assert.match(src, /Több alkalmas compliance ügy található\. Válassza ki, melyik ügyhöz kerüljön a dokumentum\./);
+  // A different 409 code still falls through to the generic upload error.
+  assert.match(src, /setActionError\("A dokumentum feltöltése jelenleg nem sikerült\."\)/);
+});
+
+test('O/T. the normal flow has no Case selector and keeps the two primary actions', () => {
+  const src = read(VIEW);
+  assert.match(src, /Feltöltés ügyfélnek/);
+  assert.match(src, /Feltöltés jogi mátrixszal/);
+  // The chooser renders only when a pending ambiguity upload exists.
+  assert.match(src, /\{pendingUpload \? \(/);
+  const beforeChooser = src.slice(0, src.indexOf('data-testid="compliance-case-chooser"'));
+  assert.doesNotMatch(beforeChooser, /Dokumentum célja/);
+});
+
+test('P/Q. the chooser shows only caseNumber + title and retries the SAME prepared payload', () => {
+  const src = read(VIEW);
+  assert.match(src, /\{option\.caseNumber\} · \{option\.title\}/);
+  assert.match(src, /Feltöltés a kiválasztott ügyhöz/);
+  assert.match(src, /runUpload\(payload, selectedCaseId\)/);
+  // The prepared upload is stored so the file never has to be re-selected.
+  assert.match(src, /setPendingUpload\(payload\)/);
+  assert.match(src, /const payload = pendingUpload;/);
+});
+
+test('R/S. cancel clears the ambiguity state and zero options show a truthful no-access message', () => {
+  const src = read(VIEW);
+  assert.match(src, /const cancelAmbiguousUpload = \(\) => \{/);
+  assert.match(src, /Mégse/);
+  assert.match(src, /Több compliance ügy létezik, de egyikhez sincs megfelelő hozzáférése\./);
+  assert.match(src, /A választható compliance ügyek jelenleg nem tölthetők be\./);
+});
+
+test('stale selection surfaces a specific bounded error without a silent re-choice', () => {
+  const src = read(VIEW);
+  assert.match(src, /A feltöltés a kiválasztott üggyel nem sikerült/);
+  assert.match(src, /error instanceof ApiError && error\.code/);
+});
+
+test('the API wrapper exposes the safe option read model and the optional caseId', () => {
+  const api = read(API);
+  assert.match(api, /document-case-options/);
+  assert.match(api, /export type ComplianceCaseOption = \{/);
+  assert.match(api, /id: string;\s*caseNumber: string;\s*title: string;\s*status: string;/);
+  assert.match(api, /caseId\?: string;/);
+});
+
 test('the canonical upload API wrapper targets the orchestration endpoint with the intent', () => {
   const api = read(API);
   assert.match(api, /documents\/upload/);

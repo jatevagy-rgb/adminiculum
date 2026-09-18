@@ -31,7 +31,7 @@ import documentsService from '../documents/services';
 import { validateWorkforceUpload } from '../upload-security/uploadValidationCore';
 import { createDocumentPublication } from '../client-publication/publicationService';
 import { linkComplianceDocument, type ComplianceDocumentAudience } from './complianceDocumentService';
-import { resolveOrCreateComplianceCase } from './complianceCaseResolver';
+import { resolveExplicitComplianceCase, resolveOrCreateComplianceCase } from './complianceCaseResolver';
 
 type Prisma = typeof defaultPrisma;
 
@@ -46,6 +46,8 @@ export interface ComplianceUploadInput {
   mimeType?: string | null;
   fileContent: Buffer;
   title?: string | null;
+  /** Exceptional ambiguity retry: an explicitly selected eligible compliance Case. */
+  caseId?: string | null;
 }
 
 export interface ComplianceUploadResult {
@@ -116,7 +118,12 @@ export async function uploadComplianceDocument(
 
   // 1) Stable canonical caseId first. The retry scope ends here and performs no
   //    external effect, so a retried resolution can never duplicate an upload.
-  const resolution = await resolveOrCreateComplianceCase(actor, input.clientId, db);
+  //    An explicitly selected case (exceptional ambiguity retry) is validated and
+  //    reused; it never creates or auto-resolves another Case.
+  const requestedCaseId = typeof input.caseId === 'string' ? input.caseId.trim() : '';
+  const resolution = requestedCaseId
+    ? { caseId: (await resolveExplicitComplianceCase(actor, input.clientId, requestedCaseId, db)).caseId, caseCreated: false, caseReused: true }
+    : await resolveOrCreateComplianceCase(actor, input.clientId, db);
 
   // 2) Exactly ONE canonical document upload.
   const document = await documentsService.createDocument({
