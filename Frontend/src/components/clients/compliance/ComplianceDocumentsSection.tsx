@@ -34,6 +34,8 @@ function readFileAsBase64(file: File): Promise<string> {
 }
 
 type PendingUpload = {
+  /** Frozen at upload start: the retry must resend the SAME prepared payload. */
+  requirementKey: string;
   intent: ComplianceDocumentAudience;
   fileName: string;
   mimeType: string;
@@ -158,7 +160,8 @@ export function ComplianceDocumentsSection({
 
   const runUpload = (payload: PendingUpload, caseId?: string) =>
     complianceDocumentApi.upload(clientId, {
-      requirementKey,
+      // Frozen prepared payload: never the live selector state.
+      requirementKey: payload.requirementKey,
       intent: payload.intent,
       fileName: payload.fileName,
       mimeType: payload.mimeType,
@@ -183,6 +186,7 @@ export function ComplianceDocumentsSection({
     let payload: PendingUpload;
     try {
       payload = {
+        requirementKey,
         intent,
         fileName: file.name,
         mimeType: file.type || "application/octet-stream",
@@ -318,6 +322,9 @@ export function ComplianceDocumentsSection({
             <select
               className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)]"
               value={requirementKey}
+              // Correctness does NOT depend on this guard: the retry always uses the
+              // frozen payload.requirementKey; disabling only avoids user confusion.
+              disabled={pendingUpload !== null}
               onChange={(event) => setRequirementKey(event.target.value)}
             >
               <option value="">Válasszon területet…</option>

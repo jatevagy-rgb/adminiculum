@@ -114,6 +114,22 @@ test('the API wrapper exposes the safe option read model and the optional caseId
   assert.match(api, /caseId\?: string;/);
 });
 
+test('R1. the ambiguous retry resends the FROZEN requirement, not the live selector state', () => {
+  const src = read(VIEW);
+
+  // The prepared payload captures the requirement at upload start.
+  assert.match(src, /type PendingUpload = \{[\s\S]*?requirementKey: string;[\s\S]*?\};/);
+  assert.match(src, /payload = \{\s*requirementKey,\s*intent,/);
+
+  // The retry body is built exclusively from the frozen payload.
+  const runUploadBody = src.slice(src.indexOf('const runUpload ='), src.indexOf('const handleUpload ='));
+  assert.match(runUploadBody, /requirementKey: payload\.requirementKey/);
+  assert.doesNotMatch(runUploadBody, /^\s*requirementKey,\s*$/m);
+
+  // UX guard only — correctness never depends on it.
+  assert.match(src, /disabled=\{pendingUpload !== null\}/);
+});
+
 test('the canonical upload API wrapper targets the orchestration endpoint with the intent', () => {
   const api = read(API);
   assert.match(api, /documents\/upload/);
