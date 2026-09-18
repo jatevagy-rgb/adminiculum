@@ -29,6 +29,7 @@ describeWithDatabase('Compliance document upload (PostgreSQL)', () => {
   const suffix = `${Date.now()}`;
   const adminId = `c4up-admin-${suffix}`;
   const lawyerId = `c4up-lawyer-${suffix}`;
+  const clientUserId = `c4up-client-user-${suffix}`;
   const clientId = `c4up-client-${suffix}`;
   const clientBId = `c4up-client-b-${suffix}`;
   const adminActor = { userId: adminId, role: 'ADMIN' };
@@ -66,14 +67,23 @@ describeWithDatabase('Compliance document upload (PostgreSQL)', () => {
       sizeBytes: 22,
       codeSafe: 'OK',
     } as never);
-    jest.spyOn(driveService, 'uploadDocument').mockResolvedValue({
+    // Canonical DocumentOperationResult contract: createDocument() requires
+    // `success` AND `item` (it reads item.id / item.name) plus webUrl/version.
+    jest.spyOn(driveService, 'uploadDocument').mockImplementation(async (options: { fileName?: string } | unknown) => ({
       success: true,
-      itemId: `sp-${randomUUID()}`,
+      item: {
+        id: `sp-item-${randomUUID()}`,
+        name: String((options as { fileName?: string } | null)?.fileName || 'stored.docx'),
+      },
       webUrl: 'https://sharepoint.invalid/doc',
-    } as never);
+      version: '1',
+    } as never));
 
     await db.user.create({ data: { id: adminId, email: `c4up-admin-${suffix}@fixture.invalid`, name: 'C4 Upload Admin', role: 'ADMIN', status: 'ACTIVE', isActive: true, skills: [] } as never });
     await db.user.create({ data: { id: lawyerId, email: `c4up-lawyer-${suffix}@fixture.invalid`, name: 'C4 Upload Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true, skills: [] } as never });
+    // Canonical publication audience requires a real CLIENT-role user; an internal
+    // ADMIN is rejected by createGrant with CLIENT_USER_REQUIRED.
+    await db.user.create({ data: { id: clientUserId, email: `c4up-client-${suffix}@fixture.invalid`, name: 'C4 Upload Client User', role: 'CLIENT', status: 'ACTIVE', isActive: true, skills: [] } as never });
     await db.client.create({ data: { id: clientId, name: 'C4 Upload Client' } });
     await db.client.create({ data: { id: clientBId, name: 'C4 Upload Client B' } });
     await provisionComplianceModuleRules(db, adminId);
@@ -87,6 +97,13 @@ describeWithDatabase('Compliance document upload (PostgreSQL)', () => {
     jest.restoreAllMocks();
     const caseIds = (await db.case.findMany({ where: { clientId: { in: [clientId, clientBId] } }, select: { id: true } })).map((row) => row.id);
     const versionIds = (await db.documentVersion.findMany({ where: { document: { caseId: { in: caseIds } } }, select: { id: true } })).map((row) => row.id);
+    // Canonical child-before-parent order, as used by the existing Case/Work Package
+    // integration suites: tasks -> matter publications -> work package -> timeline -> case.
+    await db.task.deleteMany({ where: { caseId: { in: caseIds } } });
+    await db.clientMatterPublication.deleteMany({ where: { caseId: { in: caseIds } } });
+    await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: { in: caseIds } } } });
+    await db.caseWorkPackage.deleteMany({ where: { caseId: { in: caseIds } } });
+    await db.timelineEvent.deleteMany({ where: { caseId: { in: caseIds } } });
     await db.complianceDocumentClauseAnchor.deleteMany({ where: { documentVersionId: { in: versionIds } } });
     await db.clientDocumentPublication.deleteMany({ where: { clientId: { in: [clientId, clientBId] } } });
     await db.clientPortalGrant.deleteMany({ where: { clientId: { in: [clientId, clientBId] } } });
@@ -95,7 +112,7 @@ describeWithDatabase('Compliance document upload (PostgreSQL)', () => {
     await db.document.deleteMany({ where: { caseId: { in: caseIds } } });
     await db.case.deleteMany({ where: { id: { in: caseIds } } });
     await db.client.deleteMany({ where: { id: { in: [clientId, clientBId] } } });
-    await db.user.deleteMany({ where: { id: { in: [adminId, lawyerId] } } });
+    await db.user.deleteMany({ where: { id: { in: [adminId, lawyerId, clientUserId] } } });
   });
 
   it('B. creates a canonical compliance Case on the first upload', async () => {
@@ -212,7 +229,7 @@ describeWithDatabase('Compliance document upload (PostgreSQL)', () => {
   it('G. CLIENT_POLICY enters the canonical DRAFT publication lifecycle when the audience exists', async () => {
     const seed = await upload('INTERNAL_ANALYSIS');
     const caseId = seed.caseId;
-    const grant = await createGrant(adminActor as never, { clientId, caseId, clientUserId: adminId, role: 'VIEWER', permissions: [] } as never, db as never);
+    const grant = await createGrant(adminActor as never, { clientId, caseId, clientUserId, role: 'VIEWER', permissions: [] } as never, db as never);
     await transitionGrant(adminActor as never, String(grant.id), 'activate', {} as never, db as never);
 
     const result = await upload('CLIENT_POLICY');
@@ -245,10 +262,17 @@ describeWithDatabase('Compliance document upload (PostgreSQL)', () => {
         expect(String(rejected[0].reason?.code || '')).toBe('COMPLIANCE_CASE_RESOLUTION_RETRY_EXHAUSTED');
       }
     } finally {
+      // Same canonical child-before-parent order for the concurrent fixture.
+      const concurrentCaseIds = (await db.case.findMany({ where: { clientId: concurrentClientId }, select: { id: true } })).map((row) => row.id);
+      await db.task.deleteMany({ where: { caseId: { in: concurrentCaseIds } } });
+      await db.clientMatterPublication.deleteMany({ where: { caseId: { in: concurrentCaseIds } } });
+      await db.caseWorkPackageItem.deleteMany({ where: { caseWorkPackage: { caseId: { in: concurrentCaseIds } } } });
+      await db.caseWorkPackage.deleteMany({ where: { caseId: { in: concurrentCaseIds } } });
+      await db.timelineEvent.deleteMany({ where: { caseId: { in: concurrentCaseIds } } });
       await db.clientDocumentPublication.deleteMany({ where: { clientId: concurrentClientId } });
-      await db.complianceDocument.deleteMany({ where: { document: { case: { clientId: concurrentClientId } } } });
-      await db.documentVersion.deleteMany({ where: { document: { case: { clientId: concurrentClientId } } } });
-      await db.document.deleteMany({ where: { case: { clientId: concurrentClientId } } });
+      await db.complianceDocument.deleteMany({ where: { document: { caseId: { in: concurrentCaseIds } } } });
+      await db.documentVersion.deleteMany({ where: { document: { caseId: { in: concurrentCaseIds } } } });
+      await db.document.deleteMany({ where: { caseId: { in: concurrentCaseIds } } });
       await db.case.deleteMany({ where: { clientId: concurrentClientId } });
       await db.client.deleteMany({ where: { id: concurrentClientId } });
     }

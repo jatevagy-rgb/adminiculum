@@ -101,15 +101,14 @@ describe('uploadComplianceDocument — preconditions', () => {
 });
 
 describe('uploadComplianceDocument — exactly-once external upload', () => {
-  it('uploads exactly ONCE even when Case resolution retried internally', async () => {
+  // Composition proof at the orchestration boundary: the resolver is invoked ONCE and,
+  // after it returns a stable caseId, the external document upload is invoked EXACTLY
+  // ONCE. The resolver's own internal SERIALIZABLE retry loop is proven separately by
+  // complianceCaseResolver.test.ts, and real concurrent behaviour by the PostgreSQL suite.
+  // This test does NOT exercise resolver retries end-to-end.
+  it('invokes the external upload exactly ONCE per stable resolved caseId', async () => {
     const db = fakeDb(true);
-    let attempts = 0;
-    resolveCase.mockImplementation(async () => {
-      // Simulate the internal SERIALIZABLE retry loop (two failures, then success).
-      attempts += 1;
-      attempts += 1;
-      return { caseId: 'case-1', caseCreated: false, caseReused: true };
-    });
+    resolveCase.mockResolvedValue({ caseId: 'case-1', caseCreated: false, caseReused: true });
 
     const result = await uploadComplianceDocument(ACTOR, BASE_INPUT as never, db as never);
 
