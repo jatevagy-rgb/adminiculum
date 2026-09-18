@@ -14,8 +14,13 @@
  *   - a non-terminal Case status
  *
  * 0 eligible cases  → create one through the canonical `casesService.createCase`
- * 1 eligible case   → reuse it
+ * 1 eligible case   → require canonical internal Case access, then reuse it
  * >1 eligible cases → 409 COMPLIANCE_CASE_AMBIGUOUS with NO side effect
+ *
+ * AUTHORIZATION: client read access does NOT imply Case access. Before reusing an
+ * eligible Case the actor must pass the canonical `assertInternalCaseAccess`
+ * guard, otherwise the resolution fails boundedly — it never creates a second
+ * compliance Case to work around an inaccessible one.
  *
  * CONCURRENCY: the resolve-or-create step runs in a SERIALIZABLE transaction and
  * is retried at most MAX_RETRIES times. Only serialization failures (P2034 /
@@ -30,7 +35,12 @@
  */
 import { Prisma } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
-import { InternalActor, InteractionError, assertClientReadAccess } from '../client-interaction/base';
+import {
+  InternalActor,
+  InteractionError,
+  assertClientReadAccess,
+  assertInternalCaseAccess,
+} from '../client-interaction/base';
 import casesService from '../cases/services';
 import { resolveComplianceCaseType } from './complianceCaseTypeResolver';
 
@@ -41,8 +51,13 @@ export const COMPLIANCE_CASE_MAX_RETRIES = 3;
 /** Canonical compliance proposal kind used for generic compliance work. */
 const COMPLIANCE_DOCUMENT_KIND = 'DOCUMENT_UPDATE';
 
-/** Reusable states are every canonical CaseStatus except the terminal FINAL. */
-const TERMINAL_CASE_STATUSES = ['FINAL'] as const;
+/**
+ * Canonical closed/non-reusable Case statuses. This is the SAME set the rest of
+ * the repository uses for closed cases (cases/attention.service.ts and
+ * cases/dashboardOperational.ts) — a CANCELLED or ARCHIVED compliance case must
+ * never be reused for a new upload.
+ */
+export const TERMINAL_CASE_STATUSES = ['FINAL', 'CANCELLED', 'ARCHIVED'] as const;
 
 /**
  * Serialization failure: Prisma P2034 or the underlying PostgreSQL SQLSTATE 40001.
@@ -124,6 +139,10 @@ export async function resolveOrCreateComplianceCase(
             );
           }
           if (eligible.length === 1) {
+            // Canonical Case access is REQUIRED before reuse: client read access
+            // does not imply access to this Case. An inaccessible eligible case
+            // fails boundedly instead of creating a duplicate compliance Case.
+            await assertInternalCaseAccess(actor, eligible[0].id, tx as never);
             return { caseId: eligible[0].id, caseCreated: false, caseReused: true };
           }
 

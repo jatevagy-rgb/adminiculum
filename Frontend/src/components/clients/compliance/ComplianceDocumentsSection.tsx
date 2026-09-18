@@ -37,7 +37,7 @@ function readFileAsBase64(file: File): Promise<string> {
  * provenance is persisted at ingestion and never depends on the panel being
  * open, so there is no activation button and no click-controlled monitoring.
  */
-function LinkRow({ link, audience, onUnlink, busy, clientId }: { link: ComplianceDocumentLink; audience: ComplianceDocumentAudience; onUnlink: (id: string) => void; busy: boolean; clientId: string }) {
+function LinkRow({ link, audience, onUnlink, busy, clientId, autoRefreshWhileEmpty = false }: { link: ComplianceDocumentLink; audience: ComplianceDocumentAudience; onUnlink: (id: string) => void; busy: boolean; clientId: string; autoRefreshWhileEmpty?: boolean }) {
   return (
     <li className="rounded border border-[var(--adm-border)] bg-white p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -69,7 +69,7 @@ function LinkRow({ link, audience, onUnlink, busy, clientId }: { link: Complianc
       </div>
       {audience === "INTERNAL_ANALYSIS" ? (
         <div className="mt-3 border-t border-[var(--adm-border)] pt-3">
-          <ComplianceClauseAnchorPanel clientId={clientId} documentId={link.documentId} />
+          <ComplianceClauseAnchorPanel clientId={clientId} documentId={link.documentId} autoRefreshWhileEmpty={autoRefreshWhileEmpty} />
         </div>
       ) : null}
     </li>
@@ -90,6 +90,7 @@ export function ComplianceDocumentsSection({
   const [requirementKey, setRequirementKey] = useState("");
   const [busyIntent, setBusyIntent] = useState<ComplianceDocumentAudience | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [freshDocumentId, setFreshDocumentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const clientPolicyInputRef = useRef<HTMLInputElement | null>(null);
   const internalAnalysisInputRef = useRef<HTMLInputElement | null>(null);
@@ -136,11 +137,21 @@ export function ComplianceDocumentsSection({
         fileContent: base64,
       });
       if (intent === "INTERNAL_ANALYSIS") {
-        setNotice("Feltöltve – a jogi mátrix automatikusan elkészül.");
+        setFreshDocumentId(result.documentId);
+        setNotice("Feltöltve – a jogi mátrix feldolgozása folyamatban.");
       } else if (result.publication?.status === "PUBLISHED") {
         setNotice("Ügyfélnek közzétéve.");
-      } else {
+      } else if (result.publication?.status === "DRAFT" && result.publication?.publicationId) {
         setNotice("Feltöltve – jóváhagyásra vár.");
+      } else {
+        // The document + linkage exist, but no canonical publication draft does.
+        // Never claim "approval pending", and never suggest re-uploading (the
+        // document already exists).
+        setNotice(
+          result.publication?.code === "NO_ACTIVE_AUDIENCE_GRANT"
+            ? "Dokumentum feltöltve és összekapcsolva, de az ügyfélközzétételi tervezet nem jött létre: ehhez aktív ügyfél-hozzáférés szükséges."
+            : "Dokumentum feltöltve és összekapcsolva, de az ügyfélközzétételi tervezet nem jött létre.",
+        );
       }
       await load();
     } catch {
@@ -287,7 +298,7 @@ export function ComplianceDocumentsSection({
                   <div className="mt-2">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Belső megfelelőségi elemzés</p>
                     <ul className="mt-1 space-y-1">
-                      {topic.internalAnalysis.map((link) => <LinkRow key={link.id} link={link} audience="INTERNAL_ANALYSIS" clientId={clientId} onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
+                      {topic.internalAnalysis.map((link) => <LinkRow key={link.id} link={link} audience="INTERNAL_ANALYSIS" clientId={clientId} autoRefreshWhileEmpty={freshDocumentId === link.documentId} onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
                     </ul>
                   </div>
                 ) : null}

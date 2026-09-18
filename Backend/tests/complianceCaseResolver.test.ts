@@ -16,6 +16,7 @@ jest.mock('../src/modules/client-interaction/base', () => {
     ...actual,
     requireInternal: jest.fn(),
     assertClientReadAccess: jest.fn(async () => undefined),
+    assertInternalCaseAccess: jest.fn(async () => ({ id: 'case-1', clientId: 'client-1' })),
   };
 });
 
@@ -25,7 +26,7 @@ jest.mock('../src/modules/cases/services', () => ({
 }));
 
 import casesService from '../src/modules/cases/services';
-import { InteractionError } from '../src/modules/client-interaction/base';
+import { InteractionError, assertInternalCaseAccess } from '../src/modules/client-interaction/base';
 import {
   COMPLIANCE_CASE_MAX_RETRIES,
   isCaseNumberUniqueCollision,
@@ -76,6 +77,8 @@ const ACTOR = { userId: 'user-1', role: 'ADMIN' };
 
 beforeEach(() => {
   createCase.mockReset();
+  (assertInternalCaseAccess as any).mockClear?.();
+  (assertInternalCaseAccess as any).mockImplementation?.(async () => ({ id: 'case-1', clientId: 'client-1' }));
 });
 
 describe('Compliance Case classifier helpers', () => {
@@ -150,5 +153,27 @@ describe('resolveOrCreateComplianceCase', () => {
     const db = fakeDb([[{ id: 'a' }, { id: 'b' }]]);
     await expect(resolveOrCreateComplianceCase(ACTOR, 'client-1', db as never)).rejects.toBeInstanceOf(InteractionError);
     expect(db.__attempts()).toBe(1);
+  });
+
+  it('AUTHORIZATION: refuses to reuse a Case the actor cannot access and creates NO duplicate', async () => {
+    (assertInternalCaseAccess as any).mockImplementation(async () => {
+      throw new InteractionError(403, 'CASE_ACCESS_FORBIDDEN', 'Actor cannot access this case.');
+    });
+    const db = fakeDb([[{ id: 'case-other' }]]);
+
+    await expect(resolveOrCreateComplianceCase(ACTOR, 'client-1', db as never)).rejects.toMatchObject({
+      code: 'CASE_ACCESS_FORBIDDEN',
+    });
+    // No duplicate compliance Case may be created to work around the denial.
+    expect(createCase).not.toHaveBeenCalled();
+    expect(db.__attempts()).toBe(1);
+  });
+
+  it('TERMINAL: excludes FINAL, CANCELLED and ARCHIVED from eligibility', async () => {
+    createCase.mockResolvedValueOnce({ id: 'case-new' });
+    const db = fakeDb([[]]);
+    await resolveOrCreateComplianceCase(ACTOR, 'client-1', db as never);
+    const where = (db.__tx.case.findMany as any).mock.calls[0][0].where;
+    expect(where.status.notIn).toEqual(expect.arrayContaining(['FINAL', 'CANCELLED', 'ARCHIVED']));
   });
 });

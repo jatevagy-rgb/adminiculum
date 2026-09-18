@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const VIEW = join(__dirname, '..', 'src', 'components', 'clients', 'compliance', 'ComplianceDocumentsSection.tsx');
+const PANEL = join(__dirname, '..', 'src', 'components', 'clients', 'compliance', 'ComplianceClauseAnchorPanel.tsx');
 const API = join(__dirname, '..', 'src', 'lib', 'complianceDocumentApi.ts');
 
 const read = (path: string) => readFileSync(path, 'utf8');
@@ -44,9 +45,22 @@ test('truthful client-facing outcome copy is shown after upload', () => {
   const src = read(VIEW);
   assert.match(src, /Feltöltve – jóváhagyásra vár/);
   assert.match(src, /Ügyfélnek közzétéve/);
-  assert.match(src, /a jogi mátrix automatikusan elkészül/);
-  // Upload never claims publication from the linkage alone.
-  assert.match(src, /result\.publication\?\.status === "PUBLISHED"/);
+  assert.match(src, /a jogi mátrix feldolgozása folyamatban/);
+  // Never claims approval-pending without a canonical DRAFT publication id.
+  assert.match(src, /result\.publication\?\.status === "DRAFT" && result\.publication\?\.publicationId/);
+  // Truthful partial success when no publication draft exists.
+  assert.match(src, /az ügyfélközzétételi tervezet nem jött létre/);
+  assert.doesNotMatch(src, /a jogi mátrix automatikusan elkészül/);
+});
+
+test('auto matrix refresh is bounded and stops when rows arrive', () => {
+  const panel = read(PANEL);
+  assert.match(panel, /AUTO_MATRIX_MAX_ATTEMPTS = 6/);
+  assert.match(panel, /autoRefreshWhileEmpty\?: boolean/);
+  assert.match(panel, /autoRefreshAttempts >= AUTO_MATRIX_MAX_ATTEMPTS/);
+  assert.match(panel, /clearTimeout\(timer\)/);
+  const src = read(VIEW);
+  assert.match(src, /autoRefreshWhileEmpty=\{freshDocumentId === link\.documentId\}/);
 });
 
 test('the canonical upload API wrapper targets the orchestration endpoint with the intent', () => {

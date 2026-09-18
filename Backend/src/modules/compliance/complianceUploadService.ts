@@ -103,6 +103,17 @@ export async function uploadComplianceDocument(
     throw new InteractionError(400, `COMPLIANCE_UPLOAD_REJECTED_${validation.codeSafe}`, 'The uploaded file was rejected by upload security.');
   }
 
+  // Fail-fast precondition: prove the canonical Requirement exists using the SAME
+  // key semantics as linkComplianceDocument, BEFORE case resolution or any
+  // external document upload, so a stale key can never orphan a SharePoint file.
+  const requirement = await db.requirement.findUnique({
+    where: { key: requirementKey },
+    select: { id: true },
+  });
+  if (!requirement) {
+    throw new InteractionError(404, 'COMPLIANCE_UPLOAD_REQUIREMENT_NOT_FOUND', 'Compliance topic not found.');
+  }
+
   // 1) Stable canonical caseId first. The retry scope ends here and performs no
   //    external effect, so a retried resolution can never duplicate an upload.
   const resolution = await resolveOrCreateComplianceCase(actor, input.clientId, db);
