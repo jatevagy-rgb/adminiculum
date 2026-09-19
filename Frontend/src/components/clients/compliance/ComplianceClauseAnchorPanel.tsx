@@ -234,7 +234,26 @@ function versionProvenance({
   );
 }
 
-export function ComplianceClauseAnchorPanel({ clientId, documentId }: { clientId: string; documentId: string }) {
+/**
+ * Bounded auto-refresh for a freshly uploaded INTERNAL_ANALYSIS document.
+ * CDI ingestion is scheduled fire-and-forget at linkage time, so the very first
+ * read can legitimately be empty. The panel retries a SMALL, bounded number of
+ * times and stops as soon as rows arrive; documents that legitimately have no
+ * anchors simply stop after the cap. This is display-only: it never triggers or
+ * controls ingestion/monitoring.
+ */
+const AUTO_MATRIX_MAX_ATTEMPTS = 6;
+const AUTO_MATRIX_REFRESH_MS = 2500;
+
+export function ComplianceClauseAnchorPanel({
+  clientId,
+  documentId,
+  autoRefreshWhileEmpty = false,
+}: {
+  clientId: string;
+  documentId: string;
+  autoRefreshWhileEmpty?: boolean;
+}) {
   const [data, setData] = useState<ComplianceClauseAnchorReadModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -243,6 +262,7 @@ export function ComplianceClauseAnchorPanel({ clientId, documentId }: { clientId
   const [relationType, setRelationType] = useState("");
   const [anchorType, setAnchorType] = useState("");
   const [unresolvedOnly, setUnresolvedOnly] = useState(false);
+  const [autoRefreshAttempts, setAutoRefreshAttempts] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -265,6 +285,24 @@ export function ComplianceClauseAnchorPanel({ clientId, documentId }: { clientId
   }, [clientId, documentId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => { setAutoRefreshAttempts(0); }, [documentId]);
+
+  const totalAnchorRows = useMemo(
+    () => (data?.versions ?? []).reduce((sum, version) => sum + (version.rows?.length ?? 0), 0),
+    [data],
+  );
+
+  // Bounded: at most AUTO_MATRIX_MAX_ATTEMPTS refreshes, stopping at the first row.
+  useEffect(() => {
+    if (!autoRefreshWhileEmpty || loading || error || totalAnchorRows > 0) return;
+    if (autoRefreshAttempts >= AUTO_MATRIX_MAX_ATTEMPTS) return;
+    const timer = setTimeout(() => {
+      setAutoRefreshAttempts((value) => value + 1);
+      void load();
+    }, AUTO_MATRIX_REFRESH_MS);
+    return () => clearTimeout(timer);
+  }, [autoRefreshWhileEmpty, loading, error, totalAnchorRows, autoRefreshAttempts, load]);
 
   const versions = useMemo(() => data?.versions ?? [], [data]);
   const selectedVersion = useMemo(

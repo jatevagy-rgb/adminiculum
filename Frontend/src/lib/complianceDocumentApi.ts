@@ -22,9 +22,50 @@ export type ComplianceDocumentsReadModel = {
   topics: ComplianceDocumentTopic[];
 };
 
+export type ComplianceDocumentUploadResult = {
+  caseId: string;
+  caseCreated: boolean;
+  caseReused: boolean;
+  documentId: string;
+  documentVersionId: string | null;
+  complianceDocumentId: string;
+  audience: ComplianceDocumentAudience;
+  internalAnalysis: { matrixScheduled: boolean } | null;
+  publication: { publicationId: string | null; status: string; code?: string } | null;
+};
+
+export type ComplianceCaseOption = {
+  id: string;
+  caseNumber: string;
+  title: string;
+  status: string;
+};
+
 export const complianceDocumentApi = {
   list(clientId: string) {
     return fetchApi<ComplianceDocumentsReadModel>(`/compliance/clients/${encodeURIComponent(clientId)}/documents`);
+  },
+  caseOptions(clientId: string) {
+    return fetchApi<{ items: ComplianceCaseOption[] }>(
+      `/compliance/clients/${encodeURIComponent(clientId)}/document-case-options`,
+    );
+  },
+  upload(
+    clientId: string,
+    input: {
+      requirementKey: string;
+      intent: ComplianceDocumentAudience;
+      fileName: string;
+      mimeType: string;
+      fileContent: string;
+      title?: string;
+      caseId?: string;
+    },
+  ) {
+    return fetchApi<ComplianceDocumentUploadResult>(
+      `/compliance/clients/${encodeURIComponent(clientId)}/documents/upload`,
+      { method: 'POST', body: JSON.stringify(input) },
+    );
   },
   link(clientId: string, input: { requirementKey: string; documentId: string; audience: ComplianceDocumentAudience }) {
     return fetchApi<{ id: string }>(`/compliance/clients/${encodeURIComponent(clientId)}/documents`, {
