@@ -188,6 +188,7 @@ describe('uploadComplianceDocument — bounded scanner rejection codes', () => {
     ['HTTP_SCAN_4XX', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_4XX'],
     ['HTTP_SCAN_BAD_RESPONSE', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_BAD_RESPONSE'],
     ['HTTP_SCAN_PROVIDER_ERROR', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_PROVIDER_ERROR'],
+    ['HTTP_SCAN_BAD_STATUS', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_BAD_STATUS'],
     ['SCANNER_NOT_CONFIGURED', 'COMPLIANCE_UPLOAD_REJECTED_SCANNER_NOT_CONFIGURED'],
   ])('maps allowlisted scanner code %s → %s with zero side effects', async (scannerCode, expectedCode) => {
     const db = fakeDb(true);
