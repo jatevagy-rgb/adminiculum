@@ -147,11 +147,14 @@ type MatterWorkspaceMatter = PortalMatter & {
 export function MatterView({
   matter,
   communicationSection,
+  requestsSection,
   showDocuments = true,
   showMessages = true,
 }: {
   matter: MatterWorkspaceMatter;
   communicationSection?: React.ReactNode;
+  /** Customer document/data requests. NOT gated by the message capability. */
+  requestsSection?: React.ReactNode;
   showDocuments?: boolean;
   showMessages?: boolean;
 }) {
@@ -219,6 +222,7 @@ export function MatterView({
           {matter.actionRequests.length ? matter.actionRequests.map((action) => <ActionCard key={action.id} action={action} />) : <p className="cp-empty">Jelenleg nincs teendője.</p>}
         </div>
       </Card>
+      {requestsSection}
       {showMessages && communicationSection ? communicationSection : null}
       <Card>
         <h2 className="cp-card-heading">Frissítések</h2>

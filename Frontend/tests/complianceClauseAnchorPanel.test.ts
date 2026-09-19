@@ -111,6 +111,22 @@ const selectWithOption = (tree: any, value: string) =>
 const clauseInput = (tree: any) => flatten(tree).find((node) => node.type === 'input' && node.props?.placeholder);
 const unresolvedCheckbox = (tree: any) => flatten(tree).find((node) => node.type === 'input' && node.props?.type === 'checkbox');
 
+const canonicalRefRow = baseRow({
+  id: 'row-ref',
+  clauseRef: '10.1.',
+  clauseTitle: 'Adatfeldolgozasi megallapodas',
+  relationType: 'MANDATORY_BASIS',
+  anchorType: 'LEGAL',
+  anchorDisplay: 'Figyelesi hivatkozas',
+  anchorStableId: 'la_tv_2013_5_6_59_2',
+  anchorKey: 'LEGAL|REF=TV/2013/5/6:59/2',
+  canonicalReference: 'TV/2013/5/6:59/2',
+  eli: null,
+  celex: null,
+  locator: null,
+  rationale: null,
+});
+
 const LEGAL_ONLY = { documentId: 'document-1', versions: [{ documentVersionId: 'version-1', version: 1, isCurrent: true, rows: [baseRow()] }] };
 
 test('renders each relation with clause, relation type, anchor type and machine metadata', async () => {
@@ -358,4 +374,148 @@ test('a single row renders only the metadata it actually transports', async () =
   assert.ok(!text.includes('ECLI'), 'an absent ECLI must not be rendered');
   assert.ok(!text.includes('Ügyszám'), 'an absent case number must not be rendered');
   assert.ok(!text.includes('Döntés azonosítója'), 'an absent decision id must not be rendered');
+});
+
+const ALL_ROWS = { documentId: 'document-1', versions: [{ documentVersionId: 'version-1', version: 1, isCurrent: true, rows: [baseRow(), caseRow, authorityRow, canonicalRefRow] }] };
+const toggleButton = (tree: any) => flatten(tree).find((node) => node.props?.['data-testid'] === 'clause-anchor-toggle');
+const searchFor = (h: any, query: string) => {
+  change(clauseInput(rerender(h)), query);
+  return rerender(h);
+};
+
+test('searches the free-text haystack across the meaningful row fields, not only clause text', async () => {
+  const h = await mount(ALL_ROWS);
+
+  // Clause reference and clause title keep working.
+  let tree = searchFor(h, '10.1.');
+  assert.equal(rows(tree).length, 1, 'clauseRef search must still find the clause');
+  assert.match(textOf(tree), /Figyelesi hivatkozas/);
+  tree = searchFor(h, 'Adatfeldolgozasi megallapodas');
+  assert.equal(rows(tree).length, 1, 'clauseTitle must be searchable');
+
+  // A displayed value that is not the clause reference or title must be searchable too.
+  tree = searchFor(h, 'TV/2013/5/6:59/2');
+  assert.equal(rows(tree).length, 1, 'canonicalReference (Figyelési azonosító) must be searchable');
+  assert.match(textOf(tree), /10\.1\./);
+
+  tree = searchFor(h, 'LEGAL|REF=TV/2013/5/6:59/2');
+  assert.equal(rows(tree).length, 1, 'anchorKey (Stabil hivatkozás-azonosító) must be searchable');
+
+  tree = searchFor(h, 'T/2013/5/6:59/2');
+  assert.equal(rows(tree).length, 1, 'the Peter transport alias T/... must match the canonical TV/... row');
+
+  tree = searchFor(h, 'Figyelesi hivatkozas');
+  assert.equal(rows(tree).length, 1, 'anchorDisplay must be searchable');
+
+  tree = searchFor(h, 'GDPR 28');
+  assert.equal(rows(tree).length, 1, 'anchorDisplay text must be searchable');
+
+  tree = searchFor(h, 'data.europa.eu');
+  assert.equal(rows(tree).length, 1, 'ELI must be searchable');
+
+  tree = searchFor(h, '32016R0679');
+  assert.equal(rows(tree).length, 1, 'CELEX must be searchable');
+
+  tree = searchFor(h, 'art=28');
+  assert.equal(rows(tree).length, 1, 'locator must be searchable');
+
+  tree = searchFor(h, 'EU:C:2023:949');
+  assert.equal(rows(tree).length, 1, 'ECLI must be searchable');
+
+  tree = searchFor(h, 'paras=217');
+  assert.equal(rows(tree).length, 1, 'authorityLocator must be searchable');
+
+  tree = searchFor(h, 'NAIH-19-18/2024');
+  assert.equal(rows(tree).length, 1, 'decisionId must be searchable');
+
+  tree = searchFor(h, 'naih.hu');
+  assert.equal(rows(tree).length, 1, 'sourceUrl must be searchable');
+
+  tree = searchFor(h, 'jogszabalyi hely kapcsolata');
+  assert.equal(rows(tree).length, 1, 'rationale must be searchable');
+
+  // An unrelated query finds nothing instead of everything.
+  tree = searchFor(h, 'nincs-ilyen-ertekesor');
+  assert.equal(rows(tree).length, 0);
+});
+
+test('free-text search composes with the dedicated filters', async () => {
+  const h = await mount(ALL_ROWS);
+
+  let tree = searchFor(h, 'TV/2013/5/6:59/2');
+  change(selectWithOption(tree, 'INTERPRETATION'), 'INTERPRETATION');
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 0, 'search AND relationType must both apply');
+
+  change(selectWithOption(tree, 'INTERPRETATION'), '');
+  change(selectWithOption(tree, 'MANDATORY_BASIS'), 'MANDATORY_BASIS');
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 1, 'search AND a matching relationType must keep the row');
+
+  change(selectWithOption(tree, 'MANDATORY_BASIS'), '');
+  change(selectWithOption(tree, 'CASE'), 'CASE');
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 0, 'search AND a non-matching anchorType must drop the row');
+
+  change(selectWithOption(tree, 'CASE'), '');
+  toggle(unresolvedCheckbox(tree), true);
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 0, 'search AND unresolvedOnly must both apply');
+  assert.ok(byTestId(tree, 'anchor-key-unresolved') === undefined);
+});
+
+test('collapses and reopens the matrix while preserving search, filters and version', async () => {
+  const h = await mount(ALL_ROWS);
+  let tree = rerender(h);
+
+  change(clauseInput(tree), 'TV/2013/5/6:59/2');
+  tree = rerender(h);
+  change(selectWithOption(tree, 'MANDATORY_BASIS'), 'MANDATORY_BASIS');
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 1);
+
+  const collapse = toggleButton(tree);
+  assert.ok(collapse, 'a collapse/expand control must be offered for a long matrix');
+  assert.equal(collapse.props['aria-expanded'], true);
+  assert.equal(textOf(collapse), 'Mátrix összecsukása');
+
+  collapse.props.onClick();
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 0, 'collapsed matrix must not render every row');
+  // The summary stays so it is obvious a matrix exists, with current/total context.
+  assert.match(textOf(byTestId(tree, 'clause-anchor-counts')), /Megjelenítve: 1 \/ 4 tétel/);
+  const reopen = toggleButton(tree);
+  assert.equal(reopen.props['aria-expanded'], false);
+  assert.equal(textOf(reopen), 'Mátrix megnyitása');
+
+  reopen.props.onClick();
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 1, 'reopening must restore the same filtered state');
+  assert.match(textOf(byTestId(tree, 'clause-anchor-counts')), /Megjelenítve: 1 \/ 4 tétel/);
+  // The search box still holds the query and the relation filter is unchanged.
+  assert.equal(clauseInput(tree).props.value, 'TV/2013/5/6:59/2');
+  const relationSelect = flatten(tree).find((node) => node.type === 'select' && node.props?.value === 'MANDATORY_BASIS');
+  assert.ok(relationSelect, 'the relationType selection must survive collapse/expand');
+});
+
+test('keeps the version selector and unresolved notice working after a search', async () => {
+  const h = await mount({
+    documentId: 'document-1',
+    versions: [
+      { documentVersionId: 'version-2', version: 2, isCurrent: true, rows: [baseRow({ id: 'v2', documentVersionId: 'version-2' })] },
+      { documentVersionId: 'version-1', version: 1, isCurrent: false, rows: [{ ...caseRow, id: 'v1a', documentVersionId: 'version-1' }, { ...authorityRow, id: 'v1b', documentVersionId: 'version-1' }] },
+    ],
+  });
+  let tree = rerender(h);
+  change(selectWithOption(tree, 'version-1'), 'version-1');
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 2);
+
+  change(clauseInput(tree), 'NAIH-19-18/2024');
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 1);
+  toggle(unresolvedCheckbox(tree), true);
+  tree = rerender(h);
+  assert.equal(rows(tree).length, 1);
+  assert.ok(byTestId(tree, 'anchor-key-unresolved'), 'the unresolved notice must remain visible');
 });
