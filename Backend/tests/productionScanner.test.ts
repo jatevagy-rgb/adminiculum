@@ -20,6 +20,7 @@ import {
 } from '../src/modules/upload-security/scannerAdapter';
 import {
   mapWorkforceUploadRejection,
+  validateWorkforceUpload,
   type WorkforceUploadResult,
 } from '../src/modules/upload-security/uploadValidationCore';
 
@@ -79,6 +80,99 @@ describe('HttpMalwareScanner — verdicts', () => {
   });
 });
 
+describe('HttpMalwareScanner — bounded non-2xx classification (observability, still fail-closed)', () => {
+  const cases: Array<[number, string]> = [
+    [401, 'HTTP_SCAN_UNAUTHORIZED'],
+    [403, 'HTTP_SCAN_FORBIDDEN'],
+    [429, 'HTTP_SCAN_RATE_LIMITED'],
+    [400, 'HTTP_SCAN_4XX'],
+    [404, 'HTTP_SCAN_4XX'],
+    [500, 'HTTP_SCAN_5XX'],
+    [503, 'HTTP_SCAN_5XX'],
+    [302, 'HTTP_SCAN_BAD_STATUS'],
+  ];
+
+  it.each(cases)('status %i → %s and still rejects', async (status, expectedCode) => {
+    global.fetch = jest.fn(async () => jsonResponse({ result: 'clean' }, status)) as any;
+    const r = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('SCAN_FAILED');
+    expect((r as { codeSafe?: string }).codeSafe).toBe(expectedCode);
+    expect(shouldRejectScan(r)).toBe(true);
+  });
+
+  it('keeps the existing bounded codes for timeout / network / bad status / bad response / provider error', async () => {
+    global.fetch = jest.fn((_url: any, opts: any) => {
+      const err = new Error('aborted');
+      (err as { name?: string }).name = 'AbortError';
+      return Promise.reject(err);
+    }) as any;
+    const timeout = await new HttpMalwareScanner({ url: URL, timeoutMs: 5 }).scan(SCAN_INPUT);
+    expect((timeout as { codeSafe?: string }).codeSafe).toBe('HTTP_SCAN_TIMEOUT');
+
+    global.fetch = jest.fn(async () => {
+      throw new Error('socket hang up');
+    }) as any;
+    const network = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
+    expect((network as { codeSafe?: string }).codeSafe).toBe('HTTP_SCAN_NETWORK_ERROR');
+
+    global.fetch = jest.fn(async () => jsonResponse('not-json', 200)) as any;
+    const malformed = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
+    expect((malformed as { codeSafe?: string }).codeSafe).toBe('HTTP_SCAN_BAD_RESPONSE');
+
+    global.fetch = jest.fn(async () => jsonResponse({ result: 'error' })) as any;
+    const providerError = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
+    expect((providerError as { codeSafe?: string }).codeSafe).toBe('HTTP_SCAN_PROVIDER_ERROR');
+  });
+
+  it('CLEAN still passes and keeps its bounded code', async () => {
+    global.fetch = jest.fn(async () => jsonResponse({ result: 'clean' })) as any;
+    const r = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
+    expect(r.outcome).toBe('CLEAN');
+    expect((r as { codeSafe?: string }).codeSafe).toBe('HTTP_SCAN_CLEAN');
+    expect(shouldRejectScan(r)).toBe(false);
+  });
+});
+
+describe('validateWorkforceUpload — scanner detail preservation (fail-closed unchanged)', () => {
+  it('preserves the adapter scannerCodeSafe on SCAN_FAILED while keeping the existing codeSafe', async () => {
+    setScanner({
+      provider: 'FAKE',
+      scan: async () => ({ outcome: 'SCAN_FAILED', provider: 'FAKE', codeSafe: 'HTTP_SCAN_UNAUTHORIZED' }),
+    } as any);
+
+    const result = await validateWorkforceUpload({
+      buffer: Buffer.from('%PDF-1.4 clean content'),
+      declaredMimeType: 'application/pdf',
+      originalFileName: 'doc.pdf',
+      inspectArchiveContent: false,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.scanOutcome).toBe('SCAN_FAILED');
+    expect(result.scannerCodeSafe).toBe('HTTP_SCAN_UNAUTHORIZED');
+    // Existing public behaviour is intentionally unchanged.
+    expect(result.codeSafe).toBe('SCAN_SCAN_FAILED');
+  });
+
+  it('preserves the scannerCodeSafe on an explicit CLEAN verdict without changing acceptance', async () => {
+    setScanner({
+      provider: 'FAKE',
+      scan: async () => ({ outcome: 'CLEAN', provider: 'FAKE', codeSafe: 'HTTP_SCAN_CLEAN' }),
+    } as any);
+
+    const result = await validateWorkforceUpload({
+      buffer: Buffer.from('%PDF-1.4 clean content'),
+      declaredMimeType: 'application/pdf',
+      originalFileName: 'doc.pdf',
+      inspectArchiveContent: false,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.scanOutcome).toBe('CLEAN');
+    expect(result.scannerCodeSafe).toBe('HTTP_SCAN_CLEAN');
+  });
+});
+
 describe('HttpMalwareScanner — fail-closed on abnormal paths', () => {
   it('TIMEOUT → SCAN_FAILED', async () => {
     global.fetch = jest.fn((_url: any, opts: any) =>
@@ -104,11 +198,11 @@ describe('HttpMalwareScanner — fail-closed on abnormal paths', () => {
     expect(r.codeSafe).toBe('HTTP_SCAN_NETWORK_ERROR');
   });
 
-  it('BAD_STATUS (non-2xx) → SCAN_FAILED', async () => {
+  it('BAD_STATUS (non-2xx 500) → SCAN_FAILED with bounded 5xx classification', async () => {
     global.fetch = jest.fn(async () => jsonResponse('', 500)) as any;
     const r = await new HttpMalwareScanner({ url: URL }).scan(SCAN_INPUT);
     expect(r.outcome).toBe('SCAN_FAILED');
-    expect(r.codeSafe).toBe('HTTP_SCAN_BAD_STATUS');
+    expect(r.codeSafe).toBe('HTTP_SCAN_5XX');
   });
 
   it('MALFORMED_PROVIDER_RESPONSE (non-JSON) → SCAN_FAILED', async () => {
