@@ -68,6 +68,25 @@ export interface ComplianceUploadResult {
   publication: { publicationId: string | null; status: string; code?: string } | null;
 }
 
+/**
+ * Bounded scanner codes that may be surfaced (observability only). Anything not
+ * allowlisted falls back to the existing safe generic rejection code, so no
+ * provider detail, URL, header or credential can ever reach the API response.
+ */
+const ALLOWLISTED_SCANNER_REJECTION_CODES = new Set([
+  'SCANNER_NOT_CONFIGURED',
+  'HTTP_SCAN_UNAUTHORIZED',
+  'HTTP_SCAN_FORBIDDEN',
+  'HTTP_SCAN_RATE_LIMITED',
+  'HTTP_SCAN_TIMEOUT',
+  'HTTP_SCAN_NETWORK_ERROR',
+  'HTTP_SCAN_4XX',
+  'HTTP_SCAN_5XX',
+  'HTTP_SCAN_BAD_STATUS',
+  'HTTP_SCAN_BAD_RESPONSE',
+  'HTTP_SCAN_PROVIDER_ERROR',
+]);
+
 export async function uploadComplianceDocument(
   actor: InternalActor,
   input: ComplianceUploadInput,
@@ -102,7 +121,17 @@ export async function uploadComplianceDocument(
     inspectArchiveContent: true,
   });
   if (!validation.ok) {
-    throw new InteractionError(400, `COMPLIANCE_UPLOAD_REJECTED_${validation.codeSafe}`, 'The uploaded file was rejected by upload security.');
+    // Preserve the bounded scanner-adapter code for SCAN_FAILED so the caller can
+    // distinguish not-configured / unauthorized / forbidden / rate-limited /
+    // timeout / network / 4xx / 5xx / bad response / provider error. Verdict and
+    // fail-closed behaviour are unchanged, and the message stays generic.
+    const scannerCode =
+      validation.scanOutcome === 'SCAN_FAILED' ? validation.scannerCodeSafe : undefined;
+    const suffix =
+      scannerCode && ALLOWLISTED_SCANNER_REJECTION_CODES.has(scannerCode)
+        ? scannerCode
+        : validation.codeSafe;
+    throw new InteractionError(400, `COMPLIANCE_UPLOAD_REJECTED_${suffix}`, 'The uploaded file was rejected by upload security.');
   }
 
   // Fail-fast precondition: prove the canonical Requirement exists using the SAME
