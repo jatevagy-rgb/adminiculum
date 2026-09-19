@@ -12,6 +12,7 @@ import {
   type PortalGrowAssessmentCatalogue,
   type PortalGrowAssessmentDetail,
   type PortalGrowAssessmentResult,
+  type PortalGrowInitiative,
   type PortalGrowProcess,
   type PortalGrowSurveyItem,
   type PortalOrgGrow,
@@ -46,6 +47,16 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("hu-HU", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
 }
 
+function milestoneTone(statusLabel: string) {
+  if (statusLabel === "Teljesítve") {
+    return { dot: "bg-emerald-600", chip: "bg-emerald-100 text-emerald-900" };
+  }
+  if (statusLabel === "Törölve") {
+    return { dot: "bg-stone-400", chip: "bg-stone-200 text-stone-700" };
+  }
+  return { dot: "bg-amber-500", chip: "bg-amber-100 text-amber-900" };
+}
+
 type AssessmentView = { mode: "catalogue" } | { mode: "runner"; packKey: string } | { mode: "result"; packKey: string };
 type AssessmentFilter = "all" | "uncompleted" | "completed";
 type InitiativeFilter = "all" | "planned" | "active" | "completed";
@@ -60,6 +71,9 @@ export function OrgGrowView() {
 
   // Selected opportunity for detail view (?tab=lehetosegek&opportunity=<publicationId>)
   const [selectedPublicationId, setSelectedPublicationId] = useState<string | null>(null);
+
+  // Selected initiative for project-progress detail (?tab=kezdemenyezesek&initiative=<id>)
+  const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
 
   // Survey questionnaire state
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -147,6 +161,7 @@ export function OrgGrowView() {
     const params = new URLSearchParams(window.location.search);
     const tabParam = params.get("tab") as GrowTab | null;
     const oppParam = params.get("opportunity");
+    const initiativeParam = params.get("initiative");
     if (
       tabParam &&
       ["attekintes", "felmeresek", "folyamatok", "lehetosegek", "kezdemenyezesek", "eredmenyek"].includes(tabParam)
@@ -155,12 +170,16 @@ export function OrgGrowView() {
       if (tabParam === "lehetosegek" && oppParam) {
         setSelectedPublicationId(oppParam);
       }
+      if (tabParam === "kezdemenyezesek" && initiativeParam) {
+        setSelectedInitiativeId(initiativeParam);
+      }
     }
 
     const handlePopState = () => {
       const p = new URLSearchParams(window.location.search);
       const t = p.get("tab") as GrowTab | null;
       const opp = p.get("opportunity");
+      const initiative = p.get("initiative");
       if (
         t &&
         ["attekintes", "felmeresek", "folyamatok", "lehetosegek", "kezdemenyezesek", "eredmenyek"].includes(t)
@@ -171,9 +190,15 @@ export function OrgGrowView() {
         } else {
           setSelectedPublicationId(null);
         }
+        if (t === "kezdemenyezesek" && initiative) {
+          setSelectedInitiativeId(initiative);
+        } else {
+          setSelectedInitiativeId(null);
+        }
       } else {
         setActiveTab("attekintes");
         setSelectedPublicationId(null);
+        setSelectedInitiativeId(null);
       }
     };
     window.addEventListener("popstate", handlePopState);
@@ -185,12 +210,38 @@ export function OrgGrowView() {
     if (tab !== "lehetosegek") {
       setSelectedPublicationId(null);
     }
+    if (tab !== "kezdemenyezesek") {
+      setSelectedInitiativeId(null);
+    }
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("tab", tab);
       if (tab !== "lehetosegek") {
         url.searchParams.delete("opportunity");
       }
+      if (tab !== "kezdemenyezesek") {
+        url.searchParams.delete("initiative");
+      }
+      window.history.pushState({}, "", url.toString());
+    }
+  }, []);
+
+  const handleSelectInitiative = useCallback((initiativeId: string) => {
+    setSelectedInitiativeId(initiativeId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "kezdemenyezesek");
+      url.searchParams.set("initiative", initiativeId);
+      window.history.pushState({}, "", url.toString());
+    }
+  }, []);
+
+  const handleBackToInitiatives = useCallback(() => {
+    setSelectedInitiativeId(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "kezdemenyezesek");
+      url.searchParams.delete("initiative");
       window.history.pushState({}, "", url.toString());
     }
   }, []);
@@ -1528,6 +1579,9 @@ export function OrgGrowView() {
                       <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-700 font-medium">
                         Kritikusság: {proc.criticality}
                       </span>
+                      <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-700 font-medium">
+                        Jóváhagyási pont: {proc.steps.filter((step) => step.isApproval).length}
+                      </span>
                     </div>
                   </div>
 
@@ -1536,31 +1590,48 @@ export function OrgGrowView() {
                       <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">
                         Folyamat lépései ({proc.steps.length} lépés)
                       </p>
-                      <div className="mt-2 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-                        {proc.steps.map((step) => (
-                          <div
-                            key={step.id}
-                            className="flex flex-col justify-between rounded-xl border border-stone-200/80 bg-stone-50/70 p-3.5 text-sm"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between text-xs text-stone-500">
-                                <span className="font-semibold text-stone-600">{step.position}. lépés</span>
-                                {step.isApproval ? (
-                                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
-                                    Jóváhagyási kapu
-                                  </span>
+                      {/* Horizontal process flow: readable left-to-right on desktop,
+                          scrollable on narrow screens. Only customer-safe step fields. */}
+                      <div
+                        className="mt-2 -mx-1 overflow-x-auto px-1 pb-1"
+                        data-testid={`grow-process-flow-${proc.id}`}
+                      >
+                        <ol className="flex min-w-max items-stretch gap-2 lg:min-w-0 lg:flex-wrap">
+                          {proc.steps.map((step, stepIndex) => (
+                            <li key={step.id} className="flex items-stretch">
+                              <div
+                                className="flex w-56 shrink-0 flex-col justify-between rounded-xl border border-stone-200/80 bg-stone-50/70 p-3.5 text-sm"
+                                data-testid={`grow-process-step-${step.id}`}
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between text-xs text-stone-500">
+                                    <span className="font-semibold text-stone-600">{step.position}. lépés</span>
+                                    {step.isApproval ? (
+                                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                                        Jóváhagyási kapu
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <p className="mt-1 font-medium text-stone-900 leading-snug">{step.name}</p>
+                                </div>
+                                {step.systemName ? (
+                                  <p className="mt-2.5 text-xs text-stone-600 border-t border-stone-200/60 pt-2">
+                                    Rendszer: <span className="font-semibold text-stone-800">{step.systemName}</span>
+                                    {step.systemCategory ? ` (${step.systemCategory})` : ""}
+                                  </p>
                                 ) : null}
                               </div>
-                              <p className="mt-1 font-medium text-stone-900 leading-snug">{step.name}</p>
-                            </div>
-                            {step.systemName ? (
-                              <p className="mt-2.5 text-xs text-stone-600 border-t border-stone-200/60 pt-2">
-                                Rendszer: <span className="font-semibold text-stone-800">{step.systemName}</span>
-                                {step.systemCategory ? ` (${step.systemCategory})` : ""}
-                              </p>
-                            ) : null}
-                          </div>
-                        ))}
+                              {stepIndex < proc.steps.length - 1 ? (
+                                <span
+                                  aria-hidden="true"
+                                  className="flex shrink-0 items-center px-1 text-stone-300"
+                                >
+                                  →
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ol>
                       </div>
                     </div>
                   ) : (
@@ -1790,6 +1861,156 @@ export function OrgGrowView() {
 
       {/* TAB 5: KEZDEMÉNYEZÉSEK */}
       {activeTab === "kezdemenyezesek" ? (
+        (() => {
+          const activeInitiative: PortalGrowInitiative | null = selectedInitiativeId
+            ? initiatives.find((item) => item.id === selectedInitiativeId) ?? null
+            : null;
+
+          if (activeInitiative) {
+            const relatedOutcomes = [...measuredOutcomes, ...estimatedOutcomes].filter(
+              (outcome) => outcome.initiativeTitle === activeInitiative.title,
+            );
+            const completedMilestones = activeInitiative.milestones.filter(
+              (milestone) => milestone.statusLabel === "Teljesítve",
+            ).length;
+            return (
+              <section className={card} data-testid="grow-initiative-detail">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-stone-200/80 pb-4">
+                  <button
+                    type="button"
+                    onClick={handleBackToInitiatives}
+                    data-testid="grow-initiative-detail-back"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1b382b] hover:text-[#2d5a43] transition"
+                  >
+                    ← Vissza a kezdeményezésekhez
+                  </button>
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 bg-stone-50 px-2.5 py-0.5 text-[11px] font-semibold text-stone-600">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#2d5a43]" />
+                    Fejlesztési kezdeményezés
+                  </span>
+                </div>
+
+                <div className="mt-6 max-w-3xl">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <h2
+                      className="font-serif text-2xl sm:text-3xl font-bold text-[#1b382b] leading-tight"
+                      data-testid="grow-initiative-detail-title"
+                    >
+                      {activeInitiative.title}
+                    </h2>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        activeInitiative.statusLabel === "Folyamatban"
+                          ? "bg-blue-100 text-blue-900"
+                          : activeInitiative.statusLabel.includes("Lezárva") || activeInitiative.statusLabel.includes("Megvalósult")
+                          ? "bg-emerald-100 text-emerald-900"
+                          : "bg-[#f4efe6] text-[#1b382b]"
+                      }`}
+                    >
+                      {activeInitiative.statusLabel}
+                    </span>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    {activeInitiative.targetState ? (
+                      <div className="rounded-2xl border border-stone-200/80 bg-stone-50/50 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Célállapot</p>
+                        <p className="mt-1 text-sm text-stone-800">{activeInitiative.targetState}</p>
+                      </div>
+                    ) : null}
+                    <div className="rounded-2xl border border-stone-200/80 bg-stone-50/50 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Célhatáridő</p>
+                      <p className="mt-1 text-sm text-stone-800">
+                        {activeInitiative.targetAt ? formatDate(activeInitiative.targetAt) : "Nincs megadva"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {activeInitiative.hasRelatedMatter ? (
+                    <div className="mt-4 rounded-2xl border border-[#e8ded1] bg-[#fdfbf7] p-4 text-sm text-stone-700">
+                      Ehhez a kezdeményezéshez kapcsolódó ügy látható az ügyek között.{" "}
+                      <Link href="/portal/ugyek" className="font-semibold text-[#7a5f18] hover:underline">
+                        Kapcsolódó ügy →
+                      </Link>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-8" data-testid="grow-initiative-detail-milestones">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">Mérföldkövek</h3>
+                      {activeInitiative.milestones.length > 0 ? (
+                        <span className="text-xs text-stone-500">
+                          {completedMilestones} / {activeInitiative.milestones.length} teljesítve
+                        </span>
+                      ) : null}
+                    </div>
+                    {activeInitiative.milestones.length > 0 ? (
+                      <ol className="mt-3 space-y-2.5">
+                        {activeInitiative.milestones.map((milestone) => {
+                          const tone = milestoneTone(milestone.statusLabel);
+                          return (
+                            <li
+                              key={milestone.id}
+                              className="flex items-start gap-3 rounded-2xl border border-stone-200/80 bg-white p-4"
+                              data-testid="grow-initiative-milestone"
+                            >
+                              <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}`} />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <p className="text-sm font-semibold text-stone-900">{milestone.title}</p>
+                                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone.chip}`}>
+                                    {milestone.statusLabel}
+                                  </span>
+                                </div>
+                                <p className="mt-0.5 text-xs text-stone-500">{formatDate(milestone.date)}</p>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : (
+                      <p className="mt-3 text-sm text-stone-600">
+                        Ehhez a kezdeményezéshez még nincsenek mérföldkövek rögzítve.
+                      </p>
+                    )}
+                  </div>
+
+                  {relatedOutcomes.length > 0 ? (
+                    <div className="mt-8" data-testid="grow-initiative-detail-outcomes">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-stone-500">Kapcsolódó eredmények</h3>
+                      <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                        {relatedOutcomes.map((outcome) => (
+                          <div
+                            key={outcome.id}
+                            className="rounded-2xl border border-stone-200/80 bg-stone-50/50 p-3.5"
+                          >
+                            <span className="rounded-full bg-white px-2.5 py-0.5 text-xs font-semibold text-[#1b382b]">
+                              {outcome.basisLabel}
+                            </span>
+                            {outcome.processName ? (
+                              <p className="mt-1.5 text-xs text-stone-600">Érintett folyamat: {outcome.processName}</p>
+                            ) : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-stone-200/80 pt-5">
+                    <button
+                      type="button"
+                      onClick={handleBackToInitiatives}
+                      className="rounded-full border border-stone-300 px-5 py-2.5 text-sm font-semibold text-stone-700 hover:bg-stone-50 transition"
+                    >
+                      ← Vissza a kezdeményezésekhez
+                    </button>
+                  </div>
+                </div>
+              </section>
+            );
+          }
+
+          return (
         <section className={card}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1860,6 +2081,31 @@ export function OrgGrowView() {
                         <p className="mt-0.5 text-sm text-stone-700">{item.targetState}</p>
                       </div>
                     ) : null}
+
+                    {(item.milestones || []).length > 0 ? (() => {
+                      const milestones = item.milestones || [];
+                      const completed = milestones.filter((milestone) => milestone.statusLabel === "Teljesítve").length;
+                      return (
+                        <div className="mt-3" data-testid={`grow-initiative-milestones-${item.id}`}>
+                          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
+                            <span className="font-semibold uppercase tracking-wider">Mérföldkövek</span>
+                            <span>{completed} / {milestones.length} teljesítve</span>
+                          </div>
+                          <div
+                            className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-stone-100"
+                            role="progressbar"
+                            aria-valuemin={0}
+                            aria-valuemax={milestones.length}
+                            aria-valuenow={completed}
+                          >
+                            <div
+                              className="h-full rounded-full bg-[#1b382b] transition-all"
+                              style={{ width: `${(completed / milestones.length) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })() : null}
                   </div>
 
                   <div className="mt-4 border-t border-stone-100 pt-3">
@@ -1874,6 +2120,16 @@ export function OrgGrowView() {
                         </Link>
                       ) : null}
                     </div>
+                    <div className="mt-3 flex items-center justify-end border-t border-stone-100 pt-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSelectInitiative(item.id)}
+                        data-testid={`grow-initiative-open-detail-${item.id}`}
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#1b382b] hover:text-[#2d5a43] transition"
+                      >
+                        Részletek →
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
@@ -1882,6 +2138,8 @@ export function OrgGrowView() {
             )}
           </div>
         </section>
+          );
+        })()
       ) : null}
 
       {/* TAB 6: EREDMÉNYEK */}

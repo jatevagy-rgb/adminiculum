@@ -44,6 +44,13 @@ export interface OrgGrowProcess {
   steps: OrgGrowProcessStep[];
 }
 
+export interface OrgGrowInitiativeMilestone {
+  id: string;
+  title: string;
+  statusLabel: string;
+  date: string | null;
+}
+
 export interface OrgGrowInitiative {
   id: string;
   title: string;
@@ -51,6 +58,7 @@ export interface OrgGrowInitiative {
   statusLabel: string;
   targetAt: string | null;
   hasRelatedMatter: boolean;
+  milestones: OrgGrowInitiativeMilestone[];
 }
 
 export interface OrgGrowOutcome {
@@ -97,6 +105,16 @@ const OUTCOME_BASIS_LABELS: Record<string, string> = {
   CALCULATED: 'Számított eredmény / kapacitás',
   ESTIMATED: 'Becsült érték',
 };
+
+// Customer-safe milestone status labels. The raw CompanyMilestone enum is never
+// projected; only this bounded Hungarian label crosses to the customer.
+const MILESTONE_STATUS_LABELS: Record<string, string> = {
+  PLANNED: 'Tervezett',
+  ACHIEVED: 'Teljesítve',
+  CANCELLED: 'Törölve',
+};
+
+const MILESTONE_PROJECTION_LIMIT = 50;
 
 async function listPublishedOpportunities(
   workspaceId: string,
@@ -181,7 +199,7 @@ export async function getOrganizationalGrow(
 
   // 1. Load active business processes and their steps.
   // SECURITY (Correction 4): OrganizationPerson directory data is NOT exposed.
-  // We omit responsiblePerson and only expose the step name, position, type, and linked system.
+  // We omit the responsible-person relation and only expose the step name, position, type, and linked system.
   const processesRaw = await prisma.businessProcess.findMany({
     where: { clientId: workspace.clientId, status: 'ACTIVE' },
     include: {
@@ -217,10 +235,23 @@ export async function getOrganizationalGrow(
   // 2. Load development initiatives (safe customer projection).
   // Includes PLANNED, ACTIVE, COMPLETED, ON_HOLD (or HOLD).
   // Strict publication boundary: internal IDs, raw status, and operational notes stripped.
+  // Customer-safe project progress reuses the EXISTING CompanyMilestone relation
+  // (linked by developmentInitiativeId) — no new model is introduced.
   const initiativesRaw = await prisma.developmentInitiative.findMany({
     where: {
       clientId: workspace.clientId,
       status: { in: ['PLANNED', 'ACTIVE', 'COMPLETED', 'ON_HOLD'] },
+    },
+    include: {
+      // Customer-safe milestone projection: only the linked initiative's own
+      // milestones (same client), and only the opaque id, title, derived status
+      // label, and the single effective date. Internal milestone description,
+      // internal creator/owner references and provenance are never read.
+      milestones: {
+        select: { id: true, title: true, status: true, milestoneDate: true, targetDate: true },
+        orderBy: [{ milestoneDate: 'asc' }, { id: 'asc' }],
+        take: MILESTONE_PROJECTION_LIMIT,
+      },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -232,6 +263,21 @@ export async function getOrganizationalGrow(
     statusLabel: INITIATIVE_STATUS_LABELS[i.status] || i.status,
     targetAt: i.targetAt ? i.targetAt.toISOString() : null,
     hasRelatedMatter: Boolean(i.caseId),
+    milestones: [...i.milestones]
+      .sort((a, b) => {
+        const aTime = (a.milestoneDate ?? a.targetDate)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const bTime = (b.milestoneDate ?? b.targetDate)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        return aTime - bTime || a.id.localeCompare(b.id);
+      })
+      .map((m) => {
+        const effectiveDate = m.milestoneDate ?? m.targetDate;
+        return {
+          id: m.id,
+          title: m.title,
+          statusLabel: MILESTONE_STATUS_LABELS[m.status] || m.status,
+          date: effectiveDate ? effectiveDate.toISOString() : null,
+        };
+      }),
   }));
 
   // 3. Load outcome measurements.

@@ -598,6 +598,13 @@ export type PortalGrowProcess = {
   steps: PortalGrowProcessStep[];
 };
 
+export type PortalGrowInitiativeMilestone = {
+  id: string;
+  title: string;
+  statusLabel: string;
+  date: string | null;
+};
+
 export type PortalGrowInitiative = {
   id: string;
   title: string;
@@ -605,6 +612,7 @@ export type PortalGrowInitiative = {
   statusLabel: string;
   targetAt: string | null;
   hasRelatedMatter: boolean;
+  milestones: PortalGrowInitiativeMilestone[];
 };
 
 export type PortalGrowOutcome = {

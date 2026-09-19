@@ -534,6 +534,89 @@ describeWithDb('Client Portal 2.0 Customer Product (PostgreSQL)', () => {
     }
   });
 
+  it('GROW_INITIATIVE_MILESTONE_PROJECTION=PASS — projects only customer-safe linked milestones', async () => {
+    const plannedId = crypto.randomUUID();
+    const cancelledId = crypto.randomUUID();
+    const unlinkedId = crypto.randomUUID();
+    const crossInitiativeId = crypto.randomUUID();
+    const crossMilestoneId = crypto.randomUUID();
+    const internalDescription = 'Internal auditor evaluation notes for milestones';
+
+    try {
+      await db.companyMilestone.create({
+        data: {
+          id: plannedId, clientId: ids.clientA, type: 'PROCESS_CHANGE', title: 'Kontrollok bevezetése',
+          status: 'PLANNED', targetDate: new Date('2026-09-01T00:00:00Z'),
+          developmentInitiativeId: ids.initiativeA, createdByUserId: ids.adminId,
+        },
+      });
+      await db.companyMilestone.create({
+        data: {
+          id: cancelledId, clientId: ids.clientA, type: 'OTHER', title: 'Elvetett lépés',
+          status: 'CANCELLED', milestoneDate: new Date('2026-05-01T00:00:00Z'),
+          description: internalDescription, developmentInitiativeId: ids.initiativeA, createdByUserId: ids.adminId,
+        },
+      });
+      // Unlinked milestone (no developmentInitiativeId) must never appear in an initiative.
+      await db.companyMilestone.create({
+        data: {
+          id: unlinkedId, clientId: ids.clientA, type: 'OTHER', title: 'Nem kapcsolt mérföldkő',
+          status: 'PLANNED', milestoneDate: new Date('2026-04-01T00:00:00Z'), createdByUserId: ids.adminId,
+        },
+      });
+      // Cross-client initiative + milestone must never appear on the customer path.
+      await db.developmentInitiative.create({
+        data: { id: crossInitiativeId, clientId: ids.clientB, title: 'B kliens kezdeményezés', status: 'ACTIVE' },
+      });
+      await db.companyMilestone.create({
+        data: {
+          id: crossMilestoneId, clientId: ids.clientB, type: 'OTHER', title: 'B kliens mérföldkő',
+          status: 'ACHIEVED', milestoneDate: new Date('2026-03-01T00:00:00Z'),
+          developmentInitiativeId: crossInitiativeId, createdByUserId: ids.adminId,
+        },
+      });
+
+      const grow = await getOrganizationalGrow(ids.authorizedIdentity, ids.orgWsA, db);
+      const initiative = grow.initiatives.find((item) => item.id === ids.initiativeA);
+      expect(initiative).toBeDefined();
+      const milestones = initiative!.milestones;
+      const seenIds = milestones.map((milestone) => milestone.id);
+      expect(seenIds).toContain(ids.milestoneA);
+      expect(seenIds).toContain(plannedId);
+      expect(seenIds).toContain(cancelledId);
+      expect(seenIds).not.toContain(unlinkedId);
+      expect(seenIds).not.toContain(crossMilestoneId);
+
+      // Chronological by effective date: May (cancelled) -> June (achieved) -> September (planned).
+      expect(milestones.slice(0, 3).map((milestone) => milestone.title)).toEqual([
+        'Elvetett lépés',
+        'Bevezetés kezdete',
+        'Kontrollok bevezetése',
+      ]);
+
+      for (const milestone of milestones) {
+        expect(Object.keys(milestone).sort()).toEqual(['date', 'id', 'statusLabel', 'title']);
+        expect(['Tervezett', 'Teljesítve', 'Törölve']).toContain(milestone.statusLabel);
+        expect((milestone as any).createdByUserId).toBeUndefined();
+        expect((milestone as any).status).toBeUndefined();
+        expect((milestone as any).description).toBeUndefined();
+        expect((milestone as any).targetDate).toBeUndefined();
+        expect((milestone as any).clientId).toBeUndefined();
+      }
+
+      const serialized = JSON.stringify(grow);
+      expect(serialized).not.toContain('createdByUserId');
+      expect(serialized).not.toContain(internalDescription);
+      expect(serialized).not.toContain('Nem kapcsolt mérföldkő');
+      expect(serialized).not.toContain('B kliens mérföldkő');
+    } finally {
+      await db.companyMilestone.deleteMany({
+        where: { id: { in: [plannedId, cancelledId, unlinkedId, crossMilestoneId] } },
+      });
+      await db.developmentInitiative.deleteMany({ where: { id: crossInitiativeId } });
+    }
+  });
+
   // 6. GROW_INTERNAL_DATA_HIDDEN=PASS
   it('GROW_INTERNAL_DATA_HIDDEN=PASS — internal improvement opportunities deferred and internal findings hidden', async () => {
     const grow = await getOrganizationalGrow(ids.authorizedIdentity, ids.orgWsA, db);
@@ -913,6 +996,20 @@ describe('Client Portal 2.0 Customer Product Static Verification', () => {
     const growSrc = read('src/modules/client-workspace/orgGrowService.ts');
     expect(growSrc).toContain('listPublishedOpportunities');
     expect(growSrc).toContain('ImprovementOpportunityPublication');
+    expect(growSrc).not.toContain('improvementOpportunity.findMany');
+  });
+
+  it('GROW_INITIATIVE_MILESTONE_SAFE=PASS — reuses CompanyMilestone with no internal fields or raw research', () => {
+    const growSrc = read('src/modules/client-workspace/orgGrowService.ts');
+    expect(growSrc).toContain('milestones: {');
+    expect(growSrc).toContain('MILESTONE_STATUS_LABELS');
+    // No internal-only source is read on the customer Grow path.
+    expect(growSrc).not.toContain('createdByUserId');
+    expect(growSrc).not.toContain('responsiblePerson');
+    expect(growSrc).not.toContain('recommendationCandidate');
+    expect(growSrc).not.toContain('researchEvidence');
+    expect(growSrc).not.toContain('diagnosisCandidate');
+    expect(growSrc).not.toContain('task.findMany');
     expect(growSrc).not.toContain('improvementOpportunity.findMany');
   });
 
