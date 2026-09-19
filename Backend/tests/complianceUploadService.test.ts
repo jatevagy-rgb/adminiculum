@@ -49,6 +49,7 @@ import documentsService from '../src/modules/documents/services';
 import { createDocumentPublication } from '../src/modules/client-publication/publicationService';
 import { linkComplianceDocument } from '../src/modules/compliance/complianceDocumentService';
 import { resolveOrCreateComplianceCase, resolveExplicitComplianceCase } from '../src/modules/compliance/complianceCaseResolver';
+import { validateWorkforceUpload } from '../src/modules/upload-security/uploadValidationCore';
 import { uploadComplianceDocument } from '../src/modules/compliance/complianceUploadService';
 
 const createDocument: any = documentsService.createDocument;
@@ -162,6 +163,83 @@ describe('uploadComplianceDocument — exceptional explicit case retry', () => {
     expect(createDocument).not.toHaveBeenCalled();
     expect(linkDocument).not.toHaveBeenCalled();
     expect(createPublication).not.toHaveBeenCalled();
+  });
+});
+
+describe('uploadComplianceDocument — bounded scanner rejection codes', () => {
+  const scannerReject = (fields: Record<string, unknown>) => {
+    (validateWorkforceUpload as any).mockResolvedValueOnce({
+      ok: false,
+      detectedMimeType: 'application/pdf',
+      sizeBytes: 12,
+      codeSafe: 'SCAN_SCAN_FAILED',
+      scanOutcome: 'SCAN_FAILED',
+      ...fields,
+    });
+  };
+
+  it.each([
+    ['HTTP_SCAN_UNAUTHORIZED', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_UNAUTHORIZED'],
+    ['HTTP_SCAN_FORBIDDEN', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_FORBIDDEN'],
+    ['HTTP_SCAN_RATE_LIMITED', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_RATE_LIMITED'],
+    ['HTTP_SCAN_TIMEOUT', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_TIMEOUT'],
+    ['HTTP_SCAN_NETWORK_ERROR', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_NETWORK_ERROR'],
+    ['HTTP_SCAN_5XX', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_5XX'],
+    ['HTTP_SCAN_4XX', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_4XX'],
+    ['HTTP_SCAN_BAD_RESPONSE', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_BAD_RESPONSE'],
+    ['HTTP_SCAN_PROVIDER_ERROR', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_PROVIDER_ERROR'],
+    ['HTTP_SCAN_BAD_STATUS', 'COMPLIANCE_UPLOAD_REJECTED_HTTP_SCAN_BAD_STATUS'],
+    ['SCANNER_NOT_CONFIGURED', 'COMPLIANCE_UPLOAD_REJECTED_SCANNER_NOT_CONFIGURED'],
+  ])('maps allowlisted scanner code %s → %s with zero side effects', async (scannerCode, expectedCode) => {
+    const db = fakeDb(true);
+    scannerReject({ scannerCodeSafe: scannerCode });
+
+    const error: any = await uploadComplianceDocument(ACTOR, BASE_INPUT as never, db as never).catch((e) => e);
+
+    expect(error?.code).toBe(expectedCode);
+    expect(error?.message).not.toMatch(/https?:\/\/|Bearer|authorization|api[_-]?key/i);
+    // Scanner rejection happens before case resolution, upload, linkage and publication.
+    expect(resolveCase).not.toHaveBeenCalled();
+    expect(resolveExplicit).not.toHaveBeenCalled();
+    expect(createDocument).not.toHaveBeenCalled();
+    expect(linkDocument).not.toHaveBeenCalled();
+    expect(createPublication).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the existing safe generic scanner code for an unknown scanner code', async () => {
+    const db = fakeDb(true);
+    scannerReject({ scannerCodeSafe: 'SOMETHING_UNEXPECTED' });
+    await expect(uploadComplianceDocument(ACTOR, BASE_INPUT as never, db as never)).rejects.toMatchObject({
+      code: 'COMPLIANCE_UPLOAD_REJECTED_SCAN_SCAN_FAILED',
+    });
+    expect(createDocument).not.toHaveBeenCalled();
+  });
+
+  it('falls back when the scanner code is absent', async () => {
+    const db = fakeDb(true);
+    (validateWorkforceUpload as any).mockResolvedValueOnce({
+      ok: false,
+      detectedMimeType: 'application/pdf',
+      sizeBytes: 12,
+      codeSafe: 'SCAN_SCAN_FAILED',
+      scanOutcome: 'SCAN_FAILED',
+    });
+    await expect(uploadComplianceDocument(ACTOR, BASE_INPUT as never, db as never)).rejects.toMatchObject({
+      code: 'COMPLIANCE_UPLOAD_REJECTED_SCAN_SCAN_FAILED',
+    });
+  });
+
+  it('keeps non-scan rejections on their existing code', async () => {
+    const db = fakeDb(true);
+    (validateWorkforceUpload as any).mockResolvedValueOnce({
+      ok: false,
+      detectedMimeType: null,
+      sizeBytes: 0,
+      codeSafe: 'EMPTY_FILE',
+    });
+    await expect(uploadComplianceDocument(ACTOR, BASE_INPUT as never, db as never)).rejects.toMatchObject({
+      code: 'COMPLIANCE_UPLOAD_REJECTED_EMPTY_FILE',
+    });
   });
 });
 

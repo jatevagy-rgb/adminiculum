@@ -350,6 +350,12 @@ export interface WorkforceUploadResult {
   archiveInspection?: ArchiveInspectionResult;
   /** Set when scanner runs. Only CLEAN allows ok=true. */
   scanOutcome?: string;
+  /**
+   * Bounded, safe scanner-adapter code (e.g. HTTP_SCAN_UNAUTHORIZED).
+   * Observability only: additive, never used to change the fail-closed verdict.
+   * Never contains provider response bodies, URLs, headers or credentials.
+   */
+  scannerCodeSafe?: string;
 }
 
 /**
@@ -450,10 +456,21 @@ export async function validateWorkforceUpload(
       sizeBytes,
       codeSafe: `SCAN_${scanResult.outcome}`,
       scanOutcome: scanResult.outcome,
+      // Preserve the adapter's bounded code so callers can distinguish
+      // not-configured / unauthorized / forbidden / rate-limited / timeout /
+      // network / 4xx / 5xx / bad response / provider error. Verdict unchanged.
+      scannerCodeSafe: scanResult.codeSafe,
     };
   }
 
-  return { ok: true, detectedMimeType: detected, sizeBytes, codeSafe: 'OK', scanOutcome: scanResult.outcome };
+  return {
+    ok: true,
+    detectedMimeType: detected,
+    sizeBytes,
+    codeSafe: 'OK',
+    scanOutcome: scanResult.outcome,
+    scannerCodeSafe: scanResult.codeSafe,
+  };
 }
 
 // ---------------------------------------------------------------------------
