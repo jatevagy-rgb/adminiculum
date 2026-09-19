@@ -309,7 +309,7 @@ export function CustomerInteractionCard({
 }: {
   caseId: string;
   allowAsk?: boolean;
-  scope?: 'all' | 'questions';
+  scope?: 'all' | 'requests' | 'questions';
   matterPublicationId?: string;
   heading?: string;
 }) {
@@ -372,6 +372,39 @@ export function CustomerInteractionCard({
     </div>
   );
 
+  const requestsPanel = (
+    <div className="rounded-2xl border border-[var(--adm-border)] p-4">
+      <h3 className="font-semibold text-[var(--adm-text)]">Ügyvédi bekérések</h3>
+      <div className="mt-3 space-y-3">
+        {requests.length ? requests.map((request) => (
+          <RequestResponseCard
+            key={request.id}
+            caseId={caseId}
+            request={request}
+            submission={submissions.find((submission) => submission.requestId === request.id)}
+            answers={answersByRequest[request.id] || {}}
+            note={notesByRequest[request.id] || ''}
+            onAnswer={(fieldId, value) => setAnswersByRequest((current) => ({ ...current, [request.id]: { ...(current[request.id] || {}), [fieldId]: value } }))}
+            onNote={(value) => setNotesByRequest((current) => ({ ...current, [request.id]: value }))}
+            onReload={load}
+            detailHref={matterPublicationId ? `/portal/matters/${encodeURIComponent(matterPublicationId)}/requests/${encodeURIComponent(request.id)}` : undefined}
+          />
+        )) : <p className="text-sm text-[var(--adm-text-muted)]">Nincs aktív dokumentum- vagy adatbekérés.</p>}
+      </div>
+    </div>
+  );
+
+  if (scope === 'requests') {
+    return (
+      <Card>
+        <h2 className="cp-card-heading">{heading || 'Amit Öntől kérünk'}</h2>
+        <p className="cp-subtitle mt-2 text-sm">Az iroda által közzétett dokumentum- és adatbekérések. A beküldött anyagot az iroda ellenőrzi, és szükség esetén hiánypótlást kér.</p>
+        {message ? <p className="mt-3 rounded-2xl bg-[var(--adm-ivory-100)] p-3 text-sm text-[var(--adm-text-muted)]">{message}</p> : null}
+        <div className="mt-4">{requestsPanel}</div>
+      </Card>
+    );
+  }
+
   if (scope === 'questions') {
     return (
       <Card>
@@ -389,25 +422,7 @@ export function CustomerInteractionCard({
       <p className="cp-subtitle mt-2 text-sm">Itt jelennek meg az ehhez az ügyhöz tartozó kérdések és az iroda válaszai.</p>
       {message ? <p className="mt-3 rounded-2xl bg-[var(--adm-ivory-100)] p-3 text-sm text-[var(--adm-text-muted)]">{message}</p> : null}
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-[var(--adm-border)] p-4">
-          <h3 className="font-semibold text-[var(--adm-text)]">Ügyvédi bekérések</h3>
-          <div className="mt-3 space-y-3">
-            {requests.length ? requests.map((request) => (
-              <RequestResponseCard
-                key={request.id}
-                caseId={caseId}
-                request={request}
-                submission={submissions.find((submission) => submission.requestId === request.id)}
-                answers={answersByRequest[request.id] || {}}
-                note={notesByRequest[request.id] || ''}
-                onAnswer={(fieldId, value) => setAnswersByRequest((current) => ({ ...current, [request.id]: { ...(current[request.id] || {}), [fieldId]: value } }))}
-                onNote={(value) => setNotesByRequest((current) => ({ ...current, [request.id]: value }))}
-                onReload={load}
-                detailHref={matterPublicationId ? `/portal/matters/${encodeURIComponent(matterPublicationId)}/requests/${encodeURIComponent(request.id)}` : undefined}
-              />
-            )) : <p className="text-sm text-[var(--adm-text-muted)]">Nincs aktív dokumentum- vagy adatbekérés.</p>}
-          </div>
-        </div>
+        {requestsPanel}
         {questionsPanel}
       </div>
     </Card>
