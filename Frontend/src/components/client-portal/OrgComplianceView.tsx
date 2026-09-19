@@ -38,6 +38,26 @@ const bucketBadge: Record<ComplianceBucket, string> = {
 };
 
 /**
+ * Safe, customer-facing Hungarian labels for the client-safe control
+ * implementation status. Raw enum keys must never reach the customer, so an
+ * unknown or absent status degrades to a neutral "not assessed" label instead
+ * of echoing the internal token.
+ */
+const controlStatusLabels: Record<string, string> = {
+  NOT_ASSESSED: "Nincs felmérve",
+  PLANNED: "Tervezett",
+  IMPLEMENTING: "Bevezetés alatt",
+  IMPLEMENTED: "Bevezetve",
+  PARTIAL: "Részben bevezetve",
+  NOT_IMPLEMENTED: "Nincs bevezetve",
+};
+
+export function controlStatusLabel(status: string | null | undefined): string {
+  if (!status) return "Nincs felmérve";
+  return controlStatusLabels[status] ?? "Nincs felmérve";
+}
+
+/**
  * True only when the customer can execute portal input RIGHT NOW: the missing
  * item is portal-answerable AND carries a resolvable canonical questionKey.
  * A missing item that is not answerable through the portal must never produce
@@ -116,6 +136,24 @@ export function summarizeTopics(topics: PortalComplianceTopic[]): Record<Complia
   return counts;
 }
 
+/**
+ * Three truthful overview numbers derived only from the shared primary buckets.
+ * "Folyamatban / ügyvédi vizsgálat" intentionally groups in-progress and
+ * lawyer-review topics. No score, ratio or percentage is derived here.
+ */
+export function summaryGroups(topics: PortalComplianceTopic[]): {
+  customerAction: number;
+  progress: number;
+  noAction: number;
+} {
+  const counts = summarizeTopics(topics);
+  return {
+    customerAction: counts.CUSTOMER_ACTION,
+    progress: counts.IN_PROGRESS + counts.LAWYER_REVIEW,
+    noAction: counts.NO_ACTION,
+  };
+}
+
 /** Local, frontend-only search + status filter over already loaded topics. */
 export function filterTopics(
   topics: PortalComplianceTopic[],
@@ -147,6 +185,58 @@ export function controlProgressFor(
     .filter((value): value is string => Boolean(value))
     .sort()[0] ?? null;
   return { done, total: entry.controls.length, nextReviewAt };
+}
+
+/**
+ * The raw client-safe control rows for a topic, matched by the same safe portal
+ * label used by `controlProgressFor`. When no authoritative projection exists
+ * the caller receives an empty list and must show a truthful empty state — no
+ * control/evidence row is ever invented.
+ */
+export function controlsFor(
+  topic: PortalComplianceTopic,
+  controlsSummary: PortalComplianceControlSummary[] | undefined,
+): PortalComplianceControlSummary["controls"] {
+  const entry = (controlsSummary ?? []).find((candidate) => candidate.requirementTitle === topic.topicLabel);
+  return entry?.controls ?? [];
+}
+
+export type PortalAnswerPayload = {
+  status: "ANSWERED";
+  booleanValue?: boolean;
+  numberValue?: number;
+  enumValue?: string;
+  dateValue?: string;
+  stringValue?: string;
+};
+
+/**
+ * Builds the canonical typed answer payload for a portal-answerable missing
+ * item, exactly as the company-profile answer endpoint expects it. Returns null
+ * for an unusable input so the caller performs no request. Kept as a pure,
+ * testable function so the answering contract is proven without a DOM harness.
+ */
+export function buildAnswerPayload(info: PortalComplianceMissingInfo, answerInput: string): PortalAnswerPayload | null {
+  if (!info.questionKey) return null;
+  const trimmed = answerInput.trim();
+  if (info.valueType !== "BOOLEAN" && !trimmed) return null;
+  if (info.valueType === "BOOLEAN") {
+    if (answerInput === "true" || answerInput === "false") {
+      return { status: "ANSWERED", booleanValue: answerInput === "true" };
+    }
+    return null;
+  }
+  if (info.valueType === "NUMBER") {
+    const numberValue = Number(trimmed);
+    if (!Number.isFinite(numberValue) || (info.integerOnly && !Number.isInteger(numberValue))) return null;
+    return { status: "ANSWERED", numberValue };
+  }
+  if (info.valueType === "ENUM") {
+    if (info.options?.includes(trimmed)) return { status: "ANSWERED", enumValue: trimmed };
+    return null;
+  }
+  if (info.valueType === "DATE") return { status: "ANSWERED", dateValue: trimmed };
+  return { status: "ANSWERED", stringValue: trimmed };
 }
 
 /**
@@ -210,6 +300,11 @@ function TopicGlyph({ kind }: { kind: IconKind }) {
   }
 }
 
+/**
+ * Published customer documents only. The DTO already guarantees these are
+ * explicitly published CLIENT_POLICY publications, so this component renders
+ * whatever the safe projection returned and invents nothing when it is empty.
+ */
 export function TopicDocuments({ documents }: { documents: PortalComplianceDocument[] }) {
   if (documents.length === 0) return null;
   return (
@@ -218,19 +313,26 @@ export function TopicDocuments({ documents }: { documents: PortalComplianceDocum
       <ul className="mt-2 space-y-2">
         {documents.map((doc) => (
           <li key={doc.publicationId} className="rounded-xl border border-stone-200 bg-white p-3 text-sm">
-            <p className="font-medium text-stone-800">{doc.title}</p>
-            <p className="mt-0.5 text-xs text-stone-500">
-              {doc.versionLabel}
-              {doc.publishedAt ? ` · Közzétéve: ${formatDate(doc.publishedAt)}` : ""}
-            </p>
-            {doc.downloadAvailable ? (
-              <a
-                href={portalDownloadUrl(doc.publicationId)}
-                className="mt-2 inline-block rounded-full border border-[#b95e4b] px-3 py-1 text-xs font-semibold text-[#b95e4b] hover:bg-[#fbeae6]"
-              >
-                Letöltés
-              </a>
-            ) : null}
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#eadfbf] bg-[#fffdf8] text-[#8a4536]">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></svg>
+              </span>
+              <div className="min-w-0">
+                <p className="font-medium text-stone-800">{doc.title}</p>
+                <p className="mt-0.5 text-xs text-stone-500">
+                  {doc.versionLabel}
+                  {doc.publishedAt ? ` · Közzétéve: ${formatDate(doc.publishedAt)}` : ""}
+                </p>
+                {doc.downloadAvailable ? (
+                  <a
+                    href={portalDownloadUrl(doc.publicationId)}
+                    className="mt-2 inline-block rounded-full border border-[#b95e4b] px-3 py-1 text-xs font-semibold text-[#b95e4b] hover:bg-[#fbeae6]"
+                  >
+                    Letöltés
+                  </a>
+                ) : null}
+              </div>
+            </div>
           </li>
         ))}
       </ul>
@@ -238,35 +340,335 @@ export function TopicDocuments({ documents }: { documents: PortalComplianceDocum
   );
 }
 
-function Tile({ label, count, active, onClick }: { label: string; count: number; active: boolean; onClick: () => void }) {
+function StatusCard({
+  label,
+  count,
+  hint,
+  tone,
+}: {
+  label: string;
+  count: number;
+  hint: string;
+  tone: "action" | "progress" | "clear";
+}) {
+  const tones = {
+    action: "border-[#e3b7ab] bg-[#fbeae6]/60",
+    progress: "border-[#d7c48a] bg-[#f7f1e2]/70",
+    clear: "border-emerald-300 bg-emerald-50/70",
+  } as const;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`min-w-0 rounded-2xl border p-4 text-left transition ${
-        active ? "border-[#b95e4b] bg-[#fff8f6] shadow-sm" : "border-[#eadfbf] bg-white hover:border-[#d9a396]"
-      }`}
-    >
-      <span className="block text-2xl font-semibold text-stone-900">{count}</span>
-      <span className="mt-1 block text-xs text-stone-600">{label}</span>
-    </button>
+    <div className={`min-w-0 rounded-2xl border p-4 ${tones[tone]}`}>
+      <span className="block text-3xl font-semibold text-stone-900">{count}</span>
+      <span className="mt-1 block text-sm font-semibold text-[#1f3a2e]">{label}</span>
+      <span className="mt-1 block text-xs text-stone-600">{hint}</span>
+    </div>
   );
 }
 
-function Collapsible({ summary, children }: { summary: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
+/**
+ * Grouped missing-information list built from the client-safe DTO. Portal
+ * answerable items keep the canonical typed answer mechanism; everything else
+ * is explicitly routed to office coordination instead of offering a fake CTA.
+ */
+function TopicMissingInformation({
+  topic,
+  activeQuestionKey,
+  answerInput,
+  saving,
+  actionError,
+  onStart,
+  onAnswerChange,
+  onSave,
+  onMarkUnknown,
+  onCancel,
+}: {
+  topic: PortalComplianceTopic;
+  activeQuestionKey: string | null;
+  answerInput: string;
+  saving: boolean;
+  actionError: string | null;
+  onStart: (questionKey: string) => void;
+  onAnswerChange: (value: string) => void;
+  onSave: (info: PortalComplianceMissingInfo) => void;
+  onMarkUnknown: (questionKey: string) => void;
+  onCancel: () => void;
+}) {
+  const answerable = topic.missingInformation.filter(
+    (info) => info.portalAnswerable === true && typeof info.questionKey === "string" && info.questionKey.trim().length > 0,
+  );
+  const officeOnly = topic.missingInformation.filter((info) => !answerable.includes(info));
+
+  const renderItem = (info: PortalComplianceMissingInfo, idx: number) => (
+    <li key={`${info.questionKey ?? info.label}-${idx}`} className="rounded-xl border border-stone-200 bg-white p-3 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium text-stone-800">{info.label}</span>
+        {info.portalAnswerable && info.questionKey ? (
+          activeQuestionKey === info.questionKey ? null : (
+            <button
+              type="button"
+              onClick={() => onStart(info.questionKey!)}
+              className="rounded-lg bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f]"
+            >
+              Adat megadása →
+            </button>
+          )
+        ) : (
+          <span className="text-xs text-stone-500">Irodai egyeztetés szükséges</span>
+        )}
+      </div>
+
+      {info.portalAnswerable && info.questionKey && activeQuestionKey === info.questionKey ? (
+        <div className="mt-2 space-y-2">
+          {info.valueType === "BOOLEAN" ? (
+            <select className={inputClass} value={answerInput} onChange={(e) => onAnswerChange(e.target.value)} disabled={saving}>
+              <option value="">Válasszon</option>
+              <option value="true">Igen</option>
+              <option value="false">Nem</option>
+            </select>
+          ) : info.valueType === "ENUM" ? (
+            <select className={inputClass} value={answerInput} onChange={(e) => onAnswerChange(e.target.value)} disabled={saving}>
+              <option value="">Válasszon</option>
+              {(info.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          ) : (
+            <input
+              type={info.valueType === "NUMBER" ? "number" : info.valueType === "DATE" ? "date" : "text"}
+              step={info.valueType === "NUMBER" ? (info.integerOnly ? 1 : "any") : undefined}
+              className={inputClass}
+              placeholder="Érték megadása..."
+              value={answerInput}
+              onChange={(e) => onAnswerChange(e.target.value)}
+              disabled={saving}
+            />
+          )}
+          {actionError ? <p className="text-xs text-rose-600">{actionError}</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => onSave(info)}
+              disabled={saving || !answerInput.trim()}
+              className="rounded-lg bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50"
+            >
+              {saving ? "Mentés…" : "Mentés"}
+            </button>
+            <button
+              type="button"
+              onClick={() => onMarkUnknown(info.questionKey!)}
+              disabled={saving}
+              className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
+            >
+              Nem ismertként jelölés
+            </button>
+            <button type="button" onClick={onCancel} className="text-xs text-stone-500 hover:underline">
+              Mégse
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </li>
+  );
+
+  if (topic.missingInformation.length === 0) {
+    return (
+      <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
+        Jelenleg nincs Öntől várt hiányzó adat ehhez a területhez.
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-3">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
-        className="text-xs font-semibold text-[#8a4536] hover:underline"
-      >
-        {summary} {open ? "▾" : "▸"}
-      </button>
-      {open ? <div className="mt-2 text-sm text-stone-700">{children}</div> : null}
+    <div className="space-y-4">
+      {answerable.length > 0 ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Ön által megadható adatok</p>
+          <ul className="mt-2 space-y-2">{answerable.map(renderItem)}</ul>
+        </div>
+      ) : null}
+      {officeOnly.length > 0 ? (
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Irodai egyeztetést igénylő adatok</p>
+          <ul className="mt-2 space-y-2">{officeOnly.map(renderItem)}</ul>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Compact control/checkpoint rows derived exclusively from controlsSummary.
+ * Implementation status is translated to a safe customer label and the evidence
+ * line reports the already-computed accepted/stale counts without overclaiming.
+ */
+function TopicControls({
+  topic,
+  controlsSummary,
+}: {
+  topic: PortalComplianceTopic;
+  controlsSummary: PortalComplianceControlSummary[] | undefined;
+}) {
+  const controls = controlsFor(topic, controlsSummary);
+  if (controls.length === 0) {
+    return (
+      <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
+        Ehhez a területhez még nem érhető el intézkedési összegzés.
+      </div>
+    );
+  }
+  return (
+    <ul className="space-y-2">
+      {controls.map((control, idx) => (
+        <li key={`${control.title}-${idx}`} className="rounded-xl border border-stone-200 bg-white p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm font-medium text-stone-800">{control.title}</span>
+            <span className="rounded-full border border-[#eadfbf] bg-[#fffdf8] px-2.5 py-0.5 text-xs font-semibold text-[#8a4536]">
+              {controlStatusLabel(control.implementationStatus)}
+            </span>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600">
+            <span>Érvényes, elfogadott bizonyíték: <b>{control.evidence.acceptedCurrent}</b></span>
+            {control.evidence.stale > 0 ? <span>Lejárt bizonyíték: <b>{control.evidence.stale}</b></span> : null}
+            {control.evidence.missing ? <span>Nincs érvényes bizonyíték</span> : null}
+            {control.lastReviewedAt ? <span>Utolsó felülvizsgálat: {formatDate(control.lastReviewedAt)}</span> : null}
+            {control.nextReviewAt ? <span>Következő felülvizsgálat: {formatDate(control.nextReviewAt)}</span> : null}
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * Truthful, non-technical description of how the map is produced. It explicitly
+ * avoids any AI or certainty claim.
+ */
+function HowMapIsBuilt() {
+  return (
+    <section className="rounded-3xl border border-[#eadfbf] bg-[#fffdf8] p-6 text-stone-800">
+      <h3 className="font-serif text-xl font-semibold text-[#1f3a2e]">Hogyan készül a compliance térkép?</h3>
+      <p className="mt-2 text-sm leading-6 text-stone-700">
+        Az Adminiculum a jogi és megfelelési állapotot kizárólag ellenőrizhető tényekre alapozza:
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div className="rounded-2xl bg-white p-4 shadow-xs">
+          <p className="font-semibold text-stone-950 text-sm">1. Rögzített tények</p>
+          <p className="mt-1 text-xs text-stone-600">A vállalat profiljában megadott strukturált adatok (pl. létszám, tevékenységek, rendszerek).</p>
+        </div>
+        <div className="rounded-2xl bg-white p-4 shadow-xs">
+          <p className="font-semibold text-stone-950 text-sm">2. Dokumentumok</p>
+          <p className="mt-1 text-xs text-stone-600">Érvényes belső szabályzatok, szerződések, adatkezelési tájékoztatók és jegyzőkönyvek megléte.</p>
+        </div>
+        <div className="rounded-2xl bg-white p-4 shadow-xs">
+          <p className="font-semibold text-stone-950 text-sm">3. Ügyvédi vizsgálat</p>
+          <p className="mt-1 text-xs text-stone-600">A jogi szakértők által elvégzett átvilágítási megállapítások és jóváhagyott lépések.</p>
+        </div>
+      </div>
+      <p className="mt-4 text-xs text-stone-500">
+        A jelölések nem jelentenek felelősségkizáró abszolút garanciát vagy 100%-os minősítést. Kérdése van a
+        megállapításokkal kapcsolatban? Forduljon bizalommal az eljáró ügyvédhez a portál üzenetküldő felületén.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Focused topic-detail surface built from the SAME client-safe topic DTO. Every
+ * section reuses existing safe fields only; the interactive missing-information
+ * section is injected so the answering contract stays owned by the parent view.
+ */
+export function TopicDetailView({
+  topic,
+  bucket,
+  controlsSummary,
+  onBack,
+  missingInformationSection,
+  showHowMap = true,
+}: {
+  topic: PortalComplianceTopic;
+  bucket: ComplianceBucket;
+  controlsSummary: PortalComplianceControlSummary[] | undefined;
+  onBack: () => void;
+  missingInformationSection: ReactNode;
+  showHowMap?: boolean;
+}) {
+  const secondaryNote = secondaryStateNote(topic, bucket);
+  const nextAction = nextActionFor(topic, bucket);
+  const progress = controlProgressFor(topic, controlsSummary);
+  return (
+    <div className="space-y-6" data-testid="org-compliance-topic-detail">
+      {/* HEADER */}
+      <section className="min-w-0 rounded-3xl border border-[#eadfbf] bg-[#fffdf8] p-6 shadow-sm sm:p-8">
+        <button type="button" onClick={onBack} className="text-sm font-semibold text-[#8a4536] hover:underline">
+          ← Vissza az áttekintéshez
+        </button>
+        <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9b7b25]">Megfelelési terület</p>
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-2xl">
+            <h1 className="font-serif text-3xl font-semibold text-[#1f3a2e] sm:text-4xl">{topic.topicLabel}</h1>
+            <p className="mt-3 text-sm leading-6 text-stone-600">{topic.shortExplanation}</p>
+          </div>
+          <div className="flex flex-col items-start gap-2">
+            <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${bucketBadge[bucket]}`}>
+              {primaryBadgeLabel(topic, bucket)}
+            </span>
+            <span className="text-xs text-stone-500">Állapot: {topicStateLabel(topic)}</span>
+            {secondaryNote ? <span className="text-xs text-stone-500">{secondaryNote}</span> : null}
+          </div>
+        </div>
+      </section>
+
+      {/* WHY */}
+      <section className={card}>
+        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Miért érinti a céget?</h2>
+        <p className="mt-2 text-sm leading-6 text-stone-700">{topic.shortExplanation}</p>
+      </section>
+
+      {/* NEXT STEP */}
+      <section className={card}>
+        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Következő lépés</h2>
+        {nextAction ? (
+          <div className="mt-3 rounded-xl bg-[#fff8f6] p-3 text-sm text-[#8a4536]">{nextAction}</div>
+        ) : (
+          <p className="mt-2 text-sm text-stone-600">Jelenleg nincs Ön felé mutató következő lépés ezen a területen.</p>
+        )}
+      </section>
+
+      {/* MISSING INFORMATION */}
+      <section className={card} data-testid="org-compliance-missing-information">
+        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Hiányzó információk</h2>
+        <p className="mt-1 text-xs text-stone-500">A portálon megválaszolható adatokat itt tudja rögzíteni. A többi adathoz irodai egyeztetés szükséges.</p>
+        <div className="mt-3">{missingInformationSection}</div>
+      </section>
+
+      {/* DOCUMENTS */}
+      <section className={card} data-testid="org-compliance-documents">
+        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Dokumentumok</h2>
+        <div className="mt-3">
+          {topic.documents.length > 0 ? (
+            <TopicDocuments documents={topic.documents} />
+          ) : (
+            <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
+              Ehhez a területhez még nem tettek közzé ügyfélnek szánt dokumentumot.
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* CONTROLS */}
+      <section className={card} data-testid="org-compliance-controls">
+        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Intézkedések és ellenőrzési pontok</h2>
+        <p className="mt-1 text-xs text-stone-500">Az iroda által rögzített intézkedések és felülvizsgálati pontok összegzése.</p>
+        <div className="mt-3">
+          <TopicControls topic={topic} controlsSummary={controlsSummary} />
+        </div>
+        {progress ? (
+          <p className="mt-3 text-xs text-stone-500">
+            Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
+            {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
+          </p>
+        ) : null}
+      </section>
+
+      {showHowMap ? <HowMapIsBuilt /> : null}
     </div>
   );
 }
@@ -286,6 +688,7 @@ export function OrgComplianceView() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ComplianceBucket | "ALL">("ALL");
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -326,34 +729,18 @@ export function OrgComplianceView() {
     return map;
   }, [topics]);
 
-  const counts = useMemo(() => summarizeTopics(topics), [topics]);
+  const groups = useMemo(() => summaryGroups(topics), [topics]);
 
   const visibleTopics = useMemo(() => filterTopics(topics, search, statusFilter), [topics, search, statusFilter]);
 
   const handleSaveAnswer = async (info: PortalComplianceMissingInfo) => {
     if (!info.questionKey) return;
-    const trimmed = answerInput.trim();
-    if (info.valueType !== "BOOLEAN" && !trimmed) return;
+    const payload = buildAnswerPayload(info, answerInput);
+    if (!payload) return;
     setSaving(true);
     setActionError(null);
     setActionSuccess(null);
     try {
-      const payload = info.valueType === "BOOLEAN"
-        ? (answerInput === "true" || answerInput === "false"
-          ? { status: "ANSWERED" as const, booleanValue: answerInput === "true" }
-          : null)
-        : info.valueType === "NUMBER"
-          ? (() => {
-            const numberValue = Number(trimmed);
-            if (!Number.isFinite(numberValue) || (info.integerOnly && !Number.isInteger(numberValue))) return null;
-            return { status: "ANSWERED" as const, numberValue };
-          })()
-          : info.valueType === "ENUM"
-            ? (info.options?.includes(trimmed) ? { status: "ANSWERED" as const, enumValue: trimmed } : null)
-            : info.valueType === "DATE"
-              ? { status: "ANSWERED" as const, dateValue: trimmed }
-              : { status: "ANSWERED" as const, stringValue: trimmed };
-      if (!payload) return;
       await answerPortalCompanyProfileQuestion(info.questionKey, payload);
       setActionSuccess("Adat sikeresen rögzítve.");
       setActiveQuestionKey(null);
@@ -391,8 +778,65 @@ export function OrgComplianceView() {
     }
   };
 
+  const openTopic = (topicId: string) => {
+    setSelectedTopicId(topicId);
+    setActiveQuestionKey(null);
+    setAnswerInput("");
+    setActionError(null);
+    setActionSuccess(null);
+  };
+
+  const closeTopic = () => {
+    setSelectedTopicId(null);
+    setActiveQuestionKey(null);
+    setAnswerInput("");
+    setActionError(null);
+    setActionSuccess(null);
+  };
+
   if (loading) return <section className={card}>Megfelelési áttekintés betöltése…</section>;
   if (error) return <section className={card}>{error}</section>;
+
+  const selectedTopic = selectedTopicId ? topics.find((topic) => topic.topicId === selectedTopicId) ?? null : null;
+
+  if (selectedTopic) {
+    const bucket = bucketFor.get(selectedTopic.topicId) ?? classifyTopic(selectedTopic);
+    return (
+      <div className="space-y-6" data-testid="org-compliance-view">
+        {actionSuccess ? (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{actionSuccess}</div>
+        ) : null}
+        <TopicDetailView
+          topic={selectedTopic}
+          bucket={bucket}
+          controlsSummary={data?.controlsSummary}
+          onBack={closeTopic}
+          missingInformationSection={
+            <TopicMissingInformation
+              topic={selectedTopic}
+              activeQuestionKey={activeQuestionKey}
+              answerInput={answerInput}
+              saving={saving}
+              actionError={actionError}
+              onStart={(questionKey) => {
+                setActiveQuestionKey(questionKey);
+                setAnswerInput("");
+                setActionError(null);
+              }}
+              onAnswerChange={setAnswerInput}
+              onSave={handleSaveAnswer}
+              onMarkUnknown={handleMarkUnknown}
+              onCancel={() => {
+                setActiveQuestionKey(null);
+                setAnswerInput("");
+                setActionError(null);
+              }}
+            />
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6" data-testid="org-compliance-view">
@@ -430,20 +874,32 @@ export function OrgComplianceView() {
         ) : null}
       </section>
 
-      {/* SUMMARY TILES */}
-      <section className={card}>
+      {/* STATUS SUMMARY */}
+      <section className={card} data-testid="org-compliance-status-summary">
         <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Áttekintés</h2>
-        <p className="mt-1 text-xs text-stone-500">A csempék a feltárt megfelelési területek valós állapotát összegzik.</p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {(["CUSTOMER_ACTION", "IN_PROGRESS", "LAWYER_REVIEW", "NO_ACTION"] as ComplianceBucket[]).map((bucket) => (
-            <Tile
-              key={bucket}
-              label={bucketLabels[bucket]}
-              count={counts[bucket]}
-              active={statusFilter === bucket}
-              onClick={() => setStatusFilter((current) => (current === bucket ? "ALL" : bucket))}
-            />
-          ))}
+        <p className="mt-1 text-xs text-stone-500">
+          A számok a feltárt megfelelési területek valós, ügyfélnek látható állapotát összegzik. Nem tartalmaznak
+          pontszámot vagy százalékos minősítést.
+        </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <StatusCard
+            label="Teendőt igényel"
+            count={groups.customerAction}
+            tone="action"
+            hint="Olyan terület, ahol Önnek vagy az irodának lépnie kell."
+          />
+          <StatusCard
+            label="Folyamatban / ügyvédi vizsgálat"
+            count={groups.progress}
+            tone="progress"
+            hint="Folyamatban lévő vagy ügyvédi vizsgálat alatt álló terület."
+          />
+          <StatusCard
+            label="Jelenleg nincs ügyfélteendő"
+            count={groups.noAction}
+            tone="clear"
+            hint="Ezen a területen jelenleg nincs Öntől várt teendő."
+          />
         </div>
       </section>
 
@@ -486,11 +942,13 @@ export function OrgComplianceView() {
               const progress = controlProgressFor(topic, data?.controlsSummary);
               const secondaryNote = secondaryStateNote(topic, bucket);
               const nextAction = nextActionFor(topic, bucket);
+              const answerableCount = topic.missingInformation.filter((info) => info.portalAnswerable && info.questionKey).length;
+              const officeCount = topic.missingInformation.length - answerableCount;
               return (
                 <article key={topic.topicId} className="rounded-2xl border border-[#eadfbf] bg-white p-4 shadow-xs sm:p-5">
                   <div className="grid gap-4 lg:grid-cols-12">
                     {/* LEFT — what this area is */}
-                    <div className="lg:col-span-4">
+                    <div className="lg:col-span-5">
                       <div className="flex items-start gap-3">
                         <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#eadfbf] bg-[#fffdf8] text-[#8a4536]">
                           <TopicGlyph kind={iconKind(topic.topicId)} />
@@ -500,15 +958,12 @@ export function OrgComplianceView() {
                           <p className="mt-1 text-sm text-stone-700">{topic.shortExplanation}</p>
                         </div>
                       </div>
-                      <Collapsible summary="Részletek megnyitása">
-                        <p>{topic.shortExplanation}</p>
-                        {/* Raw backend state is preserved here as subordinate, truthful context. */}
-                        <p className="mt-2 text-xs text-stone-500">Állapot: {topicStateLabel(topic)}</p>
-                      </Collapsible>
+                      {/* Raw backend state is preserved here as subordinate, truthful context. */}
+                      <p className="mt-3 text-xs text-stone-500">Állapot: {topicStateLabel(topic)}</p>
                     </div>
 
                     {/* MIDDLE — primary state and the immediate customer step */}
-                    <div className="lg:col-span-5">
+                    <div className="lg:col-span-4">
                       <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${bucketBadge[bucket]}`}>
                         {primaryBadgeLabel(topic, bucket)}
                       </span>
@@ -521,97 +976,14 @@ export function OrgComplianceView() {
                         </div>
                       ) : null}
 
-                      {topic.missingInformation.length > 0 ? (
-                        <div className="mt-4">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Szükséges adatok Öntől</p>
-                          <ul className="mt-2 space-y-2">
-                            {topic.missingInformation.map((info, idx) => (
-                              <li key={idx} className="rounded-xl border border-stone-200 bg-white p-3 text-sm">
-                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                  <span className="font-medium text-stone-800">{info.label}</span>
-                                  {info.portalAnswerable && info.questionKey ? (
-                                    activeQuestionKey === info.questionKey ? null : (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveQuestionKey(info.questionKey!);
-                                          setAnswerInput("");
-                                          setActionError(null);
-                                        }}
-                                        className="rounded-lg bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f]"
-                                      >
-                                        Adat megadása →
-                                      </button>
-                                    )
-                                  ) : (
-                                    <span className="text-xs text-stone-500">Irodai egyeztetés szükséges</span>
-                                  )}
-                                </div>
-
-                                {info.portalAnswerable && info.questionKey && activeQuestionKey === info.questionKey ? (
-                                  <div className="mt-2 space-y-2">
-                                    {info.valueType === "BOOLEAN" ? (
-                                      <select className={inputClass} value={answerInput} onChange={(e) => setAnswerInput(e.target.value)} disabled={saving}>
-                                        <option value="">Válasszon</option>
-                                        <option value="true">Igen</option>
-                                        <option value="false">Nem</option>
-                                      </select>
-                                    ) : info.valueType === "ENUM" ? (
-                                      <select className={inputClass} value={answerInput} onChange={(e) => setAnswerInput(e.target.value)} disabled={saving}>
-                                        <option value="">Válasszon</option>
-                                        {(info.options ?? []).map((option) => <option key={option} value={option}>{option}</option>)}
-                                      </select>
-                                    ) : (
-                                      <input
-                                        type={info.valueType === "NUMBER" ? "number" : info.valueType === "DATE" ? "date" : "text"}
-                                        step={info.valueType === "NUMBER" ? (info.integerOnly ? 1 : "any") : undefined}
-                                        className={inputClass}
-                                        placeholder="Érték megadása..."
-                                        value={answerInput}
-                                        onChange={(e) => setAnswerInput(e.target.value)}
-                                        disabled={saving}
-                                      />
-                                    )}
-                                    {actionError ? <p className="text-xs text-rose-600">{actionError}</p> : null}
-                                    <div className="flex flex-wrap gap-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSaveAnswer(info)}
-                                        disabled={saving || !answerInput.trim()}
-                                        className="rounded-lg bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50"
-                                      >
-                                        {saving ? "Mentés…" : "Mentés"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleMarkUnknown(info.questionKey!)}
-                                        disabled={saving}
-                                        className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-                                      >
-                                        Nem ismertként jelölés
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setActiveQuestionKey(null);
-                                          setAnswerInput("");
-                                          setActionError(null);
-                                        }}
-                                        className="text-xs text-stone-500 hover:underline"
-                                      >
-                                        Mégse
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
+                      <p className="mt-3 text-xs text-stone-600">
+                        {topic.missingInformation.length > 0
+                          ? `Hiányzó adat: ${topic.missingInformation.length}${answerableCount > 0 ? ` · ebből Önnek megválaszolható: ${answerableCount}` : ""}${officeCount > 0 ? ` · irodai egyeztetéssel: ${officeCount}` : ""}`
+                          : "Nincs hiányzó adat."}
+                      </p>
                     </div>
 
-                    {/* RIGHT — authoritative control progress + published documents */}
+                    {/* RIGHT — authoritative control progress + published documents + detail */}
                     <div className="lg:col-span-3">
                       {progress ? (
                         <div className="mb-3 rounded-xl bg-[#fffdf8] p-3 text-xs text-stone-700">
@@ -619,7 +991,18 @@ export function OrgComplianceView() {
                           {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
                         </div>
                       ) : null}
-                      <TopicDocuments documents={topic.documents} />
+                      <p className="text-xs text-stone-600">
+                        {topic.documents.length > 0
+                          ? `Közzétett ügyfél-dokumentum: ${topic.documents.length}`
+                          : "Nincs közzétett ügyfél-dokumentum."}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openTopic(topic.topicId)}
+                        className="mt-3 inline-block rounded-full bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f]"
+                      >
+                        Részletek megnyitása →
+                      </button>
                     </div>
                   </div>
                 </article>
@@ -629,31 +1012,7 @@ export function OrgComplianceView() {
         )}
       </section>
 
-      {/* HOW THE MAP IS BUILT */}
-      <section className="rounded-3xl border border-[#eadfbf] bg-[#fffdf8] p-6 text-stone-800">
-        <h3 className="font-serif text-xl font-semibold text-[#1f3a2e]">Hogyan készül a compliance térkép?</h3>
-        <p className="mt-2 text-sm leading-6 text-stone-700">
-          Az Adminiculum a jogi és megfelelési állapotot kizárólag ellenőrizhető tényekre alapozza:
-        </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-2xl bg-white p-4 shadow-xs">
-            <p className="font-semibold text-stone-950 text-sm">1. Rögzített tények</p>
-            <p className="mt-1 text-xs text-stone-600">A vállalat profiljában megadott strukturált adatok (pl. létszám, tevékenységek, rendszerek).</p>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-xs">
-            <p className="font-semibold text-stone-950 text-sm">2. Dokumentumok</p>
-            <p className="mt-1 text-xs text-stone-600">Érvényes belső szabályzatok, szerződések, adatkezelési tájékoztatók és jegyzőkönyvek megléte.</p>
-          </div>
-          <div className="rounded-2xl bg-white p-4 shadow-xs">
-            <p className="font-semibold text-stone-950 text-sm">3. Ügyvédi vizsgálat</p>
-            <p className="mt-1 text-xs text-stone-600">A jogi szakértők által elvégzett átvilágítási megállapítások és jóváhagyott lépések.</p>
-          </div>
-        </div>
-        <p className="mt-4 text-xs text-stone-500">
-          A jelölések nem jelentenek felelősségkizáró abszolút garanciát vagy 100%-os minősítést. Kérdése van a
-          megállapításokkal kapcsolatban? Forduljon bizalommal az eljáró ügyvédhez a portál üzenetküldő felületén.
-        </p>
-      </section>
+      <HowMapIsBuilt />
     </div>
   );
 }
