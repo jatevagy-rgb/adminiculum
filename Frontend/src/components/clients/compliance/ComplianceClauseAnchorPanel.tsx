@@ -35,6 +35,49 @@ export function isHttpUrl(value: string | null | undefined): boolean {
   return typeof value === "string" && /^https?:\/\//i.test(value.trim());
 }
 
+/**
+ * Every meaningful row field the read model already transports, in the order the
+ * row displays them. Free-text search covers all of these so an internal reader
+ * can find a row by any identifier that is visible in it — not only its clause.
+ */
+const SEARCHABLE_ROW_FIELDS = [
+  "clauseRef",
+  "clauseTitle",
+  "anchorDisplay",
+  "canonicalReference",
+  "anchorKey",
+  "eli",
+  "celex",
+  "locator",
+  "ecli",
+  "caseId",
+  "caseLocator",
+  "decisionId",
+  "authorityLocator",
+  "sourceUrl",
+  "rationale",
+] as const;
+
+function searchTextOf(row: ComplianceClauseAnchorRow): string {
+  return SEARCHABLE_ROW_FIELDS.map((field) => row[field])
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
+    .join(" ");
+}
+
+/**
+ * Search-only projection of one row.
+ *
+ * Peter transports a canonical `TV/<year>/<act>` reference as `T/<year>/<act>`;
+ * the backend normalizes `T` → `TV` before storage, so the canonical value never
+ * contains the alias. Matching both spellings here keeps search usable without
+ * persisting, displaying, or re-emitting the alias.
+ */
+function searchableRowText(row: ComplianceClauseAnchorRow): string {
+  const canonical = searchTextOf(row);
+  const alias = canonical.replace(/TV\//g, "T/");
+  return alias === canonical ? canonical : `${canonical} ${alias}`;
+}
+
 function formatDate(value: string | null): string {
   if (!value) return "—";
   try {
@@ -262,6 +305,7 @@ export function ComplianceClauseAnchorPanel({
   const [relationType, setRelationType] = useState("");
   const [anchorType, setAnchorType] = useState("");
   const [unresolvedOnly, setUnresolvedOnly] = useState(false);
+  const [matrixCollapsed, setMatrixCollapsed] = useState(false);
   const [autoRefreshAttempts, setAutoRefreshAttempts] = useState(0);
 
   const load = useCallback(async () => {
@@ -319,7 +363,7 @@ export function ComplianceClauseAnchorPanel({
     const query = clauseQuery.trim().toLowerCase();
     return rows.filter((row) => {
       if (query) {
-        const haystack = `${row.clauseRef} ${row.clauseTitle ?? ""}`.toLowerCase();
+        const haystack = searchableRowText(row).toLowerCase();
         if (!haystack.includes(query)) return false;
       }
       if (relationType && row.relationType !== relationType) return false;
@@ -337,9 +381,23 @@ export function ComplianceClauseAnchorPanel({
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">
           Jogi hivatkozások mátrixa
         </p>
-        <p className="text-[10px] text-[var(--adm-text-muted)]">
-          A dokumentum saját, gépi azonosítóval jelölt hivatkozásai. Ez nem jogi értékelés.
-        </p>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-[10px] text-[var(--adm-text-muted)]">
+            A dokumentum saját, gépi azonosítóval jelölt hivatkozásai. Ez nem jogi értékelés.
+          </p>
+          {!loading && !error && hasAnyRows ? (
+            <button
+              type="button"
+              data-testid="clause-anchor-toggle"
+              aria-expanded={!matrixCollapsed}
+              aria-controls="compliance-clause-anchor-matrix"
+              onClick={() => setMatrixCollapsed((value) => !value)}
+              className="rounded border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[10px] text-[var(--adm-text)]"
+            >
+              {matrixCollapsed ? "Mátrix megnyitása" : "Mátrix összecsukása"}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {loading ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Betöltés…</p> : null}
@@ -363,7 +421,12 @@ export function ComplianceClauseAnchorPanel({
       ) : null}
 
       {!loading && !error && hasAnyRows ? (
-        <div className="mt-3 space-y-3">
+        matrixCollapsed ? (
+          <p className="mt-3 text-[10px] text-[var(--adm-text-muted)]" data-testid="clause-anchor-counts">
+            {`Megjelenítve: ${visibleRows.length} / ${rows.length} tétel · Azonosító nélkül: ${unresolvedCount} · Feldolgozási jelzéssel: ${warnedCount}`}
+          </p>
+        ) : (
+        <div id="compliance-clause-anchor-matrix" className="mt-3 space-y-3">
           {selectedVersion
             ? versionProvenance({ versions, selectedDocumentVersionId: selectedVersion.documentVersionId, onSelect: setSelectedVersionId })
             : null}
@@ -425,6 +488,7 @@ export function ComplianceClauseAnchorPanel({
             <ul className="space-y-2">{visibleRows.map((row) => clauseAnchorRow(row))}</ul>
           )}
         </div>
+        )
       ) : null}
     </div>
   );
