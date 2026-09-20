@@ -118,8 +118,9 @@ function isCurrent(validFrom: Date | null, validUntil: Date | null, now: Date): 
  * Not a customer entry point: callers must resolve the client through an
  * authorized workspace first.
  */
-export async function resolveControlEvidenceCatalog(clientId: string, db: Db, now: Date = new Date()): Promise<ControlEvidenceCatalog> {
-  const snapshots = await db.requirementApplicability.findMany({
+export async function resolveControlEvidenceCatalog(clientId: string, db: Db | Tx, now: Date = new Date()): Promise<ControlEvidenceCatalog> {
+  const client = db as Tx;
+  const snapshots = await client.requirementApplicability.findMany({
     where: {
       clientId,
       scopeType: 'COMPANY',
@@ -140,7 +141,7 @@ export async function resolveControlEvidenceCatalog(clientId: string, db: Db, no
 
   const requirementVersionIds = [...new Set(snapshots.map((snapshot) => snapshot.requirementVersionId))];
   const mappings = requirementVersionIds.length
-    ? await db.requirementControlMap.findMany({
+    ? await client.requirementControlMap.findMany({
         where: { requirementVersionId: { in: requirementVersionIds } },
         select: {
           requirementVersionId: true,
@@ -205,6 +206,12 @@ export interface ControlEvidenceAnswerResult {
  * Records the client answer for one control's evidence question.
  * Idempotent for YES: an existing current evidence link is reused instead of
  * creating a duplicate record.
+ *
+ * The write gate is the SAME canonical eligibility boundary as the read
+ * journey: the requested control must be present in
+ * `resolveControlEvidenceCatalog(clientId)`. A control that is absent (not
+ * allow-listed, or currently DOES_NOT_APPLY / unevaluated) fails closed before
+ * any ClientControl, EvidenceRecord or EvidenceControlLink is touched.
  */
 export async function submitControlEvidenceAnswer(
   identityId: string,
@@ -218,13 +225,13 @@ export async function submitControlEvidenceAnswer(
 
   return db.$transaction(async (tx) => {
     const clientId = await workspaceClient(identityId, workspaceId, tx);
-    const definition = await tx.controlDefinition.findFirst({ where: { key: controlKey, status: 'ACTIVE' } });
-    if (!definition) error(404, 'CONTROL_DEFINITION_NOT_FOUND', 'Control definition not found.');
-    // Client-safe gate: only registry-allow-listed controls with an authored
-    // customer question and a known client-safe module may be answered.
-    const questionHu = definition.description?.trim() ?? '';
-    const module = moduleForControlKey(controlKey);
-    if (!lookupSafeControlLabel(controlKey) || !questionHu || !module) error(404, 'EVIDENCE_QUESTION_NOT_FOUND', 'The requested evidence question is not available.');
+    // Single canonical eligibility boundary shared with the read journey.
+    const catalog = await resolveControlEvidenceCatalog(clientId, tx);
+    const entry = catalog.controls.find((item) => item.controlKey === controlKey);
+    if (!entry) error(404, 'EVIDENCE_QUESTION_NOT_FOUND', 'The requested evidence question is not available.');
+    const definition = await tx.controlDefinition.findFirst({ where: { id: entry.controlDefinitionId, status: 'ACTIVE' } });
+    if (!definition) error(404, 'EVIDENCE_QUESTION_NOT_FOUND', 'The requested evidence question is not available.');
+    const { module, questionHu } = entry;
     const control = await ensureClientControl(tx, clientId, definition.id, definition.defaultReviewCadenceDays);
     const now = new Date();
 

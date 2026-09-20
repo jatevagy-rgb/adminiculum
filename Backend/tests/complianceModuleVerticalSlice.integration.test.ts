@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { answerCompanyProfileQuestion } from '../src/modules/client-workspace/companyProfileAnswerService';
 import { getControlEvidenceJourney, resolveControlEvidenceCatalog, submitControlEvidenceAnswer } from '../src/modules/client-workspace/companyProfileEvidenceService';
+import { lookupSafeControlLabel } from '../src/modules/compliance/safeTopicRegistry';
 import { seedComplianceModuleRuleFamilies } from '../src/modules/compliance/complianceModuleSeedingService';
 import { provisionComplianceModuleRules } from '../src/modules/compliance/complianceModuleProvisioning';
 import { createTypedFactInTx } from '../src/modules/compliance/typedFactMutationService';
@@ -289,5 +290,51 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
       await db.requirementControlMap.deleteMany({ where: { controlDefinitionId: unlisted.id } });
       await db.controlDefinition.deleteMany({ where: { id: unlisted.id } });
     }
+  });
+
+  it('READ_WRITE_GATE_UNIFIED: GET-visible catalogue membership equals POST-answerable membership', async () => {
+    await answer('personal_data_processing', { status: 'ANSWERED', booleanValue: true });
+    const catalog = await resolveControlEvidenceCatalog(clientId, db);
+    const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    expect(catalog.controls.map((entry) => entry.controlKey)).toEqual(journey.items.map((item) => item.controlKey));
+    expect(catalog.controls.map((entry) => entry.controlKey)).toContain('C-DATA-002');
+    await answer('personal_data_processing', { status: 'UNKNOWN' });
+  });
+
+  it('DOES_NOT_APPLY_POST_IS_REJECTED_WITH_ZERO_SIDE_EFFECT', async () => {
+    await answer('personal_data_processing', { status: 'ANSWERED', booleanValue: false });
+    const catalog = await resolveControlEvidenceCatalog(clientId, db);
+    expect(catalog.controls.some((entry) => entry.controlKey === 'C-DATA-002')).toBe(false);
+
+    const [controlsBefore, evidenceBefore, linksBefore] = await Promise.all([
+      db.clientControl.count({ where: { clientId } }),
+      db.evidenceRecord.count({ where: { clientId } }),
+      db.evidenceControlLink.count({ where: { clientId } }),
+    ]);
+
+    await expect(
+      submitControlEvidenceAnswer(representativeId, workspaceId, 'C-DATA-002', { answer: 'UNKNOWN' }, db),
+    ).rejects.toMatchObject({ status: 404, code: 'EVIDENCE_QUESTION_NOT_FOUND' });
+
+    expect(await db.clientControl.count({ where: { clientId } })).toBe(controlsBefore);
+    expect(await db.evidenceRecord.count({ where: { clientId } })).toBe(evidenceBefore);
+    expect(await db.evidenceControlLink.count({ where: { clientId } })).toBe(linksBefore);
+
+    await answer('personal_data_processing', { status: 'UNKNOWN' });
+  });
+
+  it('ALLOWLISTED_CONTROL_WITHOUT_APPLICABILITY_IS_REJECTED_WITH_ZERO_SIDE_EFFECT', async () => {
+    expect(lookupSafeControlLabel('C-DATA-003')).not.toBeNull();
+    const catalog = await resolveControlEvidenceCatalog(clientId, db);
+    expect(catalog.controls.some((entry) => entry.controlKey === 'C-DATA-003')).toBe(false);
+
+    const controlDefinition = await db.controlDefinition.findFirstOrThrow({ where: { key: 'C-DATA-003' } });
+    expect(await db.clientControl.count({ where: { clientId, controlDefinitionId: controlDefinition.id } })).toBe(0);
+
+    await expect(
+      submitControlEvidenceAnswer(representativeId, workspaceId, 'C-DATA-003', { answer: 'UNKNOWN' }, db),
+    ).rejects.toMatchObject({ status: 404, code: 'EVIDENCE_QUESTION_NOT_FOUND' });
+
+    expect(await db.clientControl.count({ where: { clientId, controlDefinitionId: controlDefinition.id } })).toBe(0);
   });
 });
