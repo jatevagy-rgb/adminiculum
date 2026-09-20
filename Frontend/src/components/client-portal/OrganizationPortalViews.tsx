@@ -22,6 +22,7 @@ import {
   type PortalOrganizationIntake,
   type PortalOrganizationUnit,
   type PortalWorkspace,
+  type PortalWorkspaceDocument,
 } from "@/lib/clientPortalApi";
 import { clientSafeError, customerInteractionApi, type CustomerRequestDTO, type CustomerSubmissionDTO } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
@@ -75,6 +76,52 @@ function relationshipLabel(value: string) {
   return value === "OWN" ? "Saját ügyem" : "Megosztott ügy";
 }
 
+/**
+ * Customer portal domain boundaries.
+ *
+ * `workspace.documents` mixes office-published documents with customer tasks
+ * (requests) and customer submissions. Only SHARED_DOCUMENT entries are a
+ * published document library item; the rest are Teendők / request history and
+ * must never be presented as part of the Dokumentumok library.
+ */
+export function isCustomerPublishedDocument(item: PortalWorkspaceDocument): boolean {
+  return item.kind === "SHARED_DOCUMENT";
+}
+
+export function selectCustomerPublishedDocuments(documents: PortalWorkspaceDocument[]): PortalWorkspaceDocument[] {
+  return documents.filter(isCustomerPublishedDocument);
+}
+
+export function selectCustomerRequestDocuments(documents: PortalWorkspaceDocument[]): PortalWorkspaceDocument[] {
+  return documents.filter((item) => item.kind === "DOCUMENT_REQUEST" || item.kind === "CORRECTION_REQUEST");
+}
+
+export function selectCustomerSubmissionDocuments(documents: PortalWorkspaceDocument[]): PortalWorkspaceDocument[] {
+  return documents.filter((item) => item.kind === "SUBMISSION" || item.kind === "CORRECTION_SUBMISSION");
+}
+
+/**
+ * The projection can surface the same customer item through more than one path.
+ * Deduplicate on the stable (kind, id) pair so a request is never rendered twice.
+ */
+export function dedupeCustomerItems<T extends { id: string; kind?: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    const key = `${item.kind ?? "item"}:${item.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
+/** Canonical customer request detail route, or the safe matter fallback. */
+export function customerRequestDetailHref(matterId?: string | null, requestId?: string | null): string {
+  if (!matterId || !requestId) return matterId ? `/portal/matters/${encodeURIComponent(matterId)}` : "/portal/ugyek";
+  return `/portal/matters/${encodeURIComponent(matterId)}/requests/${encodeURIComponent(requestId)}`;
+}
+
 function intakeStatusLabel(value: string) {
   const labels: Record<string, string> = {
     DRAFT: "Tervezet",
@@ -90,11 +137,29 @@ function intakeStatusLabel(value: string) {
   return labels[value] || "Feldolgozás alatt";
 }
 
-function OrganizationContextHeader({ context, units }: { context: PortalIdentityContext; units: PortalOrganizationUnit[] }) {
+function OrganizationContextHeader({ context, units, compact = false }: { context: PortalIdentityContext; units: PortalOrganizationUnit[]; compact?: boolean }) {
   const workspace = context.selectedWorkspace;
   if (!workspace) return null;
   const roleLabel = workspace.membershipRole === "APPROVER" ? "Szervezeti kapcsolattartó" : workspace.membershipRole === "REPRESENTATIVE" ? "Szervezeti kapcsolattartó" : "Szervezeti portálfelhasználó";
   const isCaseRelay = workspace.mode === "CASE_RELAY";
+  const surfaceLabel = isCaseRelay ? "Együttműködési ügyfélfelület" : "Szervezeti ügyfélfelület";
+  const unitsLabel = units.length ? units.map((unit) => unit.name).join(" · ") : "Nincs egységhez kötött tagság";
+  // Domain pages already receive workspace context from the common shell. A
+  // compact context bar keeps the organization identification without repeating
+  // a full company hero on every page.
+  if (compact) {
+    return (
+      <section className="min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3" data-testid="org-context-compact">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">{surfaceLabel}</span>
+          <span className="break-words font-semibold text-stone-950">{workspace.clientDisplayName}</span>
+          <span className="text-stone-500">· {workspace.name}</span>
+          <span className="text-stone-600">Szervezeti egységeim: {unitsLabel}</span>
+          <span className="text-stone-600">Szerepkör: {roleLabel}</span>
+        </div>
+      </section>
+    );
+  }
   return (
     <section className={`${card} bg-gradient-to-br from-white to-[#f7f1e2]`}>
       <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#9b7b25]">{isCaseRelay ? "Együttműködési ügyfélfelület" : "Szervezeti ügyfélfelület"}</p>
@@ -239,44 +304,107 @@ function OrganizationMatterDetail({
 }
 
 function OrganizationDocuments({ workspace }: { workspace: PortalWorkspace }) {
-  const shared = workspace.documents.filter((item) => item.kind === "SHARED_DOCUMENT");
-  const uploads = workspace.documents.filter((item) => item.kind !== "SHARED_DOCUMENT");
+  const shared = dedupeCustomerItems(selectCustomerPublishedDocuments(workspace.documents));
   return (
     <div className="space-y-5">
-      <Section title="Legutóbb megosztott" empty={!shared.length}>{shared.map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4"><b>{item.title}</b><span className="block text-sm text-stone-600">{item.matterTitle || "Szervezeti ügy"} · {formatDate(item.publishedAt)}</span></Link>)}</Section>
-      <Section title="Ügyek szerint" empty={!workspace.documents.length}>{workspace.documents.map((item) => <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl bg-stone-50 p-4"><b>{item.matterTitle || "Közzétett ügy"}</b><span className="block text-sm text-stone-700">{item.title}</span></Link>)}</Section>
-      <Section title="Feltöltésre vár" empty={!uploads.length}>{uploads.map((item) => <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4"><b>{item.title}</b><span className="block text-sm text-stone-700">A fájl beérkezés után ellenőrzésre vár.</span></Link>)}</Section>
+      <section className={card}>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Dokumentumok</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Az iroda által közzétett dokumentumok</h1>
+        <p className="mt-2 text-sm text-stone-600">Itt csak azok a dokumentumok jelennek meg, amelyeket az iroda kifejezetten közzétett az Ön számára. A dokumentum- és adatbekérések, valamint a beküldött anyagok a Teendők között találhatók.</p>
+      </section>
+      <Section title="Közzétett dokumentumok" empty={!shared.length} emptyText="Az iroda még nem osztott meg dokumentumot ezen a munkaterületen.">
+        {shared.map((item) => (
+          <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="break-words text-stone-950">{item.title}</b>
+              {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}
+            </div>
+            {item.explanation ? <span className="mt-1 block break-words text-sm text-stone-600">{item.explanation}</span> : null}
+            {item.publishedAt ? <span className="mt-1 block text-xs text-stone-500">Közzétéve: {formatDate(item.publishedAt)}</span> : null}
+            <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Dokumentum megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
     </div>
   );
 }
 
 function OrganizationMessages({ workspace, cases }: { workspace: PortalWorkspace; cases: PortalOrganizationCase[] }) {
-  if (!workspace.messages.length) return <Section title="Kapcsolat" empty emptyText="Még nincs folyamatban kérdés vagy üzenetváltás." />;
+  const messages = workspace.messages;
   return (
-    <Section title="Kapcsolat">
-      <p className="text-sm text-stone-600">Itt tud az irodával az ügyeiről egyeztetni.</p>
-      <div className="mt-3 grid gap-3">
-        {workspace.messages.map((message) => {
-          const linked = cases.find((item) => message.matterTitle.includes(item.publicTitle) || message.actionUrl.includes(item.publicReference));
-          return <Link key={message.id} href={message.actionUrl} className="rounded-2xl bg-stone-50 p-4"><b>{message.matterTitle}</b><span className="block text-sm text-stone-700">{linked?.organizationUnitName ? `${linked.organizationUnitName} · ` : ""}{message.subject} · {message.status}</span></Link>;
-        })}
-      </div>
-    </Section>
+    <div className="space-y-5">
+      <section className={card}>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Kapcsolat</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Portálos beszélgetések</h1>
+        <p className="mt-2 text-sm text-stone-600">Itt tud az irodával az ügyeiről egyeztetni. Csak a portálon indított kérdések és az iroda kifejezetten elküldött válaszai jelennek meg.</p>
+      </section>
+      {messages.length ? (
+        <Section title="Kapcsolat">
+          <div className="grid gap-3">
+            {messages.map((message) => {
+              const linked = cases.find((item) => message.matterTitle.includes(item.publicTitle) || message.actionUrl.includes(item.publicReference));
+              return (
+                <Link key={message.id} href={message.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <b className="break-words text-stone-950">{message.subject}</b>
+                    <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{message.status}</span>
+                  </div>
+                  <p className="mt-1 break-words text-sm text-stone-600">{message.matterTitle}{linked?.organizationUnitName ? ` · ${linked.organizationUnitName}` : ""}</p>
+                  {message.updatedAt ? <p className="mt-1 text-xs text-stone-500">Legutóbbi aktivitás: {formatDate(message.updatedAt)}</p> : null}
+                  <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Beszélgetés megnyitása →</span>
+                </Link>
+              );
+            })}
+          </div>
+        </Section>
+      ) : (
+        <Section title="Kapcsolat" empty emptyText="Még nincs folyamatban portálos beszélgetés." />
+      )}
+    </div>
   );
 }
 
 function OrganizationTasks({ workspace }: { workspace: PortalWorkspace }) {
-  const groups: Array<[string, string]> = [["now", "Most szükséges"], ["upcoming", "Közelgő"], ["completed", "Teljesített"]];
+  const groups: Array<[string, string]> = [["now", "Most szükséges"], ["upcoming", "Közelgő"], ["completed", "Teljesített / korábbi"]];
+  const requests = dedupeCustomerItems(selectCustomerRequestDocuments(workspace.documents));
+  const submissions = dedupeCustomerItems(selectCustomerSubmissionDocuments(workspace.documents));
   return (
     <div className="space-y-5">
       <section className={card}>
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Teendők</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Ami most Öntől kell</h1>
+        <p className="mt-2 text-sm text-stone-600">Az iroda által kért teendők, valamint a dokumentum- és adatbekérések egy helyen. A beküldött anyagot az iroda ellenőrzi, és szükség esetén hiánypótlást kér.</p>
       </section>
       {groups.map(([bucket, label]) => {
         const items = workspace.actions.filter((item) => item.bucket === bucket);
         return <Section key={bucket} title={label} empty={!items.length} emptyText={bucket === "completed" ? "Még nincs teljesített teendő." : "Jelenleg nincs Öntől szükséges teendő."}>{items.slice(0, 10).map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm"><b className="block text-stone-950">{item.title}</b><span className="mt-1 block text-stone-600">{item.matterTitle}{item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}</span></Link>)}</Section>;
       })}
+      <Section title="Dokumentum- és adatbekérések" empty={!requests.length} emptyText="Jelenleg nincs Öntől szükséges dokumentum- vagy adatbekérés.">
+        {requests.map((item) => (
+          <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 text-sm transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="block break-words text-stone-950">{item.title}</b>
+              {item.status ? <span className="rounded-full bg-white px-3 py-1 text-xs text-stone-700">{item.status}</span> : null}
+            </div>
+            <span className="mt-1 block text-stone-600">{item.matterTitle || "Közzétett ügy"}</span>
+            {item.description ? <span className="mt-1 block break-words text-stone-600">{item.description}</span> : null}
+            <span className="mt-2 inline-flex font-semibold text-[#7a5f18]">Bekérés megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
+      {submissions.length ? (
+        <Section title="Beküldött anyagaim">
+          {submissions.slice(0, 10).map((item) => (
+            <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <b className="block break-words text-stone-950">{item.title}</b>
+                {item.status ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.status}</span> : null}
+              </div>
+              <span className="mt-1 block text-stone-600">{item.matterTitle || "Közzétett ügy"}{item.publishedAt ? ` · Beküldve: ${formatDate(item.publishedAt)}` : ""}</span>
+            </Link>
+          ))}
+        </Section>
+      ) : null}
     </div>
   );
 }
@@ -544,7 +672,7 @@ export function OrganizationPortalViews({ view, resourceId, requestId, context, 
   return (
     <div className="space-y-6" data-testid="organization-client-portal">
       {view !== "grow" ? (
-        <OrganizationContextHeader context={context} units={state.units} />
+        <OrganizationContextHeader context={context} units={state.units} compact={view !== "home"} />
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500 pb-1" data-testid="org-context-minimal">
           <div className="flex items-center gap-2">
