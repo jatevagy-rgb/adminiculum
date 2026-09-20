@@ -105,7 +105,12 @@ describe("organization portal domain composition (source contract)", () => {
 
   it("aggregates Teendők from actions, requests and submissions without duplication", () => {
     const body = sliceFn(orgViews(), "OrganizationTasks");
-    assert.match(body, /workspace\.actions\.filter/);
+    // ORGANIZATION reuses the canonical Home customer-action projection so Home and
+    // Teendők can never disagree about whether the customer has work to do; CASE_RELAY
+    // keeps its pre-existing workspace action projection.
+    assert.match(body, /canonicalTaskRows\(/);
+    assert.match(body, /getPortalOrgHome\(\)/);
+    assert.match(body, /workspaceTaskRows\(workspace\.actions\)/);
     assert.match(body, /Most szükséges/);
     assert.match(body, /selectCustomerRequestDocuments/);
     assert.match(body, /selectCustomerSubmissionDocuments/);

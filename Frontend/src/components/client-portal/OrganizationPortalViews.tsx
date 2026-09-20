@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   createPortalOrganizationIntake,
   getPortalMatter,
+  getPortalOrgHome,
   getPortalOrganizationCase,
   getPortalOrganizationCases,
   getPortalOrganizationContracts,
@@ -17,11 +18,13 @@ import {
   type PortalLeadershipUnitAggregate,
   type PortalOrgCompany,
   type PortalOrgContract,
+  type PortalOrgHomeAction,
   type PortalOrganizationCase,
   type PortalOrganizationCaseDetail,
   type PortalOrganizationIntake,
   type PortalOrganizationUnit,
   type PortalWorkspace,
+  type PortalWorkspaceAction,
   type PortalWorkspaceDocument,
   type PortalWorkspaceMessage,
 } from "@/lib/clientPortalApi";
@@ -374,8 +377,110 @@ function OrganizationMessages({ workspace, cases }: { workspace: PortalWorkspace
   );
 }
 
-function OrganizationTasks({ workspace }: { workspace: PortalWorkspace }) {
-  const groups: Array<[string, string]> = [["now", "Most szükséges"], ["upcoming", "Közelgő"], ["completed", "Teljesített / korábbi"]];
+/**
+ * Canonical ORGANIZATION task row for the Teendők page.
+ *
+ * The shared customer-action projection (`PortalOrgHomeAction`) carries no
+ * completion status and no bucket, so completion is never fabricated here. The
+ * grouping reuses the existing portal convention: a due date more than a week out
+ * is "upcoming", everything currently actionable is "now".
+ */
+export type OrganizationTaskRow = {
+  id: string;
+  title: string;
+  context: string;
+  dueAt: string | null;
+  href: string;
+  bucket: "now" | "upcoming" | "completed";
+};
+
+const UPCOMING_TASK_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Mirrors the canonical clientPortal `actionBucket` convention for published actions. */
+export function canonicalTaskBucket(dueAt: string | null | undefined): "now" | "upcoming" {
+  if (dueAt && new Date(dueAt).getTime() > Date.now() + UPCOMING_TASK_THRESHOLD_MS) return "upcoming";
+  return "now";
+}
+
+/** Canonical destination for a customer-safe org-home action, mirroring the Home rows. */
+export function organizationTaskHref(action: Pick<PortalOrgHomeAction, "id" | "matterPublicationId" | "area" | "actionUrl">): string {
+  if (action.actionUrl) return action.actionUrl;
+  if (action.matterPublicationId) return `/portal/matters/${encodeURIComponent(action.matterPublicationId)}`;
+  if (action.area === "COMPLIANCE") return "/portal/megfeleles";
+  return `/portal/action-requests/${encodeURIComponent(action.id)}`;
+}
+
+/** Never render the same canonical action twice. */
+function dedupeTaskRows(rows: OrganizationTaskRow[]): OrganizationTaskRow[] {
+  const seen = new Set<string>();
+  const result: OrganizationTaskRow[] = [];
+  for (const row of rows) {
+    if (seen.has(row.id)) continue;
+    seen.add(row.id);
+    result.push(row);
+  }
+  return result;
+}
+
+/**
+ * The canonical customer-action projection shared with the ORGANIZATION Home. This
+ * is the SAME list Home counts, so Home and Teendők can never disagree about
+ * whether the customer has work to do.
+ */
+export function canonicalTaskRows(actions: readonly PortalOrgHomeAction[]): OrganizationTaskRow[] {
+  return dedupeTaskRows(actions.map((action) => ({
+    id: action.id,
+    title: action.title,
+    context: action.matterTitle || action.typeLabel,
+    dueAt: action.dueAt ?? null,
+    href: organizationTaskHref(action),
+    bucket: canonicalTaskBucket(action.dueAt),
+  })));
+}
+
+/** The legacy workspace.actions projection, kept unchanged for CASE_RELAY. */
+export function workspaceTaskRows(actions: readonly PortalWorkspaceAction[]): OrganizationTaskRow[] {
+  return dedupeTaskRows(actions.map((action) => ({
+    id: action.id,
+    title: action.title,
+    context: action.matterTitle,
+    dueAt: action.dueAt ?? null,
+    href: action.actionUrl,
+    bucket: action.bucket,
+  })));
+}
+
+const taskGroups: Array<["now" | "upcoming" | "completed", string]> = [["now", "Most szükséges"], ["upcoming", "Közelgő"], ["completed", "Teljesített / korábbi"]];
+
+function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: PortalWorkspace; mode?: string; canonicalActions?: PortalOrgHomeAction[] | null }) {
+  // ORGANIZATION reuses the canonical customer-action projection that the Home
+  // already renders and counts. CASE_RELAY keeps its existing workspace.actions
+  // projection unchanged.
+  const isOrganization = mode === "ORGANIZATION";
+  const [loadedActions, setLoadedActions] = useState<PortalOrgHomeAction[] | null>(canonicalActions ?? null);
+  const [canonicalFailed, setCanonicalFailed] = useState(false);
+
+  useEffect(() => {
+    if (!isOrganization || canonicalActions) return;
+    let cancelled = false;
+    setLoadedActions(null);
+    setCanonicalFailed(false);
+    getPortalOrgHome()
+      .then((home) => { if (!cancelled) setLoadedActions(home?.actions ?? []); })
+      .catch(() => { if (!cancelled) { setCanonicalFailed(true); setLoadedActions(null); } });
+    return () => { cancelled = true; };
+  }, [canonicalActions, isOrganization]);
+
+  const pendingCanonical = isOrganization && (canonicalActions ?? loadedActions) === null && !canonicalFailed;
+  const rows = useMemo<OrganizationTaskRow[]>(() => {
+    if (!isOrganization) return workspaceTaskRows(workspace.actions);
+    const canonical = canonicalActions ?? loadedActions;
+    if (canonical) return canonicalTaskRows(canonical);
+    // A transient Home-projection failure must not hide real published actions:
+    // fall back to the existing workspace projection.
+    return workspaceTaskRows(workspace.actions);
+  }, [canonicalActions, loadedActions, isOrganization, workspace.actions]);
+
   const requests = dedupeCustomerItems(selectCustomerRequestDocuments(workspace.documents));
   const submissions = dedupeCustomerItems(selectCustomerSubmissionDocuments(workspace.documents));
   return (
@@ -385,10 +490,16 @@ function OrganizationTasks({ workspace }: { workspace: PortalWorkspace }) {
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Ami most Öntől kell</h1>
         <p className="mt-2 text-sm text-stone-600">Az iroda által kért teendők, valamint a dokumentum- és adatbekérések egy helyen. A beküldött anyagot az iroda ellenőrzi, és szükség esetén hiánypótlást kér.</p>
       </section>
-      {groups.map(([bucket, label]) => {
-        const items = workspace.actions.filter((item) => item.bucket === bucket);
-        return <Section key={bucket} title={label} empty={!items.length} emptyText={bucket === "completed" ? "Még nincs teljesített teendő." : "Jelenleg nincs Öntől szükséges teendő."}>{items.slice(0, 10).map((item) => <Link key={item.id} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm"><b className="block text-stone-950">{item.title}</b><span className="mt-1 block text-stone-600">{item.matterTitle}{item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}</span></Link>)}</Section>;
-      })}
+      {pendingCanonical ? (
+        <Section title="Most szükséges" empty={false}>
+          <p role="status" className="rounded-2xl border border-stone-200 bg-white p-4 text-sm text-stone-600">Teendők betöltése…</p>
+        </Section>
+      ) : (
+        taskGroups.map(([bucket, label]) => {
+          const items = rows.filter((item) => item.bucket === bucket);
+          return <Section key={bucket} title={label} empty={!items.length} emptyText={bucket === "completed" ? "Még nincs teljesített teendő." : "Jelenleg nincs Öntől szükséges teendő."}>{items.slice(0, 10).map((item) => <Link key={item.id} href={item.href} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm"><b className="block text-stone-950">{item.title}</b><span className="mt-1 block text-stone-600">{item.context}{item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}</span></Link>)}</Section>;
+        })
+      )}
       <Section title="Dokumentum- és adatbekérések" empty={!requests.length} emptyText="Jelenleg nincs Öntől szükséges dokumentum- vagy adatbekérés.">
         {requests.map((item) => (
           <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 text-sm transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
@@ -719,7 +830,7 @@ export function OrganizationPortalViews({ view, resourceId, requestId, context, 
       ) : null}
       {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
-      {view === "tasks" ? <OrganizationTasks workspace={workspace} /> : null}
+      {view === "tasks" ? <OrganizationTasks workspace={workspace} mode={context.selectedWorkspace?.mode} /> : null}
       {view === "contracts" ? <OrganizationContracts contracts={state.contracts} /> : null}
       {view === "company" ? <OrganizationCompany company={state.company} onProfileUpdated={refreshCompany} /> : null}
       {view === "grow" ? <OrgGrowView /> : null}
