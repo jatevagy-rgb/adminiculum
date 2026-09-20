@@ -24,7 +24,7 @@ const inputClass =
 type ComplianceBucket = "CUSTOMER_ACTION" | "IN_PROGRESS" | "LAWYER_REVIEW" | "NO_ACTION";
 
 const bucketLabels: Record<ComplianceBucket, string> = {
-  CUSTOMER_ACTION: "Teendő tőletek",
+  CUSTOMER_ACTION: "Teendő szükséges",
   IN_PROGRESS: "Folyamatban",
   LAWYER_REVIEW: "Ügyvédi vizsgálat",
   NO_ACTION: "Nincs jelenlegi teendő",

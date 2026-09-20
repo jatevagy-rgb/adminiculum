@@ -563,6 +563,20 @@ async function runCustomerGrowBrowserQA() {
         }
       }
 
+      // The lightweight quick signal is an OVERVIEW capability and must render
+      // exactly once, on Áttekintés (the loop above ends on that tab).
+      const overviewSurvey = page.locator("[data-testid='grow-feltaras-section']");
+      if ((await overviewSurvey.count()) !== 1) {
+        throw new Error(`Overview must render exactly one [data-testid='grow-feltaras-section'], got ${await overviewSurvey.count()}`);
+      }
+      const overviewText = await page.evaluate(() => document.body.innerText);
+      if (!/Hol érdemes javítani\?/i.test(overviewText)) {
+        throw new Error("Overview quick-signal question 'Hol érdemes javítani?' missing");
+      }
+      if (!/korábban beküldött/i.test(overviewText)) {
+        throw new Error("Overview survey history section not found");
+      }
+
       // 4. Felmérések Tab Inspection
       console.log("4. Inspecting Felmérések tab (catalogue, filters, guide, survey)...");
       await page.locator("[data-testid='grow-tab-felmeresek']").click();
@@ -580,13 +594,14 @@ async function runCustomerGrowBrowserQA() {
         throw new Error("3-step explanatory guide 'Mi történik a kitöltés után?' not found");
       }
 
-      // Verify generic survey section and history
+      // The lightweight quick signal belongs to Áttekintés only: the formal
+      // Felmérések / diagnózisok journey must not duplicate it.
       const genericSurvey = page.locator("[data-testid='grow-feltaras-section']");
-      if ((await genericSurvey.count()) === 0) {
-        throw new Error("Generic survey section [data-testid='grow-feltaras-section'] not found");
+      if ((await genericSurvey.count()) !== 0) {
+        throw new Error("Quick operational signal must not be rendered on the Felmérések tab");
       }
-      if (!/korábban beküldött/i.test(felmeresekText)) {
-        throw new Error("Survey history section not found");
+      if (/Hol érdemes javítani\?/i.test(felmeresekText) || /korábban beküldött/i.test(felmeresekText)) {
+        throw new Error("Quick-signal form/history must not appear on the Felmérések tab");
       }
 
       await page.screenshot({ path: path.join(SHOTS, `felmeresek-${viewport.name}.png`), fullPage: true });

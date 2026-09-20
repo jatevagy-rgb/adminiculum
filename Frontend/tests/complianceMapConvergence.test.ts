@@ -404,7 +404,7 @@ describe("Compliance Map truthful primary-state convergence", () => {
   it("keeps REVIEW_RECOMMENDED on its canonical customer-attention mapping", () => {
     const t = topic({ state: "REVIEW_RECOMMENDED" });
     assert.equal(classifyTopic(t), "CUSTOMER_ACTION");
-    assert.equal(primaryBadgeLabel(t, "CUSTOMER_ACTION"), "Teendő tőletek");
+    assert.equal(primaryBadgeLabel(t, "CUSTOMER_ACTION"), "Teendő szükséges");
     assert.equal(secondaryStateNote(t, "CUSTOMER_ACTION"), null);
   });
 
