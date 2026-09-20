@@ -15,13 +15,17 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
-import { InteractionError, assertClientReadAccess, requireInternal } from '../client-interaction/base';
+import { InteractionError, assertClientReadAccess, internalCaseScope, requireInternal } from '../client-interaction/base';
 import {
   findClauseAnchorReferencesByAnchorKey,
   listClauseAnchorsForDocumentWithBinding,
   summarizeClauseAnchorsForDocument,
 } from './service';
 import { buildComplianceMonitoringManifest } from './monitoringManifest';
+import {
+  buildDocumentReferenceImpactForCanonicalReference,
+  buildLegalSourceImpactForVersion,
+} from '../compliance/legalSourceImpact';
 
 const router = Router();
 
@@ -45,6 +49,22 @@ async function assertDocumentBelongsToClient(clientId: string, documentId: strin
   if (!document) {
     throw new InteractionError(404, 'COMPLIANCE_INTELLIGENCE_DOCUMENT_NOT_FOUND', 'Document not found for this client.');
   }
+}
+
+/**
+ * Client read scope of an internal actor for a cross-client impact projection.
+ * ADMIN/PARTNER are unscoped (null); every other role is limited to the clients
+ * of the cases it can access, exactly like assertClientReadAccess.
+ */
+async function resolveImpactClientScope(internal: { userId: string; role: string }): Promise<Set<string> | null> {
+  const scope = await internalCaseScope(internal);
+  if (scope === null) return null;
+  if (scope.length === 0) return new Set<string>();
+  const cases = await prisma.case.findMany({
+    where: { id: { in: scope } },
+    select: { clientId: true },
+  });
+  return new Set(cases.map((row) => row.clientId));
 }
 
 router.use(authenticate);
@@ -113,6 +133,62 @@ router.get('/monitoring-manifest', async (req: Request, res: Response): Promise<
     res.json(await buildComplianceMonitoringManifest());
   } catch (error) {
     respond(error, res, 'COMPLIANCE_INTELLIGENCE_MONITORING_MANIFEST_ERROR');
+  }
+});
+
+/**
+ * C4C — read-only legal-source IMPACT projection.
+ *
+ * INTERNAL ONLY: workforce authenticate + requireInternal + the actor's client
+ * read scope. Exactly one subject is accepted: an existing canonical
+ * `legalSourceVersionId` (full impact), or an exact C4A `canonicalReference`
+ * (document-reference impact; requirement/control/applicability sections report
+ * `derivable: false`).
+ *
+ * The projection only READS persisted canonical relations. It never creates a
+ * finding, proposal, case, task, notice or ClientControl mutation, and a legal
+ * change is reported as review-required, never as client non-compliance.
+ */
+router.get('/legal-source-impact', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const internal = actor(req);
+    requireInternal(internal);
+    const allowedClientIds = await resolveImpactClientScope(internal);
+    const legalSourceVersionId =
+      typeof req.query.legalSourceVersionId === 'string' ? req.query.legalSourceVersionId.trim() : '';
+    const canonicalReference =
+      typeof req.query.canonicalReference === 'string' ? req.query.canonicalReference.trim() : '';
+
+    if (legalSourceVersionId && canonicalReference) {
+      throw new InteractionError(
+        400,
+        'COMPLIANCE_INTELLIGENCE_IMPACT_SUBJECT_AMBIGUOUS',
+        'Provide exactly one impact subject.',
+      );
+    }
+    if (!legalSourceVersionId && !canonicalReference) {
+      throw new InteractionError(
+        400,
+        'COMPLIANCE_INTELLIGENCE_IMPACT_SUBJECT_REQUIRED',
+        'A legalSourceVersionId or canonicalReference is required.',
+      );
+    }
+
+    const projection = legalSourceVersionId
+      ? await buildLegalSourceImpactForVersion(legalSourceVersionId, prisma, allowedClientIds)
+      : await buildDocumentReferenceImpactForCanonicalReference(canonicalReference, prisma, allowedClientIds);
+
+    if (!projection) {
+      throw new InteractionError(
+        404,
+        'COMPLIANCE_INTELLIGENCE_IMPACT_SUBJECT_NOT_FOUND',
+        'Impact subject not found.',
+      );
+    }
+
+    res.json(projection);
+  } catch (error) {
+    respond(error, res, 'COMPLIANCE_INTELLIGENCE_LEGAL_SOURCE_IMPACT_ERROR');
   }
 });
 
