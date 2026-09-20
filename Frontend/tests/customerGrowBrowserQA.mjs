@@ -505,16 +505,19 @@ async function runCustomerGrowBrowserQA() {
       console.log("2. Verifying Áttekintés tab hero and real KPIs...");
       const pageText = await page.evaluate(() => document.body.innerText);
 
-      if (!pageText.includes("Fejlesztési Áttekintés")) {
-        throw new Error("Editorial title 'Fejlesztési Áttekintés' not found on overview tab");
+      if (!pageText.includes("Grow With Us")) {
+        throw new Error("Single Grow identity 'Grow With Us' not found on overview tab");
+      }
+      if (!pageText.includes("Felmérések és fejlesztési lehetőségek")) {
+        throw new Error("Hero title 'Felmérések és fejlesztési lehetőségek' not found on overview tab");
       }
       if (!pageText.includes("Teszt Vállalat Kft.")) {
         throw new Error("Client display name 'Teszt Vállalat Kft.' not found on overview tab");
       }
 
-      // Check the 5 KPI tiles
-      if (!pageText.includes("KITÖLTÉSRE VÁR") || !pageText.includes("BEFEJEZETT") || !pageText.includes("FOLYAMATOK") || !pageText.includes("FOLYAMATBAN") || !pageText.includes("MÉRT EREDMÉNY")) {
-        throw new Error("One or more of the 5 real KPI tiles are missing on Áttekintés tab");
+      // Check the 6 real KPI tiles
+      if (!pageText.includes("KITÖLTÉSRE VÁRÓ FELMÉRÉS") || !pageText.includes("BEFEJEZETT FELMÉRÉS") || !pageText.includes("FELMÉRT FOLYAMAT") || !pageText.includes("AKTÍV KEZDEMÉNYEZÉS") || !pageText.includes("KÖZZÉTETT LEHETŐSÉG") || !pageText.includes("MÉRT EREDMÉNY")) {
+        throw new Error("One or more of the 6 real KPI tiles are missing on Áttekintés tab");
       }
 
       // Check findings spotlight
