@@ -1153,6 +1153,219 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
     });
   });
 
+  describe('Document Annotation Summary Read-Model Hardening', () => {
+    it('CURRENT VERSION ONLY: counts annotations strictly for current version, never historical versions', async () => {
+      // v1 has 4 annotations, v2 (current) has 2 annotations
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'doc-1',
+            caseId: 'case-1',
+            name: 'doc.pdf',
+            fileName: 'doc.pdf',
+            title: 'Doc',
+          }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v2', version: 2, isCurrent: true, previousVersionId: 'v1', createdAt: new Date() },
+            { id: 'v1', version: 1, isCurrent: false, createdAt: new Date() },
+          ]),
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+        documentAnnotation: {
+          groupBy: jest.fn().mockImplementation((args: any) => {
+            // Verify query was strictly scoped to current version v2 and deletedAt is null
+            expect(args.where.documentId).toBe('doc-1');
+            expect(args.where.documentVersionId).toBe('v2');
+            expect(args.where.deletedAt).toBeNull();
+            return [
+              { status: 'OPEN', annotationType: 'QUESTION', _count: { _all: 2 } },
+            ];
+          }),
+        },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-1', { prisma: mockPrisma });
+      expect(projection).not.toBeNull();
+      expect(projection!.annotationSummary).toEqual({
+        documentVersionId: 'v2',
+        totalCount: 2,
+        openCount: 2,
+        resolvedCount: 0,
+        byType: {
+          QUESTION: 2,
+        },
+      });
+      // Verifies it is 2 and NEVER 6 (4 from v1 + 2 from v2)
+      expect(projection!.annotationSummary.totalCount).toBe(2);
+      expect(mockPrisma.documentAnnotation.groupBy).toHaveBeenCalledTimes(1);
+    });
+
+    it('STATUS COUNTS: correctly partitions open vs resolved counts', async () => {
+      // 2 open, 1 resolved -> total=3, open=2, resolved=1
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'doc-1', caseId: 'case-1', name: 'd.pdf' }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v2', version: 2, isCurrent: true, createdAt: new Date() },
+          ]),
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+        documentAnnotation: {
+          groupBy: jest.fn().mockResolvedValue([
+            { status: 'OPEN', annotationType: 'REVIEW_COMMENT', _count: { _all: 2 } },
+            { status: 'RESOLVED', annotationType: 'QUESTION', _count: { _all: 1 } },
+          ]),
+        },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-1', { prisma: mockPrisma });
+      expect(projection!.annotationSummary.totalCount).toBe(3);
+      expect(projection!.annotationSummary.openCount).toBe(2);
+      expect(projection!.annotationSummary.resolvedCount).toBe(1);
+    });
+
+    it('TYPE COUNTS: counts distinct annotation types truthfully', async () => {
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'doc-1', caseId: 'case-1', name: 'd.pdf' }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v2', version: 2, isCurrent: true, createdAt: new Date() },
+          ]),
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+        documentAnnotation: {
+          groupBy: jest.fn().mockResolvedValue([
+            { status: 'OPEN', annotationType: 'QUESTION', _count: { _all: 3 } },
+            { status: 'OPEN', annotationType: 'REVIEW_COMMENT', _count: { _all: 2 } },
+            { status: 'RESOLVED', annotationType: 'INTERNAL_NOTE', _count: { _all: 1 } },
+            { status: 'RESOLVED', annotationType: 'DECISION', _count: { _all: 1 } },
+          ]),
+        },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-1', { prisma: mockPrisma });
+      expect(projection!.annotationSummary.byType).toEqual({
+        QUESTION: 3,
+        REVIEW_COMMENT: 2,
+        INTERNAL_NOTE: 1,
+        DECISION: 1,
+      });
+      expect(projection!.annotationSummary.totalCount).toBe(7);
+      expect(projection!.annotationSummary.openCount).toBe(5);
+      expect(projection!.annotationSummary.resolvedCount).toBe(2);
+    });
+
+    it('NO CURRENT VERSION: returns zero truthful summary without querying annotations', async () => {
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'doc-empty', caseId: 'case-1', name: 'empty.pdf' }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([]), // No versions!
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+        documentAnnotation: {
+          groupBy: jest.fn(),
+        },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-empty', { prisma: mockPrisma });
+      expect(projection).not.toBeNull();
+      expect(projection!.annotationSummary).toEqual({
+        documentVersionId: null,
+        totalCount: 0,
+        openCount: 0,
+        resolvedCount: 0,
+        byType: {},
+      });
+      expect(mockPrisma.documentAnnotation.groupBy).not.toHaveBeenCalled();
+    });
+
+    it('OTHER DOCUMENT ISOLATION: scopes where query strictly to target documentId and currentVersionId', async () => {
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'doc-target', caseId: 'case-1', name: 'target.pdf' }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'ver-target', version: 1, isCurrent: true, createdAt: new Date() },
+          ]),
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+        documentAnnotation: {
+          groupBy: jest.fn().mockResolvedValue([]),
+        },
+      };
+
+      await getDocumentReviewProjection('doc-target', { prisma: mockPrisma });
+      expect(mockPrisma.documentAnnotation.groupBy).toHaveBeenCalledWith({
+        by: ['status', 'annotationType'],
+        where: {
+          documentId: 'doc-target',
+          documentVersionId: 'ver-target',
+          deletedAt: null,
+        },
+        _count: { _all: true },
+      });
+    });
+
+    it('PRIVACY: projection does not expose raw annotation/comment text or anchor payload', async () => {
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'doc-1', caseId: 'case-1', name: 'd.pdf' }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v1', version: 1, isCurrent: true, createdAt: new Date() },
+          ]),
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+        documentAnnotation: {
+          groupBy: jest.fn().mockResolvedValue([
+            { status: 'OPEN', annotationType: 'INTERNAL_NOTE', _count: { _all: 1 } },
+          ]),
+        },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-1', { prisma: mockPrisma });
+      const summaryKeys = Object.keys(projection!.annotationSummary);
+      expect(summaryKeys).toEqual(['documentVersionId', 'totalCount', 'openCount', 'resolvedCount', 'byType']);
+
+      const serialized = JSON.stringify(projection!.annotationSummary);
+      expect(serialized).not.toContain('internalNote');
+      expect(serialized).not.toContain('reviewComment');
+      expect(serialized).not.toContain('selectedText');
+      expect(serialized).not.toContain('structuralPath');
+      expect(serialized).not.toContain('contentFingerprint');
+      expect(serialized).not.toContain('rectX');
+      expect(serialized).not.toContain('pointX');
+    });
+  });
+
   describe('HTTP Route Integration Tests', () => {
     it('GET /api/v1/documents/:id/review-projection returns 401 unauthenticated', async () => {
       const res = await requestJson(createApp(), '/api/v1/documents/doc-1/review-projection', false);
