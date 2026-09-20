@@ -31,6 +31,7 @@ import {
   ELI_ACT_TYPES,
   ELI_SUBDIVISION_CODES,
   ELI_SUBDIVISION_HIERARCHY_RANK,
+  ELI_SUBDIVISION_IDENTIFIER_POLICY,
   type EliActIdentitySegmentKind,
   type EliActTypeDefinition,
 } from './eliReferenceData';
@@ -220,10 +221,14 @@ export function validateEliActReference(value: string | null | undefined): EliAc
  * `art_5/par_2/pnt_b` or `art_6:59`.
  *
  * Each segment is `<3-letter-lowercase-code>[_<bounded-identifier>]`; the code
- * must be in the verified EU subdivision vocabulary; the path may not exceed
+ * must be in the verified EU subdivision vocabulary; the canonical identifier
+ * requirement of that code must be satisfied (a bare `art`, `par`, `pnt`, `anx`
+ * or singleton like `pbl` is NOT a canonical identity); the path may not exceed
  * `MAX_SUBDIVISION_DEPTH` segments; and the structural hierarchy ranks must be
- * strictly increasing. An identifier-less segment (e.g. a preamble singleton) is
- * admitted by the optional-identifier form — it is never repaired or expanded.
+ * strictly increasing. The identifier requirement comes from
+ * `ELI_SUBDIVISION_IDENTIFIER_POLICY` with a FAIL-CLOSED `REQUIRED` default, so
+ * an unproven form stays non-canonical. This is a validator, not a normalizer: a
+ * bare code is rejected, never silently expanded to `_1`.
  */
 export function validateEliSubdivisionPath(value: string | null | undefined): EliSubdivisionValidation {
   if (typeof value !== 'string') return invalidSubdivision('MALFORMED_SUBDIVISION_SEGMENT');
@@ -245,6 +250,15 @@ export function validateEliSubdivisionPath(value: string | null | undefined): El
     const code = match[1];
     if (!SUBDIVISION_CODE_SET.has(code)) return invalidSubdivision('UNKNOWN_SUBDIVISION_CODE');
 
+    // Canonical identifier requirement — consumed from data, fail-closed default.
+    const identifier = match[2] ?? null;
+    const policy = ELI_SUBDIVISION_IDENTIFIER_POLICY[code];
+    const requirement = policy?.requirement ?? 'REQUIRED';
+    if (requirement === 'REQUIRED' && identifier === null) return invalidSubdivision('MALFORMED_SUBDIVISION_SEGMENT');
+    if (requirement === 'FIXED_ONE' && (policy?.fixedIdentifier === undefined || identifier !== policy.fixedIdentifier)) {
+      return invalidSubdivision('MALFORMED_SUBDIVISION_SEGMENT');
+    }
+
     const rank = ELI_SUBDIVISION_HIERARCHY_RANK[code];
     const hierarchyRank = typeof rank === 'number' ? rank : null;
     // A ranked parent must never appear after a ranked child. Unranked (known)
@@ -254,7 +268,7 @@ export function validateEliSubdivisionPath(value: string | null | undefined): El
     }
     if (hierarchyRank !== null) previousRank = hierarchyRank;
 
-    segments.push({ code, identifier: match[2] ?? null, hierarchyRank });
+    segments.push({ code, identifier, hierarchyRank });
   }
 
   return { valid: true, subdivision: { segments, path: trimmed } };

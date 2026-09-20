@@ -144,6 +144,81 @@ export const ELI_SUBDIVISION_CODES: readonly string[] = [
 ];
 
 /**
+ * Identifier cardinality of one subdivision code.
+ *
+ *  - `REQUIRED`  the code cannot form a canonical identity without `_<identifier>`
+ *  - `FIXED_ONE` the code is a deterministic singleton; the canonical identifier
+ *                is exactly `1` (so `pbl_1`, never bare `pbl`)
+ *  - `OPTIONAL`  the code may appear with or without an identifier — reserved for
+ *                a form PROVEN by authoritative material; currently unused
+ */
+export type EliSubdivisionIdentifierRequirement = 'REQUIRED' | 'FIXED_ONE' | 'OPTIONAL';
+
+export interface EliSubdivisionIdentifierPolicy {
+  requirement: EliSubdivisionIdentifierRequirement;
+  /** For `FIXED_ONE`, the only accepted identifier. */
+  fixedIdentifier?: string;
+  /** Provenance: `EU` only when the authoritative source itself proves the rule. */
+  source: 'EU' | 'ADMINICULUM_CANONICALIZATION_POLICY';
+  note: string;
+}
+
+/**
+ * Canonical identifier requirement per subdivision code.
+ *
+ * FAIL-CLOSED DEFAULT — any code absent from this map is treated as `REQUIRED`.
+ * Codes whose usage has not been proven therefore stay non-canonical in bare form
+ * without forcing policy metadata for all 66 verified codes.
+ *
+ * SOURCE FACT vs POLICY. The EU "Subdivision" authority table
+ * (concept scheme 20260617-0) publishes each code and its English label, e.g.
+ * `PBL` = "preamble", `ENC` = "enacting terms", `WRP` = "closing part",
+ * `INP` = "introductory part", `TOC` = "table of contents", `TIT` = "title",
+ * `TIS` = "title (subdivision)". It does NOT publish the identifier cardinality
+ * of a canonical subdivision URI. The deterministic `_1` singleton rule below is
+ * therefore an ADMINICULUM CANONICALIZATION POLICY, labelled explicitly on every
+ * entry — it is not asserted as an EU fact.
+ */
+export const ELI_SUBDIVISION_IDENTIFIER_POLICY: Readonly<Record<string, EliSubdivisionIdentifierPolicy>> = {
+  pbl: {
+    requirement: 'FIXED_ONE',
+    fixedIdentifier: '1',
+    source: 'ADMINICULUM_CANONICALIZATION_POLICY',
+    note: 'preamble — one per act',
+  },
+  enc: {
+    requirement: 'FIXED_ONE',
+    fixedIdentifier: '1',
+    source: 'ADMINICULUM_CANONICALIZATION_POLICY',
+    note: 'enacting terms — one per act',
+  },
+  wrp: {
+    requirement: 'FIXED_ONE',
+    fixedIdentifier: '1',
+    source: 'ADMINICULUM_CANONICALIZATION_POLICY',
+    note: 'closing part — one per act',
+  },
+  inp: {
+    requirement: 'FIXED_ONE',
+    fixedIdentifier: '1',
+    source: 'ADMINICULUM_CANONICALIZATION_POLICY',
+    note: 'introductory part — one per act',
+  },
+  toc: {
+    requirement: 'FIXED_ONE',
+    fixedIdentifier: '1',
+    source: 'ADMINICULUM_CANONICALIZATION_POLICY',
+    note: 'table of contents — one per act',
+  },
+  tit: {
+    requirement: 'FIXED_ONE',
+    fixedIdentifier: '1',
+    source: 'ADMINICULUM_CANONICALIZATION_POLICY',
+    note: 'title metadata (EU label "title"); NOT the structural title container',
+  },
+};
+
+/**
  * BOUNDED STRUCTURAL HIERARCHY — Adminiculum ordering policy, not an EU value.
  *
  * The EU Subdivision authority table is FLAT: it publishes subdivision codes but
@@ -152,6 +227,12 @@ export const ELI_SUBDIVISION_CODES: readonly string[] = [
  * URIs (part → title → chapter → section → subsection → article → paragraph →
  * point), with document-level containers first and the annex as a top-level
  * container.
+ *
+ * TIS vs TIT (authoritative EU labels, verified 2026-09-20):
+ *   - `tis` = "title (subdivision)" → the STRUCTURAL title container ("cím").
+ *   - `tit` = "title"               → title metadata/text. Its structural role is
+ *     NOT proven, so it is deliberately NOT ranked here (order-neutral) and is
+ *     never used as the structural title container.
  *
  * A subdivision path must carry strictly increasing ranks. A code that is NOT
  * ranked here is a known EU subdivision code but order-neutral: it is never
@@ -166,7 +247,7 @@ export const ELI_SUBDIVISION_HIERARCHY_RANK: Readonly<Record<string, number>> = 
   enc: 30, // enacting terms
   anx: 35, // annex
   prt: 40, // part
-  tit: 50, // title
+  tis: 50, // title (subdivision) — the structural title container
   cpt: 60, // chapter
   sct: 70, // section
   sbs: 75, // subsection

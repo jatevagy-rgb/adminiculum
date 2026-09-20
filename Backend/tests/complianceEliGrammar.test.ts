@@ -28,6 +28,7 @@ import {
   ELI_REFERENCE_VERIFIED_ON,
   ELI_SUBDIVISION_CODES,
   ELI_SUBDIVISION_HIERARCHY_RANK,
+  ELI_SUBDIVISION_IDENTIFIER_POLICY,
   ELI_SUBDIVISION_SOURCE,
   ELI_UNVERIFIED_ACT_TYPES,
 } from '../src/modules/compliance-doc-intelligence/eliReferenceData';
@@ -214,23 +215,55 @@ describe('C5A ELI subdivision path grammar', () => {
     });
   });
 
-  it('admits identifier-less singleton segments without expanding them', () => {
-    expect(validateEliSubdivisionPath('pbl')).toEqual({
+  it('requires a canonical identifier: a bare numbered code is not an identity', () => {
+    expectInvalidSubdivision('art', 'MALFORMED_SUBDIVISION_SEGMENT');
+    expectInvalidSubdivision('par', 'MALFORMED_SUBDIVISION_SEGMENT');
+    expectInvalidSubdivision('pnt', 'MALFORMED_SUBDIVISION_SEGMENT');
+    expectInvalidSubdivision('anx', 'MALFORMED_SUBDIVISION_SEGMENT');
+    expectInvalidSubdivision('unp', 'MALFORMED_SUBDIVISION_SEGMENT');
+    // A validator never expands a bare code; the same codes with an identifier stay valid.
+    expect(validateEliSubdivisionPath('art_5').valid).toBe(true);
+    expect(validateEliSubdivisionPath('anx_1').valid).toBe(true);
+    expect(validateEliSubdivisionPath('unp_1').valid).toBe(true);
+  });
+
+  it('requires the deterministic `_1` form for singleton structural codes', () => {
+    for (const code of ['pbl', 'enc', 'wrp', 'inp', 'toc', 'tit']) {
+      expectInvalidSubdivision(code, 'MALFORMED_SUBDIVISION_SEGMENT');
+      expect(validateEliSubdivisionPath(`${code}_1`).valid).toBe(true);
+      expectInvalidSubdivision(`${code}_2`, 'MALFORMED_SUBDIVISION_SEGMENT');
+      expectInvalidSubdivision(`${code}_01`, 'MALFORMED_SUBDIVISION_SEGMENT');
+    }
+    expect(validateEliSubdivisionPath('pbl_1')).toEqual({
       valid: true,
       subdivision: {
-        path: 'pbl',
-        segments: [{ code: 'pbl', identifier: null, hierarchyRank: 10 }],
+        path: 'pbl_1',
+        segments: [{ code: 'pbl', identifier: '1', hierarchyRank: 10 }],
       },
     });
-    expect(validateEliSubdivisionPath('unp').valid).toBe(true);
+  });
+
+  it('uses `tis` as the structural title and never `tit`', () => {
+    // Authoritative EU labels (20260617-0): TIS = "title (subdivision)", TIT = "title".
+    expect(ELI_SUBDIVISION_HIERARCHY_RANK.tis).toBe(50);
+    expect(ELI_SUBDIVISION_HIERARCHY_RANK.tit).toBeUndefined();
+    expect(validateEliSubdivisionPath('prt_I/tis_II/cpt_III/sct_IV/art_1').valid).toBe(true);
+    // `tit` is a known code in canonical `_1` form, but order-neutral: not structural.
+    expect(validateEliSubdivisionPath('tit_1')).toEqual({
+      valid: true,
+      subdivision: {
+        path: 'tit_1',
+        segments: [{ code: 'tit', identifier: '1', hierarchyRank: null }],
+      },
+    });
   });
 
   it('accepts a path up to the maximum depth and rejects one segment more', () => {
-    const atDepth = 'prt_I/tit_II/cpt_III/sct_IV/sbs_V/art_1';
+    const atDepth = 'prt_I/tis_II/cpt_III/sct_IV/sbs_V/art_1';
     expect(atDepth.split('/')).toHaveLength(MAX_SUBDIVISION_DEPTH);
     expect(validateEliSubdivisionPath(atDepth).valid).toBe(true);
 
-    expectInvalidSubdivision('prt_I/tit_II/cpt_III/sct_IV/sbs_V/art_1/par_2', 'SUBDIVISION_TOO_DEEP');
+    expectInvalidSubdivision('prt_I/tis_II/cpt_III/sct_IV/sbs_V/art_1/par_2', 'SUBDIVISION_TOO_DEEP');
     expectInvalidSubdivision('art_5/par_2/pnt_b/sub_c/pnt_d/idt_e/pnt_f', 'SUBDIVISION_TOO_DEEP');
   });
 
@@ -273,6 +306,7 @@ describe('C5A ELI subdivision path grammar', () => {
       'art_5/par_2/pnt_b/sub_c',
       'art_5/par_2/pnt_b/idt_c',
       'anx_1/art_5/par_1/pnt_a',
+      'prt_I/tis_II/cpt_III/sct_IV/art_1',
       'prt_I/cpt_II/sct_III/art_1/par_1/pnt_a',
     ]) {
       expect(validateEliSubdivisionPath(subdivisionPath).valid).toBe(true);
@@ -336,6 +370,27 @@ describe('C5A reference vocabulary integrity', () => {
       expect(Number.isInteger(rank)).toBe(true);
       expect(rank).toBeGreaterThan(0);
     }
+  });
+
+  it('keeps the identifier requirement data-driven with a fail-closed default', () => {
+    for (const [code, policy] of Object.entries(ELI_SUBDIVISION_IDENTIFIER_POLICY)) {
+      expect(ELI_SUBDIVISION_CODES).toContain(code);
+      expect(['REQUIRED', 'FIXED_ONE', 'OPTIONAL']).toContain(policy.requirement);
+      expect(['EU', 'ADMINICULUM_CANONICALIZATION_POLICY']).toContain(policy.source);
+      expect(policy.note).toBeTruthy();
+    }
+    // The deterministic `_1` singleton rule is an Adminiculum policy, not an EU fact.
+    for (const code of ['pbl', 'enc', 'wrp', 'inp', 'toc', 'tit']) {
+      expect(ELI_SUBDIVISION_IDENTIFIER_POLICY[code]).toMatchObject({
+        requirement: 'FIXED_ONE',
+        fixedIdentifier: '1',
+        source: 'ADMINICULUM_CANONICALIZATION_POLICY',
+      });
+    }
+    // A verified EU code with no policy entry falls back to REQUIRED (fail closed).
+    expect(ELI_SUBDIVISION_IDENTIFIER_POLICY.ace).toBeUndefined();
+    expectInvalidSubdivision('ace', 'MALFORMED_SUBDIVISION_SEGMENT');
+    expect(validateEliSubdivisionPath('ace_1').valid).toBe(true);
   });
 
   it('verifies every candidate code named by the design', () => {
