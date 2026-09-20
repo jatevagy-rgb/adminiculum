@@ -10,7 +10,7 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 
-export type AiSourceMode = 'EXACT_VERSION_PAIR' | 'CURRENT_VERSION' | 'LEGACY_DOCUMENT';
+export type AiSourceMode = 'EXACT_VERSION_PAIR' | 'CURRENT_VERSION' | 'MIXED_VERSION_CONTEXT' | 'LEGACY_DOCUMENT';
 
 export interface DocumentReviewVersionDto {
   id: string;
@@ -126,6 +126,7 @@ export interface DocumentReviewProjectionDto {
       hasImportedResponse: boolean;
       hasRehydratedResponse: boolean;
     };
+    attentionSuggested?: boolean;
     verifiedAt: string | null;
     approvedAt: string | null;
     updatedAt: string;
@@ -205,7 +206,8 @@ export function matchAndRankAiDrafts(params: {
   const candidates: RankedAiDraft[] = [];
 
   for (const d of drafts) {
-    const vIds = parseJsonArray(d.sourceDocumentVersionIds);
+    const rawVIds = parseJsonArray(d.sourceDocumentVersionIds);
+    const vIds = Array.from(new Set(rawVIds.map((s: string) => String(s).trim()).filter(Boolean)));
     const docIds = parseJsonArray(d.sourceDocumentIds);
 
     const hasCurrent = Boolean(currentVersionId && vIds.includes(currentVersionId));
@@ -218,20 +220,36 @@ export function matchAndRankAiDrafts(params: {
     }
 
     if (hasCurrent) {
-      if (hasPrevious) {
-        // Rule 4: Prefer draft with exact canonical base + target version pair.
+      // Rule 4: EXACT_VERSION_PAIR means the immutable version source set is strictly and exactly {previousVersionId, currentVersionId}.
+      const isExactPair = Boolean(
+        previousVersionId &&
+        hasPrevious &&
+        vIds.length === 2 &&
+        vIds.includes(previousVersionId) &&
+        vIds.includes(currentVersionId!)
+      );
+
+      if (isExactPair) {
         candidates.push({
           draft: d,
           sourceMode: 'EXACT_VERSION_PAIR',
           relevanceScore: 30,
           sourceDocumentVersionIds: vIds,
         });
-      } else {
+      } else if (vIds.length === 1 && vIds[0] === currentVersionId) {
         // Rule 5: Current-version-only immutable draft.
         candidates.push({
           draft: d,
           sourceMode: 'CURRENT_VERSION',
           relevanceScore: 20,
+          sourceDocumentVersionIds: vIds,
+        });
+      } else {
+        // Current version is present, but alongside additional version IDs (e.g. [v0, v1, v2] or [v2, otherDocVersion]).
+        candidates.push({
+          draft: d,
+          sourceMode: 'MIXED_VERSION_CONTEXT',
+          relevanceScore: 15,
           sourceDocumentVersionIds: vIds,
         });
       }
@@ -404,15 +422,8 @@ export function deriveNextAction(params: {
     };
   }
 
-  // AI draft pending approval check
+  // Review states permitting approval (AI is advisory context only and never gates canonical approval)
   if (review.status === 'IN_REVIEW' || review.status === 'RESUBMITTED' || review.status === 'READY_FOR_REVIEW') {
-    if (ai && !ai.approved && (ai.status === 'AI_DRAFT' || ai.status === 'JUNIOR_VERIFIED')) {
-      return {
-        code: 'VERIFY_AI_EXPLANATION',
-        label: 'AI elemzés ellenőrzése',
-        rationale: 'Az AI által előkészített kockázatelemzés vagy magyarázat még ügyvédi jóváhagyásra vár.',
-      };
-    }
     return {
       code: 'APPROVE_REVIEW',
       label: 'Véleményezés jóváhagyása',
@@ -743,6 +754,7 @@ export async function getDocumentReviewProjection(
         hasImportedResponse: Boolean(chosen.importedResponse),
         hasRehydratedResponse: Boolean(chosen.rehydratedResponse),
       },
+      attentionSuggested: chosen.status === 'AI_DRAFT' || chosen.status === 'JUNIOR_VERIFIED',
       verifiedAt: iso(chosen.verifiedAt),
       approvedAt: iso(chosen.approvedAt),
       updatedAt: iso(chosen.updatedAt) || new Date().toISOString(),
@@ -1124,6 +1136,7 @@ export async function getCaseDocumentReviewSummaries(
           hasImportedResponse: Boolean(chosen.importedResponse),
           hasRehydratedResponse: Boolean(chosen.rehydratedResponse),
         },
+        attentionSuggested: chosen.status === 'AI_DRAFT' || chosen.status === 'JUNIOR_VERIFIED',
         verifiedAt: iso(chosen.verifiedAt),
         approvedAt: iso(chosen.approvedAt),
         updatedAt: iso(chosen.updatedAt) || new Date().toISOString(),

@@ -305,7 +305,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
       expect(action.code).toBe('REVIEW_CHANGE_SEGMENTS');
     });
 
-    it('returns VERIFY_AI_EXPLANATION when AI draft is present but not yet approved', () => {
+    it('returns APPROVE_REVIEW when review is IN_REVIEW even if AI draft is present in AI_DRAFT status (AI does not gate review)', () => {
       const action = deriveNextAction({
         currentVersion: { id: 'v1', version: 1, fileName: 'f.pdf', mimeType: 'application/pdf', size: 100, securityScanStatus: 'CLEAN', createdAt: new Date().toISOString() },
         previousVersion: null,
@@ -338,7 +338,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
           updatedAt: new Date().toISOString(),
         },
       });
-      expect(action.code).toBe('VERIFY_AI_EXPLANATION');
+      expect(action.code).toBe('APPROVE_REVIEW');
     });
 
     it('returns APPROVE_REVIEW when all points/segments resolved and AI draft is approved', () => {
@@ -743,6 +743,208 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
       expect(matched).not.toBeNull();
       expect(matched!.draft.id).toBe('draft-legacy-doc');
       expect(matched!.sourceMode).toBe('LEGACY_DOCUMENT');
+    });
+
+    it('labels [v1, v2] as EXACT_VERSION_PAIR when previous=v1, current=v2', () => {
+      const draft = {
+        id: 'draft-exact',
+        status: 'AI_DRAFT',
+        sourceDocumentVersionIds: JSON.stringify(['v1', 'v2']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date(),
+      };
+      const matched = matchAndRankAiDrafts({
+        drafts: [draft],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+      expect(matched?.sourceMode).toBe('EXACT_VERSION_PAIR');
+    });
+
+    it('normalizes duplicates: [v1, v2, v2] is recognized as EXACT_VERSION_PAIR', () => {
+      const draft = {
+        id: 'draft-exact-dup',
+        status: 'AI_DRAFT',
+        sourceDocumentVersionIds: JSON.stringify(['v1', 'v2', 'v2']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date(),
+      };
+      const matched = matchAndRankAiDrafts({
+        drafts: [draft],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+      expect(matched?.sourceMode).toBe('EXACT_VERSION_PAIR');
+      expect(matched?.sourceDocumentVersionIds).toEqual(['v1', 'v2']);
+    });
+
+    it('labels [v2] as CURRENT_VERSION', () => {
+      const draft = {
+        id: 'draft-cur',
+        status: 'AI_DRAFT',
+        sourceDocumentVersionIds: JSON.stringify(['v2']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date(),
+      };
+      const matched = matchAndRankAiDrafts({
+        drafts: [draft],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+      expect(matched?.sourceMode).toBe('CURRENT_VERSION');
+    });
+
+    it('labels [v0, v1, v2] as MIXED_VERSION_CONTEXT (extra versions invalidate exact pair)', () => {
+      const draft = {
+        id: 'draft-mixed-3',
+        status: 'AI_DRAFT',
+        sourceDocumentVersionIds: JSON.stringify(['v0', 'v1', 'v2']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date(),
+      };
+      const matched = matchAndRankAiDrafts({
+        drafts: [draft],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+      expect(matched?.sourceMode).toBe('MIXED_VERSION_CONTEXT');
+    });
+
+    it('labels [v2, otherDocumentVersion] as MIXED_VERSION_CONTEXT', () => {
+      const draft = {
+        id: 'draft-mixed-other',
+        status: 'AI_DRAFT',
+        sourceDocumentVersionIds: JSON.stringify(['v2', 'ver-other-doc']),
+        sourceDocumentIds: JSON.stringify(['doc-1', 'doc-2']),
+        updatedAt: new Date(),
+      };
+      const matched = matchAndRankAiDrafts({
+        drafts: [draft],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+      expect(matched?.sourceMode).toBe('MIXED_VERSION_CONTEXT');
+    });
+
+    it('ignores [v1] for current v2', () => {
+      const draft = {
+        id: 'draft-v1',
+        status: 'AI_DRAFT',
+        sourceDocumentVersionIds: JSON.stringify(['v1']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date(),
+      };
+      const matched = matchAndRankAiDrafts({
+        drafts: [draft],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+      expect(matched).toBeNull();
+    });
+
+    it('reports approval factually on MIXED_VERSION_CONTEXT without claiming exact pair', () => {
+      const draft = {
+        id: 'draft-mixed-approved',
+        status: 'LAWYER_APPROVED',
+        sourceDocumentVersionIds: JSON.stringify(['v0', 'v1', 'v2']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date(),
+      };
+      const matched = matchAndRankAiDrafts({
+        drafts: [draft],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+      expect(matched?.sourceMode).toBe('MIXED_VERSION_CONTEXT');
+      expect(matched?.draft.status).toBe('LAWYER_APPROVED');
+    });
+
+    it('REQUIRED TEST: review=IN_REVIEW, points=0, comparison.unresolved=0, ai=AI_DRAFT => nextAction is APPROVE_REVIEW', async () => {
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'doc-ai-gate',
+            caseId: 'case-1',
+            title: 'Szerződés',
+            fileName: 'doc.pdf',
+            category: 'CONTRACT',
+            workStatus: 'IN_PROGRESS',
+          }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v2', version: 2, originalFileName: 'v2.pdf', name: 'v2.pdf', mimeType: 'application/pdf', size: 1000, isCurrent: true, previousVersionId: 'v1', securityScanStatus: 'CLEAN', createdAt: new Date() },
+            { id: 'v1', version: 1, originalFileName: 'v1.pdf', name: 'v1.pdf', mimeType: 'application/pdf', size: 900, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date() },
+          ]),
+        },
+        documentReview: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'review-1',
+            documentVersionId: 'v2',
+            status: 'IN_REVIEW',
+            points: [], // openPointCount = 0, blockingPointCount = 0
+            currentRoundNumber: 1,
+            dueAt: null,
+            updatedAt: new Date(),
+          }),
+        },
+        documentComparison: {
+          findFirst: jest.fn().mockResolvedValue({
+            id: 'comp-1',
+            baseVersionId: 'v1',
+            targetVersionId: 'v2',
+            status: 'READY',
+            totalSegmentCount: 2,
+            reviewedSegmentCount: 2,
+            insertCount: 1,
+            deleteCount: 1,
+            replaceCount: 0,
+            formatOnlyCount: 0,
+            moveCandidateCount: 0,
+          }),
+        },
+        documentChangeSegment: {
+          groupBy: jest.fn().mockResolvedValue([
+            { reviewState: 'ACCEPTED', _count: { _all: 2 } }, // unresolvedSegments = 0
+          ]),
+        },
+        aiPromptDraft: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'draft-ai-1',
+              status: 'AI_DRAFT', // AI_DRAFT!
+              promptTemplateStableKey: 'CONTRACT_COMPARE',
+              promptTemplateVersion: 1,
+              sourceDocumentVersionIds: JSON.stringify(['v1', 'v2']),
+              sourceDocumentIds: JSON.stringify(['doc-ai-gate']),
+              importedResponse: 'AI text',
+              rehydratedResponse: null,
+              verifiedAt: null,
+              approvedAt: null,
+              updatedAt: new Date(),
+            },
+          ]),
+        },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-ai-gate', { prisma: mockPrisma });
+      expect(projection).not.toBeNull();
+      // 1. nextAction.code MUST be APPROVE_REVIEW (AI draft did NOT block legal workflow approval)
+      expect(projection!.nextAction.code).toBe('APPROVE_REVIEW');
+      // 2. AI projection MUST still be present and truthfully show AI_DRAFT
+      expect(projection!.ai).not.toBeNull();
+      expect(projection!.ai!.promptDraftId).toBe('draft-ai-1');
+      expect(projection!.ai!.status).toBe('AI_DRAFT');
+      expect(projection!.ai!.sourceMode).toBe('EXACT_VERSION_PAIR');
+      expect(projection!.ai!.approved).toBe(false);
+      expect(projection!.ai!.attentionSuggested).toBe(true);
     });
   });
 
