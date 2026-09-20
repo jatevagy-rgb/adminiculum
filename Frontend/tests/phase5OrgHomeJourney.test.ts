@@ -127,11 +127,12 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.match(individualBlock, /Üzenetek/);
   });
 
-  it("Kapcsolat wording unifies customer messaging, not Outlook", () => {
+  it("uses the canonical Kommunikáció domain for customer messaging, not Outlook", () => {
     const views = orgViews();
-    assert.match(views, /title="Kapcsolat"/);
+    assert.match(views, /Kommunikáció/);
+    assert.match(views, /Portálos beszélgetések/);
     assert.match(views, /Itt tud az irodával az ügyeiről egyeztetni/);
-    assert.doesNotMatch(views, /title="Kommunikáció"/);
+    assert.doesNotMatch(views, /title="Kapcsolat"/);
     assert.doesNotMatch(views, /Outlook sync/);
   });
 });

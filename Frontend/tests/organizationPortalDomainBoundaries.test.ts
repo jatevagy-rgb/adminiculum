@@ -6,6 +6,7 @@ import {
   customerRequestDetailHref,
   dedupeCustomerItems,
   isCustomerPublishedDocument,
+  resolveMessageOrganizationUnit,
   selectCustomerPublishedDocuments,
   selectCustomerRequestDocuments,
   selectCustomerSubmissionDocuments,
@@ -114,11 +115,19 @@ describe("organization portal domain composition (source contract)", () => {
     assert.doesNotMatch(body, /internal Task|taskStatus|workInstruction|sourceTaskId/);
   });
 
-  it("keeps communication on explicit portal threads only", () => {
-    const body = sliceFn(orgViews(), "OrganizationMessages");
+  it("uses the canonical Kommunikáció domain and explicit portal threads only", () => {
+    const src = orgViews();
+    const body = sliceFn(src, "OrganizationMessages");
     assert.match(body, /workspace\.messages/);
-    assert.match(body, /title="Kapcsolat"/);
+    assert.match(body, /Kommunikáció/);
+    assert.match(body, /Portálos beszélgetések/);
+    assert.match(body, /title="Beszélgetések"/);
     assert.match(body, /Itt tud az irodával az ügyeiről egyeztetni/);
+    assert.doesNotMatch(src, /title="Kapcsolat"/);
+    // Relation is resolved by explicit matter id, never by title/URL substring inference.
+    assert.match(body, /resolveMessageOrganizationUnit/);
+    assert.doesNotMatch(src, /matterTitle\.includes\(/);
+    assert.doesNotMatch(src, /actionUrl\.includes\(/);
     for (const forbidden of ["Outlook", "Gmail", "mailbox", "internetMessageId", "providerMessageId", "graph"]) {
       assert.doesNotMatch(body, new RegExp(forbidden, "i"), `communication must not reference ${forbidden}`);
     }
@@ -142,6 +151,29 @@ describe("organization portal domain composition (source contract)", () => {
     const communicationIndex = body.indexOf("communicationSection=");
     assert.ok(requestsIndex > -1 && communicationIndex > -1);
     assert.ok(requestsIndex < communicationIndex, "requests must render before the message slot");
+  });
+});
+
+describe("organization portal message relation by explicit matter id", () => {
+  const cases = [
+    { matterPublicationId: "matter-1", organizationUnitName: "A egység", publicTitle: "Beszállítói szerződés" },
+    { matterPublicationId: "matter-2", organizationUnitName: "B egység", publicTitle: "Beszállítói szerződés felülvizsgálata" },
+  ];
+
+  it("attaches only the exact matching case organization unit", () => {
+    const message = { matterId: "matter-2", matterTitle: "Beszállítói szerződés" };
+    assert.equal(resolveMessageOrganizationUnit(message, cases), "B egység");
+  });
+
+  it("never infers a relation from overlapping titles", () => {
+    // The title is identical to case A's title, but the id points at case B.
+    const message = { matterId: "matter-2", matterTitle: "Beszállítói szerződés" };
+    assert.notEqual(resolveMessageOrganizationUnit(message, cases), "A egység");
+  });
+
+  it("omits the unit label when no exact matter id match exists", () => {
+    assert.equal(resolveMessageOrganizationUnit({ matterId: "matter-unknown" }, cases), null);
+    assert.equal(resolveMessageOrganizationUnit({ matterId: "" }, cases), null);
   });
 });
 

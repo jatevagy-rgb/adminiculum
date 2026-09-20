@@ -23,6 +23,7 @@ import {
   type PortalOrganizationUnit,
   type PortalWorkspace,
   type PortalWorkspaceDocument,
+  type PortalWorkspaceMessage,
 } from "@/lib/clientPortalApi";
 import { clientSafeError, customerInteractionApi, type CustomerRequestDTO, type CustomerSubmissionDTO } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
@@ -120,6 +121,21 @@ export function dedupeCustomerItems<T extends { id: string; kind?: string }>(ite
 export function customerRequestDetailHref(matterId?: string | null, requestId?: string | null): string {
   if (!matterId || !requestId) return matterId ? `/portal/matters/${encodeURIComponent(matterId)}` : "/portal/ugyek";
   return `/portal/matters/${encodeURIComponent(matterId)}/requests/${encodeURIComponent(requestId)}`;
+}
+
+/**
+ * Explicit, projection-backed relation between a portal message and its
+ * organization case. The backend already maps `message.matterId` to the matter
+ * publication id, so the relationship must be resolved by exact id equality —
+ * never by title/URL substring heuristics, which can attach the wrong unit when
+ * two customer-visible matters have overlapping titles.
+ */
+export function resolveMessageOrganizationUnit(
+  message: Pick<PortalWorkspaceMessage, "matterId">,
+  cases: Array<Pick<PortalOrganizationCase, "matterPublicationId" | "organizationUnitName">>,
+): string | null {
+  const match = cases.find((item) => item.matterPublicationId === message.matterId);
+  return match?.organizationUnitName ?? null;
 }
 
 function intakeStatusLabel(value: string) {
@@ -334,32 +350,26 @@ function OrganizationMessages({ workspace, cases }: { workspace: PortalWorkspace
   return (
     <div className="space-y-5">
       <section className={card}>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Kapcsolat</p>
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Kommunikáció</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Portálos beszélgetések</h1>
         <p className="mt-2 text-sm text-stone-600">Itt tud az irodával az ügyeiről egyeztetni. Csak a portálon indított kérdések és az iroda kifejezetten elküldött válaszai jelennek meg.</p>
       </section>
-      {messages.length ? (
-        <Section title="Kapcsolat">
-          <div className="grid gap-3">
-            {messages.map((message) => {
-              const linked = cases.find((item) => message.matterTitle.includes(item.publicTitle) || message.actionUrl.includes(item.publicReference));
-              return (
-                <Link key={message.id} href={message.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <b className="break-words text-stone-950">{message.subject}</b>
-                    <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{message.status}</span>
-                  </div>
-                  <p className="mt-1 break-words text-sm text-stone-600">{message.matterTitle}{linked?.organizationUnitName ? ` · ${linked.organizationUnitName}` : ""}</p>
-                  {message.updatedAt ? <p className="mt-1 text-xs text-stone-500">Legutóbbi aktivitás: {formatDate(message.updatedAt)}</p> : null}
-                  <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Beszélgetés megnyitása →</span>
-                </Link>
-              );
-            })}
-          </div>
-        </Section>
-      ) : (
-        <Section title="Kapcsolat" empty emptyText="Még nincs folyamatban portálos beszélgetés." />
-      )}
+      <Section title="Beszélgetések" empty={!messages.length} emptyText="Még nincs folyamatban portálos beszélgetés.">
+        {messages.map((message) => {
+          const organizationUnitName = resolveMessageOrganizationUnit(message, cases);
+          return (
+            <Link key={message.id} href={message.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <b className="break-words text-stone-950">{message.subject}</b>
+                <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{message.status}</span>
+              </div>
+              <p className="mt-1 break-words text-sm text-stone-600">{message.matterTitle}{organizationUnitName ? ` · ${organizationUnitName}` : ""}</p>
+              {message.updatedAt ? <p className="mt-1 text-xs text-stone-500">Legutóbbi aktivitás: {formatDate(message.updatedAt)}</p> : null}
+              <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Beszélgetés megnyitása →</span>
+            </Link>
+          );
+        })}
+      </Section>
     </div>
   );
 }
