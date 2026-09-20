@@ -503,7 +503,13 @@ export interface CaseWorkspace {
     communicationCount: number; reviewCount: number | null; loggedMinutes: number | null;
   };
   tasks: Array<{ id: string; title: string; status: string; priority: string; attentionCategory: string | null; estimatedMinutes: number | null; dueDate: string | null; assignee: { id: string; name: string } | null; documentId: string | null; requestedByOrganizationPerson: { id: string; name: string; jobTitle: string | null; organizationGroupId: string | null; organizationGroupName: string | null; employmentStatus: string } | null; workflowStepKey: string | null; blockedPredecessors: { total: number; done: number } | null }>;
-  documents: Array<{ id: string; fileName: string; mimeType: string | null; type: string | null; category: string | null; version: string | null; uploadedAt: string | null; uploadedBy: { id: string; name: string } | null; summary: string | null; commentCount: number | null }>;
+  documents: Array<{
+    id: string; fileName: string; mimeType: string | null; type: string | null; category: string | null;
+    version: string | null; uploadedAt: string | null; uploadedBy: { id: string; name: string } | null;
+    summary: string | null; commentCount: number | null; workStatus?: string | null; workInstruction?: string | null;
+    responsible?: { id: string; name: string } | null; reviewer?: { id: string; name: string } | null;
+    dueDate?: string | null; nextStep?: string | null;
+  }>;
   deadlines: Array<{ id: string; title: string; dueAt: string | null; status: string; assignee: { id: string; name: string } | null; taskId: string | null; documentId: string | null }>;
   time: { available: true; loggedMinutes: number; billableMinutes: number | null } | { available: false; reason: string };
   communications: Array<{ id: string; type: string; subject: string | null; contentPreview: string | null; sender: string | null; timestamp: string | null; internal: boolean; taskId: string | null; documentId: string | null }>;

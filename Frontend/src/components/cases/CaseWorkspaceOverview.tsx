@@ -27,6 +27,7 @@ import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorksp
 import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummary";
 import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
+import { CaseInsightTiles } from "@/components/cases/CaseInsightTiles";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
@@ -257,6 +258,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           value={<span className="text-[14px] font-semibold leading-tight">{cp.nextStep ? "Kijelölve" : "Nincs"}</span>}
           secondary={cp.nextStep ? cp.nextStep.label : "Jelölj ki teendőt"} />
       </section>
+
+      <CaseInsightTiles workspace={ws} caseId={caseId} />
 
       {/* ---- 2b. Legal work context ---------------------------------------- */}
       <StartingContextPanel
