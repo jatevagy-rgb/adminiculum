@@ -18,7 +18,9 @@ import {
   classifyCustomerRequestStatus,
   mapActionRequestSources,
   mapCompanyMilestoneSource,
+  mapComplianceReviewSource,
   mapCustomerRequestSource,
+  mapGrowInitiativeSource,
   mapMatterSources,
   mapOrgContractSource,
 } from '../src/modules/client-portal-calendar/mappers';
@@ -36,6 +38,8 @@ function readers(overrides: Partial<CustomerCalendarReaders> = {}): CustomerCale
     listCaseRequests: async () => [],
     listContracts: async () => [],
     listCompanyMilestones: async () => [],
+    listGrowInitiatives: async () => [],
+    listComplianceReviews: async () => [],
     ...overrides,
   };
 }
@@ -52,6 +56,8 @@ describe('customer calendar category allowlist', () => {
       'CUSTOMER_REQUEST',
       'CONTRACT_DATE',
       'COMPANY_MILESTONE',
+      'GROW_TARGET',
+      'COMPLIANCE_REVIEW',
     ]);
     for (const forbidden of ['TASK', 'CASE_DEADLINE', 'CASE_INTAKE_DEADLINE', 'DUE_DATE', 'INTAKE_DUE', 'MEETING']) {
       expect(CUSTOMER_CALENDAR_CATEGORIES as readonly string[]).not.toContain(forbidden);
@@ -130,6 +136,42 @@ describe('customer calendar source mappers', () => {
   it('requires a date for milestones', () => {
     expect(mapCompanyMilestoneSource({ id: 'm1', title: 'Mérföldkő', date: null })).toEqual([]);
     expect(mapCompanyMilestoneSource({ id: 'm1', title: 'Mérföldkő', date: '2026-09-21' })[0].category).toBe('COMPANY_MILESTONE');
+  });
+
+  it('projects a Grow initiative target as an informational, customer-safe item', () => {
+    expect(mapGrowInitiativeSource({ id: 'i1', title: 'Fejlesztés', targetAt: null })).toEqual([]);
+    const projected = mapGrowInitiativeSource({ id: 'i1', title: 'Fejlesztés', targetAt: '2026-09-22T00:00:00.000Z' });
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toMatchObject({
+      category: 'GROW_TARGET',
+      sourceKey: 'initiative-i1',
+      status: 'INFO',
+      href: '/portal/fejlesztes',
+    });
+  });
+
+  it('never leaks a Grow internal status into the projected item', () => {
+    const projected = mapGrowInitiativeSource({ id: 'i1', title: 'Fejlesztés', targetAt: '2026-09-22T00:00:00.000Z', statusLabel: 'Folyamatban' });
+    expect(JSON.stringify(projected)).not.toContain('Folyamatban');
+  });
+
+  it('projects a compliance review date as informational and without an internal control id', () => {
+    expect(mapComplianceReviewSource({ requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: null })).toEqual([]);
+    const projected = mapComplianceReviewSource({ requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' });
+    expect(projected).toHaveLength(1);
+    expect(projected[0]).toMatchObject({
+      category: 'COMPLIANCE_REVIEW',
+      title: 'Hozzáférés-kezelés',
+      status: 'INFO',
+      href: '/portal/megfeleles',
+    });
+    expect(projected[0].sourceKey).toBe('control-adatvédelem-hozzáférés-kezelés');
+  });
+
+  it('labels a compliance review as a review, never as a customer deadline', () => {
+    const projected = mapComplianceReviewSource({ requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' });
+    expect(projected[0].status).not.toBe('OPEN');
+    expect(projected[0].title).not.toContain('Ön határideje');
   });
 });
 
@@ -295,5 +337,91 @@ describe('customer calendar service orchestration (injected canonical readers)',
   it('rejects an invalid or unbounded range', async () => {
     await expect(getCustomerCalendar('identity-1', 'workspace-1', { from: '2026-02-30', to: '2026-09-30' }, realPrisma, { now: NOW, readers: readers() })).rejects.toMatchObject({ status: 400 });
     await expect(getCustomerCalendar('identity-1', 'workspace-1', { from: '2020-01-01', to: '2040-01-01' }, realPrisma, { now: NOW, readers: readers() })).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('projects customer-safe Grow targets and compliance reviews from the canonical readers', async () => {
+    const result = await getCustomerCalendar('identity-1', 'workspace-1', RANGE, realPrisma, {
+      now: NOW,
+      readers: readers({
+        listGrowInitiatives: async () => [
+          { id: 'init-1', title: 'Folyamatdigitalizálás', targetAt: '2026-09-22T00:00:00.000Z', statusLabel: 'Folyamatban' },
+          { id: 'init-2', title: 'Cél nélkül', targetAt: null },
+        ],
+        listComplianceReviews: async () => [
+          { requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+          { requirementTitle: 'Adatvédelem', title: 'Nincs dátum', nextReviewAt: null },
+        ],
+      }),
+    });
+
+    const byId = new Map(result.items.map((item) => [item.id, item]));
+    expect(byId.get('GROW_TARGET:initiative-init-1')).toMatchObject({
+      day: '2026-09-22',
+      status: 'INFO',
+      href: '/portal/fejlesztes',
+    });
+    expect(byId.get('COMPLIANCE_REVIEW:control-adatvédelem-hozzáférés-kezelés')).toMatchObject({
+      day: '2026-09-24',
+      status: 'INFO',
+      href: '/portal/megfeleles',
+    });
+    expect(byId.has('GROW_TARGET:initiative-init-2')).toBe(false);
+    expect(byId.has('COMPLIANCE_REVIEW:control-adatvédelem-nincs-dátum')).toBe(false);
+    // Grow/compliance are informational: they never inflate the open/obligation KPI.
+    expect(result.counts.open).toBe(0);
+    // No internal status label or id leaks into the serialized projection.
+    expect(JSON.stringify(result)).not.toContain('Folyamatban');
+    expect(JSON.stringify(result)).not.toContain('init-2');
+    expect(() => assertClientSafe(result)).not.toThrow();
+  });
+
+  it('deduplicates the same canonical Grow initiative or control identity', async () => {
+    const result = await getCustomerCalendar('identity-1', 'workspace-1', RANGE, realPrisma, {
+      now: NOW,
+      readers: readers({
+        listGrowInitiatives: async () => [
+          { id: 'init-1', title: 'Fejlesztés', targetAt: '2026-09-22T00:00:00.000Z' },
+          { id: 'init-1', title: 'Fejlesztés', targetAt: '2026-09-22T00:00:00.000Z' },
+        ],
+        listComplianceReviews: async () => [
+          { requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+          { requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+        ],
+      }),
+    });
+    expect(result.items.map((item) => item.id)).toEqual([
+      'GROW_TARGET:initiative-init-1',
+      'COMPLIANCE_REVIEW:control-adatvédelem-hozzáférés-kezelés',
+    ]);
+  });
+
+  it('isolates Grow and compliance dates to whatever the canonical readers authorize', async () => {
+    const result = await getCustomerCalendar('identity-1', 'workspace-1', RANGE, realPrisma, {
+      now: NOW,
+      readers: readers({
+        // The canonical readers for this workspace only ever return client A.
+        listGrowInitiatives: async () => [{ id: 'init-a', title: 'A fejlesztés', targetAt: '2026-09-22T00:00:00.000Z' }],
+        listComplianceReviews: async () => [{ requirementTitle: 'A megfelelés', title: 'A kontroll', nextReviewAt: '2026-09-24T00:00:00.000Z' }],
+      }),
+    });
+    for (const item of result.items) {
+      expect(item.id).not.toContain('client-b');
+      expect(item.title).not.toContain('B ');
+      expect(item.href.startsWith('/portal/')).toBe(true);
+    }
+    expect(result.items.every((item) => item.status === 'INFO')).toBe(true);
+  });
+
+  it('keeps date-only source days literal while timestamps keep their instant', async () => {
+    const result = await getCustomerCalendar('identity-1', 'workspace-1', RANGE, realPrisma, {
+      now: NOW,
+      readers: readers({
+        listMatters: async () => [{ id: 'pub-1', title: 'Ügy', estimatedTiming: '2026-09-20', publicDeadlines: [] }],
+        listGrowInitiatives: async () => [{ id: 'init-1', title: 'Fejlesztés', targetAt: '2026-09-22T23:30:00.000Z' }],
+      }),
+    });
+    const byId = new Map(result.items.map((item) => [item.id, item]));
+    expect(byId.get('MATTER_TARGET:target')?.day).toBe('2026-09-20');
+    expect(byId.get('GROW_TARGET:initiative-init-1')?.day).toBe('2026-09-22');
   });
 });

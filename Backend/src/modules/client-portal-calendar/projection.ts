@@ -4,7 +4,8 @@
  * This module is deliberately free of Prisma, HTTP and authorization code. It
  * only turns ALREADY customer-safe source rows (published matter revisions,
  * published action requests, customer-visible requests, explicitly published
- * contract dates, ACHIEVED company milestones) into a customer-safe calendar.
+ * contract dates, ACHIEVED company milestones, customer-safe Grow initiatives
+ * and customer-safe compliance control reviews) into a customer-safe calendar.
  *
  * Hard rules carried from the internal calendar, but restricted to customer-safe
  * sources only:
@@ -23,6 +24,8 @@ export const CUSTOMER_CALENDAR_CATEGORIES = [
   'CUSTOMER_REQUEST',
   'CONTRACT_DATE',
   'COMPANY_MILESTONE',
+  'GROW_TARGET',
+  'COMPLIANCE_REVIEW',
 ] as const;
 
 export type CustomerCalendarCategory = (typeof CUSTOMER_CALENDAR_CATEGORIES)[number];
@@ -34,6 +37,11 @@ export const CUSTOMER_CALENDAR_CATEGORY_LABELS: Record<CustomerCalendarCategory,
   CUSTOMER_REQUEST: 'Adat- vagy dokumentumkérés',
   CONTRACT_DATE: 'Szerződés kulcsdátuma',
   COMPANY_MILESTONE: 'Vállalati mérföldkő',
+  // Grow initiative targetAt, already projected by the customer Grow surface.
+  GROW_TARGET: 'Fejlesztési célhatáridő',
+  // ClientControl.nextReviewAt. Informational only: the review is performed by
+  // the office, so it is never presented as a customer obligation.
+  COMPLIANCE_REVIEW: 'Következő ellenőrzés',
 };
 
 /** OPEN = customer action expected; DONE = customer-visible but completed; INFO = informational date. */

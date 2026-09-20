@@ -38,6 +38,8 @@ d('customer portal calendar integration (postgres)', () => {
   let caseB = '';
   let pubA = '';
   let pubB = '';
+  let orgIdentityA = '';
+  let orgWorkspaceA = '';
 
   async function createPortalUser(label: string, clientId: string) {
     const identityId = crypto.randomUUID();
@@ -127,11 +129,21 @@ d('customer portal calendar integration (postgres)', () => {
     // Unpublished contract date + ACHIEVED milestone (INDIVIDUAL workspace: must not surface).
     await db.contractRecord.create({ data: { clientId: clientA, title: 'A belső szerződés', contractType: 'FRAMEWORK', status: 'ACTIVE', nextCriticalDate: new Date('2026-09-29T00:00:00.000Z') } });
     await db.companyMilestone.create({ data: { clientId: clientA, title: 'A mérföldkő', type: 'CORPORATE', status: 'ACHIEVED', milestoneDate: new Date('2026-09-30T00:00:00.000Z'), createdByUserId: admin } });
+
+    // ORGANIZATION workspace for client A: the customer-safe Grow target must appear,
+    // while the internal task/case/intake dates of the SAME client stay absent.
+    const org = await createPortalUser('a-org', clientA);
+    orgIdentityA = org.identityId;
+    orgWorkspaceA = org.workspaceId;
+    await db.clientPortalWorkspace.update({ where: { id: orgWorkspaceA }, data: { mode: 'ORGANIZATION' } });
+    await db.developmentInitiative.create({ data: { clientId: clientA, title: 'A fejlesztési kezdeményezés', status: 'ACTIVE', targetAt: new Date('2026-09-21T00:00:00.000Z') } });
+    await db.developmentInitiative.create({ data: { clientId: clientB, title: 'B fejlesztési kezdeményezés', status: 'ACTIVE', targetAt: new Date('2026-09-23T00:00:00.000Z') } });
   });
 
   afterAll(async () => {
     if (!databaseUrl) return;
     const caseIds = [caseA, caseB];
+    await db.developmentInitiative.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.contractRecord.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.companyMilestone.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.task.deleteMany({ where: { caseId: { in: caseIds } } });
@@ -141,9 +153,9 @@ d('customer portal calendar integration (postgres)', () => {
     await db.clientMatterPublicationRevision.deleteMany({ where: { publicationId: { in: [pubA, pubB] } } });
     await db.clientMatterPublication.deleteMany({ where: { caseId: { in: caseIds } } });
     await db.clientPortalGrant.deleteMany({ where: { caseId: { in: caseIds } } });
-    await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: { in: [workspaceA, workspaceB] } } });
-    await db.clientPortalWorkspace.deleteMany({ where: { id: { in: [workspaceA, workspaceB] } } });
-    await db.clientPortalIdentity.deleteMany({ where: { id: { in: [identityA, identityB] } } });
+    await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: { in: [workspaceA, workspaceB, orgWorkspaceA] } } });
+    await db.clientPortalWorkspace.deleteMany({ where: { id: { in: [workspaceA, workspaceB, orgWorkspaceA] } } });
+    await db.clientPortalIdentity.deleteMany({ where: { id: { in: [identityA, identityB, orgIdentityA] } } });
     await db.case.deleteMany({ where: { id: { in: caseIds } } });
     await db.client.deleteMany({ where: { id: { in: [clientA, clientB] } } });
     await db.user.deleteMany({ where: { id: admin } });
@@ -203,5 +215,27 @@ d('customer portal calendar integration (postgres)', () => {
       expect(Number.isNaN(new Date(item.date).getTime())).toBe(false);
     }
     expect(result.counts.total).toBe(result.items.length);
+  });
+
+  it('projects the customer-safe Grow target in an ORGANIZATION workspace and still excludes internal dates', async () => {
+    const result = await getCustomerCalendar(orgIdentityA, orgWorkspaceA, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+    const grow = result.items.filter((item) => item.category === 'GROW_TARGET');
+    expect(grow.map((item) => item.day)).toEqual(['2026-09-21']);
+    expect(grow[0].status).toBe('INFO');
+    expect(grow[0].href).toBe('/portal/fejlesztes');
+    // No controls exist for this client, so the compliance section degrades safely.
+    expect(result.items.some((item) => item.category === 'COMPLIANCE_REVIEW')).toBe(false);
+    // Client B's initiative never leaks into client A's organization calendar.
+    expect(JSON.stringify(result)).not.toContain('B fejlesztési kezdeményezés');
+    // Internal Case.deadline / Task.dueDate / CaseIntakeDeadline stay absent.
+    const days = new Set(result.items.map((item) => item.day));
+    for (const internalDay of ['2026-09-22', '2026-09-23', '2026-09-24']) {
+      expect(days.has(internalDay)).toBe(false);
+    }
+  });
+
+  it('never surfaces Grow or compliance dates in an INDIVIDUAL workspace', async () => {
+    const result = await getCustomerCalendar(identityA, workspaceA, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+    expect(result.items.some((item) => item.category === 'GROW_TARGET' || item.category === 'COMPLIANCE_REVIEW')).toBe(false);
   });
 });
