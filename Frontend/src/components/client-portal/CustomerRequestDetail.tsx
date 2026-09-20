@@ -116,7 +116,7 @@ export function CustomerRequestDetail({
         <div className="cp-hero-inner p-6 sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="cp-kicker">{requestTypeLabel(request.type)}</p>
+              <p className="cp-kicker">Ügyféli teendő · {requestTypeLabel(request.type)}</p>
               <h1 className="cp-title mt-3 break-words text-3xl sm:text-4xl">{request.title}</h1>
             </div>
             <span className="cp-pill shrink-0" data-tone={requestStateTone(request.status)}>{localizedInteractionStatus(request.status)}</span>
