@@ -19,7 +19,7 @@ const label = "text-[9.5px] font-bold uppercase tracking-[0.12em] text-[var(--ad
 const field = "mt-1 w-full min-w-0 rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-1.5 text-[12.5px]";
 
 export function ChangeReviewRail({
-  segment, saving, conflict, error, onSave, onReloadConflict,
+  segment, saving, conflict, error, onSave, onReloadConflict, onRequestChanges,
 }: {
   segment: SegmentDto | null;
   saving: boolean;
@@ -27,6 +27,7 @@ export function ChangeReviewRail({
   error: string | null;
   onSave: (patch: { category?: SegmentCategory; reviewState?: ReviewState; internalRationale?: string | null; expectedRevision: number }) => void;
   onReloadConflict: () => void;
+  onRequestChanges?: () => void;
 }) {
   const [category, setCategory] = useState<SegmentCategory>("UNCLASSIFIED");
   const [reviewState, setReviewState] = useState<ReviewState>("UNREVIEWED");
@@ -83,12 +84,25 @@ export function ChangeReviewRail({
       {error ? <p role="alert" className="mt-2 text-[11.5px] font-semibold text-[var(--adm-terracotta-700)]">{error}</p> : null}
 
       <div className="mt-2.5 flex justify-end">
-        <AdminButton
-          variant="primary" size="xs" data-testid="cmp-rail-save" disabled={saving || tooLong}
-          onClick={() => onSave({ category, reviewState, internalRationale: rationale.trim() || null, expectedRevision: segment.revision })}
-        >
-          {saving ? "Mentés…" : "Mentés"}
-        </AdminButton>
+        <div className="flex flex-wrap justify-end gap-2">
+          <AdminButton
+            variant="neutral" size="xs" data-testid="cmp-accept-segment" disabled={saving || tooLong}
+            onClick={() => onSave({ category, reviewState: "ACCEPTED", internalRationale: rationale.trim() || null, expectedRevision: segment.revision })}
+          >
+            Rendben
+          </AdminButton>
+          {onRequestChanges ? (
+            <AdminButton variant="gold" size="xs" data-testid="cmp-request-changes" disabled={saving} onClick={onRequestChanges}>
+              Módosítást kérek
+            </AdminButton>
+          ) : null}
+          <AdminButton
+            variant="primary" size="xs" data-testid="cmp-rail-save" disabled={saving || tooLong}
+            onClick={() => onSave({ category, reviewState, internalRationale: rationale.trim() || null, expectedRevision: segment.revision })}
+          >
+            {saving ? "Mentés…" : "Mentés"}
+          </AdminButton>
+        </div>
       </div>
     </aside>
   );

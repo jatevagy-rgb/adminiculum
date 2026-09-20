@@ -45,6 +45,8 @@ export function DocumentReviewWorkflowPanel({ documentId, selectedVersionId, ver
   const [type, setType] = useState<ReviewPointType>("WHOLE_DOCUMENT");
   const [severity, setSeverity] = useState<ReviewPointSeverity>("NORMAL");
   const [rationale, setRationale] = useState("");
+  const [changeReason, setChangeReason] = useState("");
+  const [requestedChange, setRequestedChange] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,7 +129,22 @@ export function DocumentReviewWorkflowPanel({ documentId, selectedVersionId, ver
             <input value={reviewerId} onChange={(e) => setReviewerId(e.target.value)} placeholder="Reviewer felhasználó ID" className="min-w-[220px] rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" />
             <AdminButton variant="neutral" disabled={busy || review.status !== "DRAFT" || !reviewerId.trim()} onClick={() => run(() => transitionDocumentReview(review.id, "assign", { reviewerId: reviewerId.trim(), expectedRevision: review.revision }))}>Reviewer kijelölése</AdminButton>
             <AdminButton variant="neutral" disabled={busy || review.status !== "ASSIGNED"} onClick={() => run(() => transitionDocumentReview(review.id, "start", { expectedRevision: review.revision }))}>Review indítása</AdminButton>
-            <AdminButton variant="gold" disabled={busy || !["IN_REVIEW", "RESUBMITTED"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "request-changes", { safeRationale: rationale || undefined, expectedRevision: review.revision }))}>Változtatás kérése</AdminButton>
+            <div className="w-full rounded border border-[#E7DECB] bg-[var(--adm-sand-100)] p-3 sm:w-auto sm:min-w-[320px]">
+              <p className="text-xs font-semibold text-[var(--adm-text)]">Módosítást kérek</p>
+              <textarea data-testid="review-change-reason" value={changeReason} onChange={(event) => setChangeReason(event.target.value)} rows={2} placeholder="Miért kéred a módosítást?" className="mt-2 w-full rounded border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1.5 text-xs" />
+              <textarea data-testid="review-requested-change" value={requestedChange} onChange={(event) => setRequestedChange(event.target.value)} rows={2} placeholder="Mit kell módosítani?" className="mt-2 w-full rounded border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1.5 text-xs" />
+              <AdminButton
+                className="mt-2"
+                variant="gold"
+                disabled={busy || !["IN_REVIEW", "RESUBMITTED"].includes(String(review.status)) || !changeReason.trim() || !requestedChange.trim()}
+                onClick={() => run(() => transitionDocumentReview(review.id, "request-changes", {
+                  safeRationale: `Indok:\n${changeReason.trim()}\n\nKért módosítás:\n${requestedChange.trim()}`,
+                  expectedRevision: review.revision,
+                }))}
+              >
+                Változtatás kérése
+              </AdminButton>
+            </div>
             <AdminButton variant="neutral" disabled={busy || review.status !== "CHANGES_REQUESTED" || !latestVersion} onClick={() => run(() => transitionDocumentReview(review.id, "resubmit", { versionId: latestVersion?.id, expectedRevision: review.revision }))}>Új verzió review-ra küldése</AdminButton>
             <AdminButton variant="primary" disabled={busy || review.counts.blocking > 0 || !canAttemptApproval || mismatch} onClick={() => run(() => transitionDocumentReview(review.id, "approve", { versionId: review.reviewVersionId, expectedRevision: review.revision }))}>Jóváhagyás</AdminButton>
             <AdminButton variant="neutral" disabled={busy || !["APPROVED", "IN_REVIEW", "CHANGES_REQUESTED", "RESUBMITTED", "ASSIGNED", "DRAFT"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "close", { expectedRevision: review.revision }))}>Review lezárása</AdminButton>
