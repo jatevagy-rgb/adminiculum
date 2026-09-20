@@ -524,8 +524,11 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.clientControl.create({
       data: { clientId: clientA, controlDefinitionId: controlDefinition.id, implementationStatus: 'IMPLEMENTED' },
     });
+    // `evidence_records_exactly_one_source_check` requires exactly one canonical source;
+    // the historical source-less row is anchored to the answered fact so the fixture
+    // stays schema-valid while still exercising a second evidence record.
     await db.evidenceRecord.create({
-      data: { clientId: clientA, sourceType: 'CLIENT_FACT', title: 'A Evidence', status: 'ACCEPTED' },
+      data: { clientId: clientA, sourceType: 'CLIENT_FACT', title: 'A Evidence', status: 'ACCEPTED', clientFactId: answeredFact },
     });
     const source = await db.externalSourceConnection.create({
       data: { clientId: clientA, sourceType: 'TEST', name: 'A Source', config: { secret: 'must-not-escape' } },
@@ -696,7 +699,8 @@ d('Company Data Room integration (PostgreSQL)', () => {
     expect(view.dataQuality.stale).toBeNull();
     expect(view.dataQuality.staleAvailable).toBe(false);
     expect(view.dataQuality.provenance.portalAnswerCount).toBe(1);
-    expect(view.dataQuality.provenance.evidenceLinkedCount).toBe(1);
+    expect(view.dataQuality.provenance.evidenceLinkedCount).toBe(2);
+    expect(portalFactView?.provenance.evidenceCount).toBe(1);
     expect(view.dataQuality.freshness.ruleDefinedCount).toBe(2);
     expect(view.dataQuality.freshness.basis).toBe('FactDefinition.temporalPolicy');
     expect(typeof view.dataQuality.provenance.unknownSourceCount).toBe('number');
