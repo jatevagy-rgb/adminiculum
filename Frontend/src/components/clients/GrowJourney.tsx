@@ -4,23 +4,39 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   domainTitleHu,
+  evidenceBasisCategory,
+  evidenceBasisExplanationHu,
+  evidenceBasisLabelHu,
   evidenceOriginLabelHu,
   evidenceStrengthLabelHu,
   growApi,
   interventionLabelHu,
+  opportunityStatusLabelHu,
   outcomeBasisLabelHu,
+  publicationStatusLabelHu,
+  reviewDecisionLabelHu,
   roiProvenanceLabelHu,
   sufficiencyExplanationHu,
   sufficiencyLabelHu,
   type BusinessProcessDTO,
+  type EvidenceBasisCategory,
   type GrowEvidenceItem,
   type GrowHomeSummary,
   type GrowOpportunityDetail,
   type GrowOpportunityItem,
+  type OpportunityPublicationDTO,
+  type OpportunityPublicationWorkspaceDTO,
   type OutcomeMeasurementDTO,
   type SufficiencyDecision,
 } from "@/lib/growApi";
-import { clientCompanyApi, initiativeStatusLabel, type DevelopmentInitiative } from "@/lib/clientCompanyApi";
+import { getCurrentUser } from "@/lib/api";
+import {
+  clientCompanyApi,
+  companyMilestoneStatusLabel,
+  initiativeStatusLabel,
+  type CompanyMilestone,
+  type DevelopmentInitiative,
+} from "@/lib/clientCompanyApi";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { GrowIntake } from "@/components/clients/GrowIntake";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
@@ -75,7 +91,10 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
   const [outcomes, setOutcomes] = useState<OutcomeMeasurementDTO[]>([]);
   const [processes, setProcesses] = useState<BusinessProcessDTO[]>([]);
   const [initiatives, setInitiatives] = useState<DevelopmentInitiative[]>([]);
+  const [milestones, setMilestones] = useState<CompanyMilestone[]>([]);
+  const [acceptedOpportunities, setAcceptedOpportunities] = useState<GrowOpportunityItem[]>([]);
   const [tasks, setTasks] = useState<TaskLifecycleListItem[]>([]);
+  const [canPublishOpportunities, setCanPublishOpportunities] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<GrowOpportunityDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,23 +102,44 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
   const [researchBusy, setResearchBusy] = useState(false);
   const [researchNote, setResearchNote] = useState<string | null>(null);
 
+  // Publication authority mirrors the backend publisher allowlist
+  // (client-publication PUBLISHER_ROLES); the server remains authoritative.
+  useEffect(() => {
+    let cancelled = false;
+    void getCurrentUser()
+      .then((user) => {
+        if (cancelled) return;
+        setCanPublishOpportunities(["ADMIN", "PARTNER", "LAWYER"].includes(String(user?.role || "")));
+      })
+      .catch(() => {
+        if (!cancelled) setCanPublishOpportunities(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [homeRes, oppRes, outcomeRes, processRes, initiativeRes, taskRes] = await Promise.all([
+      const [homeRes, oppRes, acceptedRes, outcomeRes, processRes, initiativeRes, milestoneRes, taskRes] = await Promise.all([
         growApi.getHome(clientId),
         growApi.listOpportunities(clientId),
+        growApi.listOpportunities(clientId, "ACCEPTED").catch(() => ({ items: [] as GrowOpportunityItem[] })),
         growApi.listOutcomes(clientId),
         growApi.listProcesses(clientId).catch(() => [] as BusinessProcessDTO[]),
         clientCompanyApi.listInitiatives(clientId).catch(() => ({ items: [] as DevelopmentInitiative[] })),
+        clientCompanyApi.listMilestones(clientId).catch(() => ({ items: [] as CompanyMilestone[] })),
         listTaskLifecycleItems().catch(() => [] as TaskLifecycleListItem[]),
       ]);
       setHome(homeRes);
       setOpportunities(oppRes.items);
+      setAcceptedOpportunities(acceptedRes.items);
       setOutcomes(outcomeRes.items);
       setProcesses(processRes);
       setInitiatives(initiativeRes.items);
+      setMilestones(milestoneRes.items);
       setTasks(taskRes.filter((t) => t.case.clientId === clientId));
     } catch {
       setError("A Grow felület adatai jelenleg nem tölthetők be.");
@@ -125,6 +165,17 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
     },
     [clientId],
   );
+
+  // A review decision or initiative handoff changes the same recommendation, so
+  // the open detail must be re-read instead of trusting the stale pre-decision DTO.
+  const refreshDetail = useCallback(async () => {
+    if (!selectedId) return;
+    try {
+      setDetail(await growApi.getOpportunity(clientId, selectedId));
+    } catch {
+      setError("A lehetőség részletei nem tölthetők be.");
+    }
+  }, [clientId, selectedId]);
 
   const runResearch = async () => {
     setResearchBusy(true);
@@ -249,13 +300,19 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
               detail={detail}
               selectedId={selectedId}
               onChanged={load}
+              onRefreshDetail={refreshDetail}
               processes={processes}
+              canPublishOpportunities={canPublishOpportunities}
             />
           ) : null}
           {screen === "progress" ? (
             <GrowProgressScreen
               initiatives={initiatives}
+              milestones={milestones}
+              acceptedOpportunities={acceptedOpportunities}
+              outcomes={outcomes}
               tasks={clientTasks}
+              onOpenDetail={(id) => void openDetail(id)}
             />
           ) : null}
           {screen === "results" ? (
@@ -336,7 +393,7 @@ function GrowHomeScreen({
             <StatTile label="Bizonyítékkal" value={counts.evidenceBacked} />
             <StatTile label="Méréssel alátámasztott" value={counts.measurementBacked} />
             <StatTile label="Aktív kezdeményezés" value={home?.activeInitiatives.length ?? 0} />
-            <StatTile label="Lezárt eredmény" value={home?.completedOutcomes.length ?? 0} />
+            <StatTile label="Lezárt eredmény" value={home?.completedOutcomes.filter((o) => o.basis !== "ASSUMED").length ?? 0} />
           </div>
         ) : (
           <p className="mt-4 text-sm text-[#788274]">Még nincs kutatási eredmény ehhez a céghez.</p>
@@ -602,13 +659,17 @@ function GrowDetailScreen({
   detail,
   selectedId,
   onChanged,
+  onRefreshDetail,
   processes,
+  canPublishOpportunities,
 }: {
   clientId: string;
   detail: GrowOpportunityDetail | null;
   selectedId: string | null;
   onChanged: () => Promise<void>;
+  onRefreshDetail: () => Promise<void>;
   processes: BusinessProcessDTO[];
+  canPublishOpportunities: boolean;
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -620,6 +681,16 @@ function GrowDetailScreen({
     () => processes.find((p) => p.id === detail?.diagnosis?.businessProcess?.id) ?? null,
     [processes, detail],
   );
+
+  const evidenceCategoryCounts = useMemo(() => {
+    const counts: Record<EvidenceBasisCategory, number> = { MEASURED_COMPANY: 0, DECLARED_COMPANY: 0, RESEARCH: 0 };
+    for (const item of detail?.evidence ?? []) counts[evidenceBasisCategory(item)] += 1;
+    return counts;
+  }, [detail]);
+
+  const sourceRefs = detail?.diagnosis?.sourceRefs ?? null;
+  const measuredRefCount = sourceRefs?.snapshotIds?.length ?? 0;
+  const declaredRefCount = sourceRefs?.observationIds?.length ?? 0;
 
   if (!selectedId) {
     return (
@@ -653,6 +724,7 @@ function GrowDetailScreen({
             : "További információ kérve — a javaslat várakozó állapotba került.",
       );
       await onChanged();
+      await onRefreshDetail();
     } catch {
       setLocalError("A döntés rögzítése nem sikerült.");
     } finally {
@@ -668,6 +740,7 @@ function GrowDetailScreen({
       await growApi.startInitiative(clientId, detail.opportunity.id, {});
       setMessage("Kezdeményezés létrehozva — a Fejlesztés folyamatban lépésben követheti.");
       await onChanged();
+      await onRefreshDetail();
     } catch {
       setLocalError("A kezdeményezés indítása nem sikerült.");
     } finally {
@@ -735,6 +808,37 @@ function GrowDetailScreen({
       </Panel>
 
       <Panel title="Miért ezeket?">
+        <div className="mb-4 rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4" data-testid="evidence-basis-summary">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Mi alapján állítja ezt a rendszer?</p>
+          <ul className="mt-2 space-y-1.5 text-xs text-[#1b382b]">
+            <li>
+              <span className="font-semibold">Mért ügyféldata:</span>{" "}
+              {measuredRefCount > 0
+                ? `${measuredRefCount} folyamat-mérési pillanatkép`
+                : "nincs csatolt mérési pillanatkép"}
+            </li>
+            <li>
+              <span className="font-semibold">Deklarált ügyféladat:</span>{" "}
+              {declaredRefCount > 0
+                ? `${declaredRefCount} felmérési / bejelentési megfigyelés`
+                : "nincs csatolt deklarált megfigyelés"}
+            </li>
+            <li>
+              <span className="font-semibold">Kutatási háttér:</span>{" "}
+              {evidenceCategoryCounts.RESEARCH > 0
+                ? `${evidenceCategoryCounts.RESEARCH} külső hivatkozás (nem ügyféladat)`
+                : "nincs csatolt külső hivatkozás"}
+            </li>
+            {sourceRefs?.severity ? (
+              <li>
+                <span className="font-semibold">Súlyosság:</span> {sourceRefs.severity}
+              </li>
+            ) : null}
+          </ul>
+          <p className="mt-2 text-[11px] text-[#788274]">
+            A kutatási háttér alátámasztó kontextus; nem a cég saját mért tényadata.
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => setDrawerOpen((v) => !v)}
@@ -792,14 +896,20 @@ function GrowDetailScreen({
           </>
         ) : (
           <p className="text-xs text-[#1b382b]">
-            Döntés rögzítve{detail.review?.byName ? ` — ${detail.review.byName}` : ""}{detail.review?.at ? ` (${new Date(detail.review.at).toLocaleDateString("hu-HU")})` : ""}.
+            Emberi döntés: <span className="font-semibold">{reviewDecisionLabelHu(detail.status)}</span>
+            {detail.review?.byName ? ` — ${detail.review.byName}` : ""}{detail.review?.at ? ` (${new Date(detail.review.at).toLocaleDateString("hu-HU")})` : ""}.
             {detail.review?.note ? <span className="mt-1 block text-xs text-[#556052]">„{detail.review.note}”</span> : null}
           </p>
         )}
         {accepted ? (
           <div className="mt-4 rounded-2xl border border-[#2d5a43]/30 bg-[#2d5a43]/5 p-4">
             <p className="text-xs font-medium text-[#1b382b]">
-              Javítási lehetőség állapota: {detail.opportunity?.status === "INITIATIVE_STARTED" ? "kezdeményezés indítva" : detail.opportunity?.status === "OUTCOME_RECORDED" ? "eredmény rögzítve" : "nyitott"}
+              Javítási lehetőség állapota: {opportunityStatusLabelHu(detail.opportunity?.status ?? "OPEN")}
+            </p>
+            <p className="mt-1 text-xs text-[#556052]">
+              {detail.opportunity?.developmentInitiativeId
+                ? "Fejlesztési kezdeményezés létezik ehhez a lehetőséghez."
+                : "Még nincs fejlesztési kezdeményezés — a kezdeményezés indítása külön, kifejezett lépés."}
             </p>
             {detail.opportunity && detail.opportunity.status === "OPEN" ? (
               <button
@@ -816,64 +926,361 @@ function GrowDetailScreen({
         {message ? <p className="mt-3 text-xs font-semibold text-[#2d5a43]" role="status">{message}</p> : null}
         {localError ? <p className="mt-3 text-xs text-[#c85a32]" role="alert">{localError}</p> : null}
       </Panel>
+
+      {accepted && detail.opportunity ? (
+        <OpportunityPublicationPanel
+          clientId={clientId}
+          opportunityId={detail.opportunity.id}
+          internalTitle={detail.title}
+          internalProblem={detail.problemStatement}
+          internalDirection={detail.direction}
+          canPublish={canPublishOpportunities}
+        />
+      ) : null}
     </div>
   );
 }
+
+function EvidenceItemCard({ item }: { item: GrowEvidenceItem }) {
+  return (
+    <article className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <p className="text-xs font-semibold text-[#1b382b]">{item.title}</p>
+        <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${item.verificationStatus === "VERIFIED" ? "border-[#2d5a43]/40 bg-[#2d5a43]/10 text-[#1b382b]" : "border-[#e8ded1] bg-white text-[#788274]"}`}>
+          {item.verificationStatus === "VERIFIED" ? "Ellenőrzött" : "Nem ellenőrzött"}
+        </span>
+      </div>
+      <dl className="mt-3 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-3 gap-y-1.5 text-xs">
+        <dt className="text-[#667062]">Forrás</dt>
+        <dd className="text-[#1b382b]">{[item.authors, item.venue, item.year].filter(Boolean).join(" · ") || "—"}</dd>
+        <dt className="text-[#667062]">Származás</dt>
+        <dd className="text-[#1b382b]">{evidenceOriginLabelHu(item.origin)}</dd>
+        <dt className="text-[#667062]">Típus</dt>
+        <dd className="text-[#1b382b]">{item.evidenceType || item.kind}</dd>
+        <dt className="text-[#667062]">Erősség</dt>
+        <dd className="text-[#1b382b]">{evidenceStrengthLabelHu(item.strength)}</dd>
+        {item.boundedClaim ? (
+          <>
+            <dt className="text-[#667062]">Állítás</dt>
+            <dd className="text-[#1b382b]">{item.boundedClaim}</dd>
+          </>
+        ) : null}
+        {item.applicabilityNotes ? (
+          <>
+            <dt className="text-[#667062]">Alkalmazhatóság</dt>
+            <dd className="text-[#1b382b]">{item.applicabilityNotes}</dd>
+          </>
+        ) : null}
+        {item.limitations ? (
+          <>
+            <dt className="text-[#667062]">Korlátok</dt>
+            <dd className="text-[#1b382b]">{item.limitations}</dd>
+          </>
+        ) : null}
+        {item.locator || item.doi ? (
+          <>
+            <dt className="text-[#667062]">Elérhetőség</dt>
+            <dd className="break-all text-[#1b382b]">
+              {item.doi ? <span className="mr-2">DOI: {item.doi}</span> : null}
+              {item.locator ? <span>{item.locator}</span> : null}
+            </dd>
+          </>
+        ) : null}
+      </dl>
+    </article>
+  );
+}
+
+const EVIDENCE_CATEGORY_ORDER: EvidenceBasisCategory[] = ["MEASURED_COMPANY", "DECLARED_COMPANY", "RESEARCH"];
 
 function EvidenceDrawer({ evidence }: { evidence: GrowEvidenceItem[] }) {
   if (!evidence.length) {
     return <p className="mt-3 text-sm text-[#788274]">Ehhez a javaslathoz nincs csatolt bizonyíték.</p>;
   }
+  const grouped: Record<EvidenceBasisCategory, GrowEvidenceItem[]> = { MEASURED_COMPANY: [], DECLARED_COMPANY: [], RESEARCH: [] };
+  for (const item of evidence) grouped[evidenceBasisCategory(item)].push(item);
   return (
-    <div className="mt-4 space-y-3" data-testid="evidence-drawer">
-      {evidence.map((item) => (
-        <article key={item.id} className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <p className="text-xs font-semibold text-[#1b382b]">{item.title}</p>
-            <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold ${item.verificationStatus === "VERIFIED" ? "border-[#2d5a43]/40 bg-[#2d5a43]/10 text-[#1b382b]" : "border-[#e8ded1] bg-white text-[#788274]"}`}>
-              {item.verificationStatus === "VERIFIED" ? "Ellenőrzött" : "Nem ellenőrzött"}
-            </span>
-          </div>
-          <dl className="mt-3 grid grid-cols-[minmax(90px,auto)_1fr] gap-x-3 gap-y-1.5 text-xs">
-            <dt className="text-[#667062]">Forrás</dt>
-            <dd className="text-[#1b382b]">{[item.authors, item.venue, item.year].filter(Boolean).join(" · ") || "—"}</dd>
-            <dt className="text-[#667062]">Származás</dt>
-            <dd className="text-[#1b382b]">{evidenceOriginLabelHu(item.origin)}</dd>
-            <dt className="text-[#667062]">Típus</dt>
-            <dd className="text-[#1b382b]">{item.evidenceType || item.kind}</dd>
-            <dt className="text-[#667062]">Erősség</dt>
-            <dd className="text-[#1b382b]">{evidenceStrengthLabelHu(item.strength)}</dd>
-            {item.boundedClaim ? (
-              <>
-                <dt className="text-[#667062]">Állítás</dt>
-                <dd className="text-[#1b382b]">{item.boundedClaim}</dd>
-              </>
-            ) : null}
-            {item.applicabilityNotes ? (
-              <>
-                <dt className="text-[#667062]">Alkalmazhatóság</dt>
-                <dd className="text-[#1b382b]">{item.applicabilityNotes}</dd>
-              </>
-            ) : null}
-            {item.limitations ? (
-              <>
-                <dt className="text-[#667062]">Korlátok</dt>
-                <dd className="text-[#1b382b]">{item.limitations}</dd>
-              </>
-            ) : null}
-            {item.locator || item.doi ? (
-              <>
-                <dt className="text-[#667062]">Elérhetőség</dt>
-                <dd className="break-all text-[#1b382b]">
-                  {item.doi ? <span className="mr-2">DOI: {item.doi}</span> : null}
-                  {item.locator ? <span>{item.locator}</span> : null}
-                </dd>
-              </>
-            ) : null}
-          </dl>
-        </article>
-      ))}
+    <div className="mt-4 space-y-5" data-testid="evidence-drawer">
+      {EVIDENCE_CATEGORY_ORDER.map((category) => {
+        const items = grouped[category];
+        if (!items.length) return null;
+        return (
+          <section key={category} data-testid={`evidence-basis-${category}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-bold text-[#1b382b]">{evidenceBasisLabelHu(category)}</h3>
+              <span className="rounded-full border border-[#e8ded1] bg-[#faf6ee] px-2.5 py-0.5 text-[10px] font-medium text-[#556052]">
+                {items.length} tétel
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-[#788274]">{evidenceBasisExplanationHu(category)}</p>
+            <div className="mt-3 space-y-3">
+              {items.map((item) => (
+                <EvidenceItemCard key={item.id} item={item} />
+              ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
+  );
+}
+
+/* ------------------------- Screen 3b: Opportunity publication --------------------- */
+
+function OpportunityPublicationPanel({
+  clientId,
+  opportunityId,
+  internalTitle,
+  internalProblem,
+  internalDirection,
+  canPublish,
+}: {
+  clientId: string;
+  opportunityId: string;
+  internalTitle: string;
+  internalProblem: string;
+  internalDirection: string;
+  canPublish: boolean;
+}) {
+  const [publications, setPublications] = useState<OpportunityPublicationDTO[]>([]);
+  const [workspaces, setWorkspaces] = useState<OpportunityPublicationWorkspaceDTO[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState("");
+  const [safeTitle, setSafeTitle] = useState("");
+  const [safeSummary, setSafeSummary] = useState("");
+  const [safeDirection, setSafeDirection] = useState("");
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [pubRes, wsRes] = await Promise.all([
+        growApi.listOpportunityPublications(clientId, opportunityId),
+        growApi.listOpportunityPublicationWorkspaces(clientId).catch(() => ({ items: [] as OpportunityPublicationWorkspaceDTO[] })),
+      ]);
+      setPublications(pubRes.items);
+      setWorkspaces(wsRes.items);
+    } catch {
+      setLocalError("A közzétételi állapot nem tölthető be.");
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId, opportunityId]);
+
+  useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const latestByWorkspace = useMemo(() => {
+    const map = new Map<string, OpportunityPublicationDTO>();
+    for (const publication of publications) {
+      const existing = map.get(publication.workspaceId);
+      if (!existing || publication.revision > existing.revision) map.set(publication.workspaceId, publication);
+    }
+    return map;
+  }, [publications]);
+
+  const prepare = async () => {
+    setBusy("prepare");
+    setMessage(null);
+    setLocalError(null);
+    try {
+      if (!workspaceId) throw new Error("WORKSPACE_REQUIRED");
+      if (!safeTitle.trim() || !safeSummary.trim()) throw new Error("TEXT_REQUIRED");
+      const existing = latestByWorkspace.get(workspaceId);
+      await growApi.createOpportunityPublicationDraft(clientId, {
+        opportunityId,
+        workspaceId,
+        title: safeTitle.trim(),
+        summary: safeSummary.trim(),
+        direction: safeDirection.trim() || undefined,
+        expectedRevision: existing?.revision,
+      });
+      setMessage("Előkészítés rögzítve. A közzététel külön jóváhagyási és publikálási lépés.");
+      setSafeTitle("");
+      setSafeSummary("");
+      setSafeDirection("");
+      await reload();
+    } catch {
+      setLocalError("Az előkészítés nem sikerült. Ellenőrizze a munkaterületet és a szövegeket.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const transition = async (publication: OpportunityPublicationDTO, action: "submit" | "approve" | "publish" | "revoke") => {
+    setBusy(`${publication.id}:${action}`);
+    setMessage(null);
+    setLocalError(null);
+    try {
+      await growApi.transitionOpportunityPublication(clientId, publication.id, action, publication.revision);
+      setMessage(
+        action === "submit"
+          ? "Jóváhagyásra elküldve."
+          : action === "approve"
+            ? "Jóváhagyva — még nem látható az ügyfél számára."
+            : action === "publish"
+              ? "Közzétéve: a jóváhagyott, változatlan ügyfélbiztos pillanatkép látható az ügyfélportálon."
+              : "Visszavonva: a közzététel eltűnt az ügyfélportálról, a belső lehetőség megmaradt.",
+      );
+      await reload();
+    } catch {
+      setLocalError("A művelet nem sikerült.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Panel title="Ügyfél-közzététel" kicker="Ügyfélbiztos pillanatkép — külön emberi döntés">
+      <p className="text-xs text-[#556052] leading-relaxed">
+        A belső javítási lehetőség alapértelmezésben nem látható az ügyfél számára. Az ügyfél csak a
+        kifejezetten előkészített, jóváhagyott és közzétett, változatlan pillanatképet látja.
+      </p>
+
+      {loading ? <p className="mt-3 text-sm text-[#788274]">Betöltés…</p> : null}
+
+      {!loading ? (
+        <div className="mt-4 space-y-4">
+          {publications.length === 0 ? (
+            <p className="rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/50 p-4 text-xs text-[#556052]">
+              Ehhez a lehetőséghez még nincs közzététel. Az ügyfél jelenleg semmit nem lát ebből.
+            </p>
+          ) : (
+            latestByWorkspace.size > 0 ? (
+              <div className="space-y-3">
+                {[...latestByWorkspace.values()].map((publication) => {
+                  const workspace = workspaces.find((w) => w.id === publication.workspaceId);
+                  return (
+                    <article key={publication.id} className="rounded-2xl border border-[#e8ded1] bg-white p-4" data-testid={`opportunity-publication-${publication.status}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs font-semibold text-[#1b382b]">
+                          {workspace?.name ?? "Munkaterület"} · v{publication.snapshot?.revisionNumber ?? publication.revision}
+                        </p>
+                        <span className="rounded-full border border-[#e8ded1] bg-[#faf6ee] px-2.5 py-0.5 text-[10px] font-semibold text-[#1b382b]">
+                          {publicationStatusLabelHu(publication.status)}
+                        </span>
+                      </div>
+                      {publication.snapshot ? (
+                        <div className="mt-2 space-y-1 text-xs text-[#556052]">
+                          <p className="font-medium text-[#1b382b]">Ügyfélnek szánt cím: {publication.snapshot.clientSafeTitle}</p>
+                          <p>Ügyfélnek szánt összefoglaló: {publication.snapshot.clientSafeSummary}</p>
+                          {publication.snapshot.clientSafeDirection ? (
+                            <p>Ügyfélnek szánt irány: {publication.snapshot.clientSafeDirection}</p>
+                          ) : null}
+                          {publication.publishedAt ? (
+                            <p className="text-[11px] text-[#788274]">Közzétéve: {new Date(publication.publishedAt).toLocaleDateString("hu-HU")}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {publication.status === "DRAFT" ? (
+                          <button type="button" disabled={busy !== null} onClick={() => void transition(publication, "submit")}
+                            className="rounded-xl border border-[#e8ded1] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#1b382b] hover:bg-[#faf6ee] disabled:opacity-40 transition-colors">
+                            {busy === `${publication.id}:submit` ? "Küldés…" : "Jóváhagyásra küldöm"}
+                          </button>
+                        ) : null}
+                        {publication.status === "READY_FOR_APPROVAL" ? (
+                          <button type="button" disabled={busy !== null || !canPublish} onClick={() => void transition(publication, "approve")}
+                            className="rounded-xl bg-[#1b382b] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#2d5a43] disabled:cursor-not-allowed disabled:opacity-40 transition-colors">
+                            {busy === `${publication.id}:approve` ? "Jóváhagyás…" : "Jóváhagyom"}
+                          </button>
+                        ) : null}
+                        {publication.status === "APPROVED" ? (
+                          <button type="button" disabled={busy !== null || !canPublish} onClick={() => void transition(publication, "publish")}
+                            className="rounded-xl bg-[#1b382b] px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-[#2d5a43] disabled:cursor-not-allowed disabled:opacity-40 transition-colors">
+                            {busy === `${publication.id}:publish` ? "Közzététel…" : "Közzéteszem az ügyfélnek"}
+                          </button>
+                        ) : null}
+                        {publication.status === "PUBLISHED" ? (
+                          <button type="button" disabled={busy !== null || !canPublish} onClick={() => void transition(publication, "revoke")}
+                            className="rounded-xl border border-[#c85a32]/40 bg-white px-3.5 py-1.5 text-xs font-semibold text-[#a03d19] hover:bg-[#faf6ee] disabled:opacity-40 transition-colors">
+                            {busy === `${publication.id}:revoke` ? "Visszavonás…" : "Visszavonom a közzétételt"}
+                          </button>
+                        ) : null}
+                      </div>
+                      {!canPublish && ["READY_FOR_APPROVAL", "APPROVED", "PUBLISHED"].includes(publication.status) ? (
+                        <p className="mt-2 text-[11px] text-[#788274]">A jóváhagyáshoz és közzétételhez közzétételi jogosultság (admin, partner vagy ügyvéd) szükséges.</p>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : null
+          )}
+
+          <div className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Új közzététel előkészítése</p>
+            <p className="mt-1 text-[11px] text-[#788274]">
+              Belső szöveg (csak belső referencia, nem kerül automatikusan az ügyfélhez): „{internalTitle}” — {internalProblem}
+              {internalDirection ? ` / ${internalDirection}` : ""}
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="block text-xs font-semibold text-[#556052]">
+                Munkaterület (ügyfél-audience)
+                <select
+                  value={workspaceId}
+                  onChange={(e) => setWorkspaceId(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-[#e8ded1] bg-white px-3 py-2 text-xs text-[#1b382b] focus:border-[#2d5a43] focus:outline-none"
+                >
+                  <option value="">Válasszon munkaterületet</option>
+                  {workspaces.map((workspace) => (
+                    <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
+                  ))}
+                </select>
+              </label>
+              <p className="self-end text-[11px] text-[#788274]">
+                {workspaces.length === 0
+                  ? "Nincs aktív szervezeti munkaterület ehhez az ügyfélhez — közzétételi cél nem választható."
+                  : "Csak aktív szervezeti (vagy ügy-áthidaló) munkaterület választható."}
+              </p>
+              <label className="block text-xs font-semibold text-[#556052] sm:col-span-2">
+                Ügyfélbiztos cím
+                <input
+                  value={safeTitle}
+                  onChange={(e) => setSafeTitle(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-[#e8ded1] bg-white px-3 py-2 text-xs text-[#1b382b] focus:border-[#2d5a43] focus:outline-none"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-[#556052] sm:col-span-2">
+                Ügyfélbiztos összefoglaló
+                <textarea
+                  rows={3}
+                  value={safeSummary}
+                  onChange={(e) => setSafeSummary(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-[#e8ded1] bg-white px-3 py-2 text-xs text-[#1b382b] focus:border-[#2d5a43] focus:outline-none"
+                />
+              </label>
+              <label className="block text-xs font-semibold text-[#556052] sm:col-span-2">
+                Ügyfélbiztos javasolt irány (opcionális)
+                <textarea
+                  rows={2}
+                  value={safeDirection}
+                  onChange={(e) => setSafeDirection(e.target.value)}
+                  className="mt-1.5 w-full rounded-xl border border-[#e8ded1] bg-white px-3 py-2 text-xs text-[#1b382b] focus:border-[#2d5a43] focus:outline-none"
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              disabled={busy !== null || !workspaceId || !safeTitle.trim() || !safeSummary.trim()}
+              onClick={() => void prepare()}
+              className="mt-3 rounded-xl border border-[#1b382b] bg-white px-4 py-2 text-xs font-semibold text-[#1b382b] hover:bg-[#faf6ee] disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+            >
+              {busy === "prepare" ? "Előkészítés…" : "Közzététel előkészítése"}
+            </button>
+            <p className="mt-2 text-[11px] text-[#788274]">
+              Az előkészítés nem tesz közzé semmit. A jóváhagyás és a közzététel külön, kifejezett lépés.
+            </p>
+          </div>
+
+          {message ? <p className="text-xs font-semibold text-[#2d5a43]" role="status">{message}</p> : null}
+          {localError ? <p className="text-xs text-[#c85a32]" role="alert">{localError}</p> : null}
+        </div>
+      ) : null}
+    </Panel>
   );
 }
 
@@ -881,115 +1288,277 @@ function EvidenceDrawer({ evidence }: { evidence: GrowEvidenceItem[] }) {
 
 function GrowProgressScreen({
   initiatives,
+  milestones,
+  acceptedOpportunities,
+  outcomes,
   tasks,
+  onOpenDetail,
 }: {
   initiatives: DevelopmentInitiative[];
+  milestones: CompanyMilestone[];
+  acceptedOpportunities: GrowOpportunityItem[];
+  outcomes: OutcomeMeasurementDTO[];
   tasks: TaskLifecycleListItem[];
+  onOpenDetail: (id: string) => void;
 }) {
   const active = initiatives.filter((i) => ["PLANNED", "ACTIVE", "ON_HOLD"].includes(i.status));
   const closed = initiatives.filter((i) => ["COMPLETED", "CANCELLED"].includes(i.status));
   const openTasks = tasks.filter((t) => !["DONE", "COMPLETED", "CANCELLED"].includes(String(t.status).toUpperCase()));
 
   return (
-    <Panel title="Fejlesztés folyamatban" kicker="Kezdeményezések és feladatok">
-      {active.length === 0 && closed.length === 0 ? (
-        <p className="text-sm text-[#788274]">Még nincs fejlesztési kezdeményezés ehhez a céghez.</p>
-      ) : (
-        <div className="space-y-4">
-          {active.map((initiative) => {
-            const linkedTasks = openTasks.filter((t) => initiative.caseId && t.case.id === initiative.caseId);
-            return (
-              <article key={initiative.id} className="rounded-2xl border border-[#e8ded1] bg-white p-5 shadow-xs">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-serif text-base font-bold text-[#1b382b]">{initiative.title}</p>
-                  <span className="rounded-full border border-[#e8ded1] bg-[#faf6ee] px-2.5 py-0.5 text-[10px] font-semibold text-[#556052]">
-                    {initiativeStatusLabel(initiative.status)}
+    <div className="space-y-6">
+      <Panel title="Elfogadott lehetőségek" kicker="Emberi döntés után — kezdeményezés és közzététel">
+        {acceptedOpportunities.length === 0 ? (
+          <p className="text-sm text-[#788274]">
+            Még nincs elfogadott javítási lehetőség. A lehetőség a javaslat kifejezett „Elfogadom” döntése után jön létre.
+          </p>
+        ) : (
+          <ul className="space-y-3" data-testid="accepted-opportunities">
+            {acceptedOpportunities.map((o) => (
+              <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#1b382b]">{o.title}</p>
+                  <p className="mt-0.5 text-xs text-[#556052]">
+                    {domainTitleHu(o.domainKey)}
+                    {o.businessProcess ? ` · ${o.businessProcess.name}` : ""}
+                  </p>
+                  <p className="mt-1 text-[11px] text-[#788274]">
+                    {o.opportunity?.developmentInitiativeId
+                      ? "Fejlesztési kezdeményezés indítva."
+                      : "Még nincs kezdeményezés — a kezdeményezés indítása külön lépés."}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="rounded-full border border-[#2d5a43]/40 bg-[#2d5a43]/10 px-2.5 py-0.5 text-[10px] font-semibold text-[#1b382b]">
+                    {reviewDecisionLabelHu(o.status)}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => onOpenDetail(o.id)}
+                    className="text-xs font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
+                  >
+                    Részletek és közzététel →
+                  </button>
                 </div>
-                {initiative.targetState ? (
-                  <p className="mt-1.5 text-xs text-[#556052]">Cél: {initiative.targetState}</p>
-                ) : null}
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[#788274]">
-                  <span>{linkedTasks.length} nyitott kapcsolódó feladat</span>
-                  {initiative.caseId ? (
-                    <Link
-                      href={`/cases/${encodeURIComponent(initiative.caseId)}`}
-                      className="font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
-                    >
-                      Ügy megnyitása →
-                    </Link>
-                  ) : (
-                    <span>Nincs kapcsolt ügy — a feladatok az ügyekhez kapcsolódnak.</span>
-                  )}
-                </div>
-                {linkedTasks.length ? (
-                  <ul className="mt-3 space-y-1.5 border-t border-[#f0ece1] pt-3">
-                    {linkedTasks.slice(0, 5).map((task) => (
-                      <li key={task.id} className="text-xs text-[#1b382b]">
-                        <Link href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="hover:underline font-medium">
-                          {task.title}
-                        </Link>
-                        <span className="ml-2 text-[#788274]">{task.status}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </article>
-            );
-          })}
-          {closed.length ? (
-            <p className="text-xs text-[#788274]">
-              Lezárt kezdeményezések: {closed.map((i) => i.title).join(", ")}
-            </p>
-          ) : null}
-        </div>
-      )}
-    </Panel>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+
+      <Panel title="Fejlesztés folyamatban" kicker="Kezdeményezések, mérföldkövek és feladatok">
+        {active.length === 0 && closed.length === 0 ? (
+          <p className="text-sm text-[#788274]">Még nincs fejlesztési kezdeményezés ehhez a céghez.</p>
+        ) : (
+          <div className="space-y-4">
+            {active.map((initiative) => {
+              const linkedTasks = openTasks.filter((t) => initiative.caseId && t.case.id === initiative.caseId);
+              const initiativeMilestones = milestones
+                .filter((m) => m.developmentInitiativeId === initiative.id)
+                .sort((a, b) => (a.milestoneDate ?? a.targetDate ?? "9999").localeCompare(b.milestoneDate ?? b.targetDate ?? "9999"));
+              const nextMilestone = initiativeMilestones.find((m) => !["ACHIEVED", "CANCELLED"].includes(String(m.status)));
+              const relatedOutcomes = outcomes.filter((o) => o.initiative?.id === initiative.id);
+              const relatedOpportunity = acceptedOpportunities.find(
+                (o) => o.opportunity?.developmentInitiativeId === initiative.id,
+              );
+              const responsible = initiative.lawFirmOwnerName || initiative.clientOwnerDisplay || null;
+              return (
+                <article key={initiative.id} className="rounded-2xl border border-[#e8ded1] bg-white p-5 shadow-xs" data-testid="initiative-cockpit">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-serif text-base font-bold text-[#1b382b]">{initiative.title}</p>
+                    <span className="rounded-full border border-[#e8ded1] bg-[#faf6ee] px-2.5 py-0.5 text-[10px] font-semibold text-[#556052]">
+                      {initiativeStatusLabel(initiative.status)}
+                    </span>
+                  </div>
+
+                  <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-[minmax(120px,auto)_1fr]">
+                    <dt className="text-[#667062]">Kiinduló helyzet</dt>
+                    <dd className="text-[#1b382b]">{initiative.currentState || "Nincs adat."}</dd>
+                    <dt className="text-[#667062]">Célállapot</dt>
+                    <dd className="text-[#1b382b]">{initiative.targetState || "Nincs adat."}</dd>
+                    <dt className="text-[#667062]">Felelős</dt>
+                    <dd className="text-[#1b382b]">{responsible || "Nincs adat."}</dd>
+                    <dt className="text-[#667062]">Céldátum</dt>
+                    <dd className="text-[#1b382b]">{initiative.targetAt ? new Date(initiative.targetAt).toLocaleDateString("hu-HU") : "Nincs adat."}</dd>
+                    <dt className="text-[#667062]">Kapcsolódó lehetőség</dt>
+                    <dd className="text-[#1b382b]">{relatedOpportunity ? relatedOpportunity.title : "Nincs adat."}</dd>
+                    <dt className="text-[#667062]">Következő mérföldkő</dt>
+                    <dd className="text-[#1b382b]">
+                      {nextMilestone
+                        ? `${nextMilestone.title} · ${companyMilestoneStatusLabel(nextMilestone.status)}${nextMilestone.targetDate ? ` (${new Date(nextMilestone.targetDate).toLocaleDateString("hu-HU")})` : ""}`
+                        : "Nincs adat."}
+                    </dd>
+                  </dl>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[#788274]">
+                    <span>{linkedTasks.length} nyitott kapcsolódó feladat</span>
+                    {initiative.caseId ? (
+                      <Link
+                        href={`/cases/${encodeURIComponent(initiative.caseId)}`}
+                        className="font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
+                      >
+                        Ügy megnyitása →
+                      </Link>
+                    ) : (
+                      <span>Nincs kapcsolt ügy — a feladatok az ügyekhez kapcsolódnak.</span>
+                    )}
+                  </div>
+
+                  <div className="mt-4 border-t border-[#f0ece1] pt-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Mérföldkövek</p>
+                    {initiativeMilestones.length === 0 ? (
+                      <p className="mt-1.5 text-xs text-[#788274]">Ehhez a kezdeményezéshez még nincsenek mérföldkövek rögzítve.</p>
+                    ) : (
+                      <ul className="mt-2 space-y-1.5">
+                        {initiativeMilestones.map((m) => (
+                          <li key={m.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                            <span className="text-[#1b382b]">{m.title}</span>
+                            <span className="text-[#788274]">
+                              {companyMilestoneStatusLabel(m.status)}
+                              {m.targetDate ? ` · ${new Date(m.targetDate).toLocaleDateString("hu-HU")}` : ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {relatedOutcomes.length ? (
+                    <div className="mt-4 border-t border-[#f0ece1] pt-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Kapcsolódó eredmények</p>
+                      <ul className="mt-2 space-y-1">
+                        {relatedOutcomes.map((o) => (
+                          <li key={o.id} className="text-xs text-[#1b382b]">
+                            {outcomeBasisLabelHu(o.basis)}
+                            {o.synthetic ? " · szintetikus tesztadat" : ""}
+                            {" · "}
+                            {new Date(o.createdAt).toLocaleDateString("hu-HU")}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {linkedTasks.length ? (
+                    <ul className="mt-4 space-y-1.5 border-t border-[#f0ece1] pt-3">
+                      {linkedTasks.slice(0, 5).map((task) => (
+                        <li key={task.id} className="text-xs text-[#1b382b]">
+                          <Link href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="hover:underline font-medium">
+                            {task.title}
+                          </Link>
+                          <span className="ml-2 text-[#788274]">{task.status}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </article>
+              );
+            })}
+            {closed.length ? (
+              <p className="text-xs text-[#788274]">
+                Lezárt kezdeményezések: {closed.map((i) => i.title).join(", ")}
+              </p>
+            ) : null}
+          </div>
+        )}
+      </Panel>
+    </div>
   );
 }
 
 /* ---------------------------------- Screen 5: Results ------------------------------ */
 
-function GrowResultsScreen({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) {
+function OutcomeCard({ outcome }: { outcome: OutcomeMeasurementDTO }) {
   return (
-    <Panel title="Mit értünk el?" kicker="Rögzített eredmények és hatások">
-      {outcomes.length === 0 ? (
-        <div className="rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/50 p-6 text-sm text-[#556052] leading-relaxed">
-          Még nincs rögzített eredmény. Az eredmények az elfogadott lehetőségek előtte/utána méréséből származnak — ugyanannál a cégnél, ugyanahhoz a folyamathoz.
+    <article className="rounded-2xl border border-[#e8ded1] bg-white p-5 shadow-xs" data-testid={`outcome-${outcome.basis}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="font-serif text-base font-bold text-[#1b382b]">
+          {outcome.opportunityTitle ?? outcome.businessProcess?.name ?? "Eredmény"}
+        </p>
+        <div className="flex gap-1.5">
+          <span className="rounded-full border border-[#e8ded1] bg-[#faf6ee] px-2.5 py-0.5 text-[10px] font-semibold text-[#1b382b]">
+            {outcomeBasisLabelHu(outcome.basis)}
+          </span>
+          {outcome.synthetic ? (
+            <span className="rounded-full border border-amber-400 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-950">
+              Szintetikus tesztadat — nem valós üzleti eredmény
+            </span>
+          ) : null}
         </div>
+      </div>
+      {outcome.metricsSummary?.before ? (
+        <BeforeAfterTable summary={outcome.metricsSummary} />
       ) : (
-        <div className="space-y-4">
-          {outcomes.map((outcome) => (
-            <article key={outcome.id} className="rounded-2xl border border-[#e8ded1] bg-white p-5 shadow-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-serif text-base font-bold text-[#1b382b]">
-                  {outcome.opportunityTitle ?? outcome.businessProcess?.name ?? "Eredmény"}
-                </p>
-                <div className="flex gap-1.5">
-                  <span className="rounded-full border border-[#e8ded1] bg-[#faf6ee] px-2.5 py-0.5 text-[10px] font-semibold text-[#1b382b]">
-                    {outcomeBasisLabelHu(outcome.basis)}
-                  </span>
-                  {outcome.synthetic ? (
-                    <span className="rounded-full border border-amber-400 bg-amber-50 px-2.5 py-0.5 text-[10px] font-semibold text-amber-950">
-                      Szintetikus tesztadat
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              {outcome.metricsSummary?.before ? (
-                <BeforeAfterTable summary={outcome.metricsSummary} />
-              ) : null}
-              {outcome.roi ? <RoiBlock roi={outcome.roi} /> : null}
-              {outcome.note ? <p className="mt-3 text-xs text-[#556052]">{outcome.note}</p> : null}
-              <p className="mt-3 text-[11px] text-[#788274]">
-                Rögzítette: {outcome.recordedBy?.name ?? "—"} · {new Date(outcome.createdAt).toLocaleDateString("hu-HU")}
-                {outcome.initiative ? ` · ${outcome.initiative.title}` : ""}
-              </p>
-            </article>
-          ))}
-        </div>
+        <p className="mt-3 text-xs text-[#788274]" data-testid="outcome-no-measurement">
+          Nincs mérési adat.
+        </p>
       )}
-    </Panel>
+      {outcome.roi ? <RoiBlock roi={outcome.roi} /> : null}
+      {outcome.note ? <p className="mt-3 text-xs text-[#556052]">{outcome.note}</p> : null}
+      <p className="mt-3 text-[11px] text-[#788274]">
+        Rögzítette: {outcome.recordedBy?.name ?? "—"} · {new Date(outcome.createdAt).toLocaleDateString("hu-HU")}
+        {outcome.initiative ? ` · ${outcome.initiative.title}` : ""}
+      </p>
+    </article>
+  );
+}
+
+function GrowResultsScreen({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) {
+  const measured = outcomes.filter((o) => o.basis === "MEASURED");
+  const calculatedOrEstimated = outcomes.filter((o) => o.basis === "CALCULATED" || o.basis === "ESTIMATED");
+  const assumed = outcomes.filter((o) => o.basis === "ASSUMED");
+  const achievedCount = measured.length + calculatedOrEstimated.length;
+
+  return (
+    <div className="space-y-6">
+      <Panel title="Mit értünk el?" kicker="Rögzített eredmények és hatások">
+        {achievedCount === 0 ? (
+          <div className="rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/50 p-6 text-sm text-[#556052] leading-relaxed">
+            Még nincs rögzített eredmény. Az eredmények az elfogadott lehetőségek előtte/utána méréséből származnak — ugyanannál a cégnél, ugyanahhoz a folyamathoz.
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Mért eredmények</p>
+              {measured.length === 0 ? (
+                <p className="mt-2 text-xs text-[#788274]">Nincs mért eredmény.</p>
+              ) : (
+                <div className="mt-3 space-y-4">
+                  {measured.map((o) => (
+                    <OutcomeCard key={o.id} outcome={o} />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Számított / becsült eredmények</p>
+              {calculatedOrEstimated.length === 0 ? (
+                <p className="mt-2 text-xs text-[#788274]">Nincs számított vagy becsült eredmény.</p>
+              ) : (
+                <div className="mt-3 space-y-4">
+                  {calculatedOrEstimated.map((o) => (
+                    <OutcomeCard key={o.id} outcome={o} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Panel>
+
+      {assumed.length ? (
+        <Panel title="Feltételezés — nem elért eredmény" kicker="Nem tekinthető megvalósult hatásnak">
+          <p className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 leading-relaxed">
+            Az alábbi sorok feltételezésen alapulnak. Nem mért vagy számított eredmények, ezért nem jelennek meg elért eredményként.
+          </p>
+          <div className="mt-4 space-y-4">
+            {assumed.map((o) => (
+              <OutcomeCard key={o.id} outcome={o} />
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+    </div>
   );
 }
 

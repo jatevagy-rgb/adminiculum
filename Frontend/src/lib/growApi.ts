@@ -34,6 +34,7 @@ export interface GrowOpportunityItem {
   domainKey: string | null;
   businessProcess: { id: string; name: string } | null;
   evidenceStrength: EvidenceStrength;
+  opportunity?: { id: string; status: string; developmentInitiativeId: string | null } | null;
   createdAt: string;
 }
 
@@ -79,7 +80,7 @@ export interface GrowOpportunityDetail {
     summary: string;
     domainTitle: string | null;
     businessProcess: { id: string; name: string } | null;
-    sourceRefs: Record<string, unknown> | null;
+    sourceRefs: DiagnosisSourceRefs | null;
   } | null;
   evidence: GrowEvidenceItem[];
   review: { byId: string; byName: string | null; at: string | null; note: string | null } | null;
@@ -156,6 +157,70 @@ export interface BusinessProcessDTO {
   }>;
 }
 
+/** Canonical snapshot/observation references recorded on a diagnosis. */
+export interface DiagnosisSourceRefs {
+  snapshotIds?: string[];
+  observationIds?: string[];
+  businessProcessId?: string | null;
+  severity?: "HIGH" | "MEDIUM" | "LOW" | string;
+  sufficiency?: SufficiencyDecision | string;
+  reasons?: string[];
+}
+
+export type OpportunityPublicationStatus =
+  | "DRAFT"
+  | "READY_FOR_APPROVAL"
+  | "APPROVED"
+  | "PUBLISHED"
+  | "REVOKED"
+  | "SUPERSEDED";
+
+export interface OpportunityPublicationSnapshot {
+  id: string;
+  revisionNumber: number;
+  clientSafeTitle: string;
+  clientSafeSummary: string;
+  clientSafeDirection: string | null;
+  sourceFingerprint: string;
+  audienceSnapshot: unknown;
+  createdAt: string;
+}
+
+export interface OpportunityPublicationDTO {
+  id: string;
+  opportunityId: string;
+  clientId: string;
+  workspaceId: string;
+  status: OpportunityPublicationStatus;
+  currentRevisionId: string | null;
+  preparedById: string;
+  approvedById: string | null;
+  publishedById: string | null;
+  revokedById: string | null;
+  approvedAt: string | null;
+  publishedAt: string | null;
+  revokedAt: string | null;
+  revision: number;
+  snapshot: OpportunityPublicationSnapshot | null;
+}
+
+export interface OpportunityPublicationWorkspaceDTO {
+  id: string;
+  name: string;
+  mode: string;
+}
+
+export interface OpportunityPublicationDraftInput {
+  opportunityId: string;
+  workspaceId: string;
+  title: string;
+  summary: string;
+  direction?: string;
+  expectedRevision?: number;
+}
+
+export type OpportunityPublicationAction = "submit" | "approve" | "publish" | "revoke";
+
 export const SURVEY_CATEGORY_LABELS_HU: Record<string, string> = {
   MANUAL_ADMIN: "Túl sok kézi adminisztráció",
   SLOW_APPROVAL: "Lassú jóváhagyások / várakozás",
@@ -194,8 +259,9 @@ export const growApi = {
   listEvidence(clientId: string) {
     return fetchApi<{ items: GrowEvidenceItem[] }>(url(clientId, "/grow/evidence"));
   },
-  listOpportunities(clientId: string) {
-    return fetchApi<{ items: GrowOpportunityItem[] }>(url(clientId, "/grow/opportunities"));
+  listOpportunities(clientId: string, status?: "PENDING_REVIEW" | "ACCEPTED" | "DECLINED" | "NEEDS_MORE_DATA") {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return fetchApi<{ items: GrowOpportunityItem[] }>(url(clientId, `/grow/opportunities${query}`));
   },
   getOpportunity(clientId: string, recommendationId: string) {
     return fetchApi<GrowOpportunityDetail>(url(clientId, `/grow/opportunities/${encodeURIComponent(recommendationId)}`));
@@ -244,6 +310,31 @@ export const growApi = {
   },
   getProcessObservationLatest(clientId: string, processId: string) {
     return fetchApi<{ id: string; observedAt: string; metrics: Record<string, number> }>(url(clientId, `/processes/${encodeURIComponent(processId)}/observations/latest`));
+  },
+  listOpportunityPublications(clientId: string, opportunityId: string) {
+    return fetchApi<{ items: OpportunityPublicationDTO[] }>(
+      url(clientId, `/grow/opportunities/${encodeURIComponent(opportunityId)}/publications`),
+    );
+  },
+  listOpportunityPublicationWorkspaces(clientId: string) {
+    return fetchApi<{ items: OpportunityPublicationWorkspaceDTO[] }>(url(clientId, "/grow/opportunity-publication-workspaces"));
+  },
+  createOpportunityPublicationDraft(clientId: string, input: OpportunityPublicationDraftInput) {
+    return fetchApi<OpportunityPublicationDTO>(url(clientId, "/grow/opportunity-publications"), {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  transitionOpportunityPublication(
+    clientId: string,
+    publicationId: string,
+    action: OpportunityPublicationAction,
+    expectedRevision?: number,
+  ) {
+    return fetchApi<OpportunityPublicationDTO>(
+      url(clientId, `/grow/opportunity-publications/${encodeURIComponent(publicationId)}/${action}`),
+      { method: "POST", body: JSON.stringify({ expectedRevision }) },
+    );
   },
 };
 
@@ -327,4 +418,64 @@ export function evidenceOriginLabelHu(origin: string | null | undefined): string
     CLIENT_INTERNAL: "Ügyfél-belső",
   };
   return origin ? labels[origin] || origin : "—";
+}
+
+export function reviewDecisionLabelHu(status: string): string {
+  const labels: Record<string, string> = {
+    PENDING_REVIEW: "Emberi döntésre vár",
+    ACCEPTED: "Elfogadva",
+    DECLINED: "Elutasítva",
+    NEEDS_MORE_DATA: "További információ kérve",
+  };
+  return labels[status] || status;
+}
+
+export function opportunityStatusLabelHu(status: string): string {
+  const labels: Record<string, string> = {
+    OPEN: "Nyitott",
+    INITIATIVE_STARTED: "Kezdeményezés indítva",
+    OUTCOME_RECORDED: "Eredmény rögzítve",
+    CLOSED: "Lezárt",
+  };
+  return labels[status] || status;
+}
+
+export function publicationStatusLabelHu(status: string): string {
+  const labels: Record<string, string> = {
+    DRAFT: "Előkészítés (piszkozat)",
+    READY_FOR_APPROVAL: "Jóváhagyásra vár",
+    APPROVED: "Jóváhagyva",
+    PUBLISHED: "Közzétéve az ügyfélportálon",
+    REVOKED: "Visszavonva",
+    SUPERSEDED: "Felváltva",
+  };
+  return labels[status] || status;
+}
+
+/** Evidence category for the workforce "Mi alapján?" explanation. */
+export type EvidenceBasisCategory = "MEASURED_COMPANY" | "DECLARED_COMPANY" | "RESEARCH";
+
+export function evidenceBasisCategory(item: GrowEvidenceItem): EvidenceBasisCategory {
+  if (item.kind === "INTERNAL_MEASUREMENT" || item.evidenceType === "INTERNAL_MEASUREMENT") return "MEASURED_COMPANY";
+  if (item.kind === "INTERNAL_OBSERVATION" || item.evidenceType === "INTERNAL_OBSERVATION") return "DECLARED_COMPANY";
+  if (item.origin === "CLIENT_INTERNAL") return "DECLARED_COMPANY";
+  return "RESEARCH";
+}
+
+export function evidenceBasisLabelHu(category: EvidenceBasisCategory): string {
+  const labels: Record<EvidenceBasisCategory, string> = {
+    MEASURED_COMPANY: "Ügyfél-mérési bizonyíték",
+    DECLARED_COMPANY: "Deklarált felmérés / megfigyelés",
+    RESEARCH: "Kutatási háttér (nem ügyféladat)",
+  };
+  return labels[category];
+}
+
+export function evidenceBasisExplanationHu(category: EvidenceBasisCategory): string {
+  const labels: Record<EvidenceBasisCategory, string> = {
+    MEASURED_COMPANY: "A cég saját folyamat-mérési pillanatképéből származó, mért adat.",
+    DECLARED_COMPANY: "A cég által kitöltött felmérésből vagy bejelentésből származó, deklarált adat.",
+    RESEARCH: "Külső szakirodalmi/módszertani háttér. Ez nem a cég saját tényadata, csak alátámasztó kontextus.",
+  };
+  return labels[category];
 }
