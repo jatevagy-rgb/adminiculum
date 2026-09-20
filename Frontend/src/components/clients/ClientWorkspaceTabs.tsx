@@ -15,12 +15,16 @@ const tabs = [
   ["organization", "Szervezet", "/szervezet"],
   ["company-operations", "Vállalati működés", "/vallalati-mukodes"],
   ["grow", "Grow", "/grow"],
+  ["compliance", "Megfelelés", "/compliance"],
   ["calendar", "Naptár", "/calendar"],
   ["portal", "Portál", "/portal"],
 ] as const;
 
+// Organization-only modules stay hidden in individual mode. Compliance belongs
+// to the organization lifecycle, so it follows the same filter as the other
+// organization-only surfaces.
 export function ClientWorkspaceTabs({ clientId, active = "overview", organizationMode = true }: ClientWorkspaceTabsProps) {
-  const visibleTabs = organizationMode ? tabs : tabs.filter(([key]) => key !== "organization" && key !== "company-operations" && key !== "grow");
+  const visibleTabs = organizationMode ? tabs : tabs.filter(([key]) => key !== "organization" && key !== "company-operations" && key !== "grow" && key !== "compliance");
   return (
     <nav aria-label="Ügyfél munkaterület" className="border-b border-[var(--adm-border)]">
       <div className="flex min-w-0 flex-wrap items-center gap-1" role="tablist">
