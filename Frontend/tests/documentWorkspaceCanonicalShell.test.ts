@@ -12,6 +12,12 @@ const read = (file: string) => {
 };
 const documentPage = () => read("src/app/cases/[caseId]/documents/page.tsx");
 
+test("Canonical document route uses the normal application shell", () => {
+  const source = documentPage();
+  assert.match(source, /<AuthenticatedApp section="case-detail">/);
+  assert.doesNotMatch(source, /<AuthenticatedApp section="case-detail" workspaceChrome="focused">/);
+});
+
 test("Canonical four-region workspace layout renders in page.tsx", () => {
   const source = documentPage();
   assert.match(source, /data-testid="canonical-top-region"/, "Canonical top region must exist");
@@ -133,6 +139,8 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
 
 test("Preserved extended tools section keeps all existing workspaces and actions reachable", () => {
   const source = documentPage();
+  assert.match(source, /<details id="preserved-extended-tools-shell" data-testid="preserved-extended-tools-shell"/);
+  assert.match(source, /<summary[\s\S]*?További eszközök/);
   assert.match(source, /id="preserved-extended-tools"/);
   assert.match(source, /data-testid="preserved-extended-tools"/);
   assert.match(source, /További meglévő dokumentumeszközök/);
@@ -153,6 +161,17 @@ test("Preserved extended tools section keeps all existing workspaces and actions
   assert.match(source, /AnonymizeModal/);
   assert.match(source, /RehydrateModal/);
   assert.match(source, /id="ledger-delete-document-title"/);
+});
+
+test("Document workspace presents backend enums with human-readable labels", () => {
+  const source = documentPage();
+  assert.match(source, /NOT_IN_REVIEW:\s*'Nincs felülvizsgálat alatt'/);
+  assert.match(source, /INTERNAL_ONLY:\s*'Belső'/);
+  assert.match(source, /LAWYER_UPLOAD:\s*'Ügyvédi feltöltés'/);
+  assert.match(source, /ORIGINAL:\s*'Eredeti'/);
+  assert.match(source, /documentEnumLabel\(selectedVersion\.reviewStatus\)/);
+  assert.match(source, /documentEnumLabel\(selectedVersion\.publicationStatus\)/);
+  assert.doesNotMatch(source, /<p><b>Review:<\/b> \{selectedVersion\.reviewStatus\}<\/p>/);
 });
 
 // Targeted regression tests for exact-head review findings (Defects 1, 2, 3)
