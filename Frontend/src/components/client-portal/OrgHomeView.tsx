@@ -14,6 +14,7 @@ import {
   type PortalWorkSummary,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { selectUpcomingDeadlines } from "@/lib/clientPortalUpcoming";
 import { formatDate } from "./MatterWorkspace";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
@@ -252,7 +253,9 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
   const actionNow = useMemo(() => (home?.actions || []).slice(0, 4), [home]);
   const activeMatters = useMemo(() => (home?.matters || []).slice(0, 6), [home]);
 
-  // "What is coming up?" — derived only from real published dates, never invented.
+  // "What is coming up?" — today or later, derived only from real published dates.
+  // Overdue values stay on their canonical Teendők / attention surfaces; we never
+  // delete, rewrite or invent a date here.
   const deadlineRows = useMemo(() => {
     if (!home) return [] as Array<{ id: string; label: string; context: string; dueAt: string; href: string }>;
     const fromMatters = home.matters
@@ -273,7 +276,7 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         dueAt: action.dueAt as string,
         href: orgActionHref(action),
       }));
-    return [...fromMatters, ...fromActions].sort((a, b) => (a.dueAt < b.dueAt ? -1 : a.dueAt > b.dueAt ? 1 : 0)).slice(0, 3);
+    return selectUpcomingDeadlines([...fromMatters, ...fromActions], new Date());
   }, [home]);
 
   const orientation = useMemo(() => {
@@ -431,15 +434,15 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-amber-50 p-4 border border-amber-100">
             <p className="text-2xl font-semibold text-amber-950">{compliance?.attentionCount ?? 0}</p>
-            <p className="mt-1 text-xs text-amber-800">Teendőt igényel</p>
+              <p className="mt-1 text-xs text-amber-800">Öntől szükséges</p>
           </div>
           <div className="rounded-2xl bg-sky-50 p-4 border border-sky-100">
             <p className="text-2xl font-semibold text-sky-950">{compliance?.inProgressCount ?? 0}</p>
-            <p className="mt-1 text-xs text-sky-800">Folyamatban lévő intézkedés</p>
+              <p className="mt-1 text-xs text-sky-800">Irodánál van</p>
           </div>
           <div className="rounded-2xl bg-emerald-50 p-4 border border-emerald-100">
             <p className="text-2xl font-semibold text-emerald-950">{compliance?.noActionExpectedCount ?? 0}</p>
-            <p className="mt-1 text-xs text-emerald-800">Jelenleg nincs Öntől várt teendő</p>
+              <p className="mt-1 text-xs text-emerald-800">Jelenleg nincs ügyfélteendő</p>
           </div>
         </div>
         {compliance && compliance.topics && compliance.topics.length > 0 ? (

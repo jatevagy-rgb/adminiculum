@@ -120,6 +120,62 @@ function iso(v: Date | null | undefined): string | null {
   return v ? v.toISOString() : null;
 }
 
+/** The immediate next actor for a client-safe compliance topic. */
+export type OrgHomeComplianceNextActor = 'CUSTOMER_ACTION' | 'OFFICE' | 'NO_ACTION';
+
+type ComplianceTopicForClassification = {
+  state: string;
+  missingInformation?: Array<{ portalAnswerable?: boolean; questionKey?: string | null }> | null;
+};
+
+/**
+ * True only when the customer can execute portal input RIGHT NOW: the missing item
+ * is portal-answerable AND carries a resolvable canonical questionKey. A missing
+ * item that is not answerable through the portal never produces a customer action.
+ */
+export function hasPortalAnswerableMissingInformation(topic: ComplianceTopicForClassification): boolean {
+  return (topic.missingInformation ?? []).some(
+    (info) => info.portalAnswerable === true && typeof info.questionKey === 'string' && info.questionKey.trim().length > 0,
+  );
+}
+
+/**
+ * Classify a client-safe compliance topic by its IMMEDIATE next actor, mirroring the
+ * customer Compliance surface contract (OrgComplianceView.classifyTopic). Portal-
+ * answerable missing information always wins — even when the raw backend state also
+ * says LAWYER_REVIEW_REQUIRED, because the customer is simply the next actor. The
+ * raw state only decides the bucket once no customer input is outstanding.
+ *
+ * Every topic maps to exactly one bucket, so the summary counters partition the
+ * topic collection and can never double-count.
+ */
+export function classifyComplianceNextActor(topic: ComplianceTopicForClassification): OrgHomeComplianceNextActor {
+  if (hasPortalAnswerableMissingInformation(topic)) return 'CUSTOMER_ACTION';
+  if (topic.state === 'ACTION_IN_PROGRESS' || topic.state === 'LAWYER_REVIEW_REQUIRED') return 'OFFICE';
+  if (topic.state === 'MORE_INFORMATION_NEEDED' || topic.state === 'REVIEW_RECOMMENDED' || (topic.missingInformation?.length ?? 0) > 0) {
+    return 'CUSTOMER_ACTION';
+  }
+  if (topic.state === 'RESOLVED' && (topic.missingInformation?.length ?? 0) === 0) return 'NO_ACTION';
+  return 'CUSTOMER_ACTION';
+}
+
+type ComplianceTopicForNextAction = ComplianceTopicForClassification & {
+  nextAction?: string | null;
+};
+
+/**
+ * The per-topic next step shown on the home summary, mirroring OrgComplianceView's
+ * `nextActionFor`: when the raw state is lawyer review but the customer still owes
+ * executable portal data, the lawyer-oriented backend text must not be presented as
+ * the customer's next step. Every other case keeps the canonical safe DTO text.
+ */
+export function homeComplianceNextAction(topic: ComplianceTopicForNextAction): string | null {
+  if (topic.state === 'LAWYER_REVIEW_REQUIRED' && hasPortalAnswerableMissingInformation(topic)) {
+    return 'Kérjük, adja meg az alábbi hiányzó adatokat a portálon.';
+  }
+  return topic.nextAction ?? null;
+}
+
 /**
  * Resolve the current, most relevant customer-visible matter for the home
  * journey: the first granted case (preferring OWN) with a published snapshot.
@@ -334,27 +390,48 @@ export async function getOrganizationalHome(
   let compNoActionExpectedCount = 0;
 
   for (const topic of complianceModel.topics) {
-    if (topic.state === 'MORE_INFORMATION_NEEDED') {
+    const nextActor = classifyComplianceNextActor(topic);
+
+    if (nextActor === 'CUSTOMER_ACTION') {
       compAttentionCount += 1;
-      for (const missing of topic.missingInformation) {
-        if (missing.portalAnswerable) {
-          complianceActions.push({
-            id: `compliance-${topic.topicId}-${missing.questionKey || missing.label}`,
-            matterPublicationId: null,
-            matterTitle: topic.topicLabel,
-            title: missing.label,
-            instructions: topic.shortExplanation,
-            dueAt: null,
-            typeLabel: 'Megfelelési adatkérés',
-            readOnlyNote: 'Töltse ki a hiányzó adatot a portálon.',
-            area: 'COMPLIANCE',
-            actionUrl: '/portal/megfeleles',
-          });
-        }
+      // Only portal-answerable fields become actionable rows. The safe DTO is the
+      // single source of truth: no specific task is ever fabricated.
+      const answerable = (topic.missingInformation ?? []).filter(
+        (missing) => missing.portalAnswerable === true && typeof missing.questionKey === 'string' && missing.questionKey.trim().length > 0,
+      );
+      for (const missing of answerable) {
+        complianceActions.push({
+          id: `compliance-${topic.topicId}-${missing.questionKey || missing.label}`,
+          matterPublicationId: null,
+          matterTitle: topic.topicLabel,
+          title: missing.label,
+          instructions: topic.shortExplanation,
+          dueAt: null,
+          typeLabel: 'Megfelelési adatkérés',
+          readOnlyNote: 'Töltse ki a hiányzó adatot a portálon.',
+          area: 'COMPLIANCE',
+          actionUrl: '/portal/megfeleles',
+        });
       }
-    } else if (topic.state === 'ACTION_IN_PROGRESS' || topic.state === 'LAWYER_REVIEW_REQUIRED') {
+      // A review-recommended topic with no answerable field still has a truthful,
+      // customer-safe nextAction in the existing DTO; represent it once.
+      if (answerable.length === 0 && topic.state === 'REVIEW_RECOMMENDED' && topic.nextAction) {
+        complianceActions.push({
+          id: `compliance-${topic.topicId}`,
+          matterPublicationId: null,
+          matterTitle: topic.topicLabel,
+          title: topic.nextAction,
+          instructions: topic.shortExplanation,
+          dueAt: null,
+          typeLabel: 'Megfelelési teendő',
+          readOnlyNote: 'A megfelelés oldalon tudja áttekinteni.',
+          area: 'COMPLIANCE',
+          actionUrl: '/portal/megfeleles',
+        });
+      }
+    } else if (nextActor === 'OFFICE') {
       compInProgressCount += 1;
-    } else if (topic.state === 'RESOLVED' || topic.state === 'REVIEW_RECOMMENDED') {
+    } else {
       compNoActionExpectedCount += 1;
     }
   }
@@ -386,7 +463,7 @@ export async function getOrganizationalHome(
       topicId: t.topicId,
       topicLabel: t.topicLabel,
       state: t.state,
-      nextAction: t.nextAction,
+      nextAction: homeComplianceNextAction(t),
     })),
   };
 
