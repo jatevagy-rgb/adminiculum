@@ -27,6 +27,8 @@ import {
   approveOpportunityPublication,
   publishOpportunityPublication,
   revokeOpportunityPublication,
+  listOpportunityPublications,
+  listOpportunityPublicationWorkspaces,
 } from '../company-growth/opportunityPublicationService';
 
 const observatory = new ObservatoryIngestionService();
@@ -259,7 +261,16 @@ clientCompanyRouter.post('/clients/:clientId/grow/research-runs', async (req, re
   } catch (e) { fail(res, e); }
 });
 clientCompanyRouter.get('/clients/:clientId/grow/opportunities', async (req, res) => {
-  try { res.json({ items: await research.listGrowOpportunities(actor(req), String(req.params.clientId)) }); } catch (e) { fail(res, e); }
+  try {
+    const requestedStatus = req.query.status ? String(req.query.status) : undefined;
+    const REVIEWED_STATUSES = ['PENDING_REVIEW', 'ACCEPTED', 'DECLINED', 'NEEDS_MORE_DATA'];
+    if (requestedStatus && !REVIEWED_STATUSES.includes(requestedStatus)) {
+      return res.status(400).json({ status: 400, code: 'OPPORTUNITY_STATUS_INVALID', message: 'status must be PENDING_REVIEW, ACCEPTED, DECLINED or NEEDS_MORE_DATA.' });
+    }
+    res.json({ items: await research.listGrowOpportunities(actor(req), String(req.params.clientId), undefined, {
+      status: requestedStatus as 'PENDING_REVIEW' | 'ACCEPTED' | 'DECLINED' | 'NEEDS_MORE_DATA' | undefined,
+    }) });
+  } catch (e) { fail(res, e); }
 });
 clientCompanyRouter.get('/clients/:clientId/grow/opportunities/:recommendationId', async (req, res) => {
   try { res.json(await research.getOpportunityDetail(actor(req), String(req.params.clientId), String(req.params.recommendationId))); } catch (e) { fail(res, e); }
@@ -308,6 +319,12 @@ clientCompanyRouter.get('/clients/:clientId/grow/outcomes', async (req, res) => 
 });
 
 // Grow customer-opportunity publication (workforce-only; no customer read route).
+clientCompanyRouter.get('/clients/:clientId/grow/opportunity-publication-workspaces', async (req, res) => {
+  try { res.json({ items: await listOpportunityPublicationWorkspaces(actor(req), String(req.params.clientId)) }); } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.get('/clients/:clientId/grow/opportunities/:opportunityId/publications', async (req, res) => {
+  try { res.json({ items: await listOpportunityPublications(actor(req), String(req.params.clientId), String(req.params.opportunityId)) }); } catch (e) { fail(res, e); }
+});
 clientCompanyRouter.post('/clients/:clientId/grow/opportunity-publications', async (req, res) => {
   try {
     res.status(201).json(await createOpportunityPublicationDraft(actor(req), String(req.params.clientId), {

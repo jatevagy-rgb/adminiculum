@@ -6,7 +6,10 @@ import {
   publishOpportunityPublication,
   revokeOpportunityPublication,
   submitOpportunityPublication,
+  listOpportunityPublications,
+  listOpportunityPublicationWorkspaces,
 } from '../src/modules/company-growth/opportunityPublicationService';
+import { reviewRecommendation } from '../src/modules/company-growth/research/service';
 
 const databaseUrl = process.env.GROW_OPPORTUNITY_PUBLICATION_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const describeWithDatabase = databaseUrl ? describe : describe.skip;
@@ -32,6 +35,8 @@ describeWithDatabase('Grow opportunity customer publication (PostgreSQL)', () =>
     runId: crypto.randomUUID(),
     recommendationId: crypto.randomUUID(),
     opportunityId: crypto.randomUUID(),
+    declineRecommendationId: crypto.randomUUID(),
+    moreInfoRecommendationId: crypto.randomUUID(),
   };
 
   const actor = (userId: string, role: string) => ({ userId, role });
@@ -75,6 +80,10 @@ describeWithDatabase('Grow opportunity customer publication (PostgreSQL)', () =>
     await db.recommendationRun.create({ data: { id: ids.runId, clientId: ids.clientA, status: 'COMPLETED', completedAt: new Date() } });
     await db.recommendationCandidate.create({ data: { id: ids.recommendationId, clientId: ids.clientA, runId: ids.runId, title: 'Internal recommendation', problemStatement: 'Internal problem statement', direction: 'Internal direction', kind: 'DEVELOPMENT', sufficiency: 'SUPPORTED', status: 'ACCEPTED' } as any });
     await db.improvementOpportunity.create({ data: { id: ids.opportunityId, clientId: ids.clientA, recommendationId: ids.recommendationId, title: 'Internal opportunity title', problem: 'Internal diagnosis', direction: 'Internal recommendation direction', kind: 'DEVELOPMENT', evidenceStrength: 'STRONG', status: 'OPEN' } as any });
+    await db.recommendationCandidate.createMany({ data: [
+      { id: ids.declineRecommendationId, clientId: ids.clientA, runId: ids.runId, title: 'Declinable internal recommendation', problemStatement: 'Internal problem statement', direction: 'Internal direction', kind: 'DEVELOPMENT', sufficiency: 'SUPPORTED', status: 'PENDING_REVIEW' },
+      { id: ids.moreInfoRecommendationId, clientId: ids.clientA, runId: ids.runId, title: 'More-info internal recommendation', problemStatement: 'Internal problem statement', direction: 'Internal direction', kind: 'DEVELOPMENT', sufficiency: 'SUPPORTED', status: 'PENDING_REVIEW' },
+    ] as any });
   });
 
   afterAll(async () => {
@@ -82,12 +91,30 @@ describeWithDatabase('Grow opportunity customer publication (PostgreSQL)', () =>
     await db?.clientImprovementOpportunityPublication.deleteMany({ where: { clientId: ids.clientA } });
     await db?.improvementOpportunity.deleteMany({ where: { id: ids.opportunityId } });
     await db?.recommendationCandidate.deleteMany({ where: { id: ids.recommendationId } });
+    await db?.recommendationCandidate.deleteMany({ where: { id: { in: [ids.declineRecommendationId, ids.moreInfoRecommendationId] } } });
     await db?.recommendationRun.deleteMany({ where: { id: ids.runId } });
     await db?.case.deleteMany({ where: { id: ids.caseId } });
     await db?.clientPortalWorkspace.deleteMany({ where: { id: { in: [ids.workspaceAdmin, ids.workspacePartner, ids.workspaceLawyer, ids.workspaceOther, ids.workspaceB] } } });
     await db?.client.deleteMany({ where: { id: { in: [ids.clientA, ids.clientB] } } });
     await db?.user.deleteMany({ where: { id: { in: [ids.admin, ids.partner, ids.lawyer, ids.assistant, ids.collaborator, ids.customer] } } });
     await db?.$disconnect();
+  });
+
+  it('publication reads are client-bound, empty by default, and only target organizational workspaces', async () => {
+    expect(await listOpportunityPublications(actor(ids.admin, 'ADMIN'), ids.clientA, ids.opportunityId, db)).toEqual([]);
+
+    // Cross-client read of the same opportunity fails closed.
+    await expect(listOpportunityPublications(actor(ids.admin, 'ADMIN'), ids.clientB, ids.opportunityId, db))
+      .rejects.toMatchObject({ code: 'OPPORTUNITY_CLIENT_MISMATCH' });
+
+    // Workspace targets mirror requireOrganizationWorkspace readiness and stay client-scoped.
+    const workspaces = await listOpportunityPublicationWorkspaces(actor(ids.admin, 'ADMIN'), ids.clientA, db);
+    const workspaceIds = workspaces.map((w) => w.id).sort();
+    expect(workspaceIds).toEqual([ids.workspaceAdmin, ids.workspaceLawyer, ids.workspaceOther, ids.workspacePartner].sort());
+    expect(workspaces.every((w) => w.mode === 'ORGANIZATION')).toBe(true);
+
+    const otherClientWorkspaces = await listOpportunityPublicationWorkspaces(actor(ids.admin, 'ADMIN'), ids.clientB, db);
+    expect(otherClientWorkspaces.map((w) => w.id)).toEqual([ids.workspaceB]);
   });
 
   it('keeps opportunities internal by default and proves the complete publication lifecycle', async () => {
@@ -147,5 +174,40 @@ describeWithDatabase('Grow opportunity customer publication (PostgreSQL)', () =>
       timeEntries: await db.timeEntry.count({ where: { case: { clientId: ids.clientA } } }),
     };
     expect(afterSideEffects).toEqual(beforeSideEffects);
+  });
+
+  it('workforce read exposes only approved publication snapshots, never raw opportunity fields', async () => {
+    const publications = await listOpportunityPublications(actor(ids.admin, 'ADMIN'), ids.clientA, ids.opportunityId, db);
+    expect(publications.length).toBeGreaterThanOrEqual(1);
+    const published = publications.find((p) => p.status === 'PUBLISHED');
+    expect(published).toBeDefined();
+    expect((published!.snapshot as any)?.clientSafeTitle).toBe('Ügyféloldali fejlesztési lehetőség');
+    expect((published as any).snapshot).not.toHaveProperty('problem');
+    expect((published as any).snapshot).not.toHaveProperty('evidenceStrength');
+  });
+
+  it('DECLINE and REQUEST_MORE_INFO never create an opportunity, initiative or task', async () => {
+    const declined = await reviewRecommendation(
+      actor(ids.admin, 'ADMIN'),
+      ids.clientA,
+      ids.declineRecommendationId,
+      { decision: 'DECLINE' },
+      db,
+    );
+    expect(declined.opportunity).toBeNull();
+    expect(await db.improvementOpportunity.count({ where: { recommendationId: ids.declineRecommendationId } })).toBe(0);
+
+    const moreInfo = await reviewRecommendation(
+      actor(ids.admin, 'ADMIN'),
+      ids.clientA,
+      ids.moreInfoRecommendationId,
+      { decision: 'REQUEST_MORE_INFO' },
+      db,
+    );
+    expect(moreInfo.opportunity).toBeNull();
+    expect(await db.improvementOpportunity.count({ where: { recommendationId: ids.moreInfoRecommendationId } })).toBe(0);
+
+    expect(await db.developmentInitiative.count({ where: { clientId: ids.clientA } })).toBe(0);
+    expect(await db.task.count({ where: { case: { clientId: ids.clientA } } })).toBe(0);
   });
 });

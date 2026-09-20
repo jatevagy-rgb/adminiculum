@@ -203,6 +203,46 @@ async function transition(actor: InternalActor, clientId: string, publicationId:
   });
 }
 
+/**
+ * Workforce read of every publication attempt for one opportunity. This is the
+ * internal administration surface: it never crosses to a customer and it keeps
+ * the same client binding as the mutation path.
+ */
+export async function listOpportunityPublications(
+  actor: InternalActor,
+  clientId: string,
+  opportunityId: string,
+  db: PrismaClient = defaultPrisma,
+): Promise<Record<string, unknown>[]> {
+  await assertClientReadAccess(actor, clientId, db as any);
+  const opportunity = await opportunityForClient(db, String(opportunityId), clientId);
+  const rows = await (db as any).clientImprovementOpportunityPublication.findMany({
+    where: { opportunityId: opportunity.id, clientId },
+    include: { revisions: { orderBy: { revisionNumber: 'desc' }, take: 1 } },
+    orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
+  });
+  return rows.map((row: any) => dto(row, row.revisions?.[0]));
+}
+
+/**
+ * Workspace targets a publication audience may be scoped to. Mirrors the exact
+ * readiness rule of requireOrganizationWorkspace (ACTIVE + ORGANIZATION/CASE_RELAY)
+ * so the workforce can never select a workspace the publish path would reject.
+ */
+export async function listOpportunityPublicationWorkspaces(
+  actor: InternalActor,
+  clientId: string,
+  db: PrismaClient = defaultPrisma,
+): Promise<Array<{ id: string; name: string; mode: string }>> {
+  await assertClientReadAccess(actor, clientId, db as any);
+  const rows = await (db as any).clientPortalWorkspace.findMany({
+    where: { clientId, status: 'ACTIVE', mode: { in: ['ORGANIZATION', 'CASE_RELAY'] } },
+    select: { id: true, name: true, mode: true },
+    orderBy: [{ name: 'asc' }, { id: 'asc' }],
+  });
+  return rows.map((row: any) => ({ id: row.id, name: row.name, mode: String(row.mode) }));
+}
+
 export const submitOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'submit', db);
 export const approveOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'approve', db);
 export const publishOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'publish', db);
