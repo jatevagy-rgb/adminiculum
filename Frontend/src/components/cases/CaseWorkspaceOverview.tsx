@@ -10,7 +10,7 @@
  * component never invents an operational number.
  */
 import Link from "next/link";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
@@ -74,6 +74,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeDialogOpen, setTimeDialogOpen] = useState(false);
   const [timeRefreshKey, setTimeRefreshKey] = useState(0);
+  const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
 
   const load = useCallback(async ({ background = false }: { background?: boolean } = {}) => {
@@ -104,6 +105,18 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   }, [load]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const openSecondaryDetailsForHash = () => {
+      const targetId = window.location.hash.slice(1);
+      if (!['ck-starting-context', 'ck-work-package', 'ck-notes', 'ck-activity', 'ck-time'].includes(targetId)) return;
+      secondaryDetailsRef.current?.setAttribute('open', '');
+      window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ block: 'start' }));
+    };
+    openSecondaryDetailsForHash();
+    window.addEventListener('hashchange', openSecondaryDetailsForHash);
+    return () => window.removeEventListener('hashchange', openSecondaryDetailsForHash);
+  }, []);
 
   const quickStatus = useCallback(async (task: WorkspaceTask) => {
     if (rowBusy) return;
@@ -261,21 +274,23 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
       <CaseInsightTiles workspace={ws} caseId={caseId} />
 
-      {/* ---- 2b. Legal work context ---------------------------------------- */}
-      <StartingContextPanel
-        context={c.startingContext}
-        description={c.description}
-        onAddContext={() => setModal({ type: "case-comment" })}
-      />
-
-      {/* ---- 2c. Work package operational block ----------------------------- */}
-      <div className="flex justify-end">
+      <section aria-label="Gyors műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+        <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Gyors műveletek</span>
+        <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Feladat</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "deadline-create" })}>+ Határidő</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>+ Dokumentum</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setAiPromptOpen(true)}>AI előkészítés</AdminButton>
-      </div>
-      <CaseWorkPackagePanel
-        caseId={caseId}
-        onTaskCreated={() => void refresh()}
-      />
+        <AdminButton variant="neutral" size="xs" onClick={() => setTimeDialogOpen(true)}>Munkaidő rögzítése</AdminButton>
+      </section>
+
+      <nav aria-label="Ügy munkatér szakaszai" data-testid="case-workspace-section-nav" className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] font-semibold text-[var(--adm-green-800)]">
+        <a href="#ck-tasks" className="hover:underline">Aktív munka</a>
+        <a href="#ck-deadlines" className="hover:underline">Határidők</a>
+        <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
+        <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
+        <a href="#case-secondary-details" className="hover:underline">További részletek</a>
+      </nav>
 
       {/* ---- 3. Two-column operational layout ------------------------------ */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
@@ -385,55 +400,73 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         </div>
       </div>
 
-      {/* ---- 4. Secondary area: notes, activity, time ----------------------- */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <CockpitSection id="ck-notes" title="Jegyzetek" accent="green" count={ws.comments.length}
-          action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>+ Megjegyzés</AdminButton>}>
-          {ws.comments.length === 0 ? (
-            <ActionableEmpty message="Nincs belső megjegyzés." actionLabel="Első megjegyzés létrehozása" onAction={() => setModal({ type: "case-comment" })} />
-          ) : (
-            <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
-              {ws.comments.slice(0, 4).map((n) => (
-                <li key={n.id} className="px-3 py-2">
-                  <p className="line-clamp-2 text-[12px] text-[var(--adm-text)]">{n.content}</p>
-                  <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{n.author?.name || "Rendszer"} · {fmtDate(n.createdAt)}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CockpitSection>
+      <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+        <summary className="cursor-pointer font-serif text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
+        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Kontekstus, munkacsomag, belső jegyzetek, aktivitás és munkaidő.</p>
+        <div className="mt-4 space-y-4">
+          <div id="ck-starting-context" className="scroll-mt-24">
+            <StartingContextPanel
+              context={c.startingContext}
+              description={c.description}
+              onAddContext={() => setModal({ type: "case-comment" })}
+            />
+          </div>
 
-        {/* Structured activity: actor / action / object / time as separate parts. */}
-        <CockpitSection id="ck-activity" title="Aktivitás" accent="petrol">
-          {ws.activity.length === 0 ? (
-            <ActionableEmpty message="Még nincs rögzített aktivitás." actionLabel="Első feladat létrehozása" onAction={() => setModal({ type: "task-create" })} />
-          ) : (
-            <ul data-testid="activity-feed" className="divide-y divide-[rgba(22,32,26,0.06)]">
-              {ws.activity.slice(0, 6).map((a) => (
-                <li key={a.id} className="px-3 py-2">
-                  <p className="text-[12px] leading-5 text-[var(--adm-text)]">
-                    <span className="font-semibold">{a.actor || "Rendszer"}</span>{" "}
-                    <span className="text-[var(--adm-text-muted)]">{a.actionLabel}</span>{" "}
-                    <span className="font-medium">{a.objectLabel}</span>
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-[var(--adm-text-soft)]">{fmtDateTime(a.occurredAt)}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CockpitSection>
+          <div id="ck-work-package" className="scroll-mt-24">
+            <CaseWorkPackagePanel
+              caseId={caseId}
+              onTaskCreated={() => void refresh()}
+            />
+          </div>
 
-        {/* Time remains secondary, but Munkaidő rögzítése starts in the Case context. */}
-        <CockpitSection id="ck-time" title="Munkaidő" accent="neutral">
-          <CaseTimeBillingSummary
-            caseId={caseId}
-            refreshKey={timeRefreshKey}
-            onRecordTime={() => setTimeDialogOpen(true)}
-            onGenerateReport={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)}
-          />
-          {c.client && <HourlyRateCard clientId={c.client.id} caseId={caseId} />}
-        </CockpitSection>
-      </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <CockpitSection id="ck-notes" title="Jegyzetek" accent="green" count={ws.comments.length}
+              action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>+ Megjegyzés</AdminButton>}>
+              {ws.comments.length === 0 ? (
+                <ActionableEmpty message="Nincs belső megjegyzés." actionLabel="Első megjegyzés létrehozása" onAction={() => setModal({ type: "case-comment" })} />
+              ) : (
+                <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
+                  {ws.comments.slice(0, 4).map((n) => (
+                    <li key={n.id} className="px-3 py-2">
+                      <p className="line-clamp-2 text-[12px] text-[var(--adm-text)]">{n.content}</p>
+                      <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{n.author?.name || "Rendszer"} · {fmtDate(n.createdAt)}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CockpitSection>
+
+            <CockpitSection id="ck-activity" title="Aktivitás" accent="petrol">
+              {ws.activity.length === 0 ? (
+                <ActionableEmpty message="Még nincs rögzített aktivitás." actionLabel="Első feladat létrehozása" onAction={() => setModal({ type: "task-create" })} />
+              ) : (
+                <ul data-testid="activity-feed" className="divide-y divide-[rgba(22,32,26,0.06)]">
+                  {ws.activity.slice(0, 6).map((a) => (
+                    <li key={a.id} className="px-3 py-2">
+                      <p className="text-[12px] leading-5 text-[var(--adm-text)]">
+                        <span className="font-semibold">{a.actor || "Rendszer"}</span>{" "}
+                        <span className="text-[var(--adm-text-muted)]">{a.actionLabel}</span>{" "}
+                        <span className="font-medium">{a.objectLabel}</span>
+                      </p>
+                      <p className="mt-0.5 text-[10px] text-[var(--adm-text-soft)]">{fmtDateTime(a.occurredAt)}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CockpitSection>
+
+            <CockpitSection id="ck-time" title="Munkaidő" accent="neutral">
+              <CaseTimeBillingSummary
+                caseId={caseId}
+                refreshKey={timeRefreshKey}
+                onRecordTime={() => setTimeDialogOpen(true)}
+                onGenerateReport={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)}
+              />
+              {c.client && <HourlyRateCard clientId={c.client.id} caseId={caseId} />}
+            </CockpitSection>
+          </div>
+        </div>
+      </details>
 
       {/* ---- inline action modals ------------------------------------------ */}
       {modal?.type === "task-create" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
