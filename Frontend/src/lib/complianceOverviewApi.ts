@@ -1,5 +1,5 @@
 import { fetchApi } from './api';
-import type { ComplianceFindingView } from '@/components/clients/compliance/ComplianceOverview';
+import type { ComplianceControlGap, ComplianceFindingView } from '@/components/clients/compliance/ComplianceOverview';
 
 export type ComplianceOverview = { findings: ComplianceFindingView[] };
 export type ComplianceControlSummary = {
@@ -12,6 +12,7 @@ export type ComplianceControlSummary = {
       owner: string | null;
       nextReviewAt: string | null;
       evidenceSummary: { acceptedCurrent: number; stale: number; missing: boolean };
+      gap?: ComplianceControlGap | null;
     }>;
   }>;
 };

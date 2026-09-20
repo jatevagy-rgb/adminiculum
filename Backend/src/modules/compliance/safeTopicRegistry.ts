@@ -143,3 +143,15 @@ export function isPortalVisible(internalKey: string, isProduction: boolean, demo
 export function lookupSafeControlLabel(controlKey: string): string | null {
   return SAFE_CONTROL_LABELS.get(controlKey) || null;
 }
+
+/**
+ * Canonical allow-list of control keys eligible for client-portal projection.
+ *
+ * The client evidence journey derives its control catalogue from this list
+ * (joined with persisted ControlDefinition / RequirementControlMap /
+ * RequirementApplicability rows) instead of a hard-coded representative
+ * subset. Keys absent from the registry fail closed and are never projected.
+ */
+export function safeControlKeys(): readonly string[] {
+  return [...SAFE_CONTROL_LABELS.keys()];
+}

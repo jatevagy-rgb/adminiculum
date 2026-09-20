@@ -18,6 +18,7 @@
 
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+import { lookupSafeControlLabel } from '../compliance/safeTopicRegistry';
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -48,12 +49,40 @@ export const CONTROL_EVIDENCE_ROUTE_LABEL_HU: Readonly<Record<ControlEvidenceRou
   LAWYER_REVIEW: 'Ügyvédi ellenőrzés szükséges.',
 };
 
-/** The three representative evidence questions from the workbook. */
-export const CONTROL_EVIDENCE_QUESTIONS: readonly { controlKey: string; module: 'DATA' | 'WHISTLEBLOWING' | 'CYBER'; questionHu: string }[] = [
-  { controlKey: 'C-DATA-002', module: 'DATA', questionHu: 'Van jelenleg hatályos adatkezelési tájékoztatójuk?' },
-  { controlKey: 'C-WB-001', module: 'WHISTLEBLOWING', questionHu: 'Működik belső visszaélés-bejelentési csatorna, és van róla szabályzat?' },
-  { controlKey: 'C-CYBER-001', module: 'CYBER', questionHu: 'Van írásban rögzített kiberbiztonsági kockázatértékelés?' },
-];
+export type ControlEvidenceModule = 'DATA' | 'WHISTLEBLOWING' | 'CYBER';
+
+/** Client-safe module identity derived from the canonical control key prefix. */
+const MODULE_BY_CONTROL_PREFIX: Readonly<Record<string, ControlEvidenceModule>> = {
+  'C-DATA': 'DATA',
+  'C-WB': 'WHISTLEBLOWING',
+  'C-CYBER': 'CYBER',
+};
+
+/** Returns the client-safe module for a canonical control key, or null when unsupported. */
+export function moduleForControlKey(controlKey: string): ControlEvidenceModule | null {
+  const prefix = controlKey.split('-').slice(0, 2).join('-');
+  return MODULE_BY_CONTROL_PREFIX[prefix] ?? null;
+}
+
+/**
+ * Reason a canonical control is deliberately held back from the client journey.
+ * Internal audit metadata only — never projected into the customer payload.
+ */
+export type ControlEvidenceOmissionReason = 'NOT_PORTAL_VISIBLE' | 'UNSUPPORTED_MODULE' | 'NO_SAFE_QUESTION' | 'DOES_NOT_APPLY';
+
+export interface ControlEvidenceCatalogEntry {
+  readonly controlDefinitionId: string;
+  readonly controlKey: string;
+  readonly title: string;
+  readonly questionHu: string;
+  readonly module: ControlEvidenceModule;
+  readonly relevance: ControlEvidenceRelevance;
+}
+
+export interface ControlEvidenceCatalog {
+  readonly controls: ControlEvidenceCatalogEntry[];
+  readonly omissions: ReadonlyArray<{ controlKey: string; reason: ControlEvidenceOmissionReason }>;
+}
 
 function error(status: number, code: string, message: string): never {
   throw Object.assign(new Error(message), { status, code });
@@ -74,6 +103,81 @@ async function workspaceClient(identityId: string, workspaceId: string, db: Db |
 
 function isCurrent(validFrom: Date | null, validUntil: Date | null, now: Date): boolean {
   return (!validFrom || validFrom <= now) && (!validUntil || validUntil >= now);
+}
+
+/**
+ * Derives the client-safe evidence catalogue from persisted canonical rows only:
+ * the client's current RequirementApplicability outcomes, their
+ * RequirementControlMap links and the mapped ControlDefinition rows.
+ *
+ * Safety is opt-in. A control is projected only when its key is allow-listed by
+ * the safe topic registry, its canonical ControlDefinition carries a non-empty
+ * customer question, and its key maps to a client-safe module. Every held-back
+ * control is reported internally and never projected.
+ *
+ * Not a customer entry point: callers must resolve the client through an
+ * authorized workspace first.
+ */
+export async function resolveControlEvidenceCatalog(clientId: string, db: Db | Tx, now: Date = new Date()): Promise<ControlEvidenceCatalog> {
+  const client = db as Tx;
+  const snapshots = await client.requirementApplicability.findMany({
+    where: {
+      clientId,
+      scopeType: 'COMPANY',
+      requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+      ruleVersion: { status: 'APPROVED', supersededById: null },
+    },
+    orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
+    select: { requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true },
+  });
+
+  // Latest snapshot wins per (requirementVersion, ruleVersion, scope, subject):
+  // rows arrive ordered by evaluationAt/createdAt desc, so first-seen is current.
+  const latestOutcome = new Map<string, string>();
+  for (const snapshot of snapshots) {
+    const key = [snapshot.requirementVersionId, snapshot.ruleVersionId, snapshot.scopeType, snapshot.factSubjectId ?? ''].join(':');
+    if (!latestOutcome.has(key)) latestOutcome.set(key, String(snapshot.outcome));
+  }
+
+  const requirementVersionIds = [...new Set(snapshots.map((snapshot) => snapshot.requirementVersionId))];
+  const mappings = requirementVersionIds.length
+    ? await client.requirementControlMap.findMany({
+        where: { requirementVersionId: { in: requirementVersionIds } },
+        select: {
+          requirementVersionId: true,
+          controlDefinition: { select: { id: true, key: true, title: true, description: true, status: true } },
+        },
+      })
+    : [];
+
+  const grouped = new Map<string, { definition: { id: string; key: string; title: string; description: string | null; status: string }; outcomes: string[] }>();
+  for (const mapping of mappings) {
+    const definition = mapping.controlDefinition;
+    if (!definition) continue;
+    const mappedOutcomes = [...latestOutcome.entries()]
+      .filter(([key]) => key.startsWith(`${mapping.requirementVersionId}:`))
+      .map(([, outcome]) => outcome);
+    const bucket = grouped.get(definition.id) ?? { definition, outcomes: [] };
+    bucket.outcomes.push(...mappedOutcomes);
+    grouped.set(definition.id, bucket);
+  }
+
+  const controls: ControlEvidenceCatalogEntry[] = [];
+  const omissions: Array<{ controlKey: string; reason: ControlEvidenceOmissionReason }> = [];
+  for (const { definition, outcomes } of grouped.values()) {
+    const controlKey = definition.key;
+    if (definition.status !== 'ACTIVE') { omissions.push({ controlKey, reason: 'NOT_PORTAL_VISIBLE' }); continue; }
+    if (!lookupSafeControlLabel(controlKey)) { omissions.push({ controlKey, reason: 'NOT_PORTAL_VISIBLE' }); continue; }
+    const questionHu = definition.description?.trim() ?? '';
+    if (!questionHu) { omissions.push({ controlKey, reason: 'NO_SAFE_QUESTION' }); continue; }
+    const module = moduleForControlKey(controlKey);
+    if (!module) { omissions.push({ controlKey, reason: 'UNSUPPORTED_MODULE' }); continue; }
+    const relevance = relevanceFor(outcomes);
+    if (relevance === 'DOES_NOT_APPLY') { omissions.push({ controlKey, reason: 'DOES_NOT_APPLY' }); continue; }
+    controls.push({ controlDefinitionId: definition.id, controlKey, title: definition.title, questionHu, module, relevance });
+  }
+  controls.sort((left, right) => left.controlKey.localeCompare(right.controlKey));
+  return { controls, omissions };
 }
 
 async function ensureClientControl(tx: Tx, clientId: string, controlDefinitionId: string, cadenceDays: number | null) {
@@ -102,6 +206,12 @@ export interface ControlEvidenceAnswerResult {
  * Records the client answer for one control's evidence question.
  * Idempotent for YES: an existing current evidence link is reused instead of
  * creating a duplicate record.
+ *
+ * The write gate is the SAME canonical eligibility boundary as the read
+ * journey: the requested control must be present in
+ * `resolveControlEvidenceCatalog(clientId)`. A control that is absent (not
+ * allow-listed, or currently DOES_NOT_APPLY / unevaluated) fails closed before
+ * any ClientControl, EvidenceRecord or EvidenceControlLink is touched.
  */
 export async function submitControlEvidenceAnswer(
   identityId: string,
@@ -112,23 +222,26 @@ export async function submitControlEvidenceAnswer(
 ): Promise<ControlEvidenceAnswerResult> {
   const answer = String(body.answer || '').toUpperCase();
   if (!ANSWERS.has(answer)) error(400, 'EVIDENCE_ANSWER_INVALID', 'answer must be YES, NO or UNKNOWN.');
-  const question = CONTROL_EVIDENCE_QUESTIONS.find((item) => item.controlKey === controlKey);
-  if (!question) error(404, 'EVIDENCE_QUESTION_NOT_FOUND', 'The requested evidence question is not available.');
 
   return db.$transaction(async (tx) => {
     const clientId = await workspaceClient(identityId, workspaceId, tx);
-    const definition = await tx.controlDefinition.findFirst({ where: { key: controlKey, status: 'ACTIVE' } });
-    if (!definition) error(404, 'CONTROL_DEFINITION_NOT_FOUND', 'Control definition not found.');
+    // Single canonical eligibility boundary shared with the read journey.
+    const catalog = await resolveControlEvidenceCatalog(clientId, tx);
+    const entry = catalog.controls.find((item) => item.controlKey === controlKey);
+    if (!entry) error(404, 'EVIDENCE_QUESTION_NOT_FOUND', 'The requested evidence question is not available.');
+    const definition = await tx.controlDefinition.findFirst({ where: { id: entry.controlDefinitionId, status: 'ACTIVE' } });
+    if (!definition) error(404, 'EVIDENCE_QUESTION_NOT_FOUND', 'The requested evidence question is not available.');
+    const { module, questionHu } = entry;
     const control = await ensureClientControl(tx, clientId, definition.id, definition.defaultReviewCadenceDays);
     const now = new Date();
 
     if (answer === 'UNKNOWN') {
-      return { controlKey, module: question.module, route: 'LAWYER_REVIEW' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.LAWYER_REVIEW, implemented: false, documentVersionId: null };
+      return { controlKey, module, route: 'LAWYER_REVIEW' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.LAWYER_REVIEW, implemented: false, documentVersionId: null };
     }
 
     if (answer === 'NO') {
       await tx.clientControl.update({ where: { id: control.id }, data: { implementationStatus: 'NOT_IMPLEMENTED', lastReviewedAt: now } });
-      return { controlKey, module: question.module, route: 'MISSING_CONTROL_EVIDENCE' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.MISSING_CONTROL_EVIDENCE, implemented: false, documentVersionId: null };
+      return { controlKey, module, route: 'MISSING_CONTROL_EVIDENCE' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.MISSING_CONTROL_EVIDENCE, implemented: false, documentVersionId: null };
     }
 
     const documentVersionId = typeof body.documentVersionId === 'string' ? body.documentVersionId.trim() : '';
@@ -143,15 +256,15 @@ export async function submitControlEvidenceAnswer(
     });
     if (existingLink && existingLink.evidenceRecord.documentVersionId === documentVersionId && isCurrent(existingLink.evidenceRecord.validFrom, existingLink.evidenceRecord.validUntil, now)) {
       await tx.clientControl.update({ where: { id: control.id }, data: { implementationStatus: 'IMPLEMENTED', lastReviewedAt: now, nextReviewAt: definition.defaultReviewCadenceDays ? new Date(now.getTime() + definition.defaultReviewCadenceDays * 86_400_000) : control.nextReviewAt } });
-      return { controlKey, module: question.module, route: 'UPLOAD_OR_REUSE_DOCUMENT' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.UPLOAD_OR_REUSE_DOCUMENT, implemented: true, documentVersionId };
+      return { controlKey, module, route: 'UPLOAD_OR_REUSE_DOCUMENT' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.UPLOAD_OR_REUSE_DOCUMENT, implemented: true, documentVersionId };
     }
 
     const evidence = await tx.evidenceRecord.create({
-      data: { clientId, sourceType: 'DOCUMENT_VERSION', status: 'PROVIDED', title: definition.title, description: question.questionHu, providedAt: now, validFrom: now, documentVersionId },
+      data: { clientId, sourceType: 'DOCUMENT_VERSION', status: 'PROVIDED', title: definition.title, description: questionHu, providedAt: now, validFrom: now, documentVersionId },
     });
     await tx.evidenceControlLink.create({ data: { clientId, evidenceRecordId: evidence.id, clientControlId: control.id } });
     await tx.clientControl.update({ where: { id: control.id }, data: { implementationStatus: 'IMPLEMENTED', lastReviewedAt: now, nextReviewAt: definition.defaultReviewCadenceDays ? new Date(now.getTime() + definition.defaultReviewCadenceDays * 86_400_000) : control.nextReviewAt } });
-    return { controlKey, module: question.module, route: 'UPLOAD_OR_REUSE_DOCUMENT' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.UPLOAD_OR_REUSE_DOCUMENT, implemented: true, documentVersionId };
+    return { controlKey, module, route: 'UPLOAD_OR_REUSE_DOCUMENT' as const, messageHu: CONTROL_EVIDENCE_ROUTE_LABEL_HU.UPLOAD_OR_REUSE_DOCUMENT, implemented: true, documentVersionId };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
 
@@ -170,46 +283,15 @@ export interface ControlEvidenceReusableDocument {
   readonly label: string;
 }
 
-/** Client-safe read of the three representative evidence questions and their state. */
+/**
+ * Client-safe read of the applicable canonical evidence questions and their
+ * state. The control catalogue is derived from persisted canonical rows and the
+ * safe topic registry — never from a hard-coded representative subset.
+ */
 export async function getControlEvidenceJourney(identityId: string, workspaceId: string, db: Db = defaultPrisma): Promise<{ items: ControlEvidenceJourneyItem[]; reusableDocuments: ControlEvidenceReusableDocument[] }> {
   const now = new Date();
   const clientId = await workspaceClientReadOnly(identityId, workspaceId, db);
-  const definitions = await db.controlDefinition.findMany({ where: { key: { in: CONTROL_EVIDENCE_QUESTIONS.map((item) => item.controlKey) } }, select: { id: true, key: true } });
-  const byKey = new Map(definitions.map((definition) => [definition.key, definition.id]));
-
-  // Relevance: map each evidence control to its requirement versions, then to the
-  // client's latest persisted RequirementApplicability outcomes. This reuses the
-  // existing RequirementControlMap + RequirementApplicability models only.
-  const controlIds = [...byKey.values()];
-  const controlMaps = await db.requirementControlMap.findMany({
-    where: { controlDefinitionId: { in: controlIds } },
-    select: { controlDefinitionId: true, requirementVersionId: true },
-  });
-  const requirementVersionIds = [...new Set(controlMaps.map((map) => map.requirementVersionId))];
-  const snapshots = await db.requirementApplicability.findMany({
-    where: {
-      clientId,
-      scopeType: 'COMPANY',
-      requirementVersionId: { in: requirementVersionIds },
-      requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
-      ruleVersion: { status: 'APPROVED', supersededById: null },
-    },
-    orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
-    select: { requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true },
-  });
-  const latestOutcome = new Map<string, string>();
-  for (const snapshot of snapshots) {
-    const key = [snapshot.requirementVersionId, snapshot.ruleVersionId, snapshot.scopeType, snapshot.factSubjectId ?? ''].join(':');
-    if (!latestOutcome.has(key)) latestOutcome.set(key, String(snapshot.outcome));
-  }
-  const outcomesByControl = new Map<string, string[]>();
-  for (const map of controlMaps) {
-    const requirementOutcomes = [...latestOutcome.entries()]
-      .filter(([key]) => key.startsWith(`${map.requirementVersionId}:`))
-      .map(([, outcome]) => outcome);
-    const existing = outcomesByControl.get(map.controlDefinitionId) ?? [];
-    outcomesByControl.set(map.controlDefinitionId, [...existing, ...requirementOutcomes]);
-  }
+  const catalog = await resolveControlEvidenceCatalog(clientId, db, now);
 
   const reusableDocuments: ControlEvidenceReusableDocument[] = (await db.clientDocumentPublication.findMany({
     where: { clientId, status: 'PUBLISHED' },
@@ -217,24 +299,36 @@ export async function getControlEvidenceJourney(identityId: string, workspaceId:
     select: { documentVersionId: true, clientFacingTitle: true },
   })).map((publication) => ({ documentVersionId: publication.documentVersionId, label: publication.clientFacingTitle }));
 
-  const items: ControlEvidenceJourneyItem[] = [];
-  for (const question of CONTROL_EVIDENCE_QUESTIONS) {
-    const definitionId = byKey.get(question.controlKey);
-    const control = definitionId ? await db.clientControl.findFirst({ where: { clientId, controlDefinitionId: definitionId }, include: { evidenceLinks: { include: { evidenceRecord: true } } } }) : null;
-    const linked = (control?.evidenceLinks ?? []).some((link) => isCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
+  const controls = catalog.controls.length
+    ? await db.clientControl.findMany({
+        where: { clientId, controlDefinitionId: { in: catalog.controls.map((entry) => entry.controlDefinitionId) } },
+        include: { evidenceLinks: { include: { evidenceRecord: true } } },
+      })
+    : [];
+  const controlByDefinition = new Map(controls.map((control) => [control.controlDefinitionId, control]));
+
+  const items: ControlEvidenceJourneyItem[] = catalog.controls.map((entry) => {
+    const control = controlByDefinition.get(entry.controlDefinitionId) ?? null;
+    const links = control?.evidenceLinks ?? [];
+    const linked = links.some((link) => isCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
     const implemented = control?.implementationStatus === 'IMPLEMENTED' && linked;
-    const outcomes = definitionId ? (outcomesByControl.get(definitionId) ?? []) : [];
-    const relevance = relevanceFor(outcomes);
-    items.push({
-      controlKey: question.controlKey,
-      module: question.module,
-      questionHu: question.questionHu,
-      relevance,
+    const hasStaleEvidence = links.some((link) => !isCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
+    return {
+      controlKey: entry.controlKey,
+      module: entry.module,
+      questionHu: entry.questionHu,
+      relevance: entry.relevance,
       implemented,
       evidenceLinked: linked,
-      stateHu: implemented ? 'Rendben, bizonyítékkal alátámasztva.' : control?.implementationStatus === 'NOT_IMPLEMENTED' ? 'Hiányzó dokumentum vagy intézkedés.' : 'Még nincs kitöltve.',
-    });
-  }
+      stateHu: implemented
+        ? 'Rendben, bizonyítékkal alátámasztva.'
+        : control?.implementationStatus === 'NOT_IMPLEMENTED'
+          ? 'Hiányzó dokumentum vagy intézkedés.'
+          : hasStaleEvidence
+            ? 'A korábbi bizonyíték felülvizsgálatra szorul.'
+            : 'Még nincs kitöltve.',
+    };
+  });
   return { items, reusableDocuments };
 }
 
