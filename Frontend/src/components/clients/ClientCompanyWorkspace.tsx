@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { clientWorkspaceApi, type CompanyDataRoom } from "@/lib/clientWorkspaceApi";
 import { companyFactTypeLabel, factVerificationLabel } from "@/lib/clientCompanyApi";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
@@ -36,6 +37,30 @@ export const WORKSPACE_SECTIONS: Array<[WorkspaceSection, string]> = [
   ["outcomes", "Eredmények"],
   ["operational", "Operatív áttekintés"],
 ];
+
+// Company OS owns only the operational/company-data cockpit. Cross-domain views
+// (organization, compliance, Grow development/outcomes) live in their canonical
+// modules, so they no longer appear in the visible local tab bar. Their data and
+// render paths stay in place; only navigation converges.
+export const VISIBLE_WORKSPACE_SECTIONS: Array<[WorkspaceSection, string]> = [
+  ["overview", "Áttekintés"],
+  ["company-profile", "Vállalati profil"],
+  ["data", "Adatok"],
+  ["data-quality", "Adatminőség"],
+  ["processes", "Folyamatok"],
+  ["systems", "Rendszerek"],
+  ["documents", "Dokumentumok és bizonyítékok"],
+  ["operational", "Operatív áttekintés"],
+];
+
+// Legacy Company OS deep links for cross-domain views resolve to the canonical
+// module route so bookmarked ?section= / #hash links keep working.
+export const LEGACY_CROSS_DOMAIN_SECTIONS: Partial<Record<WorkspaceSection, string>> = {
+  organization: "szervezet",
+  compliance: "compliance",
+  development: "grow",
+  outcomes: "grow",
+};
 
 const statusLabels: Record<string, string> = {
   ANSWERED: "Megválaszolva",
@@ -299,16 +324,18 @@ function CountCard({
   value,
   detail,
   onClick,
+  href,
 }: {
   label: string;
   value: number | string;
   detail?: string;
   onClick?: () => void;
+  href?: string;
 }) {
   const content = (
     <div
       className={`rounded-2xl border border-stone-200 bg-white p-4 shadow-xs transition-colors ${
-        onClick ? "cursor-pointer hover:border-stone-300 hover:bg-stone-50/60" : ""
+        onClick || href ? "cursor-pointer hover:border-stone-300 hover:bg-stone-50/60" : ""
       }`}
     >
       <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">{label}</p>
@@ -317,6 +344,13 @@ function CountCard({
     </div>
   );
 
+  if (href) {
+    return (
+      <Link href={href} className="text-left focus-visible:outline-2 focus-visible:outline-[#014337]">
+        {content}
+      </Link>
+    );
+  }
   if (onClick) {
     return (
       <button type="button" onClick={onClick} className="text-left focus-visible:outline-2 focus-visible:outline-[#014337]">
@@ -338,6 +372,7 @@ export function ClientCompanyWorkspace({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("overview");
+  const router = useRouter();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -355,24 +390,28 @@ export function ClientCompanyWorkspace({
     void load();
   }, [load]);
 
-  // Synchronize URL query parameter (?section=) with active section & support browser back/forward
+  // Synchronize URL query parameter (?section=) with active section & support browser back/forward.
+  // Cross-domain sections that now live in canonical modules redirect (replace) instead of rendering.
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const readSectionFromLocation = () => {
       const params = new URLSearchParams(window.location.search);
       const sectionParam = params.get("section") as WorkspaceSection | null;
-      if (
-        sectionParam &&
-        WORKSPACE_SECTIONS.some(([key]) => key === sectionParam)
-      ) {
-        setActiveSection(sectionParam);
-        return;
-      }
-      // Backward compatibility with hash links (#compliance, #operational, etc.)
       const hash = window.location.hash.replace("#", "") as WorkspaceSection;
-      if (hash && WORKSPACE_SECTIONS.some(([key]) => key === hash)) {
-        setActiveSection(hash);
+      const candidate =
+        sectionParam && WORKSPACE_SECTIONS.some(([key]) => key === sectionParam)
+          ? sectionParam
+          : hash && WORKSPACE_SECTIONS.some(([key]) => key === hash)
+            ? hash
+            : null;
+      if (candidate) {
+        const canonicalSuffix = LEGACY_CROSS_DOMAIN_SECTIONS[candidate];
+        if (canonicalSuffix) {
+          router.replace(`/clients/${encodeURIComponent(clientId)}/${canonicalSuffix}`);
+          return;
+        }
+        setActiveSection(candidate);
         return;
       }
       setActiveSection("overview");
@@ -385,7 +424,7 @@ export function ClientCompanyWorkspace({
       window.removeEventListener("popstate", readSectionFromLocation);
       window.removeEventListener("hashchange", readSectionFromLocation);
     };
-  }, []);
+  }, [clientId, router]);
 
   const handleSectionChange = useCallback((sec: WorkspaceSection) => {
     setActiveSection(sec);
@@ -438,7 +477,7 @@ export function ClientCompanyWorkspace({
         className="flex flex-wrap gap-1 border-b border-stone-200/80 pb-2"
         role="tablist"
       >
-        {WORKSPACE_SECTIONS.map(([key, label]) => {
+        {VISIBLE_WORKSPACE_SECTIONS.map(([key, label]) => {
           const isSelected = activeSection === key;
           return (
             <button
@@ -505,7 +544,7 @@ export function ClientCompanyWorkspace({
                 <CountCard
                   label="Mért kimenetek"
                   value={measuredOutcomeCount}
-                  onClick={() => handleSectionChange("development")}
+                  href={`/clients/${encodeURIComponent(clientId)}/grow`}
                 />
               </div>
 
@@ -574,13 +613,13 @@ export function ClientCompanyWorkspace({
                 <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-stone-900">Szervezet és munkatársak</h3>
-                    <button
-                      type="button"
-                      onClick={() => handleSectionChange("organization")}
+                    <Link
+                      href={`/clients/${encodeURIComponent(clientId)}/szervezet`}
+                      data-testid="company-os-summary-organization"
                       className="text-xs font-semibold text-[#014337] hover:underline"
                     >
                       Megnyitás →
-                    </button>
+                    </Link>
                   </div>
                   <p className="mt-2 text-xs text-stone-600">
                     Egységek: <strong className="text-stone-900">{room.organization.groupCount}</strong> · Személyek:{" "}
@@ -615,13 +654,13 @@ export function ClientCompanyWorkspace({
                 <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-stone-900">Megfelelőségi státusz</h3>
-                    <button
-                      type="button"
-                      onClick={() => handleSectionChange("compliance")}
+                    <Link
+                      href={`/clients/${encodeURIComponent(clientId)}/compliance`}
+                      data-testid="company-os-summary-compliance"
                       className="text-xs font-semibold text-[#014337] hover:underline"
                     >
                       Megnyitás →
-                    </button>
+                    </Link>
                   </div>
                   <p className="mt-2 text-xs text-stone-600">
                     Értékelt: <strong className="text-stone-900">{room.complianceSummary.evaluatedCount}</strong> · Nyitott megállapítás:{" "}
@@ -636,13 +675,13 @@ export function ClientCompanyWorkspace({
                 <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
                   <div className="flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-stone-900">Fejlesztési program</h3>
-                    <button
-                      type="button"
-                      onClick={() => handleSectionChange("development")}
+                    <Link
+                      href={`/clients/${encodeURIComponent(clientId)}/grow`}
+                      data-testid="company-os-summary-development"
                       className="text-xs font-semibold text-[#014337] hover:underline"
                     >
                       Megnyitás →
-                    </button>
+                    </Link>
                   </div>
                   <p className="mt-2 text-xs text-stone-600">
                     Kezdeményezések: <strong className="text-stone-900">{room.developmentSummary.initiativeCount}</strong> (aktív:{" "}

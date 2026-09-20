@@ -71,10 +71,28 @@ describe('Dedicated client compliance workspace (structural)', () => {
     assert.match(overview, /vallalati-mukodes`} className="adm-link-button[^"]*">Grow with us/);
   });
 
-  it('does not add a Compliance top tab to ClientWorkspaceTabs', () => {
+  it('adds exactly one Megfelelés top tab and keeps it organization-only', () => {
     const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
     const tabsArray = tabs.slice(tabs.indexOf('const tabs'), tabs.indexOf('] as const'));
-    assert.doesNotMatch(tabsArray, /compliance/i);
+    assert.equal(
+      (tabsArray.match(/\["compliance", "Megfelelés", "\/compliance"\]/g) || []).length,
+      1,
+      'Compliance must appear exactly once as a canonical top-level tab',
+    );
+    // Compliance is organization-only, exactly like the other organization modules.
+    assert.match(tabs, /key !== "compliance"/);
+  });
+
+  it('renders the client-level shell before the compliance module hero', () => {
+    const src = page();
+    const tabsIndex = src.indexOf('<ClientWorkspaceTabs');
+    const heroIndex = src.indexOf('Megfelelés</p>');
+    assert.ok(tabsIndex >= 0, 'Compliance page must render ClientWorkspaceTabs');
+    assert.ok(heroIndex >= 0, 'Compliance page must render the module hero');
+    assert.ok(
+      tabsIndex < heroIndex,
+      'ClientWorkspaceTabs must render before the compliance module hero so the shell does not reorder between modules',
+    );
   });
 
   it('preserves the current-only compliance summary and canonical deep link', () => {
