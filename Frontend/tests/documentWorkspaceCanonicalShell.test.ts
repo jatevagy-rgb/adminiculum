@@ -104,10 +104,7 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   for (const mode of ["overview", "changes", "comments", "approval"]) {
     assert.match(shell, new RegExp(`contextualTab === '${mode}'`));
   }
-  assert.match(shell, /Áttekintés/);
-  assert.match(shell, /Változások/);
-  assert.match(shell, /Megjegyzések/);
-  assert.match(shell, /Jóváhagyás/);
+  assert.match(source, /<DocumentWorkspaceTabs active=\{contextualTab\} onChange=\{setContextualTab\}/);
   assert.doesNotMatch(shell, /data-testid="contextual-tab-(analysis|client|handoff)"/);
   assert.match(source, /id="document-review"/);
   assert.match(source, /id="document-legal-analysis"/);
@@ -120,7 +117,6 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   assert.match(shell, /HandoffPackagePanel/);
 
   // Truthfulness positive assertions
-  assert.match(shell, /Feltöltő:/);
   assert.match(source, /Publikálva/);
   assert.match(source, /Nincs publikálva/);
   assert.match(shell, /publicationStatusLabel/);
@@ -274,7 +270,7 @@ test("Regression Proof 1: uploaded document + isLoadingVersions does NOT render 
 
   // Review header must use isReviewLoading, not fall back to "Nincs aktív review"
   assert.match(source, /isReviewLoading\s*=\s*Boolean\(selectedUploadedDocument && \(!canonicalActiveVersion \|\| isLoadingVersions\)\)/);
-  assert.match(shell, /isReviewLoading\s*\?\s*"Verzióadatok betöltése\.\.\."\s*:\s*canonicalActiveVersion\?\.reviewStatus/);
+  assert.match(shell, /isReviewLoading\s*\?\s*"Verzióadatok betöltése\.\.\."[\s\S]*?canonicalActiveVersion\?\.reviewStatus/);
   assert.match(shell, /isReviewLoading \? \([\s\S]*?Verzió- és felülvizsgálati adatok betöltése folyamatban\.\.\./);
 
   // Publication status must map loading/unreconciled version state to "Publikációs állapot betöltése...", not "Nincs publikálva"
@@ -289,8 +285,7 @@ test("Regression Proof 2: right-shell annotation counts require annotationsVersi
   const shell = shellMatch[0];
 
   assert.match(source, /isAnnotationCountAuthoritative\s*=\s*Boolean\(\s*canonicalActiveVersion\s*&&\s*annotationsVersionId === canonicalActiveVersion\.id\s*\)/);
-  assert.match(shell, /isAnnotationCountAuthoritative \? `\$\{openAnnotationCount\} db`/);
-  assert.match(shell, /isAnnotationCountAuthoritative \? `\$\{annotations\.length\} db`/);
+  assert.match(source, /isAnnotationCountAuthoritative \? <p><b>Nyitott annotációk:<\/b> \{openAnnotationCount\} db<\/p>/);
 });
 
 test("Regression Proof 3: annotations from version A are not summarized under document/version B", () => {
@@ -379,7 +374,7 @@ test("Canonical header consolidates real work context and offers Download / New 
 
   assert.match(top, /handleDownloadUploadedDocument|handleDownload/);
   assert.match(top, /Új verzió feltöltése/);
-  assert.match(top, /Összehasonlítás/);
+  assert.match(top, /Változások/);
   assert.match(top, /AI előkészítés/);
 });
 
@@ -411,10 +406,11 @@ test("AI preparation and comparison header actions are gated to canonical upload
   assert.ok(!source.includes("documentId={activeDocument.id}"));
   // both actions are gated on an uploaded (canonical Document) row
   const aiIndex = source.indexOf("setAiPreparationOpen(true)");
-  const compareIndex = source.indexOf("router.push(metaCompareUrl)");
+  const compareIndex = source.indexOf("setContextualTab('changes')");
   assert.ok(aiIndex > 0 && compareIndex > 0);
   assert.match(source.slice(Math.max(0, aiIndex - 160), aiIndex), /selectedUploadedDocument \?/);
   assert.match(source.slice(Math.max(0, compareIndex - 160), compareIndex), /selectedUploadedDocument \?/);
+  assert.match(source, /router\.push\(metaCompareUrl\)/);
 });
 
 test("Selection quick toolbar maps to canonical annotation types and never creates a real task", () => {

@@ -9,14 +9,46 @@ const tabs = () => read("src/components/documents/workContext/DocumentWorkspaceT
 
 test("single shell exposes exactly four primary work modes", () => {
   const source = page();
-  const primary = source.match(/data-testid="primary-document-work-modes"[\s\S]*?<\/div>/)?.[0] ?? "";
+  const primary = tabs();
 
   assert.match(primary, /Áttekintés/);
   assert.match(primary, /Változások/);
   assert.match(primary, /Megjegyzések/);
   assert.match(primary, /Jóváhagyás/);
   assert.doesNotMatch(primary, /Elemzés|Ügyfél|Leadás/);
+  assert.doesNotMatch(source, /data-testid="primary-document-work-modes"/);
+  assert.equal((source.match(/<DocumentWorkspaceTabs/g) || []).length, 1);
   assert.match(source, /useState<'overview' \| 'changes' \| 'comments' \| 'approval'>\('overview'\)/);
+});
+
+test("primary mode navigation is controlled and does not use route or hash links", () => {
+  const source = tabs();
+  assert.match(source, /active: "overview" \| "changes" \| "comments" \| "approval"/);
+  assert.match(source, /onChange: \(mode: "overview" \| "changes" \| "comments" \| "approval"\)/);
+  assert.match(source, /onClick=\{\(\) => onChange\(key\)\}/);
+  assert.doesNotMatch(source, /next\/link|href=|#[a-z-]+/);
+  assert.match(page(), /<DocumentWorkspaceTabs active=\{contextualTab\} onChange=\{setContextualTab\}/);
+});
+
+test("comments owns annotation workflow while approval stays review-only", () => {
+  const source = page();
+  const comments = source.slice(source.indexOf('data-testid="contextual-comments-panel"'));
+  const approval = source.slice(source.indexOf('data-testid="contextual-approval-panel"'), source.indexOf('data-testid="contextual-changes-panel"'));
+  assert.match(comments, /comments-annotation-composer/);
+  assert.match(comments, /comments-annotation-list/);
+  assert.match(comments, /comments-comment-thread/);
+  assert.match(comments, /handleCreateAnnotation|handleResolveAnnotation|handleDeleteAnnotation/);
+  assert.doesNotMatch(approval, /handleCreateAnnotation|handleDeleteAnnotation|annotationDraft/);
+});
+
+test("review projection fields feed overview without replacing canonical next action", () => {
+  const source = page();
+  assert.match(source, /getDocumentReviewProjection/);
+  assert.match(source, /reviewProjection\.review\.openPointCount/);
+  assert.match(source, /reviewProjection\.review\.blockingPointCount/);
+  assert.match(source, /reviewProjection\.comparison\.unresolvedSegments/);
+  assert.match(source, /reviewProjection\.nextAction\.label/);
+  assert.match(source, /reviewProjection\.comparison\.reviewedSegments/);
 });
 
 test("center reader remains a sibling of the right shell and left ledger", () => {
@@ -59,4 +91,5 @@ test("tabs component names only the four primary modes", () => {
     assert.match(source, new RegExp(label));
   }
   assert.doesNotMatch(source, /Felülvizsgálat|Verziók|Elemzés|Ügyfél|Leadás/);
+  assert.doesNotMatch(source, /Link|href=|document-(overview|changes|comments|approval)/);
 });

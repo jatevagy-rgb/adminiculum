@@ -64,10 +64,12 @@ test("Requirement 4: Four primary modes switch contextual working content in rig
   }
   assert.doesNotMatch(shell, /onClick=\{\(\) => setContextualTab\('(elemzes|ugyfel|leadas)'\)\}/);
 
-  // Review contains annotation controls
-  assert.match(shell, /openAnnotationCount/);
-  assert.match(shell, /handleCreateAnnotation/);
-  assert.match(shell, /handleResolveAnnotation/);
+  // Comments owns annotation controls; approval remains review-only.
+  const commentsPanel = shell.slice(shell.indexOf('data-testid="contextual-comments-panel"'));
+  const approvalPanel = shell.slice(shell.indexOf('data-testid="contextual-approval-panel"'), shell.indexOf('data-testid="contextual-changes-panel"'));
+  assert.match(commentsPanel, /openAnnotationCount|handleCreateAnnotation/);
+  assert.match(commentsPanel, /handleResolveAnnotation/);
+  assert.doesNotMatch(approvalPanel, /handleCreateAnnotation|handleDeleteAnnotation|annotationDraft/);
 
   // Elemzés mounts LegalAnalysisIntakePanel
   assert.match(shell, /LegalAnalysisIntakePanel/);
@@ -234,8 +236,8 @@ test("Requirement 17: Text selection anchor supports both canonical reader and d
 
 test("Annotation rail keeps comments active and focuses supported text anchors", () => {
   const source = documentPage();
-  const commentsPanel = source.match(/data-testid="contextual-comments-panel"[\s\S]*?<\/div>\s*\) : null}/)?.[0];
-  assert.ok(commentsPanel, "Comments panel must remain present");
+  const commentsPanel = source.slice(source.indexOf('data-testid="contextual-comments-panel"'));
+  assert.ok(commentsPanel.includes('data-testid="contextual-comments-panel"'), "Comments panel must remain present");
   assert.match(commentsPanel, /onClick=\{\(\) => focusAnnotation\(annotation\)\}/);
   assert.doesNotMatch(commentsPanel, /setContextualTab\('review'\)/);
   assert.match(source, /const focusAnnotation = \(annotation: DocumentAnnotationItem\) =>/);
@@ -291,7 +293,7 @@ test("Requirement 18: Canonical composer displays client-explanation draft field
 
   // Canonical composer checks isClientExplanationDraft
   assert.match(shell, /isClientExplanationDraft\(annotationDraft\.annotationType\)/);
-  assert.match(shell, /id="canonical-ann-client-draft"/);
+  assert.match(shell, /id="comments-ann-client-draft"/);
   assert.match(shell, /Ügyfélnek szánt magyarázat/);
   assert.match(shell, /<NotPublishedBadge \/>/);
   assert.match(shell, /value=\{annotationDraft\.clientExplanationDraft\}/);
