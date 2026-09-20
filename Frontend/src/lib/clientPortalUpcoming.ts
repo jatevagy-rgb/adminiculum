@@ -1,10 +1,12 @@
 /**
  * Deterministic upcoming-deadline selection for the customer portal.
  *
- * A deadline is "upcoming" when its calendar day is today or later. Both date-only
- * values (`2026-09-20`) and ISO timestamps (`2026-09-20T12:00:00.000Z`) are keyed by
- * the literal date part of the value, so a same-day deadline is never pushed into
- * the past by a local/UTC timezone conversion.
+ * The deadline block is user-facing, so "today" means the browser/user's LOCAL
+ * calendar day. A date-only value (`2026-09-20`) is a literal calendar date and
+ * never shifts by timezone. An ISO timestamp (`2026-09-20T23:30:00Z`) is an
+ * instant, so it is converted to the user's local calendar day — the same day the
+ * user sees it rendered as. Deriving the current day from `toISOString()` would
+ * use the UTC calendar date and mis-classify deadlines around local midnight.
  *
  * Past values are deliberately left untouched by the caller: an overdue customer
  * action must keep appearing on its canonical Teendők / attention surface.
@@ -12,19 +14,33 @@
 
 export const UPCOMING_DEADLINE_LIMIT = 3;
 
-const DAY_KEY = /^(\d{4}-\d{2}-\d{2})/;
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** The calendar day (`YYYY-MM-DD`) a value belongs to, or null when unusable. */
-export function deadlineDayKey(value: string | null | undefined): string | null {
-  if (typeof value !== "string") return null;
-  const match = DAY_KEY.exec(value.trim());
-  return match ? match[1] : null;
+/** The user's local calendar day (`YYYY-MM-DD`) for an instant, or null when invalid. */
+export function localDayKey(date: Date): string | null {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return null;
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
-/** True when the value's day is today or in the future relative to `now`. */
+/**
+ * The calendar day (`YYYY-MM-DD`) a value belongs to, or null when unusable.
+ * Date-only values stay literal; timestamps use the local calendar day.
+ */
+export function deadlineDayKey(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const dateOnly = DATE_ONLY.exec(trimmed);
+  if (dateOnly) return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]}`;
+  return localDayKey(new Date(trimmed));
+}
+
+/** True when the value's local day is today or in the future relative to `now`. */
 export function isUpcomingDeadline(value: string | null | undefined, now: Date): boolean {
   const day = deadlineDayKey(value);
-  const today = deadlineDayKey(now.toISOString());
+  const today = localDayKey(now);
   return day !== null && today !== null && day >= today;
 }
 

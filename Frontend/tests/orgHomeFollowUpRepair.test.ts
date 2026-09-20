@@ -6,6 +6,7 @@ import {
   UPCOMING_DEADLINE_LIMIT,
   deadlineDayKey,
   isUpcomingDeadline,
+  localDayKey,
   selectUpcomingDeadlines,
 } from "../src/lib/clientPortalUpcoming";
 
@@ -13,7 +14,12 @@ const root = process.cwd();
 const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
 const orgHome = () => read("src/components/client-portal/OrgHomeView.tsx");
 
-const NOW = new Date("2026-09-20T00:00:00.000Z");
+// Local wall-clock 2026-09-20 00:30 on the machine running the test. This is the
+// user's calendar day and must hold in every host timezone, unlike a UTC string.
+const NOW = new Date(2026, 8, 20, 0, 30, 0);
+// Build an instant from local wall-clock so the expectation is timezone-independent.
+const local = (year: number, monthIndex: number, day: number, hour: number, minute: number) =>
+  new Date(year, monthIndex, day, hour, minute, 0);
 const row = (dueAt: string | null) => ({ dueAt, id: `row-${dueAt}` });
 const days = (rows: Array<{ dueAt: string | null }>) => rows.map((r) => deadlineDayKey(r.dueAt));
 
@@ -55,13 +61,29 @@ describe("Közelgő határidők is future-only", () => {
     assert.equal(selected.length, UPCOMING_DEADLINE_LIMIT);
   });
 
-  it("never turns a same-day timestamp into a past date through timezone conversion", () => {
-    // Same UTC calendar day as NOW must stay upcoming even late in the day.
-    assert.equal(isUpcomingDeadline("2026-09-20T23:59:59.000Z", NOW), true);
-    // The previous UTC calendar day must stay excluded even late in the day.
-    assert.equal(isUpcomingDeadline("2026-09-19T23:59:59.000Z", NOW), false);
+  it("keys date-only values literally and timestamps by their local calendar day", () => {
     // A date-only value is compared by its literal day, with no conversion at all.
     assert.equal(deadlineDayKey("2026-09-20"), "2026-09-20");
+    assert.equal(localDayKey(NOW), "2026-09-20");
+    // Timestamps use the local day of the instant, built from local wall-clock.
+    assert.equal(deadlineDayKey(local(2026, 8, 19, 23, 30).toISOString()), "2026-09-19");
+    assert.equal(deadlineDayKey(local(2026, 8, 20, 0, 15).toISOString()), "2026-09-20");
+    assert.equal(deadlineDayKey(local(2026, 8, 21, 1, 0).toISOString()), "2026-09-21");
+  });
+
+  it("classifies timestamps by the local day the user sees, independent of the host timezone", () => {
+    // Local 2026-09-19 23:30 is already yesterday even though it is late in the day.
+    assert.equal(isUpcomingDeadline(local(2026, 8, 19, 23, 30).toISOString(), NOW), false);
+    // Local 2026-09-20 00:15 is today — the local-midnight edge the UTC date missed.
+    assert.equal(isUpcomingDeadline(local(2026, 8, 20, 0, 15).toISOString(), NOW), true);
+    // Local 2026-09-21 01:00 is tomorrow.
+    assert.equal(isUpcomingDeadline(local(2026, 8, 21, 1, 0).toISOString(), NOW), true);
+  });
+
+  it("derives today from local calendar components at the local-midnight edge", () => {
+    assert.equal(isUpcomingDeadline("2026-09-19", NOW), false);
+    assert.equal(isUpcomingDeadline("2026-09-20", NOW), true);
+    assert.equal(isUpcomingDeadline("2026-09-21", NOW), true);
   });
 
   it("ignores unusable values and keeps equal-day input order stable", () => {
