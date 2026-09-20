@@ -138,20 +138,67 @@ export function summarizeTopics(topics: PortalComplianceTopic[]): Record<Complia
 
 /**
  * Three truthful overview numbers derived only from the shared primary buckets.
- * "Folyamatban / ügyvédi vizsgálat" intentionally groups in-progress and
- * lawyer-review topics. No score, ratio or percentage is derived here.
+ * The three categories are mutually exclusive and partition every topic, so the
+ * overview can never double-count or contradict an individual topic card:
+ *
+ * - customerAction: the customer is the immediate next actor.
+ * - atOffice: the office is processing/reviewing; no immediate customer action.
+ * - noAction: nothing is open on either side.
+ *
+ * No score, ratio or percentage is derived here.
  */
 export function summaryGroups(topics: PortalComplianceTopic[]): {
   customerAction: number;
-  progress: number;
+  atOffice: number;
   noAction: number;
 } {
   const counts = summarizeTopics(topics);
   return {
     customerAction: counts.CUSTOMER_ACTION,
-    progress: counts.IN_PROGRESS + counts.LAWYER_REVIEW,
+    atOffice: counts.IN_PROGRESS + counts.LAWYER_REVIEW,
     noAction: counts.NO_ACTION,
   };
+}
+
+/**
+ * CUSTOMER next-action dimension only. "Öntől szükséges" always means the
+ * customer is the immediate next actor; it never describes office processing.
+ * The two dimensions are intentionally kept visually separate so a topic can be
+ * "Öntől szükséges" and simultaneously under office review without either label
+ * reading as a contradiction.
+ */
+export function customerActionNote(topic: PortalComplianceTopic): string {
+  const answerable = topic.missingInformation.filter(
+    (info) => info.portalAnswerable === true && typeof info.questionKey === "string" && info.questionKey.trim().length > 0,
+  ).length;
+  if (answerable > 0) return `Öntől szükséges: ${answerable} adat megadása`;
+  if (classifyTopic(topic) === "CUSTOMER_ACTION") return "Öntől szükséges: a terület áttekintése";
+  return "Öntől jelenleg nincs várt adatmegadási teendő.";
+}
+
+/**
+ * OFFICE processing dimension, derived only from the safe client-facing topic
+ * state. It is deliberately labeled "Irodai feldolgozás" and never as the topic
+ * "state", so it can sit next to the customer dimension without implying that
+ * the two are the same value.
+ */
+export function officeProcessingNote(topic: PortalComplianceTopic): string {
+  switch (topic.state) {
+    case "LAWYER_REVIEW_REQUIRED":
+      return "Irodai feldolgozás: ügyvédi vizsgálat folyamatban";
+    case "ACTION_IN_PROGRESS":
+      return "Irodai feldolgozás: feldolgozás folyamatban";
+    case "MORE_INFORMATION_NEEDED":
+      return "Irodai feldolgozás: a beérkezett adatok ellenőrzése folyamatban";
+    case "REVIEW_RECOMMENDED":
+      return "Irodai feldolgozás: belső áttekintés előkészítés alatt";
+    case "RESOLVED":
+      return topic.missingInformation.length === 0
+        ? "Irodai feldolgozás: nincs nyitott lépés"
+        : "Irodai feldolgozás: további egyeztetés szükséges";
+    default:
+      return "Irodai feldolgozás: folyamatban";
+  }
 }
 
 /** Local, frontend-only search + status filter over already loaded topics. */
@@ -590,7 +637,6 @@ export function TopicDetailView({
   missingInformationSection: ReactNode;
   showHowMap?: boolean;
 }) {
-  const secondaryNote = secondaryStateNote(topic, bucket);
   const nextAction = nextActionFor(topic, bucket);
   const progress = controlProgressFor(topic, controlsSummary);
   return (
@@ -610,8 +656,8 @@ export function TopicDetailView({
             <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${bucketBadge[bucket]}`}>
               {primaryBadgeLabel(topic, bucket)}
             </span>
-            <span className="text-xs text-stone-500">Állapot: {topicStateLabel(topic)}</span>
-            {secondaryNote ? <span className="text-xs text-stone-500">{secondaryNote}</span> : null}
+            <span className="text-xs font-semibold text-stone-700">{customerActionNote(topic)}</span>
+            <span className="text-xs text-stone-500">{officeProcessingNote(topic)}</span>
           </div>
         </div>
       </section>
@@ -673,6 +719,37 @@ export function TopicDetailView({
   );
 }
 
+/** Customer-safe URL query parameter that selects a topic detail. */
+export const COMPLIANCE_TOPIC_QUERY_PARAM = "topic";
+
+/**
+ * Reads the selected customer-safe topic id from a location search string.
+ * Returns null for a missing, empty or malformed value so an invalid or
+ * nonexistent id safely falls back to the overview.
+ */
+export function readTopicParam(search: string): string | null {
+  try {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const value = params.get(COMPLIANCE_TOPIC_QUERY_PARAM);
+    return value && value.trim() ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Returns a location search string with the topic parameter set or removed,
+ * preserving any other query parameters. The topic id is already customer-safe
+ * (the DTO's opaque `topicId`), so it is safe to keep in the URL.
+ */
+export function withTopicParam(search: string, topicId: string | null): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  if (topicId && topicId.trim()) params.set(COMPLIANCE_TOPIC_QUERY_PARAM, topicId);
+  else params.delete(COMPLIANCE_TOPIC_QUERY_PARAM);
+  const next = params.toString();
+  return next ? `?${next}` : "";
+}
+
 export function OrgComplianceView() {
   const [data, setData] = useState<PortalComplianceReadModel | null>(null);
   const [loading, setLoading] = useState(true);
@@ -721,6 +798,16 @@ export function OrgComplianceView() {
     void loadProfile();
   }, [load, loadProfile]);
 
+  // URL-backed, customer-safe topic selection: deep-linkable and refresh-safe.
+  // `popstate` keeps browser back/forward in sync with the selected topic.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setSelectedTopicId(readTopicParam(window.location.search));
+    const onPopState = () => setSelectedTopicId(readTopicParam(window.location.search));
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   const topics = useMemo(() => data?.topics || [], [data]);
 
   const bucketFor = useMemo(() => {
@@ -732,6 +819,18 @@ export function OrgComplianceView() {
   const groups = useMemo(() => summaryGroups(topics), [topics]);
 
   const visibleTopics = useMemo(() => filterTopics(topics, search, statusFilter), [topics, search, statusFilter]);
+
+  // A stale or unknown ?topic= value safely falls back to the overview and is
+  // removed from the URL without adding a history entry.
+  useEffect(() => {
+    if (!data || !selectedTopicId) return;
+    if (topics.some((topic) => topic.topicId === selectedTopicId)) return;
+    setSelectedTopicId(null);
+    if (typeof window !== "undefined") {
+      const nextSearch = withTopicParam(window.location.search, null);
+      window.history.replaceState({}, "", `${window.location.pathname}${nextSearch}${window.location.hash}`);
+    }
+  }, [data, topics, selectedTopicId]);
 
   const handleSaveAnswer = async (info: PortalComplianceMissingInfo) => {
     if (!info.questionKey) return;
@@ -778,21 +877,21 @@ export function OrgComplianceView() {
     }
   };
 
-  const openTopic = (topicId: string) => {
+  const applyTopicSelection = useCallback((topicId: string | null) => {
     setSelectedTopicId(topicId);
     setActiveQuestionKey(null);
     setAnswerInput("");
     setActionError(null);
     setActionSuccess(null);
-  };
+    if (typeof window === "undefined") return;
+    const nextSearch = withTopicParam(window.location.search, topicId);
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const next = `${window.location.pathname}${nextSearch}${window.location.hash}`;
+    if (next !== current) window.history.pushState({}, "", next);
+  }, []);
 
-  const closeTopic = () => {
-    setSelectedTopicId(null);
-    setActiveQuestionKey(null);
-    setAnswerInput("");
-    setActionError(null);
-    setActionSuccess(null);
-  };
+  const openTopic = (topicId: string) => applyTopicSelection(topicId);
+  const closeTopic = () => applyTopicSelection(null);
 
   if (loading) return <section className={card}>Megfelelési áttekintés betöltése…</section>;
   if (error) return <section className={card}>{error}</section>;
@@ -878,29 +977,33 @@ export function OrgComplianceView() {
       <section className={card} data-testid="org-compliance-status-summary">
         <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Áttekintés</h2>
         <p className="mt-1 text-xs text-stone-500">
-          A számok a feltárt megfelelési területek valós, ügyfélnek látható állapotát összegzik. Nem tartalmaznak
-          pontszámot vagy százalékos minősítést.
+          Az összesítő három, egymást kizáró kategóriát mutat, és kizárólag az Ön következő lépését jelzi. Nem
+          tartalmaz pontszámot vagy százalékos minősítést.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <StatusCard
-            label="Teendőt igényel"
+            label="Öntől szükséges"
             count={groups.customerAction}
             tone="action"
-            hint="Olyan terület, ahol Önnek vagy az irodának lépnie kell."
+            hint="Az Ön a következő szereplő: adatmegadás vagy áttekintés szükséges."
           />
           <StatusCard
-            label="Folyamatban / ügyvédi vizsgálat"
-            count={groups.progress}
+            label="Irodánál van"
+            count={groups.atOffice}
             tone="progress"
-            hint="Folyamatban lévő vagy ügyvédi vizsgálat alatt álló terület."
+            hint="Az iroda dolgozik rajta (feldolgozás vagy ügyvédi vizsgálat); most nincs azonnali ügyféllépés."
           />
           <StatusCard
             label="Jelenleg nincs ügyfélteendő"
             count={groups.noAction}
             tone="clear"
-            hint="Ezen a területen jelenleg nincs Öntől várt teendő."
+            hint="Ezen a területen jelenleg egyik oldalon sincs nyitott lépés."
           />
         </div>
+        <p className="mt-3 text-xs text-stone-500">
+          Az irodai feldolgozás állapotát az egyes területek külön, „Irodai feldolgozás” jelöléssel mutatják — ez nem
+          ugyanaz a dimenzió, mint az Ön következő lépése.
+        </p>
       </section>
 
       {/* TOPIC LIST */}
@@ -940,7 +1043,6 @@ export function OrgComplianceView() {
             {visibleTopics.map((topic) => {
               const bucket = bucketFor.get(topic.topicId) ?? "CUSTOMER_ACTION";
               const progress = controlProgressFor(topic, data?.controlsSummary);
-              const secondaryNote = secondaryStateNote(topic, bucket);
               const nextAction = nextActionFor(topic, bucket);
               const answerableCount = topic.missingInformation.filter((info) => info.portalAnswerable && info.questionKey).length;
               const officeCount = topic.missingInformation.length - answerableCount;
@@ -958,8 +1060,6 @@ export function OrgComplianceView() {
                           <p className="mt-1 text-sm text-stone-700">{topic.shortExplanation}</p>
                         </div>
                       </div>
-                      {/* Raw backend state is preserved here as subordinate, truthful context. */}
-                      <p className="mt-3 text-xs text-stone-500">Állapot: {topicStateLabel(topic)}</p>
                     </div>
 
                     {/* MIDDLE — primary state and the immediate customer step */}
@@ -968,7 +1068,9 @@ export function OrgComplianceView() {
                         {primaryBadgeLabel(topic, bucket)}
                       </span>
 
-                      {secondaryNote ? <p className="mt-2 text-xs text-stone-500">{secondaryNote}</p> : null}
+                      {/* Two explicitly separate dimensions: customer next step vs office processing. */}
+                      <p className="mt-2 text-xs font-semibold text-stone-700">{customerActionNote(topic)}</p>
+                      <p className="mt-1 text-xs text-stone-500">{officeProcessingNote(topic)}</p>
 
                       {nextAction ? (
                         <div className="mt-3 rounded-xl bg-[#fff8f6] p-3 text-xs text-[#8a4536]">
@@ -976,11 +1078,11 @@ export function OrgComplianceView() {
                         </div>
                       ) : null}
 
-                      <p className="mt-3 text-xs text-stone-600">
-                        {topic.missingInformation.length > 0
-                          ? `Hiányzó adat: ${topic.missingInformation.length}${answerableCount > 0 ? ` · ebből Önnek megválaszolható: ${answerableCount}` : ""}${officeCount > 0 ? ` · irodai egyeztetéssel: ${officeCount}` : ""}`
-                          : "Nincs hiányzó adat."}
-                      </p>
+                      {topic.missingInformation.length > 0 ? (
+                        <p className="mt-3 text-xs text-stone-600">
+                          {`Hiányzó adat: ${topic.missingInformation.length}${answerableCount > 0 ? ` · ebből Önnek megválaszolható: ${answerableCount}` : ""}${officeCount > 0 ? ` · irodai egyeztetéssel: ${officeCount}` : ""}`}
+                        </p>
+                      ) : null}
                     </div>
 
                     {/* RIGHT — authoritative control progress + published documents + detail */}
@@ -991,11 +1093,9 @@ export function OrgComplianceView() {
                           {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
                         </div>
                       ) : null}
-                      <p className="text-xs text-stone-600">
-                        {topic.documents.length > 0
-                          ? `Közzétett ügyfél-dokumentum: ${topic.documents.length}`
-                          : "Nincs közzétett ügyfél-dokumentum."}
-                      </p>
+                      {topic.documents.length > 0 ? (
+                        <p className="text-xs text-stone-600">{`Közzétett ügyfél-dokumentum: ${topic.documents.length}`}</p>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => openTopic(topic.topicId)}

@@ -254,7 +254,11 @@ describe("Compliance Map truthful primary-state convergence", () => {
   it("A. the card shows the bucket badge and the gated customer CTA", () => {
     const src = source();
     assert.match(src, /\{primaryBadgeLabel\(topic, bucket\)\}/);
-    assert.match(src, /Állapot: \{topicStateLabel\(topic\)\}/);
+    // The office dimension must NOT be presented as the topic "state": customer
+    // next step and office processing are rendered as explicit separate labels.
+    assert.doesNotMatch(src, /Állapot: \{topicStateLabel\(topic\)\}/);
+    assert.match(src, /\{customerActionNote\(topic\)\}/);
+    assert.match(src, /\{officeProcessingNote\(topic\)\}/);
     assert.match(src, /info\.portalAnswerable && info\.questionKey \?/);
     assert.match(src, /Adat megadása →/);
   });

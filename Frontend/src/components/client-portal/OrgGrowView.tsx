@@ -426,7 +426,7 @@ export function OrgGrowView() {
   );
   const processReady = !requiresProcess || assessmentProcessId !== "";
 
-  // Real KPI calculations (zero fake numbers)
+  // Real KPI calculations (no synthetic numbers)
   const uncompletedPacksCount = packs.filter((p) => p.status !== "COMPLETED").length;
   const completedPacksCount = packs.filter((p) => p.status === "COMPLETED").length;
   const activeInitiativesCount = initiatives.filter(
@@ -438,6 +438,8 @@ export function OrgGrowView() {
   const completedInitiativesCount = initiatives.filter(
     (i) => i.statusLabel.includes("Lezárva") || i.statusLabel.includes("Megvalósult")
   ).length;
+  // Published, customer-safe opportunities only (already publication-filtered by the DTO).
+  const publishedOpportunitiesCount = data?.opportunities?.length ?? 0;
 
   // Filtered packs for Felmérések catalogue
   const filteredPacks = packs.filter((p) => {
@@ -464,7 +466,7 @@ export function OrgGrowView() {
     { id: "attekintes", label: "Áttekintés" },
     { id: "felmeresek", label: "Felmérések", count: packs.length },
     { id: "folyamatok", label: "Folyamatok", count: processes.length },
-    { id: "lehetosegek", label: "Lehetőségek" },
+    { id: "lehetosegek", label: "Lehetőségek", count: publishedOpportunitiesCount },
     { id: "kezdemenyezesek", label: "Kezdeményezések", count: initiatives.length },
     { id: "eredmenyek", label: "Eredmények", count: measuredOutcomes.length + estimatedOutcomes.length },
   ];
@@ -473,50 +475,42 @@ export function OrgGrowView() {
     <div className="space-y-6" data-testid="org-grow-view">
       {/* Editorial Hero Banner matching North Star direction */}
       <section className={`${card} border-[#e8ded1] bg-gradient-to-br from-[#fdfbf7] via-[#faf6ee] to-[#f5eedf] shadow-xs`}>
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div className="max-w-3xl">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 max-w-3xl">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#2d5a43]/30 bg-[#2d5a43]/10 px-3 py-1 text-xs font-semibold text-[#1b382b]">
-                Fejlesztési Áttekintés{data?.customerName ? ` · ${data.customerName}` : ""}
-              </span>
               <span className="inline-flex items-center rounded-full border border-[#a84318]/30 bg-[#a84318]/10 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[#a84318]">
-                Grow with Us
+                Grow With Us
               </span>
+              {data?.customerName ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[#2d5a43]/30 bg-[#2d5a43]/10 px-3 py-1 text-xs font-semibold text-[#1b382b]">
+                  {data.customerName}
+                </span>
+              ) : null}
             </div>
-            <p className="mt-2.5 text-xs font-semibold uppercase tracking-[0.24em] text-[#7a5f18]">
-              Grow With Us · Vállalatfejlesztés
-            </p>
-            <h1 className="mt-2 font-serif text-2xl font-bold tracking-tight text-[#1b382b] sm:text-4xl">
-              FELMÉRÉSEK ÉS FEJLESZTÉSI LEHETŐSÉGEK
+            <h1 className="mt-3 font-serif text-2xl font-bold tracking-tight text-[#1b382b] sm:text-4xl">
+              Felmérések és fejlesztési lehetőségek
             </h1>
-            <p className="mt-1.5 font-serif text-lg text-[#2d5a43] italic sm:text-xl">
-              Hogyan működik most a cége?
-            </p>
             <p className="mt-2 text-sm leading-6 text-stone-700">
-              Megmutatjuk, hol érdemes körülnézni, és miért{data?.customerName ? <> — <strong className="text-stone-900">{data.customerName}</strong></> : ""}.
+              Hogyan működik most a cége? Megmutatjuk, hol érdemes körülnézni
+              {data?.customerName ? <>, és miért — <strong className="text-stone-900">{data.customerName}</strong></> : ""}.
             </p>
-            <p className="mt-2 text-xs italic text-stone-600 max-w-2xl">
+            <p className="mt-2 max-w-2xl text-xs text-stone-600">
               A fejlődés nem egyetlen nagy átalakulás, hanem apró, rögzíthető lépések sorozata: feltárás, diagnózis, célzott beavatkozás és mérhető hatás.
+            </p>
+            <p
+              className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-[#7a5f18]"
+              data-testid="grow-journey-hint"
+            >
+              Felmérés → működés megértése → fejlesztési lehetőség → kezdeményezés → mérhető eredmény
             </p>
           </div>
 
-          <div className="flex flex-col items-end gap-3 pt-1">
-            <div className="rounded-2xl border border-[#e8ded1] bg-white/80 p-4 shadow-xs max-w-xs text-left">
-              <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-[#2d5a43]" />
-                <p className="text-[10px] font-bold uppercase tracking-wider text-[#7a5f18]">Módszertani alapelv</p>
-              </div>
-              <p className="mt-1.5 text-xs italic text-stone-700 leading-relaxed">
-                Nincs elméleti érettségi besorolás. A rendszer rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve.
-              </p>
-            </div>
-            <Link
-              href="/portal/megkeresesek"
-              className="inline-flex items-center gap-1.5 rounded-full border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-800 shadow-xs transition hover:bg-stone-50"
-            >
-              Kérdése van? Írjon nekünk →
-            </Link>
-          </div>
+          <Link
+            href="/portal/megkeresesek"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-stone-300 bg-white px-4 py-2 text-xs font-semibold text-stone-800 shadow-xs transition hover:bg-stone-50"
+          >
+            Kérdése van? Írjon nekünk →
+          </Link>
         </div>
 
         {/* Navigation Tabs bar directly embedded in hero card */}
@@ -560,29 +554,34 @@ export function OrgGrowView() {
         <div className="space-y-6" data-testid="grow-overview-tab">
           {/* Horizontal status strip with real metrics */}
           <div className="rounded-3xl border border-[#e8ded1] bg-white p-5 shadow-xs">
-            <div className="grid grid-cols-2 gap-4 divide-y divide-stone-100 sm:grid-cols-3 sm:divide-y-0 sm:divide-x sm:divide-stone-100 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-4 divide-y divide-stone-100 sm:grid-cols-3 sm:divide-y-0 sm:divide-x sm:divide-stone-100 lg:grid-cols-6">
               <div className="px-3 py-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a84318]">KITÖLTÉSRE VÁR</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#a84318]">Kitöltésre váró felmérés</p>
                 <p className="mt-1 font-serif text-2xl font-bold text-stone-950">{uncompletedPacksCount}</p>
                 <p className="mt-0.5 text-[11px] text-stone-500">{packs.length} felmérésből</p>
               </div>
               <div className="px-3 py-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#2d4a3e]">BEFEJEZETT</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#2d4a3e]">Befejezett felmérés</p>
                 <p className="mt-1 font-serif text-2xl font-bold text-stone-950">{completedPacksCount}</p>
                 <p className="mt-0.5 text-[11px] text-stone-500">Rögzített diagnózis</p>
               </div>
               <div className="px-3 py-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-600">FOLYAMATOK</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-stone-600">Felmért folyamat</p>
                 <p className="mt-1 font-serif text-2xl font-bold text-stone-950">{processes.length}</p>
                 <p className="mt-0.5 text-[11px] text-stone-500">Feltérképezve</p>
               </div>
               <div className="px-3 py-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-800">FOLYAMATBAN</p>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-800">Aktív kezdeményezés</p>
                 <p className="mt-1 font-serif text-2xl font-bold text-stone-950">{activeInitiativesCount}</p>
-                <p className="mt-0.5 text-[11px] text-stone-500">Kezdeményezés</p>
+                <p className="mt-0.5 text-[11px] text-stone-500">Folyamatban lévő kezdeményezés</p>
               </div>
-              <div className="col-span-2 px-3 py-1 sm:col-span-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">MÉRT EREDMÉNY</p>
+              <div className="px-3 py-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#7a5f18]">Közzétett lehetőség</p>
+                <p className="mt-1 font-serif text-2xl font-bold text-stone-950">{publishedOpportunitiesCount}</p>
+                <p className="mt-0.5 text-[11px] text-stone-500">Ügyféloldalon közzétéve</p>
+              </div>
+              <div className="px-3 py-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Mért eredmény</p>
                 <p className="mt-1 font-serif text-2xl font-bold text-stone-950">{measuredOutcomes.length}</p>
                 <p className="mt-0.5 text-[11px] text-stone-500">MÉRT alapon rögzített</p>
               </div>
@@ -679,6 +678,17 @@ export function OrgGrowView() {
                   </div>
                 ))}
               </div>
+
+              {/* Methodology principle demoted out of the hero, kept truthful and explicit. */}
+              <div className="mt-4 rounded-xl border border-[#e8ded1] bg-[#fdfbf7] p-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-[#2d5a43]" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#7a5f18]">Módszertani alapelv</p>
+                </div>
+                <p className="mt-1.5 text-xs italic leading-relaxed text-stone-700">
+                  Nincs elméleti érettségi besorolás. A rendszer rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve.
+                </p>
+              </div>
             </section>
           </div>
 
@@ -690,6 +700,9 @@ export function OrgGrowView() {
             </h2>
             <p className="mt-1 text-sm text-stone-600">
               Ossza meg velünk, milyen nehézségeket tapasztal a napi működésben. Visszajelzése közvetlenül beépül a szervezet közös fejlesztési áttekintésébe.
+            </p>
+            <p className="mt-1 text-xs text-stone-500">
+              Ez egy könnyű, jelzésértékű visszajelzés — nem formális felmérés.
             </p>
 
             <form onSubmit={handleSurveySubmit} className="mt-5 space-y-4">
@@ -1412,6 +1425,9 @@ export function OrgGrowView() {
             </h2>
             <p className="mt-1 text-sm text-stone-600">
               Ossza meg velünk, milyen nehézségeket tapasztal a napi működésben. Visszajelzése közvetlenül beépül a szervezet közös fejlesztési áttekintésébe.
+            </p>
+            <p className="mt-1 text-xs text-stone-500">
+              Ez egy könnyű, jelzésértékű visszajelzés — nem formális felmérés.
             </p>
 
             <form onSubmit={handleSurveySubmit} className="mt-5 space-y-4">
