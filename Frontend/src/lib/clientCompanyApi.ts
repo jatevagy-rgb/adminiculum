@@ -80,6 +80,8 @@ export type DevelopmentInitiative = {
   priority: string;
   status: string;
   lawFirmOwnerUserId: string | null;
+  lawFirmOwnerName?: string | null;
+  clientOwnerDisplay?: string | null;
   caseId: string | null;
   targetAt: string | null;
   updatedAt: string;

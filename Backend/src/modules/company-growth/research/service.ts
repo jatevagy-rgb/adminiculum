@@ -733,13 +733,15 @@ export async function listGrowOpportunities(
   actor: InternalActor,
   clientId: string,
   db: Db = defaultPrisma,
+  options: { status?: RecommendationCandidateStatus } = {},
 ) {
   await assertClientReadAccess(actor, clientId, db as PrismaClient);
   const recs = await db.recommendationCandidate.findMany({
-    where: { clientId, status: 'PENDING_REVIEW' },
+    where: { clientId, status: options.status ?? 'PENDING_REVIEW' },
     include: {
       diagnosis: { include: { problemDomain: true, businessProcess: true } },
       evidenceLinks: { include: { evidence: true } },
+      improvementOpportunity: { select: { id: true, status: true, developmentInitiativeId: true } },
     },
     orderBy: { createdAt: 'desc' },
   });
@@ -760,6 +762,9 @@ export async function listGrowOpportunities(
       ? { id: r.diagnosis.businessProcess.id, name: r.diagnosis.businessProcess.name }
       : null,
     evidenceStrength: strongestEvidence(r.evidenceLinks.map((l) => l.evidence)),
+    opportunity: r.improvementOpportunity
+      ? { id: r.improvementOpportunity.id, status: r.improvementOpportunity.status, developmentInitiativeId: r.improvementOpportunity.developmentInitiativeId }
+      : null,
     createdAt: r.createdAt.toISOString(),
   }));
 }

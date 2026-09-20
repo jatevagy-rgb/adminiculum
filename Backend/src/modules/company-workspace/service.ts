@@ -15,6 +15,18 @@
  * Phase 1-3 modules (never a new ACL): ADMIN/PARTNER may read any client;
  * lawyers/collaborating lawyers only clients they have a Case in.
  *
+ * PROVENANCE / FRESHNESS / CONFLICTS (cockpit convergence) are derived ONLY from
+ * canonical fields already present on ClientFact / FactDefinition / EvidenceRecord
+ * and are never stored:
+ *   - provenance category comes from `sourceReference` + `sourceDocumentVersionId`
+ *     + linked EvidenceRecord rows; the raw reference value is never projected;
+ *   - freshness comes from `FactDefinition.temporalPolicy` (only VALIDITY_INTERVAL
+ *     defines an explicit expiry) — no invented staleness window exists;
+ *   - a conflict is reported (REVIEW REQUIRED) only when a definition with
+ *     `overlapPolicy = DISALLOW` has two or more currently-valid facts for the same
+ *     scope/subject and NO canonical answer state selects a current fact. No fact
+ *     is ever silently preferred by recency, verification level or source type.
+ *
  * NOTE: this module is deliberately distinct from `client-workspace` (the CP1
  * customer-facing organizational workspace). Phase 4 exposes no customer route
  * and no new company publication scope.
@@ -29,6 +41,7 @@ import { getCanonicalCompanyFact } from '../client-workspace/companyProfileFactC
 import { applyDeterministicDerivations, resolveVisibleQuestions, type CompanyProfileFactState } from '../client-workspace/companyProfileAdaptive';
 import { resolveCanonicalTypedFactValue, type CanonicalTypedFactValue } from '../client-workspace/canonicalFactValue';
 import type { ProcessMetricCode, ProcessMetricValue } from '../company-growth/metrics/metricTypes';
+import { PROCESS_METRIC_REGISTRY } from '../company-growth/metrics/metricRegistry';
 import { hrConfidentialReadAllowed } from '../documents/authorization';
 
 type Prisma = typeof defaultPrisma;
@@ -106,6 +119,60 @@ function boundedSnapshotMetrics(value: unknown): ProcessMetricValue[] {
   });
 }
 
+/** Canonical snapshot metrics carry their registry display name and unit. */
+function snapshotMetricProjection(value: unknown): Array<ProcessMetricValue & { nameHu: string }> {
+  return boundedSnapshotMetrics(value).map((metric) => ({
+    ...metric,
+    nameHu: PROCESS_METRIC_REGISTRY[metric.code]?.nameHu ?? metric.code,
+  }));
+}
+
+/**
+ * Snapshot provenance is caller-supplied at capture time (`provenanceSource`).
+ * It is surfaced only as a bounded machine token so an unexpected value can never
+ * carry free text into the projection; anything else is reported as unknown.
+ */
+export function safeProvenanceSource(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = (value as { source?: unknown }).source;
+  if (typeof source !== 'string') return null;
+  const trimmed = source.trim();
+  return /^[A-Za-z0-9_]{1,64}$/.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * Canonical fact provenance classification. `ClientFact.sourceReference` is a
+ * free-text column that may hold a portal identity handle; the raw value is NEVER
+ * projected, only its canonical provenance category.
+ */
+export function classifyFactSourceKind(
+  sourceReference: string | null,
+  hasSourceDocument: boolean,
+): FactProvenanceSourceKind {
+  if (sourceReference && sourceReference.startsWith('CLIENT_PORTAL_IDENTITY:')) return 'CLIENT_PORTAL_ANSWER';
+  if (hasSourceDocument) return 'DOCUMENT';
+  if (sourceReference && sourceReference.trim()) return 'MANUAL';
+  return 'UNKNOWN';
+}
+
+/**
+ * Freshness is derived ONLY from the canonical fact temporal policy. Only
+ * VALIDITY_INTERVAL defines an explicit expiry (`validTo`); every other policy
+ * carries no canonical freshness rule and is reported as such — no invented
+ * staleness window is ever applied.
+ */
+export function deriveFactFreshness(
+  temporalPolicy: string | null,
+  validTo: Date | null,
+  now: Date,
+): { rule: string | null; ruleDefined: boolean; state: FactFreshnessState } {
+  if (temporalPolicy === 'VALIDITY_INTERVAL') {
+    const expired = validTo !== null && validTo.getTime() < now.getTime();
+    return { rule: temporalPolicy, ruleDefined: true, state: expired ? 'EXPIRED' : 'CURRENT' };
+  }
+  return { rule: temporalPolicy, ruleDefined: false, state: 'NO_RULE' };
+}
+
 function questionStatus(state: CompanyProfileFactState | undefined): 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED' {
   return state?.status ?? 'UNANSWERED';
 }
@@ -167,6 +234,73 @@ export interface WorkspaceAttentionItem {
   count: number;
 }
 
+export type FactProvenanceSourceKind = 'CLIENT_PORTAL_ANSWER' | 'DOCUMENT' | 'MANUAL' | 'UNKNOWN';
+
+/** Canonical freshness states. `NO_RULE` means the definition carries no rule. */
+export type FactFreshnessState = 'CURRENT' | 'EXPIRED' | 'NO_RULE';
+
+export interface CompanyDataRoomFactProvenance {
+  sourceKind: FactProvenanceSourceKind;
+  hasSourceDocument: boolean;
+  evidenceCount: number;
+  evidenceSourceTypes: string[];
+  determinationMethod: string | null;
+  recordedAt: string | null;
+  verifiedAt: string | null;
+}
+
+export interface CompanyDataRoomFactFreshness {
+  rule: string | null;
+  ruleDefined: boolean;
+  state: FactFreshnessState;
+}
+
+export interface CompanyDataRoomFactConflicts {
+  overlapPolicy: string | null;
+  sameSubjectCurrentFactCount: number;
+  /** True when a canonical answer state names this fact as the current truth. */
+  hasCanonicalSelection: boolean;
+  reviewRequired: boolean;
+}
+
+export interface CompanyDataRoomFact {
+  id: string | null;
+  type: string;
+  value: CanonicalTypedFactValue | null;
+  answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
+  factDefinition: { key: string; domainCode: string; valueType: string; labelHu?: string | null } | null;
+  scopeType: string | null;
+  factSubjectId: string | null;
+  verificationStatus: string | null;
+  observedAt: string | null;
+  effectiveAt: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  provenance: CompanyDataRoomFactProvenance;
+  freshness: CompanyDataRoomFactFreshness;
+  conflicts: CompanyDataRoomFactConflicts;
+}
+
+/** Neutral provenance/freshness/conflict projection for answer states without a fact. */
+const NO_FACT_PROVENANCE: CompanyDataRoomFactProvenance = {
+  sourceKind: 'UNKNOWN',
+  hasSourceDocument: false,
+  evidenceCount: 0,
+  evidenceSourceTypes: [],
+  determinationMethod: null,
+  recordedAt: null,
+  verifiedAt: null,
+};
+
+const NO_FACT_FRESHNESS: CompanyDataRoomFactFreshness = { rule: null, ruleDefined: false, state: 'NO_RULE' };
+
+const NO_FACT_CONFLICTS: CompanyDataRoomFactConflicts = {
+  overlapPolicy: null,
+  sameSubjectCurrentFactCount: 0,
+  hasCanonicalSelection: false,
+  reviewRequired: false,
+};
+
 export interface CompanyDataRoomDto {
   clientIdentity: {
     id: string;
@@ -183,21 +317,13 @@ export interface CompanyDataRoomDto {
     summary: string | null;
     lastReviewedAt: string | null;
     nextReviewAt: string | null;
+    review: {
+      rule: 'nextReviewAt';
+      ruleDefined: boolean;
+      state: 'CURRENT' | 'REVIEW_REQUIRED' | 'UNKNOWN';
+    };
   } | null;
-  facts: Array<{
-    id: string | null;
-    type: string;
-    value: CanonicalTypedFactValue | null;
-    answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
-    factDefinition: { key: string; domainCode: string; valueType: string; labelHu?: string | null } | null;
-    scopeType: string | null;
-    factSubjectId: string | null;
-    verificationStatus: string | null;
-    observedAt: string | null;
-    effectiveAt: string | null;
-    validFrom: string | null;
-    validTo: string | null;
-  }>;
+  facts: CompanyDataRoomFact[];
   dataQuality: {
     answerStateSummary: {
       answered: number;
@@ -215,7 +341,21 @@ export interface CompanyDataRoomDto {
     };
     stale: null;
     staleAvailable: false;
-    conflictingAvailable: false;
+    conflictingAvailable: true;
+    conflictingFactCount: number;
+    provenance: {
+      basis: 'ClientFact.sourceReference + ClientFact.sourceDocumentVersionId + EvidenceRecord';
+      documentSourceCount: number;
+      portalAnswerCount: number;
+      manualSourceCount: number;
+      unknownSourceCount: number;
+      evidenceLinkedCount: number;
+    };
+    freshness: {
+      basis: 'FactDefinition.temporalPolicy';
+      ruleDefinedCount: number;
+      noRuleCount: number;
+    };
   };
   organization: {
     groupCount: number;
@@ -235,6 +375,16 @@ export interface CompanyDataRoomDto {
     status: string;
     owner: { id: string; name: string } | null;
     organizationGroup: { id: string; name: string } | null;
+    stepCount: number;
+    approvalStepCount: number;
+    unassignedStepCount: number;
+    /** Derived sums of the STEP-LEVEL ESTIMATES. Never a measured value. */
+    estimatedTotals: {
+      activeMinutes: number | null;
+      waitingMinutes: number | null;
+      stepsWithActiveEstimate: number;
+      stepsWithWaitingEstimate: number;
+    };
     steps: Array<{
       id: string;
       position: number;
@@ -250,7 +400,9 @@ export interface CompanyDataRoomDto {
       id: string;
       observedAt: string;
       metricVersion: string;
-      metrics: ProcessMetricValue[];
+      snapshotDigest: string;
+      provenanceSource: string | null;
+      metrics: Array<ProcessMetricValue & { nameHu: string }>;
     } | null;
   }>;
   systems: Array<{
@@ -440,14 +592,20 @@ export async function getCompanyDataRoom(
         moneyCurrency: true,
         enumValue: true,
         jsonValue: true,
-        factDefinition: { select: { id: true, key: true, domainCode: true, valueType: true, temporalPolicy: true } },
+        factDefinitionId: true,
+        factDefinition: { select: { id: true, key: true, domainCode: true, valueType: true, temporalPolicy: true, overlapPolicy: true } },
         scopeType: true,
         factSubjectId: true,
         verificationStatus: true,
+        sourceReference: true,
+        sourceDocumentVersionId: true,
+        verifiedAt: true,
+        determinationMethod: true,
         observedAt: true,
         effectiveAt: true,
         validFrom: true,
         validTo: true,
+        createdAt: true,
       },
     }),
     prisma.clientFactAnswerState.findMany({
@@ -570,7 +728,9 @@ export async function getCompanyDataRoom(
             id: true,
             observedAt: true,
             metricVersion: true,
+            snapshotDigest: true,
             metrics: true,
+            provenance: true,
           },
         },
       },
@@ -671,26 +831,81 @@ export async function getCompanyDataRoom(
       labelHu: getCanonicalCompanyFact(factDefinition.key)?.labelHu ?? null,
     };
   };
+  // Every projected fact is currently valid, so a group sharing one
+  // (definition, scope, subject) overlaps in time by construction. When the
+  // definition forbids overlap and no canonical answer state selects a current
+  // fact, the group is surfaced as REVIEW REQUIRED — never silently resolved.
+  const currentFactGroupCounts = new Map<string, number>();
+  for (const fact of facts) {
+    if (!fact.factDefinitionId) continue;
+    const key = [fact.factDefinitionId, fact.scopeType ? String(fact.scopeType) : '', fact.factSubjectId ?? ''].join('|');
+    currentFactGroupCounts.set(key, (currentFactGroupCounts.get(key) ?? 0) + 1);
+  }
+  const factEvidence = facts.length
+    ? await prisma.evidenceRecord.findMany({
+        where: { clientId, clientFactId: { in: facts.map((fact) => fact.id) } },
+        select: { clientFactId: true, sourceType: true },
+        take: 500,
+      })
+    : [];
+  const evidenceByFact = new Map<string, { count: number; sourceTypes: Set<string> }>();
+  for (const evidence of factEvidence) {
+    if (!evidence.clientFactId) continue;
+    const bucket = evidenceByFact.get(evidence.clientFactId) ?? { count: 0, sourceTypes: new Set<string>() };
+    bucket.count += 1;
+    bucket.sourceTypes.add(String(evidence.sourceType));
+    evidenceByFact.set(evidence.clientFactId, bucket);
+  }
   const projectFact = (
     fact: typeof facts[number] | NonNullable<typeof answerStates[number]['currentFact']>,
-    factDefinition: { key: string; domainCode: string; valueType: string } | null,
+    factDefinition: { key: string; domainCode: string; valueType: string; temporalPolicy?: unknown; overlapPolicy?: unknown } | null,
     answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED',
     allowLegacyValue: boolean,
-  ) => ({
-    id: 'id' in fact ? fact.id : null,
-    type: fact.type,
-    value: resolveCanonicalTypedFactValue(fact) ?? (allowLegacyValue && 'value' in fact ? fact.value : null),
-    answerStatus,
-    factDefinition: projectFactDefinition(factDefinition),
-    scopeType: 'scopeType' in fact && fact.scopeType ? String(fact.scopeType) : null,
-    factSubjectId: 'factSubjectId' in fact ? fact.factSubjectId : null,
-    verificationStatus: 'verificationStatus' in fact ? String(fact.verificationStatus) : null,
-    observedAt: iso('observedAt' in fact ? fact.observedAt : null),
-    effectiveAt: iso('effectiveAt' in fact ? fact.effectiveAt : null),
-    validFrom: 'validFrom' in fact ? fact.validFrom.toISOString() : null,
-    validTo: iso('validTo' in fact ? fact.validTo : null),
-  });
-  const projectedFacts = [
+  ): CompanyDataRoomFact => {
+    const factId = 'id' in fact ? fact.id : null;
+    const definitionId = 'factDefinitionId' in fact ? fact.factDefinitionId ?? null : null;
+    const scopeType = 'scopeType' in fact && fact.scopeType ? String(fact.scopeType) : null;
+    const factSubjectId = 'factSubjectId' in fact ? fact.factSubjectId : null;
+    const sourceReference = 'sourceReference' in fact ? fact.sourceReference ?? null : null;
+    const hasSourceDocument = 'sourceDocumentVersionId' in fact ? Boolean(fact.sourceDocumentVersionId) : false;
+    const overlapPolicy = factDefinition && typeof factDefinition.overlapPolicy === 'string' ? factDefinition.overlapPolicy : null;
+    const temporalPolicy = factDefinition && typeof factDefinition.temporalPolicy === 'string' ? factDefinition.temporalPolicy : null;
+    const hasCanonicalSelection = answerStatus === 'ANSWERED';
+    const groupKey = definitionId ? [definitionId, scopeType ?? '', factSubjectId ?? ''].join('|') : null;
+    const sameSubjectCurrentFactCount = groupKey ? currentFactGroupCounts.get(groupKey) ?? 0 : 0;
+    const evidence = factId ? evidenceByFact.get(factId) : undefined;
+    return {
+      id: factId,
+      type: fact.type,
+      value: resolveCanonicalTypedFactValue(fact) ?? (allowLegacyValue && 'value' in fact ? fact.value : null),
+      answerStatus,
+      factDefinition: projectFactDefinition(factDefinition),
+      scopeType,
+      factSubjectId,
+      verificationStatus: 'verificationStatus' in fact ? String(fact.verificationStatus) : null,
+      observedAt: iso('observedAt' in fact ? fact.observedAt : null),
+      effectiveAt: iso('effectiveAt' in fact ? fact.effectiveAt : null),
+      validFrom: 'validFrom' in fact ? fact.validFrom.toISOString() : null,
+      validTo: iso('validTo' in fact ? fact.validTo : null),
+      provenance: {
+        sourceKind: classifyFactSourceKind(sourceReference, hasSourceDocument),
+        hasSourceDocument,
+        evidenceCount: evidence?.count ?? 0,
+        evidenceSourceTypes: evidence ? [...evidence.sourceTypes].sort() : [],
+        determinationMethod: 'determinationMethod' in fact && fact.determinationMethod ? String(fact.determinationMethod) : null,
+        recordedAt: iso('createdAt' in fact ? fact.createdAt : null),
+        verifiedAt: iso('verifiedAt' in fact ? fact.verifiedAt : null),
+      },
+      freshness: deriveFactFreshness(temporalPolicy, 'validTo' in fact ? fact.validTo : null, now),
+      conflicts: {
+        overlapPolicy,
+        sameSubjectCurrentFactCount,
+        hasCanonicalSelection,
+        reviewRequired: !hasCanonicalSelection && overlapPolicy === 'DISALLOW' && sameSubjectCurrentFactCount >= 2,
+      },
+    };
+  };
+  const projectedFacts: CompanyDataRoomFact[] = [
     ...facts
       .filter((fact) => {
         const definitionId = fact.factDefinition?.id;
@@ -703,7 +918,13 @@ export async function getCompanyDataRoom(
         return projectFact(
           fact,
           fact.factDefinition
-            ? { key: fact.factDefinition.key, domainCode: fact.factDefinition.domainCode, valueType: String(fact.factDefinition.valueType) }
+            ? {
+                key: fact.factDefinition.key,
+                domainCode: fact.factDefinition.domainCode,
+                valueType: String(fact.factDefinition.valueType),
+                temporalPolicy: String(fact.factDefinition.temporalPolicy),
+                overlapPolicy: String(fact.factDefinition.overlapPolicy),
+              }
             : null,
           state ? 'ANSWERED' : 'UNANSWERED',
           !state,
@@ -726,6 +947,9 @@ export async function getCompanyDataRoom(
         effectiveAt: null,
         validFrom: null,
         validTo: null,
+        provenance: NO_FACT_PROVENANCE,
+        freshness: NO_FACT_FRESHNESS,
+        conflicts: NO_FACT_CONFLICTS,
       })),
   ];
   const profileFactState = buildCanonicalFactState({
@@ -789,6 +1013,15 @@ export async function getCompanyDataRoom(
           summary: profile.summary,
           lastReviewedAt: iso(profile.lastReviewedAt),
           nextReviewAt: iso(profile.nextReviewAt),
+          review: {
+            rule: 'nextReviewAt' as const,
+            ruleDefined: profile.nextReviewAt !== null,
+            state: profile.nextReviewAt === null
+              ? ('UNKNOWN' as const)
+              : profile.nextReviewAt.getTime() <= now.getTime()
+              ? ('REVIEW_REQUIRED' as const)
+              : ('CURRENT' as const),
+          },
         }
       : null,
     facts: projectedFacts,
@@ -801,7 +1034,21 @@ export async function getCompanyDataRoom(
       relevantDataCoverage,
       stale: null,
       staleAvailable: false,
-      conflictingAvailable: false,
+      conflictingAvailable: true,
+      conflictingFactCount: projectedFacts.filter((fact) => fact.conflicts.reviewRequired).length,
+      provenance: {
+        basis: 'ClientFact.sourceReference + ClientFact.sourceDocumentVersionId + EvidenceRecord',
+        documentSourceCount: projectedFacts.filter((fact) => fact.provenance.sourceKind === 'DOCUMENT').length,
+        portalAnswerCount: projectedFacts.filter((fact) => fact.provenance.sourceKind === 'CLIENT_PORTAL_ANSWER').length,
+        manualSourceCount: projectedFacts.filter((fact) => fact.provenance.sourceKind === 'MANUAL').length,
+        unknownSourceCount: projectedFacts.filter((fact) => fact.provenance.sourceKind === 'UNKNOWN').length,
+        evidenceLinkedCount: projectedFacts.filter((fact) => fact.provenance.evidenceCount > 0).length,
+      },
+      freshness: {
+        basis: 'FactDefinition.temporalPolicy',
+        ruleDefinedCount: projectedFacts.filter((fact) => fact.freshness.ruleDefined).length,
+        noRuleCount: projectedFacts.filter((fact) => !fact.freshness.ruleDefined).length,
+      },
     },
     organization: {
       groupCount,
@@ -824,17 +1071,8 @@ export async function getCompanyDataRoom(
         organizationGroupName: person.organizationGroup?.name ?? null,
       })),
     },
-    processes: processes.map((process) => ({
-      id: process.id,
-      name: process.name,
-      category: process.category,
-      description: process.description,
-      criticality: process.criticality,
-      frequency: process.frequency,
-      status: process.status,
-      owner: process.ownerPerson,
-      organizationGroup: process.organizationGroup,
-      steps: process.steps.map((step) => ({
+    processes: processes.map((process) => {
+      const steps = process.steps.map((step) => ({
         id: step.id,
         position: step.position,
         name: step.name,
@@ -844,16 +1082,48 @@ export async function getCompanyDataRoom(
         estimatedActiveMinutes: step.estimatedActiveMinutes,
         estimatedWaitingMinutes: step.estimatedWaitingMinutes,
         isApproval: step.isApproval,
-      })),
-      latestMeasuredSnapshot: process.observationSnapshots[0]
-        ? {
-            id: process.observationSnapshots[0].id,
-            observedAt: process.observationSnapshots[0].observedAt.toISOString(),
-            metricVersion: process.observationSnapshots[0].metricVersion,
-            metrics: boundedSnapshotMetrics(process.observationSnapshots[0].metrics),
-          }
-        : null,
-    })),
+      }));
+      const stepsWithActiveEstimate = steps.filter((step) => step.estimatedActiveMinutes !== null).length;
+      const stepsWithWaitingEstimate = steps.filter((step) => step.estimatedWaitingMinutes !== null).length;
+      const latestSnapshot = process.observationSnapshots[0] ?? null;
+      return {
+        id: process.id,
+        name: process.name,
+        category: process.category,
+        description: process.description,
+        criticality: process.criticality,
+        frequency: process.frequency,
+        status: process.status,
+        owner: process.ownerPerson,
+        organizationGroup: process.organizationGroup,
+        stepCount: steps.length,
+        approvalStepCount: steps.filter((step) => step.isApproval).length,
+        unassignedStepCount: steps.filter((step) => !step.responsiblePerson).length,
+        // Step-level estimates only. Sums stay null when no step carries an
+        // estimate so an absent estimate is never rendered as a measured zero.
+        estimatedTotals: {
+          activeMinutes: stepsWithActiveEstimate
+            ? steps.reduce((total, step) => total + (step.estimatedActiveMinutes ?? 0), 0)
+            : null,
+          waitingMinutes: stepsWithWaitingEstimate
+            ? steps.reduce((total, step) => total + (step.estimatedWaitingMinutes ?? 0), 0)
+            : null,
+          stepsWithActiveEstimate,
+          stepsWithWaitingEstimate,
+        },
+        steps,
+        latestMeasuredSnapshot: latestSnapshot
+          ? {
+              id: latestSnapshot.id,
+              observedAt: latestSnapshot.observedAt.toISOString(),
+              metricVersion: latestSnapshot.metricVersion,
+              snapshotDigest: latestSnapshot.snapshotDigest,
+              provenanceSource: safeProvenanceSource(latestSnapshot.provenance),
+              metrics: snapshotMetricProjection(latestSnapshot.metrics),
+            }
+          : null,
+      };
+    }),
     systems: systems.map((system) => ({
       id: system.id,
       name: system.name,
