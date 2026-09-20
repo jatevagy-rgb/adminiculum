@@ -22,6 +22,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { prisma } from '../../prisma/prisma.service';
 import { requireDocumentReadAccess, requireDocumentManageAccess, requireHrConfidentialReadAccess } from './authorization';
+import { getDocumentReviewProjection, parseBoundedInt } from './reviewProjection.service';
 import { validateWorkforceUpload, mapWorkforceUploadRejection } from '../upload-security/uploadValidationCore';
 import { requireDocumentObjectReadAccess, requireDocumentObjectManageAccess } from './documentObjectAuthorization';
 import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
@@ -71,6 +72,29 @@ router.delete('/:id/task-links/:taskId', authenticate, requireDocumentObjectMana
 router.get('/task/:taskId/documents', authenticate, async (req: Request, res: Response): Promise<void> => {
   try { res.json(await listTaskDocuments(req, String(req.params.taskId || ''))); }
   catch (error) { sendWorkContextError(res, error); }
+});
+
+// ============================================================================
+// Document review read-model projection (CASE + DOCUMENT REVIEW READ MODEL)
+// Connects DocumentVersion lineage, DocumentComparison, DocumentReview, and AI prompt data.
+// ============================================================================
+router.get('/:id/review-projection', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const documentId = String(req.params.id || '').trim();
+    const includeSegments = req.query.includeSegments === 'true';
+    const segmentLimit = req.query.segmentLimit !== undefined
+      ? parseBoundedInt(req.query.segmentLimit, 1, 100, 50)
+      : undefined;
+    const projection = await getDocumentReviewProjection(documentId, { includeSegments, segmentLimit });
+    if (!projection) {
+      res.status(404).json({ status: 404, code: 'DOCUMENT_NOT_FOUND', message: 'Document not found' });
+      return;
+    }
+    res.json(projection);
+  } catch (error) {
+    console.error('Get document review projection error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
 });
 
 const MAX_DOCUMENT_UPLOAD_BYTES = 25 * 1024 * 1024;
