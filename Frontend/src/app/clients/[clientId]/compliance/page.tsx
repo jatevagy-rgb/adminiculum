@@ -275,22 +275,33 @@ export default function ClientCompliancePage() {
             <>
               {organizationMode ? (
                 <>
-                  <header className="rounded-[var(--adm-radius-md)] border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-5">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Compliance</p>
-                    <h1 className="mt-1 font-serif text-2xl text-[var(--adm-text)]">{client.name}</h1>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      A szervezet releváns megfelelőségi területei, megállapításai és a következő jogi lépések.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-3">
-                      <Link href={`/clients/${encodeURIComponent(clientId)}`} className="text-xs text-[var(--adm-ochre-500)] hover:underline">
-                        ← Ügyfél áttekintés
-                      </Link>
-                      <Link href={`/clients/${encodeURIComponent(clientId)}/vallalati-mukodes`} className="text-xs text-[var(--adm-ochre-500)] hover:underline">
-                        Vállalati működés →
-                      </Link>
+                  {/* Client-level shell first, then the module hero, matching Company OS / Grow. */}
+                  <ClientWorkspaceTabs clientId={client.id} active="compliance" organizationMode={organizationMode} />
+                  <header className="rounded-3xl border border-[#DCCCA6] bg-[#fbf9f4] p-5 sm:p-6 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#014337]">Megfelelés</p>
+                        <h1 className="mt-1 font-serif text-2xl font-semibold text-stone-950 sm:text-3xl">{client.name}</h1>
+                        <p className="mt-1 text-xs text-stone-600 sm:text-sm">
+                          A szervezet releváns megfelelőségi területei, megállapításai és a következő jogi lépések.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Link
+                          href={`/clients/${encodeURIComponent(clientId)}`}
+                          className="inline-flex items-center rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-xs hover:bg-stone-50"
+                        >
+                          ← Ügyfél áttekintés
+                        </Link>
+                        <Link
+                          href={`/clients/${encodeURIComponent(clientId)}/vallalati-mukodes`}
+                          className="inline-flex items-center rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 shadow-xs hover:bg-stone-50"
+                        >
+                          Vállalati működés →
+                        </Link>
+                      </div>
                     </div>
                   </header>
-                  <ClientWorkspaceTabs clientId={client.id} active="compliance" organizationMode={organizationMode} />
 
                   {/* 1. Állapotkép */}
                   <Section title="Állapotkép">
