@@ -26,6 +26,8 @@ jest.mock('../src/modules/cases/authorization', () => ({
   userCanReadCase: jest.fn().mockResolvedValue(true),
 }));
 
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { prisma } from '../src/prisma/prisma.service';
 import {
   preparePromptDraft,
@@ -665,6 +667,233 @@ describe('AI Prompt System — authoritative version-pair source text', () => {
       expect(draft.externalPromptText).toContain('Version: v2');
       expect(draft.externalPromptText).toContain(textV2);
       expect(draft.externalPromptText).not.toContain('Legacy document workspace text');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Reconciliation matrix for the refreshed #298 baseline (master f1a90841).
+  // These lock the ordering, dedupe, case-boundary, scan-boundary and
+  // download-failure-mapping contracts that the review surfaced as untested.
+  // ---------------------------------------------------------------------------
+  describe('Reconciliation matrix: ordering, dedupe, boundaries and failure mapping', () => {
+    const textMime = 'text/plain';
+    const cleanVersionText = (v: { id: string }) =>
+      v.id === 'v-1' ? textV1 : v.id === 'v-2' ? textV2 : `authoritative body for ${v.id}`;
+
+    const crossDocVersion = (id: string, docId: string, fileName: string) => ({
+      id,
+      version: 1,
+      name: fileName,
+      description: `Legacy description ${id} that must NOT be used`,
+      originalFileName: fileName,
+      mimeType: textMime,
+      size: 128,
+      securityScanStatus: 'CLEAN' as const,
+      storageReference: `sp-ref-${id}-secret`,
+      spItemId: `sp-item-${id}-secret`,
+      document: {
+        id: docId,
+        caseId,
+        title: `Document ${docId}`,
+        name: fileName,
+        workspaceText: 'Legacy workspace text that must NOT be used',
+      },
+    });
+
+    const okResolve = () =>
+      jest.fn(async (v: { id: string }) => ({
+        supported: true,
+        text: cleanVersionText(v),
+        reasonCode: null,
+        extractionRevision: 2,
+      }));
+
+    // Matrix B: versions of two DIFFERENT documents both survive.
+    it('B. keeps one version from each of two different documents as separate sources', async () => {
+      const docA = crossDocVersion('v-doc-a-1', 'doc-a', 'a_v1.txt');
+      const docB = crossDocVersion('v-doc-b-1', 'doc-b', 'b_v1.txt');
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([docA, docB]);
+
+      const draft = await preparePromptDraft(
+        actor,
+        { caseId, promptTemplateId: template.id, sourceDocumentVersionIds: ['v-doc-a-1', 'v-doc-b-1'] },
+        {
+          prisma,
+          downloadDocumentVersion: jest.fn(async () => ({ version: {} as any, content: Buffer.from('bytes') })),
+          resolveVersionText: okResolve(),
+        },
+      );
+
+      expect(draft.externalPromptText).toContain('authoritative body for v-doc-a-1');
+      expect(draft.externalPromptText).toContain('authoritative body for v-doc-b-1');
+      expect(draft.externalPromptText).toContain('Document A');
+      expect(draft.externalPromptText).toContain('Document B');
+      expect(draft.externalPromptText).not.toContain('Document C');
+      expect((draft.externalPromptText.match(/Version: v\d/g) ?? []).length).toBe(2);
+    });
+
+    // Matrix D: repeated ids are deduped, first-occurrence order is authoritative.
+    it('D. deduplicates repeated version ids while preserving first-occurrence order', async () => {
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([version1Record, version2Record]);
+
+      const draft = await preparePromptDraft(
+        actor,
+        { caseId, promptTemplateId: template.id, sourceDocumentVersionIds: ['v-2', 'v-1', 'v-2'] },
+        {
+          prisma,
+          downloadDocumentVersion: jest.fn(async () => ({ version: {} as any, content: Buffer.from('bytes') })),
+          resolveVersionText: okResolve(),
+        },
+      );
+
+      // Exactly two rendered sources even though three ids were supplied.
+      expect((draft.externalPromptText.match(/Version: v\d/g) ?? []).length).toBe(2);
+      expect(draft.externalPromptText).not.toContain('Document C');
+      const idxV2 = draft.externalPromptText.indexOf('Version: v2');
+      const idxV1 = draft.externalPromptText.indexOf('Version: v1');
+      expect(idxV2).toBeGreaterThanOrEqual(0);
+      expect(idxV1).toBeGreaterThan(idxV2);
+    });
+
+    // Case boundary: reject BEFORE any download or extraction.
+    it('E2. rejects a foreign-case version before download or extraction is attempted', async () => {
+      const foreign = {
+        ...version1Record,
+        id: 'v-foreign-2',
+        document: { ...version1Record.document, id: 'doc-foreign-2', caseId: 'case-other-foreign' },
+      };
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([foreign]);
+      const downloadSpy = jest.fn();
+      const resolveSpy = jest.fn();
+
+      await expect(
+        preparePromptDraft(
+          actor,
+          { caseId, promptTemplateId: template.id, sourceDocumentVersionIds: ['v-foreign-2'] },
+          { prisma, downloadDocumentVersion: downloadSpy as any, resolveVersionText: resolveSpy as any },
+        ),
+      ).rejects.toMatchObject({ status: 400, code: 'SOURCE_DOCUMENT_VERSION_CASE_MISMATCH' });
+
+      expect(downloadSpy).not.toHaveBeenCalled();
+      expect(resolveSpy).not.toHaveBeenCalled();
+    });
+
+    // Scan boundary: every non-CLEAN status blocks BEFORE download.
+    it('F2. blocks PENDING_SCAN, INFECTED and SCAN_FAILED without downloading bytes', async () => {
+      for (const status of ['PENDING_SCAN', 'INFECTED', 'SCAN_FAILED'] as const) {
+        (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([
+          { ...version1Record, securityScanStatus: status },
+        ]);
+        const downloadSpy = jest.fn();
+        const resolveSpy = jest.fn();
+
+        await expect(
+          preparePromptDraft(
+            actor,
+            { caseId, promptTemplateId: template.id, sourceDocumentVersionIds: ['v-1'] },
+            { prisma, downloadDocumentVersion: downloadSpy as any, resolveVersionText: resolveSpy as any },
+          ),
+        ).rejects.toMatchObject({ status: 409, code: 'DOCUMENT_SECURITY_SCAN_BLOCKED' });
+
+        expect(downloadSpy).not.toHaveBeenCalled();
+        expect(resolveSpy).not.toHaveBeenCalled();
+      }
+    });
+
+    // Download-layer defence in depth: a blocked download must not be downgraded.
+    it('G2. propagates a download-layer security block instead of downgrading it', async () => {
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([version1Record]);
+      const downloadSpy = jest.fn(async () => ({
+        error: 'blocked',
+        code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+        status: 409,
+      }));
+      // Mirrors the canonical resolver contract: it invokes the supplied download
+      // callback and turns a null download into CONTENT_UNAVAILABLE.
+      const resolveSpy = jest.fn(async (v: { id: string; documentId: string }, download: (d: string, x: string) => Promise<Buffer | null>) => {
+        const buf = await download(v.documentId, v.id);
+        return buf
+          ? { supported: true, text: buf.toString('utf8'), reasonCode: null, extractionRevision: 2 }
+          : { supported: false, text: null, reasonCode: 'CONTENT_UNAVAILABLE', extractionRevision: 2 };
+      });
+
+      await expect(
+        preparePromptDraft(
+          actor,
+          { caseId, promptTemplateId: template.id, sourceDocumentVersionIds: ['v-1'] },
+          { prisma, downloadDocumentVersion: downloadSpy, resolveVersionText: resolveSpy },
+        ),
+      ).rejects.toMatchObject({ status: 409, code: 'DOCUMENT_SECURITY_SCAN_BLOCKED' });
+
+      expect(downloadSpy).toHaveBeenCalledWith('doc-shared', 'v-1');
+    });
+
+    // Download failure mapping: safe typed unavailable, no provider text leaked.
+    it('H2. maps a storage download failure to a safe typed unavailable error without leaking provider text', async () => {
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([version1Record]);
+      const downloadSpy = jest.fn(async () => ({
+        error: 'SharePoint path /sites/secret/library/file.docx not found',
+        code: 'SHAREPOINT_FILE_NOT_FOUND',
+        status: 404,
+      }));
+      // Mirrors the canonical resolver: a failed download surfaces as CONTENT_UNAVAILABLE
+      // to the service, which must translate it into a safe typed error.
+      const resolveSpy = jest.fn(async (v: { id: string; documentId: string }, download: (d: string, x: string) => Promise<Buffer | null>) => {
+        const buf = await download(v.documentId, v.id);
+        return buf
+          ? { supported: true, text: buf.toString('utf8'), reasonCode: null, extractionRevision: 2 }
+          : { supported: false, text: null, reasonCode: 'CONTENT_UNAVAILABLE', extractionRevision: 2 };
+      });
+
+      const error: any = await preparePromptDraft(
+        actor,
+        { caseId, promptTemplateId: template.id, sourceDocumentVersionIds: ['v-1'] },
+        { prisma, downloadDocumentVersion: downloadSpy, resolveVersionText: resolveSpy },
+      ).catch((e) => e);
+
+      expect(error).toMatchObject({ status: 400, code: 'SOURCE_DOCUMENT_VERSION_UNAVAILABLE' });
+      expect(String(error.message)).not.toMatch(/SharePoint|\/sites|file\.docx/);
+    });
+
+    // Matrix P: the selectedDocumentTexts-only flow is unchanged.
+    it('P. keeps the selectedDocumentTexts-only flow working without version labels', async () => {
+      (prisma.document.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'doc-provided',
+          title: 'Ignored DB title',
+          name: 'provided.txt',
+          description: null,
+          workspaceText: 'DB workspace text that must NOT be used',
+        },
+      ]);
+
+      const draft = await preparePromptDraft(
+        actor,
+        {
+          caseId,
+          promptTemplateId: template.id,
+          selectedDocumentTexts: [
+            { documentId: 'doc-provided', title: 'Provided Title', text: 'Provided selected text wins.' },
+          ],
+        },
+        { prisma },
+      );
+
+      expect(draft.externalPromptText).toContain('Title: Provided Title');
+      expect(draft.externalPromptText).toContain('Provided selected text wins.');
+      expect(draft.externalPromptText).not.toContain('DB workspace text that must NOT be used');
+      expect(draft.externalPromptText).not.toContain('Version: v');
+    });
+
+    // Matrix T: preparation only — no direct external AI or network call.
+    it('T. prepares context only and makes no direct external AI or network call', () => {
+      const serviceSource = readFileSync(
+        path.resolve(__dirname, '../src/modules/ai-prompts/service.ts'),
+        'utf8',
+      );
+      for (const forbidden of ['openai', 'OpenAI', 'api.openai.com', 'axios', 'node-fetch', 'https.request']) {
+        expect(serviceSource).not.toContain(forbidden);
+      }
     });
   });
 });
