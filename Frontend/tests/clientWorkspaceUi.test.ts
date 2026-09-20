@@ -127,4 +127,66 @@ describe('W1C Company Workspace Convergence (structural)', () => {
     assert.match(src, /companyFactTypeLabel\(technicalKey\)/);
     assert.doesNotMatch(src, /OPEN_IMPORTANT_FINDINGS|CONTRACTS_WITHOUT_OWNER/);
   });
+
+  it('exposes the cockpit convergence concepts over existing data only', () => {
+    const src = component() + api();
+    for (const label of ["Vállalati profil", "Adatminőség", "Eredmények", "Dokumentumok és bizonyítékok"]) {
+      assert.match(src, new RegExp(label));
+    }
+    // The three cockpit questions must be answerable from canonical fields.
+    for (const question of ["Honnan tudjuk?", "Mikor állapítottuk meg?", "Ez még érvényes?"]) {
+      assert.match(src, new RegExp(question.replace("?", "\\?")));
+    }
+  });
+
+  it('reports fact provenance only from canonical fields and keeps unknown provenance unknown', () => {
+    const src = component() + api();
+    assert.match(src, /CLIENT_PORTAL_ANSWER/);
+    assert.match(src, /Ügyfélportál válasz/);
+    assert.match(src, /Belső rögzítés/);
+    assert.match(src, /Ismeretlen eredet/);
+    assert.match(src, /factSourceLabels\[provenance\?\.sourceKind \?\? "UNKNOWN"\]/);
+    assert.match(src, /provenance\??\.evidenceCount/);
+    assert.match(src, /provenance\??\.hasSourceDocument/);
+  });
+
+  it('never fabricates freshness and only reports a rule the canonical model defines', () => {
+    const src = component() + api();
+    assert.match(src, /Nincs meghatározott frissességi szabály\./);
+    assert.match(src, /factFreshnessLabel\(freshness\?\.state \?\? "NO_RULE", Boolean\(freshness\?\.ruleDefined\)\)/);
+    assert.match(src, /factFreshnessText/);
+    // No day-based staleness arithmetic anywhere in the convergence UI.
+    assert.doesNotMatch(src, /86400000/);
+    assert.doesNotMatch(src, /\d+ ?\* ?24 ?\* ?60/);
+    assert.doesNotMatch(src, /Date\.now/);
+  });
+
+  it('surfaces conflicting facts for review instead of silently selecting one', () => {
+    const src = component() + api();
+    assert.match(src, /conflicts\??\.reviewRequired/);
+    assert.match(src, /Felülvizsgálat szükséges/);
+    assert.match(src, /sameSubjectCurrentFactCount/);
+    assert.match(src, /hasCanonicalSelection/);
+    // The UI must not pick a winner by recency, verification level or source type.
+    assert.doesNotMatch(src, /legfrissebb|legmagasabb bizonyosság|elsőbbség ad/i);
+  });
+
+  it('keeps estimated step timing distinct from the recorded canonical snapshot', () => {
+    const src = component();
+    assert.match(src, /estimatedTotals/);
+    assert.match(src, /stepsWithActiveEstimate/);
+    assert.match(src, /nem mért időadatok/);
+    assert.match(src, /metric\.nameHu \|\| metric\.code/);
+    assert.match(src, /snapshotDigest/);
+    assert.match(src, /provenanceSource/);
+  });
+
+  it('does not bypass the canonical controlled editing path with raw fact writes', () => {
+    const src = component();
+    const workspaceApi = api();
+    assert.doesNotMatch(src, /clientFact/);
+    assert.doesNotMatch(src, /answerPortalCompanyProfile|answerCompanyProfileQuestion|answerCompanyProfileScreen/);
+    assert.doesNotMatch(workspaceApi, /answerPortalCompanyProfile|answerCompanyProfileQuestion|answerCompanyProfileScreen/);
+    assert.doesNotMatch(src, /fetch\(|axios/);
+  });
 });

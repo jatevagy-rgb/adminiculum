@@ -10,24 +10,30 @@ import { DemoContentBanner } from "@/components/client-portal/PortalPresentation
 
 export type WorkspaceSection =
   | "overview"
+  | "company-profile"
   | "data"
+  | "data-quality"
   | "organization"
   | "processes"
   | "systems"
   | "documents"
   | "compliance"
   | "development"
+  | "outcomes"
   | "operational";
 
 export const WORKSPACE_SECTIONS: Array<[WorkspaceSection, string]> = [
   ["overview", "Áttekintés"],
+  ["company-profile", "Vállalati profil"],
   ["data", "Adatok"],
+  ["data-quality", "Adatminőség"],
   ["organization", "Szervezet"],
   ["processes", "Folyamatok"],
   ["systems", "Rendszerek"],
-  ["documents", "Dokumentumok"],
+  ["documents", "Dokumentumok és bizonyítékok"],
   ["compliance", "Megfelelőség"],
   ["development", "Fejlesztés"],
+  ["outcomes", "Eredmények"],
   ["operational", "Operatív áttekintés"],
 ];
 
@@ -40,7 +46,33 @@ const statusLabels: Record<string, string> = {
   PLANNED: "Tervezett",
   COMPLETED: "Lezárt",
   ASSUMED: "Feltételezett",
+  CURRENT: "Érvényes",
+  EXPIRED: "Lejárt",
+  REVIEW_REQUIRED: "Felülvizsgálandó",
+  ACHIEVED: "Elért",
+  CANCELLED: "Törölt",
 };
+
+const factSourceLabels: Record<string, string> = {
+  CLIENT_PORTAL_ANSWER: "Ügyfélportál válasz",
+  DOCUMENT: "Dokumentum",
+  MANUAL: "Belső rögzítés",
+  UNKNOWN: "Ismeretlen eredet",
+};
+
+const determinationMethodLabels: Record<string, string> = {
+  USER_PROVIDED: "Emberi rögzítés",
+  DERIVED: "Származtatott",
+  LEGAL_CLASSIFICATION_REQUIRED: "Jogi besorolás szükséges",
+  TECHNICAL_CLASSIFICATION_REQUIRED: "Technikai besorolás szükséges",
+};
+
+function factFreshnessLabel(state: string, ruleDefined: boolean): string {
+  if (!ruleDefined) return "Nincs meghatározott frissességi szabály.";
+  if (state === "CURRENT") return "Érvényes";
+  if (state === "EXPIRED") return "Lejárt";
+  return "Nincs meghatározott frissességi szabály.";
+}
 
 function humanStatus(value: string | null | undefined): string {
   if (!value) return "Ismeretlen";
@@ -129,9 +161,33 @@ function factLabel(fact: CompanyDataRoom["facts"][number]): string {
   return fact.factDefinition?.labelHu || companyFactTypeLabel(technicalKey);
 }
 
+/** Bounded plain-text preview of a canonical fact value (no raw JSON in the UI). */
+function factValuePreview(fact: CompanyDataRoom["facts"][number]): string {
+  if (fact.answerStatus === "UNKNOWN") return "Ismeretlen";
+  if (fact.answerStatus === "UNANSWERED") return "Nincs még adat";
+  const value = fact.value;
+  if (value === null || value === undefined || value === "") return "Nincs még adat";
+  if (typeof value === "boolean") return value ? "Igen" : "Nem";
+  if (typeof value === "number") return value.toLocaleString("hu-HU");
+  if (Array.isArray(value)) return value.map((item) => (typeof item === "object" ? "Rögzítve" : String(item))).join(", ");
+  if (typeof value === "object") {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj.booleanValue === "boolean") return obj.booleanValue ? "Igen" : "Nem";
+    if (typeof obj.numberValue === "number") return obj.numberValue.toLocaleString("hu-HU");
+    if (typeof obj.textValue === "string") return obj.textValue;
+    if (typeof obj.enumValue === "string") return obj.enumValue;
+    return "Rögzítve";
+  }
+  return String(value);
+}
+
 function FactCard({ fact }: { fact: CompanyDataRoom["facts"][number] }) {
   const technicalKey = fact.factDefinition?.key || fact.type;
   const label = factLabel(fact);
+  const provenance = fact.provenance;
+  const freshness = fact.freshness;
+  const conflicts = fact.conflicts;
+  const establishedAt = provenance?.recordedAt || fact.observedAt || fact.effectiveAt || null;
 
   return (
     <article
@@ -160,18 +216,56 @@ function FactCard({ fact }: { fact: CompanyDataRoom["facts"][number] }) {
         {renderFactValue(fact)}
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-stone-100 pt-2 text-[11px] text-stone-500">
+      {conflicts?.reviewRequired ? (
+        <p
+          data-testid="fact-conflict-review"
+          className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-900"
+        >
+          Felülvizsgálat szükséges: {conflicts.sameSubjectCurrentFactCount} egyszerre érvényes tény
+          ugyanarra a meghatározásra és hatókörre. A kanonikus nyilvántartás nem jelöl ki egyet sem.
+        </p>
+      ) : null}
+
+      <dl className="mt-3 space-y-1 border-t border-stone-100 pt-2 text-[11px] text-stone-500">
+        <div className="flex flex-wrap gap-x-1.5">
+          <dt className="font-medium text-stone-600">Honnan tudjuk?</dt>
+          <dd>
+            {factSourceLabels[provenance?.sourceKind ?? "UNKNOWN"] ?? "Ismeretlen eredet"}
+            {provenance?.hasSourceDocument ? " · forrásdokumentum csatolva" : ""}
+            {provenance?.evidenceCount
+              ? ` · ${provenance.evidenceCount} bizonyíték (${provenance.evidenceSourceTypes.join(", ")})`
+              : " · nincs csatolt bizonyíték"}
+            {provenance?.determinationMethod
+              ? ` · ${determinationMethodLabels[provenance.determinationMethod] ?? provenance.determinationMethod}`
+              : ""}
+          </dd>
+        </div>
+        {establishedAt ? (
+          <div className="flex flex-wrap gap-x-1.5">
+            <dt className="font-medium text-stone-600">Mikor állapítottuk meg?</dt>
+            <dd>{dateText(establishedAt)}</dd>
+          </div>
+        ) : null}
+        <div className="flex flex-wrap gap-x-1.5">
+          <dt className="font-medium text-stone-600">Ez még érvényes?</dt>
+          <dd>
+            {factFreshnessLabel(freshness?.state ?? "NO_RULE", Boolean(freshness?.ruleDefined))}
+            {freshness?.ruleDefined && fact.validTo ? ` · érvényes eddig: ${dateText(fact.validTo)}` : ""}
+          </dd>
+        </div>
         {fact.verificationStatus ? (
-          <span>
-            Ellenőrzés: <strong className="font-medium text-stone-700">{factVerificationLabel(fact.verificationStatus)}</strong>
-          </span>
+          <div className="flex flex-wrap gap-x-1.5">
+            <dt className="font-medium text-stone-600">Ellenőrzés</dt>
+            <dd>{factVerificationLabel(fact.verificationStatus)}</dd>
+          </div>
         ) : null}
         {fact.observedAt ? (
-          <span>
-            Megfigyelve: <strong className="font-medium text-stone-700">{dateText(fact.observedAt)}</strong>
-          </span>
+          <div className="flex flex-wrap gap-x-1.5">
+            <dt className="font-medium text-stone-600">Megfigyelve</dt>
+            <dd>{dateText(fact.observedAt)}</dd>
+          </div>
         ) : null}
-      </div>
+      </dl>
     </article>
   );
 }
@@ -562,6 +656,193 @@ export function ClientCompanyWorkspace({
             </Panel>
           ) : null}
 
+          {activeSection === "company-profile" ? (
+            <Panel id="company-profile" title="Vállalati profil">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                  <h3 className="text-sm font-semibold text-stone-900">Cégazonosítás</h3>
+                  <dl className="mt-3 space-y-2 text-xs text-stone-700">
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Név</dt>
+                      <dd className="text-stone-900">{room.clientIdentity.name}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Cégnév</dt>
+                      <dd>{room.clientIdentity.company || "Nincs még adat"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Cégjegyzékszám</dt>
+                      <dd>{room.clientIdentity.companyRegistrationNumber || "Nincs még adat"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Adószám</dt>
+                      <dd>{room.clientIdentity.taxNumber || "Nincs még adat"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Közösségi adószám</dt>
+                      <dd>{room.clientIdentity.vatNumber || "Nincs még adat"}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Székhely</dt>
+                      <dd>{room.clientIdentity.address || "Nincs még adat"}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                  <h3 className="text-sm font-semibold text-stone-900">Működési kép</h3>
+                  <p className="mt-2 text-xs leading-relaxed text-stone-700">
+                    {room.operatingProfile?.summary || "A működési kép még nem tartalmaz leírást."}
+                  </p>
+                  <dl className="mt-3 space-y-2 text-xs text-stone-700">
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Státusz</dt>
+                      <dd>{humanStatus(room.operatingProfile?.status)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Megfelelőségi stratégia</dt>
+                      <dd>{humanStatus(room.operatingProfile?.complianceEnrollmentStatus)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Utolsó áttekintés</dt>
+                      <dd>{dateText(room.operatingProfile?.lastReviewedAt)}</dd>
+                    </div>
+                    <div>
+                      <dt className="font-semibold uppercase tracking-wider text-stone-500">Következő esedékes áttekintés</dt>
+                      <dd>
+                        {room.operatingProfile?.review?.ruleDefined
+                          ? `${dateText(room.operatingProfile?.nextReviewAt)} · ${humanStatus(room.operatingProfile?.review?.state)}`
+                          : "Nincs meghatározott felülvizsgálati ütemezés."}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <CountCard
+                  label="Megválaszolt releváns adatok"
+                  value={room.dataQuality.relevantDataCoverage.answeredCount}
+                  detail={`Ebből származtatott: ${room.dataQuality.relevantDataCoverage.derivedAnsweredCount}`}
+                />
+                <CountCard label="Ismeretlen" value={room.dataQuality.relevantDataCoverage.unknownCount} />
+                <CountCard label="Nincs még adat" value={room.dataQuality.relevantDataCoverage.unansweredCount} />
+                <CountCard label="Meghatározatlan kérdés" value={room.dataQuality.relevantDataCoverage.undeterminedCount} />
+              </div>
+              {!room.dataQuality.relevantDataCoverage.available ? (
+                <p className="mt-3 text-xs text-stone-500">A releváns adatlefedettség még nem számítható.</p>
+              ) : null}
+            </Panel>
+          ) : null}
+
+          {activeSection === "data-quality" ? (
+            <Panel id="data-quality" title="Adatminőség és bizonytalanság">
+              <p className="text-sm text-stone-600">
+                Ez a nézet kizárólag a nyilvántartott válasz- és eredetállapotokat számolja össze. Nem
+                tartalmaz becsült teljességi vagy érettségi mutatót.
+              </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <CountCard label="Megválaszolt" value={room.dataQuality.answerStateSummary.answered} />
+                <CountCard label="Ismeretlen" value={room.dataQuality.answerStateSummary.unknown} />
+                <CountCard label="Nincs még adat" value={room.dataQuality.relevantDataCoverage.unansweredCount} />
+                <CountCard label="Meghatározatlan kérdés" value={room.dataQuality.relevantDataCoverage.undeterminedCount} />
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                  <h3 className="text-sm font-semibold text-stone-900">Honnan tudjuk?</h3>
+                  <p className="mt-1 text-xs text-stone-500">
+                    Eredet szerint: {room.dataQuality.provenance.basis}
+                  </p>
+                  <dl className="mt-3 space-y-1.5 text-xs text-stone-700">
+                    <div className="flex justify-between gap-2">
+                      <dt>Ügyfélportál válasz</dt>
+                      <dd className="font-semibold text-stone-900">{room.dataQuality.provenance.portalAnswerCount}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Dokumentum alapú</dt>
+                      <dd className="font-semibold text-stone-900">{room.dataQuality.provenance.documentSourceCount}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Belső rögzítés</dt>
+                      <dd className="font-semibold text-stone-900">{room.dataQuality.provenance.manualSourceCount}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Ismeretlen eredet</dt>
+                      <dd className="font-semibold text-stone-900">{room.dataQuality.provenance.unknownSourceCount}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Bizonyítékhoz kapcsolt tény</dt>
+                      <dd className="font-semibold text-stone-900">{room.dataQuality.provenance.evidenceLinkedCount}</dd>
+                    </div>
+                  </dl>
+                </div>
+
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                  <h3 className="text-sm font-semibold text-stone-900">Ez még érvényes?</h3>
+                  <p className="mt-1 text-xs text-stone-500">
+                    Frissesség kizárólag a kanonikus időbeli szabályból: {room.dataQuality.freshness.basis}
+                  </p>
+                  <dl className="mt-3 space-y-1.5 text-xs text-stone-700">
+                    <div className="flex justify-between gap-2">
+                      <dt>Szabállyal rendelkező tény</dt>
+                      <dd className="font-semibold text-stone-900">{room.dataQuality.freshness.ruleDefinedCount}</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt>Szabály nélküli tény</dt>
+                      <dd className="font-semibold text-stone-900">{room.dataQuality.freshness.noRuleCount}</dd>
+                    </div>
+                  </dl>
+                  <p className="mt-3 text-xs text-stone-500">
+                    Ahol a definíció nem határoz meg időbeli szabályt, ott nem számítunk frissességet:
+                    „Nincs meghatározott frissességi szabály.”
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                <h3 className="text-sm font-semibold text-stone-900">Ellentmondó, egyszerre érvényes tények</h3>
+                {room.dataQuality.conflictingFactCount ? (
+                  <>
+                    <p className="mt-1 text-xs text-stone-600">
+                      {room.dataQuality.conflictingFactCount} ténycsoport igényel felülvizsgálatot. A kanonikus
+                      nyilvántartás nem választ közülük; egyik érték sem kerül automatikusan kiválasztásra.
+                    </p>
+                    <ul className="mt-3 space-y-1.5">
+                      {room.facts
+                        .filter((fact) => fact.conflicts?.reviewRequired)
+                        .map((fact) => (
+                          <li
+                            key={fact.id ?? `${fact.type}-${fact.factSubjectId}`}
+                            className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-950"
+                          >
+                            <span className="font-semibold">{factLabel(fact)}</span>
+                            {" · "}
+                            {fact.conflicts.sameSubjectCurrentFactCount} egyszerre érvényes tény · {factValuePreview(fact)}
+                          </li>
+                        ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="mt-1 text-xs text-stone-500">
+                    Nincs olyan, egyszerre érvényes ténnyel rendelkező csoport, amelyre a nyilvántartás ne
+                    jelölne ki kanonikus választ.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-stone-200 bg-stone-50/60 p-4 text-xs text-stone-600">
+                <p className="font-semibold uppercase tracking-wider text-stone-500">Amiről ez a nézet nem állít semmit</p>
+                <ul className="mt-2 list-disc space-y-1 pl-4">
+                  <li>Nincs általános lejárati idő: csak ahol a definíció kifejezetten szabályt ad, ott jelzünk frissességet.</li>
+                  <li>Nincs összevont teljességi vagy minőségi mutató; csak valós, visszakereshető állapotok darabszámai.</li>
+                  <li>Az ismeretlen eredet nem hiba, hanem hiányzó nyilvántartási információ.</li>
+                </ul>
+              </div>
+            </Panel>
+          ) : null}
+
           {activeSection === "data" ? (
             <Panel id="data" title="Adatok">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -651,6 +932,45 @@ export function ClientCompanyWorkspace({
                       <p className="mt-2 text-xs text-stone-600 leading-relaxed">{process.description}</p>
                     ) : null}
 
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs text-stone-700">
+                        Lépések: <strong className="text-stone-900">{process.stepCount}</strong>
+                      </div>
+                      <div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs text-stone-700">
+                        Jóváhagyási pontok: <strong className="text-stone-900">{process.approvalStepCount}</strong>
+                      </div>
+                      <div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs text-stone-700">
+                        Felelős nélküli lépés: <strong className="text-stone-900">{process.unassignedStepCount}</strong>
+                      </div>
+                      <div className="rounded-xl border border-stone-200 bg-stone-50/60 px-3 py-2 text-xs text-stone-700">
+                        Folyamatgazda: <strong className="text-stone-900">{process.owner?.name || "Nincs kijelölve"}</strong>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs text-stone-600">
+                      <p className="font-semibold text-stone-700">Becsült lépésidők összesen</p>
+                      <p className="mt-1">
+                        Aktív idő:{" "}
+                        <strong className="text-stone-900">
+                          {process.estimatedTotals?.activeMinutes === null ||
+                          process.estimatedTotals?.activeMinutes === undefined
+                            ? "Nincs becslés"
+                            : `${process.estimatedTotals.activeMinutes} perc`}
+                        </strong>{" "}
+                        ({process.estimatedTotals?.stepsWithActiveEstimate ?? 0}/{process.stepCount} lépéshez van becslés) · Várakozási idő:{" "}
+                        <strong className="text-stone-900">
+                          {process.estimatedTotals?.waitingMinutes === null ||
+                          process.estimatedTotals?.waitingMinutes === undefined
+                            ? "Nincs becslés"
+                            : `${process.estimatedTotals.waitingMinutes} perc`}
+                        </strong>{" "}
+                        ({process.estimatedTotals?.stepsWithWaitingEstimate ?? 0}/{process.stepCount} lépéshez van becslés)
+                      </p>
+                      <p className="mt-1 text-stone-500">
+                        Ezek a lépéseknél rögzített emberi becslések összegei, nem mért időadatok.
+                      </p>
+                    </div>
+
                     <div className="mt-4">
                       <GrowProcessMap steps={process.steps} />
                     </div>
@@ -660,17 +980,31 @@ export function ClientCompanyWorkspace({
                         <p className="text-xs font-semibold text-emerald-950">
                           Mért pillanatkép · {dateText(process.latestMeasuredSnapshot.observedAt)}
                         </p>
+                        <p className="mt-1 text-[11px] text-emerald-900">
+                          Kanonikus mérési verzió: {process.latestMeasuredSnapshot.metricVersion}
+                          {process.latestMeasuredSnapshot.provenanceSource
+                            ? ` · forrás: ${process.latestMeasuredSnapshot.provenanceSource}`
+                            : ""}
+                          {" · "}digest:{" "}
+                          <span className="font-mono">{process.latestMeasuredSnapshot.snapshotDigest?.slice(0, 12) ?? "—"}</span>
+                        </p>
                         <ul className="mt-2 flex flex-wrap gap-2">
                           {process.latestMeasuredSnapshot.metrics.map((metric) => (
                             <li
                               key={metric.code}
                               className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs text-stone-800 shadow-2xs"
                             >
-                              <strong className="text-stone-900">{metric.code}:</strong> {formatFactValue(metric.value)}{" "}
-                              {metric.unit}
+                              <strong className="text-stone-900">{metric.nameHu || metric.code}:</strong>{" "}
+                              {formatFactValue(metric.value)} {metric.unit}
+                              <span className="ml-1 font-mono text-[10px] text-stone-500">{metric.code}</span>
                             </li>
                           ))}
                         </ul>
+                        <p className="mt-2 text-[11px] text-emerald-900">
+                          A pillanatkép a rögzített folyamatállapotból determinisztikusan számított,
+                          digest-ellenőrzött mérés; a lépésszintű percek becslések maradnak. A kettő nem
+                          mosódik össze.
+                        </p>
                       </div>
                     ) : (
                       <p className="mt-3 text-xs text-stone-500">Ehhez a folyamathoz nincs mért pillanatkép.</p>
@@ -717,12 +1051,51 @@ export function ClientCompanyWorkspace({
           ) : null}
 
           {activeSection === "documents" ? (
-            <Panel id="documents" title="Dokumentumok">
+            <Panel id="documents" title="Dokumentumok és bizonyítékok">
               <div className="grid gap-4 sm:grid-cols-3">
                 <CountCard label="Jogosult dokumentumok" value={room.documents.documentCount} />
                 <CountCard label="Aktuális verziók" value={room.documents.currentVersionCount} />
                 <CountCard label="Bizonyítékhoz kapcsolt rekordok" value={room.documents.evidenceLinkedRecordCount} />
               </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                  <h3 className="text-sm font-semibold text-stone-900">
+                    Bizonyítékok ({room.evidenceSummary.totalCount})
+                  </h3>
+                  {room.evidenceSummary.bySourceType.length ? (
+                    <ul className="mt-3 space-y-1.5 text-xs text-stone-700">
+                      {room.evidenceSummary.bySourceType.map((entry) => (
+                        <li key={entry.sourceType} className="flex justify-between gap-2">
+                          <span>{humanStatus(entry.sourceType)}</span>
+                          <span className="font-semibold text-stone-900">{entry.count}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-stone-500">Nincs rögzített bizonyíték.</p>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                  <h3 className="text-sm font-semibold text-stone-900">Bizonyítékok állapot szerint</h3>
+                  {room.evidenceSummary.byStatus.length ? (
+                    <ul className="mt-3 space-y-1.5 text-xs text-stone-700">
+                      {room.evidenceSummary.byStatus.map((entry) => (
+                        <li key={entry.status} className="flex justify-between gap-2">
+                          <span>{humanStatus(entry.status)}</span>
+                          <span className="font-semibold text-stone-900">{entry.count}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-stone-500">Nincs rögzített bizonyíték.</p>
+                  )}
+                  <p className="mt-3 text-[11px] text-stone-500">
+                    A bizonyítékok tényszintű eredete az Adatok szekcióban, az egyes tényeknél jelenik meg.
+                  </p>
+                </div>
+              </div>
+
               <div className="mt-4">
                 <Link
                   href="/documents/compare"
@@ -796,6 +1169,92 @@ export function ClientCompanyWorkspace({
                         "Nincs megnevezve"}
                     </p>
                   ))}
+              </div>
+            </Panel>
+          ) : null}
+
+          {activeSection === "outcomes" ? (
+            <Panel id="outcomes" title="Eredmények">
+              <p className="text-sm text-stone-600">
+                Kimenetek a rögzített mérési alap szerint. A feltételezett kimenetek külön jelennek meg, és
+                nem keverednek a mért értékekkel.
+              </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <CountCard label="Nem szintetikus kimenet" value={room.measurementSummary.nonSyntheticOutcomeCount} />
+                <CountCard label="Mért alapú" value={measuredOutcomeCount} />
+                <CountCard label="Feltételezett" value={room.measurementSummary.assumedCount} />
+                <CountCard
+                  label="Elért mérföldkő"
+                  value={room.developmentSummary.milestones.filter((milestone) => milestone.status === "ACHIEVED").length}
+                />
+              </div>
+
+              {room.measurementSummary.byBasis.length ? (
+                <div className="mt-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                  <h3 className="text-sm font-semibold text-stone-900">Mérési alap szerint</h3>
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {room.measurementSummary.byBasis.map((entry) => (
+                      <li
+                        key={entry.basis}
+                        className="rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs text-stone-800"
+                      >
+                        <strong className="text-stone-900">{humanStatus(entry.basis)}:</strong> {entry.count}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              <div className="mt-5 space-y-2">
+                <h3 className="text-sm font-semibold text-stone-900">Kimenetek</h3>
+                {room.measurementSummary.outcomes.map((outcome) => (
+                  <article key={outcome.id} className="rounded-2xl border border-stone-200 bg-white p-3.5 shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-stone-900">
+                        {outcome.businessProcess?.name ||
+                          outcome.developmentInitiative?.title ||
+                          outcome.opportunity?.title ||
+                          "Nincs megnevezve"}
+                      </p>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                          outcome.basis === "ASSUMED"
+                            ? "border-amber-200 bg-amber-50 text-amber-800"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                        }`}
+                      >
+                        {humanStatus(outcome.basis)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-stone-500">
+                      Rögzítve: {dateText(outcome.createdAt)}
+                      {outcome.businessProcess ? ` · folyamat: ${outcome.businessProcess.name}` : ""}
+                      {outcome.developmentInitiative ? ` · kezdeményezés: ${outcome.developmentInitiative.title}` : ""}
+                      {outcome.opportunity ? ` · lehetőség: ${outcome.opportunity.title}` : ""}
+                    </p>
+                  </article>
+                ))}
+                {!room.measurementSummary.outcomes.length ? (
+                  <p className="text-xs text-stone-500">Nincs rögzített, nem szintetikus kimenet.</p>
+                ) : null}
+              </div>
+
+              <div className="mt-5 space-y-2">
+                <h3 className="text-sm font-semibold text-stone-900">Elért mérföldkövek</h3>
+                {room.developmentSummary.milestones
+                  .filter((milestone) => milestone.status === "ACHIEVED")
+                  .map((milestone) => (
+                    <article key={milestone.id} className="rounded-2xl border border-stone-200 bg-white p-3.5 shadow-xs">
+                      <p className="text-sm font-semibold text-stone-900">{milestone.title}</p>
+                      <p className="mt-1 text-xs text-stone-500">
+                        {milestone.type} · {dateText(milestone.milestoneDate)}
+                      </p>
+                    </article>
+                  ))}
+                {!room.developmentSummary.milestones.some((milestone) => milestone.status === "ACHIEVED") ? (
+                  <p className="text-xs text-stone-500">Nincs elért mérföldkő.</p>
+                ) : null}
               </div>
             </Panel>
           ) : null}</> : null}
