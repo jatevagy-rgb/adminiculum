@@ -126,6 +126,24 @@ test('INDIVIDUAL_MODE: organization-only surfaces stay capability-gated', () => 
   assert.match(src, /\{organizationMode && \([\s\S]*?<ClientOrganizationPreview/);
 });
 
+test('HASH_DEEPLINK_SCROLL: the opened detail area scrolls to the requested legacy anchor', () => {
+  const src = dossier();
+  // The pending anchor is set only from the existing hash, never a new route.
+  assert.match(src, /const \[pendingLegacyAnchor, setPendingLegacyAnchor\] = useState<string \| null>\(null\);/);
+  assert.match(src, /const anchor = window\.location\.hash\.replace\("#", ""\);/);
+  assert.match(src, /setLegacyDetailsOpen\(true\);\s*setPendingLegacyAnchor\(anchor\);/);
+  // The scroll runs only once the detail area is actually open, re-corrects while
+  // the async dossier lists settle, scrolls only when the target is off-screen,
+  // then clears the pending anchor.
+  assert.match(src, /if \(!legacyDetailsOpen \|\| !pendingLegacyAnchor\) return;/);
+  assert.match(src, /const target = document\.getElementById\(anchor\);/);
+  assert.match(src, /if \(rect\.top < 0 \|\| rect\.top >= window\.innerHeight\) target\.scrollIntoView\(\{ block: "start" \}\)/);
+  assert.match(src, /attempts < 10/);
+  assert.match(src, /setPendingLegacyAnchor\(null\)/);
+  // No new routing was invented for the deep link.
+  assert.doesNotMatch(src, /router\.(push|replace)\(`\/clients\/\$\{encodeURIComponent\(clientId\)\}#/);
+});
+
 test('LOADING_AND_DATA: client loading, editing, color and fetches are unchanged', () => {
   const src = dossier();
   assert.match(src, /getClient\(clientId\)/);

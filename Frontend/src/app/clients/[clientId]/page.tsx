@@ -73,6 +73,7 @@ function ClientDetailContent() {
   // The legacy/detail dossier block is collapsed out of the primary reading flow
   // but auto-opens when an existing deep link targets one of its anchors.
   const [legacyDetailsOpen, setLegacyDetailsOpen] = useState(false);
+  const [pendingLegacyAnchor, setPendingLegacyAnchor] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -147,12 +148,41 @@ function ClientDetailContent() {
   useEffect(() => {
     const legacyAnchors = new Set(["vallalati-mukodes", "szerzodes-tar", "szervezet"]);
     const syncFromHash = () => {
-      if (legacyAnchors.has(window.location.hash.replace("#", ""))) setLegacyDetailsOpen(true);
+      const anchor = window.location.hash.replace("#", "");
+      if (!legacyAnchors.has(anchor)) return;
+      setLegacyDetailsOpen(true);
+      setPendingLegacyAnchor(anchor);
     };
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
     return () => window.removeEventListener("hashchange", syncFromHash);
   }, []);
+
+  // The requested anchor was hidden while the detail area was collapsed, so the
+  // browser's fragment navigation could not scroll to it. Re-scroll once the
+  // details area is open; the remaining dossier lists settle asynchronously, so
+  // keep correcting for a short bounded window instead of scrolling once.
+  useEffect(() => {
+    if (!legacyDetailsOpen || !pendingLegacyAnchor) return;
+    const anchor = pendingLegacyAnchor;
+    let cancelled = false;
+    let attempts = 0;
+    const settleScroll = () => {
+      if (cancelled) return;
+      const target = document.getElementById(anchor);
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        if (rect.top < 0 || rect.top >= window.innerHeight) target.scrollIntoView({ block: "start" });
+      }
+      attempts += 1;
+      if (attempts < 10) window.setTimeout(settleScroll, 150);
+      else setPendingLegacyAnchor(null);
+    };
+    settleScroll();
+    return () => {
+      cancelled = true;
+    };
+  }, [legacyDetailsOpen, pendingLegacyAnchor]);
 
   const openEditClient = () => {
     if (!client) return;
