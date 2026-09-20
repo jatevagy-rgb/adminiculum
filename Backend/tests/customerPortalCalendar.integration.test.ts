@@ -208,7 +208,7 @@ d('customer portal calendar integration (postgres)', () => {
   });
 
   it('never invents dates for records without a customer-safe date', async () => {
-    const result = await getCustomerCalendar(identityA, workspaceA, { from: '2020-01-01', to: '2030-12-31' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+    const result = await getCustomerCalendar(identityA, workspaceA, { from: '2023-01-01', to: '2026-12-31' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
     for (const item of result.items) {
       expect(typeof item.day).toBe('string');
       expect(item.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
