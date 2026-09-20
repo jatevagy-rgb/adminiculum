@@ -7,6 +7,7 @@ import { buildFactStateMap, resolveVisibleQuestions } from '../src/modules/clien
 
 const databaseUrl =
   process.env.GROW_TEST_DATABASE_URL ||
+  process.env.CLIENT_INTERACTION_TEST_DATABASE_URL ||
   process.env.MIGRATION_REPLAY_DATABASE_URL ||
   process.env.DATABASE_URL;
 
@@ -18,6 +19,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const adminId = crypto.randomUUID();
   const lawyerId = crypto.randomUUID();
   const otherLawyerId = crypto.randomUUID();
+  const hiddenLawyerId = crypto.randomUUID();
   const clientA = crypto.randomUUID();
   const clientB = crypto.randomUUID();
   const caseA = crypto.randomUUID();
@@ -35,6 +37,14 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const factDefinition = crypto.randomUUID();
   const answeredFactDefinition = crypto.randomUUID();
   const answeredFact = crypto.randomUUID();
+  const portalFactDefinition = crypto.randomUUID();
+  const portalFact = crypto.randomUUID();
+  const conflictFactDefinition = crypto.randomUUID();
+  const conflictFactOne = crypto.randomUUID();
+  const conflictFactTwo = crypto.randomUUID();
+  const intervalFactDefinition = crypto.randomUUID();
+  const archivedProcessA = crypto.randomUUID();
+  const archivedSystemA = crypto.randomUUID();
   const complianceDomainCode = `DATA_ROOM_${suffix}`;
   const requirementId = crypto.randomUUID();
   const requirementVersionId = crypto.randomUUID();
@@ -53,6 +63,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
         { id: adminId, email: `data-room-admin-${suffix}@test.invalid`, name: 'Data Room Admin', role: 'ADMIN', status: 'ACTIVE', isActive: true },
         { id: lawyerId, email: `data-room-lawyer-${suffix}@test.invalid`, name: 'Data Room Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true },
         { id: otherLawyerId, email: `data-room-other-${suffix}@test.invalid`, name: 'Other Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true },
+        { id: hiddenLawyerId, email: `data-room-hidden-${suffix}@test.invalid`, name: 'Hidden Case Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true },
       ] as never,
     });
     await db.client.createMany({
@@ -85,7 +96,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.case.createMany({
       data: [
         { id: caseA, caseNumber: `DATA-ROOM-A-${suffix}`, title: 'Data Room A', caseType: 'OTHER', clientId: clientA, assignedLawyerId: lawyerId, createdById: adminId },
-        { id: caseA2, caseNumber: `DATA-ROOM-A2-${suffix}`, title: 'Data Room A2 Hidden Case', caseType: 'OTHER', clientId: clientA, assignedLawyerId: otherLawyerId, createdById: adminId },
+        { id: caseA2, caseNumber: `DATA-ROOM-A2-${suffix}`, title: 'Data Room A2 Hidden Case', caseType: 'OTHER', clientId: clientA, assignedLawyerId: hiddenLawyerId, createdById: adminId },
         { id: caseB, caseNumber: `DATA-ROOM-B-${suffix}`, title: 'Data Room B', caseType: 'OTHER', clientId: clientB, assignedLawyerId: otherLawyerId, createdById: adminId },
       ] as never,
     });
@@ -284,6 +295,109 @@ d('Company Data Room integration (PostgreSQL)', () => {
         currentFactId: answeredFact,
       } as never,
     });
+    // --- Cockpit convergence fixtures: provenance, freshness, conflicts, archived ---
+    await db.factDefinition.createMany({
+      data: [
+        {
+          id: portalFactDefinition,
+          key: `data_room_portal_fact_${suffix}`,
+          domainCode: 'COMPANY',
+          valueType: 'STRING',
+          allowedScopeTypes: ['COMPANY'],
+          determinationMethod: 'USER_PROVIDED',
+          overlapPolicy: 'DISALLOW',
+          temporalPolicy: 'OBSERVATION',
+        },
+        {
+          id: conflictFactDefinition,
+          key: `data_room_conflict_fact_${suffix}`,
+          domainCode: 'COMPANY',
+          valueType: 'STRING',
+          allowedScopeTypes: ['COMPANY'],
+          determinationMethod: 'USER_PROVIDED',
+          overlapPolicy: 'DISALLOW',
+          temporalPolicy: 'OBSERVATION',
+        },
+        {
+          id: intervalFactDefinition,
+          key: `data_room_interval_fact_${suffix}`,
+          domainCode: 'COMPANY',
+          valueType: 'STRING',
+          allowedScopeTypes: ['COMPANY'],
+          determinationMethod: 'USER_PROVIDED',
+          overlapPolicy: 'DISALLOW',
+          temporalPolicy: 'VALIDITY_INTERVAL',
+        },
+      ] as never,
+    });
+    await db.clientFact.createMany({
+      data: [
+        {
+          id: portalFact,
+          clientId: clientA,
+          type: 'PORTAL_SOURCED_FACT',
+          value: 'portal-sourced',
+          factDefinitionId: portalFactDefinition,
+          scopeType: 'COMPANY',
+          stringValue: 'portal-sourced',
+          validFrom: new Date('2026-01-01T00:00:00.000Z'),
+          observedAt: new Date('2026-01-02T00:00:00.000Z'),
+          verificationStatus: 'CLIENT_PROVIDED',
+          determinationMethod: 'USER_PROVIDED',
+          sourceReference: 'CLIENT_PORTAL_IDENTITY:11111111-1111-1111-1111-111111111111',
+        },
+        {
+          id: conflictFactOne,
+          clientId: clientA,
+          type: 'CONFLICTING_FACT',
+          value: 'conflict-alpha',
+          factDefinitionId: conflictFactDefinition,
+          scopeType: 'COMPANY',
+          stringValue: 'conflict-alpha',
+          validFrom: new Date('2026-01-01T00:00:00.000Z'),
+          observedAt: new Date('2026-01-02T00:00:00.000Z'),
+          verificationStatus: 'DOCUMENT_VERIFIED',
+        },
+        {
+          id: conflictFactTwo,
+          clientId: clientA,
+          type: 'CONFLICTING_FACT',
+          value: 'conflict-beta',
+          factDefinitionId: conflictFactDefinition,
+          scopeType: 'COMPANY',
+          stringValue: 'conflict-beta',
+          validFrom: new Date('2026-01-03T00:00:00.000Z'),
+          observedAt: new Date('2026-01-04T00:00:00.000Z'),
+          verificationStatus: 'UNVERIFIED',
+        },
+        {
+          clientId: clientA,
+          type: 'INTERVAL_FACT',
+          value: 'interval-value',
+          factDefinitionId: intervalFactDefinition,
+          scopeType: 'COMPANY',
+          stringValue: 'interval-value',
+          validFrom: new Date('2026-01-01T00:00:00.000Z'),
+          validTo: new Date('2027-01-01T00:00:00.000Z'),
+          verificationStatus: 'LAW_FIRM_VERIFIED',
+        },
+      ] as never,
+    });
+    await db.evidenceRecord.create({
+      data: {
+        clientId: clientA,
+        sourceType: 'CLIENT_FACT',
+        title: 'Portal fact evidence',
+        status: 'ACCEPTED',
+        clientFactId: portalFact,
+      },
+    });
+    await db.businessProcess.create({
+      data: { id: archivedProcessA, clientId: clientA, name: 'ARCHIVED_PROCESS_A', category: 'OPERATIONS', status: 'ARCHIVED' },
+    });
+    await db.businessSystem.create({
+      data: { id: archivedSystemA, clientId: clientA, name: 'ARCHIVED_SYSTEM_A', category: 'SOFTWARE', status: 'ARCHIVED' },
+    });
     await db.clientOrganizationGroup.create({
       data: { id: groupA, clientId: clientA, name: 'Operations', descriptionSafe: 'Daily operations', createdById: adminId },
     });
@@ -412,8 +526,11 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.clientControl.create({
       data: { clientId: clientA, controlDefinitionId: controlDefinition.id, implementationStatus: 'IMPLEMENTED' },
     });
+    // `evidence_records_exactly_one_source_check` requires exactly one canonical source;
+    // the historical source-less row is anchored to the answered fact so the fixture
+    // stays schema-valid while still exercising a second evidence record.
     await db.evidenceRecord.create({
-      data: { clientId: clientA, sourceType: 'CLIENT_FACT', title: 'A Evidence', status: 'ACCEPTED' },
+      data: { clientId: clientA, sourceType: 'CLIENT_FACT', title: 'A Evidence', status: 'ACCEPTED', clientFactId: answeredFact },
     });
     const source = await db.externalSourceConnection.create({
       data: { clientId: clientA, sourceType: 'TEST', name: 'A Source', config: { secret: 'must-not-escape' } },
@@ -445,6 +562,15 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db?.factSubject.deleteMany({ where: { id: factSubjectA } });
     for (const id of createdProfileDefinitionIds) await db?.factDefinition.delete({ where: { id } });
     await db?.requirementApplicability.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
+    await db?.evidenceRecord.deleteMany({ where: { clientId: clientA, clientFactId: portalFact } });
+    await db?.clientFact.deleteMany({
+      where: { clientId: clientA, factDefinitionId: { in: [portalFactDefinition, conflictFactDefinition, intervalFactDefinition] } },
+    });
+    await db?.factDefinition.deleteMany({
+      where: { id: { in: [portalFactDefinition, conflictFactDefinition, intervalFactDefinition] } },
+    });
+    await db?.businessProcess.deleteMany({ where: { id: archivedProcessA } });
+    await db?.businessSystem.deleteMany({ where: { id: archivedSystemA } });
     await db?.applicabilityRuleVersion.deleteMany({ where: { id: ruleVersionId } });
     await db?.requirementVersion.deleteMany({ where: { id: requirementVersionId } });
     await db?.requirement.deleteMany({ where: { id: requirementId } });
@@ -471,10 +597,10 @@ d('Company Data Room integration (PostgreSQL)', () => {
     const unknownFact = view.facts.find((fact) => fact.factDefinition?.key === `data_room_fact_${suffix}`);
     expect(unknownFact).toEqual(expect.objectContaining({ answerStatus: 'UNKNOWN', value: null }));
     expect(unknownFact?.factDefinition?.labelHu).toBeNull();
-    expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 1 });
+    expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 2 });
     expect(view.dataQuality.coverageAvailable).toBe(false);
     expect(view.dataQuality.relevantDataCoverage).toEqual(expect.objectContaining({
-      answeredCount: 0,
+      answeredCount: 2,
       unknownCount: 1,
       unansweredCount: expect.any(Number),
       derivedAnsweredCount: 0,
@@ -486,6 +612,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     );
     const visibility = resolveVisibleQuestions(buildFactStateMap({
       personal_data_processing: { status: 'ANSWERED', value: false },
+      annual_net_revenue_eur: { status: 'ANSWERED', value: 123456 },
       ai_use: { status: 'UNKNOWN' },
     }));
     for (const question of visibility.visible) {
@@ -519,8 +646,104 @@ d('Company Data Room integration (PostgreSQL)', () => {
     expect(view.complianceSummary.currentOnly).toBe(true);
     expect(view.complianceSummary.evaluatedCount).toBe(1);
     expect(view.complianceSummary.applies).toBe(1);
-    expect(view.evidenceSummary.totalCount).toBe(4);
+    expect(view.evidenceSummary.totalCount).toBe(5);
     expect(JSON.stringify(view)).not.toContain('must-not-escape');
+  });
+
+  it('projects canonical fact provenance, freshness and process depth without inventing rules', async () => {
+    const view = await getCompanyDataRoom(admin, clientA, db);
+
+    // Provenance comes only from canonical fields; the raw reference never leaks.
+    const portalFactView = view.facts.find((fact) => fact.factDefinition?.key === `data_room_portal_fact_${suffix}`);
+    expect(portalFactView).toEqual(expect.objectContaining({
+      answerStatus: 'UNANSWERED',
+      provenance: expect.objectContaining({
+        sourceKind: 'CLIENT_PORTAL_ANSWER',
+        hasSourceDocument: false,
+        evidenceCount: 1,
+        evidenceSourceTypes: ['CLIENT_FACT'],
+        determinationMethod: 'USER_PROVIDED',
+      }),
+    }));
+    expect(JSON.stringify(view)).not.toContain('CLIENT_PORTAL_IDENTITY');
+    expect(JSON.stringify(view)).not.toContain('11111111-1111-1111-1111-111111111111');
+
+    // OBSERVATION defines no expiry rule: freshness stays rule-less, never invented.
+    expect(portalFactView?.freshness).toEqual({ rule: 'OBSERVATION', ruleDefined: false, state: 'NO_RULE' });
+    expect(portalFactView?.freshness.ruleDefined).toBe(false);
+
+    // VALIDITY_INTERVAL is the only canonical rule and it reports its explicit bound.
+    const intervalFactView = view.facts.find((fact) => fact.factDefinition?.key === `data_room_interval_fact_${suffix}`);
+    expect(intervalFactView).toEqual(expect.objectContaining({
+      freshness: { rule: 'VALIDITY_INTERVAL', ruleDefined: true, state: 'CURRENT' },
+      validTo: new Date('2027-01-01T00:00:00.000Z').toISOString(),
+    }));
+
+    // Two currently-valid facts under a DISALLOW definition with no canonical answer
+    // state are surfaced as REVIEW REQUIRED and BOTH values remain visible.
+    const conflicting = view.facts.filter((fact) => fact.factDefinition?.key === `data_room_conflict_fact_${suffix}`);
+    expect(conflicting).toHaveLength(2);
+    expect(conflicting.map((fact) => fact.value).sort()).toEqual(['conflict-alpha', 'conflict-beta']);
+    for (const fact of conflicting) {
+      expect(fact.conflicts).toEqual(expect.objectContaining({
+        overlapPolicy: 'DISALLOW',
+        sameSubjectCurrentFactCount: 2,
+        hasCanonicalSelection: false,
+        reviewRequired: true,
+      }));
+    }
+    // The canonical selection rule is declared where it exists (the answered definition).
+    const answeredFactView = view.facts.find((fact) => fact.factDefinition?.key === `data_room_boolean_${suffix}`);
+    expect(answeredFactView?.conflicts.hasCanonicalSelection).toBe(true);
+    expect(answeredFactView?.conflicts.reviewRequired).toBe(false);
+
+    expect(view.dataQuality.conflictingAvailable).toBe(true);
+    expect(view.dataQuality.conflictingFactCount).toBe(2);
+    expect(view.dataQuality.stale).toBeNull();
+    expect(view.dataQuality.staleAvailable).toBe(false);
+    expect(view.dataQuality.provenance.portalAnswerCount).toBe(1);
+    expect(view.dataQuality.provenance.evidenceLinkedCount).toBe(2);
+    expect(portalFactView?.provenance.evidenceCount).toBe(1);
+    expect(view.dataQuality.freshness.ruleDefinedCount).toBe(2);
+    expect(view.dataQuality.freshness.basis).toBe('FactDefinition.temporalPolicy');
+    expect(typeof view.dataQuality.provenance.unknownSourceCount).toBe('number');
+
+    // Archived rows are never presented as current operations.
+    expect(view.processes.map((process) => process.name)).not.toContain('ARCHIVED_PROCESS_A');
+    expect(view.systems.map((system) => system.name)).not.toContain('ARCHIVED_SYSTEM_A');
+    expect(JSON.stringify(view)).not.toContain('ARCHIVED_PROCESS_A');
+    expect(JSON.stringify(view)).not.toContain('ARCHIVED_SYSTEM_A');
+
+    // Estimated step minutes and the recorded snapshot stay distinct and labelled.
+    const processView = view.processes.find((process) => process.name === 'A Process');
+    expect(processView).toEqual(expect.objectContaining({
+      stepCount: 1,
+      approvalStepCount: 0,
+      unassignedStepCount: 1,
+      estimatedTotals: {
+        activeMinutes: 10,
+        waitingMinutes: 20,
+        stepsWithActiveEstimate: 1,
+        stepsWithWaitingEstimate: 1,
+      },
+    }));
+    expect(processView?.steps[0]?.estimatedActiveMinutes).toBe(10);
+    expect(processView?.latestMeasuredSnapshot?.metrics[0]).toEqual(expect.objectContaining({
+      code: 'TOTAL_ACTIVE_MINUTES',
+      value: 42,
+      nameHu: 'Összes aktív munkaidő',
+    }));
+    expect(processView?.latestMeasuredSnapshot?.snapshotDigest).toBe('g'.repeat(64));
+    expect(processView?.latestMeasuredSnapshot?.provenanceSource).toBeNull();
+
+    // A process whose steps carry no estimate reports absence, not a measured zero.
+    const processWithoutEstimates = view.processes.find((process) => process.name === 'B Process');
+    expect(processWithoutEstimates?.estimatedTotals).toEqual({
+      activeMinutes: null,
+      waitingMinutes: null,
+      stepsWithActiveEstimate: 0,
+      stepsWithWaitingEstimate: 0,
+    });
   });
 
   it('allows an authorized lawyer, denies an out-of-scope lawyer, and isolates clients', async () => {

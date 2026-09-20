@@ -153,6 +153,78 @@ export type CompanyWorkspaceOverview = {
   attention: Array<{ code: WorkspaceAttentionCode; count: number }>;
 };
 
+export type FactProvenanceSourceKind = "CLIENT_PORTAL_ANSWER" | "DOCUMENT" | "MANUAL" | "UNKNOWN";
+export type FactFreshnessState = "CURRENT" | "EXPIRED" | "NO_RULE";
+
+export type CompanyDataRoomFact = {
+  id: string | null;
+  type: string;
+  value: unknown;
+  answerStatus: "ANSWERED" | "UNKNOWN" | "UNANSWERED";
+  factDefinition: { key: string; domainCode: string; valueType: string; labelHu?: string | null } | null;
+  scopeType: string | null;
+  factSubjectId: string | null;
+  verificationStatus: string | null;
+  observedAt: string | null;
+  effectiveAt: string | null;
+  validFrom: string | null;
+  validTo: string | null;
+  provenance: {
+    sourceKind: FactProvenanceSourceKind;
+    hasSourceDocument: boolean;
+    evidenceCount: number;
+    evidenceSourceTypes: string[];
+    determinationMethod: string | null;
+    recordedAt: string | null;
+    verifiedAt: string | null;
+  };
+  freshness: {
+    rule: string | null;
+    ruleDefined: boolean;
+    state: FactFreshnessState;
+  };
+  conflicts: {
+    overlapPolicy: string | null;
+    sameSubjectCurrentFactCount: number;
+    hasCanonicalSelection: boolean;
+    reviewRequired: boolean;
+  };
+};
+
+export type ProcessSnapshotMetric = {
+  code: string;
+  nameHu: string;
+  value: number | boolean | null;
+  unit: string;
+  metricVersion: string;
+};
+
+/** Canonical provenance label for a fact: "Honnan tudjuk?". */
+export function factProvenanceLabel(kind: FactProvenanceSourceKind): string {
+  switch (kind) {
+    case "CLIENT_PORTAL_ANSWER":
+      return "Ügyfélportál válasz";
+    case "DOCUMENT":
+      return "Dokumentum";
+    case "MANUAL":
+      return "Belső rögzítés";
+    default:
+      return "Ismeretlen eredet";
+  }
+}
+
+/** Canonical freshness label. NO_RULE means the definition defines no rule. */
+export function factFreshnessText(state: FactFreshnessState): string {
+  switch (state) {
+    case "CURRENT":
+      return "Érvényes";
+    case "EXPIRED":
+      return "Lejárt";
+    default:
+      return "Nincs meghatározott frissességi szabály.";
+  }
+}
+
 export type CompanyDataRoom = {
   clientIdentity: {
     id: string;
@@ -169,21 +241,13 @@ export type CompanyDataRoom = {
     summary: string | null;
     lastReviewedAt: string | null;
     nextReviewAt: string | null;
+    review: {
+      rule: "nextReviewAt";
+      ruleDefined: boolean;
+      state: "CURRENT" | "REVIEW_REQUIRED" | "UNKNOWN";
+    };
   } | null;
-  facts: Array<{
-    id: string | null;
-    type: string;
-    value: unknown;
-    answerStatus: 'ANSWERED' | 'UNKNOWN' | 'UNANSWERED';
-    factDefinition: { key: string; domainCode: string; valueType: string; labelHu?: string | null } | null;
-    scopeType: string | null;
-    factSubjectId: string | null;
-    verificationStatus: string | null;
-    observedAt: string | null;
-    effectiveAt: string | null;
-    validFrom: string | null;
-    validTo: string | null;
-  }>;
+  facts: CompanyDataRoomFact[];
   dataQuality: {
     answerStateSummary: { answered: number; unknown: number };
     coverageAvailable: boolean;
@@ -199,6 +263,20 @@ export type CompanyDataRoom = {
     stale: unknown;
     staleAvailable: boolean;
     conflictingAvailable: boolean;
+    conflictingFactCount: number;
+    provenance: {
+      basis: string;
+      documentSourceCount: number;
+      portalAnswerCount: number;
+      manualSourceCount: number;
+      unknownSourceCount: number;
+      evidenceLinkedCount: number;
+    };
+    freshness: {
+      basis: string;
+      ruleDefinedCount: number;
+      noRuleCount: number;
+    };
   };
   organization: {
     groupCount: number;
@@ -218,6 +296,15 @@ export type CompanyDataRoom = {
     status: string;
     owner: { id: string; name: string } | null;
     organizationGroup: { id: string; name: string } | null;
+    stepCount: number;
+    approvalStepCount: number;
+    unassignedStepCount: number;
+    estimatedTotals: {
+      activeMinutes: number | null;
+      waitingMinutes: number | null;
+      stepsWithActiveEstimate: number;
+      stepsWithWaitingEstimate: number;
+    };
     steps: Array<{
       id: string;
       position: number;
@@ -229,7 +316,14 @@ export type CompanyDataRoom = {
       estimatedWaitingMinutes: number | null;
       isApproval: boolean;
     }>;
-    latestMeasuredSnapshot: { id: string; observedAt: string; metricVersion: string; metrics: Array<{ code: string; value: number | boolean | null; unit: string; metricVersion: string }> } | null;
+    latestMeasuredSnapshot: {
+      id: string;
+      observedAt: string;
+      metricVersion: string;
+      snapshotDigest: string;
+      provenanceSource: string | null;
+      metrics: ProcessSnapshotMetric[];
+    } | null;
   }>;
   systems: Array<{
     id: string;
