@@ -78,9 +78,11 @@ import { DocumentReviewWorkflowPanel } from "@/components/documents/review/Docum
 import {
   addReviewPoint,
   listDocumentReviews,
+  listReviewPoints,
   transitionDocumentReview,
+  updateReviewPoint,
 } from "@/lib/documents/reviewWorkflowApi";
-import type { SegmentDto } from "@/lib/documents/comparisonApi";
+import { updateSegment, type SegmentDto } from "@/lib/documents/comparisonApi";
 import { ClientPublicationPanel, type ClientPublicationPrefillDraft } from "@/components/documents/publication/ClientPublicationPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import { useUiPack } from "@/lib/uiPack";
@@ -1698,24 +1700,40 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     setSegmentChangeBusy(true);
     try {
       const reviews = await listDocumentReviews(selectedUploadedDocument.id);
-      const review = reviews.find((item) => !['CLOSED', 'CANCELLED'].includes(String(item.status))) || null;
-      if (!review || !['IN_REVIEW', 'RESUBMITTED'].includes(String(review.status))) {
-        throw new Error('A módosítás kérhető, ha a dokumentum aktív review alatt áll.');
+      const review = reviews.find((item) =>
+        item.reviewVersionId === selectedVersion.id
+        && ['IN_REVIEW', 'RESUBMITTED'].includes(String(item.status)),
+      ) || null;
+      if (!review) {
+        throw new Error('A kiválasztott immutable verzióhoz nincs aktív review.');
       }
       const safeRationale = `Indok:\n${reason}\n\nKért módosítás:\n${requestedChange}`;
-      await addReviewPoint(review.id, {
-        title: `Módosítási kérés · ${segmentChangeRequest.sequence + 1}. változás`,
-        type: 'COMPARISON_CHANGE',
-        severity: 'IMPORTANT',
-        comparisonSegmentId: segmentChangeRequest.id,
-        internalRationale: safeRationale,
-      });
-      await transitionDocumentReview(review.id, 'request-changes', {
-        safeRationale,
-        expectedRevision: review.revision,
+      const existingPoints = await listReviewPoints(review.id, { type: 'COMPARISON_CHANGE' });
+      const existingPoint = existingPoints.data.find(
+        (point) => point.comparisonSegmentId === segmentChangeRequest.id,
+      );
+      if (existingPoint) {
+        await updateReviewPoint(review.id, existingPoint.id, {
+          status: 'OPEN',
+          severity: 'IMPORTANT',
+          internalRationale: safeRationale,
+          expectedRevision: existingPoint.revision,
+        });
+      } else {
+        await addReviewPoint(review.id, {
+          title: `Módosítási kérés · ${segmentChangeRequest.sequence + 1}. változás`,
+          type: 'COMPARISON_CHANGE',
+          severity: 'IMPORTANT',
+          comparisonSegmentId: segmentChangeRequest.id,
+          internalRationale: safeRationale,
+        });
+      }
+      await updateSegment(segmentChangeRequest.comparisonId, segmentChangeRequest.id, {
+        reviewState: 'NEEDS_DISCUSSION',
+        expectedRevision: segmentChangeRequest.revision,
       });
       setSegmentChangeRequest(null);
-      setActionResult({ type: 'success', message: 'A módosítási kérés rögzítve; a review állapota frissült.' });
+      setActionResult({ type: 'success', message: 'A változás megbeszélendőként és review pontként rögzítve.' });
       setContextualTab('review');
     } catch {
       setActionResult({ type: 'error', message: 'A módosítási kérés nem sikerült.' });
@@ -1973,10 +1991,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
                     </div>
                     <div className="border-b border-[var(--adm-border)] bg-white p-3">
-                      <details>
+                      <details data-testid="document-version-navigation">
                         <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Dokumentumok és verziók</summary>
                         <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Dokumentumváltás, verzióváltás, feltöltés és letöltés.</p>
-                      </details>
                       <label className="mt-2 block">
                         <span className="sr-only">Dokumentum keresése</span>
                         <input
@@ -1998,7 +2015,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           {isUploading ? "Hozzáadás..." : "+ Dokumentum hozzáadása"}
                         </AdminButton>
                       </div>
-                    </div>
                     <div className="max-h-[520px] space-y-4 overflow-y-auto p-3">
                       <section className="space-y-2">
                         <div className="flex items-center justify-between">
@@ -2073,6 +2089,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         && filteredGeneratedLedgerItems.length === 0 ? (
                         <p data-testid="ledger-search-empty" className="adm-board-empty p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs találat a keresésre.</p>
                       ) : null}
+                    </div>
+                      </details>
                     </div>
                   </aside>
 

@@ -91,9 +91,11 @@ export function ChangeReviewRail({
           >
             Rendben
           </AdminButton>
-          <AdminButton variant="gold" size="xs" data-testid="cmp-request-changes" disabled={saving} onClick={onRequestChanges}>
-            Módosítást kérek
-          </AdminButton>
+          {onRequestChanges ? (
+            <AdminButton variant="gold" size="xs" data-testid="cmp-request-changes" disabled={saving} onClick={onRequestChanges}>
+              Módosítást kérek
+            </AdminButton>
+          ) : null}
           <AdminButton
             variant="primary" size="xs" data-testid="cmp-rail-save" disabled={saving || tooLong}
             onClick={() => onSave({ category, reviewState, internalRationale: rationale.trim() || null, expectedRevision: segment.revision })}

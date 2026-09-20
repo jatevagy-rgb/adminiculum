@@ -36,6 +36,27 @@ test("Per-change decisions use canonical segment state and review linkage", () =
   assert.match(railSource, /Módosítást kérek/);
   assert.match(source, /comparisonSegmentId: segmentChangeRequest\.id/);
   assert.match(source, /Indok:\\n\$\{reason\}\\n\\nKért módosítás:/);
+  assert.match(source, /reviewState: 'NEEDS_DISCUSSION'/);
+  assert.match(source, /updateSegment\(segmentChangeRequest\.comparisonId/);
+  assert.doesNotMatch(
+    source.slice(source.indexOf("const submitSegmentRequestChanges"), source.indexOf("const renderAnnotatedText")),
+    /transitionDocumentReview/,
+  );
+});
+
+test("Per-change review actions require the exact selected version and reuse points", () => {
+  const source = page();
+  assert.match(source, /item\.reviewVersionId === selectedVersion\.id/);
+  assert.match(source, /listReviewPoints\(review\.id, \{ type: 'COMPARISON_CHANGE' \}\)/);
+  assert.match(source, /point\.comparisonSegmentId === segmentChangeRequest\.id/);
+  assert.match(source, /updateReviewPoint\(review\.id, existingPoint\.id/);
+});
+
+test("Secondary surfaces do not expose a dead request action and navigation is actually collapsible", () => {
+  const source = page();
+  const railSource = rail();
+  assert.match(railSource, /\{onRequestChanges \? \(/);
+  assert.match(source, /<details data-testid="document-version-navigation">[\s\S]*ledger-search-input[\s\S]*filteredUploadedDocuments[\s\S]*<\/details>/);
 });
 
 test("AI preparation carries both selected version IDs through the existing prompt system", () => {
