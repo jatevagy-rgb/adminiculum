@@ -487,38 +487,29 @@ async function loadDocuments(
   },
 ): Promise<PreparedSourceDocument[]> {
   const preparedDocs: PreparedSourceDocument[] = [];
-  const selectedDocIds = new Set([...(params.sourceDocumentIds ?? []), ...(params.selectedDocumentTexts ?? []).map((item) => item.documentId)]);
-  if (selectedDocIds.size > 0) {
-    const docs = await deps.prisma.document.findMany({
-      where: { id: { in: [...selectedDocIds] }, caseId },
-      select: { id: true, title: true, name: true, description: true, workspaceText: true },
-    });
-    if (docs.length !== selectedDocIds.size) {
-      throw Object.assign(new Error('SOURCE_DOCUMENT_CASE_MISMATCH'), { status: 400, code: 'SOURCE_DOCUMENT_CASE_MISMATCH' });
-    }
-    for (const doc of docs) {
-      const provided = params.selectedDocumentTexts?.find((item) => item.documentId === doc.id);
-      const title = provided?.title || doc.title || doc.name || `Document ${preparedDocs.length + 1}`;
-      const text = provided?.text ?? doc.workspaceText ?? doc.description ?? '';
-      preparedDocs.push({
-        documentId: doc.id,
-        title,
-        selectedText: text,
-        label: `Document ${String.fromCharCode(65 + preparedDocs.length)}`,
-      });
+
+  const rawVersionIds = params.sourceDocumentVersionIds ?? [];
+  const uniqueVersionIds: string[] = [];
+  for (const id of rawVersionIds) {
+    if (!uniqueVersionIds.includes(id)) {
+      uniqueVersionIds.push(id);
     }
   }
 
-  const rawVersionIds = params.sourceDocumentVersionIds ?? [];
-  if (rawVersionIds.length > 0) {
-    const uniqueVersionIds: string[] = [];
-    for (const id of rawVersionIds) {
-      if (!uniqueVersionIds.includes(id)) {
-        uniqueVersionIds.push(id);
-      }
-    }
+  let versionRecords: Array<{
+    id: string;
+    version: number;
+    name: string;
+    description: string | null;
+    originalFileName: string | null;
+    mimeType: string | null;
+    size: number | null;
+    securityScanStatus: string;
+    document: { id: string; caseId: string; title: string | null; name: string };
+  }> = [];
 
-    const versionRecords = await deps.prisma.documentVersion.findMany({
+  if (uniqueVersionIds.length > 0) {
+    versionRecords = await deps.prisma.documentVersion.findMany({
       where: { id: { in: uniqueVersionIds } },
       select: {
         id: true,
@@ -538,7 +529,7 @@ async function loadDocuments(
           },
         },
       },
-    });
+    }) as any;
 
     if (versionRecords.length !== uniqueVersionIds.length) {
       throw Object.assign(new Error('SOURCE_DOCUMENT_VERSION_CASE_MISMATCH'), {
@@ -546,7 +537,36 @@ async function loadDocuments(
         code: 'SOURCE_DOCUMENT_VERSION_CASE_MISMATCH',
       });
     }
+  }
 
+  const versionCoveredDocIds = new Set(versionRecords.map((rec) => rec.document.id));
+
+  const selectedDocIds = new Set([...(params.sourceDocumentIds ?? []), ...(params.selectedDocumentTexts ?? []).map((item) => item.documentId)]);
+  if (selectedDocIds.size > 0) {
+    const docs = await deps.prisma.document.findMany({
+      where: { id: { in: [...selectedDocIds] }, caseId },
+      select: { id: true, title: true, name: true, description: true, workspaceText: true },
+    });
+    if (docs.length !== selectedDocIds.size) {
+      throw Object.assign(new Error('SOURCE_DOCUMENT_CASE_MISMATCH'), { status: 400, code: 'SOURCE_DOCUMENT_CASE_MISMATCH' });
+    }
+    for (const doc of docs) {
+      if (versionCoveredDocIds.has(doc.id)) {
+        continue;
+      }
+      const provided = params.selectedDocumentTexts?.find((item) => item.documentId === doc.id);
+      const title = provided?.title || doc.title || doc.name || `Document ${preparedDocs.length + 1}`;
+      const text = provided?.text ?? doc.workspaceText ?? doc.description ?? '';
+      preparedDocs.push({
+        documentId: doc.id,
+        title,
+        selectedText: text,
+        label: `Document ${String.fromCharCode(65 + preparedDocs.length)}`,
+      });
+    }
+  }
+
+  if (uniqueVersionIds.length > 0) {
     const recordMap = new Map(versionRecords.map((rec) => [rec.id, rec]));
 
     for (const versionId of uniqueVersionIds) {
@@ -558,7 +578,7 @@ async function loadDocuments(
         });
       }
 
-      const scanBlocked = securityScanBlock(version.securityScanStatus || 'CLEAN');
+      const scanBlocked = securityScanBlock(version.securityScanStatus as any || 'CLEAN');
       if (scanBlocked) {
         throw Object.assign(new Error(scanBlocked.error), {
           status: scanBlocked.status || 409,

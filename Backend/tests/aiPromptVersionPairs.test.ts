@@ -529,4 +529,142 @@ describe('AI Prompt System — authoritative version-pair source text', () => {
     expect(serialized).not.toContain('sp-item-v2-secret');
     expect((publicDraft as unknown as { rehydrationMap?: unknown }).rehydrationMap).toBeUndefined();
   });
+
+  // Source Precedence: explicit version sources supersede generic document-level sources for the same document
+  describe('Source precedence: version sources supersede generic document-level sources for the same document', () => {
+    it('suppresses generic workspaceText when a single version of that document is also selected', async () => {
+      (prisma.document.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'doc-shared',
+          title: 'Supply Agreement',
+          name: 'Supply_Agreement.docx',
+          description: 'Doc description',
+          workspaceText: 'Legacy document workspace text that must NOT be used',
+        },
+      ]);
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([version2Record]);
+
+      const mockResolveText = jest.fn(async () => ({
+        supported: true,
+        text: textV2,
+        reasonCode: null,
+        extractionRevision: 2,
+      }));
+
+      const draft = await preparePromptDraft(
+        actor,
+        {
+          caseId,
+          promptTemplateId: template.id,
+          sourceDocumentIds: ['doc-shared'],
+          sourceDocumentVersionIds: ['v-2'],
+        },
+        {
+          prisma,
+          downloadDocumentVersion: jest.fn(async () => ({ version: {} as any, content: Buffer.from('bytes') })),
+          resolveVersionText: mockResolveText,
+        },
+      );
+
+      // Only ONE source: Document A is v2. No generic source for doc-shared
+      expect(draft.externalPromptText).toContain('Document A');
+      expect(draft.externalPromptText).not.toContain('Document B');
+      expect(draft.externalPromptText).toContain('Version: v2');
+      expect(draft.externalPromptText).toContain(textV2);
+      expect(draft.externalPromptText).not.toContain('Legacy document workspace text');
+    });
+
+    it('suppresses generic workspaceText when multiple versions of the same document are selected', async () => {
+      (prisma.document.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'doc-shared',
+          title: 'Supply Agreement',
+          name: 'Supply_Agreement.docx',
+          description: 'Doc description',
+          workspaceText: 'Legacy document workspace text that must NOT be used',
+        },
+      ]);
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([version1Record, version2Record]);
+
+      const mockResolveText = jest.fn(async (v: { id: string }) => {
+        if (v.id === 'v-1') return { supported: true, text: textV1, reasonCode: null, extractionRevision: 2 };
+        if (v.id === 'v-2') return { supported: true, text: textV2, reasonCode: null, extractionRevision: 2 };
+        return { supported: false, text: null, reasonCode: 'CONTENT_UNAVAILABLE', extractionRevision: 2 };
+      });
+
+      const draft = await preparePromptDraft(
+        actor,
+        {
+          caseId,
+          promptTemplateId: template.id,
+          sourceDocumentIds: ['doc-shared'],
+          sourceDocumentVersionIds: ['v-1', 'v-2'],
+        },
+        {
+          prisma,
+          downloadDocumentVersion: jest.fn(async () => ({ version: {} as any, content: Buffer.from('bytes') })),
+          resolveVersionText: mockResolveText,
+        },
+      );
+
+      // Exactly TWO sources: Document A (v1) and Document B (v2). Generic source suppressed.
+      expect(draft.externalPromptText).toContain('Document A');
+      expect(draft.externalPromptText).toContain('Version: v1');
+      expect(draft.externalPromptText).toContain('Document B');
+      expect(draft.externalPromptText).toContain('Version: v2');
+      expect(draft.externalPromptText).not.toContain('Document C');
+      expect(draft.externalPromptText).not.toContain('Legacy document workspace text');
+    });
+
+    it('retains generic source for doc2 while version source supersedes doc1', async () => {
+      (prisma.document.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: 'doc-shared',
+          title: 'Supply Agreement',
+          name: 'Supply_Agreement.docx',
+          description: 'Doc description',
+          workspaceText: 'Legacy document workspace text that must NOT be used',
+        },
+        {
+          id: 'doc-other',
+          title: 'Other Agreement',
+          name: 'other.docx',
+          description: null,
+          workspaceText: 'Independent doc-other workspace text that MUST be present',
+        },
+      ]);
+      (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([version2Record]);
+
+      const mockResolveText = jest.fn(async () => ({
+        supported: true,
+        text: textV2,
+        reasonCode: null,
+        extractionRevision: 2,
+      }));
+
+      const draft = await preparePromptDraft(
+        actor,
+        {
+          caseId,
+          promptTemplateId: template.id,
+          sourceDocumentIds: ['doc-shared', 'doc-other'],
+          sourceDocumentVersionIds: ['v-2'],
+        },
+        {
+          prisma,
+          downloadDocumentVersion: jest.fn(async () => ({ version: {} as any, content: Buffer.from('bytes') })),
+          resolveVersionText: mockResolveText,
+        },
+      );
+
+      // Document A is doc-other generic source, Document B is v2
+      expect(draft.externalPromptText).toContain('Document A');
+      expect(draft.externalPromptText).toContain('Title: Other Agreement');
+      expect(draft.externalPromptText).toContain('Independent doc-other workspace text that MUST be present');
+      expect(draft.externalPromptText).toContain('Document B');
+      expect(draft.externalPromptText).toContain('Version: v2');
+      expect(draft.externalPromptText).toContain(textV2);
+      expect(draft.externalPromptText).not.toContain('Legacy document workspace text');
+    });
+  });
 });
