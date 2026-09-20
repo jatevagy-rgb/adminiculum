@@ -251,6 +251,32 @@ const scanStatusLabel = (status?: DocumentItem['securityScanStatus']): string =>
   }
 };
 
+// Backend enum values remain canonical in the API. These labels are only for
+// the document workspace so internal terminology never becomes user-facing UI.
+const documentEnumLabels: Record<string, string> = {
+  NOT_IN_REVIEW: 'Nincs felülvizsgálat alatt',
+  IN_REVIEW: 'Felülvizsgálat alatt',
+  CHANGES_REQUESTED: 'Módosítás szükséges',
+  APPROVED: 'Jóváhagyva',
+  INTERNAL_ONLY: 'Belső',
+  CLIENT_READY: 'Ügyfélnek előkészítve',
+  PUBLISHED: 'Közzétéve',
+  LAWYER_UPLOAD: 'Ügyvédi feltöltés',
+  CLIENT_UPLOAD: 'Ügyfél feltöltése',
+  ORIGINAL: 'Eredeti',
+  WORKING_COPY: 'Munkapéldány',
+  RESUBMITTED: 'Újra beküldve',
+  DRAFT: 'Piszkozat',
+  ASSIGNED: 'Kijelölve',
+  RESOLVED: 'Megoldva',
+  OPEN: 'Nyitott',
+};
+
+const documentEnumLabel = (value?: string | null): string => {
+  if (!value) return 'Nincs megadva';
+  return documentEnumLabels[value] || value;
+};
+
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -264,7 +290,7 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 export default function WrappedDocumentLedgerPage({ params }: DocumentLedgerPageProps) {
   return (
-    <AuthenticatedApp section="case-detail" workspaceChrome="focused">
+    <AuthenticatedApp section="case-detail">
       <DocumentLedgerContent params={params} />
     </AuthenticatedApp>
   );
@@ -1770,7 +1796,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <span><b>Feltöltve:</b> {formatDateTime(canonicalActiveVersion.uploadedAt)}</span>
                         ) : null}
                         {canonicalActiveVersion?.reviewStatus ? (
-                          <span><b>Review státusz:</b> {canonicalActiveVersion.reviewStatus}</span>
+                          <span><b>Review státusz:</b> {documentEnumLabel(canonicalActiveVersion.reviewStatus)}</span>
                         ) : null}
                         <span><b>Szerkesztő:</b> Microsoft Word (asztali)</span>
                       </div>
@@ -1823,6 +1849,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <AdminButton
                         variant="neutral"
                         onClick={() => {
+                          const tools = document.getElementById('preserved-extended-tools-shell') as HTMLDetailsElement | null;
+                          if (tools) tools.open = true;
                           const el = document.getElementById('preserved-extended-tools');
                           if (el) el.scrollIntoView({ behavior: 'smooth' });
                         }}
@@ -2150,7 +2178,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
                             {isReviewLoading
                               ? "Verzióadatok betöltése..."
-                              : canonicalActiveVersion?.reviewStatus || (selectedUploadedDocument ? "Nincs felülvizsgálati állapot" : "Nincs aktív review")}
+                              : canonicalActiveVersion?.reviewStatus
+                                ? documentEnumLabel(canonicalActiveVersion.reviewStatus)
+                                : (selectedUploadedDocument ? "Nincs felülvizsgálati állapot" : "Nincs aktív review")}
                           </h4>
                         </div>
                         {isReviewLoading ? (
@@ -2412,6 +2442,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </div>
 
                 {/* 3. PRESERVED EXTENDED TOOLS SECTION */}
+                <details id="preserved-extended-tools-shell" data-testid="preserved-extended-tools-shell" className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+                  <summary className="cursor-pointer font-serif text-lg font-semibold text-[var(--adm-text)]">
+                    További eszközök
+                    <span className="ml-2 text-xs font-normal text-[var(--adm-text-muted)]">Haladó dokumentumfunkciók</span>
+                  </summary>
                 <section id="preserved-extended-tools" data-testid="preserved-extended-tools" className="mt-8 space-y-6 border-t-2 border-[rgba(22,32,26,0.12)] pt-6">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <div>
@@ -2551,7 +2586,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <span className="font-serif text-lg font-semibold text-[var(--adm-text)]">v{version.versionNumber}</span>
                                         <span className="flex flex-wrap gap-2">
                                           {version.isCurrent ? <AdminBadge tone="gold">Aktuális</AdminBadge> : null}
-                                          <AdminBadge tone="neutral">{version.versionType}</AdminBadge>
+                                          <AdminBadge tone="neutral">{documentEnumLabel(version.versionType)}</AdminBadge>
                                         </span>
                                       </div>
                                       <p className="mt-1 truncate text-sm font-semibold text-[#3D4842]">{version.originalFileName}</p>
@@ -2575,10 +2610,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <p><b>Feltöltve:</b> {formatDateTime(selectedVersion.uploadedAt)}</p>
                                         <p><b>Méret:</b> {formatFileSize(selectedVersion.size)}</p>
                                         <p><b>MIME:</b> {selectedVersion.mimeType || 'application/octet-stream'}</p>
-                                        <p><b>Típus:</b> {selectedVersion.versionType}</p>
-                                        <p><b>Review:</b> {selectedVersion.reviewStatus}</p>
-                                        <p><b>Publikáció:</b> {selectedVersion.publicationStatus}</p>
-                                        <p><b>Forrás:</b> {selectedVersion.uploadSource}</p>
+                                        <p><b>Típus:</b> {documentEnumLabel(selectedVersion.versionType)}</p>
+                                        <p><b>Review:</b> {documentEnumLabel(selectedVersion.reviewStatus)}</p>
+                                        <p><b>Publikáció:</b> {documentEnumLabel(selectedVersion.publicationStatus)}</p>
+                                        <p><b>Forrás:</b> {documentEnumLabel(selectedVersion.uploadSource)}</p>
                                         <p><b>Előző verzió:</b> {selectedVersion.previousVersionId ? 'Kapcsolva' : 'Nincs'}</p>
                                         {selectedVersion.securityScanStatus !== 'CLEAN' ? <p className="font-semibold text-[#92400E]">{scanStatusLabel(selectedVersion.securityScanStatus)}</p> : null}
                                       </div>
@@ -3089,6 +3124,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   {handoffPackageError && <p className="rounded bg-[var(--adm-terracotta-100)] p-2 text-[12px] font-semibold text-[var(--adm-terracotta-700)]">{handoffPackageError}</p>}
                   </aside>
                 </section>
+                </details>
               </div>
             )}
 
