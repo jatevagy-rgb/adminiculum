@@ -60,15 +60,21 @@ describe('Dedicated client compliance workspace (structural)', () => {
     assert.match(src, /Vállalati működés/);
   });
 
-  it('repoints the client overview Compliance entry to the dedicated route', () => {
+  it('reaches the dedicated /compliance route through the canonical Megfelelés tab, with no duplicate dossier entry', () => {
     const overview = read('src/app/clients/[clientId]/page.tsx');
-    assert.match(overview, /clients\/\$\{encodeURIComponent\(clientId\)\}\/compliance`} className="adm-link-button[^"]*">Compliance/);
+    const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
+    assert.match(tabs, /\["compliance", "Megfelelés", "\/compliance"\]/);
     assert.doesNotMatch(overview, /vallalati-mukodes#compliance/);
+    assert.doesNotMatch(overview, />Compliance →</);
+    assert.doesNotMatch(overview, /Szervezeti felépítés →/);
   });
 
-  it('leaves the Grow with us entry unchanged', () => {
+  it('reaches the canonical Grow module through the Grow tab, with no competing "Grow with us" dossier entry', () => {
     const overview = read('src/app/clients/[clientId]/page.tsx');
-    assert.match(overview, /vallalati-mukodes`} className="adm-link-button[^"]*">Grow with us/);
+    const tabs = read('src/components/clients/ClientWorkspaceTabs.tsx');
+    assert.match(tabs, /\["grow", "Grow", "\/grow"\]/);
+    assert.doesNotMatch(overview, /Grow with us/);
+    assert.doesNotMatch(overview, /vallalati-mukodes`} className="adm-link-button/);
   });
 
   it('adds exactly one Megfelelés top tab and keeps it organization-only', () => {

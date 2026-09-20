@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 // Client lifecycle archive/delete contract for the workforce dossier:
-// Haladó -> Ügyfél archiválása with a truthful dependency preview, explicit
+// Ügyfélműveletek -> Ügyfél archiválása with a truthful dependency preview, explicit
 // confirmation, archived-client filtering, and a typed-name hard delete that
 // is only offered for dependency-free clients.
 
@@ -11,8 +11,9 @@ const page = readFileSync("src/app/clients/[clientId]/page.tsx", "utf8");
 const controls = readFileSync("src/components/clients/ClientLifecycleControls.tsx", "utf8");
 const api = readFileSync("src/lib/api.ts", "utf8");
 
-test("archive action lives under the Haladó menu on the client dossier", () => {
-  assert.match(page, /••• Haladó/);
+test("archive action lives under the Ügyfélműveletek control on the client dossier", () => {
+  assert.match(page, /Ügyfélműveletek/);
+  assert.doesNotMatch(page, /••• Haladó/);
   assert.match(page, /<ClientLifecycleControls client=\{client\} onArchived=\{\(\) => router\.push\("\/clients"\)\} \/>/);
   assert.match(controls, /Ügyfél archiválása/);
 });
