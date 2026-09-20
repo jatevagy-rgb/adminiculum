@@ -16,7 +16,7 @@ describe("Phase 5B organizational customer contract + company surface", () => {
     const src = shell();
     const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
     const orgBlock = src.slice(orgIdx, src.indexOf("if (workspace.mode === 'CASE_RELAY')"));
-    const order = ["Főoldal", "Ügyeink", "Teendőim", "Dokumentumok", "Üzenetek"];
+    const order = ["Áttekintés", "Ügyek", "Teendők", "Dokumentumok", "Naptár", "Fejlesztés", "Megfelelés", "Kommunikáció", "Vállalat"];
     let last = -1;
     for (const label of order) {
       const idx = orgBlock.indexOf(`'${label}'`);

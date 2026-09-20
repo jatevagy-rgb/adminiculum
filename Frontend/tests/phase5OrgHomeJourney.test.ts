@@ -17,7 +17,7 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     const src = shell();
     const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
     const orgBlock = src.slice(orgIdx, src.indexOf("if (workspace.mode === 'CASE_RELAY')"));
-    const order = ["Főoldal", "Ügyeink", "Teendőim", "Dokumentumok", "Üzenetek"];
+    const order = ["Áttekintés", "Ügyek", "Teendők", "Dokumentumok", "Naptár", "Fejlesztés", "Megfelelés", "Kommunikáció", "Vállalat"];
     let last = -1;
     for (const label of order) {
       const idx = orgBlock.indexOf(`'${label}'`);
@@ -26,7 +26,7 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
       last = idx;
     }
     // No technical/legacy wording in the org nav.
-    assert.doesNotMatch(orgBlock, /Ügyeim|Új megkeresés|Megkereséseim|Vezetői áttekintés|Kommunikáció|Együttműködési áttekintés/);
+    assert.doesNotMatch(orgBlock, /Ügyeim|Jogi ügyek|Új megkeresés|Megkereséseim|Vezetői áttekintés|Együttműködési áttekintés/);
   });
 
   it("Főoldal renders Eddig / Most / Következőként journey", () => {
@@ -112,7 +112,11 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
   it("home action link falls back to action-request detail when no matter publication id", () => {
     const src = orgHome();
     // When matterPublicationId is absent the action id is a request id, not a matter id.
-    assert.match(src, /action\.matterPublicationId\s*\?\s*`\/portal\/matters\/\$\{encodeURIComponent\(action\.matterPublicationId\)\}`\s*:\s*`\/portal\/action-requests\/\$\{encodeURIComponent\(action\.id\)\}`/);
+    assert.match(src, /action\.matterPublicationId/);
+    assert.match(src, /`\/portal\/matters\/\$\{encodeURIComponent\(action\.matterPublicationId\)\}`/);
+    assert.match(src, /`\/portal\/action-requests\/\$\{encodeURIComponent\(action\.id\)\}`/);
+    // A compliance action without a matter goes to the compliance surface, never a dead end.
+    assert.match(src, /action\.area === "COMPLIANCE"[\s\S]{0,60}\/portal\/megfeleles/);
     assert.doesNotMatch(src, /action\.matterPublicationId\s*\|\|\s*action\.id/);
     assert.doesNotMatch(src, /\/portal\/matters\/\$\{encodeURIComponent\(action\.matterPublicationId\s*\|\|\s*action\.id\)\}/);
   });
@@ -127,11 +131,12 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
     assert.match(individualBlock, /Üzenetek/);
   });
 
-  it("Kapcsolat wording unifies customer messaging, not Outlook", () => {
+  it("uses the canonical Kommunikáció domain for customer messaging, not Outlook", () => {
     const views = orgViews();
-    assert.match(views, /title="Kapcsolat"/);
+    assert.match(views, /Kommunikáció/);
+    assert.match(views, /Portálos beszélgetések/);
     assert.match(views, /Itt tud az irodával az ügyeiről egyeztetni/);
-    assert.doesNotMatch(views, /title="Kommunikáció"/);
+    assert.doesNotMatch(views, /title="Kapcsolat"/);
     assert.doesNotMatch(views, /Outlook sync/);
   });
 });

@@ -20,7 +20,7 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(shell(), /selectedWorkspace\?\.mode === 'CASE_RELAY'/);
     assert.match(shell(), /OrganizationPortalViews/);
     assert.match(shell(), /OrgHomeView/);
-    for (const label of ["'Főoldal', '\/portal'", "'Ügyeink', '\/portal\/ugyeim'", "'Teendőim', '\/portal\/teendoim'", "'Dokumentumok', '\/portal\/dokumentumok'", "'Üzenetek', '\/portal\/uzenetek'"]) {
+    for (const label of ["'Főoldal', '\/portal'", "'Ügyek', '\/portal\/ugyek'", "'Teendőim', '\/portal\/teendoim'", "'Dokumentumok', '\/portal\/dokumentumok'", "'Üzenetek', '\/portal\/uzenetek'"]) {
       assert.match(shell(), new RegExp(label));
     }
     assert.equal(existsSync(path.join(root, "src/app/portal/szervezeti-attekintes/page.tsx")), true);

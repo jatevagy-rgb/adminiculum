@@ -11,10 +11,22 @@ describe('Frontend Portal Identity and Multi-Workspace Resolution (R0)', () => {
   const selectorSrc = () => read('src/components/client-portal/PortalWorkspaceSelector.tsx');
   const apiSrc = () => read('src/lib/clientPortalApi.ts');
 
-  it('1. ORGANIZATION navigation uses "Ügyeink"', () => {
+  it('1. ORGANIZATION navigation uses the canonical customer domains', () => {
     const src = shellSrc();
     assert.ok(src.includes("workspace.mode === 'ORGANIZATION'"));
-    assert.ok(src.includes("['Ügyeink', '/portal/ugyeim']"));
+    for (const entry of [
+      "['Áttekintés', '/portal']",
+      "['Ügyek', '/portal/ugyek']",
+      "['Teendők', '/portal/teendoim']",
+      "['Dokumentumok', '/portal/dokumentumok']",
+      "['Naptár', '/portal/naptar']",
+      "['Fejlesztés', '/portal/fejlesztes']",
+      "['Megfelelés', '/portal/megfeleles']",
+      "['Kommunikáció', '/portal/uzenetek']",
+      "['Vállalat', '/portal/vallalat']",
+    ]) {
+      assert.ok(src.includes(entry), `canonical organization navigation is missing ${entry}`);
+    }
   });
 
   it('2. INDIVIDUAL navigation uses "Ügyeim"', () => {
