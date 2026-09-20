@@ -509,6 +509,18 @@ export interface CaseWorkspace {
     summary: string | null; commentCount: number | null; workStatus?: string | null; workInstruction?: string | null;
     responsible?: { id: string; name: string } | null; reviewer?: { id: string; name: string } | null;
     dueDate?: string | null; nextStep?: string | null;
+    reviewSummary?: {
+      documentId: string; caseId: string; documentTitle: string; category: string | null; workStatus: string | null;
+      currentVersionNumber: number | null; currentVersionId: string | null;
+      previousVersionNumber: number | null; previousVersionId: string | null;
+      reviewId: string | null; reviewVersionId: string | null; reviewStatus: string | null;
+      openPointCount: number; blockingPointCount: number;
+      comparisonId: string | null; comparisonStatus: string | null;
+      totalSegments: number; reviewedSegments: number; unresolvedSegments: number;
+      aiPromptDraftId: string | null; aiDraftStatus: string | null; aiApproved: boolean;
+      aiSourceMode?: 'EXACT_VERSION_PAIR' | 'CURRENT_VERSION' | 'MIXED_VERSION_CONTEXT' | 'LEGACY_DOCUMENT' | null;
+      nextAction: { code: string; label: string; rationale: string };
+    } | null;
   }>;
   deadlines: Array<{ id: string; title: string; dueAt: string | null; status: string; assignee: { id: string; name: string } | null; taskId: string | null; documentId: string | null }>;
   time: { available: true; loggedMinutes: number; billableMinutes: number | null } | { available: false; reason: string };

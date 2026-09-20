@@ -46,12 +46,31 @@ const documentWorkStatusLabels: Record<string, string> = {
   WORKING_COPY: "Munkapéldány",
 };
 
+const reviewStatusLabels: Record<string, string> = {
+  DRAFT: "Tervezet",
+  ASSIGNED: "Kiosztva",
+  READY_FOR_REVIEW: "Véleményezésre kész",
+  IN_REVIEW: "Véleményezés alatt",
+  CHANGES_REQUESTED: "Módosítás szükséges",
+  RESUBMITTED: "Újra benyújtva",
+  APPROVED: "Jóváhagyva",
+  CLOSED: "Lezárva",
+  CANCELLED: "Megszakítva",
+};
+
 const humanEnumLabel = (value?: string | null): string => {
   if (!value) return "Nincs adat";
   const normalized = value.toUpperCase();
   return documentWorkStatusLabels[normalized]
     || normalized.replace(/_/g, " ").toLocaleLowerCase("hu-HU").replace(/^./, (character) => character.toLocaleUpperCase("hu-HU"));
 };
+
+const reviewStatusLabel = (value?: string | null): string => {
+  if (!value) return "Ismeretlen review állapot";
+  return reviewStatusLabels[value.toUpperCase()] || "Ismeretlen review állapot";
+};
+
+const pointLabel = (count: number, singular: string, plural: string): string => `${count} ${count === 1 ? singular : plural}`;
 
 const firstNonEmpty = (...values: Array<string | null | undefined>): string | null => {
   const value = values.find((candidate) => Boolean(candidate && candidate.trim()));
@@ -108,6 +127,27 @@ export const CASE_INSIGHT_TILE_REGISTRY: CaseInsightTileDefinition[] = [
     derive: (workspace, caseId) => {
       const document = activeDocument(workspace);
       if (!document) return null;
+      const reviewSummary = document.reviewSummary;
+      if (reviewSummary) {
+        const detail = [
+          reviewSummary.currentVersionNumber !== null ? `Verzió: v${reviewSummary.currentVersionNumber}` : null,
+          reviewSummary.comparisonId && reviewSummary.totalSegments > 0
+            ? `${reviewSummary.reviewedSegments} / ${reviewSummary.totalSegments} változás ellenőrizve`
+            : null,
+          reviewSummary.openPointCount > 0 ? pointLabel(reviewSummary.openPointCount, "nyitott észrevétel", "nyitott észrevétel") : null,
+          reviewSummary.blockingPointCount > 0 ? pointLabel(reviewSummary.blockingPointCount, "blokkoló észrevétel", "blokkoló észrevétel") : null,
+          reviewSummary.nextAction.label ? `Következő: ${reviewSummary.nextAction.label}` : null,
+        ].filter(Boolean).join(" · ");
+        return {
+          key: "document-review",
+          title: "Dokumentum / review állapot",
+          accent: "ochre",
+          status: reviewStatusLabel(reviewSummary.reviewStatus),
+          body: reviewSummary.documentTitle || document.fileName,
+          detail: detail || undefined,
+          action: { label: "Dokumentum munkatér", href: `/cases/${encodeURIComponent(caseId)}/documents?documentId=${encodeURIComponent(document.id)}` },
+        };
+      }
       const activeReason = workspace.cockpit.activeDocuments.find((item) => item.id === document.id)?.reason;
       const detail = [
         document.version ? `Verzió: ${document.version}` : null,

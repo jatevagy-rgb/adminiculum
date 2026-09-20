@@ -62,6 +62,70 @@ test("Insight tiles fall back to description and omit unsupported empty tiles", 
   assert.deepEqual(emptyTiles.map((tile) => tile.key), ["current-state"]);
 });
 
+test("Document review insight prefers the canonical review summary without exposing enums", () => {
+  const canonical = workspace();
+  canonical.documents[0].reviewSummary = {
+    documentId: "doc-1", caseId: "case-1", documentTitle: "Kanonikus szerződés.docx", category: null, workStatus: "IN_REVIEW",
+    currentVersionNumber: 2, currentVersionId: "version-2", previousVersionNumber: 1, previousVersionId: "version-1",
+    reviewId: "review-1", reviewVersionId: "version-2", reviewStatus: "IN_REVIEW",
+    openPointCount: 1, blockingPointCount: 0, comparisonId: "comparison-1", comparisonStatus: "READY",
+    totalSegments: 6, reviewedSegments: 4, unresolvedSegments: 2,
+    aiPromptDraftId: null, aiDraftStatus: null, aiApproved: false,
+    nextAction: { code: "RESOLVE_SEGMENTS", label: "Változtatási szakaszok elbírálása", rationale: "Kanonikus sorrend" },
+  };
+  const tile = deriveCaseInsightTiles(canonical, "case-1").find((item) => item.key === "document-review");
+  assert.equal(tile?.body, "Kanonikus szerződés.docx");
+  assert.equal(tile?.status, "Véleményezés alatt");
+  assert.match(tile?.detail || "", /Verzió: v2/);
+  assert.match(tile?.detail || "", /4 \/ 6 változás ellenőrizve/);
+  assert.match(tile?.detail || "", /1 nyitott észrevétel/);
+  assert.match(tile?.detail || "", /Következő: Változtatási szakaszok elbírálása/);
+  assert.doesNotMatch(`${tile?.status} ${tile?.detail}`, /IN_REVIEW|RESOLVE_SEGMENTS/);
+});
+
+test("Document review insight keeps blocking points, canonical actions, and safe no-comparison presentation distinct", () => {
+  const canonical = workspace();
+  canonical.documents[0].reviewSummary = {
+    documentId: "doc-1", caseId: "case-1", documentTitle: "Szerződés.docx", category: null, workStatus: "APPROVED",
+    currentVersionNumber: 3, currentVersionId: "version-3", previousVersionNumber: 2, previousVersionId: "version-2",
+    reviewId: "review-1", reviewVersionId: "version-3", reviewStatus: "APPROVED",
+    openPointCount: 2, blockingPointCount: 1, comparisonId: null, comparisonStatus: null,
+    totalSegments: 0, reviewedSegments: 0, unresolvedSegments: 0,
+    aiPromptDraftId: "ai-1", aiDraftStatus: "AI_DRAFT", aiApproved: false,
+    nextAction: { code: "APPROVE_REVIEW", label: "Véleményezés jóváhagyása", rationale: "AI tanácsadó" },
+  };
+  const tile = deriveCaseInsightTiles(canonical, "case-1").find((item) => item.key === "document-review");
+  assert.equal(tile?.status, "Jóváhagyva");
+  assert.match(tile?.detail || "", /2 nyitott észrevétel/);
+  assert.match(tile?.detail || "", /1 blokkoló észrevétel/);
+  assert.doesNotMatch(tile?.detail || "", /0 \/ 0/);
+  assert.match(tile?.detail || "", /Következő: Véleményezés jóváhagyása/);
+});
+
+test("Document review insight uses a neutral label for unknown canonical statuses and preserves the legacy fallback", () => {
+  const unknown = workspace();
+  unknown.documents[0].reviewSummary = {
+    documentId: "doc-1", caseId: "case-1", documentTitle: "Szerződés.docx", category: null, workStatus: null,
+    currentVersionNumber: null, currentVersionId: null, previousVersionNumber: null, previousVersionId: null,
+    reviewId: null, reviewVersionId: null, reviewStatus: "FUTURE_STATUS",
+    openPointCount: 0, blockingPointCount: 0, comparisonId: null, comparisonStatus: null,
+    totalSegments: 0, reviewedSegments: 0, unresolvedSegments: 0,
+    aiPromptDraftId: null, aiDraftStatus: null, aiApproved: false,
+    nextAction: { code: "RUN_COMPARISON", label: "Összehasonlítás szükséges", rationale: "Nincs összevetés" },
+  };
+  const unknownTile = deriveCaseInsightTiles(unknown, "case-1").find((item) => item.key === "document-review");
+  assert.equal(unknownTile?.status, "Ismeretlen review állapot");
+  assert.match(unknownTile?.detail || "", /Összehasonlítás szükséges/);
+  assert.doesNotMatch(`${unknownTile?.status} ${unknownTile?.detail}`, /FUTURE_STATUS|RUN_COMPARISON/);
+
+  const legacy = workspace();
+  legacy.documents[0].reviewSummary = null;
+  const fallback = deriveCaseInsightTiles(legacy, "case-1").find((item) => item.key === "document-review");
+  assert.equal(fallback?.status, "Belső felülvizsgálat");
+  assert.match(fallback?.detail || "", /Ellenőrző: Reviewer/);
+  assert.equal(fallback?.action?.href, "/cases/case-1/documents?documentId=doc-1");
+});
+
 test("Insight presentation maps document enums instead of rendering raw backend values", () => {
   assert.match(source, /humanEnumLabel\(activeReason === "REVIEW_PENDING"/);
   assert.doesNotMatch(source, /\{document\.workStatus\}/);
