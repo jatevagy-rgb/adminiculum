@@ -26,6 +26,13 @@ export type ComplianceFindingView = {
   subjectLabel?: string | null;
 };
 
+export type ComplianceControlGap =
+  | "EVIDENCED"
+  | "MISSING_CONTROL"
+  | "STALE_EVIDENCE"
+  | "MISSING_EVIDENCE"
+  | "NOT_ASSESSED";
+
 export type ComplianceControlSummary = {
   requirements: Array<{
     title: string;
@@ -35,6 +42,8 @@ export type ComplianceControlSummary = {
       owner: string | null;
       nextReviewAt: string | null;
       evidenceSummary: { acceptedCurrent: number; stale: number; missing: boolean };
+      /** Canonical workforce gap classification. Optional for older payloads. */
+      gap?: ComplianceControlGap | null;
     }>;
   }>;
 };
@@ -52,6 +61,39 @@ const complianceControlStatusLabels: Record<string, string> = {
   PARTIAL: "Részben bevezetve",
   NOT_IMPLEMENTED: "Nincs bevezetve",
 };
+
+export const complianceGapLabels: Record<ComplianceControlGap, string> = {
+  EVIDENCED: "Bizonyítékkal alátámasztva",
+  MISSING_CONTROL: "Hiányzó intézkedés",
+  STALE_EVIDENCE: "Elavult bizonyíték",
+  MISSING_EVIDENCE: "Hiányzó bizonyíték",
+  NOT_ASSESSED: "Nincs felmérve",
+};
+
+export const complianceGapClass: Record<ComplianceControlGap, string> = {
+  EVIDENCED: "border-[#BFD6C6] bg-[#EEF5F0] text-[var(--adm-green-800)]",
+  MISSING_CONTROL: "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]",
+  STALE_EVIDENCE: "border-[#DCCCA6] bg-[#FFF3D8] text-[#735D16]",
+  MISSING_EVIDENCE: "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]",
+  NOT_ASSESSED: "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]",
+};
+
+/**
+ * Presentation-only fallback for payloads produced before the canonical gap
+ * field existed. The backend classification stays authoritative when present.
+ */
+export function deriveControlEvidenceGap(control: {
+  implementationStatus: string | null;
+  gap?: ComplianceControlGap | null;
+  evidenceSummary: { acceptedCurrent: number; stale: number; missing: boolean };
+}): ComplianceControlGap {
+  if (control.gap) return control.gap;
+  if (control.implementationStatus === "NOT_IMPLEMENTED") return "MISSING_CONTROL";
+  if (control.evidenceSummary.acceptedCurrent > 0) return "EVIDENCED";
+  if (control.evidenceSummary.stale > 0) return "STALE_EVIDENCE";
+  if (!control.implementationStatus || control.implementationStatus === "NOT_ASSESSED") return "NOT_ASSESSED";
+  return "MISSING_EVIDENCE";
+}
 
 export function ComplianceControlsSection({
   state,
@@ -76,9 +118,14 @@ export function ComplianceControlsSection({
       {state.status === "success" && !controls.length ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített megfelelési intézkedés.</p> : null}
       {state.status === "success" && controls.length ? (
         <ul className="mt-3 space-y-3">
-          {controls.map((control, index) => (
+          {controls.map((control, index) => {
+            const gap = deriveControlEvidenceGap(control);
+            return (
             <li key={`${control.title}-${index}`} className="rounded border border-[var(--adm-border)] p-3">
-              <p className="font-medium text-[var(--adm-text)]">{control.title}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-medium text-[var(--adm-text)]">{control.title}</p>
+                <span className={`rounded border px-2 py-1 text-xs ${complianceGapClass[gap]}`}>{complianceGapLabels[gap]}</span>
+              </div>
               <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Állapot: {complianceControlStatusLabels[control.implementationStatus || "NOT_ASSESSED"] || "Nincs felmérve"}</p>
               {control.owner ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Felelős: {control.owner}</p> : null}
               <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
@@ -86,7 +133,8 @@ export function ComplianceControlsSection({
               </p>
               {control.nextReviewAt ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Következő felülvizsgálat: {control.nextReviewAt.slice(0, 10)}</p> : null}
             </li>
-          ))}
+            );
+          })}
         </ul>
       ) : null}
     </section>

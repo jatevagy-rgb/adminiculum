@@ -145,6 +145,7 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     await linkEvidenceToControl(actor, clientId, first.id, current.id, db);
     await expect(linkEvidenceToControl(actor, secondClientId, first.id, current.id, db)).rejects.toBeTruthy();
     expect((await getControlCoverage(actor, clientId, db)).requirements[0].controls[0].evidenceSummary.stale).toBe(1);
+    expect((await getControlCoverage(actor, clientId, db)).requirements[0].controls[0].gap).toBe('EVIDENCED');
     expect((await db.evidenceRecord.findUniqueOrThrow({ where: { id: stale.id } })).status).toBe('ACCEPTED');
     expect((await db.clientControl.findUniqueOrThrow({ where: { id: first.id } })).implementationStatus).toBe('NOT_ASSESSED');
     void definition;
@@ -237,5 +238,37 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     await db.requirementApplicability.create({ data: snapshot('APPLIES', new Date(nextEvaluation.getTime() + 2000)) });
     expect((await getControlCoverage(actor, clientId, db)).requirements).toHaveLength(1);
     void definition;
+  });
+
+  it('DISTINCT_CONTROL_GAPS: missing control, stale evidence, missing evidence and not assessed stay distinct', async () => {
+    const makeControl = async (label: string) => {
+      const definition = await createControlDefinition(actor, { key: `gap_${label}_${suffix}`, title: `Gap ${label}`, type: 'PROCEDURAL' }, db);
+      await mapControlToRequirement(actor, { requirementVersionId: versionId, controlDefinitionId: definition.id }, db);
+      return createClientControl(actor, clientId, { controlDefinitionId: definition.id }, db);
+    };
+
+    const missingControl = await makeControl('missingcontrol');
+    await updateClientControl(actor, clientId, missingControl.id, { implementationStatus: 'NOT_IMPLEMENTED' }, db);
+
+    const staleOnly = await makeControl('staleonly');
+    const expired = await createEvidenceRecord(actor, clientId, { sourceType: 'EXTERNAL_REFERENCE', title: 'Expired gap evidence', externalReference: 'https://example.invalid/gap-expired', validUntil: new Date('2020-01-01') }, db);
+    await reviewEvidenceRecord(actor, clientId, expired.id, { status: 'ACCEPTED' }, db);
+    await linkEvidenceToControl(actor, clientId, staleOnly.id, expired.id, db);
+    await updateClientControl(actor, clientId, staleOnly.id, { implementationStatus: 'IMPLEMENTED' }, db);
+
+    const missingEvidence = await makeControl('missingevidence');
+    await updateClientControl(actor, clientId, missingEvidence.id, { implementationStatus: 'IMPLEMENTED' }, db);
+
+    await makeControl('notassessed');
+
+    const coverage = await getControlCoverage(actor, clientId, db);
+    const byTitle = new Map(coverage.requirements.flatMap((item) => item.controls).map((control) => [control.title, control]));
+    expect(byTitle.get('Gap missingcontrol')?.gap).toBe('MISSING_CONTROL');
+    expect(byTitle.get('Gap staleonly')?.gap).toBe('STALE_EVIDENCE');
+    expect(byTitle.get('Gap missingevidence')?.gap).toBe('MISSING_EVIDENCE');
+    expect(byTitle.get('Gap notassessed')?.gap).toBe('NOT_ASSESSED');
+    // A stale-only accepted record must never be counted as current evidence.
+    expect(byTitle.get('Gap staleonly')?.evidenceSummary.acceptedCurrent).toBe(0);
+    expect(byTitle.get('Gap staleonly')?.evidenceSummary.stale).toBe(1);
   });
 });

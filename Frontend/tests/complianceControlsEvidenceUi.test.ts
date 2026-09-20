@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ComplianceControlsSection, type ComplianceControlSummary, type ComplianceControlsState } from "../src/components/clients/compliance/ComplianceOverview";
+import { ComplianceControlsSection, deriveControlEvidenceGap, type ComplianceControlSummary, type ComplianceControlsState } from "../src/components/clients/compliance/ComplianceOverview";
 
 const summary: ComplianceControlSummary = {
   requirements: [{
@@ -53,5 +53,49 @@ describe("compliance controls and evidence workforce UI", () => {
     const markup = renderToStaticMarkup(createElement(ComplianceControlsSection, { state: successState, onRetry: retry }));
     assert.doesNotMatch(markup, /%|control_|requirementVersion|documentVersion|clientFact|observation|reviewer|internal/i);
     assert.match(markup, /Intézkedések és bizonyítékok/);
+  });
+
+  it("DISTINCT_GAP_TYPES_RENDERED: evidence gaps are not collapsed into one missing state", () => {
+    const summary: ComplianceControlSummary = {
+      requirements: [{
+        title: "Követelmény",
+        controls: [
+          { title: "A", implementationStatus: "NOT_IMPLEMENTED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 0, stale: 0, missing: true }, gap: "MISSING_CONTROL" },
+          { title: "B", implementationStatus: "IMPLEMENTED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 0, stale: 1, missing: true }, gap: "STALE_EVIDENCE" },
+          { title: "C", implementationStatus: "IMPLEMENTED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 0, stale: 0, missing: true }, gap: "MISSING_EVIDENCE" },
+          { title: "D", implementationStatus: "NOT_ASSESSED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 0, stale: 0, missing: true }, gap: "NOT_ASSESSED" },
+          { title: "E", implementationStatus: "IMPLEMENTED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 1, stale: 0, missing: false }, gap: "EVIDENCED" },
+        ],
+      }],
+    };
+    const markup = renderToStaticMarkup(createElement(ComplianceControlsSection, { state: { status: "success", summary }, onRetry: retry }));
+    assert.match(markup, /Hiányzó intézkedés/);
+    assert.match(markup, /Elavult bizonyíték/);
+    assert.match(markup, /Hiányzó bizonyíték/);
+    assert.match(markup, /Bizonyítékkal alátámasztva/);
+    // Control C is marked implemented but must not read as evidenced.
+    assert.match(markup, /Hiányzó bizonyíték/);
+    assert.doesNotMatch(markup, /%|reviewer|internal|sourceVersion/i);
+  });
+
+  it("GAP_FALLBACK: stale-only evidence is never derived as evidenced without the canonical field", () => {
+    assert.equal(
+      deriveControlEvidenceGap({ implementationStatus: "IMPLEMENTED", evidenceSummary: { acceptedCurrent: 0, stale: 1, missing: true } }),
+      "STALE_EVIDENCE",
+    );
+    assert.equal(
+      deriveControlEvidenceGap({ implementationStatus: "NOT_IMPLEMENTED", evidenceSummary: { acceptedCurrent: 2, stale: 0, missing: false } }),
+      "MISSING_CONTROL",
+    );
+    assert.equal(
+      deriveControlEvidenceGap({ implementationStatus: "IMPLEMENTED", gap: "EVIDENCED", evidenceSummary: { acceptedCurrent: 0, stale: 0, missing: true } }),
+      "EVIDENCED",
+    );
+    const staleOnly: ComplianceControlSummary = {
+      requirements: [{ title: "T", controls: [{ title: "S", implementationStatus: "IMPLEMENTED", owner: null, nextReviewAt: null, evidenceSummary: { acceptedCurrent: 0, stale: 1, missing: true } }] }],
+    };
+    const markup = renderToStaticMarkup(createElement(ComplianceControlsSection, { state: { status: "success", summary: staleOnly }, onRetry: retry }));
+    assert.match(markup, /Elavult bizonyíték/);
+    assert.doesNotMatch(markup, /Bizonyítékkal alátámasztva/);
   });
 });

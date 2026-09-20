@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { answerCompanyProfileQuestion } from '../src/modules/client-workspace/companyProfileAnswerService';
-import { getControlEvidenceJourney, submitControlEvidenceAnswer } from '../src/modules/client-workspace/companyProfileEvidenceService';
+import { getControlEvidenceJourney, resolveControlEvidenceCatalog, submitControlEvidenceAnswer } from '../src/modules/client-workspace/companyProfileEvidenceService';
 import { seedComplianceModuleRuleFamilies } from '../src/modules/compliance/complianceModuleSeedingService';
 import { provisionComplianceModuleRules } from '../src/modules/compliance/complianceModuleProvisioning';
 import { createTypedFactInTx } from '../src/modules/compliance/typedFactMutationService';
@@ -170,11 +170,15 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
 
   it('NO_SECOND_EVIDENCE_MODEL: the journey reads back through the shared models only', async () => {
     const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
-    expect(journey.items).toHaveLength(3);
+    const keys = journey.items.map((item) => item.controlKey);
+    // Every eligible canonical safe control appears exactly once; no hard-coded
+    // representative subset and no duplicates.
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toEqual(['C-CYBER-001', 'C-CYBER-002', 'C-DATA-001', 'C-DATA-002', 'C-WB-001']);
     const gdpr = journey.items.find((item) => item.controlKey === 'C-DATA-002');
     expect(gdpr).toMatchObject({ implemented: true, evidenceLinked: true });
     expect(journey.items.map((item) => item.questionHu)).toEqual(expect.arrayContaining([
-      'Van jelenleg hatályos adatkezelési tájékoztatójuk?',
+      'Van jelenleg hatályos adatkezelési tájékoztatótok?',
     ]));
     expect(JSON.stringify(journey)).not.toContain('evidenceRecordId');
     expect(JSON.stringify(journey)).not.toContain('clientControlId');
@@ -200,7 +204,8 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
 
     await answer('personal_data_processing', { status: 'ANSWERED', booleanValue: false });
     journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
-    expect(journey.items.find((item) => item.controlKey === 'C-DATA-002')?.relevance).toBe('DOES_NOT_APPLY');
+    // Irrelevant controls are omitted, never rendered as a state.
+    expect(journey.items.find((item) => item.controlKey === 'C-DATA-002')).toBeUndefined();
 
     await answer('personal_data_processing', { status: 'UNKNOWN' });
     journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
@@ -225,5 +230,64 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     expect(journey.items[0]).toEqual(expect.objectContaining({ controlKey: expect.any(String), questionHu: expect.any(String), relevance: expect.any(String) }));
     expect(journey.reusableDocuments.some((doc) => doc.documentVersionId === documentVersionId)).toBe(true);
     expect(journey.reusableDocuments.every((doc) => typeof doc.documentVersionId === 'string' && typeof doc.label === 'string')).toBe(true);
+  });
+
+  it('ONE_DOCUMENT_VERSION_BACKS_MULTIPLE_CONTROLS_WITHOUT_COPYING', async () => {
+    const versionCountBefore = await db.documentVersion.count({ where: { documentId } });
+    const dataControl = await submitControlEvidenceAnswer(representativeId, workspaceId, 'C-DATA-001', { answer: 'YES', documentVersionId }, db);
+    const wbControl = await submitControlEvidenceAnswer(representativeId, workspaceId, 'C-WB-001', { answer: 'YES', documentVersionId }, db);
+    expect(dataControl).toMatchObject({ route: 'UPLOAD_OR_REUSE_DOCUMENT', implemented: true, documentVersionId });
+    expect(wbControl).toMatchObject({ route: 'UPLOAD_OR_REUSE_DOCUMENT', implemented: true, documentVersionId });
+    // No document or document-version copy is created to reuse the evidence.
+    expect(await db.documentVersion.count({ where: { documentId } })).toBe(versionCountBefore);
+    expect(await db.evidenceRecord.count({ where: { clientId, documentVersionId } })).toBeGreaterThanOrEqual(3);
+  });
+
+  it('EXPIRED_EVIDENCE_IS_STALE_AND_DOES_NOT_COUNT_AS_CURRENT', async () => {
+    const definition = await db.controlDefinition.findFirstOrThrow({ where: { key: 'C-CYBER-001' } });
+    const control = await db.clientControl.create({ data: { clientId, controlDefinitionId: definition.id, implementationStatus: 'IMPLEMENTED' } });
+    const expired = await db.evidenceRecord.create({
+      data: {
+        clientId, sourceType: 'EXTERNAL_REFERENCE', status: 'ACCEPTED', title: 'Lejárt bizonyíték',
+        externalReference: 'https://example.invalid/expired', validFrom: new Date('2020-01-01'), validUntil: new Date('2020-12-31'),
+        reviewedAt: new Date('2020-12-31'), reviewedByUserId: adminId,
+      },
+    });
+    await db.evidenceControlLink.create({ data: { clientId, evidenceRecordId: expired.id, clientControlId: control.id } });
+
+    const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    const item = journey.items.find((entry) => entry.controlKey === 'C-CYBER-001');
+    expect(item).toMatchObject({ implemented: false, evidenceLinked: false, relevance: 'LEGAL_REVIEW_REQUIRED' });
+
+    await db.evidenceControlLink.deleteMany({ where: { clientId, clientControlId: control.id } });
+    await db.evidenceRecord.deleteMany({ where: { id: expired.id } });
+    await db.clientControl.deleteMany({ where: { id: control.id } });
+  });
+
+  it('CONTROLS_WITHOUT_SAFE_METADATA_FAIL_CLOSED_AND_ARE_REPORTED', async () => {
+    const version = await db.requirementVersion.findFirstOrThrow({ where: { requirement: { key: 'GDPR_GENERAL_SCOPE' } } });
+    const unlistedKey = `C-INTERNAL-${suffix.replace(/-/g, '').slice(0, 8)}`;
+    const unlisted = await db.controlDefinition.create({ data: { key: unlistedKey, title: 'Belső kontroll', description: 'Belső megjegyzés', type: 'ORGANIZATIONAL' } });
+    await db.requirementControlMap.create({ data: { requirementVersionId: version.id, controlDefinitionId: unlisted.id } });
+
+    const safeDefinition = await db.controlDefinition.findFirstOrThrow({ where: { key: 'C-DATA-001' } });
+    const originalDescription = safeDefinition.description;
+    await db.controlDefinition.update({ where: { id: safeDefinition.id }, data: { description: null } });
+
+    try {
+      const catalog = await resolveControlEvidenceCatalog(clientId, db);
+      expect(catalog.omissions).toEqual(expect.arrayContaining([
+        { controlKey: unlistedKey, reason: 'NOT_PORTAL_VISIBLE' },
+        { controlKey: 'C-DATA-001', reason: 'NO_SAFE_QUESTION' },
+      ]));
+      const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+      expect(journey.items.some((item) => item.controlKey === unlistedKey)).toBe(false);
+      expect(journey.items.some((item) => item.controlKey === 'C-DATA-001')).toBe(false);
+      expect(journey.items.some((item) => item.questionHu === 'Belső megjegyzés')).toBe(false);
+    } finally {
+      await db.controlDefinition.update({ where: { id: safeDefinition.id }, data: { description: originalDescription } });
+      await db.requirementControlMap.deleteMany({ where: { controlDefinitionId: unlisted.id } });
+      await db.controlDefinition.deleteMany({ where: { id: unlisted.id } });
+    }
   });
 });

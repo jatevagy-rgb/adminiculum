@@ -34,6 +34,8 @@ export type ComplianceWorkspaceCitation = {
 export type ComplianceWorkspaceArea = {
   applicabilityId: string;
   requirementKey: string | null;
+  requirementVersionKey: string | null;
+  ruleVersionKey: string | null;
   title: string;
   domainLabel: string | null;
   outcome: ComplianceWorkspaceOutcome;

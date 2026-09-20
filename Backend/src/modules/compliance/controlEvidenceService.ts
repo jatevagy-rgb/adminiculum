@@ -1,5 +1,9 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientReadAccess, InteractionError, InternalActor, requireInternal, safeText } from '../client-interaction/base';
+import { classifyControlEvidenceGap } from './controlEvidenceGap';
+
+export { classifyControlEvidenceGap } from './controlEvidenceGap';
+export type { ControlEvidenceGap } from './controlEvidenceGap';
 
 type Prisma = typeof defaultPrisma;
 
@@ -289,6 +293,11 @@ export async function getControlCoverage(actor: InternalActor, clientId: string,
           lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,
           nextReviewAt: control?.nextReviewAt?.toISOString() || null,
           evidenceSummary: { acceptedCurrent: current.length, stale: accepted.length - current.length, missing: current.length === 0 },
+          gap: classifyControlEvidenceGap({
+            implementationStatus: control ? String(control.implementationStatus) : 'NOT_ASSESSED',
+            acceptedCurrent: current.length,
+            stale: accepted.length - current.length,
+          }),
         };
       }),
     })),
