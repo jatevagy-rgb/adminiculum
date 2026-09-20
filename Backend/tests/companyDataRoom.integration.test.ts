@@ -19,6 +19,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
   const adminId = crypto.randomUUID();
   const lawyerId = crypto.randomUUID();
   const otherLawyerId = crypto.randomUUID();
+  const hiddenLawyerId = crypto.randomUUID();
   const clientA = crypto.randomUUID();
   const clientB = crypto.randomUUID();
   const caseA = crypto.randomUUID();
@@ -62,6 +63,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
         { id: adminId, email: `data-room-admin-${suffix}@test.invalid`, name: 'Data Room Admin', role: 'ADMIN', status: 'ACTIVE', isActive: true },
         { id: lawyerId, email: `data-room-lawyer-${suffix}@test.invalid`, name: 'Data Room Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true },
         { id: otherLawyerId, email: `data-room-other-${suffix}@test.invalid`, name: 'Other Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true },
+        { id: hiddenLawyerId, email: `data-room-hidden-${suffix}@test.invalid`, name: 'Hidden Case Lawyer', role: 'LAWYER', status: 'ACTIVE', isActive: true },
       ] as never,
     });
     await db.client.createMany({
@@ -94,7 +96,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     await db.case.createMany({
       data: [
         { id: caseA, caseNumber: `DATA-ROOM-A-${suffix}`, title: 'Data Room A', caseType: 'OTHER', clientId: clientA, assignedLawyerId: lawyerId, createdById: adminId },
-        { id: caseA2, caseNumber: `DATA-ROOM-A2-${suffix}`, title: 'Data Room A2 Hidden Case', caseType: 'OTHER', clientId: clientA, assignedLawyerId: otherLawyerId, createdById: adminId },
+        { id: caseA2, caseNumber: `DATA-ROOM-A2-${suffix}`, title: 'Data Room A2 Hidden Case', caseType: 'OTHER', clientId: clientA, assignedLawyerId: hiddenLawyerId, createdById: adminId },
         { id: caseB, caseNumber: `DATA-ROOM-B-${suffix}`, title: 'Data Room B', caseType: 'OTHER', clientId: clientB, assignedLawyerId: otherLawyerId, createdById: adminId },
       ] as never,
     });
@@ -595,7 +597,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     const unknownFact = view.facts.find((fact) => fact.factDefinition?.key === `data_room_fact_${suffix}`);
     expect(unknownFact).toEqual(expect.objectContaining({ answerStatus: 'UNKNOWN', value: null }));
     expect(unknownFact?.factDefinition?.labelHu).toBeNull();
-    expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 1 });
+    expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 2 });
     expect(view.dataQuality.coverageAvailable).toBe(false);
     expect(view.dataQuality.relevantDataCoverage).toEqual(expect.objectContaining({
       answeredCount: 0,
