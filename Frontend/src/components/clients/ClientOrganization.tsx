@@ -207,21 +207,6 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
       {!loading && !error ? (
         <>
           <OrganizationEditor key={clientId} clientId={clientId} groups={groups} persons={filteredPersons} workspaces={workspaces} action={editorAction} onManagePermissionChanged={setCanManageOrganization} onSaved={async () => { setDetail(null); setSelectedId(null); setEditorAction(null); await load(); }} />
-          <Section title="Szervezeti adatok">
-            {overview?.profile?.summary ? <p className="text-sm text-[var(--adm-text)]">{overview.profile.summary}</p> : null}
-            {overview?.factGroups.length ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {overview.factGroups.map((group) => (
-                  <div key={group.key} className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--adm-text-muted)]">{group.label}</h3>
-                    <ul className="mt-2 space-y-1 text-sm text-[var(--adm-text)]">
-                      {group.facts.filter((fact) => fact.isCurrent).map((fact) => <li key={fact.id}>{fact.type}: {fact.value}</li>)}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            ) : !overview?.profile ? <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített szervezeti adat.</p> : null}
-          </Section>
 
           <Section title="Szervezeti hierarchia" empty={!groups.length && !ungrouped.length}>
             <div className="space-y-5">

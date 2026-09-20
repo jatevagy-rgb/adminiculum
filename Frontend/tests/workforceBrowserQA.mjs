@@ -347,8 +347,17 @@ async function assertComplianceMode(browser, mode, viewport) {
   await checkPage(qa.page, target, `Compliance ${mode} ${viewport.width}`);
   const body = await qa.page.locator("body").innerText();
     if (mode === "populated") {
-    for (const label of ["Áttekintés", "Adatok", "Szervezet", "Folyamatok", "Megfelelőség", "Fejlesztés"]) {
-      if (!body.includes(label)) throw new Error(`Missing compliance scope label: ${label}`);
+    for (const label of ["Áttekintés", "Vállalati profil", "Folyamatok", "Rendszerek", "Dokumentumok és bizonyítékok"]) {
+      if (!body.includes(label)) throw new Error(`Missing Company OS primary label: ${label}`);
+    }
+    for (const label of ["Szervezet", "Megfelelőség", "Fejlesztés"]) {
+      if (!body.includes(label)) throw new Error(`Missing cross-domain module summary label: ${label}`);
+    }
+    // The fact-engine audit and legacy views stay reachable from the secondary control.
+    await qa.page.locator('[data-testid="company-os-advanced-views"] > summary').click();
+    const advancedViews = await qa.page.locator('[data-testid="company-os-advanced-views"]').innerText();
+    for (const label of ["Adatok", "Adatminőség", "Operatív áttekintés"]) {
+      if (!advancedViews.includes(label)) throw new Error(`Missing advanced Company OS view: ${label}`);
     }
     if (!body.includes("Ismeretlen") || !body.includes("Nincs még adat")) throw new Error("UNKNOWN and UNANSWERED states were not separated");
     if (!body.includes("Becsült értékek") || !body.includes("Mért pillanatkép")) throw new Error("Estimated and measured values were merged");
@@ -414,7 +423,8 @@ async function main() {
       throw new Error("Processes panel should NOT be visible when overview is active");
     }
 
-    // Click on Adatok tab
+    // Adatok is an advanced view: reach it through the compact secondary control.
+    await navQa.page.locator('[data-testid="company-os-advanced-views"] > summary').click();
     await navQa.page.locator('button[data-testid="workspace-tab-data"]').click();
     await navQa.page.waitForTimeout(300);
     if (!navQa.page.url().includes("section=data")) {
@@ -463,11 +473,29 @@ async function main() {
       throw new Error("Browser Forward did not restore visible Processes section");
     }
 
-    // Switch to Operatív áttekintés tab
+    // Switch to Operatív áttekintés (advanced view behind the secondary control)
+    if (!await navQa.page.locator('button[data-testid="workspace-tab-operational"]').isVisible()) {
+      await navQa.page.locator('[data-testid="company-os-advanced-views"] > summary').click();
+    }
     await navQa.page.locator('button[data-testid="workspace-tab-operational"]').click();
     await navQa.page.waitForTimeout(300);
     if (!await navQa.page.locator('[data-testid="legacy-operational-overview"]').isVisible()) {
       throw new Error("Legacy operational overview should be visible when operational tab is selected");
+    }
+
+    // Legacy deep links keep reaching the advanced fact/audit views unchanged.
+    await navQa.page.goto(`${BASE_URL}${cwTarget}?section=data-quality`, { waitUntil: "networkidle" });
+    await navQa.page.waitForTimeout(300);
+    if (!navQa.page.url().includes("section=data-quality")) {
+      throw new Error("?section=data-quality deep link did not preserve the query parameter");
+    }
+    if (!await navQa.page.locator('[data-section-id="data-quality"]').isVisible()) {
+      throw new Error("?section=data-quality deep link did not reach the data quality view");
+    }
+    await navQa.page.goto(`${BASE_URL}${cwTarget}#operational`, { waitUntil: "networkidle" });
+    await navQa.page.waitForTimeout(300);
+    if (!await navQa.page.locator('[data-testid="legacy-operational-overview"]').isVisible()) {
+      throw new Error("#operational hash deep link did not reach the legacy operational view");
     }
 
     await navQa.context.close();
