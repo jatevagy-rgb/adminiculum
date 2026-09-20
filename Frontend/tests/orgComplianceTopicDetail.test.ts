@@ -79,16 +79,16 @@ describe("Compliance overview truthful status summary", () => {
       topic({ topicId: "e", state: "RESOLVED" }),
       topic({ topicId: "f", state: "RESOLVED", missingInformation: [missing()] }),
     ];
-    assert.deepEqual(summaryGroups(topics), { customerAction: 3, progress: 2, noAction: 1 });
+    assert.deepEqual(summaryGroups(topics), { customerAction: 3, atOffice: 2, noAction: 1 });
     // The groups partition every topic exactly once.
     const g = summaryGroups(topics);
-    assert.equal(g.customerAction + g.progress + g.noAction, topics.length);
+    assert.equal(g.customerAction + g.atOffice + g.noAction, topics.length);
   });
 
-  it("renders the three approved status labels and derives them from summaryGroups", () => {
+  it("renders the three approved mutually exclusive status labels from summaryGroups", () => {
     const src = source();
-    assert.match(src, /label="Teendőt igényel"/);
-    assert.match(src, /label="Folyamatban \/ ügyvédi vizsgálat"/);
+    assert.match(src, /label="Öntől szükséges"/);
+    assert.match(src, /label="Irodánál van"/);
     assert.match(src, /label="Jelenleg nincs ügyfélteendő"/);
     assert.match(src, /summaryGroups\(topics\)/);
   });
