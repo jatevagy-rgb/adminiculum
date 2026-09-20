@@ -8,6 +8,7 @@
  */
 import { prisma } from '../../prisma/prisma.service';
 import { buildCockpit, type CaseCockpit } from './workspaceCockpit';
+import { getCaseDocumentReviewSummaries, type DocumentReviewSummaryDto } from '../documents/reviewProjection.service';
 
 const TASK_LIMIT = 8;
 const DOCUMENT_LIMIT = 8;
@@ -110,6 +111,7 @@ export interface CaseWorkspaceDto {
     reviewer: { id: string; name: string } | null;
     dueDate: string | null;
     nextStep: string | null;
+    reviewSummary: DocumentReviewSummaryDto | null;
   }>;
   deadlines: Array<{
     id: string;
@@ -361,6 +363,26 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
   if (documents.length > 0) {
     warnings.push({ section: 'documents', code: 'DOCUMENT_META_LIMITED', message: 'A dokumentum feltöltő/összefoglaló adat a jelenlegi modellből nem elérhető.' });
   }
+
+  const reviewSummaries = await safe(
+    'documents',
+    'DOCUMENT_REVIEWS_UNAVAILABLE',
+    'A dokumentumok felülvizsgálati állapota most nem elérhető.',
+    async () => {
+      const summaryResult = await getCaseDocumentReviewSummaries(caseId, {
+        limit: DOCUMENT_LIMIT,
+        documents: documents.slice(0, DOCUMENT_LIMIT),
+      });
+      const map = new Map<string, DocumentReviewSummaryDto>();
+      for (const item of summaryResult.items) {
+        map.set(item.documentId, item);
+      }
+      return map;
+    },
+    new Map<string, DocumentReviewSummaryDto>(),
+    warnings,
+  );
+
   const documentsDto = documents.slice(0, DOCUMENT_LIMIT).map((d) => ({
     id: d.id,
     fileName: d.fileName || d.name || 'Dokumentum',
@@ -378,6 +400,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     reviewer: d.reviewer ? { id: d.reviewer.id, name: d.reviewer.name } : null,
     dueDate: iso(d.dueDate),
     nextStep: d.nextStep ?? null,
+    reviewSummary: reviewSummaries.get(d.id) ?? null,
   }));
 
   // ---- deadlines: derived from open tasks that carry a dueDate (reliable

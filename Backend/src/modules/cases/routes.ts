@@ -13,6 +13,7 @@ import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
 import { getCaseWorkspace } from './workspace';
+import { getCaseDocumentReviewSummaries, parseBoundedInt } from '../documents/reviewProjection.service';
 import { createCaseComment, listCaseComments, resolveCaseComment, reopenCaseComment, sendCaseCommentError } from './caseComments.service';
 import { createCaseIntake, CaseIntakeError } from './intakeCreate.service';
 import { CaseWorkPackageError } from './caseWorkPackage.service';
@@ -318,6 +319,23 @@ router.get('/:caseId/workspace', authenticate, requireCaseReadAccess, async (req
     res.json(workspace);
   } catch (error) {
     console.error('Get case workspace error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
+  }
+});
+
+// ============================================================================
+// GET /cases/:caseId/document-reviews — case document review summaries
+// ============================================================================
+router.get('/:caseId/document-reviews', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { caseId } = req.params as { caseId: string };
+    const limit = req.query.limit !== undefined
+      ? parseBoundedInt(req.query.limit, 1, 50, 20)
+      : undefined;
+    const summaries = await getCaseDocumentReviewSummaries(caseId, { limit });
+    res.json(summaries);
+  } catch (error) {
+    console.error('Get case document reviews error:', error);
     res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });
   }
 });

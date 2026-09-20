@@ -75,6 +75,14 @@ import { DocumentWorkspaceHeader } from "@/components/documents/workContext/Docu
 import { DocumentWorkspaceTabs } from "@/components/documents/workContext/DocumentWorkspaceTabs";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
+import {
+  addReviewPoint,
+  listDocumentReviews,
+  listReviewPoints,
+  transitionDocumentReview,
+  updateReviewPoint,
+} from "@/lib/documents/reviewWorkflowApi";
+import { updateSegment, type SegmentDto } from "@/lib/documents/comparisonApi";
 import { ClientPublicationPanel, type ClientPublicationPrefillDraft } from "@/components/documents/publication/ClientPublicationPanel";
 import { LegalAnalysisIntakePanel } from "@/components/documents/LegalAnalysisIntakePanel";
 import { useUiPack } from "@/lib/uiPack";
@@ -328,6 +336,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [modifiedWorkingCopies, setModifiedWorkingCopies] = useState<DocumentItem[]>([]);
   const [ledgerSearch, setLedgerSearch] = useState("");
   const [aiPreparationOpen, setAiPreparationOpen] = useState(false);
+  const [aiVersionPair, setAiVersionPair] = useState<string[] | null>(null);
   const [readingFocus, setReadingFocus] = useState(false);
   const [readerZoom, setReaderZoom] = useState(100);
   const [caseRecord, setCaseRecord] = useState<{
@@ -401,6 +410,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
   const [isCreatingAnnotation, setIsCreatingAnnotation] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [annotationFocusMessage, setAnnotationFocusMessage] = useState<string | null>(null);
   const [versionText, setVersionText] = useState<string | null>(null);
   const [isLoadingVersionText, setIsLoadingVersionText] = useState(false);
   // Controlled "preview unavailable" state for a version whose stored content
@@ -431,8 +441,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     pageIndex: number;
   } | null>(null);
   const [visualMode, setVisualMode] = useState<Extract<DocumentAnnotationAnchorType, 'PAGE_RECTANGLE' | 'PAGE_ELLIPSE' | 'PAGE_POINT'> | null>(null);
-  const [contextualTab, setContextualTab] = useState<'review' | 'elemzes' | 'ugyfel' | 'leadas'>('review');
+  const [contextualTab, setContextualTab] = useState<'review' | 'changes' | 'comments' | 'elemzes' | 'ugyfel' | 'leadas'>('review');
   const [visitedContextualTabs, setVisitedContextualTabs] = useState<Record<string, boolean>>({ review: true });
+  const [segmentChangeRequest, setSegmentChangeRequest] = useState<SegmentDto | null>(null);
+  const [segmentChangeReason, setSegmentChangeReason] = useState("");
+  const [segmentRequestedChange, setSegmentRequestedChange] = useState("");
+  const [segmentChangeBusy, setSegmentChangeBusy] = useState(false);
   const [publicationPrefill, setPublicationPrefill] = useState<ClientPublicationPrefillDraft | null>(null);
 
   useEffect(() => {
@@ -1249,6 +1263,57 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const canRenderPageSurface = annotationCapabilities.canNavigateToPageAnchor;
   const openAnnotationCount = annotations.filter((annotation) => annotation.status !== 'RESOLVED').length;
 
+  const focusAnnotation = (annotation: DocumentAnnotationItem) => {
+    setSelectedAnnotationId(annotation.id);
+    setAnnotationFocusMessage(null);
+
+    if (
+      annotation.anchorType === 'TEXT_RANGE'
+      && annotationCapabilities.canNavigateToTextAnchor
+      && annotation.startOffset !== null
+      && annotation.endOffset !== null
+    ) {
+      globalThis.requestAnimationFrame?.(() => {
+        const target = document.getElementById(`annotation-anchor-${annotation.id}`);
+        if (!target) {
+          setAnnotationFocusMessage('A szöveghorgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.');
+          return;
+        }
+        target.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
+      });
+      return;
+    }
+
+    const isPageAnchor =
+      annotation.anchorType === 'PAGE_RECTANGLE' ||
+      annotation.anchorType === 'PAGE_ELLIPSE' ||
+      annotation.anchorType === 'PAGE_POINT';
+    if (isPageAnchor && annotationCapabilities.canNavigateToPageAnchor) {
+      globalThis.requestAnimationFrame?.(() => {
+        const target = document.getElementById(`visual-annotation-anchor-${annotation.id}`);
+        if (!target) {
+          setAnnotationFocusMessage('A vizuális horgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.');
+          return;
+        }
+        target.focus({ preventScroll: true });
+        target.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
+      });
+      return;
+    }
+
+    setAnnotationFocusMessage(
+      annotation.anchorType === 'TEXT_RANGE'
+        ? 'A szöveghorgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.'
+        : 'A vizuális horgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.',
+    );
+  };
+
   const refreshAnnotations = useCallback(async (documentId: string, versionId: string) => {
     setIsLoadingAnnotations(true);
     setAnnotationError(null);
@@ -1422,6 +1487,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     setPendingTextAnchor(null);
     setPendingVisualAnchor(null);
     setVisualMode(null);
+    setAnnotationFocusMessage(null);
     if (versionTextPlan === 'VERSION_BLOB' && selectedVersionDocumentId && selectedVersionStableId) {
       setIsLoadingVersionText(true);
       downloadDocumentVersion(selectedVersionDocumentId, selectedVersionStableId)
@@ -1670,6 +1736,65 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     setCommentDraft('');
   };
 
+  const handleSegmentRequestChanges = (segment: SegmentDto) => {
+    setSegmentChangeRequest(segment);
+    setSegmentChangeReason('');
+    setSegmentRequestedChange('');
+  };
+
+  const submitSegmentRequestChanges = async () => {
+    if (!segmentChangeRequest || !selectedUploadedDocument?.id || !selectedVersion?.id) return;
+    const reason = segmentChangeReason.trim();
+    const requestedChange = segmentRequestedChange.trim();
+    if (!reason || !requestedChange) {
+      setActionResult({ type: 'error', message: 'A módosítás kéréséhez mindkét mezőt ki kell tölteni.' });
+      return;
+    }
+    setSegmentChangeBusy(true);
+    try {
+      const reviews = await listDocumentReviews(selectedUploadedDocument.id);
+      const review = reviews.find((item) =>
+        item.reviewVersionId === selectedVersion.id
+        && ['IN_REVIEW', 'RESUBMITTED'].includes(String(item.status)),
+      ) || null;
+      if (!review) {
+        throw new Error('A kiválasztott immutable verzióhoz nincs aktív review.');
+      }
+      const safeRationale = `Indok:\n${reason}\n\nKért módosítás:\n${requestedChange}`;
+      const existingPoints = await listReviewPoints(review.id, { type: 'COMPARISON_CHANGE' });
+      const existingPoint = existingPoints.data.find(
+        (point) => point.comparisonSegmentId === segmentChangeRequest.id,
+      );
+      if (existingPoint) {
+        await updateReviewPoint(review.id, existingPoint.id, {
+          status: 'OPEN',
+          severity: 'IMPORTANT',
+          internalRationale: safeRationale,
+          expectedRevision: existingPoint.revision,
+        });
+      } else {
+        await addReviewPoint(review.id, {
+          title: `Módosítási kérés · ${segmentChangeRequest.sequence + 1}. változás`,
+          type: 'COMPARISON_CHANGE',
+          severity: 'IMPORTANT',
+          comparisonSegmentId: segmentChangeRequest.id,
+          internalRationale: safeRationale,
+        });
+      }
+      await updateSegment(segmentChangeRequest.comparisonId, segmentChangeRequest.id, {
+        reviewState: 'NEEDS_DISCUSSION',
+        expectedRevision: segmentChangeRequest.revision,
+      });
+      setSegmentChangeRequest(null);
+      setActionResult({ type: 'success', message: 'A változás megbeszélendőként és review pontként rögzítve.' });
+      setContextualTab('review');
+    } catch {
+      setActionResult({ type: 'error', message: 'A módosítási kérés nem sikerült.' });
+    } finally {
+      setSegmentChangeBusy(false);
+    }
+  };
+
   const renderAnnotatedText = () => {
     if (!versionText) return null;
     const ranges = annotations
@@ -1685,8 +1810,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       nodes.push(
         <mark
           key={annotation.id}
+          id={`annotation-anchor-${annotation.id}`}
+          data-annotation-id={annotation.id}
+          aria-current={selectedAnnotationId === annotation.id ? 'true' : undefined}
           className={`cursor-pointer rounded px-0.5 ${selectedAnnotationId === annotation.id ? 'bg-[#D8C58E]' : 'bg-[#FEF3C7]'}`}
-          onClick={() => setSelectedAnnotationId(annotation.id)}
+          onClick={() => focusAnnotation(annotation)}
         >
           {versionText.slice(start, end)}
         </mark>
@@ -1865,9 +1993,43 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <AIPromptPreparationModal
                     caseId={canonicalCaseId}
                     documentId={selectedUploadedDocument.id}
-                    documentVersionId={canonicalActiveVersion?.id}
-                    onClose={() => setAiPreparationOpen(false)}
+                    documentVersionId={aiVersionPair ? null : canonicalActiveVersion?.id}
+                    documentVersionIds={aiVersionPair || undefined}
+                    onClose={() => { setAiPreparationOpen(false); setAiVersionPair(null); }}
                   />
+                ) : null}
+
+                {segmentChangeRequest ? (
+                  <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" role="presentation">
+                    <section role="dialog" aria-modal="true" aria-labelledby="segment-change-request-title" className="w-full max-w-xl rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5 shadow-2xl">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Kanonikus review kérés</p>
+                          <h2 id="segment-change-request-title" className="font-serif text-xl font-semibold text-[var(--adm-text)]">Módosítást kérek</h2>
+                        </div>
+                        <AdminButton variant="neutral" size="xs" onClick={() => setSegmentChangeRequest(null)} disabled={segmentChangeBusy}>Bezárás</AdminButton>
+                      </div>
+                      <div className="mt-3 space-y-3">
+                        <div className="rounded border border-[rgba(22,32,26,0.10)] bg-white p-3 text-xs text-[#3D4842]">
+                          <p><b>Változás:</b> {segmentChangeRequest.sequence + 1}. · {segmentChangeRequest.baseExcerpt || '—'} → {segmentChangeRequest.targetExcerpt || '—'}</p>
+                        </div>
+                        <label className="block text-sm font-semibold text-[var(--adm-text)]">
+                          Miért kéred a módosítást?
+                          <textarea data-testid="segment-change-reason" value={segmentChangeReason} onChange={(event) => setSegmentChangeReason(event.target.value)} rows={3} className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm" />
+                        </label>
+                        <label className="block text-sm font-semibold text-[var(--adm-text)]">
+                          Mit kell módosítani?
+                          <textarea data-testid="segment-requested-change" value={segmentRequestedChange} onChange={(event) => setSegmentRequestedChange(event.target.value)} rows={3} className="mt-1 w-full rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-sm" />
+                        </label>
+                        <div className="flex justify-end gap-2">
+                          <AdminButton variant="neutral" onClick={() => setSegmentChangeRequest(null)} disabled={segmentChangeBusy}>Mégse</AdminButton>
+                          <AdminButton variant="gold" onClick={() => void submitSegmentRequestChanges()} disabled={segmentChangeBusy || !segmentChangeReason.trim() || !segmentRequestedChange.trim()}>
+                            {segmentChangeBusy ? 'Mentés…' : 'Módosítás kérése'}
+                          </AdminButton>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
                 ) : null}
 
                 {/* 2. CANONICAL 3-COLUMN WORKSPACE: LEFT (LEDGER) | CENTER (READING) | RIGHT (CONTEXTUAL SHELL) */}
@@ -1875,7 +2037,19 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   {/* CANONICAL LEFT REGION: Document Ledger */}
                   <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " xl:hidden" : ""}`}>
                     <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-4">
-                      <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Workspace elemek</h2>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Jogi munka</p>
+                      <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">AI / prompt előkészítés</h2>
+                      <p className="mt-1 text-[11px] text-[#3D4842]">Anonimizálás, export, import és emberi ellenőrzés a kanonikus Prompt Systemen keresztül.</p>
+                      {selectedUploadedDocument ? (
+                        <AdminButton className="mt-3 w-full justify-start" variant="primary" size="xs" onClick={() => { setAiVersionPair(null); setAiPreparationOpen(true); }}>
+                          AI előkészítés megnyitása
+                        </AdminButton>
+                      ) : null}
+                    </div>
+                    <div className="border-b border-[var(--adm-border)] bg-white p-3">
+                      <details data-testid="document-version-navigation">
+                        <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Dokumentumok és verziók</summary>
+                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Dokumentumváltás, verzióváltás, feltöltés és letöltés.</p>
                       <label className="mt-2 block">
                         <span className="sr-only">Dokumentum keresése</span>
                         <input
@@ -1897,8 +2071,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           {isUploading ? "Hozzáadás..." : "+ Dokumentum hozzáadása"}
                         </AdminButton>
                       </div>
-                    </div>
-                    <div className="max-h-[680px] space-y-4 overflow-y-auto p-3">
+                    <div className="max-h-[520px] space-y-4 overflow-y-auto p-3">
                       <section className="space-y-2">
                         <div className="flex items-center justify-between">
                           <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Feltöltött dokumentumok</h3>
@@ -1972,6 +2145,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         && filteredGeneratedLedgerItems.length === 0 ? (
                         <p data-testid="ledger-search-empty" className="adm-board-empty p-3 text-[12px] text-[var(--adm-text-muted)]">Nincs találat a keresésre.</p>
                       ) : null}
+                    </div>
+                      </details>
                     </div>
                   </aside>
 
@@ -2139,14 +2314,32 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </span>
                         <span className="text-[11px] text-[var(--adm-text-muted)]">Munkafelületek</span>
                       </div>
-                      <div className="mt-2 grid grid-cols-4 gap-1 rounded-[8px] bg-white/80 p-1 text-[11px] font-semibold">
+                      <div className="mt-2 grid grid-cols-3 gap-1 rounded-[8px] bg-white/80 p-1 text-[11px] font-semibold">
                         <button
                           type="button"
                           onClick={() => setContextualTab('review')}
                           className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'review' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
                         >
-                          Review
+                          Áttekintés
                         </button>
+                        <button
+                          type="button"
+                          data-testid="contextual-tab-changes"
+                          onClick={() => setContextualTab('changes')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'changes' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                        >
+                          Változások
+                        </button>
+                        <button
+                          type="button"
+                          data-testid="contextual-tab-comments"
+                          onClick={() => setContextualTab('comments')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'comments' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                        >
+                          Megjegyzések
+                        </button>
+                      </div>
+                      <div className="mt-1 grid grid-cols-3 gap-1 rounded-[8px] bg-white/80 p-1 text-[11px] font-semibold">
                         <button
                           type="button"
                           onClick={() => setContextualTab('elemzes')}
@@ -2278,7 +2471,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <button
                                   key={annotation.id}
                                   type="button"
-                                  onClick={() => setSelectedAnnotationId(annotation.id)}
+                                  onClick={() => focusAnnotation(annotation)}
                                   className={`w-full rounded-[8px] border p-2 text-left transition ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.10)] bg-white hover:bg-[var(--adm-surface)]'}`}
                                 >
                                   <div className="flex items-center justify-between gap-1">
@@ -2343,6 +2536,77 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </div>
                         )}
                       </div>
+
+                      {visitedContextualTabs['changes'] ? (
+                        <div className={contextualTab === 'changes' ? 'space-y-4' : 'hidden'} data-testid="contextual-changes-panel">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Gyors jogi review</p>
+                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Változások</h4>
+                            <p className="mt-1 text-xs text-[#3D4842]">A dokumentum marad a központi olvasó; itt a kiválasztott immutable verziópár review-térképe látható.</p>
+                          </div>
+                          {selectedUploadedDocument && versions.length >= 2 ? (
+                            <section data-testid="cmp-workspace-section">
+                              <ComparisonWorkspace
+                              documentId={selectedUploadedDocument.id}
+                              documentTitle={activeTitle || selectedUploadedDocument.fileName || "Dokumentum"}
+                              versions={versions.map((v) => ({ id: v.id, versionNumber: v.versionNumber, isCurrent: v.isCurrent, supported: getFileType(v.originalFileName) === "TXT" }))}
+                              currentVersionNumber={versions.find((v) => v.isCurrent)?.versionNumber ?? null}
+                              onDownload={() => { if (selectedVersion) void handleDownloadVersion(selectedVersion); }}
+                              canManage={caseRecord?.status !== "ARCHIVED"}
+                              onPrepareAiComparison={(baseVersionId, targetVersionId) => {
+                                setAiVersionPair([baseVersionId, targetVersionId]);
+                                setAiPreparationOpen(true);
+                              }}
+                              onRequestSegmentChanges={handleSegmentRequestChanges}
+                              />
+                            </section>
+                          ) : (
+                            <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Legalább két immutable verzió szükséges a változástérképhez.</p>
+                          )}
+                        </div>
+                      ) : null}
+
+                      {visitedContextualTabs['comments'] ? (
+                        <div className={contextualTab === 'comments' ? 'space-y-4' : 'hidden'} data-testid="contextual-comments-panel">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Verzióhoz kötött megjegyzések</p>
+                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Megjegyzések</h4>
+                            <p className="mt-1 text-xs text-[#3D4842]">A kiválasztott verzió DocumentAnnotation elemei és kommentfolyamai.</p>
+                          </div>
+                          {isLoadingAnnotations ? <p className="text-xs text-[var(--adm-text-muted)]">Megjegyzések betöltése...</p> : annotations.length === 0 ? (
+                            <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Még nincs megjegyzés ezen a verzión.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              {annotations.map((annotation) => (
+                                <button key={annotation.id} type="button" onClick={() => focusAnnotation(annotation)} className={`w-full rounded border p-3 text-left ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white'}`}>
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-green-800)]">{ANNOTATION_TYPE_LABELS[annotation.annotationType]}</p>
+                                  <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{annotation.headline || annotation.selectedText || 'Megjegyzés'}</p>
+                                  {annotation.selectedText ? <p className="mt-1 line-clamp-2 text-xs italic text-[#3D4842]">“{annotation.selectedText}”</p> : null}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {annotationFocusMessage ? (
+                            <p data-testid="annotation-focus-message" className="rounded border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-2 text-xs text-[#3D4842]">
+                              {annotationFocusMessage}
+                            </p>
+                          ) : null}
+                          {selectedAnnotation ? (
+                            <div data-testid="comments-selected-annotation" className="space-y-2 rounded border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Kiválasztott megjegyzés</p>
+                              {selectedAnnotation.selectedText ? (
+                                <p className="rounded bg-white p-2 text-xs italic text-[#3D4842]">“{selectedAnnotation.selectedText}”</p>
+                              ) : null}
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Kommentek</p>
+                              {annotationComments.length > 0 ? annotationComments.map((comment) => (
+                                <p key={comment.id} className="rounded bg-white p-2 text-xs text-[#3D4842]">{comment.body}</p>
+                              )) : (
+                                <p className="text-xs text-[var(--adm-text-muted)]">Ehhez a megjegyzéshez még nincs komment.</p>
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       {visitedContextualTabs['elemzes'] ? (
                         <div className={contextualTab === 'elemzes' ? 'space-y-4' : 'hidden'}>
@@ -2786,8 +3050,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <button
                                         key={annotation.id}
                                         type="button"
+                                        id={`visual-annotation-anchor-${annotation.id}`}
                                         aria-label={annotation.headline || ANNOTATION_TYPE_LABELS[annotation.annotationType]}
-                                        onClick={() => setSelectedAnnotationId(annotation.id)}
+                                        onClick={() => focusAnnotation(annotation)}
                                         className={`absolute border-2 bg-[#D8C58E]/20 ${annotation.anchorType === 'PAGE_ELLIPSE' ? 'rounded-full' : 'rounded'} ${selectedAnnotationId === annotation.id ? 'border-[#8A6A20]' : 'border-[#D8C58E]'}`}
                                         style={{
                                           left: `${(annotation.rect.x || 0) * 100}%`,
@@ -2801,8 +3066,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <button
                                         key={annotation.id}
                                         type="button"
+                                        id={`visual-annotation-anchor-${annotation.id}`}
                                         aria-label={annotation.headline || ANNOTATION_TYPE_LABELS[annotation.annotationType]}
-                                        onClick={() => setSelectedAnnotationId(annotation.id)}
+                                        onClick={() => focusAnnotation(annotation)}
                                         className={`absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${selectedAnnotationId === annotation.id ? 'border-[#8A6A20] bg-[#D8C58E]' : 'border-[#D8C58E] bg-white'}`}
                                         style={{
                                           left: `${(annotation.point.x || 0) * 100}%`,
@@ -2901,7 +3167,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <button
                                         key={annotation.id}
                                         type="button"
-                                        onClick={() => setSelectedAnnotationId(annotation.id)}
+                                        onClick={() => focusAnnotation(annotation)}
                                         className={`w-full rounded-[10px] border p-3 text-left ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white'}`}
                                       >
                                         <div className="flex items-center justify-between gap-2">
@@ -2976,19 +3242,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 )}
                   </div>
                 </section>
-
-                {selectedUploadedDocument && versions.length >= 2 ? (
-                  <section className="adm-board-panel min-w-0 overflow-hidden p-4 xl:col-start-2" data-testid="cmp-workspace-section">
-                    <ComparisonWorkspace
-                      documentId={selectedUploadedDocument.id}
-                      documentTitle={activeTitle || selectedUploadedDocument.fileName || "Dokumentum"}
-                      versions={versions.map((v) => ({ id: v.id, versionNumber: v.versionNumber, isCurrent: v.isCurrent, supported: getFileType(v.originalFileName) === "TXT" }))}
-                      currentVersionNumber={versions.find((v) => v.isCurrent)?.versionNumber ?? null}
-                      onDownload={() => { if (selectedVersion) void handleDownloadVersion(selectedVersion); }}
-                      canManage={caseRecord?.status !== "ARCHIVED"}
-                    />
-                  </section>
-                ) : null}
 
                 <aside className="grid min-w-0 gap-3 md:grid-cols-2 xl:col-start-2">
                   <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)]">

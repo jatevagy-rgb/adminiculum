@@ -22,6 +22,7 @@ type Props = {
   caseId: string;
   documentId?: string;
   documentVersionId?: string | null;
+  documentVersionIds?: string[];
   /** Preselect this canonical template id when the modal opens. */
   initialTemplateId?: string;
   onClose: () => void;
@@ -42,7 +43,7 @@ function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-export function AIPromptPreparationModal({ caseId, documentId, documentVersionId, initialTemplateId, onClose }: Props) {
+export function AIPromptPreparationModal({ caseId, documentId, documentVersionId, documentVersionIds, initialTemplateId, onClose }: Props) {
   const [templates, setTemplates] = useState<AiPromptTemplate[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [drafts, setDrafts] = useState<AiPromptDraft[]>([]);
@@ -111,7 +112,11 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
     await run(() => prepareAiPrompt(caseId, {
       promptTemplateId: templateId,
       sourceDocumentIds: selectedDocumentIds,
-      sourceDocumentVersionIds: documentVersionId ? [documentVersionId] : [],
+      sourceDocumentVersionIds: documentVersionIds?.length
+        ? documentVersionIds
+        : documentVersionId
+          ? [documentVersionId]
+          : [],
       lawyerInstruction: instruction || null,
       additionalContext: additionalContext || null,
     }));
@@ -183,6 +188,11 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
                   </label>
                 ))}
               </div>
+              {documentVersionIds && documentVersionIds.length > 0 ? (
+                <p data-testid="ai-version-pair" className="mt-2 rounded border border-[#E7DECB] bg-[var(--adm-sand-100)] p-2 text-[11px] text-[#3D4842]">
+                  Pontos immutable forráspár: {documentVersionIds.map((id) => id.slice(0, 8)).join(" → ")}
+                </p>
+              ) : null}
             </fieldset>
 
             <label className="block text-xs font-semibold text-[var(--adm-text)]">

@@ -11,7 +11,8 @@
  * No document-content editing, no AI controls, no client-publication action.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { SegmentFilters } from "@/lib/documents/comparisonApi";
+import { AdminButton } from "@/components/adminiculum/ui";
+import type { SegmentDto, SegmentFilters } from "@/lib/documents/comparisonApi";
 import { getComparison } from "@/lib/documents/comparisonApi";
 import { useDocumentComparison, useComparisonSegments, useComparisonSegmentMutation, useComparisonKeyboardNavigation } from "./useComparison";
 import { ComparisonHeader, ComparisonToolbar, ComparisonTechnicalDetails, VersionPairSelector, type VersionOption } from "./header";
@@ -24,7 +25,7 @@ import {
 } from "./states";
 
 export function ComparisonWorkspace({
-  documentId, documentTitle, versions, currentVersionNumber, onDownload, canManage = true,
+  documentId, documentTitle, versions, currentVersionNumber, onDownload, canManage = true, onPrepareAiComparison, onRequestSegmentChanges,
 }: {
   documentId: string;
   documentTitle: string;
@@ -32,6 +33,8 @@ export function ComparisonWorkspace({
   currentVersionNumber: number | null;
   onDownload?: () => void;
   canManage?: boolean;
+  onPrepareAiComparison?: (baseVersionId: string, targetVersionId: string) => void;
+  onRequestSegmentChanges?: (segment: SegmentDto) => void;
 }) {
   const current = versions.find((v) => v.isCurrent) || versions[versions.length - 1] || null;
   const previous = current ? versions.filter((v) => v.versionNumber < current.versionNumber).sort((a, b) => b.versionNumber - a.versionNumber)[0] : null;
@@ -82,6 +85,11 @@ export function ComparisonWorkspace({
         <div className="mt-2">
           <VersionPairSelector versions={versions} baseId={baseId} targetId={targetId} disabled={creating}
             onChange={(b, t) => { setBaseId(b || null); setTargetId(t || null); }} />
+          {onPrepareAiComparison && baseId && targetId && !sameVersion ? (
+            <AdminButton variant="neutral" size="xs" data-testid="cmp-ai-prepare" onClick={() => onPrepareAiComparison(baseId, targetId)}>
+              AI összehasonlítás előkészítése
+            </AdminButton>
+          ) : null}
           {sameVersion ? <p data-testid="cmp-same-version" className="mt-1 text-[11px] font-semibold text-[var(--adm-terracotta-700)]">A bázis és a cél nem lehet ugyanaz a verzió.</p> : null}
         </div>
         {comparison ? <ComparisonTechnicalDetails comparison={comparison} /> : null}
@@ -116,6 +124,7 @@ export function ComparisonWorkspace({
             segment={canManage ? selected : selected /* read view identical; edit disabled below when !canManage */}
             saving={mutation.saving} conflict={mutation.conflict} error={mutation.error}
             onSave={onSave} onReloadConflict={onReloadConflict}
+            onRequestChanges={selected && onRequestSegmentChanges ? () => onRequestSegmentChanges(selected) : undefined}
           />
         </div>
       )}

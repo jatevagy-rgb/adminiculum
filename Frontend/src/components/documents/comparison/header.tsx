@@ -85,6 +85,7 @@ export function ComparisonHeader({
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Strukturált összehasonlítás</p>
       <h2 data-testid="cmp-doc-title" className="min-w-0 truncate font-serif text-[19px] font-semibold text-[var(--adm-text)]">{documentTitle}</h2>
       <p className="mt-0.5 text-[12px] text-[var(--adm-text-muted)]">
+        {target?.versionNumber != null ? `Mi változott a v${target.versionNumber}-ben? ` : ""}
         <span data-testid="cmp-base-identity">Alap: {id.baseLabel}</span> {" → "}
         <span data-testid="cmp-target-identity">Cél: {id.targetLabel}{id.targetIsHistorical ? " (korábbi)" : ""}</span>
       </p>

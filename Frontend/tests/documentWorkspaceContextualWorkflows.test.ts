@@ -235,6 +235,57 @@ test("Requirement 17: Text selection anchor supports both canonical reader and d
   assert.match(source, /detailedAnnotationSurfaceRef\.current\?\.contains\(anchorNode\)/);
 });
 
+test("Annotation rail keeps comments active and focuses supported text anchors", () => {
+  const source = documentPage();
+  const commentsPanel = source.match(/data-testid="contextual-comments-panel"[\s\S]*?<\/div>\s*\) : null}/)?.[0];
+  assert.ok(commentsPanel, "Comments panel must remain present");
+  assert.match(commentsPanel, /onClick=\{\(\) => focusAnnotation\(annotation\)\}/);
+  assert.doesNotMatch(commentsPanel, /setContextualTab\('review'\)/);
+  assert.match(source, /const focusAnnotation = \(annotation: DocumentAnnotationItem\) =>/);
+  assert.match(source, /setSelectedAnnotationId\(annotation\.id\)/);
+  assert.match(source, /globalThis\.requestAnimationFrame\?\.\(\(\) =>/);
+  assert.match(source, /document\.getElementById\(`annotation-anchor-\$\{annotation\.id\}`\)/);
+  assert.match(source, /target\.scrollIntoView\(\{\s*block: 'center',\s*behavior: 'smooth',\s*\}\)/);
+  assert.match(source, /id=\{`annotation-anchor-\$\{annotation\.id\}`\}/);
+  assert.match(source, /data-annotation-id=\{annotation\.id\}/);
+  assert.match(source, /aria-current=\{selectedAnnotationId === annotation\.id \? 'true' : undefined\}/);
+});
+
+test("Unsupported visual anchors remain selected without fabricated navigation", () => {
+  const source = documentPage();
+  assert.match(source, /annotation\.anchorType === 'TEXT_RANGE'/);
+  assert.match(source, /annotationCapabilities\.canNavigateToTextAnchor/);
+  assert.match(source, /const isPageAnchor =/);
+  assert.match(source, /annotationCapabilities\.canNavigateToPageAnchor/);
+  assert.match(source, /document\.getElementById\(`visual-annotation-anchor-\$\{annotation\.id\}`\)/);
+  assert.match(source, /A vizuális horgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció\./);
+  assert.match(source, /data-testid="annotation-focus-message"/);
+});
+
+test("Supported visual anchors reuse rendered page controls for navigation", () => {
+  const source = documentPage();
+  const pageSurface = source.match(/canRenderPageSurface \? annotations\.filter[\s\S]*?pendingVisualAnchor/)?.[0];
+  assert.ok(pageSurface, "Rendered page annotation controls must remain present");
+  assert.match(source, /id=\{`visual-annotation-anchor-\$\{annotation\.id\}`\}/g);
+  assert.match(source, /target\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(source, /target\.scrollIntoView\(\{\s*block: 'center',\s*behavior: 'smooth',\s*\}\)/);
+  assert.match(pageSurface, /PAGE_RECTANGLE/);
+  assert.match(pageSurface, /PAGE_POINT/);
+});
+
+test("Annotation creation, editing, resolution, deletion, and comments remain canonical", () => {
+  const source = documentPage();
+  assert.match(source, /handleCreateAnnotation/);
+  assert.match(source, /handleResolveAnnotation/);
+  assert.match(source, /handleReopenAnnotation/);
+  assert.match(source, /handleDeleteAnnotation/);
+  assert.match(source, /handleAddAnnotationComment/);
+  assert.match(source, /getDocumentAnnotationComments/);
+  assert.match(source, /selectedAnnotation\.headline/);
+  assert.match(source, /selectedAnnotation\.internalNote/);
+  assert.doesNotMatch(source, /new\s+DocumentAnnotation/);
+});
+
 test("Requirement 18: Canonical composer displays client-explanation draft field with NotPublishedBadge for CLIENT_EXPLANATION_DRAFT", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
