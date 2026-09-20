@@ -410,6 +410,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isLoadingAnnotations, setIsLoadingAnnotations] = useState(false);
   const [isCreatingAnnotation, setIsCreatingAnnotation] = useState(false);
   const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [annotationFocusMessage, setAnnotationFocusMessage] = useState<string | null>(null);
   const [versionText, setVersionText] = useState<string | null>(null);
   const [isLoadingVersionText, setIsLoadingVersionText] = useState(false);
   // Controlled "preview unavailable" state for a version whose stored content
@@ -1262,6 +1263,32 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const canRenderPageSurface = annotationCapabilities.canNavigateToPageAnchor;
   const openAnnotationCount = annotations.filter((annotation) => annotation.status !== 'RESOLVED').length;
 
+  const focusAnnotation = (annotation: DocumentAnnotationItem) => {
+    setSelectedAnnotationId(annotation.id);
+    setAnnotationFocusMessage(null);
+
+    if (
+      annotation.anchorType === 'TEXT_RANGE'
+      && annotationCapabilities.canNavigateToTextAnchor
+      && annotation.startOffset !== null
+      && annotation.endOffset !== null
+    ) {
+      globalThis.requestAnimationFrame?.(() => {
+        document.getElementById(`annotation-anchor-${annotation.id}`)?.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
+      });
+      return;
+    }
+
+    setAnnotationFocusMessage(
+      annotation.anchorType === 'TEXT_RANGE'
+        ? 'A szöveghorgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.'
+        : 'A vizuális horgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.',
+    );
+  };
+
   const refreshAnnotations = useCallback(async (documentId: string, versionId: string) => {
     setIsLoadingAnnotations(true);
     setAnnotationError(null);
@@ -1435,6 +1462,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     setPendingTextAnchor(null);
     setPendingVisualAnchor(null);
     setVisualMode(null);
+    setAnnotationFocusMessage(null);
     if (versionTextPlan === 'VERSION_BLOB' && selectedVersionDocumentId && selectedVersionStableId) {
       setIsLoadingVersionText(true);
       downloadDocumentVersion(selectedVersionDocumentId, selectedVersionStableId)
@@ -1757,8 +1785,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       nodes.push(
         <mark
           key={annotation.id}
+          id={`annotation-anchor-${annotation.id}`}
+          data-annotation-id={annotation.id}
+          aria-current={selectedAnnotationId === annotation.id ? 'true' : undefined}
           className={`cursor-pointer rounded px-0.5 ${selectedAnnotationId === annotation.id ? 'bg-[#D8C58E]' : 'bg-[#FEF3C7]'}`}
-          onClick={() => setSelectedAnnotationId(annotation.id)}
+          onClick={() => focusAnnotation(annotation)}
         >
           {versionText.slice(start, end)}
         </mark>
@@ -2415,7 +2446,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <button
                                   key={annotation.id}
                                   type="button"
-                                  onClick={() => setSelectedAnnotationId(annotation.id)}
+                                  onClick={() => focusAnnotation(annotation)}
                                   className={`w-full rounded-[8px] border p-2 text-left transition ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.10)] bg-white hover:bg-[var(--adm-surface)]'}`}
                                 >
                                   <div className="flex items-center justify-between gap-1">
@@ -2522,7 +2553,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           ) : (
                             <div className="space-y-2">
                               {annotations.map((annotation) => (
-                                <button key={annotation.id} type="button" onClick={() => { setSelectedAnnotationId(annotation.id); setContextualTab('review'); }} className={`w-full rounded border p-3 text-left ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white'}`}>
+                                <button key={annotation.id} type="button" onClick={() => focusAnnotation(annotation)} className={`w-full rounded border p-3 text-left ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white'}`}>
                                   <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-green-800)]">{ANNOTATION_TYPE_LABELS[annotation.annotationType]}</p>
                                   <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{annotation.headline || annotation.selectedText || 'Megjegyzés'}</p>
                                   {annotation.selectedText ? <p className="mt-1 line-clamp-2 text-xs italic text-[#3D4842]">“{annotation.selectedText}”</p> : null}
@@ -2530,6 +2561,25 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               ))}
                             </div>
                           )}
+                          {annotationFocusMessage ? (
+                            <p data-testid="annotation-focus-message" className="rounded border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-2 text-xs text-[#3D4842]">
+                              {annotationFocusMessage}
+                            </p>
+                          ) : null}
+                          {selectedAnnotation ? (
+                            <div data-testid="comments-selected-annotation" className="space-y-2 rounded border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Kiválasztott megjegyzés</p>
+                              {selectedAnnotation.selectedText ? (
+                                <p className="rounded bg-white p-2 text-xs italic text-[#3D4842]">“{selectedAnnotation.selectedText}”</p>
+                              ) : null}
+                              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Kommentek</p>
+                              {annotationComments.length > 0 ? annotationComments.map((comment) => (
+                                <p key={comment.id} className="rounded bg-white p-2 text-xs text-[#3D4842]">{comment.body}</p>
+                              )) : (
+                                <p className="text-xs text-[var(--adm-text-muted)]">Ehhez a megjegyzéshez még nincs komment.</p>
+                              )}
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
 
@@ -2976,7 +3026,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         key={annotation.id}
                                         type="button"
                                         aria-label={annotation.headline || ANNOTATION_TYPE_LABELS[annotation.annotationType]}
-                                        onClick={() => setSelectedAnnotationId(annotation.id)}
+                                        onClick={() => focusAnnotation(annotation)}
                                         className={`absolute border-2 bg-[#D8C58E]/20 ${annotation.anchorType === 'PAGE_ELLIPSE' ? 'rounded-full' : 'rounded'} ${selectedAnnotationId === annotation.id ? 'border-[#8A6A20]' : 'border-[#D8C58E]'}`}
                                         style={{
                                           left: `${(annotation.rect.x || 0) * 100}%`,
@@ -2991,7 +3041,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         key={annotation.id}
                                         type="button"
                                         aria-label={annotation.headline || ANNOTATION_TYPE_LABELS[annotation.annotationType]}
-                                        onClick={() => setSelectedAnnotationId(annotation.id)}
+                                        onClick={() => focusAnnotation(annotation)}
                                         className={`absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${selectedAnnotationId === annotation.id ? 'border-[#8A6A20] bg-[#D8C58E]' : 'border-[#D8C58E] bg-white'}`}
                                         style={{
                                           left: `${(annotation.point.x || 0) * 100}%`,
@@ -3090,7 +3140,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <button
                                         key={annotation.id}
                                         type="button"
-                                        onClick={() => setSelectedAnnotationId(annotation.id)}
+                                        onClick={() => focusAnnotation(annotation)}
                                         className={`w-full rounded-[10px] border p-3 text-left ${selectedAnnotationId === annotation.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white'}`}
                                       >
                                         <div className="flex items-center justify-between gap-2">
