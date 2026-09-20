@@ -43,6 +43,28 @@ type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'mat
 
 type Props = { view: PortalView; resourceId?: string; requestId?: string };
 
+/**
+ * Which canonical portal domain a navigation destination belongs to. Used only to
+ * mark the active destination; it never changes authorization.
+ */
+const NAV_VIEW_BY_PATH: Record<string, PortalView> = {
+  '/portal': 'home',
+  '/portal/ugyek': 'matters',
+  '/portal/ugyeim': 'matters',
+  '/portal/teendoim': 'tasks',
+  '/portal/dokumentumok': 'documents',
+  '/portal/naptar': 'calendar',
+  '/portal/fejlesztes': 'grow',
+  '/portal/megfeleles': 'compliance',
+  '/portal/uzenetek': 'messages',
+  '/portal/vallalat': 'company',
+  '/portal/szervezeti-attekintes': 'leadership',
+};
+
+/** The compact mobile primary destinations for the organization portal. */
+const ORG_MOBILE_PRIMARY_HREFS = ['/portal', '/portal/teendoim', '/portal/dokumentumok'];
+
+
 type LoadState =
   | { status: 'loading' }
   | { status: 'login' }
@@ -286,6 +308,7 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selectedReference, setSelectedReference] = useState<string | null>(() => getStoredPortalWorkspace());
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // Canonical customer-auth layer: single MSAL instance, one logout config.
   const { logoutCustomer } = useCustomerAuth();
 
@@ -374,17 +397,23 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
     const workspace = state.context.selectedWorkspace;
     const communicationEnabled = workspace.communicationMode !== 'EXTERNAL_ONLY';
     if (workspace.mode === 'ORGANIZATION') {
+      // Canonical organization portal domains. Organization content is delivered
+      // through explicit case grants and organization projections — the exact same
+      // model the loader uses — so navigation must NOT re-hide a domain behind the
+      // individual workspace capability flags. Only a genuine, authoritative
+      // messaging prohibition removes Kommunikáció.
       return [
         ['Áttekintés', '/portal'],
-        ['Jogi ügyek', '/portal/ugyek'],
+        ['Ügyek', '/portal/ugyek'],
+        ['Teendők', '/portal/teendoim'],
+        ['Dokumentumok', '/portal/dokumentumok'],
         ['Naptár', '/portal/naptar'],
         ['Fejlesztés', '/portal/fejlesztes'],
         ['Megfelelés', '/portal/megfeleles'],
-        ['Üzenetek', '/portal/uzenetek'],
+        ['Kommunikáció', '/portal/uzenetek'],
         ['Vállalat', '/portal/vallalat'],
       ].filter(([, href]) => {
-        if (href === '/portal/ugyek' && !capabilities.matters) return false;
-        if (href === '/portal/uzenetek' && (!capabilities.messages || !communicationEnabled)) return false;
+        if (href === '/portal/uzenetek' && !communicationEnabled) return false;
         return true;
       }) as string[][];
     }
@@ -426,17 +455,26 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
       })()
     : null;
 
+  const isOrganization = state.status === 'ready' && state.context.selectedWorkspace?.mode === 'ORGANIZATION';
+  const isActiveNav = (href: string) => NAV_VIEW_BY_PATH[href] === view;
+  const navLinkClass = (href: string) =>
+    `rounded-full px-3 py-2 font-medium focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40 ${
+      isActiveNav(href)
+        ? 'bg-[var(--adm-ivory-100)] text-[var(--adm-blue-950)]'
+        : 'text-[var(--adm-text-muted)] hover:bg-[var(--adm-ivory-100)] hover:text-[var(--adm-blue-950)]'
+    }`;
+
   return (
     <main className="cp-shell min-h-screen overflow-x-hidden text-[var(--adm-text)]" data-testid="client-portal-shell">
       <header className="sticky top-0 z-20 border-b border-[var(--adm-border)] bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
           <Link href="/portal" className="cp-title text-2xl tracking-tight focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">Adminiculum</Link>
-          {state.status === 'ready' ? <nav className="flex flex-wrap gap-1.5 text-sm" aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className="rounded-full px-3 py-2 font-medium text-[var(--adm-text-muted)] hover:bg-[var(--adm-ivory-100)] hover:text-[var(--adm-blue-950)] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" key={label} href={href}>{label}</Link>)}</nav> : null}
+          {state.status === 'ready' ? <nav className={`${isOrganization ? 'hidden sm:flex' : 'flex'} flex-wrap items-center gap-1.5 text-sm`} aria-label="Ügyfélportál navigáció">{nav.map(([label, href]) => <Link className={navLinkClass(href)} aria-current={isActiveNav(href) ? 'page' : undefined} key={href} href={href}>{label}</Link>)}</nav> : null}
           {['ready', 'select', 'onboarding', 'no-workspace', 'pending', 'suspended', 'workspace-empty', 'service-error'].includes(state.status) ? <div className="flex items-center gap-3">{(state.status === 'ready' || state.status === 'workspace-empty') && state.context.workspaces.length > 1 ? <button className="rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm text-[var(--adm-text-muted)]" onClick={() => { setSelectedPortalWorkspace(null); setSelectedReference(null); setState({ status: 'select', context: { ...state.context, state: 'SELECTION_REQUIRED', selectedWorkspace: null } }); }}>Munkatérváltás</button> : null}<button className="rounded-full border border-[var(--adm-border)] px-3 py-2 text-sm text-[var(--adm-text-muted)]" onClick={logoutCustomer}>Kijelentkezés</button></div> : null}
         </div>
-        {state.status === 'ready' && contextLabel ? <div className="border-t border-[var(--adm-border)] bg-[var(--adm-surface)]"><div className="mx-auto max-w-6xl px-4 py-2 text-sm text-[var(--adm-text-muted)] sm:px-6">{contextLabel}</div></div> : null}
+        {state.status === 'ready' && contextLabel ? <div className="border-t border-[var(--adm-border)] bg-[var(--adm-surface)]"><div className="mx-auto max-w-7xl px-4 py-2 text-sm text-[var(--adm-text-muted)] sm:px-6">{contextLabel}</div></div> : null}
       </header>
-      <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
+      <div className={`mx-auto max-w-7xl px-4 py-8 sm:px-6 ${isOrganization ? 'pb-24 sm:pb-8' : ''}`}>
         {state.status === 'loading' ? <Card>Betöltés...</Card> : null}
         {state.status === 'login' ? <Card><h1 className="cp-title text-3xl">Ügyfélportál belépés</h1><p className="cp-subtitle mt-3">A biztonságos Microsoft ügyfélfiókos azonosításhoz folytassa a belépést.</p><Link href="/portal/login" className="mt-6 inline-flex rounded-full bg-[var(--adm-blue-950)] px-5 py-3 text-white">Belépés Microsoft-fiókkal</Link></Card> : null}
         {state.status === 'select' ? <PortalWorkspaceSelector workspaces={state.context.workspaces} onSelect={(reference) => { setSelectedPortalWorkspace(reference); setSelectedReference(reference); setState({ status: 'loading' }); setReloadNonce((value) => value + 1); }} /> : null}
@@ -487,6 +525,47 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         {state.status === 'ready' && view === 'action' && state.action ? <ActionView action={state.action} /> : null}
 
       </div>
+      {state.status === 'ready' && isOrganization ? (
+        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--adm-border)] bg-white/95 backdrop-blur sm:hidden" aria-label="Ügyfélportál gyorsnavigáció" data-testid="org-portal-mobile-nav">
+          <div id="org-portal-more-nav" className={`grid grid-cols-3 gap-1 border-b border-[var(--adm-border)] px-3 py-3 ${mobileNavOpen ? '' : 'hidden'}`}>
+            {nav
+              .filter(([, href]) => !ORG_MOBILE_PRIMARY_HREFS.includes(href))
+              .map(([label, href]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={isActiveNav(href) ? 'page' : undefined}
+                  className={`rounded-xl px-2 py-2 text-center text-xs font-medium ${isActiveNav(href) ? 'bg-[var(--adm-ivory-100)] text-[var(--adm-blue-950)]' : 'text-[var(--adm-text-muted)]'}`}
+                >
+                  {label}
+                </Link>
+              ))}
+          </div>
+          <div className="grid grid-cols-4">
+            {nav
+              .filter(([, href]) => ORG_MOBILE_PRIMARY_HREFS.includes(href))
+              .map(([label, href]) => (
+                <Link
+                  key={href}
+                  href={href}
+                  aria-current={isActiveNav(href) ? 'page' : undefined}
+                  className={`px-2 py-3 text-center text-xs font-semibold ${isActiveNav(href) ? 'text-[var(--adm-blue-950)]' : 'text-[var(--adm-text-muted)]'}`}
+                >
+                  {label}
+                </Link>
+              ))}
+            <button
+              type="button"
+              aria-expanded={mobileNavOpen}
+              aria-controls="org-portal-more-nav"
+              onClick={() => setMobileNavOpen((value) => !value)}
+              className="px-2 py-3 text-center text-xs font-semibold text-[var(--adm-text-muted)]"
+            >
+              Továbbiak
+            </button>
+          </div>
+        </nav>
+      ) : null}
     </main>
   );
 }

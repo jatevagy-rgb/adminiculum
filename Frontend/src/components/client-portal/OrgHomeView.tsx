@@ -14,10 +14,31 @@ import {
   type PortalWorkSummary,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { selectUpcomingDeadlines } from "@/lib/clientPortalUpcoming";
 import { formatDate } from "./MatterWorkspace";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const compactState = "min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3";
+
+/** The canonical destinations offered as quick actions on the organization home. */
+const QUICK_ACTIONS: Array<{ label: string; href: string }> = [
+  { label: "Ügyek", href: "/portal/ugyek" },
+  { label: "Teendők", href: "/portal/teendoim" },
+  { label: "Dokumentumok", href: "/portal/dokumentumok" },
+  { label: "Naptár", href: "/portal/naptar" },
+];
+
+/**
+ * Resolve an organization action to a real customer-safe destination. A compliance
+ * action without a matter has no action-request detail page, so it goes to the
+ * compliance surface rather than a dead end.
+ */
+function orgActionHref(action: PortalOrgHome["actions"][number]): string {
+  if (action.actionUrl) return action.actionUrl;
+  if (action.matterPublicationId) return `/portal/matters/${encodeURIComponent(action.matterPublicationId)}`;
+  if (action.area === "COMPLIANCE") return "/portal/megfeleles";
+  return `/portal/action-requests/${encodeURIComponent(action.id)}`;
+}
 
 function Section({
   kicker,
@@ -76,13 +97,7 @@ function Section({
 
 function ActionRow({ action }: { action: PortalOrgHome["actions"][number] }) {
   const isCompliance = action.area === "COMPLIANCE";
-  const href = action.actionUrl || (
-    action.matterPublicationId
-      ? `/portal/matters/${encodeURIComponent(action.matterPublicationId)}`
-      : isCompliance
-      ? `/portal/megfeleles`
-      : `/portal/action-requests/${encodeURIComponent(action.id)}`
-  );
+  const href = orgActionHref(action);
 
   return (
     <Link href={href} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 transition hover:border-[#b99b45]">
@@ -139,7 +154,7 @@ function CurrentMatter({ matter }: { matter: NonNullable<PortalOrgHome["currentM
     <section className={card}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Kiemelt aktív ügy</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Innen folytassa · kiemelt aktív ügy</p>
           <h2 className="mt-1 break-words font-serif text-2xl font-semibold text-stone-950">{matter.title}</h2>
         </div>
         <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-semibold text-stone-700">{matter.status}</span>
@@ -238,6 +253,32 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
   const actionNow = useMemo(() => (home?.actions || []).slice(0, 4), [home]);
   const activeMatters = useMemo(() => (home?.matters || []).slice(0, 6), [home]);
 
+  // "What is coming up?" — today or later, derived only from real published dates.
+  // Overdue values stay on their canonical Teendők / attention surfaces; we never
+  // delete, rewrite or invent a date here.
+  const deadlineRows = useMemo(() => {
+    if (!home) return [] as Array<{ id: string; label: string; context: string; dueAt: string; href: string }>;
+    const fromMatters = home.matters
+      .filter((matter) => matter.publicTargetDate)
+      .map((matter) => ({
+        id: `matter-${matter.publicReference}`,
+        label: matter.publicTitle,
+        context: matter.organizationUnitName || "Közzétett ügy",
+        dueAt: matter.publicTargetDate as string,
+        href: `/portal/matters/${encodeURIComponent(matter.matterPublicationId)}`,
+      }));
+    const fromActions = home.actions
+      .filter((action) => action.dueAt)
+      .map((action) => ({
+        id: `action-${action.id}`,
+        label: action.title,
+        context: action.typeLabel,
+        dueAt: action.dueAt as string,
+        href: orgActionHref(action),
+      }));
+    return selectUpcomingDeadlines([...fromMatters, ...fromActions], new Date());
+  }, [home]);
+
   const orientation = useMemo(() => {
     if (!home) return null;
     const updateCandidates = home.recentDocuments
@@ -284,6 +325,19 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         ) : null}
       </section>
 
+      {/* Quick actions — every canonical destination stays one tap away. */}
+      <nav aria-label="Gyors műveletek" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {QUICK_ACTIONS.map((action) => (
+          <Link
+            key={action.href}
+            href={action.href}
+            className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-center text-sm font-semibold text-stone-800 transition hover:border-[#b99b45]"
+          >
+            {action.label}
+          </Link>
+        ))}
+      </nav>
+
       {/* 1. AMI MOST ÖNTŐL KELL — dominant when actions exist, compact when empty */}
       <Section
         kicker="Teendői"
@@ -309,6 +363,28 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
       >
         {activeMatters.map((matter) => (
           <CaseRow key={matter.publicReference} matter={matter} />
+        ))}
+      </Section>
+
+      {/* 2b. SZERVEZETI TERÜLETEK — which company/unit context am I in */}
+      <Section
+        kicker="Szervezeti kontextus"
+        title="Szervezeti területek"
+        empty={!summaries.length}
+        emptyText="Még nincs közzétett szervezeti területi összesítés."
+        actionLink="/portal/vallalat"
+        actionLabel="Vállalat"
+      >
+        {summaries.map((unit) => (
+          <div key={unit.organizationUnitName || "unit"} className="rounded-2xl border border-stone-200 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="font-semibold text-stone-950">{unit.organizationUnitName || "Szervezeti egység"}</h3>
+              <span className="text-xs text-stone-500">{unit.activeCaseCount} aktív ügy</span>
+            </div>
+            <p className="mt-1 text-sm text-stone-600">
+              {unit.waitingOnCustomerCount} Öntől váró teendő · {unit.waitingOnOfficeCount} irodai lépés
+            </p>
+          </div>
         ))}
       </Section>
 
@@ -358,15 +434,15 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl bg-amber-50 p-4 border border-amber-100">
             <p className="text-2xl font-semibold text-amber-950">{compliance?.attentionCount ?? 0}</p>
-            <p className="mt-1 text-xs text-amber-800">Teendőt igényel</p>
+              <p className="mt-1 text-xs text-amber-800">Öntől szükséges</p>
           </div>
           <div className="rounded-2xl bg-sky-50 p-4 border border-sky-100">
             <p className="text-2xl font-semibold text-sky-950">{compliance?.inProgressCount ?? 0}</p>
-            <p className="mt-1 text-xs text-sky-800">Folyamatban lévő intézkedés</p>
+              <p className="mt-1 text-xs text-sky-800">Irodánál van</p>
           </div>
           <div className="rounded-2xl bg-emerald-50 p-4 border border-emerald-100">
             <p className="text-2xl font-semibold text-emerald-950">{compliance?.noActionExpectedCount ?? 0}</p>
-            <p className="mt-1 text-xs text-emerald-800">Jelenleg nincs Öntől várt teendő</p>
+              <p className="mt-1 text-xs text-emerald-800">Jelenleg nincs ügyfélteendő</p>
           </div>
         </div>
         {compliance && compliance.topics && compliance.topics.length > 0 ? (
@@ -387,9 +463,35 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         title="Közzétett frissítések"
         empty={!home.recentDocuments.length}
         emptyText="Még nincs közzétett frissítés."
+        actionLink="/portal/dokumentumok"
+        actionLabel="Dokumentumok"
       >
         {home.recentDocuments.slice(0, 4).map((document) => (
           <ActivityRow key={document.id} document={document} />
+        ))}
+      </Section>
+
+      {/* 5b. KÖZELGŐ HATÁRIDŐK — only real published dates */}
+      <Section
+        kicker="Naptár"
+        title="Közelgő határidők"
+        empty={!deadlineRows.length}
+        emptyText="Nincs közzétett közelgő határidő."
+        actionLink="/portal/naptar"
+        actionLabel="Naptár megnyitása"
+      >
+        {deadlineRows.map((row) => (
+          <Link
+            key={row.id}
+            href={row.href}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-stone-200 p-4 transition hover:border-[#b99b45]"
+          >
+            <span className="min-w-0">
+              <span className="block break-words font-semibold text-stone-950">{row.label}</span>
+              <span className="mt-1 block text-xs text-stone-500">{row.context}</span>
+            </span>
+            <span className="text-xs font-medium text-stone-600">{formatDate(row.dueAt)}</span>
+          </Link>
         ))}
       </Section>
 
