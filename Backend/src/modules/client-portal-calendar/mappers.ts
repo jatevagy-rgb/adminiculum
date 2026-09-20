@@ -56,10 +56,11 @@ export interface GrowInitiativeSourceRow {
 
 /**
  * Customer-safe compliance control row (from getClientSafeComplianceReadModel).
- * The internal ClientControl id is never carried; identity is derived from the
- * already customer-safe requirement/control labels.
+ * Identity is the safe-registry `controlRef`; the internal ClientControl id, the
+ * internal ControlDefinition key and the display text are never used as identity.
  */
 export interface ComplianceReviewSourceRow {
+  controlRef: string;
   requirementTitle: string;
   title: string;
   nextReviewAt?: string | null;
@@ -202,23 +203,23 @@ export function mapGrowInitiativeSource(row: GrowInitiativeSourceRow): CustomerC
   }];
 }
 
-function identitySlug(value: string): string {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, '-');
-}
-
 /**
  * Compliance control next review date. Sourced only from the customer-safe
  * compliance read model, so internal control ids, severity and raw engine state
- * never appear. No customer action is required, therefore the item is
- * informational ("Következő ellenőrzés"), never an "Ön határideje" obligation.
+ * never appear. Identity is the opaque safe-registry `controlRef`, so two
+ * distinct controls with identical display labels stay distinct. No customer
+ * action is required, therefore the item is informational ("Következő
+ * ellenőrzés"), never an "Ön határideje" obligation.
  */
 export function mapComplianceReviewSource(row: ComplianceReviewSourceRow): CustomerCalendarSourceItem[] {
   if (!row.nextReviewAt) return [];
+  const controlRef = String(row.controlRef || '').trim();
+  if (!controlRef) return [];
   const requirementTitle = String(row.requirementTitle || '').trim();
   const controlTitle = String(row.title || '').trim();
   return [{
     category: 'COMPLIANCE_REVIEW',
-    sourceKey: `control-${identitySlug(requirementTitle)}-${identitySlug(controlTitle)}`,
+    sourceKey: `control-${controlRef}`,
     title: controlTitle || requirementTitle || 'Megfelelési ellenőrzés',
     date: row.nextReviewAt,
     status: 'INFO',

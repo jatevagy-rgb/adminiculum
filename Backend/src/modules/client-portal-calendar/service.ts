@@ -179,6 +179,7 @@ async function canonicalReaders(identityId: string, workspaceId: string, prisma:
           group.controls
             .filter((control) => Boolean(control.nextReviewAt))
             .map((control) => ({
+              controlRef: control.controlRef,
               requirementTitle: group.requirementTitle,
               title: control.title,
               nextReviewAt: control.nextReviewAt,

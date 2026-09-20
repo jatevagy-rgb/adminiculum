@@ -1,6 +1,7 @@
 import {
   isPortalVisible,
   lookupSafeControlLabel,
+  lookupSafeControlRef,
   lookupSafeTopic,
   portalVisibleKeys,
 } from '../src/modules/compliance/safeTopicRegistry';
@@ -31,5 +32,19 @@ describe('safeTopicRegistry — compliance discovery verticals', () => {
       expect(lookupSafeControlLabel(key)).not.toBeNull();
     }
     expect(lookupSafeControlLabel('UNKNOWN_CONTROL')).toBeNull();
+  });
+
+  it('SAFE_CONTROL_IDENTITY: every labelled control has a unique opaque reference', () => {
+    const keys = ['GDPR_DATA_PROCESSING_CONTROL', 'C-DATA-001', 'C-DATA-002', 'C-DATA-003', 'C-CYBER-001', 'C-CYBER-002', 'C-WB-001'];
+    const refs = keys.map((key) => {
+      const ref = lookupSafeControlRef(key);
+      expect(ref).toBeTruthy();
+      // Never the internal key, never the customer-visible display label.
+      expect(ref).not.toBe(key);
+      expect(ref).not.toBe(lookupSafeControlLabel(key));
+      return ref as string;
+    });
+    expect(new Set(refs).size).toBe(refs.length);
+    expect(lookupSafeControlRef('UNKNOWN_CONTROL')).toBeNull();
   });
 });

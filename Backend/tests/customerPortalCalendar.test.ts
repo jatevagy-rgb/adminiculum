@@ -156,8 +156,8 @@ describe('customer calendar source mappers', () => {
   });
 
   it('projects a compliance review date as informational and without an internal control id', () => {
-    expect(mapComplianceReviewSource({ requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: null })).toEqual([]);
-    const projected = mapComplianceReviewSource({ requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' });
+    expect(mapComplianceReviewSource({ controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: null })).toEqual([]);
+    const projected = mapComplianceReviewSource({ controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' });
     expect(projected).toHaveLength(1);
     expect(projected[0]).toMatchObject({
       category: 'COMPLIANCE_REVIEW',
@@ -165,11 +165,30 @@ describe('customer calendar source mappers', () => {
       status: 'INFO',
       href: '/portal/megfeleles',
     });
-    expect(projected[0].sourceKey).toBe('control-adatvédelem-hozzáférés-kezelés');
+    // Identity is the opaque safe-registry reference, never display text.
+    expect(projected[0].sourceKey).toBe('control-processing-register');
+    expect(projected[0].sourceKey).not.toContain('hozzáférés');
+  });
+
+  it('fails closed for a compliance review without a safe control reference', () => {
+    expect(mapComplianceReviewSource({ controlRef: '', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' })).toEqual([]);
+  });
+
+  it('never uses the visitor-facing label as identity for two distinct controls with identical labels', () => {
+    const first = mapComplianceReviewSource({ controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Azonos cím', nextReviewAt: '2026-09-24T00:00:00.000Z' });
+    const second = mapComplianceReviewSource({ controlRef: 'impact-assessment', requirementTitle: 'Adatvédelem', title: 'Azonos cím', nextReviewAt: '2026-09-24T00:00:00.000Z' });
+    expect(first[0].title).toBe(second[0].title);
+    expect(first[0].sourceKey).not.toBe(second[0].sourceKey);
+  });
+
+  it('drops any non-allowlisted source field instead of projecting it', () => {
+    const projected = mapComplianceReviewSource({ controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z', clientControlId: 'internal-client-control-id', controlKey: 'C-DATA-001' } as never);
+    expect(JSON.stringify(projected)).not.toContain('internal-client-control-id');
+    expect(JSON.stringify(projected)).not.toContain('C-DATA-001');
   });
 
   it('labels a compliance review as a review, never as a customer deadline', () => {
-    const projected = mapComplianceReviewSource({ requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' });
+    const projected = mapComplianceReviewSource({ controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' });
     expect(projected[0].status).not.toBe('OPEN');
     expect(projected[0].title).not.toContain('Ön határideje');
   });
@@ -348,8 +367,8 @@ describe('customer calendar service orchestration (injected canonical readers)',
           { id: 'init-2', title: 'Cél nélkül', targetAt: null },
         ],
         listComplianceReviews: async () => [
-          { requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
-          { requirementTitle: 'Adatvédelem', title: 'Nincs dátum', nextReviewAt: null },
+          { controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+          { controlRef: 'no-date', requirementTitle: 'Adatvédelem', title: 'Nincs dátum', nextReviewAt: null },
         ],
       }),
     });
@@ -360,13 +379,13 @@ describe('customer calendar service orchestration (injected canonical readers)',
       status: 'INFO',
       href: '/portal/fejlesztes',
     });
-    expect(byId.get('COMPLIANCE_REVIEW:control-adatvédelem-hozzáférés-kezelés')).toMatchObject({
+    expect(byId.get('COMPLIANCE_REVIEW:control-processing-register')).toMatchObject({
       day: '2026-09-24',
       status: 'INFO',
       href: '/portal/megfeleles',
     });
     expect(byId.has('GROW_TARGET:initiative-init-2')).toBe(false);
-    expect(byId.has('COMPLIANCE_REVIEW:control-adatvédelem-nincs-dátum')).toBe(false);
+    expect(byId.has('COMPLIANCE_REVIEW:control-no-date')).toBe(false);
     // Grow/compliance are informational: they never inflate the open/obligation KPI.
     expect(result.counts.open).toBe(0);
     // No internal status label or id leaks into the serialized projection.
@@ -384,15 +403,35 @@ describe('customer calendar service orchestration (injected canonical readers)',
           { id: 'init-1', title: 'Fejlesztés', targetAt: '2026-09-22T00:00:00.000Z' },
         ],
         listComplianceReviews: async () => [
-          { requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
-          { requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+          { controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+          { controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Hozzáférés-kezelés', nextReviewAt: '2026-09-24T00:00:00.000Z' },
         ],
       }),
     });
     expect(result.items.map((item) => item.id)).toEqual([
       'GROW_TARGET:initiative-init-1',
-      'COMPLIANCE_REVIEW:control-adatvédelem-hozzáférés-kezelés',
+      'COMPLIANCE_REVIEW:control-processing-register',
     ]);
+  });
+
+  it('keeps two distinct canonical controls with identical display labels as two events', async () => {
+    const result = await getCustomerCalendar('identity-1', 'workspace-1', RANGE, realPrisma, {
+      now: NOW,
+      readers: readers({
+        listComplianceReviews: async () => [
+          { controlRef: 'processing-register', requirementTitle: 'Adatvédelem', title: 'Azonos megjelenő cím', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+          { controlRef: 'impact-assessment', requirementTitle: 'Adatvédelem', title: 'Azonos megjelenő cím', nextReviewAt: '2026-09-24T00:00:00.000Z' },
+        ],
+      }),
+    });
+    const reviews = result.items.filter((item) => item.category === 'COMPLIANCE_REVIEW');
+    expect(reviews).toHaveLength(2);
+    expect(reviews.map((item) => item.title)).toEqual(['Azonos megjelenő cím', 'Azonos megjelenő cím']);
+    expect(new Set(reviews.map((item) => item.id)).size).toBe(2);
+    // The visible label never becomes identity.
+    expect(reviews.some((item) => item.id.includes('azonos'))).toBe(false);
+    // Still informational, never an obligation.
+    expect(result.counts.open).toBe(0);
   });
 
   it('isolates Grow and compliance dates to whatever the canonical readers authorize', async () => {
@@ -401,7 +440,7 @@ describe('customer calendar service orchestration (injected canonical readers)',
       readers: readers({
         // The canonical readers for this workspace only ever return client A.
         listGrowInitiatives: async () => [{ id: 'init-a', title: 'A fejlesztés', targetAt: '2026-09-22T00:00:00.000Z' }],
-        listComplianceReviews: async () => [{ requirementTitle: 'A megfelelés', title: 'A kontroll', nextReviewAt: '2026-09-24T00:00:00.000Z' }],
+        listComplianceReviews: async () => [{ controlRef: 'a-control', requirementTitle: 'A megfelelés', title: 'A kontroll', nextReviewAt: '2026-09-24T00:00:00.000Z' }],
       }),
     });
     for (const item of result.items) {
