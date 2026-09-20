@@ -6,8 +6,11 @@
  * projection for the Document Workspace review rail and Case Workspace summary tiles.
  *
  * ZERO SCHEMA CHANGES - ZERO SECOND ENGINES - STRICT PRIVACY / LEAK PROTECTION
+ * BATCHED CASE PROJECTION - NO SERIAL N+1 - EXACT PREVIOUS->CURRENT COMPARISON ONLY
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+
+export type AiSourceMode = 'EXACT_VERSION_PAIR' | 'CURRENT_VERSION' | 'LEGACY_DOCUMENT';
 
 export interface DocumentReviewVersionDto {
   id: string;
@@ -42,6 +45,7 @@ export interface DocumentReviewSummaryDto {
   aiPromptDraftId: string | null;
   aiDraftStatus: string | null;
   aiApproved: boolean;
+  aiSourceMode?: AiSourceMode | null;
   nextAction: {
     code: string;
     label: string;
@@ -116,6 +120,7 @@ export interface DocumentReviewProjectionDto {
     templateKey: string;
     templateVersion: number;
     sourceDocumentVersionIds: string[];
+    sourceMode: AiSourceMode;
     approved: boolean;
     artifactAvailability: {
       hasImportedResponse: boolean;
@@ -162,6 +167,113 @@ function parseJsonArray(val: unknown): string[] {
     }
   }
   return [];
+}
+
+export function parseBoundedInt(val: unknown, min: number, max: number, defaultVal: number): number {
+  if (val === undefined || val === null || val === '') return defaultVal;
+  const num = Number(val);
+  if (!Number.isFinite(num) || Number.isNaN(num)) return defaultVal;
+  return Math.max(min, Math.min(Math.floor(num), max));
+}
+
+export interface RankedAiDraft {
+  draft: any;
+  sourceMode: AiSourceMode;
+  relevanceScore: number;
+  sourceDocumentVersionIds: string[];
+}
+
+/**
+ * Matches and ranks AI prompt drafts for a document/version-pair in a version-truthful manner.
+ *
+ * Rules:
+ * 1. A version-specific AI projection MUST contain currentVersionId.
+ * 2. A draft matching only previousVersionId MUST NOT represent current-version AI state.
+ * 3. A generic sourceDocumentIds-only legacy draft MUST NOT override an exact immutable current-version draft.
+ * 4. For version-pair analysis, prefer a draft whose sourceDocumentVersionIds contain the exact canonical base + target pair.
+ * 5. If no exact pair exists, a current-version-only immutable draft may be exposed truthfully as current-version analysis, but do not call it a version-pair result.
+ * 6. Status priority (e.g. LAWYER_APPROVED over AI_DRAFT) must only be applied AFTER source-version relevance is established.
+ */
+export function matchAndRankAiDrafts(params: {
+  drafts: any[];
+  documentId: string;
+  currentVersionId?: string | null;
+  previousVersionId?: string | null;
+}): RankedAiDraft | null {
+  const { drafts, documentId, currentVersionId, previousVersionId } = params;
+
+  const candidates: RankedAiDraft[] = [];
+
+  for (const d of drafts) {
+    const vIds = parseJsonArray(d.sourceDocumentVersionIds);
+    const docIds = parseJsonArray(d.sourceDocumentIds);
+
+    const hasCurrent = Boolean(currentVersionId && vIds.includes(currentVersionId));
+    const hasPrevious = Boolean(previousVersionId && vIds.includes(previousVersionId));
+    const onlyPrevious = hasPrevious && !hasCurrent;
+
+    // Rule 2: A draft matching only previousVersionId MUST NOT represent current-version AI state.
+    if (onlyPrevious) {
+      continue;
+    }
+
+    if (hasCurrent) {
+      if (hasPrevious) {
+        // Rule 4: Prefer draft with exact canonical base + target version pair.
+        candidates.push({
+          draft: d,
+          sourceMode: 'EXACT_VERSION_PAIR',
+          relevanceScore: 30,
+          sourceDocumentVersionIds: vIds,
+        });
+      } else {
+        // Rule 5: Current-version-only immutable draft.
+        candidates.push({
+          draft: d,
+          sourceMode: 'CURRENT_VERSION',
+          relevanceScore: 20,
+          sourceDocumentVersionIds: vIds,
+        });
+      }
+      continue;
+    }
+
+    // Rule 3: Generic sourceDocumentIds-only legacy draft (applies ONLY if no version IDs attached).
+    if (docIds.includes(documentId) && vIds.length === 0) {
+      candidates.push({
+        draft: d,
+        sourceMode: 'LEGACY_DOCUMENT',
+        relevanceScore: 10,
+        sourceDocumentVersionIds: [],
+      });
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Rule 6: Status priority applied AFTER source-version relevance is established.
+  candidates.sort((a, b) => {
+    if (b.relevanceScore !== a.relevanceScore) {
+      return b.relevanceScore - a.relevanceScore;
+    }
+
+    const isLawyerApproved = (s: string) => s === 'LAWYER_APPROVED';
+    const isJuniorVerified = (s: string) => s === 'JUNIOR_VERIFIED';
+
+    const aApproved = isLawyerApproved(a.draft.status);
+    const bApproved = isLawyerApproved(b.draft.status);
+    if (aApproved && !bApproved) return -1;
+    if (bApproved && !aApproved) return 1;
+
+    const aVerified = isJuniorVerified(a.draft.status);
+    const bVerified = isJuniorVerified(b.draft.status);
+    if (aVerified && !bVerified) return -1;
+    if (bVerified && !aVerified) return 1;
+
+    return new Date(b.draft.updatedAt).getTime() - new Date(a.draft.updatedAt).getTime();
+  });
+
+  return candidates[0];
 }
 
 export interface ProjectionOptions {
@@ -496,28 +608,19 @@ export async function getDocumentReviewProjection(
   };
 
   // 3. DocumentComparison & ChangeSegments
+  // CANONICAL EXACT PREVIOUS->CURRENT ONLY! (Zero arbitrary base fallback!)
   let comparisonProjection: DocumentReviewProjectionDto['comparison'] = null;
   let rawSegments: any[] = [];
 
   if (currentVerRow && previousVerRow) {
-    let comparison = await db.documentComparison.findFirst({
+    const comparison = await db.documentComparison.findFirst({
       where: {
         documentId,
         targetVersionId: currentVerRow.id,
-        baseVersionId: previousVerRow.id,
+        baseVersionId: previousVerRow.id, // EXACT PAIR ONLY!
       },
       orderBy: [{ createdAt: 'desc' }],
     });
-
-    if (!comparison) {
-      comparison = await db.documentComparison.findFirst({
-        where: {
-          documentId,
-          targetVersionId: currentVerRow.id,
-        },
-        orderBy: [{ createdAt: 'desc' }],
-      });
-    }
 
     if (comparison) {
       const [stateGroups, catGroups] = await Promise.all([
@@ -548,7 +651,6 @@ export async function getDocumentReviewProjection(
       const needsDiscussion = stateMap['NEEDS_DISCUSSION'] || 0;
       const notRelevant = stateMap['NOT_RELEVANT'] || 0;
 
-      // An unresolved segment is one that is unreviewed, rejected, or needs discussion
       const totalSeg = comparison.totalSegmentCount;
       const reviewedSeg = comparison.reviewedSegmentCount;
       const unresolvedSeg = unreviewed + rejected + needsDiscussion;
@@ -579,7 +681,7 @@ export async function getDocumentReviewProjection(
       };
 
       if (options.includeSegments) {
-        const segLimit = Math.min(Math.max(1, options.segmentLimit || 50), 100);
+        const segLimit = parseBoundedInt(options.segmentLimit, 1, 100, 50);
         rawSegments = await db.documentChangeSegment.findMany({
           where: { comparisonId: comparison.id },
           select: {
@@ -599,7 +701,7 @@ export async function getDocumentReviewProjection(
     }
   }
 
-  // 4. AiPromptDraft: bounded, safe, leak-proof
+  // 4. AiPromptDraft: version-truthful matching and ranking (ISSUE 1 FIX)
   let aiProjection: DocumentReviewProjectionDto['ai'] = null;
   const recentDrafts = await db.aiPromptDraft.findMany({
     where: { caseId: doc.caseId },
@@ -617,40 +719,26 @@ export async function getDocumentReviewProjection(
       updatedAt: true,
     },
     orderBy: [{ updatedAt: 'desc' }],
-    take: 40,
+    take: 50,
   });
 
-  // Match draft to current version or document
-  const currentVersionId = currentVerRow?.id;
-  const previousVersionId = previousVerRow?.id;
-
-  const matchedDrafts = recentDrafts.filter((d: any) => {
-    const vIds = parseJsonArray(d.sourceDocumentVersionIds);
-    if (currentVersionId && vIds.includes(currentVersionId)) return true;
-    if (previousVersionId && vIds.includes(previousVersionId)) return true;
-    const dIds = parseJsonArray(d.sourceDocumentIds);
-    if (dIds.includes(doc.id)) return true;
-    return false;
+  const matched = matchAndRankAiDrafts({
+    drafts: recentDrafts,
+    documentId: doc.id,
+    currentVersionId: currentVerRow?.id,
+    previousVersionId: previousVerRow?.id,
   });
 
-  if (matchedDrafts.length > 0) {
-    // Prefer LAWYER_APPROVED, then JUNIOR_VERIFIED, then most recent
-    matchedDrafts.sort((a: any, b: any) => {
-      if (a.status === 'LAWYER_APPROVED' && b.status !== 'LAWYER_APPROVED') return -1;
-      if (b.status === 'LAWYER_APPROVED' && a.status !== 'LAWYER_APPROVED') return 1;
-      if (a.status === 'JUNIOR_VERIFIED' && b.status !== 'JUNIOR_VERIFIED') return -1;
-      if (b.status === 'JUNIOR_VERIFIED' && a.status !== 'JUNIOR_VERIFIED') return 1;
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    });
-
-    const chosen = matchedDrafts[0];
+  if (matched) {
+    const chosen = matched.draft;
     aiProjection = {
       promptDraftId: chosen.id,
       status: chosen.status,
       templateKey: chosen.promptTemplateStableKey,
       templateVersion: chosen.promptTemplateVersion,
-      sourceDocumentVersionIds: parseJsonArray(chosen.sourceDocumentVersionIds),
-      approved: chosen.status === 'LAWYER_APPROVED',
+      sourceDocumentVersionIds: matched.sourceDocumentVersionIds,
+      sourceMode: matched.sourceMode,
+      approved: matched.sourceMode !== 'LEGACY_DOCUMENT' && chosen.status === 'LAWYER_APPROVED',
       artifactAvailability: {
         hasImportedResponse: Boolean(chosen.importedResponse),
         hasRehydratedResponse: Boolean(chosen.rehydratedResponse),
@@ -702,53 +790,379 @@ export async function getDocumentReviewProjection(
 }
 
 /**
- * Returns compact review summaries for all documents in a case.
+ * Returns compact review summaries for documents in a case using a fully batched, bounded pipeline.
  * Designed for Case Workspace summary tiles and fast overview loading.
+ *
+ * NO SERIAL N+1 QUERY LOOP:
+ * Fetches versions, reviews, comparisons, and AI drafts in bounded batch queries and maps in memory.
  */
 export async function getCaseDocumentReviewSummaries(
   caseId: string,
-  options: { limit?: number; prisma?: any } = {}
+  options: {
+    limit?: number;
+    prisma?: any;
+    documents?: Array<{
+      id: string;
+      caseId?: string;
+      name?: string | null;
+      fileName?: string | null;
+      title?: string | null;
+      category?: string | null;
+      workStatus?: string | null;
+    }>;
+  } = {}
 ): Promise<{ caseId: string; documentCount: number; items: DocumentReviewSummaryDto[] }> {
   const db = options.prisma || defaultPrisma;
-  const docLimit = Math.min(Math.max(1, options.limit || 20), 50);
+  const docLimit = parseBoundedInt(options.limit, 1, 50, 20);
 
-  const documents = await db.document.findMany({
-    where: { caseId },
-    select: { id: true },
-    orderBy: { updatedAt: 'desc' },
-    take: docLimit,
+  // 1. Resolve documents (either from preloaded options or bounded findMany)
+  let documents: Array<{
+    id: string;
+    caseId: string;
+    name: string;
+    fileName: string | null;
+    title: string | null;
+    category: any;
+    workStatus: any;
+  }>;
+
+  if (options.documents && options.documents.length > 0) {
+    documents = options.documents.slice(0, docLimit).map((d) => ({
+      id: d.id,
+      caseId: d.caseId || caseId,
+      name: d.name || d.fileName || 'Dokumentum',
+      fileName: d.fileName || null,
+      title: d.title || null,
+      category: d.category || null,
+      workStatus: d.workStatus || null,
+    }));
+  } else {
+    documents = await db.document.findMany({
+      where: { caseId },
+      select: {
+        id: true,
+        caseId: true,
+        name: true,
+        fileName: true,
+        title: true,
+        category: true,
+        workStatus: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+      take: docLimit,
+    });
+  }
+
+  if (documents.length === 0) {
+    return { caseId, documentCount: 0, items: [] };
+  }
+
+  const docIds = documents.map((d) => d.id);
+
+  // 2. BATCH QUERY: All versions for these documents
+  const versions = await db.documentVersion.findMany({
+    where: { documentId: { in: docIds } },
+    select: {
+      id: true,
+      documentId: true,
+      version: true,
+      originalFileName: true,
+      name: true,
+      mimeType: true,
+      size: true,
+      isCurrent: true,
+      previousVersionId: true,
+      securityScanStatus: true,
+      createdAt: true,
+    },
+    orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
   });
 
+  const versionsByDoc = new Map<string, any[]>();
+  for (const v of versions) {
+    const list = versionsByDoc.get(v.documentId) || [];
+    list.push(v);
+    versionsByDoc.set(v.documentId, list);
+  }
+
+  const currentVersionMap = new Map<string, DocumentReviewVersionDto | null>();
+  const previousVersionMap = new Map<string, DocumentReviewVersionDto | null>();
+  const currentVersionIds: string[] = [];
+  const pairConditions: Array<{ documentId: string; targetVersionId: string; baseVersionId: string }> = [];
+
+  for (const doc of documents) {
+    const docVersions = versionsByDoc.get(doc.id) || [];
+    let currentVerRow = docVersions.find((v: any) => v.isCurrent);
+    if (!currentVerRow && docVersions.length > 0) {
+      currentVerRow = docVersions[0];
+    }
+
+    const curVer: DocumentReviewVersionDto | null = currentVerRow
+      ? {
+          id: currentVerRow.id,
+          version: currentVerRow.version,
+          fileName: currentVerRow.originalFileName || currentVerRow.name || null,
+          mimeType: currentVerRow.mimeType || null,
+          size: currentVerRow.size ?? null,
+          securityScanStatus: String(currentVerRow.securityScanStatus || 'CLEAN'),
+          createdAt: new Date(currentVerRow.createdAt).toISOString(),
+        }
+      : null;
+    currentVersionMap.set(doc.id, curVer);
+
+    if (currentVerRow) {
+      currentVersionIds.push(currentVerRow.id);
+    }
+
+    let prevVerRow: any = null;
+    if (currentVerRow) {
+      if (currentVerRow.previousVersionId) {
+        prevVerRow = docVersions.find((v: any) => v.id === currentVerRow.previousVersionId) || null;
+      }
+      if (!prevVerRow) {
+        prevVerRow = docVersions.find((v: any) => v.version < currentVerRow.version) || null;
+      }
+    }
+
+    const prevVer: DocumentReviewVersionDto | null = prevVerRow
+      ? {
+          id: prevVerRow.id,
+          version: prevVerRow.version,
+          fileName: prevVerRow.originalFileName || prevVerRow.name || null,
+          mimeType: prevVerRow.mimeType || null,
+          size: prevVerRow.size ?? null,
+          securityScanStatus: String(prevVerRow.securityScanStatus || 'CLEAN'),
+          createdAt: new Date(prevVerRow.createdAt).toISOString(),
+        }
+      : null;
+    previousVersionMap.set(doc.id, prevVer);
+
+    if (currentVerRow && prevVerRow) {
+      pairConditions.push({
+        documentId: doc.id,
+        targetVersionId: currentVerRow.id,
+        baseVersionId: prevVerRow.id,
+      });
+    }
+  }
+
+  // 3. BATCH QUERY: Reviews for all current versions (exact version binding)
+  const reviews = currentVersionIds.length > 0
+    ? await db.documentReview.findMany({
+        where: {
+          documentId: { in: docIds },
+          documentVersionId: { in: currentVersionIds },
+        },
+        include: {
+          assignedReviewer: { select: { id: true, name: true, email: true } },
+          points: {
+            select: {
+              id: true,
+              status: true,
+              severity: true,
+              comparisonSegmentId: true,
+            },
+          },
+        },
+        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      })
+    : [];
+
+  const reviewsByVersionId = new Map<string, any>();
+  for (const r of reviews) {
+    if (!reviewsByVersionId.has(r.documentVersionId)) {
+      reviewsByVersionId.set(r.documentVersionId, r);
+    }
+  }
+
+  // 4. BATCH QUERY: Comparisons for all exact (previous->current) version pairs
+  const comparisons = pairConditions.length > 0
+    ? await db.documentComparison.findMany({
+        where: { OR: pairConditions },
+        orderBy: [{ createdAt: 'desc' }],
+      })
+    : [];
+
+  const comparisonByTargetId = new Map<string, any>();
+  for (const c of comparisons) {
+    const key = `${c.documentId}:${c.baseVersionId}:${c.targetVersionId}`;
+    if (!comparisonByTargetId.has(key)) {
+      comparisonByTargetId.set(key, c);
+    }
+  }
+
+  // 5. BATCH QUERY: Change segment aggregates across all found comparisons
+  const compIds = comparisons.map((c: any) => c.id);
+  const stateGroups = compIds.length > 0
+    ? await db.documentChangeSegment.groupBy({
+        by: ['comparisonId', 'reviewState'],
+        where: { comparisonId: { in: compIds } },
+        _count: { _all: true },
+      })
+    : [];
+
+  const compStateCounts = new Map<string, Record<string, number>>();
+  for (const g of stateGroups as any[]) {
+    const current = compStateCounts.get(g.comparisonId) || {};
+    current[g.reviewState] = g._count?._all || 0;
+    compStateCounts.set(g.comparisonId, current);
+  }
+
+  // 6. SINGLE CASE-WIDE QUERY: AI drafts for the entire case (loaded exactly ONCE!)
+  const caseDrafts = await db.aiPromptDraft.findMany({
+    where: { caseId },
+    select: {
+      id: true,
+      status: true,
+      promptTemplateStableKey: true,
+      promptTemplateVersion: true,
+      sourceDocumentVersionIds: true,
+      sourceDocumentIds: true,
+      importedResponse: true,
+      rehydratedResponse: true,
+      verifiedAt: true,
+      approvedAt: true,
+      updatedAt: true,
+    },
+    orderBy: [{ updatedAt: 'desc' }],
+    take: 50,
+  });
+
+  // 7. IN-MEMORY ASSEMBLY: Build summary DTOs with deterministic nextAction
   const items: DocumentReviewSummaryDto[] = [];
 
   for (const doc of documents) {
-    const projection = await getDocumentReviewProjection(doc.id, { prisma: db });
-    if (!projection) continue;
+    const documentTitle = doc.title || doc.fileName || doc.name || 'Névtelen dokumentum';
+    const currentVersion = currentVersionMap.get(doc.id) || null;
+    const previousVersion = previousVersionMap.get(doc.id) || null;
+
+    let reviewProjection: DocumentReviewProjectionDto['review'] = null;
+    if (currentVersion) {
+      const r = reviewsByVersionId.get(currentVersion.id);
+      if (r) {
+        const openPoints = r.points.filter((p: any) => p.status === 'OPEN' || p.status === 'ANSWERED');
+        const blockingPoints = openPoints.filter((p: any) => p.severity === 'BLOCKING');
+        const pointsLinkedToSegments = r.points.filter((p: any) => Boolean(p.comparisonSegmentId));
+        const openPointsLinkedToSegments = openPoints.filter((p: any) => Boolean(p.comparisonSegmentId));
+
+        reviewProjection = {
+          reviewId: r.id,
+          documentVersionId: r.documentVersionId,
+          reviewVersionId: r.documentVersionId,
+          status: r.status,
+          reviewer: r.assignedReviewer
+            ? {
+                id: r.assignedReviewer.id,
+                name: r.assignedReviewer.name,
+                email: r.assignedReviewer.email,
+              }
+            : null,
+          openPointCount: openPoints.length,
+          blockingPointCount: blockingPoints.length,
+          pointsLinkedToSegmentsCount: pointsLinkedToSegments.length,
+          openPointsLinkedToSegmentsCount: openPointsLinkedToSegments.length,
+          dueAt: iso(r.dueAt),
+          currentRoundNumber: r.currentRoundNumber,
+          updatedAt: iso(r.updatedAt) || new Date().toISOString(),
+        };
+      }
+    }
+
+    let comparisonProjection: DocumentReviewProjectionDto['comparison'] = null;
+    if (currentVersion && previousVersion) {
+      const compKey = `${doc.id}:${previousVersion.id}:${currentVersion.id}`;
+      const comp = comparisonByTargetId.get(compKey);
+      if (comp) {
+        const states = compStateCounts.get(comp.id) || {};
+        const unreviewed = states['UNREVIEWED'] || 0;
+        const accepted = states['ACCEPTED'] || 0;
+        const rejected = states['REJECTED'] || 0;
+        const needsDiscussion = states['NEEDS_DISCUSSION'] || 0;
+        const notRelevant = states['NOT_RELEVANT'] || 0;
+        const unresolved = unreviewed + rejected + needsDiscussion;
+
+        comparisonProjection = {
+          comparisonId: comp.id,
+          status: comp.status,
+          baseVersionId: comp.baseVersionId,
+          targetVersionId: comp.targetVersionId,
+          totalSegments: comp.totalSegmentCount,
+          reviewedSegments: comp.reviewedSegmentCount,
+          unresolvedSegments: unresolved,
+          segmentStates: { unreviewed, accepted, rejected, needsDiscussion, notRelevant },
+          counts: {
+            insertCount: comp.insertCount,
+            deleteCount: comp.deleteCount,
+            replaceCount: comp.replaceCount,
+            formatOnlyCount: comp.formatOnlyCount,
+            moveCandidateCount: comp.moveCandidateCount,
+          },
+          categories: {},
+        };
+      }
+    }
+
+    const matched = matchAndRankAiDrafts({
+      drafts: caseDrafts,
+      documentId: doc.id,
+      currentVersionId: currentVersion?.id,
+      previousVersionId: previousVersion?.id,
+    });
+
+    let aiProjection: DocumentReviewProjectionDto['ai'] = null;
+    if (matched) {
+      const chosen = matched.draft;
+      aiProjection = {
+        promptDraftId: chosen.id,
+        status: chosen.status,
+        templateKey: chosen.promptTemplateStableKey,
+        templateVersion: chosen.promptTemplateVersion,
+        sourceDocumentVersionIds: matched.sourceDocumentVersionIds,
+        sourceMode: matched.sourceMode,
+        approved: matched.sourceMode !== 'LEGACY_DOCUMENT' && chosen.status === 'LAWYER_APPROVED',
+        artifactAvailability: {
+          hasImportedResponse: Boolean(chosen.importedResponse),
+          hasRehydratedResponse: Boolean(chosen.rehydratedResponse),
+        },
+        verifiedAt: iso(chosen.verifiedAt),
+        approvedAt: iso(chosen.approvedAt),
+        updatedAt: iso(chosen.updatedAt) || new Date().toISOString(),
+      };
+    }
+
+    const nextAction = deriveNextAction({
+      currentVersion,
+      previousVersion,
+      review: reviewProjection,
+      comparison: comparisonProjection,
+      ai: aiProjection,
+    });
 
     items.push({
-      documentId: projection.documentId,
-      caseId: projection.caseId,
-      documentTitle: projection.documentTitle,
-      category: projection.category,
-      workStatus: projection.workStatus,
-      currentVersionNumber: projection.currentVersion?.version ?? null,
-      currentVersionId: projection.currentVersion?.id ?? null,
-      previousVersionNumber: projection.previousVersion?.version ?? null,
-      previousVersionId: projection.previousVersion?.id ?? null,
-      reviewId: projection.review?.reviewId ?? null,
-      reviewVersionId: projection.review?.documentVersionId ?? null,
-      reviewStatus: projection.review?.status ?? null,
-      openPointCount: projection.review?.openPointCount ?? 0,
-      blockingPointCount: projection.review?.blockingPointCount ?? 0,
-      comparisonId: projection.comparison?.comparisonId ?? null,
-      comparisonStatus: projection.comparison?.status ?? null,
-      totalSegments: projection.comparison?.totalSegments ?? 0,
-      reviewedSegments: projection.comparison?.reviewedSegments ?? 0,
-      unresolvedSegments: projection.comparison?.unresolvedSegments ?? 0,
-      aiPromptDraftId: projection.ai?.promptDraftId ?? null,
-      aiDraftStatus: projection.ai?.status ?? null,
-      aiApproved: projection.ai?.approved ?? false,
-      nextAction: projection.nextAction,
+      documentId: doc.id,
+      caseId: doc.caseId,
+      documentTitle,
+      category: doc.category ? String(doc.category) : null,
+      workStatus: doc.workStatus ? String(doc.workStatus) : null,
+      currentVersionNumber: currentVersion?.version ?? null,
+      currentVersionId: currentVersion?.id ?? null,
+      previousVersionNumber: previousVersion?.version ?? null,
+      previousVersionId: previousVersion?.id ?? null,
+      reviewId: reviewProjection?.reviewId ?? null,
+      reviewVersionId: reviewProjection?.documentVersionId ?? null,
+      reviewStatus: reviewProjection?.status ?? null,
+      openPointCount: reviewProjection?.openPointCount ?? 0,
+      blockingPointCount: reviewProjection?.blockingPointCount ?? 0,
+      comparisonId: comparisonProjection?.comparisonId ?? null,
+      comparisonStatus: comparisonProjection?.status ?? null,
+      totalSegments: comparisonProjection?.totalSegments ?? 0,
+      reviewedSegments: comparisonProjection?.reviewedSegments ?? 0,
+      unresolvedSegments: comparisonProjection?.unresolvedSegments ?? 0,
+      aiPromptDraftId: aiProjection?.promptDraftId ?? null,
+      aiDraftStatus: aiProjection?.status ?? null,
+      aiApproved: aiProjection?.approved ?? false,
+      aiSourceMode: aiProjection?.sourceMode ?? null,
+      nextAction,
     });
   }
 

@@ -13,7 +13,7 @@ import { getCaseWorkflowSummary } from './workflowSummary';
 import { getCaseWorkItems } from './workItems';
 import { getCaseActivity } from './activity';
 import { getCaseWorkspace } from './workspace';
-import { getCaseDocumentReviewSummaries } from '../documents/reviewProjection.service';
+import { getCaseDocumentReviewSummaries, parseBoundedInt } from '../documents/reviewProjection.service';
 import { createCaseComment, listCaseComments, resolveCaseComment, reopenCaseComment, sendCaseCommentError } from './caseComments.service';
 import { createCaseIntake, CaseIntakeError } from './intakeCreate.service';
 import { CaseWorkPackageError } from './caseWorkPackage.service';
@@ -329,7 +329,9 @@ router.get('/:caseId/workspace', authenticate, requireCaseReadAccess, async (req
 router.get('/:caseId/document-reviews', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
-    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const limit = req.query.limit !== undefined
+      ? parseBoundedInt(req.query.limit, 1, 50, 20)
+      : undefined;
     const summaries = await getCaseDocumentReviewSummaries(caseId, { limit });
     res.json(summaries);
   } catch (error) {

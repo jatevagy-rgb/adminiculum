@@ -8,7 +8,7 @@
  */
 import { prisma } from '../../prisma/prisma.service';
 import { buildCockpit, type CaseCockpit } from './workspaceCockpit';
-import { getDocumentReviewProjection, type DocumentReviewSummaryDto } from '../documents/reviewProjection.service';
+import { getCaseDocumentReviewSummaries, type DocumentReviewSummaryDto } from '../documents/reviewProjection.service';
 
 const TASK_LIMIT = 8;
 const DOCUMENT_LIMIT = 8;
@@ -369,36 +369,13 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     'DOCUMENT_REVIEWS_UNAVAILABLE',
     'A dokumentumok felülvizsgálati állapota most nem elérhető.',
     async () => {
+      const summaryResult = await getCaseDocumentReviewSummaries(caseId, {
+        limit: DOCUMENT_LIMIT,
+        documents: documents.slice(0, DOCUMENT_LIMIT),
+      });
       const map = new Map<string, DocumentReviewSummaryDto>();
-      for (const d of documents.slice(0, DOCUMENT_LIMIT)) {
-        const p = await getDocumentReviewProjection(d.id);
-        if (p) {
-          map.set(d.id, {
-            documentId: p.documentId,
-            caseId: p.caseId,
-            documentTitle: p.documentTitle,
-            category: p.category,
-            workStatus: p.workStatus,
-            currentVersionNumber: p.currentVersion?.version ?? null,
-            currentVersionId: p.currentVersion?.id ?? null,
-            previousVersionNumber: p.previousVersion?.version ?? null,
-            previousVersionId: p.previousVersion?.id ?? null,
-            reviewId: p.review?.reviewId ?? null,
-            reviewVersionId: p.review?.documentVersionId ?? null,
-            reviewStatus: p.review?.status ?? null,
-            openPointCount: p.review?.openPointCount ?? 0,
-            blockingPointCount: p.review?.blockingPointCount ?? 0,
-            comparisonId: p.comparison?.comparisonId ?? null,
-            comparisonStatus: p.comparison?.status ?? null,
-            totalSegments: p.comparison?.totalSegments ?? 0,
-            reviewedSegments: p.comparison?.reviewedSegments ?? 0,
-            unresolvedSegments: p.comparison?.unresolvedSegments ?? 0,
-            aiPromptDraftId: p.ai?.promptDraftId ?? null,
-            aiDraftStatus: p.ai?.status ?? null,
-            aiApproved: p.ai?.approved ?? false,
-            nextAction: p.nextAction,
-          });
-        }
+      for (const item of summaryResult.items) {
+        map.set(item.documentId, item);
       }
       return map;
     },

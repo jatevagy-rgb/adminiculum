@@ -4,6 +4,8 @@ import {
   deriveNextAction,
   getDocumentReviewProjection,
   getCaseDocumentReviewSummaries,
+  matchAndRankAiDrafts,
+  parseBoundedInt,
   DocumentReviewProjectionDto,
 } from '../src/modules/documents/reviewProjection.service';
 
@@ -328,6 +330,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
           templateKey: 'CONTRACT_RISK',
           templateVersion: 1,
           sourceDocumentVersionIds: ['v1'],
+          sourceMode: 'CURRENT_VERSION',
           approved: false, // NOT lawyer approved
           artifactAvailability: { hasImportedResponse: true, hasRehydratedResponse: true },
           verifiedAt: null,
@@ -363,6 +366,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
           templateKey: 'CONTRACT_RISK',
           templateVersion: 1,
           sourceDocumentVersionIds: ['v1'],
+          sourceMode: 'CURRENT_VERSION',
           approved: true, // LAWYER APPROVED
           artifactAvailability: { hasImportedResponse: true, hasRehydratedResponse: true },
           verifiedAt: new Date().toISOString(),
@@ -628,6 +632,322 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
       expect(projection!.comparison).toBeNull();
       expect(projection!.ai).toBeNull();
       expect(projection!.nextAction.code).toBe('UPLOAD_VERSION');
+    });
+  });
+
+  describe('AI Draft Version-Truthful Matching & Ranking (Issue 1)', () => {
+    it('selects v1/v2 AI_DRAFT over older v1 LAWYER_APPROVED when current is v2 (relevance before status)', () => {
+      const draftV1Approved = {
+        id: 'draft-v1-approved',
+        status: 'LAWYER_APPROVED',
+        promptTemplateStableKey: 'CONTRACT_RISK',
+        promptTemplateVersion: 1,
+        sourceDocumentVersionIds: JSON.stringify(['v1']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date('2026-09-01'),
+      };
+      const draftPairAi = {
+        id: 'draft-v1-v2-pair',
+        status: 'AI_DRAFT',
+        promptTemplateStableKey: 'CONTRACT_COMPARE',
+        promptTemplateVersion: 1,
+        sourceDocumentVersionIds: JSON.stringify(['v1', 'v2']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date('2026-09-02'),
+      };
+
+      const matched = matchAndRankAiDrafts({
+        drafts: [draftV1Approved, draftPairAi],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+
+      expect(matched).not.toBeNull();
+      expect(matched!.draft.id).toBe('draft-v1-v2-pair');
+      expect(matched!.sourceMode).toBe('EXACT_VERSION_PAIR');
+      expect(matched!.draft.status).toBe('AI_DRAFT');
+    });
+
+    it('discards drafts matching only previousVersionId (does not misattribute old version AI state)', () => {
+      const draftPreviousOnly = {
+        id: 'draft-v1-only',
+        status: 'LAWYER_APPROVED',
+        promptTemplateStableKey: 'CONTRACT_RISK',
+        promptTemplateVersion: 1,
+        sourceDocumentVersionIds: JSON.stringify(['v1']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date('2026-09-01'),
+      };
+
+      const matched = matchAndRankAiDrafts({
+        drafts: [draftPreviousOnly],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+
+      expect(matched).toBeNull();
+    });
+
+    it('prefers exact current-version draft (CURRENT_VERSION) over legacy document-level draft (LEGACY_DOCUMENT)', () => {
+      const draftLegacy = {
+        id: 'draft-legacy',
+        status: 'LAWYER_APPROVED',
+        promptTemplateStableKey: 'GENERIC_ANALYSIS',
+        promptTemplateVersion: 1,
+        sourceDocumentVersionIds: JSON.stringify([]),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date('2026-09-05'),
+      };
+      const draftCurrent = {
+        id: 'draft-v2-current',
+        status: 'AI_DRAFT',
+        promptTemplateStableKey: 'VERSION_ANALYSIS',
+        promptTemplateVersion: 1,
+        sourceDocumentVersionIds: JSON.stringify(['v2']),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date('2026-09-01'),
+      };
+
+      const matched = matchAndRankAiDrafts({
+        drafts: [draftLegacy, draftCurrent],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+
+      expect(matched).not.toBeNull();
+      expect(matched!.draft.id).toBe('draft-v2-current');
+      expect(matched!.sourceMode).toBe('CURRENT_VERSION');
+    });
+
+    it('matches legacy document-level draft only if no version IDs are attached', () => {
+      const draftLegacy = {
+        id: 'draft-legacy-doc',
+        status: 'AI_DRAFT',
+        promptTemplateStableKey: 'GENERIC_ANALYSIS',
+        promptTemplateVersion: 1,
+        sourceDocumentVersionIds: JSON.stringify([]),
+        sourceDocumentIds: JSON.stringify(['doc-1']),
+        updatedAt: new Date('2026-09-01'),
+      };
+
+      const matched = matchAndRankAiDrafts({
+        drafts: [draftLegacy],
+        documentId: 'doc-1',
+        currentVersionId: 'v2',
+        previousVersionId: 'v1',
+      });
+
+      expect(matched).not.toBeNull();
+      expect(matched!.draft.id).toBe('draft-legacy-doc');
+      expect(matched!.sourceMode).toBe('LEGACY_DOCUMENT');
+    });
+  });
+
+  describe('Comparison Fallback Rejection (Issue 2)', () => {
+    it('rejects arbitrary comparison: v0->v2 comparison is NOT used when canonical previous is v1', async () => {
+      // Lineage: v0 -> v1 -> v2
+      // Current: v2, Previous: v1
+      // Database has comparison v0->v2 only.
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'doc-comp-test',
+            caseId: 'case-1',
+            name: 'Megallapodas.docx',
+            fileName: 'Megallapodas.docx',
+            title: 'Megállapodás',
+            category: 'CONTRACT',
+            workStatus: 'IN_PROGRESS',
+          }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v2', version: 2, originalFileName: 'v2.docx', name: 'v2.docx', mimeType: 'application/docx', size: 2000, isCurrent: true, previousVersionId: 'v1', securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-03') },
+            { id: 'v1', version: 1, originalFileName: 'v1.docx', name: 'v1.docx', mimeType: 'application/docx', size: 1900, isCurrent: false, previousVersionId: 'v0', securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-02') },
+            { id: 'v0', version: 0, originalFileName: 'v0.docx', name: 'v0.docx', mimeType: 'application/docx', size: 1800, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-01') },
+          ]),
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: {
+          findFirst: jest.fn().mockImplementation((args: any) => {
+            // Service must search strictly for baseVersionId: 'v1' and targetVersionId: 'v2'
+            if (args.where?.baseVersionId === 'v1' && args.where?.targetVersionId === 'v2') {
+              return null; // Exact canonical pair does NOT exist
+            }
+            // An obsolete v0->v2 comparison exists in the DB:
+            if (args.where?.targetVersionId === 'v2' && !args.where?.baseVersionId) {
+              return { id: 'comp-v0-v2', baseVersionId: 'v0', targetVersionId: 'v2', status: 'READY' };
+            }
+            return null;
+          }),
+        },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-comp-test', { prisma: mockPrisma });
+      expect(projection).not.toBeNull();
+      // Comparison MUST be null because v0->v2 is NOT canonical previous (v1) -> current (v2)
+      expect(projection!.comparison).toBeNull();
+      expect(projection!.nextAction.code).toBe('RUN_COMPARISON');
+      expect(mockPrisma.documentComparison.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            baseVersionId: 'v1',
+            targetVersionId: 'v2',
+          }),
+        })
+      );
+    });
+
+    it('accepts exact canonical previousVersionId -> currentVersionId comparison', async () => {
+      const mockPrisma = {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'doc-comp-ok',
+            caseId: 'case-1',
+            name: 'Megallapodas.docx',
+            fileName: 'Megallapodas.docx',
+            title: 'Megállapodás',
+            category: 'CONTRACT',
+            workStatus: 'IN_PROGRESS',
+          }),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v2', version: 2, originalFileName: 'v2.docx', name: 'v2.docx', mimeType: 'application/docx', size: 2000, isCurrent: true, previousVersionId: 'v1', securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-02') },
+            { id: 'v1', version: 1, originalFileName: 'v1.docx', name: 'v1.docx', mimeType: 'application/docx', size: 1800, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-01') },
+          ]),
+        },
+        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentComparison: {
+          findFirst: jest.fn().mockImplementation((args: any) => {
+            if (args.where?.baseVersionId === 'v1' && args.where?.targetVersionId === 'v2') {
+              return {
+                id: 'comp-v1-v2',
+                baseVersionId: 'v1',
+                targetVersionId: 'v2',
+                status: 'READY',
+                totalSegmentCount: 5,
+                reviewedSegmentCount: 2,
+                insertCount: 2,
+                deleteCount: 1,
+                replaceCount: 2,
+                formatOnlyCount: 0,
+                moveCandidateCount: 0,
+              };
+            }
+            return null;
+          }),
+        },
+        documentChangeSegment: {
+          groupBy: jest.fn().mockResolvedValue([
+            { reviewState: 'UNREVIEWED', _count: { _all: 3 } },
+            { reviewState: 'ACCEPTED', _count: { _all: 2 } },
+          ]),
+        },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+      };
+
+      const projection = await getDocumentReviewProjection('doc-comp-ok', { prisma: mockPrisma });
+      expect(projection).not.toBeNull();
+      expect(projection!.comparison).not.toBeNull();
+      expect(projection!.comparison!.comparisonId).toBe('comp-v1-v2');
+      expect(projection!.comparison!.baseVersionId).toBe('v1');
+      expect(projection!.comparison!.targetVersionId).toBe('v2');
+      expect(projection!.comparison!.unresolvedSegments).toBe(3);
+    });
+  });
+
+  describe('Case Workspace Batched Execution & Single Query AI Drafts (Issue 3)', () => {
+    it('getCaseDocumentReviewSummaries executes single query for AI drafts and batches versions and comparisons', async () => {
+      const mockPrisma = {
+        document: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'doc-1', caseId: 'case-batch', title: 'Doc 1', fileName: 'doc1.pdf', category: 'CONTRACT', workStatus: 'IN_PROGRESS' },
+            { id: 'doc-2', caseId: 'case-batch', title: 'Doc 2', fileName: 'doc2.pdf', category: 'MEMO', workStatus: 'RECEIVED' },
+          ]),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v1-2', documentId: 'doc-1', version: 2, isCurrent: true, previousVersionId: 'v1-1', securityScanStatus: 'CLEAN', createdAt: new Date() },
+            { id: 'v1-1', documentId: 'doc-1', version: 1, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date() },
+            { id: 'v2-1', documentId: 'doc-2', version: 1, isCurrent: true, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date() },
+          ]),
+        },
+        documentReview: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        documentComparison: {
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        documentChangeSegment: {
+          groupBy: jest.fn().mockResolvedValue([]),
+        },
+        aiPromptDraft: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'draft-case-wide',
+              caseId: 'case-batch',
+              status: 'AI_DRAFT',
+              promptTemplateStableKey: 'CONTRACT_COMPARE',
+              promptTemplateVersion: 1,
+              sourceDocumentVersionIds: JSON.stringify(['v1-1', 'v1-2']),
+              sourceDocumentIds: JSON.stringify(['doc-1']),
+              importedResponse: 'Analysis',
+              rehydratedResponse: 'Rehydrated',
+              verifiedAt: null,
+              approvedAt: null,
+              updatedAt: new Date(),
+            },
+          ]),
+        },
+      };
+
+      const result = await getCaseDocumentReviewSummaries('case-batch', { prisma: mockPrisma });
+      expect(result.items).toHaveLength(2);
+      // aiPromptDraft.findMany MUST be called exactly once across the whole case (single case-wide query)
+      expect(mockPrisma.aiPromptDraft.findMany).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.aiPromptDraft.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { caseId: 'case-batch' } })
+      );
+
+      // Check that doc-1 correctly received its matched AI draft in memory:
+      const doc1Summary = result.items.find((i) => i.documentId === 'doc-1');
+      expect(doc1Summary).toBeDefined();
+      expect(doc1Summary!.aiPromptDraftId).toBe('draft-case-wide');
+      expect(doc1Summary!.aiSourceMode).toBe('EXACT_VERSION_PAIR');
+
+      // Check that doc-2 has no AI draft:
+      const doc2Summary = result.items.find((i) => i.documentId === 'doc-2');
+      expect(doc2Summary).toBeDefined();
+      expect(doc2Summary!.aiPromptDraftId).toBeNull();
+    });
+  });
+
+  describe('Bounded Query Parameter Validation (Issue 4)', () => {
+    it('parseBoundedInt enforces limits and handles edge cases', () => {
+      // segmentLimit bounds: min 1, max 100, default 50
+      expect(parseBoundedInt(-10, 1, 100, 50)).toBe(1);
+      expect(parseBoundedInt(0, 1, 100, 50)).toBe(1);
+      expect(parseBoundedInt(250, 1, 100, 50)).toBe(100);
+      expect(parseBoundedInt('invalid', 1, 100, 50)).toBe(50);
+      expect(parseBoundedInt(undefined, 1, 100, 50)).toBe(50);
+      expect(parseBoundedInt(null, 1, 100, 50)).toBe(50);
+      expect(parseBoundedInt('', 1, 100, 50)).toBe(50);
+      expect(parseBoundedInt(NaN, 1, 100, 50)).toBe(50);
+      expect(parseBoundedInt(Infinity, 1, 100, 50)).toBe(50);
+      expect(parseBoundedInt('45.9', 1, 100, 50)).toBe(45);
+
+      // case limit bounds: min 1, max 50, default 20
+      expect(parseBoundedInt(-5, 1, 50, 20)).toBe(1);
+      expect(parseBoundedInt(0, 1, 50, 20)).toBe(1);
+      expect(parseBoundedInt(100, 1, 50, 20)).toBe(50);
+      expect(parseBoundedInt(35, 1, 50, 20)).toBe(35);
+      expect(parseBoundedInt('15', 1, 50, 20)).toBe(15);
     });
   });
 
