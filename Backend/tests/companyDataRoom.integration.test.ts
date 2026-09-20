@@ -600,7 +600,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     expect(view.dataQuality.answerStateSummary).toEqual({ answered: 1, unknown: 2 });
     expect(view.dataQuality.coverageAvailable).toBe(false);
     expect(view.dataQuality.relevantDataCoverage).toEqual(expect.objectContaining({
-      answeredCount: 0,
+      answeredCount: 2,
       unknownCount: 1,
       unansweredCount: expect.any(Number),
       derivedAnsweredCount: 0,
@@ -612,6 +612,7 @@ d('Company Data Room integration (PostgreSQL)', () => {
     );
     const visibility = resolveVisibleQuestions(buildFactStateMap({
       personal_data_processing: { status: 'ANSWERED', value: false },
+      annual_net_revenue_eur: { status: 'ANSWERED', value: 123456 },
       ai_use: { status: 'UNKNOWN' },
     }));
     for (const question of visibility.visible) {
