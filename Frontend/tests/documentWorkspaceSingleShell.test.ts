@@ -51,6 +51,33 @@ test("review projection fields feed overview without replacing canonical next ac
   assert.match(source, /reviewProjection\.comparison\.reviewedSegments/);
 });
 
+test("approval keeps selected-version identity separate from current projection truth", () => {
+  const source = page();
+  assert.match(source, /projectionMatchesSelectedVersion/);
+  assert.match(source, /Kiválasztott verzió:<\/b> \{selectedVersion \?/);
+  assert.match(source, /approval-current-version-note/);
+  assert.match(source, /A kanonikus összegzés az aktuális verzióhoz tartozik/);
+});
+
+test("review projection refreshes after review and segment mutations", () => {
+  const source = page();
+  const review = readFileSync(
+    path.resolve(process.cwd(), "src/components/documents/review/DocumentReviewWorkflowPanel.tsx"),
+    "utf8",
+  );
+  assert.match(source, /refreshReviewProjection\(selectedUploadedDocument\.id\)/);
+  assert.match(source, /onChanged=\{\(\) => void refreshReviewProjection\(selectedUploadedDocument\.id\)\}/);
+  assert.match(source, /onChanged=\{\(\) => selectedUploadedDocument \? refreshReviewProjection\(selectedUploadedDocument\.id\)/);
+  assert.match(review, /onChanged\?: \(\) => void \| Promise<void>/);
+  assert.match(review, /await onChanged\?\.\(\)/);
+});
+
+test("unknown document enums use a neutral bounded label", () => {
+  const source = page();
+  assert.match(source, /documentEnumLabels\[value\] \|\| 'Ismeretlen állapot'/);
+  assert.doesNotMatch(source, /documentEnumLabels\[value\] \|\| value/);
+});
+
 test("center reader remains a sibling of the right shell and left ledger", () => {
   const source = page();
   assert.match(source, /data-testid="canonical-left-ledger"/);

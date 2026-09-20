@@ -26,6 +26,7 @@ test("Change map uses exact immutable versions and preserves truthful excerpts",
   assert.match(workspace, /!sameVersion/);
   assert.match(source, /setAiVersionPair\(\[baseVersionId, targetVersionId\]\)/);
   assert.match(source, /onRequestSegmentChanges=\{handleSegmentRequestChanges\}/);
+  assert.match(source, /onChanged=\{\(\) => selectedUploadedDocument \? refreshReviewProjection\(selectedUploadedDocument\.id\)/);
   assert.match(source, /<ComparisonWorkspace[\s\S]*?versions=\{versions\.map/);
 });
 

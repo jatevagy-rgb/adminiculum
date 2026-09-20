@@ -293,7 +293,7 @@ const documentEnumLabels: Record<string, string> = {
 
 const documentEnumLabel = (value?: string | null): string => {
   if (!value) return 'Nincs megadva';
-  return documentEnumLabels[value] || value;
+  return documentEnumLabels[value] || 'Ismeretlen állapot';
 };
 
 const fileToBase64 = (file: File): Promise<string> =>
@@ -460,6 +460,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [segmentChangeBusy, setSegmentChangeBusy] = useState(false);
   const [publicationPrefill, setPublicationPrefill] = useState<ClientPublicationPrefillDraft | null>(null);
   const [reviewProjection, setReviewProjection] = useState<DocumentReviewProjection | null>(null);
+  const reviewProjectionRequestRef = useRef(0);
 
   useEffect(() => {
     setVisitedContextualTabs((prev) => (prev[contextualTab] ? prev : { ...prev, [contextualTab]: true }));
@@ -643,24 +644,30 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const selectedUploadedDocument = selectedLedgerItem?.kind === 'uploaded' ? selectedLedgerItem.item : null;
   const selectedGeneratedContract = selectedLedgerItem?.kind === 'generated' ? selectedLedgerItem.item : selectedContract;
 
+  const refreshReviewProjection = useCallback(async (documentId: string) => {
+    const requestId = reviewProjectionRequestRef.current + 1;
+    reviewProjectionRequestRef.current = requestId;
+    try {
+      const projection = await getDocumentReviewProjection(documentId);
+      if (reviewProjectionRequestRef.current === requestId) {
+        setReviewProjection(projection);
+      }
+    } catch {
+      if (reviewProjectionRequestRef.current === requestId) {
+        setReviewProjection(null);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const documentId = selectedUploadedDocument?.id;
     if (!documentId) {
+      reviewProjectionRequestRef.current += 1;
       setReviewProjection(null);
       return;
     }
-    let cancelled = false;
-    getDocumentReviewProjection(documentId)
-      .then((projection) => {
-        if (!cancelled) setReviewProjection(projection);
-      })
-      .catch(() => {
-        if (!cancelled) setReviewProjection(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedUploadedDocument?.id]);
+    void refreshReviewProjection(documentId);
+  }, [refreshReviewProjection, selectedUploadedDocument?.id]);
 
   const refreshSelectedDocumentVersions = useCallback(async (documentId: string) => {
     setIsLoadingVersions(true);
@@ -1466,6 +1473,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // Review transient truthfulness: when an uploaded document is active but its version
   // list is loading or unreconciled, we render a neutral loading state rather than false negatives.
   const isReviewLoading = Boolean(selectedUploadedDocument && (!canonicalActiveVersion || isLoadingVersions));
+  const projectionMatchesSelectedVersion = Boolean(
+    reviewProjection?.currentVersion?.id && reviewProjection.currentVersion.id === selectedVersion?.id,
+  );
 
   // Publication status truth table:
   // - no publishable uploaded document => "Nem publikálható"
@@ -1819,6 +1829,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       });
       setSegmentChangeRequest(null);
       setActionResult({ type: 'success', message: 'A változás megbeszélendőként és review pontként rögzítve.' });
+      await refreshReviewProjection(selectedUploadedDocument.id);
       setContextualTab('approval');
     } catch {
       setActionResult({ type: 'error', message: 'A módosítási kérés nem sikerült.' });
@@ -2398,7 +2409,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
                             {isReviewLoading
                               ? "Verzióadatok betöltése..."
-                              : reviewProjection?.review?.status
+                              : projectionMatchesSelectedVersion && reviewProjection?.review?.status
                                 ? documentEnumLabel(reviewProjection.review.status)
                                 : canonicalActiveVersion?.reviewStatus
                                   ? documentEnumLabel(canonicalActiveVersion.reviewStatus)
@@ -2411,11 +2422,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </div>
                         ) : (
                           <div className="space-y-1.5 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
-                            <p><b>Kiválasztott verzió:</b> {reviewProjection?.currentVersion ? `v${reviewProjection.currentVersion.version}` : canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
-                            <p><b>Nyitott review pontok:</b> {reviewProjection?.review?.openPointCount ?? '—'}{reviewProjection?.review ? ' db' : ''}</p>
-                            <p><b>Blokkoló review pontok:</b> {reviewProjection?.review?.blockingPointCount ?? '—'}{reviewProjection?.review ? ' db' : ''}</p>
-                            <p><b>Feloldatlan változások:</b> {reviewProjection?.comparison?.unresolvedSegments ?? '—'}</p>
-                            {reviewProjection?.nextAction?.label ? <p><b>Következő teendő:</b> {reviewProjection.nextAction.label}</p> : null}
+                            <p><b>Kiválasztott verzió:</b> {selectedVersion ? `v${selectedVersion.versionNumber}` : canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
+                            {projectionMatchesSelectedVersion ? (
+                              <>
+                                <p><b>Nyitott review pontok:</b> {reviewProjection?.review?.openPointCount ?? '—'}{reviewProjection?.review ? ' db' : ''}</p>
+                                <p><b>Blokkoló review pontok:</b> {reviewProjection?.review?.blockingPointCount ?? '—'}{reviewProjection?.review ? ' db' : ''}</p>
+                                <p><b>Feloldatlan változások:</b> {reviewProjection?.comparison?.unresolvedSegments ?? '—'}</p>
+                                {reviewProjection?.nextAction?.label ? <p><b>Következő teendő:</b> {reviewProjection.nextAction.label}</p> : null}
+                              </>
+                            ) : reviewProjection ? (
+                              <p data-testid="approval-current-version-note" className="text-[11px] text-[var(--adm-text-muted)]">A kanonikus összegzés az aktuális verzióhoz tartozik.</p>
+                            ) : null}
                           </div>
                         )}
 
@@ -2425,6 +2442,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               documentId={selectedUploadedDocument.id}
                               selectedVersionId={selectedVersion?.id || null}
                               versions={versions}
+                              onChanged={() => void refreshReviewProjection(selectedUploadedDocument.id)}
                             />
                           </section>
                         ) : (
@@ -2456,6 +2474,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 setAiPreparationOpen(true);
                               }}
                               onRequestSegmentChanges={handleSegmentRequestChanges}
+                              onChanged={() => selectedUploadedDocument ? refreshReviewProjection(selectedUploadedDocument.id) : undefined}
                               />
                             </section>
                           ) : (
@@ -2605,7 +2624,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
 
                       {visitedContextualTabs['approval'] ? (
-                        <details id="approval-ai-tools" data-testid="approval-ai-tools" className="rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                        <details id="approval-ai-tools" data-testid="approval-ai-tools" className={`${contextualTab === 'approval' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
                           <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">AI előkészítés és jogi elemzés</summary>
                           <div className="mt-3 space-y-4">
                           <div>
@@ -2640,7 +2659,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
 
                       {visitedContextualTabs['approval'] ? (
-                        <details id="approval-publication-tools" data-testid="approval-publication-tools" className="rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                        <details id="approval-publication-tools" data-testid="approval-publication-tools" className={`${contextualTab === 'approval' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
                           <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Ügyfélátadás / közzététel</summary>
                           <div className="mt-3 space-y-4">
                           <div>
@@ -2678,7 +2697,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
 
                       {visitedContextualTabs['approval'] ? (
-                        <details id="approval-handoff-tools" data-testid="approval-handoff-tools" className="rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                        <details id="approval-handoff-tools" data-testid="approval-handoff-tools" className={`${contextualTab === 'approval' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
                           <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Leadás / ügyvédi átadás</summary>
                           <div className="mt-3 space-y-4">
                           <div>

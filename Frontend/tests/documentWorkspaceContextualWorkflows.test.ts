@@ -24,6 +24,7 @@ test("Requirement 1: AI and legal analysis remain secondary approval tools", () 
   assert.match(shell, /<LegalAnalysisIntakePanel/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-legal-analysis['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
+  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
 });
 
 test("Requirement 2: Publication remains a secondary approval tool", () => {
@@ -37,6 +38,7 @@ test("Requirement 2: Publication remains a secondary approval tool", () => {
   assert.match(shell, /viewMode="document-only"/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-publication['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
+  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
 });
 
 test("Requirement 3: Handoff remains a secondary approval tool", () => {
@@ -50,6 +52,7 @@ test("Requirement 3: Handoff remains a secondary approval tool", () => {
   assert.match(shell, /compact/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-handoff['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
+  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
 });
 
 test("Requirement 4: Four primary modes switch contextual working content in right shell", () => {

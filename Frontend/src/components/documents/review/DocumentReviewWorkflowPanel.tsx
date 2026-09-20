@@ -35,7 +35,17 @@ const typeLabel: Record<string, string> = { WHOLE_DOCUMENT: "Teljes dokumentum",
 const severityLabel: Record<string, string> = { INFO: "Info", NORMAL: "Normál", IMPORTANT: "Fontos", BLOCKING: "Blokkoló" };
 const closedPointStatuses = new Set(["RESOLVED", "REJECTED", "DEFERRED"]);
 
-export function DocumentReviewWorkflowPanel({ documentId, selectedVersionId, versions }: { documentId: string; selectedVersionId: string | null; versions: VersionOption[] }) {
+export function DocumentReviewWorkflowPanel({
+  documentId,
+  selectedVersionId,
+  versions,
+  onChanged,
+}: {
+  documentId: string;
+  selectedVersionId: string | null;
+  versions: VersionOption[];
+  onChanged?: () => void | Promise<void>;
+}) {
   const [review, setReview] = useState<DocumentReviewDto | null>(null);
   const [points, setPoints] = useState<ReviewPointDto[]>([]);
   const [decisions, setDecisions] = useState<ReviewDecisionDto[]>([]);
@@ -75,7 +85,11 @@ export function DocumentReviewWorkflowPanel({ documentId, selectedVersionId, ver
 
   const run = async (fn: () => Promise<DocumentReviewDto | ReviewPointDto>) => {
     setBusy(true); setError(null);
-    try { await fn(); await load(); }
+    try {
+      await fn();
+      await load();
+      await onChanged?.();
+    }
     catch (err) { setError(err instanceof ApiError ? `${err.code || err.status}: ${err.message}` : "A review művelet nem sikerült."); }
     finally { setBusy(false); }
   };
