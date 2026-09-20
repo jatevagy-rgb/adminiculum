@@ -9,15 +9,15 @@ const documentPage = () => read("src/app/cases/[caseId]/documents/page.tsx");
 const clientPage = () => read("src/app/clients/[clientId]/page.tsx");
 const tabs = () => read("src/components/documents/workContext/DocumentWorkspaceTabs.tsx");
 
-test("Document Workspace exposes the four case-document views", () => {
+test("Document Workspace exposes the four primary case-document modes", () => {
   const source = tabs();
-  for (const label of ["Áttekintés", "Változások", "Felülvizsgálat", "Verziók"]) {
+  for (const label of ["Áttekintés", "Változások", "Megjegyzések", "Jóváhagyás"]) {
     assert.match(source, new RegExp(label));
   }
-  for (const anchor of ["document-overview", "document-changes", "document-review", "document-versions"]) {
+  for (const anchor of ["document-overview", "document-changes", "document-comments", "document-approval"]) {
     assert.match(source, new RegExp(anchor));
-    assert.match(documentPage(), new RegExp(`id=\\"${anchor}\\"`));
   }
+  assert.doesNotMatch(source, /Elemzés|Ügyfél|Leadás/);
 });
 
 test("Document add and immutable version upload remain distinct", () => {

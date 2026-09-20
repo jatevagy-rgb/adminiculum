@@ -441,8 +441,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     pageIndex: number;
   } | null>(null);
   const [visualMode, setVisualMode] = useState<Extract<DocumentAnnotationAnchorType, 'PAGE_RECTANGLE' | 'PAGE_ELLIPSE' | 'PAGE_POINT'> | null>(null);
-  const [contextualTab, setContextualTab] = useState<'review' | 'changes' | 'comments' | 'elemzes' | 'ugyfel' | 'leadas'>('review');
-  const [visitedContextualTabs, setVisitedContextualTabs] = useState<Record<string, boolean>>({ review: true });
+  const [contextualTab, setContextualTab] = useState<'overview' | 'changes' | 'comments' | 'approval'>('overview');
+  const [visitedContextualTabs, setVisitedContextualTabs] = useState<Record<string, boolean>>({ overview: true });
   const [segmentChangeRequest, setSegmentChangeRequest] = useState<SegmentDto | null>(null);
   const [segmentChangeReason, setSegmentChangeReason] = useState("");
   const [segmentRequestedChange, setSegmentRequestedChange] = useState("");
@@ -1661,7 +1661,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       title,
       explanation,
     });
-    setContextualTab('ugyfel');
+    setContextualTab('approval');
   };
 
   const handleCreateAnnotation = async () => {
@@ -1787,7 +1787,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       });
       setSegmentChangeRequest(null);
       setActionResult({ type: 'success', message: 'A változás megbeszélendőként és review pontként rögzítve.' });
-      setContextualTab('review');
+      setContextualTab('approval');
     } catch {
       setActionResult({ type: 'error', message: 'A módosítási kérés nem sikerült.' });
     } finally {
@@ -2314,11 +2314,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </span>
                         <span className="text-[11px] text-[var(--adm-text-muted)]">Munkafelületek</span>
                       </div>
-                      <div className="mt-2 grid grid-cols-3 gap-1 rounded-[8px] bg-white/80 p-1 text-[11px] font-semibold">
+                      <div className="mt-2 grid grid-cols-4 gap-1 rounded-[8px] bg-white/80 p-1 text-[11px] font-semibold" data-testid="primary-document-work-modes">
                         <button
                           type="button"
-                          onClick={() => setContextualTab('review')}
-                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'review' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                          data-testid="contextual-tab-overview"
+                          onClick={() => setContextualTab('overview')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'overview' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
                         >
                           Áttekintés
                         </button>
@@ -2338,34 +2339,43 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         >
                           Megjegyzések
                         </button>
-                      </div>
-                      <div className="mt-1 grid grid-cols-3 gap-1 rounded-[8px] bg-white/80 p-1 text-[11px] font-semibold">
                         <button
                           type="button"
-                          onClick={() => setContextualTab('elemzes')}
-                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'elemzes' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
+                          data-testid="contextual-tab-approval"
+                          onClick={() => setContextualTab('approval')}
+                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'approval' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
                         >
-                          Elemzés
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setContextualTab('ugyfel')}
-                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'ugyfel' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
-                        >
-                          Ügyfél
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setContextualTab('leadas')}
-                          className={`rounded px-1.5 py-1 text-center transition ${contextualTab === 'leadas' ? 'bg-[var(--adm-green-800)] text-white shadow-sm' : 'text-[#3D4842] hover:bg-black/5'}`}
-                        >
-                          Leadás
+                          Jóváhagyás
                         </button>
                       </div>
                     </div>
 
                     <div className="flex-1 max-h-[720px] overflow-y-auto p-4">
-                      <div className={contextualTab === 'review' ? 'space-y-4' : 'hidden'}>
+                      <div className={contextualTab === 'overview' ? 'space-y-4' : 'hidden'} data-testid="contextual-overview-panel">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Dokumentum áttekintése</p>
+                          <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">{activeTitle || "Nincs kiválasztott dokumentum"}</h4>
+                        </div>
+                        {activeDocument ? (
+                          <div className="space-y-1.5 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
+                            <p><b>Aktív verzió:</b> {canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : "Betöltés..."}</p>
+                            <p><b>Munkastátusz:</b> {selectedStatusLabel}</p>
+                            {activeWorkContextView?.owner?.name ? <p><b>Felelős:</b> {activeWorkContextView.owner.name}</p> : null}
+                            {activeWorkContextView?.reviewer?.name ? <p><b>Reviewer:</b> {activeWorkContextView.reviewer.name}</p> : null}
+                            {activeWorkContextView?.dueDateLabel ? <p><b>Határidő:</b> {activeWorkContextView.dueDateLabel}</p> : null}
+                            {isAnnotationCountAuthoritative ? <p><b>Nyitott annotációk:</b> {openAnnotationCount} db</p> : null}
+                          </div>
+                        ) : (
+                          <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Válassz dokumentumot az áttekintéshez.</p>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <AdminButton size="sm" variant="neutral" onClick={() => setContextualTab('changes')} disabled={!selectedUploadedDocument}>Változások megnyitása</AdminButton>
+                          <AdminButton size="sm" variant="neutral" onClick={() => setContextualTab('comments')} disabled={!selectedUploadedDocument}>Megjegyzések megnyitása</AdminButton>
+                          <AdminButton size="sm" variant="primary" onClick={() => setContextualTab('approval')} disabled={!selectedUploadedDocument}>Jóváhagyás megnyitása</AdminButton>
+                        </div>
+                      </div>
+
+                      <div className={contextualTab === 'approval' ? 'space-y-4' : 'hidden'} data-testid="contextual-approval-panel">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
                           <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
@@ -2387,6 +2397,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             <p><b>Kiválasztott verzió:</b> {canonicalActiveVersion ? `v${canonicalActiveVersion.versionNumber}` : 'Nincs'}</p>
                             <p><b>Feltöltő:</b> {canonicalActiveVersion?.uploadedBy?.name || 'Nincs hozzárendelve'}</p>
                           </div>
+                        )}
+
+                        {selectedUploadedDocument && versions.length > 0 ? (
+                          <section data-testid="canonical-document-approval">
+                            <DocumentReviewWorkflowPanel
+                              documentId={selectedUploadedDocument.id}
+                              selectedVersionId={selectedVersion?.id || null}
+                              versions={versions}
+                            />
+                          </section>
+                        ) : (
+                          <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">
+                            A jóváhagyási felület az immutable verzió betöltése után érhető el.
+                          </p>
                         )}
 
                         {/* In-Panel Annotation Composer */}
@@ -2608,8 +2632,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
                       ) : null}
 
-                      {visitedContextualTabs['elemzes'] ? (
-                        <div className={contextualTab === 'elemzes' ? 'space-y-4' : 'hidden'}>
+                      {visitedContextualTabs['approval'] ? (
+                        <details id="approval-ai-tools" data-testid="approval-ai-tools" className="rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                          <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">AI előkészítés és jogi elemzés</summary>
+                          <div className="mt-3 space-y-4">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Jogi elemzés</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
@@ -2637,11 +2663,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </AdminButton>
                             </div>
                           )}
-                        </div>
+                          </div>
+                        </details>
                       ) : null}
 
-                      {visitedContextualTabs['ugyfel'] ? (
-                        <div className={contextualTab === 'ugyfel' ? 'space-y-4' : 'hidden'}>
+                      {visitedContextualTabs['approval'] ? (
+                        <details id="approval-publication-tools" data-testid="approval-publication-tools" className="rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                          <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Ügyfélátadás / közzététel</summary>
+                          <div className="mt-3 space-y-4">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélkapcsolat & Portál</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
@@ -2672,11 +2701,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </AdminButton>
                             </div>
                           )}
-                        </div>
+                          </div>
+                        </details>
                       ) : null}
 
-                      {visitedContextualTabs['leadas'] ? (
-                        <div className={contextualTab === 'leadas' ? 'space-y-4' : 'hidden'}>
+                      {visitedContextualTabs['approval'] ? (
+                        <details id="approval-handoff-tools" data-testid="approval-handoff-tools" className="rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3">
+                          <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Leadás / ügyvédi átadás</summary>
+                          <div className="mt-3 space-y-4">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadás</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
@@ -2699,7 +2731,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               <p className="text-[11px] text-[var(--adm-text-muted)]">A leadási csomag panel csak érvényes ügykontextusban érhető el.</p>
                             </div>
                           )}
-                        </div>
+                          </div>
+                        </details>
                       ) : null}
                     </div>
                   </aside>
@@ -2708,7 +2741,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 {/* 3. PRESERVED EXTENDED TOOLS SECTION */}
                 <details id="preserved-extended-tools-shell" data-testid="preserved-extended-tools-shell" className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
                   <summary className="cursor-pointer font-serif text-lg font-semibold text-[var(--adm-text)]">
-                    További eszközök
+                    Haladó eszközök
                     <span className="ml-2 text-xs font-normal text-[var(--adm-text-muted)]">Haladó dokumentumfunkciók</span>
                   </summary>
                 <section id="preserved-extended-tools" data-testid="preserved-extended-tools" className="mt-8 space-y-6 border-t-2 border-[rgba(22,32,26,0.12)] pt-6">
@@ -2803,15 +2836,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Jogi elemzés integráció</p>
                                 <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Kontextuális elemzési munkafelület</h4>
                                 <p className="mt-1 text-sm text-[#3D4842]">
-                                  A jogi elemzés beillesztése és szerkesztése közvetlenül a fenti jobb oldali kontextus panelen („Elemzés” fül) érhető el. A felület szándékosan egyetlen aktív szerkesztőt tart fenn.
+                                  A jogi elemzés beillesztése és szerkesztése a Jóváhagyás munkamód másodlagos AI-eszközei között érhető el. A felület szándékosan egyetlen aktív szerkesztőt tart fenn.
                                 </p>
                               </div>
                               <AdminButton
                                 variant="primary"
-                                onClick={() => setContextualTab('elemzes')}
+                                onClick={() => setContextualTab('approval')}
                                 disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                               >
-                                Megnyitás az Elemzés fülön
+                                Megnyitás az AI / elemzés eszköznél
                               </AdminButton>
                             </div>
                           </div>
@@ -2905,27 +2938,23 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Belső felülvizsgálat</p>
                                     <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Review munkafolyamat</h4>
                                     <p className="mt-1 text-sm text-[#3D4842]">
-                                      A felülvizsgálati állapot és az annotációk kezelése közvetlenül a fenti jobb oldali kontextus panelen („Review” fül) érhető el.
+                                      A felülvizsgálati állapot és az annotációk kezelése közvetlenül a fenti jobb oldali Jóváhagyás munkamódban érhető el.
                                     </p>
                                   </div>
                                   <AdminButton
                                     variant="primary"
-                                    onClick={() => setContextualTab('review')}
+                                    onClick={() => setContextualTab('approval')}
                                     disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                                   >
-                                    Megnyitás a Review fülön
+                                    Megnyitás a Jóváhagyás felületén
                                   </AdminButton>
                                 </div>
                               </div>
                               {selectedUploadedDocument && versions.length > 0 ? (
                                 <details className="mt-3 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-3">
-                                  <summary className="cursor-pointer text-xs font-semibold text-[var(--adm-text)]">Részletes review döntések és pontok</summary>
+                                  <summary className="cursor-pointer text-xs font-semibold text-[var(--adm-text)]">Jóváhagyási felület elérése</summary>
                                   <div className="mt-3">
-                                    <DocumentReviewWorkflowPanel
-                                      documentId={selectedUploadedDocument.id}
-                                      selectedVersionId={selectedVersion?.id || null}
-                                      versions={versions}
-                                    />
+                                    <p className="text-xs text-[var(--adm-text-muted)]">A dokumentumszintű döntés a kanonikus Jóváhagyás munkamódban érhető el.</p>
                                   </div>
                                 </details>
                               ) : null}
@@ -2952,15 +2981,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Változáskövetés & Annotációk</p>
                                       <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Szövegannotációs felület</h4>
                                       <p className="mt-1 text-sm text-[#3D4842]">
-                                        Az annotációk és megjegyzések rögzítése közvetlenül a fenti kanonikus olvasófelületen és a jobb oldali Review panelen történik.
+                                        Az annotációk és megjegyzések rögzítése közvetlenül a fenti kanonikus olvasófelületen és a jobb oldali Megjegyzések munkamódban történik.
                                       </p>
                                     </div>
                                     <AdminButton
                                       variant="neutral"
-                                      onClick={() => setContextualTab('review')}
+                                      onClick={() => setContextualTab('approval')}
                                       disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                                     >
-                                      Ugrás a Review felületre
+                                      Ugrás a Jóváhagyás felületre
                                     </AdminButton>
                                   </div>
                                 </div>
@@ -3360,15 +3389,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyvédi leadás</p>
                           <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Leadási csomagok felülete</h4>
                           <p className="mt-1 text-sm text-[#3D4842]">
-                            A leadási csomagok kezelése, előkészítése és ügyvédi beküldése közvetlenül a fenti jobb oldali kontextus panelen („Leadás” fül) érhető el.
+                            A leadási csomagok kezelése, előkészítése és ügyvédi beküldése közvetlenül a fenti jobb oldali Jóváhagyás munkamód másodlagos átadási eszközei között érhető el.
                           </p>
                         </div>
                         <AdminButton
                           variant="primary"
-                          onClick={() => setContextualTab('leadas')}
+                          onClick={() => setContextualTab('approval')}
                           disabled={!caseRecord}
                         >
-                          Megnyitás a Leadás fülön
+                          Megnyitás a Jóváhagyás felületén
                         </AdminButton>
                       </div>
                     </div>

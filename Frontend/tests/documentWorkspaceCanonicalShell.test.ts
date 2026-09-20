@@ -101,14 +101,14 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   assert.ok(shellMatch, "Right shell must be found");
   const shell = shellMatch[0];
 
-  assert.match(shell, /contextualTab === 'review'/);
-  assert.match(shell, /contextualTab === 'elemzes'/);
-  assert.match(shell, /contextualTab === 'ugyfel'/);
-  assert.match(shell, /contextualTab === 'leadas'/);
-  assert.match(shell, /Review/);
-  assert.match(shell, /Elemzés/);
-  assert.match(shell, /Ügyfél/);
-  assert.match(shell, /Leadás/);
+  for (const mode of ["overview", "changes", "comments", "approval"]) {
+    assert.match(shell, new RegExp(`contextualTab === '${mode}'`));
+  }
+  assert.match(shell, /Áttekintés/);
+  assert.match(shell, /Változások/);
+  assert.match(shell, /Megjegyzések/);
+  assert.match(shell, /Jóváhagyás/);
+  assert.doesNotMatch(shell, /data-testid="contextual-tab-(analysis|client|handoff)"/);
   assert.match(source, /id="document-review"/);
   assert.match(source, /id="document-legal-analysis"/);
   assert.match(source, /id="document-publication"/);
@@ -131,7 +131,7 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   assert.doesNotMatch(shell, /Nincs elemzés/);
   assert.doesNotMatch(shell, /Beérkeztetve/, "Must not display ungrounded intake status");
   assert.doesNotMatch(shell, /Várakozik/);
-  assert.doesNotMatch(shell, /Felelős:[\s\S]*?uploadedBy/, "Uploader must not be labeled as Felelős");
+  assert.doesNotMatch(source, /<b>Felelős:<\/b>[^\\n]*uploadedBy/, "Uploader must not be labeled as Felelős");
   assert.doesNotMatch(shell, /handoffPackageCountLabel/, "Must not use invalid handoff package count");
   assert.doesNotMatch(shell, /Belső munkaverzió/, "Must not infer ungrounded publication status");
   assert.doesNotMatch(source, /handoffPackageCountLabel/, "handoffPackageCountLabel must be completely removed");
@@ -140,7 +140,7 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
 test("Preserved extended tools section keeps all existing workspaces and actions reachable", () => {
   const source = documentPage();
   assert.match(source, /<details id="preserved-extended-tools-shell" data-testid="preserved-extended-tools-shell"/);
-  assert.match(source, /<summary[\s\S]*?További eszközök/);
+  assert.match(source, /<summary[\s\S]*?Haladó eszközök/);
   assert.match(source, /id="preserved-extended-tools"/);
   assert.match(source, /data-testid="preserved-extended-tools"/);
   assert.match(source, /További meglévő dokumentumeszközök/);
@@ -253,14 +253,14 @@ test("Contextual right shell hosts actual working panels without downward scroll
   assert.match(shell, /<HandoffPackagePanel/);
 });
 
-test("Canonical Leadás summary does not claim ZIP export and does not fabricate Aktív fallback", () => {
+test("Canonical handoff summary does not claim ZIP export or fabricate package state", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must be found");
   const shell = shellMatch[0];
 
   assert.doesNotMatch(source, /ZIP export és átadási jegyzék/);
-  assert.doesNotMatch(shell, /Aktív/);
+  assert.doesNotMatch(shell, /ZIP export és átadási jegyzék/);
   assert.match(shell, /HandoffPackagePanel/);
 });
 

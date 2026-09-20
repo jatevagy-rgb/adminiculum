@@ -4,14 +4,14 @@ import Link from "next/link";
 
 type DocumentWorkspaceTabsProps = {
   caseId: string;
-  active?: "overview" | "changes" | "review" | "versions";
+  active?: "overview" | "changes" | "comments" | "approval";
 };
 
 const tabs = [
   ["overview", "Áttekintés", "document-overview"],
   ["changes", "Változások", "document-changes"],
-  ["review", "Felülvizsgálat", "document-review"],
-  ["versions", "Verziók", "document-versions"],
+  ["comments", "Megjegyzések", "document-comments"],
+  ["approval", "Jóváhagyás", "document-approval"],
 ] as const;
 
 export function DocumentWorkspaceTabs({ caseId, active = "overview" }: DocumentWorkspaceTabsProps) {
