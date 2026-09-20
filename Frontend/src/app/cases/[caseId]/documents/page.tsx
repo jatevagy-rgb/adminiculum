@@ -1274,7 +1274,32 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       && annotation.endOffset !== null
     ) {
       globalThis.requestAnimationFrame?.(() => {
-        document.getElementById(`annotation-anchor-${annotation.id}`)?.scrollIntoView({
+        const target = document.getElementById(`annotation-anchor-${annotation.id}`);
+        if (!target) {
+          setAnnotationFocusMessage('A szöveghorgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.');
+          return;
+        }
+        target.scrollIntoView({
+          block: 'center',
+          behavior: 'smooth',
+        });
+      });
+      return;
+    }
+
+    const isPageAnchor =
+      annotation.anchorType === 'PAGE_RECTANGLE' ||
+      annotation.anchorType === 'PAGE_ELLIPSE' ||
+      annotation.anchorType === 'PAGE_POINT';
+    if (isPageAnchor && annotationCapabilities.canNavigateToPageAnchor) {
+      globalThis.requestAnimationFrame?.(() => {
+        const target = document.getElementById(`visual-annotation-anchor-${annotation.id}`);
+        if (!target) {
+          setAnnotationFocusMessage('A vizuális horgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció.');
+          return;
+        }
+        target.focus({ preventScroll: true });
+        target.scrollIntoView({
           block: 'center',
           behavior: 'smooth',
         });
@@ -3025,6 +3050,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <button
                                         key={annotation.id}
                                         type="button"
+                                        id={`visual-annotation-anchor-${annotation.id}`}
                                         aria-label={annotation.headline || ANNOTATION_TYPE_LABELS[annotation.annotationType]}
                                         onClick={() => focusAnnotation(annotation)}
                                         className={`absolute border-2 bg-[#D8C58E]/20 ${annotation.anchorType === 'PAGE_ELLIPSE' ? 'rounded-full' : 'rounded'} ${selectedAnnotationId === annotation.id ? 'border-[#8A6A20]' : 'border-[#D8C58E]'}`}
@@ -3040,6 +3066,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <button
                                         key={annotation.id}
                                         type="button"
+                                        id={`visual-annotation-anchor-${annotation.id}`}
                                         aria-label={annotation.headline || ANNOTATION_TYPE_LABELS[annotation.annotationType]}
                                         onClick={() => focusAnnotation(annotation)}
                                         className={`absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${selectedAnnotationId === annotation.id ? 'border-[#8A6A20] bg-[#D8C58E]' : 'border-[#D8C58E] bg-white'}`}

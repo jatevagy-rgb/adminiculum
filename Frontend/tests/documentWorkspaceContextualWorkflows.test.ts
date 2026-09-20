@@ -244,7 +244,8 @@ test("Annotation rail keeps comments active and focuses supported text anchors",
   assert.match(source, /const focusAnnotation = \(annotation: DocumentAnnotationItem\) =>/);
   assert.match(source, /setSelectedAnnotationId\(annotation\.id\)/);
   assert.match(source, /globalThis\.requestAnimationFrame\?\.\(\(\) =>/);
-  assert.match(source, /document\.getElementById\(`annotation-anchor-\$\{annotation\.id\}`\)\?\.scrollIntoView/);
+  assert.match(source, /document\.getElementById\(`annotation-anchor-\$\{annotation\.id\}`\)/);
+  assert.match(source, /target\.scrollIntoView\(\{\s*block: 'center',\s*behavior: 'smooth',\s*\}\)/);
   assert.match(source, /id=\{`annotation-anchor-\$\{annotation\.id\}`\}/);
   assert.match(source, /data-annotation-id=\{annotation\.id\}/);
   assert.match(source, /aria-current=\{selectedAnnotationId === annotation\.id \? 'true' : undefined\}/);
@@ -254,9 +255,22 @@ test("Unsupported visual anchors remain selected without fabricated navigation",
   const source = documentPage();
   assert.match(source, /annotation\.anchorType === 'TEXT_RANGE'/);
   assert.match(source, /annotationCapabilities\.canNavigateToTextAnchor/);
+  assert.match(source, /const isPageAnchor =/);
+  assert.match(source, /annotationCapabilities\.canNavigateToPageAnchor/);
+  assert.match(source, /document\.getElementById\(`visual-annotation-anchor-\$\{annotation\.id\}`\)/);
   assert.match(source, /A vizuális horgony kiválasztva; ehhez a verzióhoz nincs feloldható olvasói pozíció\./);
   assert.match(source, /data-testid="annotation-focus-message"/);
-  assert.match(source, /canNavigateToPageAnchor/);
+});
+
+test("Supported visual anchors reuse rendered page controls for navigation", () => {
+  const source = documentPage();
+  const pageSurface = source.match(/canRenderPageSurface \? annotations\.filter[\s\S]*?pendingVisualAnchor/)?.[0];
+  assert.ok(pageSurface, "Rendered page annotation controls must remain present");
+  assert.match(source, /id=\{`visual-annotation-anchor-\$\{annotation\.id\}`\}/g);
+  assert.match(source, /target\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(source, /target\.scrollIntoView\(\{\s*block: 'center',\s*behavior: 'smooth',\s*\}\)/);
+  assert.match(pageSurface, /PAGE_RECTANGLE/);
+  assert.match(pageSurface, /PAGE_POINT/);
 });
 
 test("Annotation creation, editing, resolution, deletion, and comments remain canonical", () => {
