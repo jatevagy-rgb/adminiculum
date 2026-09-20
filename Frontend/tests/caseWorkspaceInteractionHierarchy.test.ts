@@ -38,6 +38,22 @@ test("Secondary capabilities remain composed in an expandable, hash-safe detail 
   assert.match(source, /document\.getElementById\(targetId\)\?\.scrollIntoView/);
 });
 
+test("Initial secondary deep links resolve again after the loading view is replaced", () => {
+  const source = overview();
+  assert.match(source, /if \(!secondaryDetailsRef\.current\) return;/);
+  assert.match(source, /\}, \[loading, ws\]\);/);
+  for (const target of ['ck-starting-context', 'ck-work-package', 'ck-notes', 'ck-activity', 'ck-time']) {
+    assert.match(source, new RegExp(`'${target}'`));
+  }
+});
+
+test("Details navigation opens the secondary panel while preserving ordinary hash navigation", () => {
+  const source = overview();
+  assert.match(source, /href="#case-secondary-details" onClick=\{\(\) => secondaryDetailsRef\.current\?\.setAttribute\('open', ''\)\}/);
+  assert.match(source, /window\.addEventListener\('hashchange', openSecondaryDetailsForHash\)/);
+  assert.match(source, /window\.removeEventListener\('hashchange', openSecondaryDetailsForHash\)/);
+});
+
 test("Primary anchors and existing document/communication routes remain unchanged", () => {
   const source = overview();
   for (const target of ['#ck-tasks', '#ck-deadlines', '#ck-comms', '#ck-documents']) {

@@ -110,13 +110,17 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     const openSecondaryDetailsForHash = () => {
       const targetId = window.location.hash.slice(1);
       if (!['ck-starting-context', 'ck-work-package', 'ck-notes', 'ck-activity', 'ck-time'].includes(targetId)) return;
-      secondaryDetailsRef.current?.setAttribute('open', '');
+      // The initial mount can be the loading state, before <details> exists.
+      // This effect re-runs once the workspace is rendered, so deep links are
+      // restored only after their target can be opened and scrolled to.
+      if (!secondaryDetailsRef.current) return;
+      secondaryDetailsRef.current.setAttribute('open', '');
       window.requestAnimationFrame(() => document.getElementById(targetId)?.scrollIntoView({ block: 'start' }));
     };
     openSecondaryDetailsForHash();
     window.addEventListener('hashchange', openSecondaryDetailsForHash);
     return () => window.removeEventListener('hashchange', openSecondaryDetailsForHash);
-  }, []);
+  }, [loading, ws]);
 
   const quickStatus = useCallback(async (task: WorkspaceTask) => {
     if (rowBusy) return;
@@ -289,7 +293,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         <a href="#ck-deadlines" className="hover:underline">Határidők</a>
         <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
         <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
-        <a href="#case-secondary-details" className="hover:underline">További részletek</a>
+        <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>
       </nav>
 
       {/* ---- 3. Two-column operational layout ------------------------------ */}
