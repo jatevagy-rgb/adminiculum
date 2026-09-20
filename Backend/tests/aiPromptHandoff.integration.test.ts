@@ -144,8 +144,8 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
     });
     await db.documentVersion.createMany({
       data: [
-        { id: ids.version, documentId: ids.document, version: 1, name: 'Selected document v1', description: `Dr. John Smith reviewed Prompt Client ${suffix}.`, uploadedById: ids.admin, isCurrent: true },
-        { id: ids.otherVersion, documentId: ids.otherDocument, version: 1, name: 'Foreign document v1', description: 'Foreign content.', uploadedById: ids.admin, isCurrent: true },
+        { id: ids.version, documentId: ids.document, version: 1, name: 'Selected document v1', originalFileName: 'selected_v1.txt', mimeType: 'text/plain', description: `Dr. John Smith reviewed Prompt Client ${suffix}.`, uploadedById: ids.admin, isCurrent: true },
+        { id: ids.otherVersion, documentId: ids.otherDocument, version: 1, name: 'Foreign document v1', originalFileName: 'foreign_v1.txt', mimeType: 'text/plain', description: 'Foreign content.', uploadedById: ids.admin, isCurrent: true },
       ],
     });
     await db.task.createMany({
@@ -192,7 +192,13 @@ describeWithDatabase('AI prompt handoff PostgreSQL behavior', () => {
       sourceDocumentVersionIds: [ids.version],
       sourceTaskId: ids.task,
       lawyerInstruction: 'Review the selected document.',
-    }, db);
+    }, {
+      prisma: db,
+      downloadDocumentVersion: async (_docId, _verId) => ({
+        version: { id: ids.version, version: 1 } as any,
+        content: Buffer.from(`Dr. John Smith reviewed Prompt Client ${suffix}.`, 'utf8'),
+      }),
+    });
 
     expect(prepared.sourceDocumentVersionIds).toEqual([ids.version]);
     expect(prepared.externalPromptText).not.toContain('Prompt Admin');

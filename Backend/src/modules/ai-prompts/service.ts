@@ -4,6 +4,9 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { detectCandidates, runAnonymization, type SanitizedExternalPackage } from '../anonymization';
 import { rehydrateDocument, type RehydrationItem, type RehydrationWarning } from '../anonymize/rehydration';
 import { userCanManageCase, userCanReadCase } from '../cases/authorization';
+import { resolveVersionText, type VersionMeta } from '../documents/comparison/versionText';
+import { securityScanBlock } from '../documents/securityScan.service';
+import documentsService from '../documents/services';
 
 export const AI_PROMPT_DRAFT_STATUS = [
   'PREPARED',
@@ -76,9 +79,13 @@ export type PromptTemplateRecord = {
 export type PreparedSourceDocument = {
   documentId: string;
   versionId?: string | null;
+  versionNumber?: number | null;
   label: string;
   title: string;
   selectedText: string;
+  originalFileName?: string | null;
+  mimeType?: string | null;
+  size?: number | null;
 };
 
 export type PromptPrepareInput = {
@@ -228,6 +235,7 @@ function buildDocumentSection(doc: PreparedSourceDocument): string {
   return [
     `${doc.label}`,
     `Title: ${doc.title}`,
+    doc.versionNumber != null ? `Version: v${doc.versionNumber}` : null,
     doc.selectedText ? `Text:\n${doc.selectedText}` : 'Text: [no selected text]',
   ].filter(Boolean).join('\n');
 }
@@ -355,37 +363,266 @@ async function loadCaseContext(caseId: string, prismaClient: PrismaLike) {
   } | null;
 }
 
+export class AiPromptVersionExtractionError extends Error {
+  status: number;
+  code: string;
+  reasonCode: string;
+  versionId: string;
+
+  constructor(code: string, message: string, status = 400, reasonCode = code, versionId = '') {
+    super(message);
+    this.name = 'AiPromptVersionExtractionError';
+    this.code = code;
+    this.status = status;
+    this.reasonCode = reasonCode;
+    this.versionId = versionId;
+  }
+}
+
+function mapVersionExtractionError(reasonCode: string | null, versionId = ''): never {
+  switch (reasonCode) {
+    case 'FORMAT_NOT_TEXT_EXTRACTABLE':
+    case 'FORMAT_UNSUPPORTED':
+      throw new AiPromptVersionExtractionError(
+        'SOURCE_DOCUMENT_VERSION_UNSUPPORTED',
+        'A dokumentum formátuma nem támogatja a szövegkinyerést.',
+        400,
+        'FORMAT_NOT_TEXT_EXTRACTABLE',
+        versionId,
+      );
+    case 'CONTENT_TOO_LARGE':
+    case 'INPUT_TOO_LARGE':
+      throw new AiPromptVersionExtractionError(
+        'SOURCE_DOCUMENT_VERSION_TOO_LARGE',
+        'The document version exceeds the maximum allowed size.',
+        400,
+        'CONTENT_TOO_LARGE',
+        versionId,
+      );
+    case 'NO_EXTRACTABLE_TEXT':
+      throw new AiPromptVersionExtractionError(
+        'SOURCE_DOCUMENT_VERSION_EMPTY',
+        'A dokumentum nem tartalmaz géppel kinyerhető szöveget.',
+        400,
+        'NO_EXTRACTABLE_TEXT',
+        versionId,
+      );
+    case 'CONTENT_UNAVAILABLE':
+      throw new AiPromptVersionExtractionError(
+        'SOURCE_DOCUMENT_VERSION_UNAVAILABLE',
+        'A dokumentum verzió tartalma nem érhető el.',
+        400,
+        'CONTENT_UNAVAILABLE',
+        versionId,
+      );
+    case 'EXTRACTION_FAILED':
+    default:
+      throw new AiPromptVersionExtractionError(
+        'SOURCE_DOCUMENT_VERSION_EXTRACTION_FAILED',
+        'A dokumentum szövegének kinyerése sikertelen volt.',
+        400,
+        reasonCode || 'EXTRACTION_FAILED',
+        versionId,
+      );
+  }
+}
+
+export type PromptPrepareDeps = {
+  prisma?: PrismaLike;
+  downloadDocumentVersion?: (documentId: string, versionId: string) => Promise<{
+    version: unknown;
+    content: Buffer;
+  } | { error: string; code: string; status: number } | null>;
+  resolveVersionText?: (
+    version: VersionMeta,
+    download: (documentId: string, versionId: string) => Promise<Buffer | null>,
+  ) => Promise<{
+    supported: boolean;
+    text: string | null;
+    reasonCode: string | null;
+    extractionRevision: number;
+  }>;
+};
+
+function isPrismaClient(value: unknown): value is PrismaLike {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    ('$transaction' in value || 'aiPromptDraft' in value || 'case' in value),
+  );
+}
+
+function resolvePrepareDeps(prismaOrDeps: PrismaLike | PromptPrepareDeps = defaultPrisma): {
+  prisma: PrismaLike;
+  downloadVersion: (documentId: string, versionId: string) => Promise<{
+    version: unknown;
+    content: Buffer;
+  } | { error: string; code: string; status: number } | null>;
+  resolveText: typeof resolveVersionText;
+} {
+  if (isPrismaClient(prismaOrDeps)) {
+    return {
+      prisma: prismaOrDeps,
+      downloadVersion: (docId, verId) => documentsService.downloadDocumentVersion(docId, verId),
+      resolveText: resolveVersionText,
+    };
+  }
+  return {
+    prisma: prismaOrDeps.prisma ?? defaultPrisma,
+    downloadVersion: prismaOrDeps.downloadDocumentVersion ?? ((docId, verId) => documentsService.downloadDocumentVersion(docId, verId)),
+    resolveText: prismaOrDeps.resolveVersionText ?? resolveVersionText,
+  };
+}
+
 async function loadDocuments(
   caseId: string,
   params: Pick<PromptPrepareInput, 'sourceDocumentIds' | 'sourceDocumentVersionIds' | 'selectedDocumentTexts'>,
-  prismaClient: PrismaLike,
+  deps: {
+    prisma: PrismaLike;
+    downloadVersion: (documentId: string, versionId: string) => Promise<{
+      version: unknown;
+      content: Buffer;
+    } | { error: string; code: string; status: number } | null>;
+    resolveText: typeof resolveVersionText;
+  },
 ): Promise<PreparedSourceDocument[]> {
-  const byDoc = new Map<string, PreparedSourceDocument>();
-  const selectedIds = new Set([...(params.sourceDocumentIds ?? []), ...(params.selectedDocumentTexts ?? []).map((item) => item.documentId)]);
-  if (selectedIds.size > 0) {
-    const docs = await prismaClient.document.findMany({
-      where: { id: { in: [...selectedIds] }, caseId },
-      select: { id: true, title: true, name: true, description: true, workspaceText: true, versions: { select: { id: true, version: true, name: true, description: true } } },
+  const preparedDocs: PreparedSourceDocument[] = [];
+  const selectedDocIds = new Set([...(params.sourceDocumentIds ?? []), ...(params.selectedDocumentTexts ?? []).map((item) => item.documentId)]);
+  if (selectedDocIds.size > 0) {
+    const docs = await deps.prisma.document.findMany({
+      where: { id: { in: [...selectedDocIds] }, caseId },
+      select: { id: true, title: true, name: true, description: true, workspaceText: true },
     });
-    if (docs.length !== selectedIds.size) throw Object.assign(new Error('SOURCE_DOCUMENT_CASE_MISMATCH'), { status: 400, code: 'SOURCE_DOCUMENT_CASE_MISMATCH' });
+    if (docs.length !== selectedDocIds.size) {
+      throw Object.assign(new Error('SOURCE_DOCUMENT_CASE_MISMATCH'), { status: 400, code: 'SOURCE_DOCUMENT_CASE_MISMATCH' });
+    }
     for (const doc of docs) {
       const provided = params.selectedDocumentTexts?.find((item) => item.documentId === doc.id);
-      const title = provided?.title || doc.title || doc.name || `Document ${byDoc.size + 1}`;
+      const title = provided?.title || doc.title || doc.name || `Document ${preparedDocs.length + 1}`;
       const text = provided?.text ?? doc.workspaceText ?? doc.description ?? '';
-      byDoc.set(doc.id, { documentId: doc.id, title, selectedText: text, label: `Document ${String.fromCharCode(65 + byDoc.size)}` });
+      preparedDocs.push({
+        documentId: doc.id,
+        title,
+        selectedText: text,
+        label: `Document ${String.fromCharCode(65 + preparedDocs.length)}`,
+      });
     }
   }
-  for (const versionId of params.sourceDocumentVersionIds ?? []) {
-    const version = await prismaClient.documentVersion.findUnique({
-      where: { id: versionId },
-      select: { id: true, version: true, name: true, description: true, document: { select: { id: true, caseId: true, title: true, name: true, workspaceText: true } } },
+
+  const rawVersionIds = params.sourceDocumentVersionIds ?? [];
+  if (rawVersionIds.length > 0) {
+    const uniqueVersionIds: string[] = [];
+    for (const id of rawVersionIds) {
+      if (!uniqueVersionIds.includes(id)) {
+        uniqueVersionIds.push(id);
+      }
+    }
+
+    const versionRecords = await deps.prisma.documentVersion.findMany({
+      where: { id: { in: uniqueVersionIds } },
+      select: {
+        id: true,
+        version: true,
+        name: true,
+        description: true,
+        originalFileName: true,
+        mimeType: true,
+        size: true,
+        securityScanStatus: true,
+        document: {
+          select: {
+            id: true,
+            caseId: true,
+            title: true,
+            name: true,
+          },
+        },
+      },
     });
-    if (!version || version.document.caseId !== caseId) throw Object.assign(new Error('SOURCE_DOCUMENT_VERSION_CASE_MISMATCH'), { status: 400, code: 'SOURCE_DOCUMENT_VERSION_CASE_MISMATCH' });
-    const title = version.name || version.document.title || version.document.name || `Document ${byDoc.size + 1}`;
-    const text = version.description ?? version.document.workspaceText ?? '';
-    byDoc.set(version.document.id, { documentId: version.document.id, versionId: version.id, title, selectedText: text, label: `Document ${String.fromCharCode(65 + byDoc.size)}` });
+
+    if (versionRecords.length !== uniqueVersionIds.length) {
+      throw Object.assign(new Error('SOURCE_DOCUMENT_VERSION_CASE_MISMATCH'), {
+        status: 400,
+        code: 'SOURCE_DOCUMENT_VERSION_CASE_MISMATCH',
+      });
+    }
+
+    const recordMap = new Map(versionRecords.map((rec) => [rec.id, rec]));
+
+    for (const versionId of uniqueVersionIds) {
+      const version = recordMap.get(versionId)!;
+      if (version.document.caseId !== caseId) {
+        throw Object.assign(new Error('SOURCE_DOCUMENT_VERSION_CASE_MISMATCH'), {
+          status: 400,
+          code: 'SOURCE_DOCUMENT_VERSION_CASE_MISMATCH',
+        });
+      }
+
+      const scanBlocked = securityScanBlock(version.securityScanStatus || 'CLEAN');
+      if (scanBlocked) {
+        throw Object.assign(new Error(scanBlocked.error), {
+          status: scanBlocked.status || 409,
+          code: scanBlocked.code || 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+        });
+      }
+
+      let downloadFailure: { status: number; code: string; error: string } | null = null;
+      const downloadFn = async (documentId: string, verId: string): Promise<Buffer | null> => {
+        try {
+          const dlRes = await deps.downloadVersion(documentId, verId);
+          if (!dlRes) {
+            downloadFailure = { status: 404, code: 'SOURCE_DOCUMENT_VERSION_NOT_FOUND', error: 'Document version not found' };
+            return null;
+          }
+          if ('error' in dlRes) {
+            downloadFailure = dlRes;
+            return null;
+          }
+          return dlRes.content;
+        } catch {
+          downloadFailure = { status: 400, code: 'SOURCE_DOCUMENT_VERSION_DOWNLOAD_FAILED', error: 'Document version download failed' };
+          return null;
+        }
+      };
+
+      const versionMeta: VersionMeta = {
+        id: version.id,
+        documentId: version.document.id,
+        mimeType: version.mimeType,
+        originalFileName: version.originalFileName,
+        size: version.size,
+      };
+
+      const textResult = await deps.resolveText(versionMeta, downloadFn);
+
+      if (downloadFailure && (downloadFailure as any).code === 'DOCUMENT_SECURITY_SCAN_BLOCKED') {
+        throw Object.assign(new Error((downloadFailure as any).error), {
+          status: (downloadFailure as any).status || 409,
+          code: (downloadFailure as any).code || 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+        });
+      }
+
+      if (!textResult.supported || !textResult.text || !textResult.text.trim()) {
+        mapVersionExtractionError(textResult.reasonCode, version.id);
+      }
+
+      const title = version.originalFileName || version.document.title || version.document.name || version.name || `Document ${preparedDocs.length + 1}`;
+
+      preparedDocs.push({
+        documentId: version.document.id,
+        versionId: version.id,
+        versionNumber: version.version,
+        title,
+        selectedText: textResult.text!,
+        label: `Document ${String.fromCharCode(65 + preparedDocs.length)}`,
+        originalFileName: version.originalFileName,
+        mimeType: version.mimeType,
+        size: version.size,
+      });
+    }
   }
-  return [...byDoc.values()];
+
+  return preparedDocs;
 }
 
 async function validateCaseProvenance(input: PromptPrepareInput, caseId: string, prismaClient: PrismaLike): Promise<void> {
@@ -426,18 +663,19 @@ function buildSourceText(
 export async function preparePromptDraft(
   actor: { userId: string; role?: string | null },
   input: PromptPrepareInput,
-  prismaClient: PrismaLike = defaultPrisma,
+  prismaOrDeps: PrismaLike | PromptPrepareDeps = defaultPrisma,
 ): Promise<PromptDraftRecord> {
   if (!actor.userId) {
     throw Object.assign(new Error('AUTH_REQUIRED'), { status: 401, code: 'AUTH_REQUIRED' });
   }
+  const deps = resolvePrepareDeps(prismaOrDeps);
   await requireCaseAccess({ user: actor } as Request, input.caseId, 'manage');
-  const template = await prismaClient.aiPromptTemplateVersion.findUnique({ where: { id: input.promptTemplateId } }) as PromptTemplateRecord | null;
+  const template = await deps.prisma.aiPromptTemplateVersion.findUnique({ where: { id: input.promptTemplateId } }) as PromptTemplateRecord | null;
   if (!template || !template.isActive) throw Object.assign(new Error('PROMPT_TEMPLATE_NOT_FOUND'), { status: 404, code: 'PROMPT_TEMPLATE_NOT_FOUND' });
-  const caseContextRecord = await loadCaseContext(input.caseId, prismaClient);
+  const caseContextRecord = await loadCaseContext(input.caseId, deps.prisma);
   if (!caseContextRecord) throw Object.assign(new Error('CASE_NOT_FOUND'), { status: 404, code: 'CASE_NOT_FOUND' });
-  await validateCaseProvenance(input, input.caseId, prismaClient);
-  const documents = await loadDocuments(input.caseId, input, prismaClient);
+  await validateCaseProvenance(input, input.caseId, deps.prisma);
+  const documents = await loadDocuments(input.caseId, input, deps);
   const caseContext = buildCaseContext(caseContextRecord);
   const sourceText = buildSourceText(caseContext, documents, input);
   const knownTerms = normalizeKnownTerms(input.knownEntities, sourceText);
@@ -477,7 +715,7 @@ export async function preparePromptDraft(
     selectedCommunications: input.selectedCommunications ?? [],
     additionalContext: input.additionalContext ?? null,
   };
-  const draft = await prismaClient.aiPromptDraft.create({
+  const draft = await deps.prisma.aiPromptDraft.create({
     data: {
       caseId: input.caseId,
       promptTemplateId: template.id,
