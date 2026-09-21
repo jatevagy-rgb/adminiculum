@@ -20,7 +20,13 @@ export type CompanyFact = {
   verificationStatus: string;
   verifiedAt: string | null;
   updatedAt: string;
+  /** Additive read-only metadata (fail-safe when the backend omits it). */
+  supersededAt?: string | null;
+  factDefinition?: { key: string | null; valueType: string | null; labelHu: string | null } | null;
+  sourceKind?: CompanyFactSourceKind;
 };
+
+export type CompanyFactSourceKind = 'CLIENT_PORTAL_ANSWER' | 'DOCUMENT' | 'MANUAL' | 'UNKNOWN';
 
 export type CompanyMilestone = {
   id: string;
@@ -168,6 +174,20 @@ export function companyFactTypeLabel(type: string): string {
     SENSITIVE_DATA_USAGE: 'Érzékeny adatok kezelése',
     AI_USAGE: 'AI-használat',
     CERTIFICATION: 'Tanúsítvány',
+    // Retained legacy company-profile keys. The labels are the exact Hungarian
+    // question labels from the canonical registry; only used when no
+    // `factDefinition.labelHu` is available, so this is a fallback, not a second
+    // catalogue.
+    COMPANY_MAIN_ACTIVITY: 'Fő tevékenység vagy ágazat',
+    COMPANY_OPERATING_COUNTRY: 'Működési ország',
+    COMPANY_REGULATED_ACTIVITY: 'Szabályozott tevékenység',
+    COMPANY_SENSITIVE_DATA_USAGE: 'Különleges személyes adatok kezelése',
+    COMPANY_IMPORTANT_IT_SYSTEM: 'Fontos informatikai rendszerek',
+    COMPANY_AI_USAGE: 'Mesterséges intelligencia használata',
+    COMPANY_EXPORT_ACTIVITY: 'Export- vagy határon átnyúló tevékenység',
+    // Historical demo type string; never a semantic identity when a
+    // factDefinition exists, but must never render as raw English either.
+    DEMO_KFT_COMPANY_EMPLOYEE_COUNT: 'Munkavállalói létszám',
   };
 
   if (labels[upperKey]) return labels[upperKey];
@@ -183,6 +203,39 @@ export function companyFactTypeLabel(type: string): string {
   }
 
   return normalized || 'Rögzített adat';
+}
+
+/**
+ * Canonical label for a fact row. Priority:
+ *   1. factDefinition.labelHu (canonical catalogue, resolved by the backend),
+ *   2. the same catalogue resolved from factDefinition.key via the local map,
+ *   3. the existing safe companyFactTypeLabel fallback.
+ * A stale ClientFact.type string is never the preferred semantic identity when a
+ * factDefinition exists.
+ */
+export function companyFactLabel(fact: {
+  type: string;
+  factDefinition?: { key?: string | null; labelHu?: string | null } | null;
+}): string {
+  const labelHu = fact.factDefinition?.labelHu;
+  if (labelHu) return labelHu;
+  const key = fact.factDefinition?.key;
+  if (key) return companyFactTypeLabel(key);
+  return companyFactTypeLabel(fact.type);
+}
+
+/**
+ * Human provenance label. Raw sourceReference handles (e.g. a portal identity
+ * key) must never be printed; only the canonical category is shown.
+ */
+export function factSourceKindLabel(kind: string | null | undefined): string {
+  const labels: Record<string, string> = {
+    CLIENT_PORTAL_ANSWER: 'Ügyfélportálon közölte',
+    DOCUMENT: 'Dokumentum alapján',
+    MANUAL: 'Belső rögzítés',
+    UNKNOWN: 'Ismeretlen eredet',
+  };
+  return labels[String(kind || '')] || labels.UNKNOWN;
 }
 
 

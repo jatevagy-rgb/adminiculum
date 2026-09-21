@@ -10,7 +10,7 @@ import {
   type CompanyWorkspaceOverview,
 } from "@/lib/clientWorkspaceApi";
 import {
-  companyFactTypeLabel,
+  companyFactLabel,
   factVerificationLabel,
   assessmentTypeLabel,
   assessmentStatusLabel,
@@ -175,19 +175,39 @@ export function ClientCompanyOperationsLegacy({ clientId, clientName }: { client
           {/* 4. Cégprofil */}
           <Panel title="Cégprofil">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {overview.factGroups.map((group) => (
-                <div key={group.key}>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{group.label}</p>
-                  <ul className="mt-2 space-y-1">
-                    {group.facts.map((fact) => (
-                      <li key={fact.id} className="flex justify-between text-sm">
-                        <span className="text-[var(--adm-text-muted)]">{companyFactTypeLabel(fact.type)}</span>
-                        <b className="text-[var(--adm-text)]">{fact.value}</b>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+              {overview.factGroups.map((group) => {
+                // Explicit current/history split: a superseded row is history,
+                // never a competing current truth. No precedence is invented.
+                const current = group.facts.filter((fact) => fact.isCurrent && !fact.supersededAt);
+                const history = group.facts.filter((fact) => !(fact.isCurrent && !fact.supersededAt));
+                return (
+                  <div key={group.key}>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{group.label}</p>
+                    <ul className="mt-2 space-y-1">
+                      {current.map((fact) => (
+                        <li key={fact.id} className="flex justify-between text-sm">
+                          <span className="text-[var(--adm-text-muted)]">{companyFactLabel(fact)}</span>
+                          <b className="text-[var(--adm-text)]">{fact.value}</b>
+                        </li>
+                      ))}
+                    </ul>
+                    {history.length ? (
+                      <details className="mt-2" data-testid="company-operations-fact-history">
+                        <summary className="cursor-pointer text-xs text-[var(--adm-text-muted)]">Korábbi tények ({history.length})</summary>
+                        <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Korábban rögzített értékek, nem aktuális tények.</p>
+                        <ul className="mt-1 space-y-1">
+                          {history.map((fact) => (
+                            <li key={fact.id} className="flex justify-between text-sm">
+                              <span className="text-[var(--adm-text-muted)]">{companyFactLabel(fact)}</span>
+                              <b className="text-[var(--adm-text)]">{fact.value}</b>
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </Panel>
 
