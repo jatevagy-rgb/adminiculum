@@ -313,7 +313,9 @@ export type PortalCalendarCategory =
   | 'ACTION_REQUEST'
   | 'CUSTOMER_REQUEST'
   | 'CONTRACT_DATE'
-  | 'COMPANY_MILESTONE';
+  | 'COMPANY_MILESTONE'
+  | 'GROW_TARGET'
+  | 'COMPLIANCE_REVIEW';
 
 export type PortalCalendarStatus = 'OPEN' | 'DONE' | 'INFO';
 
