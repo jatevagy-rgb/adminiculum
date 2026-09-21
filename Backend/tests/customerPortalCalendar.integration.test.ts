@@ -369,6 +369,8 @@ d('customer portal calendar integration (postgres)', () => {
       expect(result.items.some((item) => item.category === 'COMPLIANCE_REVIEW')).toBe(false);
       expect(result.items.some((item) => item.category === 'GROW_TARGET')).toBe(false);
     } finally {
+      // The grant references the workspace, so it must be removed first.
+      await db.clientPortalGrant.deleteMany({ where: { workspaceId: individual.workspaceId } });
       await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: individual.workspaceId } });
       await db.clientPortalWorkspace.deleteMany({ where: { id: individual.workspaceId } });
       await db.clientPortalIdentity.deleteMany({ where: { id: individual.identityId } });
@@ -385,6 +387,7 @@ d('customer portal calendar integration (postgres)', () => {
         getCustomerCalendar(ungranted.identityId, ungranted.workspaceId, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') }),
       ).rejects.toThrow(/No active portal access/);
     } finally {
+      await db.clientPortalGrant.deleteMany({ where: { workspaceId: ungranted.workspaceId } });
       await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: ungranted.workspaceId } });
       await db.clientPortalWorkspace.deleteMany({ where: { id: ungranted.workspaceId } });
       await db.clientPortalIdentity.deleteMany({ where: { id: ungranted.identityId } });
