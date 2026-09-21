@@ -5,8 +5,12 @@ import {
   ApiError,
   archiveHandoffPackage,
   createCaseHandoffPackage,
+  getCaseResponsibility,
+  getCurrentUser,
   listCaseHandoffPackages,
+  reviewHandoffPackage,
   updateHandoffPackage,
+  type LawyerHandoffDecision,
   type LawyerHandoffPackageRecord,
   type LawyerHandoffStatus,
 } from "@/lib/api";
@@ -104,6 +108,61 @@ function getHandoffErrorMessage(error: unknown): string {
   return "A művelet nem sikerült. Próbáld újra később.";
 }
 
+const REVIEW_DECISION_LABELS: Record<LawyerHandoffDecision, string> = {
+  APPROVED: "Jóváhagyva",
+  REJECTED_NEEDS_REVISION: "Visszaküldve javításra",
+  REJECTED_BLOCKING: "Visszaküldve blokkoló okkal",
+};
+
+const REVIEW_PRIVILEGED_ROLES = new Set(["ADMIN", "PARTNER"]);
+const REVIEWER_ROLES = new Set(["LAWYER", "COLLAB_LAWYER"]);
+
+function isReviewableStatus(status: LawyerHandoffStatus): boolean {
+  return status === "SUBMITTED" || status === "IN_REVIEW";
+}
+
+/**
+ * Mirrors the backend `requireHandoffReviewAccess` gate so the decision actions
+ * are only offered to an authorised reviewer. The backend remains authoritative.
+ */
+function canReviewerDecide(params: {
+  currentUserId: string | null;
+  currentUserRole: string | null;
+  assignedLawyerId: string | null;
+  preparedById?: string | null;
+}): boolean {
+  const { currentUserId, currentUserRole, assignedLawyerId, preparedById } = params;
+  if (!currentUserId) return false;
+  if (preparedById && preparedById === currentUserId) return false;
+  const role = (currentUserRole || "").toUpperCase();
+  if (REVIEW_PRIVILEGED_ROLES.has(role)) return true;
+  return Boolean(assignedLawyerId && assignedLawyerId === currentUserId && REVIEWER_ROLES.has(role));
+}
+
+function getReviewErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === "HANDOFF_SELF_REVIEW_FORBIDDEN") {
+      return "A saját Leadásod nem hagyhatod jóvá és nem küldheted vissza.";
+    }
+    if (error.code === "HANDOFF_REVIEW_FORBIDDEN") {
+      return "Nincs jogosultságod ehhez az ügyvédi döntéshez.";
+    }
+    if (error.code === "REVIEW_COMMENT_REQUIRED") {
+      return "Visszaküldéshez reviewer megjegyzés szükséges.";
+    }
+    if (error.code === "REVIEW_ALREADY_DECIDED") {
+      return "Erről a Leadásról már született ügyvédi döntés.";
+    }
+    if (error.code === "HANDOFF_NOT_READY") {
+      return "A Leadás még nem küldhető review-ra.";
+    }
+    if (error.status === 403) return "Nincs jogosultságod ehhez az ügyvédi döntéshez.";
+    if (error.status === 501) return "A funkció jelenleg nem elérhető ebben a környezetben.";
+    if (error.status === 404) return "A Leadás vagy a kapcsolódó ügy nem található.";
+  }
+  return "A döntés rögzítése nem sikerült. Próbáld újra később.";
+}
+
 export function HandoffPackagePanel({
   caseId,
   refreshKey = 0,
@@ -127,6 +186,15 @@ export function HandoffPackagePanel({
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [submittingPackageId, setSubmittingPackageId] = useState<string | null>(null);
   const [archivingPackageId, setArchivingPackageId] = useState<string | null>(null);
+
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [assignedLawyerId, setAssignedLawyerId] = useState<string | null>(null);
+  const [reviewPackageId, setReviewPackageId] = useState<string | null>(null);
+  const [reviewCommentDraft, setReviewCommentDraft] = useState("");
+  const [reviewDecisionInFlight, setReviewDecisionInFlight] = useState<LawyerHandoffDecision | null>(null);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
 
   const hasDocumentContext = Boolean(sourceDocumentId || generatedContractId);
   const activePackages = packages.filter((pkg) => pkg.status !== "ARCHIVED");
@@ -158,6 +226,38 @@ export function HandoffPackagePanel({
           setIsLoading(false);
         }
       });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [caseId, refreshKey]);
+
+  useEffect(() => {
+    if (!caseId) {
+      setCurrentUserId(null);
+      setCurrentUserRole(null);
+      setAssignedLawyerId(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void Promise.allSettled([getCurrentUser(), getCaseResponsibility(caseId)]).then(
+      ([userResult, responsibilityResult]) => {
+        if (cancelled) return;
+        if (userResult.status === "fulfilled") {
+          setCurrentUserId(userResult.value?.id || null);
+          setCurrentUserRole(userResult.value?.role || null);
+        } else {
+          console.error("Handoff reviewer identity load failed:", userResult.reason);
+        }
+        if (responsibilityResult.status === "fulfilled") {
+          setAssignedLawyerId(responsibilityResult.value?.responsibleLawyer?.id || null);
+        } else {
+          console.error("Handoff case responsibility load failed:", responsibilityResult.reason);
+        }
+      }
+    );
 
     return () => {
       cancelled = true;
@@ -258,6 +358,54 @@ export function HandoffPackagePanel({
     }
   };
 
+  const openReviewForm = (pkgId: string) => {
+    setReviewPackageId(pkgId);
+    setReviewCommentDraft("");
+    setReviewError(null);
+    setReviewFeedback(null);
+  };
+
+  const cancelReviewForm = () => {
+    setReviewPackageId(null);
+    setReviewCommentDraft("");
+    setReviewError(null);
+  };
+
+  const handleReviewDecision = async (
+    pkg: LawyerHandoffPackageRecord,
+    decision: LawyerHandoffDecision
+  ) => {
+    const comment = reviewCommentDraft.trim();
+    if (decision !== "APPROVED" && !comment) {
+      setReviewError("Visszaküldéshez reviewer megjegyzés szükséges.");
+      return;
+    }
+
+    setReviewError(null);
+    setReviewFeedback(null);
+    setReviewDecisionInFlight(decision);
+    try {
+      const updated = await reviewHandoffPackage(pkg.id, {
+        decision,
+        reviewComment: comment || undefined,
+      });
+      setPackages((prev) =>
+        prev.map((item) => (item.id === pkg.id ? updated : item)).filter((item) => item.status !== "ARCHIVED")
+      );
+      setReviewPackageId(null);
+      setReviewCommentDraft("");
+      setReviewFeedback(
+        decision === "APPROVED"
+          ? "Leadás jóváhagyva. A döntés a Leadás adatlapján megmarad."
+          : "Leadás visszaküldve javításra. A reviewer megjegyzés a Leadás adatlapján megmarad."
+      );
+    } catch (err) {
+      setReviewError(getReviewErrorMessage(err));
+    } finally {
+      setReviewDecisionInFlight(null);
+    }
+  };
+
   const canSubmit = (pkg: LawyerHandoffPackageRecord): boolean => {
     return pkg.status === "DRAFT" || pkg.status === "PREPARED";
   };
@@ -315,6 +463,12 @@ export function HandoffPackagePanel({
         {createError ? <p className="mt-2 text-[9px] font-semibold text-[var(--adm-terracotta-700)]">{createError}</p> : null}
       </div>
 
+      {reviewFeedback ? (
+        <p className="mb-3 rounded-[var(--adm-radius-sm)] border border-[var(--adm-green-800)] bg-[var(--adm-sage-100)] px-3 py-2 text-[10px] font-semibold text-[var(--adm-green-800)]">
+          {reviewFeedback}
+        </p>
+      ) : null}
+
       {isLoading && (
         <p className="text-[10px] text-[var(--adm-text-muted)] italic py-2">Leadások betöltése…</p>
       )}
@@ -342,6 +496,15 @@ export function HandoffPackagePanel({
             const canPkgSubmit = canSubmit(pkg);
             const submitDisabled = isSubmitDisabled(pkg);
             const nextAction = getNextAction(pkg);
+            const isPreparer = Boolean(currentUserId && pkg.preparedById === currentUserId);
+            const canDecide = canReviewerDecide({
+              currentUserId,
+              currentUserRole,
+              assignedLawyerId,
+              preparedById: pkg.preparedById,
+            });
+            const underReview = isReviewableStatus(pkg.status);
+            const isReviewSubmitting = reviewDecisionInFlight !== null;
 
             return (
               <div
@@ -434,6 +597,126 @@ export function HandoffPackagePanel({
 
                 {/* Következő lépés */}
                 <p className="text-[9px] text-[var(--adm-text-muted)] italic mb-2">Következő lépés: {nextAction}</p>
+
+                {underReview ? (
+                  <div className="mb-2 rounded-[var(--adm-radius-md)] border border-[#D8C58E] bg-[var(--adm-sand-100)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#6D5418]">Ügyvédi review</p>
+                      <span className="text-[9px] text-[#6D5418]">
+                        {pkg.packageType === "FINAL_APPROVAL" ? "Végleges jóváhagyás" : "Standard leadás"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[9px] text-[var(--adm-text-muted)]">
+                      Beküldve: {pkg.submittedAt ? new Date(pkg.submittedAt).toLocaleString("hu-HU") : "—"}
+                    </p>
+                    {pkg.preparerSummary?.trim() ? (
+                      <p className="mt-1 whitespace-pre-wrap text-[9px] text-[var(--adm-text-muted)]">
+                        Előkészítő összefoglaló: {pkg.preparerSummary}
+                      </p>
+                    ) : null}
+
+                    {canDecide ? (
+                      reviewPackageId === pkg.id ? (
+                        <div className="mt-2 border-t border-[#D8C58E] pt-2">
+                          <label
+                            htmlFor={`handoff-review-comment-${pkg.id}`}
+                            className="text-[9px] font-semibold text-[var(--adm-text)]"
+                          >
+                            Reviewer megjegyzés (visszaküldésnél kötelező, jóváhagyásnál nem kötelező)
+                          </label>
+                          <textarea
+                            id={`handoff-review-comment-${pkg.id}`}
+                            value={reviewCommentDraft}
+                            onChange={(event) => setReviewCommentDraft(event.target.value)}
+                            rows={3}
+                            placeholder="Írd le a döntés indokát, a szükséges javításokat vagy a jóváhagyás megjegyzését."
+                            className="adm-board-field mt-1 w-full resize-none px-2 py-1.5 text-[10px] placeholder:text-[var(--adm-text-muted)]"
+                          />
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleReviewDecision(pkg, "APPROVED")}
+                              disabled={isReviewSubmitting}
+                              className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {reviewDecisionInFlight === "APPROVED" ? "Rögzítés..." : "Jóváhagyás"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewDecision(pkg, "REJECTED_NEEDS_REVISION")}
+                              disabled={isReviewSubmitting || !reviewCommentDraft.trim()}
+                              className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-terracotta-700)] text-[var(--adm-ivory-50)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {reviewDecisionInFlight === "REJECTED_NEEDS_REVISION" ? "Rögzítés..." : "Visszaküldés javításra"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleReviewDecision(pkg, "REJECTED_BLOCKING")}
+                              disabled={isReviewSubmitting || !reviewCommentDraft.trim()}
+                              className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-700)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[var(--adm-terracotta-700)] hover:bg-[#f7ece9] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {reviewDecisionInFlight === "REJECTED_BLOCKING" ? "Rögzítés..." : "Visszaküldés blokkoló okkal"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelReviewForm}
+                              disabled={isReviewSubmitting}
+                              className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-text-muted)] hover:underline disabled:opacity-50"
+                            >
+                              Mégse
+                            </button>
+                          </div>
+                          {!reviewCommentDraft.trim() ? (
+                            <p className="mt-1 text-[9px] text-[var(--adm-text-muted)]">
+                              Visszaküldéshez reviewer megjegyzés szükséges.
+                            </p>
+                          ) : null}
+                          {reviewError ? (
+                            <p className="mt-1 text-[9px] font-semibold text-[var(--adm-terracotta-700)]">{reviewError}</p>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openReviewForm(pkg.id)}
+                            className="rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] hover:opacity-90 transition-colors"
+                          >
+                            Ügyvédi döntés
+                          </button>
+                          <span className="text-[9px] text-[var(--adm-text-muted)]">
+                            Jóváhagyás vagy visszaküldés reviewer megjegyzéssel.
+                          </span>
+                        </div>
+                      )
+                    ) : (
+                      <p className="mt-2 rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-[9px] text-[var(--adm-text-muted)]">
+                        {isPreparer
+                          ? "A saját Leadásod nem hagyhatod jóvá és nem küldheted vissza."
+                          : "Ügyvédi döntésre vár — a döntést a kijelölt ügyvéd vagy adminisztrátor hozhatja meg."}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+
+                {pkg.reviewDecision ? (
+                  <div className="mb-2 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-ivory-100)] p-3">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-[var(--adm-text-muted)]">Ügyvédi döntés</p>
+                    <p className="mt-1 text-[10px] font-semibold text-[var(--adm-text)]">
+                      {REVIEW_DECISION_LABELS[pkg.reviewDecision] ?? pkg.reviewDecision}
+                    </p>
+                    {pkg.reviewedAt ? (
+                      <p className="mt-0.5 text-[9px] text-[var(--adm-text-muted)]">
+                        Döntés ideje: {new Date(pkg.reviewedAt).toLocaleString("hu-HU")}
+                      </p>
+                    ) : null}
+                    {pkg.reviewComment ? (
+                      <p className="mt-1 whitespace-pre-wrap text-[9px] text-[var(--adm-text-muted)]">
+                        Reviewer megjegyzés: {pkg.reviewComment}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {editingPackageId === pkg.id ? (
                   <div className="border-t border-[var(--adm-border)] pt-2">
