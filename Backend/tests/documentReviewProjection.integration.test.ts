@@ -49,6 +49,15 @@ const ids = {
   reviewV2: 'b8000000-0000-4000-8000-000000000002',
   point1: 'b9000000-0000-4000-8000-000000000001',
   aiDraft: 'ba000000-0000-4000-8000-000000000001',
+  annotV1_1: 'bb000000-0000-4000-8000-000000000001',
+  annotV1_2: 'bb000000-0000-4000-8000-000000000002',
+  annotV1_3: 'bb000000-0000-4000-8000-000000000003',
+  annotV1_4: 'bb000000-0000-4000-8000-000000000004',
+  annotV2_1: 'bb000000-0000-4000-8000-000000000005',
+  annotV2_2: 'bb000000-0000-4000-8000-000000000006',
+  annotV2_3: 'bb000000-0000-4000-8000-000000000007',
+  annotV2_del: 'bb000000-0000-4000-8000-000000000008',
+  annotCross: 'bb000000-0000-4000-8000-000000000009',
 };
 
 describeWithDatabase('Document Review Projection PostgreSQL Integration', () => {
@@ -59,6 +68,7 @@ describeWithDatabase('Document Review Projection PostgreSQL Integration', () => 
     await db.$connect();
 
     // Clean up any stale records from previous runs
+    await db.documentAnnotation.deleteMany({ where: { documentId: { in: [ids.doc1, ids.doc2Cross] } } }).catch(() => {});
     await db.documentChangeSegment.deleteMany({ where: { comparisonId: ids.comparison } }).catch(() => {});
     await db.documentComparison.deleteMany({ where: { id: ids.comparison } }).catch(() => {});
     await db.reviewPoint.deleteMany({ where: { id: ids.point1 } }).catch(() => {});
@@ -172,10 +182,35 @@ describeWithDatabase('Document Review Projection PostgreSQL Integration', () => 
         verifiedAt: new Date('2026-09-20T09:30:00Z'),
       },
     });
+
+    // Seed annotations to test current-version scoping, status/type aggregation, and soft-delete filtering
+    await db.documentAnnotation.createMany({
+      data: [
+        // v1 (historical): 4 annotations (2 OPEN, 2 RESOLVED)
+        { id: ids.annotV1_1, documentId: ids.doc1, documentVersionId: ids.v1, annotationType: 'QUESTION', anchorType: 'TEXT_RANGE', status: 'OPEN', createdById: ids.authorizedLawyer, internalNote: 'SENSITIVE_V1_NOTE_1' },
+        { id: ids.annotV1_2, documentId: ids.doc1, documentVersionId: ids.v1, annotationType: 'QUESTION', anchorType: 'TEXT_RANGE', status: 'OPEN', createdById: ids.authorizedLawyer, internalNote: 'SENSITIVE_V1_NOTE_2' },
+        { id: ids.annotV1_3, documentId: ids.doc1, documentVersionId: ids.v1, annotationType: 'REVIEW_COMMENT', anchorType: 'TEXT_RANGE', status: 'RESOLVED', createdById: ids.authorizedLawyer },
+        { id: ids.annotV1_4, documentId: ids.doc1, documentVersionId: ids.v1, annotationType: 'INTERNAL_NOTE', anchorType: 'TEXT_RANGE', status: 'RESOLVED', createdById: ids.authorizedLawyer },
+
+        // v2 (current): 3 active annotations (2 OPEN, 1 RESOLVED)
+        // 2 OPEN: 1 QUESTION, 1 REVIEW_COMMENT
+        // 1 RESOLVED: 1 QUESTION
+        { id: ids.annotV2_1, documentId: ids.doc1, documentVersionId: ids.v2, annotationType: 'QUESTION', anchorType: 'TEXT_RANGE', status: 'OPEN', createdById: ids.authorizedLawyer, internalNote: 'SENSITIVE_V2_NOTE_1', headline: 'Kérdés' },
+        { id: ids.annotV2_2, documentId: ids.doc1, documentVersionId: ids.v2, annotationType: 'REVIEW_COMMENT', anchorType: 'TEXT_RANGE', status: 'OPEN', createdById: ids.authorizedLawyer, reviewComment: 'SENSITIVE_V2_COMMENT' },
+        { id: ids.annotV2_3, documentId: ids.doc1, documentVersionId: ids.v2, annotationType: 'QUESTION', anchorType: 'TEXT_RANGE', status: 'RESOLVED', createdById: ids.authorizedLawyer, openQuestion: 'SENSITIVE_V2_RESOLVED_QUESTION' },
+
+        // v2 soft-deleted annotation (deletedAt is set): MUST NOT BE COUNTED
+        { id: ids.annotV2_del, documentId: ids.doc1, documentVersionId: ids.v2, annotationType: 'DECISION', anchorType: 'TEXT_RANGE', status: 'OPEN', createdById: ids.authorizedLawyer, deletedAt: new Date(), deletedById: ids.authorizedLawyer },
+
+        // doc2Cross / vCross: annotations on another document: MUST NOT BE COUNTED
+        { id: ids.annotCross, documentId: ids.doc2Cross, documentVersionId: ids.vCross, annotationType: 'TASK_NOTE', anchorType: 'TEXT_RANGE', status: 'OPEN', createdById: ids.crossCaseLawyer },
+      ],
+    });
   });
 
   afterAll(async () => {
     if (db) {
+      await db.documentAnnotation.deleteMany({ where: { documentId: { in: [ids.doc1, ids.doc2Cross] } } }).catch(() => {});
       await db.documentChangeSegment.deleteMany({ where: { comparisonId: ids.comparison } }).catch(() => {});
       await db.documentComparison.deleteMany({ where: { id: ids.comparison } }).catch(() => {});
       await db.reviewPoint.deleteMany({ where: { id: ids.point1 } }).catch(() => {});
@@ -306,5 +341,35 @@ describeWithDatabase('Document Review Projection PostgreSQL Integration', () => 
     expect(item.unresolvedSegments).toBe(1);
     expect(item.aiApproved).toBe(true);
     expect(item.nextAction.code).toBe('REVIEW_CHANGE_SEGMENTS');
+  });
+
+  it('truthfully scopes annotation summary to current version only in PostgreSQL', async () => {
+    const projection = await getDocumentReviewProjection(ids.doc1, { prisma: db });
+    expect(projection).not.toBeNull();
+    expect(projection!.annotationSummary).not.toBeNull();
+    expect(projection!.annotationSummary.documentVersionId).toBe(ids.v2);
+
+    // Total count must be exactly 3 (from v2 active):
+    // Never 10 (all seeded), never 7 (v1 + v2), never 4 (v2 including soft-deleted)
+    expect(projection!.annotationSummary.totalCount).toBe(3);
+    expect(projection!.annotationSummary.openCount).toBe(2);
+    expect(projection!.annotationSummary.resolvedCount).toBe(1);
+
+    // byType counts
+    expect(projection!.annotationSummary.byType).toEqual({
+      QUESTION: 2,
+      REVIEW_COMMENT: 1,
+    });
+
+    // Leak protection: raw annotation text, notes, comments, anchors are NEVER exposed
+    const serialized = JSON.stringify(projection!.annotationSummary);
+    expect(serialized).not.toContain('SENSITIVE_V1_NOTE_1');
+    expect(serialized).not.toContain('SENSITIVE_V2_NOTE_1');
+    expect(serialized).not.toContain('SENSITIVE_V2_COMMENT');
+    expect(serialized).not.toContain('SENSITIVE_V2_RESOLVED_QUESTION');
+    expect(serialized).not.toContain('headline');
+    expect(serialized).not.toContain('reviewComment');
+    expect(serialized).not.toContain('internalNote');
+    expect(serialized).not.toContain('openQuestion');
   });
 });
