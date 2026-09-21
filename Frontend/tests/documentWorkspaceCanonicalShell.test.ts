@@ -53,7 +53,7 @@ test("Canonical left ledger preserves all document categories and upload trigger
   assert.match(ledger, /Generált \/ módosított/);
   assert.match(ledger, /filteredGeneratedLedgerItems\.map/);
   assert.match(ledger, /scanStatusLabel\(doc\.securityScanStatus\)/);
-  assert.match(ledger, /setSelectedLedgerItem/);
+  assert.match(ledger, /selectLedgerItem/);
   // Left-rail search is a view filter over the already-loaded collection.
   assert.match(ledger, /data-testid="ledger-search-input"/);
   assert.match(ledger, /setLedgerSearch/);
@@ -352,7 +352,7 @@ test("Regression Proof 5: publication jump is disabled while uploaded-document v
 
 // UX convergence (PR #250): consolidated header + truthful reading toolbar.
 
-test("Canonical header consolidates real work context and offers Download / New version / Comparison / AI preparation", () => {
+test("Canonical header consolidates real work context without duplicating primary workflows", () => {
   const source = documentPage();
   const topMatch = source.match(/<section data-testid="canonical-top-region"[\s\S]*?<\/section>/);
   assert.ok(topMatch, "Top region section must be found");
@@ -361,9 +361,9 @@ test("Canonical header consolidates real work context and offers Download / New 
   assert.match(top, /data-testid="canonical-document-context-line"/);
   assert.match(top, /<b>Ügy:<\/b>/);
   assert.match(top, /<b>Ügyfél:<\/b>/);
-  assert.match(top, /<b>Felelős:<\/b>/);
-  assert.match(top, /<b>Reviewer:<\/b>/);
-  assert.match(top, /<b>Határidő:<\/b>/);
+  assert.match(top, /<b>Felelős:<\/b> \{activeWorkContextView\.owner\.name\}/);
+  assert.match(top, /<b>Reviewer:<\/b> \{activeWorkContextView\.reviewer\.name\}/);
+  assert.match(top, /<b>Határidő:<\/b> \{activeWorkContextView\.dueDateLabel\}/);
   assert.match(top, /data-testid="canonical-document-work-instruction"/);
   // responsibility/reviewer/due date come from the canonical work-context view, never inferred
   assert.match(top, /activeWorkContextView\?\.owner\?\.name/);
@@ -374,8 +374,8 @@ test("Canonical header consolidates real work context and offers Download / New 
 
   assert.match(top, /handleDownloadUploadedDocument|handleDownload/);
   assert.match(top, /Új verzió feltöltése/);
-  assert.match(top, /Változások/);
-  assert.match(top, /AI előkészítés/);
+  assert.doesNotMatch(top, /<AdminButton[^>]*>Változások<\/AdminButton>/);
+  assert.doesNotMatch(top, /<AdminButton[^>]*>AI előkészítés<\/AdminButton>/);
 });
 
 test("Reading toolbar is truthful: real zoom, real focus mode, no fake page count, no false Word open", () => {
@@ -390,8 +390,8 @@ test("Reading toolbar is truthful: real zoom, real focus mode, no fake page coun
   assert.match(center, /style=\{\{ zoom: readerZoom \/ 100 \}\}/);
   assert.match(center, /data-testid="reading-focus-toggle"/);
   // focus mode collapses the auxiliary rails and back to a single column
-  assert.match(source, /readingFocus \? " xl:hidden" : ""/);
-  assert.match(source, /readingFocus \? "xl:grid-cols-\[minmax\(0,1fr\)\]"/);
+  assert.match(source, /readingFocus \? " lg:hidden" : ""/);
+  assert.match(source, /readingFocus \? "lg:grid-cols-\[minmax\(0,1fr\)\]"/);
 
   // no invented pagination and no unproven Word open action
   assert.doesNotMatch(source, /\b1 \/ 24\b/);
@@ -399,17 +399,16 @@ test("Reading toolbar is truthful: real zoom, real focus mode, no fake page coun
   assert.doesNotMatch(source, /WORD_OPEN/);
 });
 
-test("AI preparation and comparison header actions are gated to canonical uploaded documents", () => {
+test("AI preparation and comparison remain contextual secondary capabilities", () => {
   const source = documentPage();
   // the AI modal receives a canonical Document id (never a generated-contract id)
   assert.ok(source.includes("documentId={selectedUploadedDocument.id}"));
   assert.ok(!source.includes("documentId={activeDocument.id}"));
-  // both actions are gated on an uploaded (canonical Document) row
+  // AI remains available from the secondary left-rail preparation block.
   const aiIndex = source.indexOf("setAiPreparationOpen(true)");
-  const compareIndex = source.indexOf("setContextualTab('changes')");
-  assert.ok(aiIndex > 0 && compareIndex > 0);
-  assert.match(source.slice(Math.max(0, aiIndex - 160), aiIndex), /selectedUploadedDocument \?/);
-  assert.match(source.slice(Math.max(0, compareIndex - 160), compareIndex), /selectedUploadedDocument \?/);
+  assert.ok(aiIndex > 0);
+  assert.match(source.slice(Math.max(0, aiIndex - 220), aiIndex), /selectedUploadedDocument \?/);
+  assert.match(source, /setAiVersionPair\(\[baseVersionId, targetVersionId\]\)/);
   assert.match(source, /router\.push\(metaCompareUrl\)/);
 });
 

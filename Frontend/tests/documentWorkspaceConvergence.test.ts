@@ -57,7 +57,7 @@ test("Secondary surfaces do not expose a dead request action and navigation is a
   const source = page();
   const railSource = rail();
   assert.match(railSource, /\{onRequestChanges \? \(/);
-  assert.match(source, /<details data-testid="document-version-navigation">[\s\S]*ledger-search-input[\s\S]*filteredUploadedDocuments[\s\S]*<\/details>/);
+  assert.match(source, /<details data-testid="document-version-navigation" open>[\s\S]*ledger-search-input[\s\S]*filteredUploadedDocuments[\s\S]*<\/details>/);
 });
 
 test("AI preparation carries both selected version IDs through the existing prompt system", () => {
