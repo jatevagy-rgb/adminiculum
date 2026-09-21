@@ -83,7 +83,8 @@ type AuthenticatedAppProps = {
     | "timesheet-presets"
     | "calendar"
     | "client-portal-admin"
-    | "search";
+    | "search"
+    | "notifications";
   children?: React.ReactNode;
   /** Viewport-bound workbench shell (professional editor route only). */
   fullViewport?: boolean;

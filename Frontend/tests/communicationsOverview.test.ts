@@ -9,7 +9,7 @@ const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 describe('Canonical workforce communication workspace', () => {
   const workspace = () => read('src/components/communications/CommunicationWorkspace.tsx');
   const canonicalPage = () => read('src/app/communications/page.tsx');
-  const legacyPage = () => read('src/app/notifications/page.tsx');
+  const notificationsPage = () => read('src/app/notifications/page.tsx');
   const sidebar = () => read('src/components/Sidebar.tsx');
   const navigation = () => read('src/lib/navigation.ts');
   const api = () => read('src/lib/api.ts');
@@ -25,11 +25,17 @@ describe('Canonical workforce communication workspace', () => {
     assert.doesNotMatch(sidebar(), /notifications:\s*"\/notifications"/);
   });
 
-  it('redirects the legacy route and preserves supported query state', () => {
-    const src = legacyPage();
-    assert.match(src, /redirect\(/);
-    assert.match(src, /\/communications/);
-    for (const key of ['view', 'communicationId', 'clientId', 'caseId']) assert.match(src, new RegExp(key));
+  // Superseded behaviour: /notifications used to redirect into /communications.
+  // The canonical workforce notification inbox now owns that route, so the
+  // communications domain must no longer be aliased there. Communications itself
+  // stays a separate canonical surface with its own navigation entry.
+  it('keeps the workforce notification inbox out of the communications domain', () => {
+    const notifications = notificationsPage();
+    assert.doesNotMatch(notifications, /redirect\(/);
+    assert.doesNotMatch(notifications, /\/communications/);
+    assert.match(notifications, /AuthenticatedApp section="notifications"/);
+    assert.match(canonicalPage(), /CommunicationWorkspace/);
+    assert.match(navigation(), /id: "communications", label: "Kommunikáció"/);
   });
 
   it('keeps canonical API actions and operational filters', () => {
