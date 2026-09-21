@@ -9,8 +9,51 @@ import {
   listBillingPreparations,
   type BillingPreparationSummary,
 } from '@/lib/billingPreparationsApi';
-import { formatNetAmount, formatMinutes } from '@/lib/billingPreparationPresentation';
+import {
+  formatBudapestDateTime,
+  formatNetAmount,
+  groupPreparationsByPeriod,
+} from '@/lib/billingPreparationPresentation';
 import { rateToday } from '@/lib/hourlyRatePresentation';
+
+/**
+ * One preparation row. Every preparation id stays linked; identical-looking
+ * totals across rows are explained by their own creation/close timestamps and
+ * short id rather than being collapsed or deduplicated.
+ */
+function PreparationRow({ clientId, prep, current }: { clientId: string; prep: BillingPreparationSummary; current: boolean }) {
+  const open = prep.status === 'OPEN';
+  const label = open ? (current ? 'Jelenlegi nyitott előkészítés' : 'Nyitott előkészítés') : 'Lezárt változat';
+  return (
+    <Link
+      href={`/clients/${encodeURIComponent(clientId)}/szamlazas/${encodeURIComponent(prep.id)}`}
+      className="group flex items-start justify-between gap-3 px-3 py-2.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]"
+    >
+      <span className="min-w-0">
+        <span className={`flex flex-wrap items-center gap-2 ${current ? 'font-semibold' : ''}`}>
+          <span>{label}</span>
+          <span
+            title={prep.id}
+            className="rounded-full border border-[var(--adm-border)] px-1.5 py-0.5 font-mono text-[10px] font-normal text-[var(--adm-text-muted)]"
+          >
+            {prep.id.slice(0, 8)}
+          </span>
+        </span>
+        <span className="mt-0.5 block text-[11px] text-[var(--adm-text-muted)]">
+          {open
+            ? `Létrehozva: ${formatBudapestDateTime(prep.createdAt)}`
+            : `Létrehozva: ${formatBudapestDateTime(prep.createdAt)} · Lezárva: ${formatBudapestDateTime(prep.closedAt)}`}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-3 text-xs text-[var(--adm-text-muted)]">
+        <span>{prep.status === 'OPEN' ? 'Nyitott' : 'Lezárt'}</span>
+        {typeof prep.itemCount === 'number' && <span>{prep.itemCount} sor</span>}
+        {prep.includedNetAmount && <span>{formatNetAmount(prep.includedNetAmount)}</span>}
+        <span className="text-[var(--adm-ochre-500)] opacity-0 transition-opacity group-hover:opacity-100">→</span>
+      </span>
+    </Link>
+  );
+}
 
 /** Default period: previous calendar month, computed in the Europe/Budapest calendar. */
 function defaultPeriod(): { start: string; end: string } {
@@ -102,22 +145,40 @@ export default function SzamlazasPageContent({ clientId }: { clientId: string })
       <section className="rounded-lg border border-[var(--adm-border)] bg-white p-4">
         <h2 className="text-sm font-semibold">Korábbi előkészítések</h2>
         {preparations.length === 0 && <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Még nincs előkészítés ehhez az ügyfélhez.</p>}
-        <ul className="mt-2 divide-y divide-[var(--adm-border)]">
-          {preparations.map(prep => (
-            <li key={prep.id}>
-              <Link href={`/clients/${encodeURIComponent(clientId)}/szamlazas/${encodeURIComponent(prep.id)}`}
-                className="flex items-center justify-between py-2 text-sm group">
-                <span>{prep.periodStart} – {prep.periodEnd}</span>
-                <span className="flex items-center gap-3 text-xs text-[var(--adm-text-muted)]">
-                  <span>{prep.status === 'OPEN' ? 'Nyitott' : 'Lezárt'}</span>
-                  {typeof prep.itemCount === 'number' && <span>{prep.itemCount} sor</span>}
-                  {prep.includedNetAmount && <span>{formatNetAmount(prep.includedNetAmount)}</span>}
-                  <span className="text-[var(--adm-ochre-600)] opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+        {preparations.length > 0 && (
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+            Egy időszakhoz egyszerre egy nyitott előkészítés tartozik. Ugyanahhoz az időszakhoz több lezárt változat is
+            megmaradhat: ezek korábbi lezárt pillanatképek, mindegyik külön megnyitható.
+          </p>
+        )}
+        <div className="mt-3 space-y-4">
+          {groupPreparationsByPeriod(preparations).map(group => (
+            <div key={`${group.periodStart}|${group.periodEnd}`} className="overflow-hidden rounded-md border border-[var(--adm-border)]">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2">
+                <span className="text-sm font-medium">{group.periodStart} – {group.periodEnd}</span>
+                <span className="text-[11px] text-[var(--adm-text-muted)]">
+                  {group.current ? '1 nyitott előkészítés' : 'Nincs nyitott előkészítés'}
+                  {group.history.length > 0 ? ` · ${group.history.length} korábbi lezárt változat` : ''}
                 </span>
-              </Link>
-            </li>
+              </div>
+              {group.current && <PreparationRow clientId={clientId} prep={group.current} current />}
+              {group.history.length > 0 && (
+                <div className={group.current ? 'border-t border-[var(--adm-border)]' : ''}>
+                  <h3 className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--adm-text-muted)]">
+                    Korábbi lezárt változatok
+                  </h3>
+                  <ul className="divide-y divide-[var(--adm-border)]">
+                    {group.history.map(prep => (
+                      <li key={prep.id}>
+                        <PreparationRow clientId={clientId} prep={prep} current={false} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           ))}
-        </ul>
+        </div>
       </section>
     </main>
   );
