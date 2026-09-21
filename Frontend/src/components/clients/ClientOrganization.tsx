@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   clientOrganizationApi,
+  isCurrentOrganizationPerson,
   personStatusLabel,
   responsibilityTypeLabel,
   type OrgGroupDTO,
@@ -99,15 +100,27 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
     ].join(" ").toLocaleLowerCase("hu-HU").includes(needle));
   }, [persons, query]);
 
+  // Canonical split: only ACTIVE / ON_LEAVE persons form the current organization.
+  // INACTIVE persons stay reachable as truthful history but are never presented
+  // as a current active member, manager or responsibility holder.
+  const currentPersons = useMemo(
+    () => filteredPersons.filter((person) => isCurrentOrganizationPerson(person.employmentStatus)),
+    [filteredPersons],
+  );
+  const historicalPersons = useMemo(
+    () => filteredPersons.filter((person) => !isCurrentOrganizationPerson(person.employmentStatus)),
+    [filteredPersons],
+  );
+
   const personsByGroup = useMemo(() => {
     const result = new Map<string | null, OrgPersonDTO[]>();
-    filteredPersons.forEach((person) => {
+    currentPersons.forEach((person) => {
       const current = result.get(person.organizationGroupId) || [];
       current.push(person);
       result.set(person.organizationGroupId, current);
     });
     return result;
-  }, [filteredPersons]);
+  }, [currentPersons]);
 
   const openPerson = async (personId: string) => {
     setSelectedId(personId);
@@ -139,14 +152,14 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
   };
 
   const roots = groups.filter((group) => !group.parentGroupId);
-  const rootPeople = organizationRootPeople(filteredPersons);
+  const rootPeople = organizationRootPeople(currentPersons);
   const editPerson = (personId: string) => setEditorAction({ mode: "person", selectedId: personId });
   const removePerson = (personId: string) => setEditorAction({ mode: "person", selectedId: personId, remove: true });
   const addPersonToGroup = (groupId: string | null) => setEditorAction({ mode: "person", groupId });
   const editGroup = (groupId: string) => setEditorAction({ mode: "group", selectedId: groupId });
   const addSubgroup = (groupId: string) => setEditorAction({ mode: "group", groupId });
   const renderPerson = (person: OrgPersonDTO, nested = false, groupScope: string | null = null): ReactNode => {
-    const reports = organizationReportsInScope(filteredPersons, person.id, groupScope);
+    const reports = organizationReportsInScope(currentPersons, person.id, groupScope);
     const portal = derivePortalMembership(person, workspaces);
     return <div key={person.id} className={nested ? "relative mt-3 border-l border-[var(--adm-green-300)] pl-5 before:absolute before:left-0 before:top-6 before:h-px before:w-4 before:bg-[var(--adm-green-300)]" : ""}>
       <div className="rounded-xl border border-[var(--adm-border)] bg-white p-3 shadow-sm">
@@ -177,7 +190,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
           <div className="flex items-center gap-3"><span className={pill}>{members.length} személy</span>{canManageOrganization ? <div className="flex gap-2 text-xs font-semibold text-[var(--adm-green-800)]"><button type="button" onClick={() => addPersonToGroup(group.id)} className="underline">+ Kolléga</button><button type="button" onClick={() => addSubgroup(group.id)} className="underline">+ Alcsoport</button><button type="button" onClick={() => editGroup(group.id)} className="underline">Szerkesztés</button></div> : null}</div>
         </div>
         {members.length ? (
-          <div className="mt-3 grid gap-3 lg:grid-cols-2">{organizationGroupStarts(filteredPersons, group.id).map((person) => renderPerson(person, false, group.id))}</div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">{organizationGroupStarts(currentPersons, group.id).map((person) => renderPerson(person, false, group.id))}</div>
         ) : null}
         </div>
         {children.map((child) => renderGroup(child, depth + 1, nextAncestors))}
@@ -186,8 +199,8 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
   };
 
   const ungrouped = personsByGroup.get(null) || [];
-  const activePortalPeople = filteredPersons.filter((person) => Boolean(person.portalMembershipId));
-  const responsibilityPeople = filteredPersons.filter((person) => Boolean(person.responsibilities?.length));
+  const activePortalPeople = currentPersons.filter((person) => Boolean(person.portalMembershipId));
+  const responsibilityPeople = currentPersons.filter((person) => Boolean(person.responsibilities?.length));
   const hasGaps = Boolean(gaps && (gaps.contractsWithoutOwner.length || gaps.obligationsWithoutOwner.length || gaps.ownerPersonsInactive.length));
 
   return (
@@ -197,7 +210,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
         <h1 className="mt-1 font-serif text-3xl text-[var(--adm-text)]">{clientName ? `${clientName} — szervezet` : "Személyek és szervezeti felépítés"}</h1>
         <p className="mt-2 max-w-2xl text-sm text-[var(--adm-text-muted)]">A pozíció, a felelősség és a portál-hozzáférés külön kezelt szervezeti információk.</p>
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          {[["Személy", persons.length], ["Szervezeti egység", groups.length], ["Felelősséggel rendelkező", responsibilityPeople.length], ["Portál-hozzáférés", activePortalPeople.length]].map(([label, value]) => <div key={String(label)} className="adm-board-strip p-3"><p className="font-serif text-2xl text-[var(--adm-text)]">{value}</p><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</p></div>)}
+          {[["Személy", currentPersons.length], ["Szervezeti egység", groups.length], ["Felelősséggel rendelkező", responsibilityPeople.length], ["Portál-hozzáférés", activePortalPeople.length]].map(([label, value]) => <div key={String(label)} className="adm-board-strip p-3"><p className="font-serif text-2xl text-[var(--adm-text)]">{value}</p><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">{label}</p></div>)}
         </div>
       </section>
 
@@ -212,9 +225,29 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
             <div className="space-y-5">
               {rootPeople.length ? <div className="rounded-xl bg-[var(--adm-ivory-100)] p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-serif text-lg text-[var(--adm-text)]">Vezetői szint</h3>{canManageOrganization ? <button type="button" onClick={() => addPersonToGroup(null)} className="text-xs font-semibold text-[var(--adm-green-800)] underline">+ Kolléga</button> : null}</div><div className="mt-3 grid gap-3 lg:grid-cols-2">{rootPeople.map((person) => renderPerson(person))}</div></div> : null}
               {roots.map((root) => renderGroup(root))}
-              {organizationUngroupedStarts(filteredPersons).length ? <div className="border-t border-[var(--adm-border)] pt-4"><h3 className="font-serif text-lg text-[var(--adm-text)]">Nincs szervezeti egységhez rendelve</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">{organizationUngroupedStarts(filteredPersons).map((person) => renderPerson(person, false, null))}</div></div> : null}
+              {organizationUngroupedStarts(currentPersons).length ? <div className="border-t border-[var(--adm-border)] pt-4"><h3 className="font-serif text-lg text-[var(--adm-text)]">Nincs szervezeti egységhez rendelve</h3><div className="mt-2 grid gap-3 sm:grid-cols-2">{organizationUngroupedStarts(currentPersons).map((person) => renderPerson(person, false, null))}</div></div> : null}
             </div>
           </Section>
+
+          {historicalPersons.length ? (
+            <Section title="Korábbi, nem aktuális munkatársak">
+              <p className="text-xs text-[var(--adm-text-muted)]">
+                Ezek a személyek már nem aktuális szervezeti szereplők. Adataik és korábbi felelősségeik történeti adatként maradnak elérhetők, de nem jelennek meg aktuális felelősségként.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="organization-historical-persons">
+                {historicalPersons.map((person) => (
+                  <div key={person.id} className="rounded-xl border border-[var(--adm-border)] bg-white p-3 shadow-sm">
+                    <div className="flex items-start justify-between gap-2">
+                      <button type="button" onClick={() => void openPerson(person.id)} className="text-left font-semibold text-[var(--adm-text)] hover:underline">{person.name}</button>
+                      <span className={pill} data-testid="organization-historical-status">{personStatusLabel(person.employmentStatus)}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-[var(--adm-text-muted)]">{person.jobTitle || "Pozíció nincs megadva"}</p>
+                    {person.responsibilities?.length ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Korábbi felelősség: {person.responsibilities.map((item) => item.label).join(", ")}</p> : null}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          ) : null}
 
           <Section title="Személyek keresése" empty={!persons.length}>
             <label className="block max-w-xl text-sm font-semibold text-[var(--adm-text)]"><span className="sr-only">Keresés név, egység, pozíció vagy felelősség szerint</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Név, szervezeti egység, pozíció vagy felelősség" className="w-full rounded-xl border border-[var(--adm-border)] bg-white px-3 py-2 font-normal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-700)]" /></label>
@@ -231,7 +264,7 @@ export function ClientOrganization({ clientId, clientName }: { clientId: string;
               <div><p className="text-xs uppercase tracking-wide text-[var(--adm-text-muted)]">Foglalkoztatási státusz</p><p className="mt-1 text-[var(--adm-text)]">{personStatusLabel(detail.employmentStatus)}</p></div>
             </div>
             <div className="mt-5 grid gap-4 border-t border-[var(--adm-border)] pt-4 md:grid-cols-2">
-              <div><h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--adm-text-muted)]">Felelősségek</h3>{detail.responsibilities?.length ? <ul className="mt-2 space-y-2">{detail.responsibilities.map((item) => <li key={item.id} className="rounded-lg bg-[var(--adm-ivory-100)] p-2 text-sm"><b>{item.label}</b><span className="ml-2 text-xs text-[var(--adm-text-muted)]">{responsibilityTypeLabel(item.type)}</span></li>)}</ul> : <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Nincs külön rögzített felelősség.</p>}</div>
+              <div><h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--adm-text-muted)]">Felelősségek</h3>{!isCurrentOrganizationPerson(detail.employmentStatus) ? <p className="mt-2 text-xs text-[var(--adm-text-muted)]" data-testid="organization-historical-responsibility-note">A személy nem aktuális szervezeti szereplő; az alábbi felelősségek történeti adatok.</p> : null}{detail.responsibilities?.length ? <ul className="mt-2 space-y-2">{detail.responsibilities.map((item) => <li key={item.id} className="rounded-lg bg-[var(--adm-ivory-100)] p-2 text-sm"><b>{item.label}</b><span className="ml-2 text-xs text-[var(--adm-text-muted)]">{responsibilityTypeLabel(item.type)}</span></li>)}</ul> : <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Nincs külön rögzített felelősség.</p>}</div>
               <div><h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--adm-text-muted)]">Portál-hozzáférés</h3>{detail.portalMembershipId ? <p className="mt-2 rounded-lg bg-[var(--adm-ivory-100)] p-2 text-sm text-[var(--adm-text)]">{portalRoleLabel(detail.portalMembershipRole)}</p> : <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Nincs portál-hozzáférés</p>}</div>
             </div>
           </Section> : null}

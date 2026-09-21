@@ -87,6 +87,11 @@ const statusLabels: Record<string, string> = {
   REVIEW_REQUIRED: "Felülvizsgálandó",
   ACHIEVED: "Elért",
   CANCELLED: "Törölt",
+  // Canonical complianceEnrollmentStatus values (presentation only; the persisted
+  // enum and the backend state machine are unchanged).
+  ENROLLED: "Bekapcsolva a megfelelőségi értékelésbe",
+  NOT_ENROLLED: "Nincs bekapcsolva a megfelelőségi értékelésbe",
+  SUSPENDED: "Felfüggesztve",
 };
 
 const factSourceLabels: Record<string, string> = {
