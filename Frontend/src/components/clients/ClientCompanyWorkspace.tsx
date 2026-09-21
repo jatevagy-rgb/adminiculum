@@ -42,14 +42,25 @@ export const WORKSPACE_SECTIONS: Array<[WorkspaceSection, string]> = [
 // (organization, compliance, Grow development/outcomes) live in their canonical
 // modules, so they no longer appear in the visible local tab bar. Their data and
 // render paths stay in place; only navigation converges.
+//
+// Primary local navigation answers the ordinary user's questions about how the
+// company operates. The fact-engine audit views (Adatok, Adatminőség) and the
+// legacy operational overview stay out of the primary row: they are reachable
+// through the compact ADVANCED_WORKSPACE_SECTIONS control, and their deep links,
+// render paths and data are unchanged.
 export const VISIBLE_WORKSPACE_SECTIONS: Array<[WorkspaceSection, string]> = [
   ["overview", "Áttekintés"],
   ["company-profile", "Vállalati profil"],
-  ["data", "Adatok"],
-  ["data-quality", "Adatminőség"],
   ["processes", "Folyamatok"],
   ["systems", "Rendszerek"],
   ["documents", "Dokumentumok és bizonyítékok"],
+];
+
+// Secondary, module-local advanced views. Same sections, same panels, same data —
+// only their entry point moves out of the primary row.
+export const ADVANCED_WORKSPACE_SECTIONS: Array<[WorkspaceSection, string]> = [
+  ["data", "Adatok"],
+  ["data-quality", "Adatminőség"],
   ["operational", "Operatív áttekintés"],
 ];
 
@@ -444,6 +455,10 @@ export function ClientCompanyWorkspace({
   const measuredOutcomeCount =
     room?.measurementSummary.byBasis.find((entry) => entry.basis === "MEASURED")?.count ?? 0;
 
+  // Keeps the advanced control honest: when one of its views is open (including
+  // via an old ?section= / #hash deep link) the summary names it.
+  const activeAdvancedLabel = ADVANCED_WORKSPACE_SECTIONS.find(([key]) => key === activeSection)?.[1] ?? null;
+
   return (
     <div className="space-y-5" data-testid="client-company-workspace">
       <DemoContentBanner enabled={process.env.NEXT_PUBLIC_ADMINICULUM_DEMO_CONTENT_ENABLED === "true"} />
@@ -453,13 +468,13 @@ export function ClientCompanyWorkspace({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#014337]">
-              Company OS · Vállalati működés
+              Vállalati működés
             </p>
             <h1 className="mt-1 font-serif text-2xl font-semibold text-stone-950 sm:text-3xl">
               {clientName}
             </h1>
             <p className="mt-1 text-xs text-stone-600 sm:text-sm">
-              A vállalat Data Room felülete: a rögzített tények, szervezeti struktúra, folyamatok és fejlesztési irányok egy helyen.
+              A vállalat működésének képe: a rögzített tények, folyamatok, rendszerek és fejlesztési irányok egy helyen.
             </p>
           </div>
           <Link
@@ -471,33 +486,61 @@ export function ClientCompanyWorkspace({
         </div>
       </header>
 
-      {/* Canonical Navigation Tabs */}
-      <nav
-        aria-label="Vállalati működés szekciói"
-        className="flex flex-wrap gap-1 border-b border-stone-200/80 pb-2"
-        role="tablist"
-      >
-        {VISIBLE_WORKSPACE_SECTIONS.map(([key, label]) => {
-          const isSelected = activeSection === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={isSelected}
-              data-testid={`workspace-tab-${key}`}
-              onClick={() => handleSectionChange(key)}
-              className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#014337] ${
-                isSelected
-                  ? "bg-[#014337] text-white shadow-xs"
-                  : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 hover:text-stone-900"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </nav>
+      {/* Canonical primary navigation + compact advanced view control */}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200/80 pb-2">
+        <nav
+          aria-label="Vállalati működés szekciói"
+          className="flex flex-wrap gap-1"
+          role="tablist"
+        >
+          {VISIBLE_WORKSPACE_SECTIONS.map(([key, label]) => {
+            const isSelected = activeSection === key;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                data-testid={`workspace-tab-${key}`}
+                onClick={() => handleSectionChange(key)}
+                className={`rounded-xl px-3.5 py-2 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#014337] ${
+                  isSelected
+                    ? "bg-[#014337] text-white shadow-xs"
+                    : "bg-white text-stone-600 border border-stone-200 hover:bg-stone-50 hover:text-stone-900"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </nav>
+
+        <details data-testid="company-os-advanced-views" className="relative">
+          <summary className="cursor-pointer list-none rounded-xl border border-stone-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-stone-600 hover:bg-stone-50 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-[#014337]">
+            Haladó nézetek
+            {activeAdvancedLabel ? ` · ${activeAdvancedLabel}` : ""}
+          </summary>
+          <div className="absolute right-0 z-10 mt-1 flex min-w-max flex-col gap-1 rounded-xl border border-stone-200 bg-white p-2 shadow-sm">
+            {ADVANCED_WORKSPACE_SECTIONS.map(([key, label]) => {
+              const isSelected = activeSection === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-current={isSelected ? "true" : undefined}
+                  data-testid={`workspace-tab-${key}`}
+                  onClick={() => handleSectionChange(key)}
+                  className={`rounded-lg px-3 py-1.5 text-left text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-[#014337] ${
+                    isSelected ? "bg-[#014337] text-white" : "text-stone-600 hover:bg-stone-50 hover:text-stone-900"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </details>
+      </div>
 
       {loading ? (
         <div data-testid="data-room-loading" className="rounded-2xl border border-stone-200 bg-white p-6 text-sm text-stone-600 shadow-xs">
@@ -552,7 +595,7 @@ export function ClientCompanyWorkspace({
               <div className="mt-5 rounded-2xl border border-stone-200 bg-stone-50/60 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">Működési kép</p>
                 <p className="mt-1 text-sm text-stone-800 leading-relaxed">
-                  {room.operatingProfile?.summary || "A Data Room összesített működési képe még nem tartalmaz leírást."}
+                  {room.operatingProfile?.summary || "Az összesített működési kép még nem tartalmaz leírást."}
                 </p>
                 {!room.dataQuality.relevantDataCoverage.available ? (
                   <p className="mt-2 text-xs text-stone-500">A releváns adatlefedettség még nem számítható.</p>

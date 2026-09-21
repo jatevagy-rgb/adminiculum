@@ -66,6 +66,39 @@ describe('Client-level module information architecture convergence (structural)'
     assert.doesNotMatch(companyOs(), /\{WORKSPACE_SECTIONS\.map\(/);
   });
 
+  it('5b. Company OS primary tabs are the five operational surfaces and advanced views stay reachable', () => {
+    const src = companyOs();
+    const primary = blockFrom(src, 'export const VISIBLE_WORKSPACE_SECTIONS', '];');
+    const advanced = blockFrom(src, 'export const ADVANCED_WORKSPACE_SECTIONS', '];');
+    // Exact primary product navigation, in order.
+    assert.match(
+      primary,
+      /\["overview", "Áttekintés"\][\s\S]*\["company-profile", "Vállalati profil"\][\s\S]*\["processes", "Folyamatok"\][\s\S]*\["systems", "Rendszerek"\][\s\S]*\["documents", "Dokumentumok és bizonyítékok"\]/,
+    );
+    // The fact-engine audit and legacy views live behind one compact control.
+    assert.match(
+      advanced,
+      /\["data", "Adatok"\][\s\S]*\["data-quality", "Adatminőség"\][\s\S]*\["operational", "Operatív áttekintés"\]/,
+    );
+    assert.match(src, /Haladó nézetek/);
+    assert.match(src, /data-testid="company-os-advanced-views"/);
+    assert.match(src, /\{ADVANCED_WORKSPACE_SECTIONS\.map\(/);
+    // Every advanced view keeps its panel/data render path (nothing was deleted).
+    assert.match(src, /<Panel id="data" title="Adatok">/);
+    assert.match(src, /<Panel id="data-quality"/);
+    assert.match(src, /data-testid="legacy-operational-overview"/);
+    // The advanced control names the open view, including after a legacy deep link.
+    assert.match(src, /ADVANCED_WORKSPACE_SECTIONS\.find\(\(\[key\]\) => key === activeSection\)/);
+  });
+
+  it('5c. Company OS user-facing copy drops implementation vocabulary', () => {
+    const src = companyOs();
+    assert.match(src, /Vállalati működés/);
+    assert.doesNotMatch(src, /Company OS · Vállalati működés/);
+    assert.doesNotMatch(src, /Data Room felülete/);
+    assert.doesNotMatch(src, /A Data Room összesített működési kép/);
+  });
+
   it('6. Company OS still keeps the cross-domain summary data and views', () => {
     const src = companyOs();
     assert.match(src, /<Panel id="organization" title="Szervezet">/);
@@ -127,9 +160,20 @@ describe('Client-level module information architecture convergence (structural)'
 
   it('15. Company-owned ?section= values still work through the existing push-state path', () => {
     const src = companyOs();
-    for (const key of ['company-profile', 'data', 'data-quality', 'processes', 'systems', 'documents', 'operational', 'overview']) {
-      assert.match(blockFrom(src, 'export const WORKSPACE_SECTIONS', '];'), new RegExp(`"${key}"`));
-      assert.match(blockFrom(src, 'export const VISIBLE_WORKSPACE_SECTIONS', '];'), new RegExp(`"${key}"`));
+    const canonical = blockFrom(src, 'export const WORKSPACE_SECTIONS', '];');
+    const primary = blockFrom(src, 'export const VISIBLE_WORKSPACE_SECTIONS', '];');
+    const advanced = blockFrom(src, 'export const ADVANCED_WORKSPACE_SECTIONS', '];');
+    // Primary product navigation.
+    for (const key of ['overview', 'company-profile', 'processes', 'systems', 'documents']) {
+      assert.match(canonical, new RegExp(`"${key}"`));
+      assert.match(primary, new RegExp(`"${key}"`));
+      assert.doesNotMatch(advanced, new RegExp(`"${key}"`));
+    }
+    // Fact-engine audit and legacy views: reachable, but not primary.
+    for (const key of ['data', 'data-quality', 'operational']) {
+      assert.match(canonical, new RegExp(`"${key}"`));
+      assert.match(advanced, new RegExp(`"${key}"`));
+      assert.doesNotMatch(primary, new RegExp(`"${key}"`));
     }
     assert.match(src, /url\.searchParams\.set\("section", sec\)/);
     assert.match(src, /window\.history\.pushState\(\{\}, "", url\.toString\(\)\)/);
