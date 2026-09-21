@@ -25,7 +25,7 @@ import {
 } from "./states";
 
 export function ComparisonWorkspace({
-  documentId, documentTitle, versions, currentVersionNumber, onDownload, canManage = true, onPrepareAiComparison, onRequestSegmentChanges,
+  documentId, documentTitle, versions, currentVersionNumber, onDownload, canManage = true, onPrepareAiComparison, onRequestSegmentChanges, onChanged,
 }: {
   documentId: string;
   documentTitle: string;
@@ -35,6 +35,7 @@ export function ComparisonWorkspace({
   canManage?: boolean;
   onPrepareAiComparison?: (baseVersionId: string, targetVersionId: string) => void;
   onRequestSegmentChanges?: (segment: SegmentDto) => void;
+  onChanged?: () => void | Promise<void>;
 }) {
   const current = versions.find((v) => v.isCurrent) || versions[versions.length - 1] || null;
   const previous = current ? versions.filter((v) => v.versionNumber < current.versionNumber).sort((a, b) => b.versionNumber - a.versionNumber)[0] : null;
@@ -65,8 +66,9 @@ export function ComparisonWorkspace({
     if (updated && comparison) {
       await reloadSegments();
       try { setComparison(await getComparison(comparison.id)); } catch { /* counts refresh best-effort */ }
+      await onChanged?.();
     }
-  }, [selected, mutation, comparison, reloadSegments, setComparison]);
+  }, [selected, mutation, comparison, reloadSegments, setComparison, onChanged]);
 
   const onReloadConflict = useCallback(async () => { mutation.clearConflict(); await reloadSegments(); }, [mutation, reloadSegments]);
 

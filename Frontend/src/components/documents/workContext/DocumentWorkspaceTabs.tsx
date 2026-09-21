@@ -1,27 +1,26 @@
 "use client";
 
-import Link from "next/link";
-
 type DocumentWorkspaceTabsProps = {
-  caseId: string;
-  active?: "overview" | "changes" | "review" | "versions";
+  active: "overview" | "changes" | "comments" | "approval";
+  onChange: (mode: "overview" | "changes" | "comments" | "approval") => void;
 };
 
 const tabs = [
-  ["overview", "Áttekintés", "document-overview"],
-  ["changes", "Változások", "document-changes"],
-  ["review", "Felülvizsgálat", "document-review"],
-  ["versions", "Verziók", "document-versions"],
+  ["overview", "Áttekintés"],
+  ["changes", "Változások"],
+  ["comments", "Megjegyzések"],
+  ["approval", "Jóváhagyás"],
 ] as const;
 
-export function DocumentWorkspaceTabs({ caseId, active = "overview" }: DocumentWorkspaceTabsProps) {
+export function DocumentWorkspaceTabs({ active, onChange }: DocumentWorkspaceTabsProps) {
   return (
     <nav aria-label="Dokumentum munkatér" className="flex min-w-0 flex-wrap gap-1 border-b border-[var(--adm-border)] pb-1">
-      {tabs.map(([key, label, anchor]) => (
-        <Link
+      {tabs.map(([key, label]) => (
+        <button
           key={key}
-          href={`/cases/${encodeURIComponent(caseId)}/documents#${anchor}`}
-          aria-current={active === key ? "page" : undefined}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={active === key}
           className={`rounded-t px-3 py-2 text-xs font-semibold ${
             active === key
               ? "border-b-2 border-[var(--adm-ochre-500)] text-[var(--adm-text)]"
@@ -29,7 +28,7 @@ export function DocumentWorkspaceTabs({ caseId, active = "overview" }: DocumentW
           }`}
         >
           {label}
-        </Link>
+        </button>
       ))}
     </nav>
   );

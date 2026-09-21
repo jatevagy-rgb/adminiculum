@@ -8,6 +8,7 @@
  * ZERO SCHEMA CHANGES - ZERO SECOND ENGINES - STRICT PRIVACY / LEAK PROTECTION
  * BATCHED CASE PROJECTION - NO SERIAL N+1 - EXACT PREVIOUS->CURRENT COMPARISON ONLY
  */
+import { DocumentAnnotationStatus, DocumentAnnotationType } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 
 export type AiSourceMode = 'EXACT_VERSION_PAIR' | 'CURRENT_VERSION' | 'MIXED_VERSION_CONTEXT' | 'LEGACY_DOCUMENT';
@@ -50,6 +51,22 @@ export interface DocumentReviewSummaryDto {
     code: string;
     label: string;
     rationale: string;
+  };
+}
+
+export interface DocumentAnnotationSummaryDto {
+  documentVersionId: string | null;
+  totalCount: number;
+  openCount: number;
+  resolvedCount: number;
+  byType: {
+    INTERNAL_NOTE?: number;
+    REVIEW_COMMENT?: number;
+    MODIFICATION_REASON?: number;
+    CLIENT_EXPLANATION_DRAFT?: number;
+    QUESTION?: number;
+    DECISION?: number;
+    TASK_NOTE?: number;
   };
 }
 
@@ -137,6 +154,8 @@ export interface DocumentReviewProjectionDto {
     label: string;
     rationale: string;
   };
+
+  annotationSummary: DocumentAnnotationSummaryDto;
 
   segments?: Array<{
     sequence: number;
@@ -761,7 +780,57 @@ export async function getDocumentReviewProjection(
     };
   }
 
-  // 5. Deterministic Next Action
+  // 5. Current-version Annotation Summary (additive read-model signal for the four-mode UI)
+  let annotationSummary: DocumentAnnotationSummaryDto = {
+    documentVersionId: currentVerRow ? currentVerRow.id : null,
+    totalCount: 0,
+    openCount: 0,
+    resolvedCount: 0,
+    byType: {},
+  };
+
+  if (currentVerRow && db.documentAnnotation?.groupBy) {
+    const annotationGroups = await db.documentAnnotation.groupBy({
+      by: ['status', 'annotationType'],
+      where: {
+        documentId: doc.id,
+        documentVersionId: currentVerRow.id,
+        deletedAt: null,
+      },
+      _count: { _all: true },
+    });
+
+    let total = 0;
+    let open = 0;
+    let resolved = 0;
+    const byType: DocumentAnnotationSummaryDto['byType'] = {};
+
+    for (const group of annotationGroups as Array<{
+      status: DocumentAnnotationStatus;
+      annotationType: DocumentAnnotationType;
+      _count?: { _all?: number };
+    }>) {
+      const count = group._count?._all || 0;
+      total += count;
+      if (group.status === DocumentAnnotationStatus.RESOLVED) {
+        resolved += count;
+      } else {
+        open += count;
+      }
+      const type = group.annotationType as keyof DocumentAnnotationSummaryDto['byType'];
+      byType[type] = (byType[type] || 0) + count;
+    }
+
+    annotationSummary = {
+      documentVersionId: currentVerRow.id,
+      totalCount: total,
+      openCount: open,
+      resolvedCount: resolved,
+      byType,
+    };
+  }
+
+  // 6. Deterministic Next Action
   const nextAction = deriveNextAction({
     currentVersion,
     previousVersion,
@@ -783,6 +852,7 @@ export async function getDocumentReviewProjection(
     comparison: comparisonProjection,
     ai: aiProjection,
     nextAction,
+    annotationSummary,
   };
 
   if (options.includeSegments && rawSegments.length > 0) {
