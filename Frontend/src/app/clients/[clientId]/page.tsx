@@ -70,6 +70,10 @@ function ClientDetailContent() {
   const [communications, setCommunications] = useState<ClientCommunicationSummaryItem[]>([]);
   const [portalWorkspace, setPortalWorkspace] = useState<AdminWorkspaceDTO | null>(null);
   const [hasOrganizationCapability, setHasOrganizationCapability] = useState(false);
+  // The legacy/detail dossier block is collapsed out of the primary reading flow
+  // but auto-opens when an existing deep link targets one of its anchors.
+  const [legacyDetailsOpen, setLegacyDetailsOpen] = useState(false);
+  const [pendingLegacyAnchor, setPendingLegacyAnchor] = useState<string | null>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +143,47 @@ function ClientDetailContent() {
     loadClientData();
   }, [loadClientData]);
 
+  // Preserve legacy dossier deep links (#vallalati-mukodes, #szerzodes-tar, #szervezet)
+  // by opening the collapsed detail area when one of its anchors is requested.
+  useEffect(() => {
+    const legacyAnchors = new Set(["vallalati-mukodes", "szerzodes-tar", "szervezet"]);
+    const syncFromHash = () => {
+      const anchor = window.location.hash.replace("#", "");
+      if (!legacyAnchors.has(anchor)) return;
+      setLegacyDetailsOpen(true);
+      setPendingLegacyAnchor(anchor);
+    };
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
+
+  // The requested anchor was hidden while the detail area was collapsed, so the
+  // browser's fragment navigation could not scroll to it. Re-scroll once the
+  // details area is open; the remaining dossier lists settle asynchronously, so
+  // keep correcting for a short bounded window instead of scrolling once.
+  useEffect(() => {
+    if (!legacyDetailsOpen || !pendingLegacyAnchor) return;
+    const anchor = pendingLegacyAnchor;
+    let cancelled = false;
+    let attempts = 0;
+    const settleScroll = () => {
+      if (cancelled) return;
+      const target = document.getElementById(anchor);
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        if (rect.top < 0 || rect.top >= window.innerHeight) target.scrollIntoView({ block: "start" });
+      }
+      attempts += 1;
+      if (attempts < 10) window.setTimeout(settleScroll, 150);
+      else setPendingLegacyAnchor(null);
+    };
+    settleScroll();
+    return () => {
+      cancelled = true;
+    };
+  }, [legacyDetailsOpen, pendingLegacyAnchor]);
+
   const openEditClient = () => {
     if (!client) return;
     setEditFormData({
@@ -202,6 +247,9 @@ function ClientDetailContent() {
   return (
     <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
       <main className="adm-board-container space-y-6">
+        {/* Canonical client-level navigation first, matching every sibling module page. */}
+        <ClientWorkspaceTabs clientId={clientId} active="overview" organizationMode={organizationMode} />
+
         <header className="adm-board-hero p-5 lg:p-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="flex items-center gap-4 min-w-0">
@@ -237,23 +285,9 @@ function ClientDetailContent() {
               </Link>
               <details className="relative">
                 <summary className="cursor-pointer list-none rounded border border-[var(--adm-border)] bg-white px-3 py-2 text-xs font-semibold text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]">
-                  ••• Haladó
+                  Ügyfélműveletek
                 </summary>
-                <div className="absolute right-0 z-20 mt-1 w-52 rounded border border-[var(--adm-border)] bg-white p-2 shadow-lg">
-                  {organizationMode ? (
-                    <Link
-                      className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]"
-                      href={`/clients/${encodeURIComponent(clientId)}/workgroups`}
-                    >
-                      Munkacsoportok
-                    </Link>
-                  ) : null}
-                  <Link
-                    className="block rounded px-3 py-2 text-xs hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-ochre-500)]"
-                    href={`/clients/${encodeURIComponent(clientId)}#house-style`}
-                  >
-                    Dokumentumstílus
-                  </Link>
+                <div className="absolute right-0 z-20 mt-1 w-56 rounded border border-[var(--adm-border)] bg-white p-2 shadow-lg">
                   <ClientLifecycleControls client={client} onArchived={() => router.push("/clients")} />
                 </div>
               </details>
@@ -261,23 +295,10 @@ function ClientDetailContent() {
           </div>
 
         </header>
-        <ClientWorkspaceTabs clientId={clientId} active="overview" organizationMode={organizationMode} />
 
-        <section aria-labelledby="client-overview-heading" className="adm-board-panel p-5">
-          <h2 id="client-overview-heading" className="font-serif text-xl text-[var(--adm-text)]">Ügyfél áttekintés</h2>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button p-4 text-sm font-semibold">Szervezeti felépítés →</Link> : null}
-            {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/vallalati-mukodes`} className="adm-link-button p-4 text-sm font-semibold">Grow with us →</Link> : null}
-            {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/compliance`} className="adm-link-button p-4 text-sm font-semibold">Compliance →</Link> : null}
-            <Link href={`/clients/${encodeURIComponent(clientId)}/calendar`} className="adm-link-button p-4 text-sm font-semibold">Naptár →</Link>
-            <Link href={`/communications?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button p-4 text-sm font-semibold">Kommunikáció →</Link>
-            <Link href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=ACTIVE`} className="adm-link-button p-4 text-sm font-semibold">Nyitott ügyek →</Link>
-            <Link href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=CLOSED`} className="adm-link-button p-4 text-sm font-semibold">Lezárt ügyek megnyitása →</Link>
-            <Link href={`/time-entries?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button p-4 text-sm font-semibold">Munkaórák →</Link>
-          </div>
-        </section>
-
-        {/* 2. Integrated Client Basics & Operational Hub */}
+        {/* Primary dossier content: identity, working lists and secondary tools.
+            The canonical top navigation owns module destinations, so no second
+            main navigation grid renders here. */}
         <section aria-label="Ügyfél alapadatok és környezet" className="grid grid-cols-1 gap-5">
           {/* Card 1: Identity & Contact */}
           <div className={`adm-board-panel p-5 flex flex-col justify-between ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
@@ -380,6 +401,8 @@ function ClientDetailContent() {
             <h2 className="text-sm font-semibold text-[var(--adm-text)]">További eszközök</h2>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=ACTIVE`} className="adm-link-button px-3 py-2 text-xs">Nyitott ügyek</Link>
+            <Link href={`/cases?clientId=${encodeURIComponent(clientId)}&scope=CLOSED`} className="adm-link-button px-3 py-2 text-xs">Lezárt ügyek megnyitása</Link>
             <Link href={`/time-entries?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button px-3 py-2 text-xs">Munkaórák</Link>
             <Link href={`/clients/${encodeURIComponent(clientId)}/szamlazas`} className="adm-link-button px-3 py-2 text-xs">Számlázás előkészítése</Link>
             <Link href={cases.find((item) => item.status !== "CLOSED") ? `/cases/${cases.find((item) => item.status !== "CLOSED")?.id}/documents` : `/cases?clientId=${encodeURIComponent(clientId)}`} className="adm-link-button px-3 py-2 text-xs">Dokumentum hozzáadása</Link>
@@ -470,38 +493,52 @@ function ClientDetailContent() {
             </div>
             <ClientHouseStylePanel clientId={clientId} clientName={client.name} />
           </details>
-        {/* 4. Corporate Governance & Organizational Snapshots */}
-        <section aria-label="Vállalati és szervezeti modulok" className="space-y-5">
-          <div className="flex items-center justify-between border-b border-[var(--adm-border)] pb-2">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">
-                Vállalati governance és háttér
-              </p>
-              <h2 className="mt-0.5 font-serif text-lg text-[var(--adm-text)]">
-                Működés, szerződések és szervezeti struktúra
-              </h2>
+        {/* 4. Legacy/detail dossier material — preserved behind one collapsed area.
+            Its information is already available through the canonical Grow,
+            Megfelelés, Szervezet and Vállalati működés module pages. */}
+        <details
+          id="reszletes-dosszie-adatok"
+          open={legacyDetailsOpen}
+          onToggle={(event) => setLegacyDetailsOpen((event.currentTarget as HTMLDetailsElement).open)}
+          className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}
+        >
+          <summary className="cursor-pointer font-semibold text-sm">Részletes dosszié-adatok</summary>
+          <p className="mt-2 text-[11px] text-[var(--adm-text-muted)]">
+            A vállalati működés, a szerződéstár és a szervezeti struktúra részletes nézetei a saját moduljaikban érhetők el; ez a blokk a dosszié korábbi részletnézetét őrzi.
+          </p>
+
+          <section aria-label="Vállalati és szervezeti modulok" className="mt-4 space-y-5">
+            <div className="flex items-center justify-between border-b border-[var(--adm-border)] pb-2">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--adm-text-muted)]">
+                  Vállalati governance és háttér
+                </p>
+                <h2 className="mt-0.5 font-serif text-lg text-[var(--adm-text)]">
+                  Működés, szerződések és szervezeti struktúra
+                </h2>
+              </div>
+              {clientColorDef.key && (
+                <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
+              )}
             </div>
-            {clientColorDef.key && (
-              <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <section id="vallalati-mukodes" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
+                <ClientCompanyFoundation clientId={clientId} />
+              </section>
+
+              <section id="szerzodes-tar" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
+                <ClientContractLibrary clientId={clientId} />
+              </section>
+            </div>
+
+            {organizationMode && (
+              <section id="szervezet" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
+                <ClientOrganizationPreview clientId={clientId} clientName={client.name} />
+              </section>
             )}
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            <section id="vallalati-mukodes" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
-              <ClientCompanyFoundation clientId={clientId} />
-            </section>
-
-            <section id="szerzodes-tar" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
-              <ClientContractLibrary clientId={clientId} />
-            </section>
-          </div>
-
-          {organizationMode && (
-            <section id="szervezet" className={`adm-board-panel p-5 scroll-mt-24 ${clientColorDef.key ? `border-t-2 ${clientColorDef.accentTopBorderClass}` : ""}`}>
-              <ClientOrganizationPreview clientId={clientId} clientName={client.name} />
-            </section>
-          )}
-        </section>
+          </section>
+        </details>
       </main>
 
       <CompactNewCaseDialog

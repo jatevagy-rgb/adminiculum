@@ -40,7 +40,7 @@ describe("Client dossier & dedicated portal surface separation", () => {
     );
   });
 
-  it("hero header maintains calm layout with Új ügy and Haladó while preserving actions in dashboard", () => {
+  it("hero header maintains calm layout with Új ügy and Ügyfélműveletek while preserving actions in dashboard", () => {
     const heroStart = dossierSrc.indexOf('<header className="adm-board-hero');
     const heroEnd = dossierSrc.indexOf("</header>", heroStart);
     assert.ok(heroStart !== -1 && heroEnd !== -1, "Hero header must exist");
@@ -49,7 +49,11 @@ describe("Client dossier & dedicated portal surface separation", () => {
     assert.match(heroContent, /flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between/);
     assert.match(heroContent, /break-words/);
     assert.match(heroContent, /Új ügy/);
-    assert.match(heroContent, /••• Haladó/);
+    assert.match(heroContent, /Ügyfélműveletek/);
+    // The hero must not duplicate the canonical "••• Haladó" menu from ClientWorkspaceTabs.
+    assert.doesNotMatch(heroContent, /••• Haladó/);
+    assert.doesNotMatch(heroContent, /Dokumentumstílus/);
+    assert.match(heroContent, /ClientLifecycleControls/);
     assert.doesNotMatch(heroContent, /dossierStats/);
 
     // Hero does NOT contain duplicate actions or module entrypoints
