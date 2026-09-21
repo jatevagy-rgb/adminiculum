@@ -4,6 +4,7 @@
 import { run } from 'node:test';
 import { spec } from 'node:test/reporters';
 import { readdirSync } from 'node:fs';
+import { finished } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -28,8 +29,25 @@ const files = readdirSync(dir)
   .sort();
 
 let failures = 0;
-run({ files, concurrency: true })
-  .on('test:fail', () => { failures += 1; })
-  .compose(spec)
-  .pipe(process.stdout)
-  .on('finish', () => { process.exitCode = failures > 0 ? 1 : 0; });
+let runnerError = null;
+
+const runner = run({ files, concurrency: true });
+runner.on('test:fail', () => { failures += 1; });
+runner.on('error', (error) => { runnerError = error; });
+
+// The composed reporter stream is the authoritative lifecycle: it ends only
+// after every discovered test has been reported. The previous code attached
+// 'finish' to the value returned by .pipe() — which is process.stdout, a
+// long-lived stream that never ends — so the exit code was never assigned and a
+// failing run still exited 0.
+const reporter = runner.compose(spec);
+reporter.pipe(process.stdout);
+
+try {
+  await finished(reporter);
+} catch (error) {
+  runnerError = error;
+}
+
+if (runnerError) console.error(runnerError);
+process.exitCode = (failures > 0 || runnerError !== null) ? 1 : 0;
