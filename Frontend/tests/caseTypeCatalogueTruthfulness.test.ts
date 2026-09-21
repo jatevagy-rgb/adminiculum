@@ -22,6 +22,7 @@ function harness({ role = 'ADMIN', options = [] as Eligible[], types = [] as any
   const cases: any[] = [];
   const h = componentHarness('src/components/cases/CompactNewCaseDialog.tsx', 'CompactNewCaseDialog', {
     'next/navigation': { useRouter: () => ({ push() {} }) },
+    'next/link': { default: 'a' },
     './intake/intakeStyles': { intake: {}, ACCENT_BG: {}, ACCENT_TEXT: {} },
     '@/lib/api': {
       getClientList: async () => [{ id: 'client-1', name: 'Demo Kft.' }],
@@ -105,6 +106,71 @@ test('non-managers keep the honest empty state and gain no creation capability',
   assert.match(textOf(tree), /nincs ügytípus/i);
   assert.ok(!textOf(tree).includes('mentése új ügytípusként'));
   assert.ok(!flatten(tree).some((node) => node.props?.id === 'existing-case-type'));
+  assert.ok(!flatten(tree).some((node) => node.props?.href === '/settings/work-packages'));
+  assert.deepEqual(created, []);
+});
+
+test('an empty New Case state gives managers one obvious path to the canonical case type settings surface', async () => {
+  const { h } = harness({ role: 'ADMIN', options: [], types: [] });
+  const tree = await settle(h, { open: true, onClose() {}, initialClientId: 'client-1' });
+  const cta = flatten(tree).find((node) => node.props?.href === '/settings/work-packages');
+  assert.ok(cta, 'the empty state must link to the canonical /settings/work-packages surface');
+  assert.match(textOf(cta), /Ügytípusok és munkacsomagok beállítása/);
+});
+
+test('the canonical settings path can make a case type creation-eligible without hidden knowledge', async () => {
+  // Mirrors the real flow: POST /work-package-admin/case-types/usable creates the
+  // type and atomically activates an empty "Alap munkacsomag" template, so the
+  // very next creation-options read contains it. No seed, no hidden row.
+  const { h } = harness({ role: 'ADMIN', options: [], types: [] });
+  const settings = componentHarness('src/app/settings/work-packages/page.tsx', 'WorkPackagesContent', {
+    '@/components/AuthenticatedApp': { AuthenticatedApp: 'div' },
+    '@/lib/api': {
+      getCurrentUser: async () => ({ role: 'ADMIN' }),
+      listWorkPackageCaseTypes: async () => ({ items: [] }),
+      listWorkPackageTemplates: async () => ({ items: [] }),
+      createUsableCaseType: async (name: string) => eligible('type-new', name),
+      setWorkPackageCaseTypeActive: async () => ({}),
+      createWorkPackageTemplate: async () => ({}),
+      activateWorkPackageTemplate: async () => ({}),
+    },
+  });
+  let tree: any;
+  for (let i = 0; i < 3; i += 1) { tree = settings.render(); settings.effects(); await tick(); }
+  tree = settings.render();
+  const nameInput = flatten(tree).find((node) => node.props?.id === 'case-type-name');
+  assert.ok(nameInput, 'settings must expose name-only creation');
+  nameInput.props.onChange({ target: { value: 'Munkajog' } });
+  tree = settings.render();
+  flatten(tree).find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  await tick();
+  // The dialog only ever reads the canonical options; nothing is invented here.
+  assert.ok(!flatten(await settle(h, { open: true, onClose() {}, initialClientId: 'client-1' })).some((node) => node.props?.id === 'existing-case-type'));
+});
+
+test('after configuration the reopened dialog reloads canonical options and creates the case', async () => {
+  const options: Eligible[] = [];
+  const types: any[] = [];
+  const { h, cases, created } = harness({ role: 'ADMIN', options, types });
+  const open = { open: true, onClose() {}, initialClientId: 'client-1', initialTitle: 'Munkajogi tanácsadás' };
+  let tree = await settle(h, open);
+  assert.match(textOf(tree), /nincs ügytípus/i);
+
+  // Admin configures the first eligible type on the canonical settings surface.
+  options.push(eligible('type-1', 'Munkajog'));
+  types.push({ id: 'type-1', name: 'Munkajog', isActive: true, sortOrder: 0 });
+
+  h.render({ ...open, open: false }); h.effects();
+  tree = h.render(open); h.effects(); await tick(); tree = h.render(open); h.effects(); tree = h.render(open);
+
+  const list = flatten(tree).find((node) => node.props?.id === 'existing-case-type');
+  assert.ok(list, 'the newly eligible type must appear after reopening');
+  assert.ok(flatten(list).some((node) => node.type === 'option' && node.props.value === 'type-1'));
+  list.props.onChange({ target: { value: 'type-1' } });
+  tree = h.render(open); h.effects(); tree = h.render(open);
+  await flatten(tree).find((node) => node.type === 'form').props.onSubmit({ preventDefault() {} });
+  assert.equal(cases[0].caseTypeDefinitionId, 'type-1');
+  assert.equal(cases[0].clientId, 'client-1');
   assert.deepEqual(created, []);
 });
 

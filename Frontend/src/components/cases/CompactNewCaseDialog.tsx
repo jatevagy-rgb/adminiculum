@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intake/intakeStyles";
 import {
   createCase,
@@ -246,9 +247,14 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                   {catalogueEmptyNotice}
                   <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
                     {canManageTypes
-                      ? "Ügytípus és aktív munkacsomag a Beállítások → Munkacsomagok oldalon hozható létre, illetve aktiválható."
+                      ? "A létrehozáshoz előbb állíts be legalább egy ügytípust aktív munkacsomaggal."
                       : "Kérj ügytípust az iroda adminisztrátorától vagy partnerétől."}
                   </span>
+                  {canManageTypes && (
+                    <Link href="/settings/work-packages" className={`${intake.secondaryAction} mt-2 inline-flex`}>
+                      Ügytípusok és munkacsomagok beállítása
+                    </Link>
+                  )}
                 </div>
               )}
               {/* Client + Title */}
