@@ -30,6 +30,170 @@ const anchorTypeLabels: Record<ComplianceAnchorType, string> = {
 
 const anchorTypeOrder: ComplianceAnchorType[] = ["LEGAL", "CASE", "AUTHORITY"];
 
+/**
+ * Readable Hungarian labels for the document-authored relation vocabulary
+ * (`ADM-RELTYPE`). The stored token is a bounded machine token and must never be
+ * rendered directly in the normal workforce card.
+ *
+ * This mirrors the backend's documented + observed vocabulary
+ * (`Backend/src/modules/compliance-doc-intelligence/types.ts`). The vocabulary is
+ * open-ended by design (an unknown but valid token is preserved verbatim and is
+ * never rejected), so `relationTypeLabel` falls back to a neutral phrase for any
+ * token outside this list instead of leaking it.
+ */
+const relationTypeLabels: Record<string, string> = {
+  MANDATORY_BASIS: "Kötelező jogalap",
+  LEGAL_LIMIT: "Jogi korlát",
+  ROLE_DEFINITION: "Szerepkör-meghatározás",
+  CONTRACTUAL_CHOICE: "Szerződéses választás",
+  CONTRACTUAL_FRAMEWORK: "Szerződéses keret",
+  CONDITIONAL_MANDATORY: "Feltételes kötelezettség",
+  MANDATORY_INFO: "Kötelező tájékoztatás",
+  UNSPECIFIED: "Nincs megjelölve",
+  ACCOUNTABILITY: "Elszámoltathatóság",
+  ADEQUACY_MECHANISM: "Megfelelőségi mechanizmus",
+  AUTHORITY_CONTROL: "Hatósági kontroll",
+  AUTHORIZED_PROCESSING: "Engedélyezett adatkezelés",
+  AUTOMATED_DECISION_DISCLOSURE: "Automatizált döntés tájékoztatása",
+  AUTOMATED_DECISION_RIGHT: "Automatizált döntéssel kapcsolatos jog",
+  CASELAW_INTERPRETATION: "Bírói gyakorlat értelmezése",
+  CONDITIONAL_CROSS_BORDER: "Feltételes határon átnyúló adatkezelés",
+  CONDITIONAL_EXCEPTION: "Feltételes kivétel",
+  CONDITIONAL_REQUIREMENT: "Feltételes követelmény",
+  CONDITIONAL_TRANSFER_BASIS: "Feltételes továbbítási jogalap",
+  CONFIDENTIALITY: "Titoktartás",
+  CONFLICTS_RULE: "Összeférhetetlenségi szabály",
+  CONFLICT_GUARDRAIL: "Összeférhetetlenségi korlát",
+  CONSENT_REQUIREMENT: "Hozzájárulási követelmény",
+  CONSENT_WITHDRAWAL: "Hozzájárulás visszavonása",
+  CONTRACTUAL_ALLOCATION: "Szerződéses feladatmegosztás",
+  CONTRACTUAL_GUARDRAIL: "Szerződéses korlát",
+  CONTRACTUAL_IMPLEMENTATION: "Szerződéses megvalósítás",
+  CONTRACT_FORMATION: "Szerződéskötés",
+  CONTRACT_PARTY_SEPARATION: "Szerződő felek szétválasztása",
+  COOKIE_RULE: "Sütiszabály",
+  CORRECTION_CONSEQUENCE: "Helyesbítés következménye",
+  DATA_MINIMISATION: "Adattakarékosság",
+  DATA_PROCESSOR_CONTRACT: "Adatfeldolgozói szerződés",
+  DATA_PROTECTION_CONTEXT: "Adatvédelmi kontextus",
+  DATA_PROTECTION_PRINCIPLE: "Adatvédelmi alapelv",
+  DATA_PROTECTION_ROLE: "Adatvédelmi szerepkör",
+  DATA_SUBJECT_RIGHT: "Érintetti jog",
+  DEADLINE_BASIS: "Határidő jogalapja",
+  DOCUMENTATION_BASIS: "Dokumentálási jogalap",
+  DOCUMENTATION_DUTY: "Dokumentálási kötelezettség",
+  ENFORCEMENT_BENCHMARK: "Hatósági gyakorlat mércéje",
+  EVIDENCE_CONTEXT: "Bizonyíték-kontextus",
+  EVIDENCE_RETENTION: "Bizonyíték megőrzése",
+  EXEMPTION_RULE: "Mentességi szabály",
+  FURTHER_PURPOSE_NOTICE: "További célú felhasználás tájékoztatása",
+  INCIDENT_DUTY: "Incidenskezelési kötelezettség",
+  INDEPENDENCE_STANDARD: "Függetlenségi követelmény",
+  INDIRECT_DATA_CATEGORY: "Közvetett adatkategória",
+  INDIRECT_RECIPIENT_TRANSPARENCY: "Közvetett címzett-tájékoztatás",
+  INDIRECT_SOURCE_DISCLOSURE: "Közvetett forrás felfedése",
+  INDIRECT_TRANSPARENCY: "Közvetett tájékoztatás",
+  INTEGRITY_CONFIDENTIALITY: "Integritás és bizalmasság",
+  INTERPRETATION: "Értelmezés",
+  JUDICIAL_REMEDY: "Bírósági jogorvoslat",
+  JURISDICTION_CONTEXT: "Joghatósági kontextus",
+  LEGAL_BASIS: "Jogalap",
+  LEGAL_CONSEQUENCE: "Jogkövetkezmény",
+  LEGAL_GUARDRAIL: "Jogi korlát",
+  LEGAL_PROTECTION: "Jogi védelem",
+  LIABILITY_BASELINE: "Felelősségi alapvonal",
+  MANDATORY_EVIDENCE: "Kötelező bizonyíték",
+  MANDATORY_INFORMATION: "Kötelező tájékoztatás",
+  OUTPUT_DUTY: "Eredményközlési kötelezettség",
+  PERSONALITY_RIGHT: "Személyiségi jog",
+  PRECONDITION_DOCUMENTATION: "Előfeltétel dokumentálása",
+  PROCESSOR_FRAMEWORK: "Adatfeldolgozói keret",
+  PROCESSOR_INSTRUCTION: "Adatfeldolgozói utasítás",
+  PROFESSIONAL_CONTENT: "Szakmai tartalom",
+  PROFESSIONAL_RESPONSIBILITY: "Szakmai felelősség",
+  PROFESSIONAL_RESULT: "Szakmai eredmény",
+  PROFESSIONAL_SCOPE: "Szakmai hatókör",
+  PROFESSIONAL_STANDARD: "Szakmai követelmény",
+  PROHIBITION: "Tilalom",
+  RECIPIENT_TRANSPARENCY: "Címzett-tájékoztatás",
+  REGISTRY_CONTENT: "Nyilvántartási tartalom",
+  REGISTRY_OBLIGATION: "Nyilvántartási kötelezettség",
+  REGISTRY_REPORTING: "Nyilvántartási jelentés",
+  REQUEST_DEADLINE: "Kérelem határideje",
+  RETENTION: "Megőrzés",
+  RETENTION_BASIS: "Megőrzési jogalap",
+  RETENTION_REQUIREMENT: "Megőrzési követelmény",
+  ROLE_ALLOCATION: "Szerepkör-megosztás",
+  ROLE_DEPENDENT: "Szerepkörfüggő",
+  ROLE_GUARDRAIL: "Szerepkör-korlát",
+  SAFEGUARD_MECHANISM: "Védelmi mechanizmus",
+  SCC_MECHANISM: "Standard szerződéses kikötés",
+  SECTORAL_BASIS: "Ágazati jogalap",
+  SECURITY_CONTEXT: "Biztonsági kontextus",
+  SECURITY_CONTROL: "Biztonsági intézkedés",
+  SECURITY_REQUIREMENT: "Biztonsági követelmény",
+  SECURITY_RISK_ASSESSMENT: "Biztonsági kockázatértékelés",
+  STATUTORY_BASELINE: "Törvényi alapvonal",
+  STATUTORY_CONTEXT: "Törvényi kontextus",
+  STATUTORY_DEFAULT: "Törvényi alapértelmezés",
+  STATUTORY_MODEL: "Törvényi minta",
+  STORAGE_LIMITATION: "Tárolási korlát",
+  SUBPROCESSOR_AUTHORIZATION: "Alfeldolgozó engedélyezése",
+  SUBPROCESSOR_FLOWDOWN: "Alfeldolgozói továbbadás",
+  SUPERVISORY_REMEDY: "Hatósági jogorvoslat",
+  SURVIVAL_RETENTION: "Szerződés megszűnését túlélő megőrzés",
+  TRANSFER_REQUIREMENT: "Továbbítási követelmény",
+  TRANSFER_TRANSPARENCY: "Továbbítási tájékoztatás",
+  TRANSPARENCY_REQUIREMENT: "Átláthatósági követelmény",
+  UI_MANDATORY_GATE: "Kötelező felületi kapu",
+  VERIFICATION_BASIS: "Ellenőrzési jogalap",
+};
+
+const UNKNOWN_RELATION_TYPE_LABEL = "Nem besorolt kapcsolat";
+
+/** Present one document-authored relation token as a readable Hungarian label. */
+export function relationTypeLabel(value: string | null | undefined): string {
+  const key = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (!key) return UNKNOWN_RELATION_TYPE_LABEL;
+  return relationTypeLabels[key] ?? UNKNOWN_RELATION_TYPE_LABEL;
+}
+
+/**
+ * Display-only locator humanizer.
+ *
+ * The persisted locator is opaque and is never rewritten (see
+ * `docs/compliance/COMPLIANCE_MONITORING_MANIFEST_V1.md`). For the NORMAL
+ * workforce card only, a locator composed exclusively of the two documented,
+ * unambiguous legislative keys is rendered as a human citation; anything else
+ * that carries implementation syntax is omitted rather than guessed at.
+ *
+ *   `art=28;par=3`  ->  `28. cikk (3) bekezdés`
+ *   `5/2/b`         ->  `5/2/b`            (plain locator, no implementation syntax)
+ *   `sec=15/B;par=4`->  null               (unrecognized key: never invented)
+ *   `paras=41-45`   ->  null               (unrecognized key: never invented)
+ */
+const LOCATOR_TOKEN_RENDERERS: Record<string, (value: string) => string | null> = {
+  art: (value) => (/^\d+[A-Za-z]?$/.test(value) ? `${value}. cikk` : null),
+  par: (value) => (/^\d+$/.test(value) ? `(${value}) bekezdés` : null),
+};
+
+export function humanizeLocator(value: string | null | undefined): string | null {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) return null;
+  if (!raw.includes("=")) return raw;
+
+  const rendered: string[] = [];
+  for (const part of raw.split(";").map((token) => token.trim()).filter(Boolean)) {
+    const separator = part.indexOf("=");
+    if (separator <= 0) return null;
+    const render = LOCATOR_TOKEN_RENDERERS[part.slice(0, separator).trim().toLowerCase()];
+    const text = render ? render(part.slice(separator + 1).trim()) : null;
+    if (!text) return null;
+    rendered.push(text);
+  }
+  return rendered.length ? rendered.join(" ") : null;
+}
+
 /** An absolute http(s) value is the only thing rendered as a link. */
 export function isHttpUrl(value: string | null | undefined): boolean {
   return typeof value === "string" && /^https?:\/\//i.test(value.trim());
@@ -87,9 +251,9 @@ function formatDate(value: string | null): string {
   }
 }
 
-const caseIdentifier = (row: ComplianceClauseAnchorRow): string | null => row.caseId || row.caseLocator;
+const caseIdentifier = (row: ComplianceClauseAnchorRow): string | null => row.caseId || humanizeLocator(row.caseLocator);
 const authorityLocators = (row: ComplianceClauseAnchorRow): string | null =>
-  [row.authorityLocator, row.locator].filter(Boolean).join(" · ") || null;
+  [humanizeLocator(row.authorityLocator), humanizeLocator(row.locator)].filter(Boolean).join(" · ") || null;
 
 /**
  * A hyperlink-transported TV reference has no CELEX by construction, so its
@@ -160,15 +324,16 @@ export function ingestWarningTexts(codes: string[]): string[] {
  * Truthful canonical binding line (INTERNAL only).
  *
  * A resolved binding shows the stored canonical citation/title when the registry
- * actually has one; otherwise it shows the canonical source KEY built from the
- * row's own CELEX, never a fabricated legal name.
+ * actually has one. When no readable identity is stored the line is omitted: an
+ * internal transport key (e.g. `EU-<celex>`) is never leaked into the normal
+ * workforce card as a stand-in legal name.
  */
 function bindingLine(row: ComplianceClauseAnchorRow) {
   const status = row.legalSourceBindingStatus;
   if (!status) return null;
 
   if (status === "RESOLVED") {
-    const label = row.canonicalTitle || row.canonicalCitation || (row.celex ? `EU-${row.celex}` : null);
+    const label = row.canonicalTitle || row.canonicalCitation;
     if (!label) return null;
     return (
       <p className="mt-1 text-xs text-[var(--adm-text)]" data-testid="clause-anchor-binding">
@@ -231,8 +396,8 @@ function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
           {row.clauseTitle ? <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">{row.clauseTitle}</p> : null}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 font-mono text-[10px] text-[var(--adm-text)]">
-            {row.relationType}
+          <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
+            {relationTypeLabel(row.relationType)}
           </span>
           <span className="rounded border border-[var(--adm-border)] bg-white px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
             {anchorTypeLabels[row.anchorType] ?? row.anchorType}
@@ -244,12 +409,12 @@ function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
 
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {metaField({ label: "ELI", value: row.eli, mono: true, href: isHttpUrl(row.eli) ? row.eli : null })}
-        {metaField({ label: "Norma helye (locator)", value: row.locator, mono: true })}
+        {metaField({ label: "Norma helye", value: humanizeLocator(row.locator) })}
         {metaField({ label: "ECLI", value: row.ecli, mono: true })}
         {metaField({ label: "Ügyszám", value: caseIdentifier(row), mono: true })}
-        {metaField({ label: "Bírósági hely", value: row.caseLocator, mono: true })}
+        {metaField({ label: "Bírósági hely", value: humanizeLocator(row.caseLocator) })}
         {metaField({ label: "Döntés azonosítója", value: row.decisionId, mono: true })}
-        {metaField({ label: "Hatósági hely", value: authorityLocators(row), mono: true })}
+        {metaField({ label: "Hatósági hely", value: authorityLocators(row) })}
         {metaField({ label: "Forrás URL", value: row.sourceUrl, href: isHttpUrl(row.sourceUrl) ? row.sourceUrl : null })}
       </div>
 
@@ -497,7 +662,7 @@ export function ComplianceClauseAnchorPanel({
               >
                 <option value="">Összes</option>
                 {relationTypes.map((type) => (
-                  <option key={type} value={type}>{type}</option>
+                  <option key={type} value={type}>{relationTypeLabel(type)}</option>
                 ))}
               </select>
             </label>

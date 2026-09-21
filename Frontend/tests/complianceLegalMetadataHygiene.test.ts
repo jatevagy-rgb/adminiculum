@@ -72,7 +72,7 @@ const canonicalRefRow = baseRow({
   canonicalReference: 'TV/2013/5/6:59/2',
   eli: null,
   celex: null,
-  locator: null,
+  locator: '5/2/b',
 });
 
 const warningRow = baseRow({
@@ -90,6 +90,23 @@ const warningRow = baseRow({
   authorityLocator: 'paras=217-241',
   sourceUrl: 'https://naih.hu/hatarozatok-vegzesek?download=1427',
   ingestWarnings: ['ANCHOR_KEY_UNRESOLVED', 'RELATION_TYPE_SOURCE_LABEL:NAIH'],
+});
+
+/** A resolved binding whose registry entry carries no readable title/citation. */
+const celexFallbackRow = baseRow({
+  id: 'row-fallback',
+  clauseRef: '3.1.',
+  anchorDisplay: 'Figyelt jogforras',
+  eli: null,
+  celex: '32019R1234',
+  locator: null,
+  rationale: null,
+  legalSourceBindingStatus: 'RESOLVED',
+  canonicalLegalSourceVersionId: 'canonical-version-fallback',
+  canonicalCitation: null,
+  canonicalTitle: null,
+  bindingOrigin: 'READ_TIME_EXACT_CELEX',
+  bindingReason: 'EXACT_CELEX_MATCH:32019R1234',
 });
 
 function harness(model: any) {
@@ -122,11 +139,21 @@ const ALL = {
     documentVersionId: 'version-1',
     version: 1,
     isCurrent: true,
-    rows: [baseRow(), caseRow, canonicalRefRow, warningRow],
+    rows: [baseRow(), caseRow, canonicalRefRow, warningRow, celexFallbackRow],
   }],
 };
 
-const RAW_IDENTIFIERS = [
+/**
+ * Mission rule 5 — values the NORMAL workforce card must never expose:
+ * machine enums, raw parser/anchor identity, raw parser warnings, the internal
+ * `EU-<celex>` fallback identity and `key=value` locator implementation syntax.
+ */
+const FORBIDDEN_NORMAL_UI_TOKENS = [
+  // Machine enums (document-authored relation tokens).
+  'MANDATORY_BASIS',
+  'INTERPRETATION',
+  'ENFORCEMENT_BENCHMARK',
+  // Raw parser / anchor identity.
   'LEGAL|SID=',
   'CASE|SID=',
   'LEGAL|REF=',
@@ -135,15 +162,25 @@ const RAW_IDENTIFIERS = [
   'AUTHORITY|DEC=',
   'la_baa4796f2169',
   'ca_760eedf30941',
-  '32016R0679',
+  // Raw parser warnings.
   'ANCHOR_KEY_UNRESOLVED',
   'RELATION_TYPE_SOURCE_LABEL',
+  // Raw CELEX codes and the internal EU-<celex> fallback identity.
+  '32016R0679',
+  '32019R1234',
+  'EU-32016R0679',
+  'EU-32019R1234',
+  // Locator implementation syntax.
+  'art=28',
+  'par=3',
+  'paras=41-45',
+  'paras=217-241',
 ];
 
-test('REPRODUCTION: the normal workforce card does not render raw parser/anchor identifiers', async () => {
+test('REPRODUCTION: the normal workforce card does not render machine enums, parser identity, warnings or fallback keys', async () => {
   const text = textOf(rerender(await mount(ALL)));
-  for (const raw of RAW_IDENTIFIERS) {
-    assert.ok(!text.includes(raw), `raw technical identifier must not be rendered in the normal card: ${raw}`);
+  for (const raw of FORBIDDEN_NORMAL_UI_TOKENS) {
+    assert.ok(!text.includes(raw), `raw technical value must not be rendered in the normal card: ${raw}`);
   }
 });
 
@@ -156,6 +193,41 @@ test('human-readable legal references stay visible', async () => {
   assert.match(text, /NAIH-19-18\/2024/, 'the authority decision must remain');
   assert.match(text, /TV\/2013\/5\/6:59\/2/, 'the canonical legal reference must remain');
   assert.match(text, /Adatfeldolgozasi megallapodas/, 'the clause title must remain');
+});
+
+test('machine enums and locators are presented in readable Hungarian form', async () => {
+  const text = textOf(rerender(await mount(ALL)));
+  // Relation tokens become readable labels (badge and filter options).
+  assert.match(text, /Kötelező jogalap/, 'MANDATORY_BASIS must render as a readable label');
+  assert.match(text, /Értelmezés/, 'INTERPRETATION must render as a readable label');
+  assert.match(text, /Hatósági gyakorlat mércéje/, 'ENFORCEMENT_BENCHMARK must render as a readable label');
+  // The documented art/par locator becomes a human citation.
+  assert.match(text, /28\. cikk \(3\) bekezdés/, 'art=28;par=3 must render as a human citation');
+  // A plain locator without implementation syntax is preserved as-is.
+  assert.match(text, /5\/2\/b/, 'a plain locator stays visible');
+});
+
+test('a resolved binding without a readable identity is omitted, not replaced by the EU-<celex> key', async () => {
+  const tree = rerender(await mount({
+    documentId: 'document-1',
+    versions: [{
+      documentVersionId: 'version-1',
+      version: 1,
+      isCurrent: true,
+      rows: [
+        celexFallbackRow,
+        { ...celexFallbackRow, id: 'row-labelled', canonicalTitle: 'Teszt rendelet', canonicalCitation: 'Regulation (EU) 2019/1234' },
+      ],
+    }],
+  }));
+  const text = textOf(tree);
+  const compact = text.replace(/\s+/g, ' ');
+
+  // The readable binding is shown.
+  assert.match(compact, /Kanónikus forrás: Teszt rendelet · Regulation \(EU\) 2019\/1234/);
+  // The identity-less binding contributes no leaked fallback key at all.
+  assert.ok(!text.includes('EU-32019R1234'), 'the internal EU-<celex> fallback must never be rendered');
+  assert.equal(compact.match(/Kanónikus forrás:/g)?.length, 1, 'only the readable binding line is shown');
 });
 
 test('the hidden machine identity stays available to internal search', async () => {

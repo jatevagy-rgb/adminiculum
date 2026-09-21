@@ -136,21 +136,22 @@ test('renders each relation with readable clause, relation type, anchor type and
 
   assert.equal(rows(tree).length, 2);
   assert.match(text, /1\.1\./);
-  assert.match(text, /MANDATORY_BASIS/);
-  assert.match(text, /INTERPRETATION/);
+  // The document-authored relation token is presented as a readable label.
+  assert.match(text, /Kötelező jogalap/);
+  assert.match(text, /Értelmezés/);
   assert.match(text, /GDPR 28\. cikk \(3\)/);
   assert.match(text, /http:\/\/data\.europa\.eu\/eli\/reg\/2016\/679\/oj/);
-  assert.match(text, /art=28;par=3/);
+  // The documented art/par locator is rendered as a human citation.
+  assert.match(text, /28\. cikk \(3\) bekezdés/);
   assert.match(text, /EU:C:2023:949/);
-  assert.match(text, /paras=41-45/);
   assert.match(text, /A szerzodeses pont es a jogszabalyi hely kapcsolata\./);
   // Anchor source kinds are labelled truthfully.
   assert.match(text, /Jogszabály/);
   assert.match(text, /Bírósági döntés/);
-  // The raw machine identity is internal only: the normal card renders the readable
-  // legal reference instead of the parser key or the implementation CELEX code.
-  assert.ok(!text.includes('LEGAL|SID='), 'the raw anchor key must not be rendered');
-  assert.ok(!text.includes('32016R0679'), 'the raw CELEX code must not be rendered');
+  // No raw machine identity or implementation syntax reaches the normal card.
+  for (const raw of ['MANDATORY_BASIS', 'INTERPRETATION', 'LEGAL|SID=', '32016R0679', 'art=28', 'par=3', 'paras=41-45']) {
+    assert.ok(!text.includes(raw), `raw machine value must not be rendered: ${raw}`);
+  }
 });
 
 test('shows DocumentVersion provenance and lets an older version be inspected', async () => {
@@ -321,6 +322,16 @@ test('surfaces the canonical source binding truthfully, or says it is unresolved
             legalSourceBindingStatus: 'UNRESOLVED',
             bindingReason: 'NO_CELEX',
           }),
+          baseRow({
+            id: 'bind-5',
+            clauseRef: '4.5.',
+            legalSourceBindingStatus: 'RESOLVED',
+            canonicalLegalSourceVersionId: 'canonical-version-5',
+            canonicalCitation: 'Regulation (EU) 2019/1234',
+            canonicalTitle: 'Teszt rendelet',
+            bindingOrigin: 'READ_TIME_EXACT_CELEX',
+            bindingReason: 'EXACT_CELEX_MATCH:32019R1234',
+          }),
         ],
       },
     ],
@@ -332,11 +343,12 @@ test('surfaces the canonical source binding truthfully, or says it is unresolved
 
   // A resolved binding shows the canonical identity the registry actually has.
   assert.match(compact, /Kanónikus forrás: GDPR · Regulation \(EU\) 2016\/679/);
+  assert.match(compact, /Kanónikus forrás: Teszt rendelet · Regulation \(EU\) 2019\/1234/);
   assert.match(compact, /verzió feldolgozásakor rögzítve/);
-  // With no canonical label stored, the truthful CELEX-derived source key is shown
-  // instead of an invented legal name, and it says the match was not persisted.
-  assert.match(compact, /EU-32019R1234/);
   assert.match(compact, /CELEX egyezés, nem tárolt/);
+  // A resolved binding with no stored readable identity is omitted entirely, rather
+  // than leaking the internal CELEX-derived fallback key (`EU-<celex>`).
+  assert.ok(!compact.includes('EU-32019R1234'), 'the internal EU-<celex> fallback must never be rendered');
   assert.equal(bindings.length, 2);
   // Unresolved stays unresolved, with a neutral reason.
   assert.match(compact, /Kanónikus forrás: nincs egyedi találat — több egyedi találat, ezért nem oldható fel/);
