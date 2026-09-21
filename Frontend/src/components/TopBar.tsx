@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import type { UiPackId } from "@/lib/uiPack";
 import { getUnreadNotificationsCount } from "@/lib/api";
+import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notificationPresentation";
 
 type TopBarProps = {
   title: string;
@@ -16,23 +17,29 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
   const isSignal = uiPack === "signal_tiles_console";
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
-  useEffect(() => {
-    let mounted = true;
-    const loadUnread = async () => {
-      try {
-        const result = await getUnreadNotificationsCount();
-        if (mounted) {
-          setUnreadNotifications(result.unreadCount);
-        }
-      } catch {
-        // ignore notification badge failures in topbar
-      }
-    };
-    void loadUnread();
-    return () => {
-      mounted = false;
-    };
+  const loadUnread = useCallback(async () => {
+    try {
+      const result = await getUnreadNotificationsCount();
+      setUnreadNotifications(result.unreadCount);
+    } catch {
+      // ignore notification badge failures in topbar
+    }
   }, []);
+
+  useEffect(() => {
+    void loadUnread();
+  }, [loadUnread]);
+
+  // The badge stays canonical after the notification inbox mutates read state.
+  useEffect(() => {
+    const onNotificationsChanged = () => {
+      void loadUnread();
+    };
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onNotificationsChanged);
+    return () => {
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onNotificationsChanged);
+    };
+  }, [loadUnread]);
 
   return (
     <header className={`${isSignal ? "bg-[#0F172A] border-[#1F2937]" : "adm-topbar"} border-b px-3 py-2.5 sm:px-5`}>
@@ -50,7 +57,7 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
             <span>Ügy, ügyfél, irat keresése</span>
           </Link>
           <Link
-            href="/communications"
+            href="/notifications"
             className={`relative h-9 w-9 rounded-[var(--adm-radius-sm)] border grid place-items-center transition-colors ${isSignal ? "border-[#334155] bg-[#111827] text-[#CBD5E1]" : "border-[var(--adm-border)] bg-[var(--adm-surface-raised)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"}`}
             title="Értesítések"
           >

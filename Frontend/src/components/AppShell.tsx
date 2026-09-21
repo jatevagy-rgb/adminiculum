@@ -25,7 +25,8 @@ type AppShellProps = {
     | "timesheet-presets"
     | "calendar"
     | "client-portal-admin"
-    | "search";
+    | "search"
+    | "notifications";
   userProfile?: {
     id: string;
     email: string;
@@ -73,6 +74,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
     calendar: "Határidők és naptár",
     "client-portal-admin": "Ügyfélportál adminisztráció",
     search: "Keresés",
+    notifications: "Értesítések",
   };
 
   const shouldRenderCasesDefault = section === "cases" && !children;
