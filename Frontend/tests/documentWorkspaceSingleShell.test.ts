@@ -103,7 +103,7 @@ test("approval uses the canonical document review workflow and secondary lifecyc
 
 test("document and version navigation plus metadata compare remain secondary", () => {
   const source = page();
-  assert.match(source, /<details data-testid="document-version-navigation">/);
+  assert.match(source, /<details data-testid="document-version-navigation" open>/);
   assert.match(source, /filteredUploadedDocuments/);
   assert.match(source, /filteredGeneratedLedgerItems/);
   assert.match(source, /<details id="preserved-extended-tools-shell"/);
