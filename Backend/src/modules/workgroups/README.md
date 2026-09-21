@@ -106,11 +106,18 @@ Response:
 
 ## RBAC Permissions
 
+All endpoints are gated by the canonical Client authorization model
+(`assertClientReadAccess`) and workgroup → client ownership is resolved from the
+persisted row before authorization. Writes additionally require the established
+client-management rule (ADMIN / PARTNER), matching the sibling client-scoped
+modules (`client-company`, `client-contracts`).
+
 | Role | Permissions |
 |------|-------------|
-| Admin | Full CRUD |
-| Lawyer | Record workload |
-| Client | Read-only summary (future) |
+| Admin / Partner | Full CRUD + workload recording on any client |
+| Lawyer / Collaborating lawyer | Read workgroups, workload and summary for clients where the actor has Case access |
+| Other workforce roles (Trainee, Legal assistant) | No access |
+| Client | No workforce endpoint access (customer portal is separate) |
 
 ## Notes
 
