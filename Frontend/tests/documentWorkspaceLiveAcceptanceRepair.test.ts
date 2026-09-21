@@ -93,11 +93,13 @@ test("DW06 writes version identity only as documentId plus explicit historical v
 
 test("DW06 resolves explicit historical versions from the URL and blocks cross-document leakage", () => {
   const effectStart = source.indexOf("const activeDocumentId = selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null;");
-  const effectEnd = source.indexOf("}, [isLoadingVersions, requestedVersionId, selectedUploadedDocument?.id, selectedGeneratedContract?.id, selectedVersionId, syncWorkspaceIdentityToUrl, versions]);", effectStart);
+  const effectEnd = source.indexOf("}, [isLoadingVersions, requestedVersionId, selectedUploadedDocument?.id, selectedGeneratedContract?.id, selectedVersionId, syncWorkspaceIdentityToUrl, versions, versionsLoadedForDocumentId]);", effectStart);
   const effect = source.slice(effectStart, effectEnd);
   assert.ok(effectStart > 0 && effectEnd > effectStart);
-  // Wait for the active document's own version list; never reconcile against another document's versions.
-  assert.match(effect, /versions\.some\(\(version\) => version\.documentId === activeDocumentId\)/);
+  // Wait until the loaded version list is authoritative for the active document; never
+  // reconcile against another document's versions (or a not-yet-loaded empty list).
+  assert.match(source, /setVersionsLoadedForDocumentId\(documentId\)/);
+  assert.match(effect, /versionsLoadedForDocumentId !== activeDocumentId/);
   // Explicit historical versions bind; stale/foreign/current ids canonicalize to the document's current version.
   assert.match(effect, /if \(match && !match\.isCurrent\)/);
   assert.match(effect, /syncWorkspaceIdentityToUrl\(\{ documentId: activeDocumentId, versionId: null \}, "replace"\)/);

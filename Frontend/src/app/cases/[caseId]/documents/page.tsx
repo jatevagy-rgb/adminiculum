@@ -371,6 +371,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [versions, setVersions] = useState<DocumentVersionItem[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  // Which document the currently loaded `versions` array is authoritative for.
+  // null means "unknown / not loaded", so the URL->version effect never treats a
+  // not-yet-loaded (or failed) empty list as "this document has no versions".
+  const [versionsLoadedForDocumentId, setVersionsLoadedForDocumentId] = useState<string | null>(null);
   const [isPromotingVersion, setIsPromotingVersion] = useState<string | null>(null);
   const [uploadPhase, setUploadPhase] = useState<string | null>(null);
   const [isUploadingToSP, setIsUploadingToSP] = useState<string | null>(null);
@@ -747,11 +751,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     try {
       const response = await getDocumentVersions(documentId);
       setVersions(response.versions);
+      setVersionsLoadedForDocumentId(documentId);
       const current = response.versions.find((version) => version.isCurrent) || response.versions[0] || null;
       setSelectedVersionId((existing) => response.versions.some((version) => version.id === existing) ? existing : current?.id || null);
     } catch (err) {
       console.error('Document versions load failed:', err);
       setVersions([]);
+      setVersionsLoadedForDocumentId(null);
       setSelectedVersionId(null);
     } finally {
       setIsLoadingVersions(false);
@@ -764,8 +770,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     } else {
       setVersions([]);
       setSelectedVersionId(null);
+      // No version surface for this selection (generated contract, working copy,
+      // or nothing selected): the empty list is authoritative for that document.
+      setVersionsLoadedForDocumentId(selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null);
     }
-  }, [selectedUploadedDocument?.id, selectedUploadedDocument?.documentType, refreshSelectedDocumentVersions]);
+  }, [selectedUploadedDocument?.id, selectedUploadedDocument?.documentType, selectedGeneratedContract?.id, refreshSelectedDocumentVersions]);
 
   // URL -> version identity. The current/default version is implicit (no
   // versionId in the URL). An explicit versionId only binds when it belongs to
@@ -775,9 +784,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   useEffect(() => {
     const activeDocumentId = selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null;
     if (isLoadingVersions || !activeDocumentId) return;
-    // Version lists still belong to a previously active document: wait instead
-    // of reconciling against another document's versions.
-    if (versions.length > 0 && !versions.some((version) => version.documentId === activeDocumentId)) return;
+    // Only reconcile once the loaded version list is authoritative for the active
+    // document. Otherwise a not-yet-loaded (or failed) list must never be treated
+    // as "this document has no versions", which would drop a valid deep link.
+    if (versionsLoadedForDocumentId !== activeDocumentId) return;
     if (reconciledVersionUrlRef.current === requestedVersionId) return;
     reconciledVersionUrlRef.current = requestedVersionId;
 
@@ -806,7 +816,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (requestedVersionId) {
       syncWorkspaceIdentityToUrl({ documentId: activeDocumentId, versionId: null }, "replace");
     }
-  }, [isLoadingVersions, requestedVersionId, selectedUploadedDocument?.id, selectedGeneratedContract?.id, selectedVersionId, syncWorkspaceIdentityToUrl, versions]);
+  }, [isLoadingVersions, requestedVersionId, selectedUploadedDocument?.id, selectedGeneratedContract?.id, selectedVersionId, syncWorkspaceIdentityToUrl, versions, versionsLoadedForDocumentId]);
 
   const handleVersionFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
