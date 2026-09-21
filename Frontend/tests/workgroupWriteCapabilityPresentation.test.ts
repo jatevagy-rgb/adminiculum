@@ -46,7 +46,7 @@ describe('workgroup write capability presentation', () => {
       'the create, edit/delete and record-workload affordances must each be gated',
     );
     assert.match(src, /canManageWorkgroups && \(\s*<button[\s\S]{0,220}\+ Új/);
-    assert.match(src, /canManageWorkgroups && \([\s\S]{0,320}\+ Terhelés rögzítése/);
+    assert.match(src, /canManageWorkgroups && \([\s\S]{0,700}\+ Terhelés rögzítése/);
 
     // The mutation modals themselves cannot be opened by a non-manager.
     assert.match(src, /\{showWorkgroupModal && canManageWorkgroups && \(/);

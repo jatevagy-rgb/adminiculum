@@ -37,8 +37,8 @@ describe('notification vs communication badge separation', () => {
     );
     assert.doesNotMatch(
       src,
-      /nav\.id === ["']communications["']/,
-      'the communications nav entry must not carry a notification badge',
+      /unread/i,
+      'no unread-derived count may remain anywhere in the Sidebar',
     );
   });
 
