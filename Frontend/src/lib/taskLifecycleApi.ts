@@ -23,6 +23,13 @@ export interface SafeWorkflowUser {
   role: string;
 }
 
+/** Task planning-role user shape projected by the canonical task read model. */
+export interface TaskPlanningUser {
+  id: string;
+  name?: string | null;
+  role?: string | null;
+}
+
 export interface TaskSubmissionDocument {
   id: string;
   documentId: string;
@@ -175,6 +182,11 @@ export interface TaskLifecycleListItem {
   submissionRevision?: number | null;
   submittedAt?: string | null;
   assignedReviewer?: SafeWorkflowUser | null;
+  // Planned (pre-submission) reviewer, projected by the canonical task read
+  // model alongside the submission reviewer above. Optional: planning fields
+  // are additive and may be absent on a trimmed projection.
+  plannedReviewerId?: string | null;
+  plannedReviewer?: TaskPlanningUser | null;
   requestedAttention?: string | null;
   latestDecisionType?: string | null;
   latestDecisionAt?: string | null;
