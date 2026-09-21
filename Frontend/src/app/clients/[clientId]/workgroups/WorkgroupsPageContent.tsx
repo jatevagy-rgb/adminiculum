@@ -21,7 +21,7 @@ import {
 } from '@/lib/api';
 
 interface PageContentProps {
-  client: Client | null;
+  client: Client;
   workgroups: Workgroup[];
   initialSummary: WorkloadSummary | null;
   currentPeriod: string;
@@ -62,7 +62,6 @@ export default function WorkgroupsPageContent({
   const [showCreateCaseModal, setShowCreateCaseModal] = useState(false);
 
   const loadWorkgroups = useCallback(async () => {
-    if (!client) return;
     try {
       const data = await getClientWorkgroups(client.id);
       setWorkgroups(data);
@@ -81,7 +80,6 @@ export default function WorkgroupsPageContent({
   }, []);
 
   const loadSummary = useCallback(async (period: string) => {
-    if (!client) return;
     try {
       const data = await getClientWorkloadSummary(client.id, period);
       setSummary(data);
@@ -113,7 +111,7 @@ export default function WorkgroupsPageContent({
   };
 
   const handleSaveWorkgroup = async () => {
-    if (!client || !workgroupForm.name.trim()) return;
+    if (!workgroupForm.name.trim()) return;
     setWorkgroupSaving(true);
     setError(null);
     try {
@@ -176,19 +174,6 @@ export default function WorkgroupsPageContent({
   const openCreateCaseModal = () => {
     setShowCreateCaseModal(true);
   };
-
-  if (!client) {
-    return (
-      <div className="p-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded p-4 text-yellow-800">
-          Ügyfél nem található.
-        </div>
-        <div className="mt-4">
-          <Link href="/clients" className="text-blue-600 hover:underline">← Vissza az ügyfelekhez</Link>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -528,7 +513,7 @@ export default function WorkgroupsPageContent({
       <CompactNewCaseDialog
         open={showCreateCaseModal}
         onClose={() => setShowCreateCaseModal(false)}
-        initialClientId={client?.id}
+        initialClientId={client.id}
       />
     </div>
   );
