@@ -25,7 +25,7 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientSafe, InteractionError } from '../client-interaction/base';
-import { lookupSafeControlLabel, lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
+import { lookupSafeControlLabel, lookupSafeControlRef, lookupSafeTopic, portalVisibleKeys, type SafeTopicEntry } from './safeTopicRegistry';
 import { isEvidenceCurrent } from './controlEvidenceService';
 import {
   getCompanyProfileQuestionForDefinition,
@@ -96,6 +96,11 @@ export interface ClientSafeComplianceReadModel {
 export interface ClientSafeControlSummaryDto {
   requirementTitle: string;
   controls: Array<{
+    /**
+     * Opaque, stable, customer-safe control identity from the safe registry.
+     * Never an internal ControlDefinition key or the internal ClientControl id.
+     */
+    controlRef: string;
     title: string;
     implementationStatus: string | null;
     lastReviewedAt: string | null;
@@ -492,10 +497,15 @@ export async function getClientSafeComplianceReadModel(
       const controls = row.requirementVersion.controlMaps.flatMap((map) => {
         const title = lookupSafeControlLabel(map.controlDefinition.key);
         if (!title) return [];
+        // Identity is the safe-registry reference, never the label: two distinct
+        // controls with equal display text must stay distinct downstream.
+        const controlRef = lookupSafeControlRef(map.controlDefinition.key);
+        if (!controlRef) return [];
         const control = controlByDefinition.get(map.controlDefinitionId);
         const accepted = (control?.evidenceLinks || []).filter((link) => link.evidenceRecord.status === 'ACCEPTED');
         const current = accepted.filter((link) => isEvidenceCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
         return {
+          controlRef,
           title,
           implementationStatus: control ? String(control.implementationStatus) : null,
           lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,

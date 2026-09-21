@@ -110,6 +110,23 @@ const SAFE_CONTROL_LABELS = new Map<string, string>([
 ]);
 
 /**
+ * Opaque, stable, customer-safe identity for each control that may cross the
+ * portal boundary. Mirrors SAFE_TOPICS.topicKey: a product identity that is
+ * neither the internal ControlDefinition key nor the customer-visible display
+ * label, so canonical identity/dedup can never depend on display text.
+ * Every key present in SAFE_CONTROL_LABELS must have exactly one ref.
+ */
+const SAFE_CONTROL_REFS = new Map<string, string>([
+  ['GDPR_DATA_PROCESSING_CONTROL', 'data-processing'],
+  ['C-DATA-001', 'processing-register'],
+  ['C-DATA-002', 'privacy-notices'],
+  ['C-DATA-003', 'impact-assessment'],
+  ['C-CYBER-001', 'risk-framework'],
+  ['C-CYBER-002', 'incident-response'],
+  ['C-WB-001', 'reporting-channel'],
+]);
+
+/**
  * Returns the set of internal Requirement.keys that are portal-visible
  * in the given environment. DEMO topics are excluded in production
  * or when demo mode is not explicitly enabled.
@@ -142,6 +159,15 @@ export function isPortalVisible(internalKey: string, isProduction: boolean, demo
 
 export function lookupSafeControlLabel(controlKey: string): string | null {
   return SAFE_CONTROL_LABELS.get(controlKey) || null;
+}
+
+/**
+ * Opaque, stable customer-safe identity for a control key. Never the internal
+ * key and never display text. Returns `null` when the control is not declared
+ * customer-safe, so callers can fail closed.
+ */
+export function lookupSafeControlRef(controlKey: string): string | null {
+  return SAFE_CONTROL_REFS.get(controlKey) || null;
 }
 
 /**

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { getClientSafeComplianceReadModel } from '../src/modules/compliance/clientSafeComplianceService';
+import { lookupSafeControlRef } from '../src/modules/compliance/safeTopicRegistry';
 import { createEvidenceRecord, getControlCoverage, linkEvidenceToControl, reviewEvidenceRecord } from '../src/modules/compliance/controlEvidenceService';
 
 const databaseUrl = process.env.PHASE7CB_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
@@ -380,7 +381,12 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
     expect(portal.controlsSummary[0].controls[0].evidence.missing).toBe(true);
     expect(portal.controlsSummary[0].requirementTitle).toBe('Adatvédelmi feldolgozás');
     expect(portal.controlsSummary[0].controls[0].title).toBe('Adatvédelmi intézkedés');
+    // Canonical identity is the opaque safe-registry reference, never the raw
+    // ClientControl id and never the internal ControlDefinition key.
+    expect(portal.controlsSummary[0].controls[0].controlRef).toBe(lookupSafeControlRef('GDPR_DATA_PROCESSING_CONTROL'));
     const serialized = JSON.stringify(portal);
+    expect(serialized).not.toContain(portalControl.id);
+    expect(serialized).not.toContain('GDPR_DATA_PROCESSING_CONTROL');
     expect(serialized).not.toContain('INTERNAL WORKFORCE REQUIREMENT WORDING — MUST NOT LEAK');
     expect(serialized).not.toContain('INTERNAL CONTROL TITLE — MUST NOT LEAK');
     expect(serialized).not.toContain('UNKNOWN INTERNAL CONTROL TITLE — MUST NOT LEAK');
