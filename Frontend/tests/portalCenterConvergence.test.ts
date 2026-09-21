@@ -100,3 +100,47 @@ test("truthful empty, loading and error states are preserved", () => {
   assert.match(page, /Publikált tartalom betöltése…/);
   assert.match(page, /A publikált tartalom adatai jelenleg nem érhetők el\./);
 });
+
+// ─── State dimension separation ─────────────────────────────────────────────
+// Portal preparation, workspace state, membership, invitation delivery and
+// publication are independent server states. They may be presented next to each
+// other, but none of them may be presented as, or derived from, another.
+
+test("N. the five state dimensions are rendered as separate labelled groups", () => {
+  for (const dimension of [
+    'data-testid="portal-dimension-portal-workspace"',
+    'data-testid="portal-dimension-membership"',
+    'data-testid="portal-dimension-invitation"',
+    'data-testid="portal-dimension-publication"',
+  ]) {
+    assert.ok(page.includes(dimension), `missing separated dimension: ${dimension}`);
+  }
+  // the client-level portal switch stays its own state, not the workspace state
+  assert.ok(page.includes('client.portalAccessEnabled ? "Portál előkészítve" : "Portál hozzáférés kikapcsolva"'));
+  // workspace state is labelled as the workspace, never as "Portál: ..."
+  assert.doesNotMatch(page, /Portál: \{statusLabels\[workspace\.status\]\}/);
+  assert.ok(page.includes('Munkatér: {workspace ? statusLabels[workspace.status] : "Nincs portál"}'));
+});
+
+test("O. invitation and delivery state comes from canonical invitation rows only", () => {
+  assert.ok(page.includes("item.pendingInvitationCount"), "invitation count must come from the workspace read model");
+  assert.ok(page.includes("deliverySummary(invitation.deliveryStatus, invitation.deliveryCodeSafe)"), "delivery wording must reuse the canonical mapping");
+  // delivery state is never derived from the workspace status
+  assert.doesNotMatch(page, /deliveryStatus[\s\S]{0,80}workspace\.status/);
+  // and the surface states the separation explicitly in both directions
+  assert.ok(page.includes("A meghívás rögzítése nem jelenti, hogy az e-mail kézbesítve lett; a kézbesítési hiba a munkatér állapotát nem változtatja meg."));
+  assert.ok(page.includes("A portál-előkészítés ügyfélszintű kapcsoló; a munkatér állapota ettől független."));
+});
+
+test("P. membership state is canonical and never implies delivery or case access", () => {
+  assert.ok(page.includes("workspace.pendingApprovalCount"), "pending approval count must come from the workspace read model");
+  assert.ok(page.includes("A tagság önmagában nem ad ügyhozzáférést, és nem bizonyít e-mail-kézbesítést."));
+});
+
+test("Q. zero publication categories are never presented as published content", () => {
+  assert.ok(page.includes("publicationTypes.filter(([, count]) => count > 0)"), "only non-zero publication categories may be rendered");
+  assert.ok(page.includes("Nincs publikált tartalom."), "an empty publication state must stay honest");
+  // the per-category breakdown no longer renders zero counts
+  assert.doesNotMatch(page, /ügyállapot: \{published\.counts\.matters\}/);
+  assert.ok(page.includes("A portál aktiválása nem publikál tartalmat; a publikáció külön, kifejezett lépés."));
+});

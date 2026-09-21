@@ -133,8 +133,9 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(tabsSrc, /Dokumentumstílus/);
     assert.match(tabsSrc, /#house-style/);
 
-    assert.match(pageSrc, /••• Haladó/);
-    assert.match(pageSrc, /#house-style/);
+    assert.match(pageSrc, /Ügyfélműveletek/);
+    // The dossier still provides the shared navigation's #house-style target.
+    assert.match(pageSrc, /id="house-style"/);
     assert.match(pageSrc, /Munkacsoportok/);
   });
 
@@ -186,11 +187,18 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
       "Quick Actions workgroups link must be strictly guarded by organizationMode",
     );
 
-    // Header Haladó dropdown workgroups link is guarded strictly by organizationMode
+    // The hero admin control is semantically distinct and holds only the
+    // dossier lifecycle actions; workgroups/document-style live in the
+    // canonical tabs Haladó / body and must not be duplicated here.
     assert.match(
       pageSrc,
-      /\{organizationMode \? \(\s*<Link[\s\S]*?\/workgroups`\}[\s\S]*?Munkacsoportok[\s\S]*?<\/Link>\s*\) : null\}/,
-      "Header Haladó dropdown workgroups link must be guarded by organizationMode",
+      /<summary[^>]*>\s*Ügyfélműveletek\s*<\/summary>[\s\S]*?<ClientLifecycleControls/,
+      "Hero admin control must contain only ClientLifecycleControls",
+    );
+    assert.doesNotMatch(
+      pageSrc,
+      /••• Haladó/,
+      "The hero must not duplicate the canonical Haladó menu",
     );
   });
 
@@ -263,7 +271,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.ok(matches && matches.length >= 7, "All accented panels must use clientColorDef.accentTopBorderClass");
   });
 
-  it("21. Hero contains only Új ügy and Haladó, with no duplicate module entrypoints or secondary actions", () => {
+  it("21. Hero contains only Új ügy, Ügyfélportál kezelése and the dossier admin control, with no duplicate module entrypoints", () => {
     const heroStart = pageSrc.indexOf('<header className="adm-board-hero');
     const heroEnd = pageSrc.indexOf("</header>", heroStart);
     assert.ok(heroStart !== -1 && heroEnd !== -1, "Hero header must exist");
@@ -271,7 +279,9 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
 
     // Kept in HERO:
     assert.match(heroContent, /Új ügy/);
-    assert.match(heroContent, /••• Haladó/);
+    assert.match(heroContent, /Ügyfélportál kezelése/);
+    assert.match(heroContent, /Ügyfélműveletek/);
+    assert.doesNotMatch(heroContent, /••• Haladó/);
 
     // Removed from HERO:
     assert.ok(!heroContent.includes("Vállalati működés"), "Hero must not contain Vállalati működés");

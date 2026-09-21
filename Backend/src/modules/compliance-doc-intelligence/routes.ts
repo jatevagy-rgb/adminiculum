@@ -15,13 +15,19 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { prisma } from '../../prisma/prisma.service';
-import { InteractionError, assertClientReadAccess, requireInternal } from '../client-interaction/base';
+import { InteractionError, assertClientReadAccess, internalCaseScope, requireInternal } from '../client-interaction/base';
+import { hrConfidentialReadAllowed } from '../documents/authorization';
 import {
   findClauseAnchorReferencesByAnchorKey,
   listClauseAnchorsForDocumentWithBinding,
   summarizeClauseAnchorsForDocument,
 } from './service';
 import { buildComplianceMonitoringManifest } from './monitoringManifest';
+import {
+  buildDocumentReferenceImpactForCanonicalReference,
+  buildLegalSourceImpactForVersion,
+  type LegalSourceImpactAccessScope,
+} from '../compliance/legalSourceImpact';
 
 const router = Router();
 
@@ -45,6 +51,51 @@ async function assertDocumentBelongsToClient(clientId: string, documentId: strin
   if (!document) {
     throw new InteractionError(404, 'COMPLIANCE_INTELLIGENCE_DOCUMENT_NOT_FOUND', 'Document not found for this client.');
   }
+}
+
+/**
+ * Resolve the C4C impact projection scope from the actor's CANONICAL policy.
+ *
+ * It deliberately resolves TWO distinct layers, because a client-scoped read must
+ * never unlock document metadata outside the actor's case scope:
+ *  - DOCUMENT-LEVEL: the exact case ids from `internalCaseScope` (ADMIN/PARTNER
+ *    are unscoped → null) plus the canonical HR_CONFIDENTIAL boundary from
+ *    `documents/authorization`. A readable case of one client never unlocks
+ *    another case's documents of the same client, and HR_CONFIDENTIAL documents
+ *    stay restricted to the privileged roles.
+ *  - CLIENT-LEVEL: the distinct clients of those readable cases — the exact
+ *    `assertClientReadAccess` rule (a non-privileged actor may read a client iff
+ *    it has case access in that client). Requirement / control / applicability
+ *    impact stays legitimately client-level.
+ *
+ * This reuses the canonical helpers; it does not introduce a second access policy.
+ *
+ * Exported so the canonical scope resolution can be regression-proven against a
+ * real database (same source of truth the route uses).
+ */
+export async function resolveImpactAccessScope(internal: {
+  userId: string;
+  role: string;
+}): Promise<LegalSourceImpactAccessScope> {
+  const readableCases = await internalCaseScope(internal);
+  if (readableCases === null) {
+    return {
+      readableClientIds: null,
+      readableCaseIds: null,
+      hrConfidentialReadAllowed: hrConfidentialReadAllowed(internal.role),
+    };
+  }
+  const clients = readableCases.length
+    ? await prisma.case.findMany({
+        where: { id: { in: readableCases } },
+        select: { clientId: true },
+      })
+    : [];
+  return {
+    readableClientIds: new Set(clients.map((row) => row.clientId)),
+    readableCaseIds: new Set(readableCases),
+    hrConfidentialReadAllowed: hrConfidentialReadAllowed(internal.role),
+  };
 }
 
 router.use(authenticate);
@@ -113,6 +164,68 @@ router.get('/monitoring-manifest', async (req: Request, res: Response): Promise<
     res.json(await buildComplianceMonitoringManifest());
   } catch (error) {
     respond(error, res, 'COMPLIANCE_INTELLIGENCE_MONITORING_MANIFEST_ERROR');
+  }
+});
+
+/**
+ * C4C — read-only legal-source IMPACT projection.
+ *
+ * INTERNAL ONLY: workforce authenticate + requireInternal + the actor's canonical
+ * read scope. Exactly one subject is accepted: an existing canonical
+ * `legalSourceVersionId` (full impact), or an exact C4A `canonicalReference`
+ * (document-reference impact; requirement/control/applicability sections report
+ * `derivable: false`).
+ *
+ * AUTHORIZATION: the actor's CANONICAL case scope governs document impact and the
+ * canonical HR_CONFIDENTIAL boundary still applies; the actor's canonical client
+ * scope governs the client-level requirement / control / applicability impact.
+ * Document visibility is never derived from client access. Every total is
+ * computed after that filtering.
+ *
+ * The projection only READS persisted canonical relations. It never creates a
+ * finding, proposal, case, task, notice or ClientControl mutation, and a legal
+ * change is reported as review-required, never as client non-compliance.
+ */
+router.get('/legal-source-impact', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const internal = actor(req);
+    requireInternal(internal);
+    const accessScope = await resolveImpactAccessScope(internal);
+    const legalSourceVersionId =
+      typeof req.query.legalSourceVersionId === 'string' ? req.query.legalSourceVersionId.trim() : '';
+    const canonicalReference =
+      typeof req.query.canonicalReference === 'string' ? req.query.canonicalReference.trim() : '';
+
+    if (legalSourceVersionId && canonicalReference) {
+      throw new InteractionError(
+        400,
+        'COMPLIANCE_INTELLIGENCE_IMPACT_SUBJECT_AMBIGUOUS',
+        'Provide exactly one impact subject.',
+      );
+    }
+    if (!legalSourceVersionId && !canonicalReference) {
+      throw new InteractionError(
+        400,
+        'COMPLIANCE_INTELLIGENCE_IMPACT_SUBJECT_REQUIRED',
+        'A legalSourceVersionId or canonicalReference is required.',
+      );
+    }
+
+    const projection = legalSourceVersionId
+      ? await buildLegalSourceImpactForVersion(legalSourceVersionId, prisma, accessScope)
+      : await buildDocumentReferenceImpactForCanonicalReference(canonicalReference, prisma, accessScope);
+
+    if (!projection) {
+      throw new InteractionError(
+        404,
+        'COMPLIANCE_INTELLIGENCE_IMPACT_SUBJECT_NOT_FOUND',
+        'Impact subject not found.',
+      );
+    }
+
+    res.json(projection);
+  } catch (error) {
+    respond(error, res, 'COMPLIANCE_INTELLIGENCE_LEGAL_SOURCE_IMPACT_ERROR');
   }
 });
 

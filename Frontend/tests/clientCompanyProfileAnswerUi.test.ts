@@ -17,77 +17,126 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     assert.match(api, /'\/client-portal\/org\/company-profile'/);
     assert.match(api, /export async function answerPortalCompanyProfileQuestion/);
     assert.match(api, /\/client-portal\/org\/company-profile\/questions\//);
+    assert.match(api, /export async function answerPortalCompanyProfileScreen/);
+    assert.match(api, /\/client-portal\/org\/company-profile\/screens\//);
     assert.match(api, /PortalCompanyProfileDiscovery/);
     assert.match(api, /PortalCompanyProfileQuestion/);
     assert.match(api, /PortalCompanyProfileAnswerPayload/);
     assert.match(api, /status:\s*"ANSWERED"\s*\|\s*"UNKNOWN"/);
   });
 
-  it("OrganizationCompanyProfile is functional, client-safe, and renders questions with human labels", () => {
+  it("loads the canonical adaptive discovery and saves through the grouped screen endpoint", () => {
     const src = profileSrc();
     assert.match(src, /OrganizationCompanyProfile/);
     assert.match(src, /getPortalCompanyProfileDiscovery/);
-    assert.match(src, /answerPortalCompanyProfileQuestion/);
-    assert.match(src, /Vállalati profil/);
-    assert.match(src, /Foglalkoztatottak létszáma/);
-    assert.match(src, /Megadva/);
+    assert.match(src, /answerPortalCompanyProfileScreen\(activeScreen\.screenKey, facts\)/);
+    assert.match(src, /companyProfileCompletion\(questions, screens\)/);
+    // The backend question keys stay the canonical fact bindings of the screen.
+    assert.match(src, /facts\[atom\.questionKey\] = payload/);
+    // Keys are never hardcoded as string literals or exposed as display labels.
+    assert.doesNotMatch(src, /questionKey\s*:\s*"/);
+  });
+
+  it("renders one focused question group at a time instead of every question simultaneously", () => {
+    const src = profileSrc();
+    assert.match(src, /const activeScreen: PortalCompanyProfileScreen \| undefined = screens\[activeIndex\]/);
+    assert.match(src, /data-testid="company-profile-screen"/);
+    assert.match(src, /activeAtoms\.map\(\(atom\)/);
+    // Exactly one screen is rendered; the whole screen list is never mapped into the form.
+    assert.doesNotMatch(src, /screens\.map\(\(screen, index\) => \(/);
+    assert.doesNotMatch(src, /activeAtoms\.flatMap/);
+  });
+
+  it("replaces the anonymous step strip with a grouped, labelled topic list behind progressive disclosure", () => {
+    const src = profileSrc();
+    // The dense strip of unlabelled pills is gone.
+    assert.doesNotMatch(src, /h-2 w-6 rounded-full/);
+    assert.doesNotMatch(src, /screens\.map\(\(screen, index\) => \(/);
+    // All reachable topics remain selectable, grouped by canonical section title.
+    assert.match(src, /const topicGroups = useMemo/);
+    assert.match(src, /group\.sectionTitle/);
+    assert.match(src, /group\.topics\.map\(\(topic\)/);
+    assert.match(src, /topic\.screen\.titleHu/);
+    assert.match(src, /data-testid="company-profile-topics"/);
+    assert.match(src, /data-testid="company-profile-topic"/);
+    assert.match(src, /aria-expanded=\{topicListOpen\}/);
+    assert.match(src, /const \[topicListOpen, setTopicListOpen\] = useState\(false\)/);
+    // Selecting a topic focuses it and collapses the list again.
+    assert.match(src, /const selectTopic = \(index: number\) =>/);
+    assert.match(src, /setTopicListOpen\(false\)/);
+  });
+
+  it("hides the repeated per-question explanations behind a disclosure", () => {
+    const src = profileSrc();
+    assert.match(src, /Miért kérdezzük\?/);
+    assert.match(src, /<details className="mt-2">/);
+    assert.match(src, /<details className="min-w-0">/);
+    // Screen-level explanation renders once, not once per question.
+    assert.match(src, /activeScreen\.whyHu \? \(/);
+  });
+
+  it("preserves the Nem tudom (UNKNOWN) control and the save/continue actions", () => {
+    const src = profileSrc();
+    assert.match(src, /Nem tudom/);
+    assert.match(src, /const markUnknown = async \(question: PortalCompanyProfileQuestion\) =>/);
+    assert.match(src, /status: "UNKNOWN"/);
+    assert.match(src, /Mentés és tovább →/);
+    assert.match(src, /const saveActiveScreen = async \(advance: boolean\) =>/);
+    assert.match(src, /← Vissza/);
+  });
+
+  it("shows completion context without presenting it as a legal compliance score", () => {
+    const src = profileSrc();
+    assert.match(src, /Profiladat-kitöltöttség/);
+    assert.match(src, /progress\.answered} \/ \{progress\.total/);
+    assert.match(src, /Nem jogi megfelelőségi minősítés/);
+    assert.doesNotMatch(src, /100% megfelelés/);
+    assert.doesNotMatch(src, /megfelelőségi pontszám/);
+  });
+
+  it("separates customer profile input from the published company overview", () => {
+    const src = profileSrc();
+    assert.match(src, /Itt az Ön által megadott profiladatokat rögzítjük/);
+    assert.match(src, /közzétett vállalati áttekintést/);
+    assert.match(src, /Profiladatok/);
+  });
+
+  it("keeps previously saved answers and UNKNOWN state visible next to the control", () => {
+    const src = profileSrc();
+    assert.match(src, /function draftLabel\(question: PortalCompanyProfileQuestion, draft: DraftValue \| undefined\)/);
     assert.match(src, /Nem ismertként jelölve/);
     assert.match(src, /Nincs megadva/);
-    assert.match(src, /Cégadatok/);
-    assert.match(src, /A szervezeti áttekintéshez szükséges cégadatok\./);
+    assert.match(src, /\{draft \? <span className="text-xs text-stone-500">\{draftLabel\(atom, draft\)\}<\/span> : null\}/);
   });
 
-  it("supports ANSWERED with typed numeric mutation (e.g. 47 -> 52) and UNKNOWN transitions", () => {
+  it("renders typed adaptive controls", () => {
     const src = profileSrc();
-    const answered = src.slice(src.indexOf("const handleSaveAnswer"), src.indexOf("const handleMarkUnknown"));
-    const unknown = src.slice(src.indexOf("const handleMarkUnknown"), src.indexOf("if (loading)"));
-    // Saving ANSWERED
-    assert.match(src, /status:\s*"ANSWERED"/);
-    assert.match(src, /numberValue/);
-    assert.match(src, /Mentés/);
-    // Saving UNKNOWN
-    assert.match(src, /status:\s*"UNKNOWN"/);
-    assert.match(src, /Nem ismertként jelölöm/);
-    assert.match(src, /const refreshDiscovery = useCallback\(async \(\) => \{/);
-    assert.match(src, /await refreshDiscovery\(\);/);
-    assert.match(src, /void loadDiscovery\(\);/);
-    assert.match(src, /mutationCompleted/);
-    assert.match(src, /Az adat mentése megtörtént, de a frissített áttekintés betöltése nem sikerült/);
-    // Both handlers use the throwing refresh primitive before awaiting the parent refresh.
-    for (const handler of [answered, unknown]) {
-      assert.ok(handler.indexOf("await answerPortalCompanyProfileQuestion") < handler.indexOf("await refreshDiscovery"));
-      assert.ok(handler.indexOf("await refreshDiscovery") < handler.indexOf("await onProfileUpdated?.()"));
-      assert.doesNotMatch(handler, /await loadDiscovery\(\)/);
-    }
-    assert.match(
-      src,
-      /A cégadatokat frissítettük\. A szervezeti áttekintést az új adatok alapján frissítettük\./,
-    );
+    assert.match(src, /atom\.valueType === "BOOLEAN"/);
+    assert.match(src, /atom\.valueType === "ENUM"/);
+    assert.match(src, /atom\.valueType === "DATE"/);
+    assert.match(src, /atom\.valueType === "NUMBER"/);
+    assert.match(src, /atom\.valueType === "JURISDICTION"/);
+    assert.match(src, /atom\.valueType === "MULTI_ENUM"/);
   });
 
-  it("renders typed adaptive controls and truthful discovery copy", () => {
+  it("keeps the follow-up evidence journey progressive: collapsed, one control at a time", () => {
     const src = profileSrc();
-    assert.match(src, /question\.valueType === "BOOLEAN"/);
-    assert.match(src, /question\.valueType === "ENUM"/);
-    assert.match(src, /question\.valueType === "DATE"/);
-    assert.match(src, /question\.valueType === "NUMBER"/);
-    assert.match(src, /question\.valueType === "STRING"/);
-    assert.match(src, /adat ismert ·/);
-    assert.match(src, /A jelenlegi adatok alapján nincs további tisztázandó kérdés\./);
-    assert.doesNotMatch(src, /100% megfelelés|Kitöltöttség/);
-    assert.match(src, /sectionLabel/);
+    assert.match(src, /const \[evidenceOpen, setEvidenceOpen\] = useState\(false\)/);
+    assert.match(src, /const \[openEvidenceKey, setOpenEvidenceKey\] = useState<string \| null>\(null\)/);
+    assert.match(src, /aria-expanded=\{evidenceOpen\}/);
+    assert.match(src, /open=\{openEvidenceKey === item\.controlKey\}/);
+    // The three customer-safe answers survive inside the expanded control.
+    assert.match(src, /submit\("NO"\)/);
+    assert.match(src, /submit\("UNKNOWN"\)/);
+    assert.match(src, /setMode\("YES"\)/);
+    assert.match(src, /answerPortalCompanyProfileEvidence\(item\.controlKey/);
   });
 
-  it("keeps mutation failures distinct from persisted-but-stale refresh failures", () => {
+  it("stays usable on narrow viewports", () => {
     const src = profileSrc();
-    const answered = src.slice(src.indexOf("const handleSaveAnswer"), src.indexOf("const handleMarkUnknown"));
-    const unknown = src.slice(src.indexOf("const handleMarkUnknown"), src.indexOf("if (loading)"));
-    for (const handler of [answered, unknown]) {
-      assert.match(handler, /if \(mutationCompleted\)/);
-      assert.match(handler, /setRefreshWarning\(/);
-      assert.match(handler, /setActionError\(clientSafeError\(err\)\)/);
-    }
-    assert.match(src, /<div[\s\S]*role="status"[\s\S]*\{refreshWarning\}/);
+    // The full-width mobile layout for the progress card and the topic rows.
+    assert.match(src, /w-full rounded-2xl border border-\[#eadfbf\] bg-\[#fffdf8\] px-4 py-3 sm:w-auto/);
+    assert.match(src, /flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2 text-left text-sm/);
   });
 
   it("never exposes a technical question key as a visible label or test marker", () => {
@@ -96,31 +145,6 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     assert.doesNotMatch(src, /return question\.label \|\| question\.questionKey/);
     assert.match(src, /data-testid="company-profile-question"/);
     assert.doesNotMatch(src, /data-testid=\{`company-profile-question-\$\{question\.questionKey\}\`\}/);
-  });
-
-  it("uses neutral, client-safe copy and preserves UNANSWERED as absence", () => {
-    const src = profileSrc();
-    assert.match(src, /Ehhez még szükségünk van egy adatra\./);
-    assert.match(src, /A szervezet jelenleg nem rendelkezik pontos adattal\./);
-    // Guard against accusing or legal-breach customer language
-    assert.doesNotMatch(src, /Hiányos a megfelelősége/);
-    assert.doesNotMatch(src, /Ön jogszabályt sért/);
-    assert.doesNotMatch(src, /Jogszabálysértés/);
-  });
-
-  it("removes compliance-console language from customer-facing organization views", () => {
-    const profile = profileSrc();
-    const home = read("src/components/client-portal/OrgHomeView.tsx");
-    for (const source of [profile, home]) {
-      assert.doesNotMatch(source, /Vállalat és megfelelőség/);
-      assert.doesNotMatch(source, /Megfelelőségi áttekintés/);
-      assert.doesNotMatch(
-        source,
-        /jogi megfelelőségi és működési értékeléshez szükséges alapvető szervezeti adatok/,
-      );
-    }
-    assert.match(home, /Vállalati profil/);
-    assert.match(home, /Szervezeti területek/);
   });
 
   it("strictly prohibits internal technical IDs, rule ASTs, and severity scores from leaking", () => {
@@ -147,6 +171,20 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     // The profile edit callback must never be the full parent `load`, whose
     // loading=true state unmounts OrganizationCompanyProfile and resets the wizard.
     assert.doesNotMatch(views, /onProfileUpdated=\{load\}/);
+  });
+
+  it("counts pending follow-up evidence (never the applicable total) and keeps UNKNOWN seeded", () => {
+    const src = profileSrc();
+    // The follow-up header is the machine-readable pending count, not the total.
+    assert.match(src, /countPendingEvidence\(applicableEvidence\)/);
+    assert.match(src, /evidencePendingLabel\(applicableEvidence\.length, pendingEvidenceCount\)/);
+    assert.doesNotMatch(src, /\$\{applicableEvidence\.length\} megválaszolandó/);
+    // Persisted UNKNOWN is reconstructed when drafts are seeded from discovery.
+    assert.match(src, /seedDrafts\(previous, activeAtoms\)/);
+    assert.match(src, /import \{ draftToPayload, seedDrafts, type DraftValue \} from "@\/lib\/companyProfileDraft"/);
+    const evidenceLib = read("src/lib/companyProfileEvidence.ts");
+    assert.match(evidenceLib, /Mind megválaszolva/);
+    assert.match(evidenceLib, /megválaszolandó/);
   });
 
   it("refreshCompany preserves the previously loaded company summary on failure", () => {

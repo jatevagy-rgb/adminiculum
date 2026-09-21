@@ -287,6 +287,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   REVIEWER_CANNOT_BE_WORKER: "A feladat végrehajtója és ellenőrzője nem lehet ugyanaz a személy.",
   COLLABORATOR_IS_WORKER: "A feladat felelőse nem jelölhető meg párhuzamos közreműködőként is.",
   COLLABORATOR_IS_REVIEWER: "Az ellenőrző nem lehet egyben párhuzamos közreműködő.",
+  TASK_ASSIGNMENT_FORBIDDEN: "Ön nem rendelheti a feladatot ehhez a munkatárshoz.",
+  ASSIGNEE_NOT_CASE_MEMBER: "A feladat felelőse csak az ügy csapatának tagja lehet.",
+  ASSIGNEE_NOT_AVAILABLE: "A kiválasztott munkatárs jelenleg nem érhető el.",
+  TASK_ACTION_FORBIDDEN: "Ehhez a feladatművelethez nincs jogosultsága.",
 };
 
 export function taskWorkflowErrorMessage(error: unknown): string {

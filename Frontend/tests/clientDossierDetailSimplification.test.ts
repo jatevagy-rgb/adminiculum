@@ -31,10 +31,10 @@ test("ClientControlCenter is not rendered but the component source is preserved"
   assert.ok(controlCenterExists, "ClientControlCenter.tsx source file must still exist");
 });
 
-test("ClientWorkspaceTabs is rendered client-scoped below the header", () => {
-  const headerEnd = source.indexOf("</header>");
+test("ClientWorkspaceTabs renders before the dossier hero (canonical shell order)", () => {
   const tabsIdx = order("ClientWorkspaceTabs", source.indexOf("<ClientWorkspaceTabs clientId={clientId}"));
-  assert.ok(headerEnd !== -1 && tabsIdx > headerEnd, "ClientWorkspaceTabs must render after the header");
+  const heroIdx = order("dossier hero", source.indexOf('<header className="adm-board-hero'));
+  assert.ok(tabsIdx < heroIdx, "ClientWorkspaceTabs must render before the dossier hero");
   assert.match(source, /active="overview" organizationMode=\{organizationMode\}/);
 });
 

@@ -12,6 +12,10 @@ export type WorkspaceFactGroup = {
     validTo: string | null;
     sourceReference: string | null;
     isCurrent: boolean;
+    /** Explicit canonical/current metadata; null when the row is not superseded. */
+    supersededAt?: string | null;
+    factDefinition?: { key: string; labelHu: string | null } | null;
+    sourceKind?: 'CLIENT_PORTAL_ANSWER' | 'DOCUMENT' | 'MANUAL' | 'UNKNOWN';
   }>;
 };
 

@@ -260,4 +260,26 @@ describe('internal portal-admin UI', () => {
     const nav = read('src/lib/navigation.ts');
     assert.match(nav, /id: ["']client-portal-admin["']/);
   });
+
+  it('separates invitation delivery from portal activation and workspace state', () => {
+    const src = page();
+    // The workspace row is labelled as the workspace, never as an active portal.
+    assert.match(src, /if \(status === "ACTIVE"\) return "Munkatér aktív";/);
+    assert.match(src, /if \(status === "SUSPENDED"\) return "Munkatér szünetel";/);
+    assert.doesNotMatch(src, /return "Portál aktív";/);
+    assert.match(src, /Munkatér állapota/);
+    // Activation reports portal preparation + workspace activation, not a delivered invitation.
+    assert.match(src, /Portál előkészítés \+ munkatér aktiválás/);
+    assert.match(src, /A meghívás kézbesítése külön állapot; ügyhozzáférés nem jött létre\./);
+    // The invitation call is guarded so a delivery/invitation failure can never be
+    // reported as a failed activation, and its canonical delivery state is surfaced.
+    assert.match(src, /reportInvitationOutcome\([\s\S]{0,120}invitation\.state === "PENDING_APPROVAL"/);
+    assert.match(src, /A meghívás nem jött létre\. A portál előkészítése és a munkatér aktiválása ettől függetlenül megtörtént/);
+    assert.match(src, /deliverySummary\(invitation\.deliveryStatus, invitation\.deliveryCodeSafe\)/);
+    assert.match(src, /data-testid="activation-invitation-outcome"/);
+    assert.match(src, /A munkatér aktiválása és a meghívás kézbesítése külön állapot/);
+    // reportInvitationOutcome is threaded to the wizard that owns activation.
+    assert.match(src, /reportInvitationOutcome=\{reportInvitationOutcome\}/);
+    assert.match(src, /reportInvitationOutcome=\{setInvitationOutcome\}/);
+  });
 });

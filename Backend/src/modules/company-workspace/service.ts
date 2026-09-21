@@ -1216,7 +1216,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
   const [client, profile, facts, assessments, contracts, openObligations, groups, persons, initiatives, milestones, cases] = await Promise.all([
     prisma.client.findUnique({ where: { id: clientId }, select: { id: true, name: true } }),
     prisma.clientOperatingProfile.findUnique({ where: { clientId } }),
-    prisma.clientFact.findMany({ where: { clientId }, orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }], include: { factDefinition: { select: { valueType: true } } } }),
+    prisma.clientFact.findMany({ where: { clientId }, orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }], include: { factDefinition: { select: { key: true, valueType: true } } } }),
     prisma.assessment.findMany({
       where: { clientId },
       orderBy: { createdAt: 'desc' },
@@ -1290,7 +1290,7 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       currentFactIds.add(fact.id);
     }
   }
-  const factGroups: Array<{ key: string; label: string; facts: Array<{ id: string; type: string; value: string; verificationStatus: string; validFrom: string; validTo: string | null; sourceReference: string | null; isCurrent: boolean }> }> = [];
+  const factGroups: Array<{ key: string; label: string; facts: Array<{ id: string; type: string; value: string; verificationStatus: string; validFrom: string; validTo: string | null; sourceReference: string | null; isCurrent: boolean; supersededAt: string | null; factDefinition: { key: string; labelHu: string | null } | null; sourceKind: FactProvenanceSourceKind }> }> = [];
   const grouped: Record<string, Array<any>> = {};
   for (const fact of facts) {
     const key = FACT_GROUP_KEYS[fact.type] || 'OTHER';
@@ -1306,8 +1306,16 @@ export async function getWorkspaceOverview(actor: InternalActor, clientId: strin
       verificationStatus: String(fact.verificationStatus),
       validFrom: fact.validFrom.toISOString(),
       validTo: fact.validTo ? fact.validTo.toISOString() : null,
-        sourceReference: fact.sourceReference,
-        isCurrent: currentFactIds.has(fact.id),
+      sourceReference: fact.sourceReference,
+      isCurrent: currentFactIds.has(fact.id),
+      // Additive read-only presentation metadata: history must stay visible, but
+      // a superseded row must never be presentable as a current truth. The raw
+      // sourceReference handle is never projected — only its provenance category.
+      supersededAt: fact.supersededAt ? fact.supersededAt.toISOString() : null,
+      factDefinition: fact.factDefinition
+        ? { key: fact.factDefinition.key, labelHu: getCanonicalCompanyFact(fact.factDefinition.key)?.labelHu ?? null }
+        : null,
+      sourceKind: classifyFactSourceKind(fact.sourceReference, Boolean(fact.sourceDocumentVersionId)),
     });
   }
   for (const key of Object.keys(FACT_GROUP_LABELS)) {

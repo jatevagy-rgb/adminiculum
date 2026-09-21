@@ -46,6 +46,26 @@ export interface CompanyMilestoneSourceRow {
   date?: string | null;
 }
 
+/** Customer-safe Grow initiative row (from getOrganizationalGrow). */
+export interface GrowInitiativeSourceRow {
+  id: string;
+  title: string;
+  targetAt?: string | null;
+  statusLabel?: string | null;
+}
+
+/**
+ * Customer-safe compliance control row (from getClientSafeComplianceReadModel).
+ * Identity is the safe-registry `controlRef`; the internal ClientControl id, the
+ * internal ControlDefinition key and the display text are never used as identity.
+ */
+export interface ComplianceReviewSourceRow {
+  controlRef: string;
+  requirementTitle: string;
+  title: string;
+  nextReviewAt?: string | null;
+}
+
 function matterHref(publicationId: string): string {
   return `/portal/matters/${encodeURIComponent(publicationId)}`;
 }
@@ -160,6 +180,50 @@ export function mapCompanyMilestoneSource(milestone: CompanyMilestoneSourceRow):
     date: milestone.date,
     status: 'INFO',
     href: '/portal/vallalat',
+    matterTitle: null,
+  }];
+}
+
+/**
+ * Grow initiative target date. The initiative is only projectable because it
+ * already crosses the customer-safe Grow projection (getOrganizationalGrow), so
+ * no internal status or task deadline is carried. A target is informational, not
+ * a customer obligation.
+ */
+export function mapGrowInitiativeSource(row: GrowInitiativeSourceRow): CustomerCalendarSourceItem[] {
+  if (!row.targetAt) return [];
+  return [{
+    category: 'GROW_TARGET',
+    sourceKey: `initiative-${row.id}`,
+    title: String(row.title || '').trim() || 'Fejlesztési kezdeményezés',
+    date: row.targetAt,
+    status: 'INFO',
+    href: '/portal/fejlesztes',
+    matterTitle: null,
+  }];
+}
+
+/**
+ * Compliance control next review date. Sourced only from the customer-safe
+ * compliance read model, so internal control ids, severity and raw engine state
+ * never appear. Identity is the opaque safe-registry `controlRef`, so two
+ * distinct controls with identical display labels stay distinct. No customer
+ * action is required, therefore the item is informational ("Következő
+ * ellenőrzés"), never an "Ön határideje" obligation.
+ */
+export function mapComplianceReviewSource(row: ComplianceReviewSourceRow): CustomerCalendarSourceItem[] {
+  if (!row.nextReviewAt) return [];
+  const controlRef = String(row.controlRef || '').trim();
+  if (!controlRef) return [];
+  const requirementTitle = String(row.requirementTitle || '').trim();
+  const controlTitle = String(row.title || '').trim();
+  return [{
+    category: 'COMPLIANCE_REVIEW',
+    sourceKey: `control-${controlRef}`,
+    title: controlTitle || requirementTitle || 'Megfelelési ellenőrzés',
+    date: row.nextReviewAt,
+    status: 'INFO',
+    href: '/portal/megfeleles',
     matterTitle: null,
   }];
 }

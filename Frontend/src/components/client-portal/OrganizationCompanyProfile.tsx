@@ -17,6 +17,8 @@ import {
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
 import { companyProfileCompletion } from "@/lib/companyProfileCompletion";
+import { draftToPayload, seedDrafts, type DraftValue } from "@/lib/companyProfileDraft";
+import { countPendingEvidence, evidencePendingLabel } from "@/lib/companyProfileEvidence";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const inputClass =
@@ -28,58 +30,14 @@ const chipOff = `${chipBase} border border-stone-300 text-stone-700 hover:bg-sto
 const TEAOR_UNAVAILABLE =
   "Az ágazati besorolás jelenleg nem érhető el. A korábban megadott tevékenységi adat megmaradt.";
 
-type DraftValue = {
-  status: "ANSWERED" | "UNKNOWN";
-  numberValue?: string;
-  booleanValue?: boolean;
-  stringValue?: string;
-  enumValue?: string;
-  jsonValue?: string[];
-};
-
-function valueToDraft(question: PortalCompanyProfileQuestion): DraftValue | undefined {
-  if (question.status !== "ANSWERED" || question.value === null || question.value === undefined) return undefined;
-  if (Array.isArray(question.value)) return { status: "ANSWERED", jsonValue: [...question.value] };
-  if (question.valueType === "NUMBER" && typeof question.value === "number") return { status: "ANSWERED", numberValue: String(question.value) };
-  if (question.valueType === "BOOLEAN" && typeof question.value === "boolean") return { status: "ANSWERED", booleanValue: question.value };
-  if (question.valueType === "ENUM" || question.valueType === "JURISDICTION") return { status: "ANSWERED", enumValue: String(question.value) };
-  return { status: "ANSWERED", stringValue: String(question.value) };
-}
-
-function draftToPayload(question: PortalCompanyProfileQuestion, draft: DraftValue): PortalCompanyProfileAnswerPayload | null {
-  if (draft.status === "UNKNOWN") return { status: "UNKNOWN" };
-  switch (question.valueType) {
-    case "NUMBER": {
-      const trimmed = (draft.numberValue ?? "").trim();
-      if (!trimmed) return null;
-      const parsed = Number(trimmed);
-      if (!Number.isFinite(parsed) || parsed < 0) return null;
-      if (question.integerOnly && !Number.isInteger(parsed)) return null;
-      return { status: "ANSWERED", numberValue: parsed };
-    }
-    case "BOOLEAN":
-      return typeof draft.booleanValue === "boolean" ? { status: "ANSWERED", booleanValue: draft.booleanValue } : null;
-    case "ENUM":
-      return draft.enumValue ? { status: "ANSWERED", enumValue: draft.enumValue } : null;
-    case "JURISDICTION": {
-      const code = (draft.enumValue ?? "").trim();
-      return code ? { status: "ANSWERED", enumValue: code.toUpperCase() } : null;
-    }
-    case "MULTI_ENUM": {
-      const values = draft.jsonValue ?? [];
-      return values.length ? { status: "ANSWERED", jsonValue: values } : null;
-    }
-    case "STRING": {
-      const value = (draft.stringValue ?? "").trim();
-      return value ? { status: "ANSWERED", stringValue: value } : null;
-    }
-    default:
-      return null;
-  }
+// Customer-safe human label. The technical question key is never a display value.
+function questionLabel(question: PortalCompanyProfileQuestion): string {
+  return question.label?.trim() || "Szervezeti adat";
 }
 
 function draftLabel(question: PortalCompanyProfileQuestion, draft: DraftValue | undefined) {
-  if (!draft || draft.status === "UNKNOWN") return "Nincs megadva";
+  if (!draft) return "";
+  if (draft.status === "UNKNOWN") return "Nem ismertként jelölve";
   const payload = draftToPayload(question, draft);
   if (!payload) return "Nincs megadva";
   if (payload.jsonValue) return payload.jsonValue.join(", ");
@@ -120,6 +78,12 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [refreshWarning, setRefreshWarning] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<PortalCompanyProfileEvidenceJourney | null>(null);
+  // Progressive disclosure: the full topic list and the follow-up evidence
+  // journey stay collapsed until the customer asks for them, so the landing
+  // surface shows one focused question group instead of every control at once.
+  const [topicListOpen, setTopicListOpen] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [openEvidenceKey, setOpenEvidenceKey] = useState<string | null>(null);
 
   const refreshDiscovery = useCallback(async () => {
     const result = await getPortalCompanyProfileDiscovery();
@@ -175,20 +139,43 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
       .filter((atom): atom is PortalCompanyProfileQuestion => Boolean(atom));
   }, [activeScreen, atomsByKey]);
 
+  // Grouped, labelled topic navigator. Every currently reachable screen is kept
+  // as a selectable topic; only the presentation is collapsed. Counts reflect
+  // persisted answers (discovery), never in-flight drafts.
+  const topicGroups = useMemo(() => {
+    const groups: Array<{
+      sectionTitle: string;
+      topics: Array<{ screen: PortalCompanyProfileScreen; index: number; answered: number; total: number }>;
+    }> = [];
+    screens.forEach((screen, index) => {
+      const boundKeys = screen.factBindings.filter((factKey) => atomsByKey.has(factKey));
+      const answered = boundKeys.filter((factKey) => atomsByKey.get(factKey)?.status === "ANSWERED").length;
+      const topic = { screen, index, answered, total: boundKeys.length };
+      const existing = groups.find((group) => group.sectionTitle === screen.sectionTitleHu);
+      if (existing) existing.topics.push(topic);
+      else groups.push({ sectionTitle: screen.sectionTitleHu, topics: [topic] });
+    });
+    return groups;
+  }, [screens, atomsByKey]);
+
+  const applicableEvidence = useMemo(
+    () => (evidence?.items ?? []).filter((item) => item.relevance === "APPLIES"),
+    [evidence],
+  );
+
+  // "Megválaszolandó" counts only applicable controls that are still PENDING.
+  // It must never be the total applicable count: a persisted YES (current
+  // evidence linked) and a persisted NO (explicitly not implemented) are both
+  // answered, and stale evidence keeps its own truthful state instead of being
+  // presented as unanswered. The applicable total stays separately available.
+  const pendingEvidenceCount = useMemo(() => countPendingEvidence(applicableEvidence), [applicableEvidence]);
+
   const hasTeaorAtom = activeAtoms.some((atom) => atom.codeCatalog === "TEAOR25");
 
   // Seed drafts from persisted answers, and resolve TEÁOR labels for stored codes.
   useEffect(() => {
     if (!activeScreen) return;
-    setDrafts((previous) => {
-      const next = { ...previous };
-      for (const atom of activeAtoms) {
-        if (next[atom.questionKey]) continue;
-        const seeded = valueToDraft(atom);
-        if (seeded) next[atom.questionKey] = seeded;
-      }
-      return next;
-    });
+    setDrafts((previous) => seedDrafts(previous, activeAtoms));
     for (const atom of activeAtoms) {
       if (atom.codeCatalog !== "TEAOR25") continue;
       const draft = drafts[atom.questionKey];
@@ -226,6 +213,11 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     setDraft(question.questionKey, { status: "ANSWERED", jsonValue: next });
   };
 
+  const selectTopic = (index: number) => {
+    setActiveIndex(index);
+    setTopicListOpen(false);
+  };
+
   const saveActiveScreen = async (advance: boolean) => {
     if (!activeScreen) return;
     const currentKey = activeScreen.screenKey;
@@ -239,7 +231,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
       if (!draft) continue;
       const payload = draftToPayload(atom, draft);
       if (!payload) {
-        setActionError(`Hiányos vagy érvénytelen válasz: ${atom.label}.`);
+        setActionError(`Hiányos vagy érvénytelen válasz: ${questionLabel(atom)}.`);
         return;
       }
       facts[atom.questionKey] = payload;
@@ -287,21 +279,28 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
   return (
     <section className={card} data-testid="organization-company-profile">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">Cégadatok</p>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#9b7b25]">Profiladatok</p>
           <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Vállalati profil</h2>
           <p className="mt-2 text-sm text-stone-600">
             Segítsen pontosítani, milyen szabályok érintik a vállalkozását.
           </p>
+          <p className="mt-2 max-w-xl text-xs leading-5 text-stone-500">
+            Itt az Ön által megadott profiladatokat rögzítjük. A közzétett vállalati áttekintést ettől elkülönülten az
+            iroda állítja össze.
+          </p>
         </div>
-        <div className="rounded-2xl border border-[#eadfbf] bg-[#fffdf8] px-4 py-3 text-right">
-          <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">Kitöltöttség</span>
+        <div className="w-full rounded-2xl border border-[#eadfbf] bg-[#fffdf8] px-4 py-3 sm:w-auto">
+          <span className="text-xs font-semibold uppercase tracking-wider text-stone-500">Profiladat-kitöltöttség</span>
           <p className="text-lg font-semibold text-stone-900">
             {progress.answered} / {progress.total}
           </p>
           <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-stone-200">
             <div className="h-full bg-[#b95e4b]" style={{ width: `${progress.percent}%` }} />
           </div>
+          <p className="mt-2 max-w-[16rem] text-[11px] leading-4 text-stone-500">
+            A megadott profiladatok arányát mutatja. Nem jogi megfelelőségi minősítés.
+          </p>
         </div>
       </div>
 
@@ -313,34 +312,64 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
         <p className="mt-6 text-sm text-stone-600">A jelenlegi adatok alapján nincs további tisztázandó kérdés.</p>
       ) : (
         <div className="mt-6">
-          <div className="flex flex-wrap items-center gap-2">
-            {screens.map((screen, index) => {
-              const isActive = index === activeIndex;
-              const isCompleted = index < activeIndex;
-              return (
-                <button
-                  key={screen.screenKey}
-                  type="button"
-                  onClick={() => setActiveIndex(index)}
-                  aria-current={isActive ? "step" : undefined}
-                  className={`h-2 w-6 rounded-full transition-colors ${
-                    isActive ? "bg-[#b95e4b]" : isCompleted ? "bg-[#d3a08f]" : "bg-stone-200 hover:bg-stone-300"
-                  }`}
-                  title={screen.sectionTitleHu}
-                >
-                  <span className="sr-only">{screen.titleHu}</span>
-                </button>
-              );
-            })}
-            <span className="ml-2 text-xs font-semibold uppercase tracking-wider text-stone-500">
-              {activeIndex + 1} / {screens.length} · {activeScreen.sectionTitleHu}
-            </span>
+          <div className="rounded-2xl border border-stone-200 bg-stone-50 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="min-w-0 text-sm font-semibold text-stone-800">
+                <span className="text-stone-500">{activeIndex + 1} / {screens.length} · </span>
+                {activeScreen.sectionTitleHu}
+              </p>
+              <button
+                type="button"
+                onClick={() => setTopicListOpen((open) => !open)}
+                aria-expanded={topicListOpen}
+                className="rounded-full border border-stone-300 px-3 py-1 text-xs font-semibold text-stone-700 hover:bg-white"
+              >
+                {topicListOpen ? "Témakörlista bezárása" : "Témakörlista"}
+              </button>
+            </div>
+            {topicListOpen ? (
+              <div className="mt-3 space-y-3" data-testid="company-profile-topics">
+                {topicGroups.map((group) => (
+                  <div key={group.sectionTitle}>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">{group.sectionTitle}</p>
+                    <div className="mt-1 space-y-1">
+                      {group.topics.map((topic) => {
+                        const isActive = topic.index === activeIndex;
+                        return (
+                          <button
+                            key={topic.screen.screenKey}
+                            type="button"
+                            data-testid="company-profile-topic"
+                            onClick={() => selectTopic(topic.index)}
+                            aria-current={isActive ? "step" : undefined}
+                            className={`flex w-full items-start justify-between gap-3 rounded-xl border px-3 py-2 text-left text-sm ${
+                              isActive ? "border-[#b95e4b] bg-white font-semibold text-stone-950" : "border-stone-200 bg-white text-stone-800 hover:border-[#d3a08f]"
+                            }`}
+                          >
+                            <span className="min-w-0">{topic.screen.titleHu}</span>
+                            <span className="shrink-0 text-xs font-normal text-stone-500">
+                              {topic.answered} / {topic.total} adat megadva
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
-          <div className="mt-4 rounded-2xl border border-[#eadfbf] bg-white p-4" data-testid="company-profile-screen">
-            <h3 className="font-semibold text-stone-950">{activeScreen.titleHu}</h3>
+          <div className="mt-3 rounded-2xl border border-[#eadfbf] bg-white p-4" data-testid="company-profile-screen">
+            <p className="text-xs font-semibold uppercase tracking-wider text-stone-500">{activeScreen.sectionTitleHu}</p>
+            <h3 className="mt-1 font-semibold text-stone-950">{activeScreen.titleHu}</h3>
             <p className="mt-1 text-sm text-stone-700">{activeScreen.helpTextHu}</p>
-            {activeScreen.whyHu ? <p className="mt-1 text-xs text-stone-400">Miért kérdezzük? {activeScreen.whyHu}</p> : null}
+            {activeScreen.whyHu ? (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-xs font-semibold text-stone-500 hover:text-stone-700">Miért kérdezzük?</summary>
+                <p className="mt-1 text-xs text-stone-500">{activeScreen.whyHu}</p>
+              </details>
+            ) : null}
             {hasTeaorAtom && !teaorInstalled ? (
               <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{TEAOR_UNAVAILABLE}</p>
             ) : null}
@@ -350,10 +379,9 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
                 const draft = drafts[atom.questionKey];
                 const isTeaor = atom.codeCatalog === "TEAOR25";
                 return (
-                  <div key={atom.questionKey} className="border-t border-stone-100 pt-3">
-                    <label className="block text-sm font-semibold text-stone-900">{atom.label}</label>
+                  <div key={atom.questionKey} data-testid="company-profile-question" className="border-t border-stone-100 pt-3">
+                    <label className="block text-sm font-semibold text-stone-900">{questionLabel(atom)}</label>
                     {atom.helpText ? <p className="mt-1 text-xs text-stone-500">{atom.helpText}</p> : null}
-                    {atom.why ? <p className="mt-1 text-xs text-stone-400">Miért kérdezzük? {atom.why}</p> : null}
 
                     <div className="mt-2">
                       {isTeaor && !teaorInstalled ? (
@@ -427,11 +455,17 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
                       )}
                     </div>
 
-                    <div className="mt-2 flex items-center gap-3">
-                      <span className="text-xs text-stone-500">{draftLabel(atom, draft)}</span>
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {draft ? <span className="text-xs text-stone-500">{draftLabel(atom, draft)}</span> : null}
                       <button type="button" onClick={() => void markUnknown(atom)} disabled={saving} className="text-xs font-semibold text-amber-800 hover:underline">
                         Nem tudom
                       </button>
+                      {atom.why ? (
+                        <details className="min-w-0">
+                          <summary className="cursor-pointer text-xs text-stone-400 hover:text-stone-600">Miért kérdezzük?</summary>
+                          <p className="mt-1 text-xs text-stone-400">{atom.why}</p>
+                        </details>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -462,25 +496,44 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
 
       {evidence ? (
         <div className="mt-6 border-t border-stone-200 pt-5" data-testid="company-profile-evidence">
-          <h3 className="font-semibold text-stone-950">Dokumentumok és intézkedések</h3>
-          <p className="mt-1 text-sm text-stone-600">
-            A rátok vonatkozó területeken ellenőrizzük, hogy rendelkezésre áll-e a szükséges dokumentum vagy intézkedés.
-          </p>
-          <div className="mt-4 space-y-4">
-            {evidence.items
-              .filter((item) => item.relevance === "APPLIES")
-              .map((item) => (
-                <EvidenceQuestion key={item.controlKey} item={item} documents={evidence.reusableDocuments} onAnswered={() => void refreshEvidence()} />
+          <button
+            type="button"
+            onClick={() => setEvidenceOpen((open) => !open)}
+            aria-expanded={evidenceOpen}
+            className="flex w-full items-start justify-between gap-3 text-left"
+          >
+            <span className="min-w-0">
+              <span className="block font-semibold text-stone-950">Dokumentumok és intézkedések</span>
+              <span className="mt-1 block text-sm text-stone-600">
+                A rátok vonatkozó területeken ellenőrizzük, hogy rendelkezésre áll-e a szükséges dokumentum vagy intézkedés.
+              </span>
+            </span>
+            <span className="shrink-0 text-xs font-semibold text-stone-500">
+              {evidencePendingLabel(applicableEvidence.length, pendingEvidenceCount)}
+            </span>
+          </button>
+          {evidenceOpen ? (
+            <div className="mt-4 space-y-3">
+              {applicableEvidence.map((item) => (
+                <EvidenceQuestion
+                  key={item.controlKey}
+                  item={item}
+                  documents={evidence.reusableDocuments}
+                  open={openEvidenceKey === item.controlKey}
+                  onToggle={() => setOpenEvidenceKey((current) => (current === item.controlKey ? null : item.controlKey))}
+                  onAnswered={() => void refreshEvidence()}
+                />
               ))}
-            {evidence.items.some((item) => item.relevance === "LEGAL_REVIEW_REQUIRED") ? (
-              <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                Egyes területek a tevékenység vagy méret miatt jogi pontosítást igényelnek, ezért azokat ügyvédünk ellenőrzi.
-              </p>
-            ) : null}
-            {evidence.items.length > 0 && evidence.items.every((item) => item.relevance === "INSUFFICIENT_FACTS" || item.relevance === "DOES_NOT_APPLY") ? (
-              <p className="text-sm text-stone-500">A dokumentumokkal kapcsolatos kérdések a vállalati profil kitöltése után jelennek meg.</p>
-            ) : null}
-          </div>
+              {evidence.items.some((item) => item.relevance === "LEGAL_REVIEW_REQUIRED") ? (
+                <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                  Egyes területek a tevékenység vagy méret miatt jogi pontosítást igényelnek, ezért azokat ügyvédünk ellenőrzi.
+                </p>
+              ) : null}
+              {evidence.items.length > 0 && evidence.items.every((item) => item.relevance === "INSUFFICIENT_FACTS" || item.relevance === "DOES_NOT_APPLY") ? (
+                <p className="text-sm text-stone-500">A dokumentumokkal kapcsolatos kérdések a vállalati profil kitöltése után jelennek meg.</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -490,10 +543,14 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
 function EvidenceQuestion({
   item,
   documents,
+  open,
+  onToggle,
   onAnswered,
 }: {
   item: PortalCompanyProfileEvidenceItem;
   documents: PortalCompanyProfileReusableDocument[];
+  open: boolean;
+  onToggle: () => void;
   onAnswered: () => void;
 }) {
   const [mode, setMode] = useState<"YES" | "NO" | "UNKNOWN" | null>(null);
@@ -523,42 +580,56 @@ function EvidenceQuestion({
   };
 
   return (
-    <div className="rounded-2xl border border-stone-200 p-4">
-      <p className="text-sm font-semibold text-stone-900">{item.questionHu}</p>
-      <p className="mt-1 text-xs text-stone-500">{item.stateHu}</p>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setMode("YES")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
-          Igen
-        </button>
-        <button type="button" onClick={() => void submit("NO")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
-          Nem
-        </button>
-        <button type="button" onClick={() => void submit("UNKNOWN")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">
-          Nem tudom
-        </button>
-      </div>
-      {mode === "YES" ? (
-        <div className="mt-3">
-          {documents.length ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <select className={inputClass} value={documentVersionId} onChange={(event) => setDocumentVersionId(event.target.value)} disabled={busy}>
-                <option value="">Válassz dokumentumot…</option>
-                {documents.map((doc) => (
-                  <option key={doc.documentVersionId} value={doc.documentVersionId}>
-                    {doc.label}
-                  </option>
-                ))}
-              </select>
-              <button type="button" onClick={() => void submit("YES")} disabled={busy || !documentVersionId} className="rounded-full bg-[#b95e4b] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50">
-                {busy ? "Mentés…" : "Mentés"}
-              </button>
+    <div className="rounded-2xl border border-stone-200 bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-start justify-between gap-3 p-4 text-left"
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-stone-900">{item.questionHu}</span>
+          <span className="mt-1 block text-xs text-stone-500">{item.stateHu}</span>
+        </span>
+        <span className="shrink-0 text-xs font-semibold text-stone-500">{open ? "Bezárás" : "Válaszadás"}</span>
+      </button>
+      {open ? (
+        <div className="border-t border-stone-100 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => setMode("YES")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
+              Igen
+            </button>
+            <button type="button" onClick={() => void submit("NO")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50 disabled:opacity-50">
+              Nem
+            </button>
+            <button type="button" onClick={() => void submit("UNKNOWN")} disabled={busy} className="rounded-full border border-stone-300 px-4 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">
+              Nem tudom
+            </button>
+          </div>
+          {mode === "YES" ? (
+            <div className="mt-3">
+              {documents.length ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <select className={inputClass} value={documentVersionId} onChange={(event) => setDocumentVersionId(event.target.value)} disabled={busy}>
+                    <option value="">Válassz dokumentumot…</option>
+                    {documents.map((doc) => (
+                      <option key={doc.documentVersionId} value={doc.documentVersionId}>
+                        {doc.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" onClick={() => void submit("YES")} disabled={busy || !documentVersionId} className="rounded-full bg-[#b95e4b] px-4 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50">
+                    {busy ? "Mentés…" : "Mentés"}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-stone-500">Nincs elérhető dokumentum a kiválasztáshoz.</p>
+              )}
             </div>
-          ) : (
-            <p className="text-xs text-stone-500">Nincs elérhető dokumentum a kiválasztáshoz.</p>
-          )}
+          ) : null}
+          {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
         </div>
       ) : null}
-      {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
     </div>
   );
 }

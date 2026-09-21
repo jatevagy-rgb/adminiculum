@@ -10,7 +10,7 @@ const root = process.cwd();
 const source = () => readFileSync(path.join(root, "src/components/clients/compliance/ComplianceDocumentsSection.tsx"), "utf8");
 
 describe("internal Compliance Documents management section", () => {
-  it("renders the link form with both audiences, a requirement picker and document search", () => {
+  it("renders the upload form, the linked-documents area and the secondary manual section", () => {
     const markup = renderToStaticMarkup(
       createElement(ComplianceDocumentsSection, {
         clientId: "client-1",
@@ -18,11 +18,18 @@ describe("internal Compliance Documents management section", () => {
       }),
     );
     assert.match(markup, /Megfelelőségi terület/);
-    assert.match(markup, /Meglévő dokumentum keresése/);
-    assert.match(markup, /Ügyfélnek szánt szabályzat/);
-    assert.match(markup, /Belső megfelelőségi elemzés/);
+    assert.match(markup, /Feltöltés ügyfélnek/);
+    assert.match(markup, /Feltöltés jogi mátrixszal/);
+    assert.match(markup, /Összekapcsolt dokumentumok/);
     assert.match(markup, /Általános adatvédelem/);
     assert.match(markup, /Betöltés/);
+    // The secondary manual section is collapsed by default; its labels and both
+    // audiences remain available in the source.
+    assert.match(markup, /Meglévő dokumentum kapcsolása/);
+    const src = source();
+    assert.match(src, /Meglévő dokumentum keresése/);
+    assert.match(src, /Ügyfélnek szánt szabályzat/);
+    assert.match(src, /Belső megfelelőségi elemzés/);
   });
 
   it("reuses the canonical document search and compliance document API only", () => {
@@ -31,7 +38,10 @@ describe("internal Compliance Documents management section", () => {
     assert.match(src, /complianceDocumentApi\.list/);
     assert.match(src, /complianceDocumentApi\.link/);
     assert.match(src, /complianceDocumentApi\.unlink/);
-    assert.doesNotMatch(src, /uploadCaseDocument|upload/);
+    // Only the canonical compliance upload orchestration is called; there is no
+    // raw case-document upload helper and no direct DocumentVersion access.
+    assert.match(src, /complianceDocumentApi\.upload/);
+    assert.doesNotMatch(src, /uploadCaseDocument/);
     assert.doesNotMatch(src, /DocumentVersion|documentVersion/);
   });
 

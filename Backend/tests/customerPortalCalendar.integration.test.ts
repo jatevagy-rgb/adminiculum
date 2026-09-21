@@ -38,6 +38,24 @@ d('customer portal calendar integration (postgres)', () => {
   let caseB = '';
   let pubA = '';
   let pubB = '';
+  let orgIdentityA = '';
+  let orgWorkspaceA = '';
+  let clientC = '';
+  let orgIdentityC = '';
+  let orgWorkspaceC = '';
+  let caseC = '';
+  let complianceClientControlId = '';
+
+  const createdRequirementIds: string[] = [];
+  const createdVersionIds: string[] = [];
+  const createdRuleIds: string[] = [];
+  const createdDefinitionIds: string[] = [];
+  const createdControlMapIds: string[] = [];
+  const createdDomainCodes: string[] = [];
+
+  function sha256(value: string): string {
+    return crypto.createHash('sha256').update(value).digest('hex');
+  }
 
   async function createPortalUser(label: string, clientId: string) {
     const identityId = crypto.randomUUID();
@@ -49,6 +67,63 @@ d('customer portal calendar integration (postgres)', () => {
     await db.clientPortalWorkspace.create({ data: { id: workspaceId, clientId, name: `WS ${label}`, mode: 'INDIVIDUAL', publicReference: `ws-${workspaceId}`, createdById: admin } });
     await db.clientPortalWorkspaceMembership.create({ data: { clientPortalIdentityId: identityId, workspaceId, status: 'ACTIVE', approvedAt: new Date(), approvedById: admin } });
     return { identityId, workspaceId };
+  }
+
+  async function createOrganizationPortalUser(label: string, clientId: string) {
+    const created = await createPortalUser(label, clientId);
+    await db.clientPortalWorkspace.update({ where: { id: created.workspaceId }, data: { mode: 'ORGANIZATION' } });
+    return created;
+  }
+
+  /**
+   * Seeds the minimum canonical compliance chain plus one client-scoped
+   * ClientControl carrying a next review date. Every version/rule/control map is
+   * created suite-unique, so shared seeded rows are reused but never mutated.
+   */
+  async function seedComplianceControl(clientId: string, nextReviewAt: Date): Promise<string> {
+    const domainCode = `calendar-safe-${tag}`;
+    await db.complianceDomain.create({ data: { code: domainCode, label: 'Calendar Safe' } }).catch(() => {});
+    createdDomainCodes.push(domainCode);
+
+    let requirement = await db.requirement.findFirst({ where: { key: 'GDPR_DATA_PROCESSING' } });
+    if (!requirement) {
+      requirement = await db.requirement.create({ data: { id: crypto.randomUUID(), key: 'GDPR_DATA_PROCESSING', jurisdictionCode: 'HU', domainCode } });
+      createdRequirementIds.push(requirement.id);
+    }
+
+    const versionId = crypto.randomUUID();
+    createdVersionIds.push(versionId);
+    await db.requirementVersion.create({
+      data: { id: versionId, requirementId: requirement.id, versionKey: `CAL_${tag}`, title: 'Calendar safe requirement', normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01T00:00:00.000Z'), sourceSupportState: 'SUFFICIENT', status: 'APPROVED' },
+    });
+
+    const ruleId = crypto.randomUUID();
+    createdRuleIds.push(ruleId);
+    await db.applicabilityRuleVersion.create({
+      data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: `CAL_R_${tag}`, schemaVersion: 'rule-ast/v1', astJson: { node: 'test' }, canonicalDigest: sha256(`calendar-rule-${tag}`), status: 'APPROVED' },
+    });
+
+    let definition = await db.controlDefinition.findFirst({ where: { key: 'GDPR_DATA_PROCESSING_CONTROL' } });
+    if (!definition) {
+      definition = await db.controlDefinition.create({ data: { id: crypto.randomUUID(), key: 'GDPR_DATA_PROCESSING_CONTROL', title: 'Internal calendar control title', type: 'LEGAL' } });
+      createdDefinitionIds.push(definition.id);
+    }
+
+    const mapId = crypto.randomUUID();
+    createdControlMapIds.push(mapId);
+    await db.requirementControlMap.create({ data: { id: mapId, requirementVersionId: versionId, controlDefinitionId: definition.id } });
+
+    await db.requirementApplicability.create({
+      data: {
+        id: crypto.randomUUID(), clientId, requirementVersionId: versionId, ruleVersionId: ruleId,
+        ruleDigest: sha256(`calendar-app-${clientId}`), outcome: 'APPLIES', scopeType: 'COMPANY',
+        evaluationAt: new Date(), sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE',
+        schemaVersion: 'phase6-requirement-applicability/v1', snapshotJson: {}, snapshotDigest: sha256(`calendar-snap-${clientId}`),
+      },
+    });
+
+    const control = await db.clientControl.create({ data: { clientId, controlDefinitionId: definition.id, nextReviewAt } });
+    return control.id;
   }
 
   async function makeCase(clientId: string, caseKey: string) {
@@ -127,11 +202,34 @@ d('customer portal calendar integration (postgres)', () => {
     // Unpublished contract date + ACHIEVED milestone (INDIVIDUAL workspace: must not surface).
     await db.contractRecord.create({ data: { clientId: clientA, title: 'A belső szerződés', contractType: 'FRAMEWORK', status: 'ACTIVE', nextCriticalDate: new Date('2026-09-29T00:00:00.000Z') } });
     await db.companyMilestone.create({ data: { clientId: clientA, title: 'A mérföldkő', type: 'CORPORATE', status: 'ACHIEVED', milestoneDate: new Date('2026-09-30T00:00:00.000Z'), createdByUserId: admin } });
+
+    // ORGANIZATION workspace for client A: the customer-safe Grow target must appear,
+    // while the internal task/case/intake dates of the SAME client stay absent.
+    const orgA = await createOrganizationPortalUser('a-org', clientA);
+    orgIdentityA = orgA.identityId;
+    orgWorkspaceA = orgA.workspaceId;
+    await db.developmentInitiative.create({ data: { clientId: clientA, title: 'A fejlesztési kezdeményezés', status: 'ACTIVE', targetAt: new Date('2026-09-21T00:00:00.000Z') } });
+    await db.developmentInitiative.create({ data: { clientId: clientB, title: 'B fejlesztési kezdeményezés', status: 'ACTIVE', targetAt: new Date('2026-09-23T00:00:00.000Z') } });
+
+    // A dedicated ORGANIZATION client carries the customer-safe compliance control,
+    // so client A's organization calendar stays free of compliance reviews.
+    clientC = (await db.client.create({ data: { name: `${tag} C` } })).id;
+    const orgC = await createOrganizationPortalUser('c-org', clientC);
+    orgIdentityC = orgC.identityId;
+    orgWorkspaceC = orgC.workspaceId;
+    complianceClientControlId = await seedComplianceControl(clientC, new Date('2026-09-24T00:00:00.000Z'));
+    // An INDIVIDUAL workspace of the SAME client only resolves through the
+    // canonical grant path: resolvePortalContext denies a grant-less INDIVIDUAL
+    // workspace, so the INDIVIDUAL exclusion must be exercised on an authorized
+    // workspace instead of accidentally asserting the 403 denial.
+    caseC = await makeCase(clientC, 'C');
   });
 
   afterAll(async () => {
     if (!databaseUrl) return;
-    const caseIds = [caseA, caseB];
+    const caseIds = [caseA, caseB, caseC];
+    const clientIds = [clientA, clientB, clientC];
+    await db.developmentInitiative.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.contractRecord.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.companyMilestone.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.task.deleteMany({ where: { caseId: { in: caseIds } } });
@@ -141,11 +239,23 @@ d('customer portal calendar integration (postgres)', () => {
     await db.clientMatterPublicationRevision.deleteMany({ where: { publicationId: { in: [pubA, pubB] } } });
     await db.clientMatterPublication.deleteMany({ where: { caseId: { in: caseIds } } });
     await db.clientPortalGrant.deleteMany({ where: { caseId: { in: caseIds } } });
-    await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: { in: [workspaceA, workspaceB] } } });
-    await db.clientPortalWorkspace.deleteMany({ where: { id: { in: [workspaceA, workspaceB] } } });
-    await db.clientPortalIdentity.deleteMany({ where: { id: { in: [identityA, identityB] } } });
+    // Compliance fixture: client-scoped rows first, then only the global rows this
+    // suite created (shared seeded rows are left untouched).
+    await db.clientControl.deleteMany({ where: { clientId: { in: clientIds } } });
+    await db.requirementApplicability.deleteMany({ where: { clientId: { in: clientIds } } });
+    if (createdControlMapIds.length > 0) await db.requirementControlMap.deleteMany({ where: { id: { in: createdControlMapIds } } });
+    if (createdDefinitionIds.length > 0) await db.controlDefinition.deleteMany({ where: { id: { in: createdDefinitionIds } } });
+    if (createdRuleIds.length > 0) await db.applicabilityRuleVersion.deleteMany({ where: { id: { in: createdRuleIds } } });
+    if (createdVersionIds.length > 0) await db.requirementVersion.deleteMany({ where: { id: { in: createdVersionIds } } });
+    if (createdRequirementIds.length > 0) await db.requirement.deleteMany({ where: { id: { in: createdRequirementIds } } });
+    if (createdDomainCodes.length > 0) await db.complianceDomain.deleteMany({ where: { code: { in: createdDomainCodes } } });
+    const workspaceIds = [workspaceA, workspaceB, orgWorkspaceA, orgWorkspaceC];
+    const identityIds = [identityA, identityB, orgIdentityA, orgIdentityC];
+    await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: { in: workspaceIds } } });
+    await db.clientPortalWorkspace.deleteMany({ where: { id: { in: workspaceIds } } });
+    await db.clientPortalIdentity.deleteMany({ where: { id: { in: identityIds } } });
     await db.case.deleteMany({ where: { id: { in: caseIds } } });
-    await db.client.deleteMany({ where: { id: { in: [clientA, clientB] } } });
+    await db.client.deleteMany({ where: { id: { in: clientIds } } });
     await db.user.deleteMany({ where: { id: admin } });
     await db.$disconnect();
   });
@@ -196,12 +306,91 @@ d('customer portal calendar integration (postgres)', () => {
   });
 
   it('never invents dates for records without a customer-safe date', async () => {
-    const result = await getCustomerCalendar(identityA, workspaceA, { from: '2020-01-01', to: '2030-12-31' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+    const result = await getCustomerCalendar(identityA, workspaceA, { from: '2023-01-01', to: '2026-12-31' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
     for (const item of result.items) {
       expect(typeof item.day).toBe('string');
       expect(item.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(Number.isNaN(new Date(item.date).getTime())).toBe(false);
     }
     expect(result.counts.total).toBe(result.items.length);
+  });
+
+  it('projects the customer-safe Grow target in an ORGANIZATION workspace and still excludes internal dates', async () => {
+    const result = await getCustomerCalendar(orgIdentityA, orgWorkspaceA, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+    const grow = result.items.filter((item) => item.category === 'GROW_TARGET');
+    expect(grow.map((item) => item.day)).toEqual(['2026-09-21']);
+    expect(grow[0].status).toBe('INFO');
+    expect(grow[0].href).toBe('/portal/fejlesztes');
+    // Client A has no client control, so its organization calendar stays free of reviews.
+    expect(result.items.some((item) => item.category === 'COMPLIANCE_REVIEW')).toBe(false);
+    // Client B's initiative never leaks into client A's organization calendar.
+    expect(JSON.stringify(result)).not.toContain('B fejlesztési kezdeményezés');
+    // Internal Case.deadline / Task.dueDate / CaseIntakeDeadline stay absent.
+    const days = new Set(result.items.map((item) => item.day));
+    for (const internalDay of ['2026-09-22', '2026-09-23', '2026-09-24']) {
+      expect(days.has(internalDay)).toBe(false);
+    }
+  });
+
+  it('never surfaces Grow or compliance dates in an INDIVIDUAL workspace', async () => {
+    const result = await getCustomerCalendar(identityA, workspaceA, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+    expect(result.items.some((item) => item.category === 'GROW_TARGET' || item.category === 'COMPLIANCE_REVIEW')).toBe(false);
+  });
+
+  it('projects the customer-safe compliance review in an ORGANIZATION workspace without leaking internal identity', async () => {
+    const result = await getCustomerCalendar(orgIdentityC, orgWorkspaceC, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+    const reviews = result.items.filter((item) => item.category === 'COMPLIANCE_REVIEW');
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({
+      day: '2026-09-24',
+      status: 'INFO',
+      href: '/portal/megfeleles',
+      categoryLabel: 'Következő ellenőrzés',
+      title: 'Adatvédelmi intézkedés',
+    });
+    // Identity is the opaque safe-registry reference: not the internal ClientControl
+    // id, not the raw ControlDefinition key and not the display text.
+    expect(reviews[0].id).toBe('COMPLIANCE_REVIEW:control-data-processing');
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(complianceClientControlId);
+    expect(serialized).not.toContain('GDPR_DATA_PROCESSING_CONTROL');
+    expect(serialized).not.toContain('Adatkezelési nyilvántartás és jogalap-mátrix');
+    // A review is informational; it never counts as an open customer obligation.
+    expect(result.counts.open).toBe(0);
+  });
+
+  it('never surfaces a compliance review in an INDIVIDUAL workspace for the same client', async () => {
+    const individual = await createPortalUser('c-individual', clientC);
+    try {
+      // Authorize the workspace through the canonical grant path so the calendar
+      // resolves; the assertion below is about content, not about access denial.
+      await grant(individual.identityId, individual.workspaceId, clientC, caseC);
+      const result = await getCustomerCalendar(individual.identityId, individual.workspaceId, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
+      expect(result.items.some((item) => item.category === 'COMPLIANCE_REVIEW')).toBe(false);
+      expect(result.items.some((item) => item.category === 'GROW_TARGET')).toBe(false);
+    } finally {
+      // The grant references the workspace, so it must be removed first.
+      await db.clientPortalGrant.deleteMany({ where: { workspaceId: individual.workspaceId } });
+      await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: individual.workspaceId } });
+      await db.clientPortalWorkspace.deleteMany({ where: { id: individual.workspaceId } });
+      await db.clientPortalIdentity.deleteMany({ where: { id: individual.identityId } });
+    }
+  });
+
+  it('still denies a grant-less INDIVIDUAL workspace before any projection is attempted', async () => {
+    const ungranted = await createPortalUser('c-ungranted', clientC);
+    try {
+      // The canonical authorization gate is unchanged: an INDIVIDUAL workspace
+      // without an active grant must be denied rather than silently projecting an
+      // empty calendar.
+      await expect(
+        getCustomerCalendar(ungranted.identityId, ungranted.workspaceId, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') }),
+      ).rejects.toThrow(/No active portal access/);
+    } finally {
+      await db.clientPortalGrant.deleteMany({ where: { workspaceId: ungranted.workspaceId } });
+      await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: ungranted.workspaceId } });
+      await db.clientPortalWorkspace.deleteMany({ where: { id: ungranted.workspaceId } });
+      await db.clientPortalIdentity.deleteMany({ where: { id: ungranted.identityId } });
+    }
   });
 });

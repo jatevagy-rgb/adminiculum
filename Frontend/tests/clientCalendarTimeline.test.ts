@@ -30,10 +30,12 @@ test("ClientWorkspaceTabs exposes a client-scoped Naptár destination", () => {
   assert.doesNotMatch(src, /\/deadlines/);
 });
 
-test("client overview Naptár tile links to the real client calendar", () => {
+test("client calendar is reached through the canonical tabs, not a duplicate dossier tile", () => {
   const src = overview();
-  assert.match(src, /\/clients\/\$\{encodeURIComponent\(clientId\)\}\/calendar/);
-  assert.match(src, />Naptár →</);
+  assert.match(tabs(), /\["calendar", "Naptár", "\/calendar"\]/);
+  // The dossier no longer renders a competing Naptár tile in a second nav grid.
+  assert.doesNotMatch(src, />Naptár →</);
+  assert.doesNotMatch(src, /client-overview-heading/);
   assert.doesNotMatch(src, /Ügyfélnaptár kialakítás alatt/);
 });
 

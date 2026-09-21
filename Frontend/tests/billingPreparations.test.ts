@@ -2,14 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  formatBudapestDateTime,
   formatMinutes,
   formatNetAmount,
   formatRate,
   groupByOrganizationGroup,
+  groupPreparationsByPeriod,
   rateScopeLabel,
   reviewStatusLabel,
 } from '../src/lib/billingPreparationPresentation';
-import type { BillingItem } from '../src/lib/billingPreparationsApi';
+import type { BillingItem, BillingPreparationSummary } from '../src/lib/billingPreparationsApi';
 
 test('presentation formats decimal strings without any money math', () => {
   assert.equal(formatNetAmount('40000.00'), '40 000 Ft');
@@ -79,4 +81,67 @@ test('api client sends only billing fields, never source mutations', () => {
   assert.match(api, /method: 'PATCH'/);
   assert.match(api, /rateOverride\?: string \| null/);
   assert.doesNotMatch(api, /sourceMinutes|sourceBillable.*=|method: '(PUT|DELETE)'/);
+});
+
+function summary(overrides: Partial<BillingPreparationSummary>): BillingPreparationSummary {
+  return {
+    id: 'prep',
+    clientId: 'client',
+    clientName: 'Teszt Ügyfél Kft.',
+    periodStart: '2026-08-01',
+    periodEnd: '2026-08-31',
+    currency: 'HUF',
+    calculationPolicyVersion: 'PER_ENTRY_MINUTES_X_RATE_HALF_UP_2DP_V1',
+    status: 'CLOSED',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    createdById: 'user-1',
+    closedAt: '2026-09-02T08:00:00.000Z',
+    closedById: 'user-1',
+    itemCount: 2,
+    includedMinutes: 120,
+    includedNetAmount: '50000.00',
+    ...overrides,
+  };
+}
+
+test('audit timestamps render in Hungarian Budapest form without locale drift', () => {
+  assert.equal(formatBudapestDateTime('2026-09-20T12:35:00.000Z'), '2026. 09. 20. 14:35'); // CEST
+  assert.equal(formatBudapestDateTime('2026-01-15T00:05:00.000Z'), '2026. 01. 15. 01:05'); // CET
+  assert.equal(formatBudapestDateTime(null), '—');
+  assert.equal(formatBudapestDateTime('not-a-date'), '—');
+});
+
+test('same-period preparations are grouped: one open current, every closed snapshot kept as history', () => {
+  const currentOpen = summary({ id: 'open-1', status: 'OPEN', closedAt: null, closedById: null, createdAt: '2026-09-10T08:00:00.000Z' });
+  const olderClosed = summary({ id: 'closed-old', closedAt: '2026-09-05T08:00:00.000Z' });
+  const newerClosed = summary({ id: 'closed-new', closedAt: '2026-09-08T08:00:00.000Z' });
+  const otherPeriod = summary({ id: 'other-period', periodStart: '2026-07-01', periodEnd: '2026-07-31' });
+
+  const groups = groupPreparationsByPeriod([olderClosed, currentOpen, newerClosed, otherPeriod]);
+  assert.equal(groups.length, 2);
+  assert.deepEqual([groups[0].periodStart, groups[0].periodEnd], ['2026-08-01', '2026-08-31']);
+  assert.equal(groups[0].current?.id, 'open-1');
+  assert.deepEqual(groups[0].history.map((prep) => prep.id), ['closed-new', 'closed-old']);
+  assert.equal(groups[1].current, null);
+  assert.deepEqual(groups[1].history.map((prep) => prep.id), ['other-period']);
+
+  // No record is collapsed away: every input id stays reachable exactly once.
+  const seen: string[] = [];
+  for (const group of groups) {
+    if (group.current) seen.push(group.current.id);
+    for (const prep of group.history) seen.push(prep.id);
+  }
+  assert.deepEqual(seen.slice().sort(), ['closed-new', 'closed-old', 'open-1', 'other-period']);
+});
+
+test('history surface groups by period, labels closed snapshots and links every preparation id', () => {
+  const page = readFileSync('src/app/clients/[clientId]/szamlazas/SzamlazasPageContent.tsx', 'utf8');
+  assert.match(page, /groupPreparationsByPeriod\(preparations\)/);
+  assert.match(page, /Korábbi lezárt változatok/);
+  assert.match(page, /Jelenlegi nyitott előkészítés/);
+  assert.match(page, /Nincs nyitott előkészítés/);
+  // each rendered row links to its own preparation id
+  assert.match(page, /href=\{`\/clients\/\$\{encodeURIComponent\(clientId\)\}\/szamlazas\/\$\{encodeURIComponent\(prep\.id\)\}`\}/);
+  assert.match(page, /formatBudapestDateTime\(prep\.createdAt\)/);
+  assert.match(page, /formatBudapestDateTime\(prep\.closedAt\)/);
 });

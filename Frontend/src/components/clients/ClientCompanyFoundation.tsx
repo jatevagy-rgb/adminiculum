@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   clientCompanyApi,
-  companyFactTypeLabel,
+  companyFactLabel,
+  factSourceKindLabel,
   factVerificationLabel,
   assessmentTypeLabel,
   initiativeStatusLabel,
@@ -28,6 +29,42 @@ function Section({ title, children, empty }: { title: string; children: React.Re
 }
 
 const labelCls = "rounded bg-white border border-[var(--adm-border)] px-2 py-1 text-xs text-[var(--adm-text-muted)]";
+
+/**
+ * A ClientFact is current only when it is explicitly NOT superseded. Array order
+ * and validFrom are never used to infer current state, and two current facts of
+ * the same concept are never silently collapsed.
+ */
+function isSupersededFact(fact: CompanyFact): boolean {
+  return Boolean(fact.supersededAt);
+}
+
+function factIdentity(fact: CompanyFact): string {
+  return fact.factDefinition?.key || fact.type;
+}
+
+function FactCard({ fact, historical, reviewRequired }: { fact: CompanyFact; historical?: boolean; reviewRequired?: boolean }) {
+  return (
+    <div className="rounded bg-white border border-[var(--adm-border)] p-2 text-sm" data-testid={historical ? "fact-history-entry" : "fact-current-entry"}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <b className="text-[var(--adm-text)]">{companyFactLabel(fact)}</b>
+        <span className={labelCls}>{factVerificationLabel(fact.verificationStatus)}</span>
+      </div>
+      <p className="mt-1 break-words text-[var(--adm-text)]">{fact.value}</p>
+      <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+        Érvényesség: {new Date(fact.validFrom).toLocaleDateString("hu-HU")}
+        {fact.validTo ? ` – ${new Date(fact.validTo).toLocaleDateString("hu-HU")}` : ""}
+        {historical ? " · Korábbi rögzített érték" : ""}
+      </p>
+      <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">Forrás: {factSourceKindLabel(fact.sourceKind)}</p>
+      {reviewRequired ? (
+        <p className="mt-1 text-xs font-semibold text-[var(--adm-amber-950)]" data-testid="fact-review-required">
+          Ugyanahhoz a fogalomhoz több érvényes érték tartozik — felülvizsgálat szükséges. A rendszer nem jelöl ki automatikus elsőbbséget.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
   const [profile, setProfile] = useState<{ summary: string | null; status: string | null } | null>(null);
@@ -63,6 +100,15 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  // History is preserved, never deleted; only its presentation is separated.
+  const currentFacts = facts.filter((fact) => !isSupersededFact(fact));
+  const historicalFacts = facts.filter(isSupersededFact);
+  const currentIdentityCounts = new Map<string, number>();
+  for (const fact of currentFacts) {
+    const identity = factIdentity(fact);
+    currentIdentityCounts.set(identity, (currentIdentityCounts.get(identity) ?? 0) + 1);
+  }
+
   return (
     <div className="space-y-4" data-testid="client-company-foundation">
       <div className="rounded border border-[#DCCCA6] bg-[var(--adm-sand-100)] p-3">
@@ -77,23 +123,27 @@ export function ClientCompanyFoundation({ clientId }: { clientId: string }) {
         <>
           <Section title="Profil" empty={!profile && !facts.length}>
             {profile?.summary ? <p className="text-sm text-[var(--adm-text)]">{profile.summary}</p> : profile ? null : null}
-            {facts.length ? (
-              <div className="mt-3 grid gap-2">
-                {facts.map((fact) => (
-                  <div key={fact.id} className="rounded bg-white border border-[var(--adm-border)] p-2 text-sm">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <b className="text-[var(--adm-text)]">{companyFactTypeLabel(fact.type)}</b>
-                      <span className={labelCls}>{factVerificationLabel(fact.verificationStatus)}</span>
-                    </div>
-                    <p className="mt-1 break-words text-[var(--adm-text)]">{fact.value}</p>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-                      Érvényesség: {new Date(fact.validFrom).toLocaleDateString("hu-HU")}
-                      {fact.validTo ? ` – ${new Date(fact.validTo).toLocaleDateString("hu-HU")}` : ""}
-                      {fact.sourceReference ? ` · Forrás: ${fact.sourceReference}` : ""}
-                    </p>
-                  </div>
+            {currentFacts.length ? (
+              <div className="mt-3 grid gap-2" data-testid="company-fact-current">
+                {currentFacts.map((fact) => (
+                  <FactCard key={fact.id} fact={fact} reviewRequired={(currentIdentityCounts.get(factIdentity(fact)) ?? 0) > 1} />
                 ))}
               </div>
+            ) : null}
+            {historicalFacts.length ? (
+              <details className="mt-3" data-testid="company-fact-history">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
+                  Korábbi tények ({historicalFacts.length})
+                </summary>
+                <p className="mt-2 text-xs text-[var(--adm-text-muted)]">
+                  Korábban rögzített értékek. Nem aktuális, versengő tények, és nem jelölnek ki automatikus elsőbbséget.
+                </p>
+                <div className="mt-2 grid gap-2">
+                  {historicalFacts.map((fact) => (
+                    <FactCard key={fact.id} fact={fact} historical />
+                  ))}
+                </div>
+              </details>
             ) : null}
           </Section>
 

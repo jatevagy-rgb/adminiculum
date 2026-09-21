@@ -239,4 +239,159 @@ d('Company foundation (Phase 1) (PostgreSQL)', () => {
     await expect(addAssessmentItem(admin, assessment.id, { key: 'k2', label: 'Q2' })).rejects.toMatchObject({ code: 'ASSESSMENT_LOCKED' });
     await expect(updateAssessmentItem(admin, item.id, { label: 'edited' })).rejects.toMatchObject({ code: 'ASSESSMENT_LOCKED' });
   });
+
+  /* ------------------------------------------------------------------ */
+  /* C4E — additive read-only fact presentation metadata                 */
+  /* ------------------------------------------------------------------ */
+
+  it('CURRENT_50_HISTORY_47: exposes current vs superseded metadata without deletion', async () => {
+    const definition = await db.factDefinition.upsert({
+      where: { key: 'employee_count' },
+      update: {},
+      create: {
+        key: 'employee_count',
+        domainCode: 'CLIENT_COMPANY_PROFILE',
+        valueType: 'NUMBER',
+        allowedEnumValues: null,
+        allowedScopeTypes: ['COMPANY'],
+        determinationMethod: 'USER_PROVIDED',
+        overlapPolicy: 'DISALLOW',
+        temporalPolicy: 'OBSERVATION',
+        questionKey: 'employee_count',
+        status: 'ACTIVE',
+      } as never,
+    });
+    const currentId = crypto.randomUUID();
+    const historyId = crypto.randomUUID();
+    await db.clientFact.create({
+      data: {
+        id: currentId,
+        clientId: clientA,
+        type: 'employee_count',
+        value: '50',
+        numberValue: 50,
+        factDefinitionId: definition.id,
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+        validFrom: new Date('2026-05-01T00:00:00Z'),
+        observedAt: new Date('2026-05-01T00:00:00Z'),
+        sourceReference: `CLIENT_PORTAL_IDENTITY:${crypto.randomUUID()}`,
+      } as never,
+    });
+    await db.clientFact.create({
+      data: {
+        id: historyId,
+        clientId: clientA,
+        type: 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT',
+        value: '47',
+        numberValue: 47,
+        factDefinitionId: definition.id,
+        scopeType: 'COMPANY',
+        factSubjectId: null,
+        validFrom: new Date('2026-01-01T00:00:00Z'),
+        observedAt: new Date('2026-01-01T00:00:00Z'),
+        supersededAt: new Date('2026-05-01T00:00:00Z'),
+      } as never,
+    });
+
+    const items = (await listFacts(admin, clientA)).items as any[];
+    const employeeFacts = items.filter((fact) => fact.factDefinition?.key === 'employee_count');
+    const current = employeeFacts.find((fact) => fact.id === currentId);
+    const history = employeeFacts.find((fact) => fact.id === historyId);
+
+    expect(current).toBeDefined();
+    expect(history).toBeDefined();
+    expect(current.supersededAt).toBeNull();
+    expect(history.supersededAt).toBe('2026-05-01T00:00:00.000Z');
+    expect(current.value).toBe('50');
+    expect(history.value).toBe('47');
+    // Both rows survive; nothing was deleted or merged.
+    expect(await db.clientFact.count({ where: { id: { in: [currentId, historyId] } } })).toBe(2);
+    // The canonical provenance category is projected; the raw handle is not the label.
+    expect(current.sourceKind).toBe('CLIENT_PORTAL_ANSWER');
+  });
+
+  it('STALE_TYPE_CANONICAL_LABEL: a stale legacy type resolves to the canonical definition label', async () => {
+    const items = (await listFacts(admin, clientA)).items as any[];
+    const stale = items.find((fact) => fact.type === 'DEMO_KFT_COMPANY_EMPLOYEE_COUNT');
+    expect(stale).toBeDefined();
+    // Semantic identity comes from the factDefinition, never the stale type.
+    expect(stale.factDefinition.key).toBe('employee_count');
+    expect(stale.factDefinition.labelHu).toBe('Munkavállalói létszám');
+    expect(stale.factDefinition.valueType).toBe('NUMBER');
+  });
+
+  it('NO_FACT_DEFINITION: a legacy untyped fact stays displayable and fail-safe', async () => {
+    const legacy = await createFact(admin, clientA, { type: 'MAIN_ACTIVITY', value: 'Legal tech', validFrom: '2026-01-01T00:00:00Z' });
+    const items = (await listFacts(admin, clientA)).items as any[];
+    const row = items.find((fact) => fact.id === legacy.id);
+    expect(row).toBeDefined();
+    expect(row.factDefinition).toBeNull();
+    expect(row.supersededAt).toBeNull();
+    expect(['CLIENT_PORTAL_ANSWER', 'DOCUMENT', 'MANUAL', 'UNKNOWN']).toContain(row.sourceKind);
+    expect(row.sourceKind).toBe('UNKNOWN');
+  });
+
+  it('TWO_CURRENT_SAME_DEFINITION: two unsuperseded facts of one definition are both preserved', async () => {
+    const definition = await db.factDefinition.create({
+      data: {
+        id: crypto.randomUUID(),
+        key: `c4e_dual_${suffix}`,
+        domainCode: 'CLIENT_COMPANY_PROFILE',
+        valueType: 'NUMBER',
+        allowedEnumValues: null,
+        allowedScopeTypes: ['COMPANY'],
+        determinationMethod: 'USER_PROVIDED',
+        overlapPolicy: 'DISALLOW',
+        temporalPolicy: 'OBSERVATION',
+        questionKey: null,
+        status: 'ACTIVE',
+      } as never,
+    });
+    const firstId = crypto.randomUUID();
+    const secondId = crypto.randomUUID();
+    for (const id of [firstId, secondId]) {
+      await db.clientFact.create({
+        data: {
+          id,
+          clientId: clientA,
+          type: definition.key,
+          value: id === firstId ? '11' : '12',
+          numberValue: id === firstId ? 11 : 12,
+          factDefinitionId: definition.id,
+          scopeType: 'COMPANY',
+          factSubjectId: null,
+          validFrom: new Date('2026-06-01T00:00:00Z'),
+        } as never,
+      });
+    }
+    const items = (await listFacts(admin, clientA)).items as any[];
+    const dual = items.filter((fact) => fact.factDefinition?.key === definition.key);
+    // No latest-wins collapse: both remain visible/reviewable.
+    expect(dual).toHaveLength(2);
+    expect(dual.every((fact) => fact.supersededAt === null)).toBe(true);
+  });
+
+  it('keeps client scope on the additive metadata and performs no write', async () => {
+    const countsBefore = {
+      facts: await db.clientFact.count({ where: { clientId: clientA } }),
+      states: await db.clientFactAnswerState.count({ where: { clientId: clientA } }),
+    };
+    const items = (await listFacts(admin, clientA)).items as any[];
+    expect(items.every((fact) => fact.clientId === clientA)).toBe(true);
+    // Cross-client authorisation is unchanged.
+    await expect(listFacts(lawyer, clientB)).rejects.toMatchObject({ code: 'CLIENT_ACCESS_FORBIDDEN' });
+    expect({
+      facts: await db.clientFact.count({ where: { clientId: clientA } }),
+      states: await db.clientFactAnswerState.count({ where: { clientId: clientA } }),
+    }).toEqual(countsBefore);
+  });
+
+  it('GROW_HISTORY_PRESERVED: the before -> after employee count narrative is unchanged', async () => {
+    const { getCompanyGrowthNarrative } = await import('../src/modules/compliance/companyGrowthNarrative');
+    const narrative = await getCompanyGrowthNarrative(admin, clientA, db);
+    expect(narrative.beforeEmployeeCount).toBe(47);
+    expect(narrative.currentEmployeeCount).toBe(50);
+    expect(narrative.changed).toBe(true);
+  });
 });

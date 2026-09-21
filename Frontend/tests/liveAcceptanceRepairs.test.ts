@@ -116,7 +116,7 @@ test('Portal: actionable and active content precede the organization profile', (
   const src = read('Frontend/src/components/client-portal/OrgHomeView.tsx');
   const actions = src.indexOf('title="Ami most Öntől kell"');
   const matters = src.indexOf('title="Ügyeink"');
-  const org = src.indexOf('<CompanyStatus company=');
+  const org = src.indexOf('data-testid="org-company-profile"');
   assert.ok(actions > -1 && matters > -1 && org > -1, 'portal markers missing');
   assert.ok(actions < org, 'actions must precede organization profile');
   assert.ok(matters < org, 'active matters must precede organization profile');

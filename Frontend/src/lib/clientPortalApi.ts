@@ -313,7 +313,9 @@ export type PortalCalendarCategory =
   | 'ACTION_REQUEST'
   | 'CUSTOMER_REQUEST'
   | 'CONTRACT_DATE'
-  | 'COMPANY_MILESTONE';
+  | 'COMPANY_MILESTONE'
+  | 'GROW_TARGET'
+  | 'COMPLIANCE_REVIEW';
 
 export type PortalCalendarStatus = 'OPEN' | 'DONE' | 'INFO';
 
@@ -1010,6 +1012,15 @@ export type PortalEvidenceRelevance =
   | "DOES_NOT_APPLY"
   | "INSUFFICIENT_FACTS";
 
+/**
+ * Machine-readable follow-up state of one applicable control, derived from the
+ * persisted ClientControl row and its evidence links. PENDING is "the customer
+ * still owes an answer"; ANSWERED covers a persisted YES (current evidence) and
+ * a persisted NO (explicitly not implemented); STALE is persisted evidence that
+ * is no longer current and needs review rather than a fresh answer.
+ */
+export type PortalCompanyProfileEvidenceState = "PENDING" | "ANSWERED" | "STALE";
+
 export type PortalCompanyProfileEvidenceItem = {
   controlKey: string;
   module: "DATA" | "WHISTLEBLOWING" | "CYBER";
@@ -1017,6 +1028,7 @@ export type PortalCompanyProfileEvidenceItem = {
   relevance: PortalEvidenceRelevance;
   implemented: boolean;
   evidenceLinked: boolean;
+  evidenceState: PortalCompanyProfileEvidenceState;
   stateHu: string;
 };
 

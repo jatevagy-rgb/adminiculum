@@ -51,13 +51,29 @@ describe('Organization internal UI (structural)', () => {
     assert.match(api(), /method: "PATCH"/);
   });
 
-  it('uses the coherent client workspace projection for facts and cases', () => {
+  it('uses the coherent client workspace projection for cases but leaves profile facts to Company OS', () => {
     const src = component();
     assert.match(src, /clientWorkspaceApi\.getOverview/);
-    assert.match(src, /Szervezeti adatok/);
     assert.match(src, /Ügyek/);
     assert.match(src, /\/clients\/\$\{encodeURIComponent\(clientId\)\}\/cases/);
+    // Generic company profile / compliance facts belong to the canonical Company OS
+    // module; Organization must not render them (domain-boundary leak repaired).
+    assert.doesNotMatch(src, /factGroups/);
+    assert.doesNotMatch(src, /overview\?\.profile/);
+    assert.doesNotMatch(src, /group\.facts/);
     assert.doesNotMatch(src, /grant|workspaceId|permission JSON/i);
+  });
+
+  it('renders only organization-domain sections on the default surface', () => {
+    const src = component();
+    for (const title of ['Szervezeti hierarchia', 'Személyek keresése', 'Felelősségi hiányosságok', 'Ügyek']) {
+      assert.match(src, new RegExp(`title="${title}"`));
+    }
+    for (const orgDomain of ['Személy', 'Szervezeti egység', 'Felelősséggel rendelkező', 'Portál-hozzáférés']) {
+      assert.match(src, new RegExp(orgDomain));
+    }
+    // No generic characteristic dump (Méret, Piaci jelenlét, Szabályozási jellemzők, ...).
+    assert.doesNotMatch(src, /Méret és forgalom|Piaci jelenlét|Szabályozási jellemzők|Digitális működés és adatok/);
   });
 
   it('keeps the route client-scoped and does not use portal access for workforce auth', () => {

@@ -19,6 +19,8 @@ const CATEGORY_DOT: Record<PortalCalendarCategory, string> = {
   CUSTOMER_REQUEST: "bg-[#6f5514]",
   CONTRACT_DATE: "bg-[#3f6552]",
   COMPANY_MILESTONE: "bg-[#7a5f18]",
+  GROW_TARGET: "bg-[#5b6ea8]",
+  COMPLIANCE_REVIEW: "bg-[#8a6f9e]",
 };
 
 const STATUS_LABEL: Record<PortalCalendarItem["status"], string> = {

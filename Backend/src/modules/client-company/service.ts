@@ -22,6 +22,8 @@ import {
 } from '../client-interaction/base';
 import { isCompanyAssessmentType, isCompanyFactType, isCompanyMilestoneType } from './registry';
 import { createTypedFactAndEvaluate } from '../compliance/typedFactMutationService';
+import { getCanonicalCompanyFact } from '../client-workspace/companyProfileFactCatalog';
+import { classifyFactSourceKind } from '../company-workspace/service';
 
 type Prisma = typeof defaultPrisma;
 
@@ -169,6 +171,7 @@ export async function upsertOperatingProfile(actor: InternalActor, clientId: str
 
 export function toFactDTO(row: any): any {
   const definitionType = row.factDefinition?.valueType ? String(row.factDefinition.valueType) : null;
+  const definitionKey = row.factDefinition?.key ? String(row.factDefinition.key) : null;
   const typedValue = definitionType ? {
     valueType: definitionType,
     value: definitionType === 'BOOLEAN' ? row.booleanValue
@@ -202,6 +205,22 @@ export function toFactDTO(row: any): any {
     verifiedAt: row.verifiedAt ? row.verifiedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    // ------------------------------------------------------------------
+    // Additive, read-only presentation metadata.
+    // The canonical provenance CATEGORY is projected, never the raw
+    // sourceReference handle (a portal identity key must not reach a surface).
+    // Every field is fail-safe: when a caller did not load the relation the
+    // value degrades to null/false and never throws.
+    // ------------------------------------------------------------------
+    supersededAt: row.supersededAt ? row.supersededAt.toISOString() : null,
+    factDefinition: row.factDefinition
+      ? {
+        key: definitionKey,
+        valueType: definitionType,
+        labelHu: definitionKey ? getCanonicalCompanyFact(definitionKey)?.labelHu ?? null : null,
+      }
+      : null,
+    sourceKind: classifyFactSourceKind(row.sourceReference ?? null, Boolean(row.sourceDocumentVersionId)),
   };
   return dto;
 }
@@ -211,7 +230,7 @@ export async function listFacts(actor: InternalActor, clientId: string, opts: { 
   const rows = await prisma.clientFact.findMany({
     where: { clientId, ...(opts.type ? { type: opts.type } : {}), ...(opts.status ? { verificationStatus: opts.status as any } : {}) },
     orderBy: [{ validFrom: 'desc' }, { createdAt: 'desc' }],
-    include: { factDefinition: { select: { valueType: true } } },
+    include: { factDefinition: { select: { key: true, valueType: true } } },
   });
   const dto = rows.map(toFactDTO);
   assertClientSafe(dto);

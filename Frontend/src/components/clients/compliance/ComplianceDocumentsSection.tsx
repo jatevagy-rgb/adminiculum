@@ -6,6 +6,7 @@ import {
   type ComplianceCaseOption,
   type ComplianceDocumentAudience,
   type ComplianceDocumentLink,
+  type ComplianceDocumentTopic,
   type ComplianceDocumentsReadModel,
 } from "@/lib/complianceDocumentApi";
 import { ApiError, searchDocuments, type DocumentSearchItem } from "@/lib/api";
@@ -55,47 +56,181 @@ const RECOVERABLE_CASE_SELECTION_CODES = new Set([
   "CASE_ACCESS_FORBIDDEN",
 ]);
 
+export type ComplianceDocumentRelation = {
+  /**
+   * Canonical per-relation link id (ComplianceDocument.id). It is the ONLY
+   * unlink target, so removing one relation never touches the others.
+   */
+  id: string;
+  requirementKey: string;
+  requirementTitle: string;
+};
+
+export type ComplianceDocumentGroup = {
+  /** Audience + physical document identity: one presentation card per pair. */
+  key: string;
+  audience: ComplianceDocumentAudience;
+  documentId: string;
+  title: string;
+  latestVersion: { version: number; createdAt: string } | null;
+  published: ComplianceDocumentLink["published"];
+  /** One entry per canonical relation; unlink stays per relation. */
+  relations: ComplianceDocumentRelation[];
+  /** Representative relation used for document-level version/state/matrix identity. */
+  link: ComplianceDocumentLink;
+};
+
+function hasNewerVersion(candidate: ComplianceDocumentLink, current: ComplianceDocumentLink): boolean {
+  const candidateVersion = candidate.latestVersion?.version ?? -1;
+  const currentVersion = current.latestVersion?.version ?? -1;
+  if (candidateVersion !== currentVersion) return candidateVersion > currentVersion;
+  return candidate.updatedAt > current.updatedAt;
+}
+
 /**
- * A linked internal document renders its legal matrix automatically: the anchor
- * provenance is persisted at ingestion and never depends on the panel being
- * open, so there is no activation button and no click-controlled monitoring.
+ * Document-centric read projection of the canonical many-to-many relations.
+ *
+ * The backend relation (one physical document -> N requirement topics, per
+ * audience) is preserved untouched: every relation keeps its own `id` so unlink
+ * remains per-relation. This projection only collapses the PRESENTATION, so a
+ * document renders once per audience/document context instead of once per
+ * requirement.
  */
-function LinkRow({ link, audience, onUnlink, busy, clientId, autoRefreshWhileEmpty = false }: { link: ComplianceDocumentLink; audience: ComplianceDocumentAudience; onUnlink: (id: string) => void; busy: boolean; clientId: string; autoRefreshWhileEmpty?: boolean }) {
+export function groupComplianceDocuments(
+  topics: ComplianceDocumentTopic[],
+  topicTitles: Map<string, string>,
+): ComplianceDocumentGroup[] {
+  const groups = new Map<string, ComplianceDocumentGroup>();
+  for (const topic of topics) {
+    const buckets: Array<[ComplianceDocumentAudience, ComplianceDocumentLink[]]> = [
+      ["INTERNAL_ANALYSIS", topic.internalAnalysis],
+      ["CLIENT_POLICY", topic.clientPolicy],
+    ];
+    for (const [audience, links] of buckets) {
+      for (const link of links) {
+        const key = `${audience}::${link.documentId}`;
+        const existing = groups.get(key);
+        if (existing) {
+          if (hasNewerVersion(link, existing.link)) {
+            existing.link = link;
+            existing.title = link.title;
+            existing.latestVersion = link.latestVersion;
+          }
+          if (!existing.published && link.published) existing.published = link.published;
+          existing.relations.push({
+            id: link.id,
+            requirementKey: topic.requirementKey,
+            requirementTitle: topicTitles.get(topic.requirementKey) || topic.requirementKey,
+          });
+          continue;
+        }
+        groups.set(key, {
+          key,
+          audience,
+          documentId: link.documentId,
+          title: link.title,
+          latestVersion: link.latestVersion,
+          published: link.published,
+          relations: [{
+            id: link.id,
+            requirementKey: topic.requirementKey,
+            requirementTitle: topicTitles.get(topic.requirementKey) || topic.requirementKey,
+          }],
+          link,
+        });
+      }
+    }
+  }
+  return [...groups.values()];
+}
+
+/**
+ * Document-centric list. A linked internal document renders its legal matrix
+ * automatically ONCE per document: the anchor provenance is persisted at
+ * ingestion and never depends on the panel being open, so there is no
+ * activation button and no click-controlled monitoring.
+ */
+export function ComplianceDocumentList({
+  groups,
+  clientId,
+  freshDocumentId,
+  removingId,
+  onUnlink,
+}: {
+  groups: ComplianceDocumentGroup[];
+  clientId: string;
+  freshDocumentId: string | null;
+  removingId: string | null;
+  onUnlink: (id: string) => void;
+}) {
   return (
-    <li className="rounded border border-[var(--adm-border)] bg-white p-3">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-[var(--adm-text)]">{link.title}</p>
-          <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">
-            Legfrissebb verzió: {link.latestVersion ? `v${link.latestVersion.version} · ${formatDate(link.latestVersion.createdAt)}` : "—"}
-          </p>
-          {audience === "CLIENT_POLICY" ? (
-            <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">
-              {link.published
-                ? `Ügyfélnek közzétéve: ${formatDate(link.published.publishedAt)}`
-                : "Ügyfélnek még nincs közzétéve"}
-            </p>
-          ) : (
-            <p className="mt-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Csak az iroda számára</p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onUnlink(link.id)}
-            className="rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-xs text-[var(--adm-text-muted)] hover:text-red-700 disabled:opacity-50"
+    <div className="mt-3 space-y-4">
+      {groups.map((group) => {
+        // Version, publication state and matrix identity belong to the physical
+        // document, so they are rendered once per audience/document context.
+        const link = group.link;
+        return (
+          <div
+            key={group.key}
+            data-compliance-document-card="true"
+            data-compliance-document-id={group.documentId}
+            data-compliance-audience={group.audience}
+            className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"
           >
-            Eltávolítás
-          </button>
-        </div>
-      </div>
-      {audience === "INTERNAL_ANALYSIS" ? (
-        <div className="mt-3 border-t border-[var(--adm-border)] pt-3">
-          <ComplianceClauseAnchorPanel clientId={clientId} documentId={link.documentId} autoRefreshWhileEmpty={autoRefreshWhileEmpty} />
-        </div>
-      ) : null}
-    </li>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[var(--adm-text)]">{group.title}</p>
+                <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">
+                  Legfrissebb verzió: {group.latestVersion ? `v${group.latestVersion.version} · ${formatDate(group.latestVersion.createdAt)}` : "—"}
+                </p>
+                {group.audience === "CLIENT_POLICY" ? (
+                  <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">
+                    {group.published
+                      ? `Ügyfélnek közzétéve: ${formatDate(group.published.publishedAt)}`
+                      : "Ügyfélnek még nincs közzétéve"}
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Csak az iroda számára</p>
+                )}
+              </div>
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
+                {group.audience === "INTERNAL_ANALYSIS" ? "Belső megfelelőségi elemzés" : "Ügyfélnek szánt szabályzat"}
+              </p>
+            </div>
+
+            <div className="mt-3 border-t border-[var(--adm-border)] pt-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kapcsolódó területek</p>
+              <ul className="mt-1 space-y-1">
+                {group.relations.map((relation) => (
+                  <li
+                    key={relation.id}
+                    data-compliance-relation="true"
+                    data-compliance-link-id={relation.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--adm-border)] bg-white px-2 py-1"
+                  >
+                    <span className="text-xs text-[var(--adm-text)]">{relation.requirementTitle}</span>
+                    <button
+                      type="button"
+                      disabled={removingId === relation.id}
+                      onClick={() => onUnlink(relation.id)}
+                      className="rounded border border-[var(--adm-border)] bg-white px-2 py-0.5 text-xs text-[var(--adm-text-muted)] hover:text-red-700 disabled:opacity-50"
+                    >
+                      Eltávolítás
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {group.audience === "INTERNAL_ANALYSIS" ? (
+              <div className="mt-3 border-t border-[var(--adm-border)] pt-3">
+                <ComplianceClauseAnchorPanel clientId={clientId} documentId={link.documentId} autoRefreshWhileEmpty={freshDocumentId === link.documentId} />
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -335,6 +470,7 @@ export function ComplianceDocumentsSection({
 
   const topics = data?.topics ?? [];
   const topicTitles = new Map(requirements.map((requirement) => [requirement.key, requirement.title]));
+  const documentGroups = groupComplianceDocuments(topics, topicTitles);
   const uploadBusy = busyIntent !== null;
 
   return (
@@ -464,35 +600,17 @@ export function ComplianceDocumentsSection({
             <button type="button" onClick={() => void load()} className="ml-3 rounded border border-[var(--adm-border)] bg-white px-3 py-1 text-xs text-[var(--adm-text)]">Újrapróbálás</button>
           </div>
         ) : null}
-        {!loading && !error && topics.length === 0 ? (
+        {!loading && !error && documentGroups.length === 0 ? (
           <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs megfelelőségi dokumentum összekapcsolva.</p>
         ) : null}
         {!loading && !error ? (
-          <div className="mt-3 space-y-4">
-            {topics.map((topic) => (
-              <div key={topic.requirementKey} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-                <p className="text-sm font-semibold text-[var(--adm-text)]">
-                  {topicTitles.get(topic.requirementKey) || topic.requirementKey}
-                </p>
-                {topic.internalAnalysis.length ? (
-                  <div className="mt-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-ochre-500)]">Belső megfelelőségi elemzés</p>
-                    <ul className="mt-1 space-y-1">
-                      {topic.internalAnalysis.map((link) => <LinkRow key={link.id} link={link} audience="INTERNAL_ANALYSIS" clientId={clientId} autoRefreshWhileEmpty={freshDocumentId === link.documentId} onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
-                    </ul>
-                  </div>
-                ) : null}
-                {topic.clientPolicy.length ? (
-                  <div className="mt-2">
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ügyfélnek szánt szabályzat</p>
-                    <ul className="mt-1 space-y-1">
-                      {topic.clientPolicy.map((link) => <LinkRow key={link.id} link={link} audience="CLIENT_POLICY" clientId={clientId} onUnlink={(id) => void handleUnlink(id)} busy={removingId === link.id} />)}
-                    </ul>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
+          <ComplianceDocumentList
+            groups={documentGroups}
+            clientId={clientId}
+            freshDocumentId={freshDocumentId}
+            removingId={removingId}
+            onUnlink={(id) => void handleUnlink(id)}
+          />
         ) : null}
       </div>
 

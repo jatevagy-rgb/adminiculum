@@ -12,6 +12,10 @@
  *   - customer-visible ClientRequest.dueAt                 (CUSTOMER_REQUEST)
  *   - keyDate of an EXPLICITLY published ContractRecord     (CONTRACT_DATE, ORGANIZATION)
  *   - ACHIEVED company milestones of a published overview   (COMPANY_MILESTONE, ORGANIZATION)
+ *   - DevelopmentInitiative.targetAt via the customer-safe Grow projection
+ *                                                           (GROW_TARGET, ORGANIZATION, INFO)
+ *   - ClientControl.nextReviewAt via the customer-safe compliance read model
+ *                                                           (COMPLIANCE_REVIEW, ORGANIZATION, INFO)
  *
  * Every source is read through the canonical customer-safe readers; this module
  * never queries an internal table directly and never accepts a client/case/grant
@@ -23,7 +27,9 @@ import { listCustomerRequests } from '../client-interaction/requestService';
 import { listPortalActionRequests, listPortalMatters } from '../client-publication/publicationService';
 import { getOrganizationalContracts } from '../client-workspace/orgContractsService';
 import { canViewOrganizationSummary } from '../client-workspace/leadershipSummaryService';
+import { getOrganizationalGrow } from '../client-workspace/orgGrowService';
 import { projectCompanyOverviewForCustomer } from '../client-company/projector';
+import { getClientSafeComplianceReadModel } from '../compliance/clientSafeComplianceService';
 import { resolveCalendarRange } from '../client-calendar/service';
 import {
   CustomerCalendarProjection,
@@ -32,13 +38,17 @@ import {
 } from './projection';
 import {
   CompanyMilestoneSourceRow,
+  ComplianceReviewSourceRow,
   CustomerRequestSourceRow,
+  GrowInitiativeSourceRow,
   OrgContractSourceRow,
   PortalActionRequestSourceRow,
   PortalMatterSourceRow,
   mapActionRequestSources,
   mapCompanyMilestoneSource,
+  mapComplianceReviewSource,
   mapCustomerRequestSource,
+  mapGrowInitiativeSource,
   mapMatterSources,
   mapOrgContractSource,
 } from './mappers';
@@ -64,6 +74,8 @@ export interface CustomerCalendarReaders {
   listCaseRequests(caseId: string): Promise<CustomerRequestSourceRow[]>;
   listContracts(): Promise<OrgContractSourceRow[]>;
   listCompanyMilestones(): Promise<CompanyMilestoneSourceRow[]>;
+  listGrowInitiatives(): Promise<GrowInitiativeSourceRow[]>;
+  listComplianceReviews(): Promise<ComplianceReviewSourceRow[]>;
 }
 
 export interface CustomerCalendarOptions {
@@ -137,6 +149,47 @@ async function canonicalReaders(identityId: string, workspaceId: string, prisma:
         return [];
       }
     },
+    async listGrowInitiatives() {
+      if (!isOrganization) return [];
+      try {
+        // Reuses the SAME customer-safe projection that backs /portal/fejlesztes,
+        // so an initiative reaches the calendar only when it already reaches Grow.
+        const grow = await getOrganizationalGrow(identityId, workspaceId, prisma);
+        return grow.initiatives.map((initiative) => ({
+          id: initiative.id,
+          title: initiative.title,
+          targetAt: initiative.targetAt,
+          statusLabel: initiative.statusLabel,
+        }));
+      } catch {
+        return [];
+      }
+    },
+    async listComplianceReviews() {
+      if (!isOrganization) return [];
+      try {
+        // Reuses the SAME customer-safe read model that backs /portal/megfeleles.
+        const isProduction = process.env.NODE_ENV === 'production';
+        const model = await getClientSafeComplianceReadModel(
+          workspace.clientId,
+          isProduction,
+          !isProduction && process.env.ADMINICULUM_DEMO_CONTENT_ENABLED === 'true',
+          prisma,
+        );
+        return model.controlsSummary.flatMap((group) =>
+          group.controls
+            .filter((control) => Boolean(control.nextReviewAt))
+            .map((control) => ({
+              controlRef: control.controlRef,
+              requirementTitle: group.requirementTitle,
+              title: control.title,
+              nextReviewAt: control.nextReviewAt,
+            })),
+        );
+      } catch {
+        return [];
+      }
+    },
   };
 }
 
@@ -159,12 +212,14 @@ export async function getCustomerCalendar(
 
   const readers = options.readers ?? await canonicalReaders(identityId, workspaceId, prisma);
 
-  const [matters, actionRequests, caseIds, contracts, milestones] = await Promise.all([
+  const [matters, actionRequests, caseIds, contracts, milestones, growInitiatives, complianceReviews] = await Promise.all([
     readers.listMatters(),
     readers.listActionRequests(),
     readers.grantedCaseIds(),
     readers.listContracts(),
     readers.listCompanyMilestones(),
+    readers.listGrowInitiatives(),
+    readers.listComplianceReviews(),
   ]);
 
   const publicationByCase = new Map<string, string>();
@@ -177,6 +232,8 @@ export async function getCustomerCalendar(
   for (const action of actionRequests) sources.push(...mapActionRequestSources(action));
   for (const contract of contracts) sources.push(...mapOrgContractSource(contract));
   for (const milestone of milestones) sources.push(...mapCompanyMilestoneSource(milestone));
+  for (const initiative of growInitiatives) sources.push(...mapGrowInitiativeSource(initiative));
+  for (const review of complianceReviews) sources.push(...mapComplianceReviewSource(review));
 
   const seenRequests = new Set<string>();
   for (const caseId of caseIds) {

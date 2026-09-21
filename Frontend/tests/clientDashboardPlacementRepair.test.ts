@@ -5,18 +5,24 @@ import test from "node:test";
 const overview = fs.readFileSync("src/app/clients/[clientId]/page.tsx", "utf8");
 const portal = fs.readFileSync("src/app/clients/[clientId]/portal/page.tsx", "utf8");
 
-test("operational links live on overview and remain client scoped", () => {
-  assert.match(overview, /Ügyfél áttekintés/);
-  assert.match(overview, /communications\?clientId=/);
+test("operational links remain client scoped on overview without a second main navigation", () => {
+  // Canonical module destinations are owned by ClientWorkspaceTabs.
+  assert.match(overview, /<ClientWorkspaceTabs clientId=\{clientId\} active="overview"/);
+
+  // Non-canonical operational shortcuts remain available on the dossier.
   assert.match(overview, /cases\?clientId=.*scope=ACTIVE/);
   assert.match(overview, /cases\?clientId=.*scope=CLOSED/);
   assert.match(overview, /time-entries\?clientId=/);
-  // The calendar placeholder was replaced by the real client-scoped calendar route.
-  assert.match(overview, /\/clients\/\$\{encodeURIComponent\(clientId\)\}\/calendar/);
-  assert.match(overview, />Naptár →</);
-  assert.match(overview, /organizationMode \? <Link[\s\S]*szervezet/);
-  assert.match(overview, /organizationMode \? <Link[^>]+vallalati-mukodes[^>]*>[\s\S]*?Grow with us/);
-  assert.match(overview, /organizationMode \? <Link[^>]+\/compliance[^>]*>[\s\S]*?Compliance/);
+
+  // The duplicate main navigation grid is gone; canonical destinations are not
+  // repeated as dossier tiles.
+  assert.doesNotMatch(overview, /client-overview-heading/);
+  assert.doesNotMatch(overview, /organizationMode \? <Link/);
+  assert.doesNotMatch(overview, />Naptár →</);
+  assert.doesNotMatch(overview, />Grow with us/);
+  assert.doesNotMatch(overview, />Compliance →</);
+  assert.doesNotMatch(overview, /Szervezeti felépítés →/);
+  assert.doesNotMatch(overview, /communications\?clientId=/);
   assert.doesNotMatch(overview, /vallalati-mukodes#compliance/);
   assert.doesNotMatch(overview, /<ClientControlCenter/);
 });

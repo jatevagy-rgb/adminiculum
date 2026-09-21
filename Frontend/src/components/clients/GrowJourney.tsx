@@ -84,6 +84,27 @@ function kindLabelHu(kind: string): string {
   return kind === "QUICK_FIX" ? "Gyors javítás" : "Fejlesztési lehetőség";
 }
 
+/**
+ * Presentation-only comparison for records where a legacy or imported
+ * opportunity carries the same sentence as both title and problem statement.
+ * The source data is never mutated or discarded — only the repeated second
+ * print is skipped.
+ */
+function normalizeComparableText(value: string | null | undefined): string {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase()
+    .replace(/[.!?…]+$/u, "")
+    .trim();
+}
+
+function repeatsComparableText(a: string | null | undefined, b: string | null | undefined): boolean {
+  const left = normalizeComparableText(a);
+  const right = normalizeComparableText(b);
+  return left.length > 0 && left === right;
+}
+
 export function GrowJourney({ clientId, clientName }: { clientId: string; clientName: string }) {
   const [screen, setScreen] = useState<GrowScreen>("home");
   const [home, setHome] = useState<GrowHomeSummary | null>(null);
@@ -197,12 +218,37 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
   };
 
   const clientTasks = tasks;
-  const nav: Array<{ id: GrowScreen; label: string; disabled?: boolean }> = [
-    { id: "home", label: "1. Áttekintés" },
-    { id: "feed", label: "2. Javítási lehetőségek" },
-    { id: "detail", label: "3. Részletek", disabled: !selectedId },
-    { id: "progress", label: "4. Folyamatban" },
-    { id: "results", label: "5. Eredmények" },
+  // The five entries are destinations, not a gated form wizard. Each hint is
+  // derived from already-loaded canonical data; no workflow state is invented.
+  const activeInitiativeCount = initiatives.filter((i) =>
+    ["PLANNED", "ACTIVE", "ON_HOLD"].includes(i.status),
+  ).length;
+  const nav: Array<{ id: GrowScreen; label: string; hint: string }> = [
+    {
+      id: "home",
+      label: "1. Áttekintés",
+      hint: home?.canRunResearch ? "Kutatás indítható" : "Diagnosztikai állapot",
+    },
+    {
+      id: "feed",
+      label: "2. Javítási lehetőségek",
+      hint: opportunities.length > 0 ? `${opportunities.length} lehetőség` : "Még nincs lehetőség",
+    },
+    {
+      id: "detail",
+      label: "3. Részletek",
+      hint: selectedId ? "Kiválasztott lehetőség" : "Előbb válassz lehetőséget",
+    },
+    {
+      id: "progress",
+      label: "4. Folyamatban",
+      hint: activeInitiativeCount > 0 ? `${activeInitiativeCount} kezdeményezés` : "Még nincs kezdeményezés",
+    },
+    {
+      id: "results",
+      label: "5. Eredmények",
+      hint: outcomes.length > 0 ? `${outcomes.length} rögzített eredmény` : "Még nincs eredmény",
+    },
   ];
 
   return (
@@ -211,14 +257,12 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
       <header className="relative overflow-hidden rounded-3xl border border-[#e8ded1] bg-[#faf6ee] p-6 sm:p-8 shadow-xs">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#2d5a43]/30 bg-[#2d5a43]/10 px-2.5 py-0.5 text-[10.5px] font-semibold tracking-wider text-[#1b382b] uppercase">
-                <svg className="h-3 w-3 text-[#2d5a43]" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
-                Grow with us · Belső munkafolyamat
-              </span>
-            </div>
+            <p className="flex items-center gap-1.5 text-[10.5px] font-semibold tracking-wider text-[#667062] uppercase">
+              <svg className="h-3 w-3 text-[#2d5a43]" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1.323l3.954 1.582 1.599-.8a1 1 0 01.894 1.79l-1.233.616 1.738 5.42a1 1 0 01-.285 1.05A3.989 3.989 0 0115 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.715-5.349L11 6.477V16h2a1 1 0 110 2H7a1 1 0 110-2h2V6.477L6.237 7.582l1.715 5.349a1 1 0 01-.285 1.05A3.989 3.989 0 015 15a3.989 3.989 0 01-2.667-1.019 1 1 0 01-.285-1.05l1.738-5.42-1.233-.617a1 1 0 01.894-1.788l1.599.799L9 4.323V3a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Grow with us · Belső nézet
+            </p>
             <h1 className="mt-2 font-serif text-2xl sm:text-3xl text-[#1b382b] tracking-tight">Hogyan működik most a céged?</h1>
             <p className="mt-2 text-sm text-[#556052] leading-relaxed">
               Megmutatjuk, hol érdemes körülnézni, és miért — <span className="font-semibold text-[#1b382b]">{clientName}</span>.
@@ -237,28 +281,39 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
         </div>
       </header>
 
-      {/* Pill Navigation */}
-      <nav className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#e8ded1] bg-white p-2 shadow-xs" aria-label="Grow lépései">
+      {/* Destination navigation — every view stays reachable at any time */}
+      <nav className="flex flex-wrap items-stretch gap-2 rounded-2xl border border-[#e8ded1] bg-white p-2 shadow-xs" aria-label="Grow nézetei">
         {nav.map((item) => {
           const active = screen === item.id;
           return (
             <button
               key={item.id}
               type="button"
-              disabled={item.disabled}
               onClick={() => setScreen(item.id)}
-              className={`rounded-full px-4 py-2 text-xs font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+              data-testid={`grow-destination-${item.id}`}
+              className={`rounded-2xl px-4 py-2 text-left text-xs font-semibold transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
                 active
                   ? "bg-[#1b382b] text-white shadow-xs"
-                  : "bg-transparent text-[#556052] hover:bg-[#f7f4ed] hover:text-[#1b382b] disabled:opacity-40 disabled:hover:bg-transparent"
+                  : "bg-transparent text-[#556052] hover:bg-[#f7f4ed] hover:text-[#1b382b]"
               }`}
               aria-current={active ? "step" : undefined}
             >
-              {item.label}
+              <span className="block">{item.label}</span>
+              <span
+                className={`mt-0.5 block text-[10px] font-medium ${
+                  active ? "text-white/75" : "text-[#788274]"
+                }`}
+              >
+                {item.hint}
+              </span>
             </button>
           );
         })}
       </nav>
+      <p className="px-1 text-[11px] text-[#788274] leading-relaxed">
+        Mindegyik nézet bármikor elérhető. A „Részletek” nem sorrendi lépés, hanem egy kiválasztott javítási
+        lehetőség kontextusa — ezért előbb lehetőséget kell választani hozzá.
+      </p>
 
       {error ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">
@@ -301,6 +356,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
               selectedId={selectedId}
               onChanged={load}
               onRefreshDetail={refreshDetail}
+              onShowFeed={() => setScreen("feed")}
               processes={processes}
               canPublishOpportunities={canPublishOpportunities}
             />
@@ -475,11 +531,12 @@ function GrowHomeScreen({
 
         {/* Right Column: 5-stage Grow Method Journey Card */}
         <div className="space-y-6">
-          <div className="rounded-3xl border border-[#e8ded1] bg-[#faf6ee]/80 p-6 sm:p-7 shadow-xs">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Adminiculum Módszertan</p>
-            <h3 className="mt-1 font-serif text-xl font-bold text-[#1b382b]">A fejlődés 5 mérföldköve</h3>
-            <p className="mt-2 text-xs text-[#556052] leading-relaxed">
-              Hogyan alakítjuk a megfigyelt működési réseket mérhető, rögzített üzleti eredménnyé:
+          <div className="rounded-3xl border border-[#e8ded1] bg-white p-5 shadow-xs" data-testid="grow-method-reference">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Módszertani háttér</p>
+            <h3 className="mt-1 text-sm font-semibold text-[#1b382b]">A fejlődés 5 mérföldköve</h3>
+            <p className="mt-1.5 text-xs text-[#556052] leading-relaxed">
+              Általános referencia a munkafolyamathoz — nem a cég aktuális állapota. A jelenlegi helyzetet az
+              „Áttekintés” és a „Folyamatban” nézetek mutatják.
             </p>
 
             <div className="mt-6 space-y-4">
@@ -601,7 +658,9 @@ function GrowFeedScreen({
                     {kindLabelHu(opp.kind)}
                   </span>
                 </div>
-                <p className="mt-3 text-xs text-[#333e30] leading-relaxed">{opp.problemStatement}</p>
+                {repeatsComparableText(opp.title, opp.problemStatement) ? null : (
+                  <p className="mt-3 text-xs text-[#333e30] leading-relaxed">{opp.problemStatement}</p>
+                )}
                 <p className="mt-2 text-xs text-[#556052] leading-relaxed">{opp.direction}</p>
                 {opp.impactTags.length ? (
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -660,6 +719,7 @@ function GrowDetailScreen({
   selectedId,
   onChanged,
   onRefreshDetail,
+  onShowFeed,
   processes,
   canPublishOpportunities,
 }: {
@@ -668,6 +728,7 @@ function GrowDetailScreen({
   selectedId: string | null;
   onChanged: () => Promise<void>;
   onRefreshDetail: () => Promise<void>;
+  onShowFeed: () => void;
   processes: BusinessProcessDTO[];
   canPublishOpportunities: boolean;
 }) {
@@ -694,14 +755,24 @@ function GrowDetailScreen({
 
   if (!selectedId) {
     return (
-      <Panel title="Részletek">
-        <p className="text-sm text-[#788274]">Válasszon egy lehetőséget a listából.</p>
+      <Panel title="Részletek" kicker="Kiválasztott lehetőség kontextusa">
+        <p className="text-sm text-[#556052] leading-relaxed">
+          A részletek nézet egy kiválasztott javítási lehetőséghez tartozik, ezért előbb lehetőséget kell
+          választani. Ez nem sorrendi lépés: a többi nézet addig is elérhető.
+        </p>
+        <button
+          type="button"
+          onClick={onShowFeed}
+          className="mt-3 rounded-xl bg-[#1b382b] px-4 py-2 text-xs font-semibold text-white hover:bg-[#2d5a43] transition-colors"
+        >
+          Javítási lehetőségek megnyitása
+        </button>
       </Panel>
     );
   }
   if (!detail) {
     return (
-      <Panel title="Részletek">
+      <Panel title="Részletek" kicker="Kiválasztott lehetőség kontextusa">
         <p className="text-sm text-[#788274]">Betöltés…</p>
       </Panel>
     );
@@ -709,6 +780,12 @@ function GrowDetailScreen({
 
   const pending = detail.status === "PENDING_REVIEW";
   const accepted = !!detail.opportunity;
+  const diagnosisSummary = detail.diagnosis?.summary?.trim() ? detail.diagnosis.summary : null;
+  const problemRepeatsTitle = repeatsComparableText(detail.title, detail.problemStatement);
+  // The header always prints the title, and "Mit látunk?" prints the problem
+  // statement when there is no diagnosis summary. Skip the repeated second print
+  // so the same normalized sentence never appears twice.
+  const problemStatementAlreadyShown = problemRepeatsTitle || !diagnosisSummary;
 
   const decide = async (decision: "ACCEPT" | "DECLINE" | "REQUEST_MORE_INFO") => {
     setBusy(decision);
@@ -769,7 +846,11 @@ function GrowDetailScreen({
       ) : null}
 
       <Panel title="Mit látunk?">
-        <p className="text-sm text-[#1b382b] leading-relaxed">{detail.diagnosis?.summary ?? detail.problemStatement}</p>
+        {diagnosisSummary || !problemRepeatsTitle ? (
+          <p className="text-sm text-[#1b382b] leading-relaxed">{diagnosisSummary ?? detail.problemStatement}</p>
+        ) : (
+          <p className="text-sm text-[#788274] leading-relaxed">Ehhez a javaslathoz nincs külön diagnózis-összefoglaló.</p>
+        )}
         {detail.diagnosis?.businessProcess ? (
           <p className="mt-2 text-xs text-[#556052]">Folyamat: {detail.diagnosis.businessProcess.name}</p>
         ) : null}
@@ -781,7 +862,18 @@ function GrowDetailScreen({
       </Panel>
 
       <Panel title="Mi lehet az oka?">
-        <p className="text-sm text-[#1b382b] leading-relaxed">{detail.problemStatement}</p>
+        {problemRepeatsTitle ? (
+          <p className="text-sm text-[#788274] leading-relaxed">
+            A probléma megfogalmazása megegyezik a javaslat címével — a részletek a beavatkozásoknál és a
+            bizonyítékoknál olvashatók.
+          </p>
+        ) : problemStatementAlreadyShown ? (
+          <p className="text-sm text-[#788274] leading-relaxed">
+            A probléma megfogalmazása már a fenti „Mit látunk?” összefoglalóban olvasható.
+          </p>
+        ) : (
+          <p className="text-sm text-[#1b382b] leading-relaxed">{detail.problemStatement}</p>
+        )}
       </Panel>
 
       <Panel title="Mit érdemes megvizsgálni?">
@@ -1214,7 +1306,8 @@ function OpportunityPublicationPanel({
           <div className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-4">
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Új közzététel előkészítése</p>
             <p className="mt-1 text-[11px] text-[#788274]">
-              Belső szöveg (csak belső referencia, nem kerül automatikusan az ügyfélhez): „{internalTitle}” — {internalProblem}
+              Belső szöveg (csak belső referencia, nem kerül automatikusan az ügyfélhez): „{internalTitle}”
+              {repeatsComparableText(internalTitle, internalProblem) ? null : ` — ${internalProblem}`}
               {internalDirection ? ` / ${internalDirection}` : ""}
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
