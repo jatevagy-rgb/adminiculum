@@ -43,6 +43,7 @@ d('customer portal calendar integration (postgres)', () => {
   let clientC = '';
   let orgIdentityC = '';
   let orgWorkspaceC = '';
+  let caseC = '';
   let complianceClientControlId = '';
 
   const createdRequirementIds: string[] = [];
@@ -217,11 +218,16 @@ d('customer portal calendar integration (postgres)', () => {
     orgIdentityC = orgC.identityId;
     orgWorkspaceC = orgC.workspaceId;
     complianceClientControlId = await seedComplianceControl(clientC, new Date('2026-09-24T00:00:00.000Z'));
+    // An INDIVIDUAL workspace of the SAME client only resolves through the
+    // canonical grant path: resolvePortalContext denies a grant-less INDIVIDUAL
+    // workspace, so the INDIVIDUAL exclusion must be exercised on an authorized
+    // workspace instead of accidentally asserting the 403 denial.
+    caseC = await makeCase(clientC, 'C');
   });
 
   afterAll(async () => {
     if (!databaseUrl) return;
-    const caseIds = [caseA, caseB];
+    const caseIds = [caseA, caseB, caseC];
     const clientIds = [clientA, clientB, clientC];
     await db.developmentInitiative.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
     await db.contractRecord.deleteMany({ where: { clientId: { in: [clientA, clientB] } } });
@@ -356,12 +362,32 @@ d('customer portal calendar integration (postgres)', () => {
   it('never surfaces a compliance review in an INDIVIDUAL workspace for the same client', async () => {
     const individual = await createPortalUser('c-individual', clientC);
     try {
+      // Authorize the workspace through the canonical grant path so the calendar
+      // resolves; the assertion below is about content, not about access denial.
+      await grant(individual.identityId, individual.workspaceId, clientC, caseC);
       const result = await getCustomerCalendar(individual.identityId, individual.workspaceId, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') });
       expect(result.items.some((item) => item.category === 'COMPLIANCE_REVIEW')).toBe(false);
+      expect(result.items.some((item) => item.category === 'GROW_TARGET')).toBe(false);
     } finally {
       await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: individual.workspaceId } });
       await db.clientPortalWorkspace.deleteMany({ where: { id: individual.workspaceId } });
       await db.clientPortalIdentity.deleteMany({ where: { id: individual.identityId } });
+    }
+  });
+
+  it('still denies a grant-less INDIVIDUAL workspace before any projection is attempted', async () => {
+    const ungranted = await createPortalUser('c-ungranted', clientC);
+    try {
+      // The canonical authorization gate is unchanged: an INDIVIDUAL workspace
+      // without an active grant must be denied rather than silently projecting an
+      // empty calendar.
+      await expect(
+        getCustomerCalendar(ungranted.identityId, ungranted.workspaceId, { from: '2026-09-01', to: '2026-11-30' }, db, { now: new Date('2026-09-15T00:00:00.000Z') }),
+      ).rejects.toThrow(/No active portal access/);
+    } finally {
+      await db.clientPortalWorkspaceMembership.deleteMany({ where: { workspaceId: ungranted.workspaceId } });
+      await db.clientPortalWorkspace.deleteMany({ where: { id: ungranted.workspaceId } });
+      await db.clientPortalIdentity.deleteMany({ where: { id: ungranted.identityId } });
     }
   });
 });
