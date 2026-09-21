@@ -5,7 +5,6 @@ import Image from "next/image";
 import { navItems } from "@/lib/navigation";
 import { useRouter } from "next/navigation";
 import type { UiPackId } from "@/lib/uiPack";
-import { getUnreadNotificationsCount } from "@/lib/api";
 
 type SidebarProps = {
   activeItem: string;
@@ -104,7 +103,6 @@ const navGroups: Array<{ id: string; label: string; items: string[] }> = [
 export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_ops_atelier" }: SidebarProps) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const isSignal = uiPack === "signal_tiles_console";
   const isCaseActive = activeItem === "cases" || activeItem === "case-detail" || activeItem === "generation";
   const isClauseLibraryActive = activeItem === "clause-library";
@@ -150,24 +148,6 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     } catch {
       // ignore
     }
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    const loadUnread = async () => {
-      try {
-        const result = await getUnreadNotificationsCount();
-        if (mounted) {
-          setUnreadNotifications(result.unreadCount);
-        }
-      } catch {
-        // ignore notification badge failures in sidebar
-      }
-    };
-    void loadUnread();
-    return () => {
-      mounted = false;
-    };
   }, []);
 
   const toggleCollapsed = () => {
@@ -253,11 +233,6 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                   {!collapsed && (
                     <>
                       <span className="hidden md:inline">{navLabelMap[nav.id] || nav.label}</span>
-                      {nav.id === "communications" && unreadNotifications > 0 ? (
-                        <span className={`ml-auto hidden rounded-full px-2 py-0.5 text-[11px] font-semibold md:inline-flex ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[var(--adm-ochre-500)] text-[var(--adm-green-950)]"}`}>
-                          {unreadNotifications}
-                        </span>
-                      ) : null}
                     </>
                   )}
                 </button>

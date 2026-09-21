@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { CompactNewCaseDialog } from '@/components/cases/CompactNewCaseDialog';
 import {
@@ -11,6 +11,7 @@ import {
   deleteWorkgroup,
   recordWorkload,
   getClientWorkloadSummary,
+  getCurrentUser,
   type Client,
   type Workgroup,
   type WorkloadRecord,
@@ -60,6 +61,28 @@ export default function WorkgroupsPageContent({
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [showCreateCaseModal, setShowCreateCaseModal] = useState(false);
+
+  /**
+   * Workgroup and workload mutations are client-manager operations. The backend
+   * enforces ADMIN/PARTNER on every write endpoint, so the UI must not present
+   * write affordances to roles the canonical rule forbids. Read access (the
+   * workgroup list, recorded workload and summary) stays available.
+   */
+  const [canManageWorkgroups, setCanManageWorkgroups] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void getCurrentUser()
+      .then((user) => {
+        if (active) setCanManageWorkgroups(['ADMIN', 'PARTNER'].includes(user.role));
+      })
+      .catch(() => {
+        if (active) setCanManageWorkgroups(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const loadWorkgroups = useCallback(async () => {
     try {
@@ -213,12 +236,14 @@ export default function WorkgroupsPageContent({
           <div className="bg-white border rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b bg-gray-50 flex items-center justify-between">
               <h2 className="font-semibold text-gray-800 text-sm">Munkacsoportok</h2>
-              <button
-                onClick={openCreateModal}
-                className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
-              >
-                + Új
-              </button>
+              {canManageWorkgroups && (
+                <button
+                  onClick={openCreateModal}
+                  className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700"
+                >
+                  + Új
+                </button>
+              )}
             </div>
 
             {workgroups.length === 0 ? (
@@ -260,57 +285,61 @@ export default function WorkgroupsPageContent({
                       <p className="text-sm text-gray-500 mt-1">{selectedWorkgroup.description}</p>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openEditModal(selectedWorkgroup)}
-                      className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1"
-                    >
-                      Szerkesztés
-                    </button>
-                    {deletingId === selectedWorkgroup.id ? (
-                      <div className="flex gap-1 items-center">
-                        <span className="text-xs text-red-600">Töröl?</span>
-                        <button
-                          onClick={() => handleDeleteWorkgroup(selectedWorkgroup.id)}
-                          disabled={loading}
-                          className="text-xs bg-red-600 text-white rounded px-2 py-1"
-                        >
-                          Igen
-                        </button>
-                        <button
-                          onClick={() => setDeletingId(null)}
-                          className="text-xs text-gray-600 border rounded px-2 py-1"
-                        >
-                          Mégse
-                        </button>
-                      </div>
-                    ) : (
+                  {canManageWorkgroups && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => setDeletingId(selectedWorkgroup.id)}
-                        className="text-xs text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1"
+                        onClick={() => openEditModal(selectedWorkgroup)}
+                        className="text-xs text-blue-600 hover:text-blue-800 border border-blue-200 rounded px-2 py-1"
                       >
-                        Törlés
+                        Szerkesztés
                       </button>
-                    )}
-                  </div>
+                      {deletingId === selectedWorkgroup.id ? (
+                        <div className="flex gap-1 items-center">
+                          <span className="text-xs text-red-600">Töröl?</span>
+                          <button
+                            onClick={() => handleDeleteWorkgroup(selectedWorkgroup.id)}
+                            disabled={loading}
+                            className="text-xs bg-red-600 text-white rounded px-2 py-1"
+                          >
+                            Igen
+                          </button>
+                          <button
+                            onClick={() => setDeletingId(null)}
+                            className="text-xs text-gray-600 border rounded px-2 py-1"
+                          >
+                            Mégse
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeletingId(selectedWorkgroup.id)}
+                          className="text-xs text-red-600 hover:text-red-800 border border-red-200 rounded px-2 py-1"
+                        >
+                          Törlés
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="text-xs text-gray-400">
                   Létrehozva: {new Date(selectedWorkgroup.createdAt).toLocaleDateString('hu-HU')}
                 </div>
 
-                {/* Record workload button */}
-                <div className="mt-4 pt-3 border-t">
-                  <button
-                    onClick={() => {
-                      setWorkloadForm({ period: selectedPeriod, reportedHours: 0, note: '' });
-                      setShowWorkloadModal(true);
-                    }}
-                    className="text-sm bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                  >
-                    + Terhelés rögzítése
-                  </button>
-                </div>
+                {/* Record workload button — manager-only write (backend requires client-manager) */}
+                {canManageWorkgroups && (
+                  <div className="mt-4 pt-3 border-t">
+                    <button
+                      onClick={() => {
+                        setWorkloadForm({ period: selectedPeriod, reportedHours: 0, note: '' });
+                        setShowWorkloadModal(true);
+                      }}
+                      className="text-sm bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                    >
+                      + Terhelés rögzítése
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Workload Records */}
@@ -400,7 +429,7 @@ export default function WorkgroupsPageContent({
       </div>
 
       {/* Create/Edit Workgroup Modal */}
-      {showWorkgroupModal && (
+      {showWorkgroupModal && canManageWorkgroups && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -449,7 +478,7 @@ export default function WorkgroupsPageContent({
       )}
 
       {/* Record Workload Modal */}
-      {showWorkloadModal && selectedWorkgroup && (
+      {showWorkloadModal && selectedWorkgroup && canManageWorkgroups && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">
