@@ -46,6 +46,7 @@ function Section({
   children,
   empty,
   emptyText,
+  note,
   actionLink,
   actionLabel,
 }: {
@@ -54,6 +55,7 @@ function Section({
   children?: React.ReactNode;
   empty?: boolean;
   emptyText?: string;
+  note?: React.ReactNode;
   actionLink?: string;
   actionLabel?: string;
 }) {
@@ -83,6 +85,9 @@ function Section({
         <div>
           {kicker ? <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">{kicker}</p> : null}
           <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">{title}</h2>
+          {note ? (
+            <p className="mt-1 text-sm text-stone-600" data-testid="portal-section-scope">{note}</p>
+          ) : null}
         </div>
         {actionLink && actionLabel ? (
           <Link href={actionLink} className="text-sm font-semibold text-[#7a5f18] hover:underline">
@@ -253,6 +258,12 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
   const actionNow = useMemo(() => (home?.actions || []).slice(0, 4), [home]);
   const activeMatters = useMemo(() => (home?.matters || []).slice(0, 6), [home]);
 
+  // The Home list is a deliberate preview. When the backend publishes more actions
+  // than the preview shows, the section states the real scope instead of implying
+  // that only the visible rows exist.
+  const actionTotal = home?.actions.length ?? 0;
+  const actionScopeNote = actionTotal > actionNow.length ? `${actionNow.length} megjelenítve · ${actionTotal} összesen` : undefined;
+
   // "What is coming up?" — today or later, derived only from real published dates.
   // Overdue values stay on their canonical Teendők / attention surfaces; we never
   // delete, rewrite or invent a date here.
@@ -300,6 +311,19 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
   const compliance = home.complianceSummary;
   const digitalTwin = home.digitalTwinSummary;
 
+  // The company profile is informational. When no published figure or headline
+  // exists it must not compete visually with the customer's own tasks; it stays
+  // reachable as a compact line with its canonical destination.
+  const profileHasContent = Boolean(
+    digitalTwin?.employeeCount != null ||
+      digitalTwin?.knownSystemsCount != null ||
+      digitalTwin?.knownProcessesCount != null ||
+      company?.employeeCount != null ||
+      (company?.systems?.length ?? 0) > 0 ||
+      (company?.processes?.length ?? 0) > 0 ||
+      company?.profileHeadline,
+  );
+
   return (
     <div className="space-y-5" data-testid="org-home-view">
       {/* 0. Orientation */}
@@ -344,6 +368,9 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         title="Ami most Öntől kell"
         empty={!actionNow.length}
         emptyText="Jelenleg nincs Önnek szóló teendő."
+        note={actionScopeNote}
+        actionLink={actionScopeNote ? "/portal/teendoim" : undefined}
+        actionLabel={actionScopeNote ? "Összes teendő" : undefined}
       >
         {actionNow.map((action) => (
           <ActionRow key={action.id} action={action} />
@@ -518,35 +545,52 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
       {/* Rögzített munka (ha van) */}
       {workSummary && workSummary.totalMinutes > 0 ? <WorkSummary summary={workSummary} /> : null}
 
-      {/* 7. VÁLLALAT / DIGITÁLIS IKER */}
-      <section className={card}>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Vállalati digitális iker</p>
-            <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Vállalati profil</h2>
+      {/* 7. VÁLLALAT / DIGITÁLIS IKER — compact while unpublished, never unreachable */}
+      {profileHasContent ? (
+        <section className={card} data-testid="org-company-profile">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-stone-500">Vállalati digitális iker</p>
+              <h2 className="mt-1 font-serif text-2xl font-semibold text-stone-950">Vállalati profil</h2>
+            </div>
+            <Link href="/portal/vallalat" className="text-sm font-semibold text-[#7a5f18] hover:underline">
+              Profil megnyitása →
+            </Link>
           </div>
-          <Link href="/portal/vallalat" className="text-sm font-semibold text-[#7a5f18] hover:underline">
-            Profil megnyitása →
-          </Link>
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-2xl bg-stone-50 p-4">
-            <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.employeeCount ?? company?.employeeCount ?? "—"}</p>
-            <p className="mt-1 text-sm text-stone-600">munkavállalói létszám (fő)</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-stone-50 p-4">
+              <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.employeeCount ?? company?.employeeCount ?? "—"}</p>
+              <p className="mt-1 text-sm text-stone-600">munkavállalói létszám (fő)</p>
+            </div>
+            <div className="rounded-2xl bg-stone-50 p-4">
+              <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.knownSystemsCount ?? company?.systems?.length ?? "—"}</p>
+              <p className="mt-1 text-sm text-stone-600">ismert IT / üzleti rendszer</p>
+            </div>
+            <div className="rounded-2xl bg-stone-50 p-4">
+              <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.knownProcessesCount ?? company?.processes?.length ?? "—"}</p>
+              <p className="mt-1 text-sm text-stone-600">feltárt szervezeti folyamat</p>
+            </div>
           </div>
-          <div className="rounded-2xl bg-stone-50 p-4">
-            <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.knownSystemsCount ?? company?.systems?.length ?? "—"}</p>
-            <p className="mt-1 text-sm text-stone-600">ismert IT / üzleti rendszer</p>
+          {company?.profileHeadline ? (
+            <p className="mt-4 break-words text-sm leading-6 text-stone-700">{company.profileHeadline}</p>
+          ) : null}
+        </section>
+      ) : (
+        <section className={compactState} data-testid="portal-compact-empty">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Vállalati digitális iker · </span>
+              <span className="text-sm font-semibold text-stone-800">Vállalati profil</span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-stone-500">A vállalati profil adatai még nem kerültek közzétételre.</span>
+              <Link href="/portal/vallalat" className="text-xs font-semibold text-[#7a5f18] hover:underline">
+                Profil megnyitása →
+              </Link>
+            </div>
           </div>
-          <div className="rounded-2xl bg-stone-50 p-4">
-            <p className="text-2xl font-semibold text-stone-950">{digitalTwin?.knownProcessesCount ?? company?.processes?.length ?? "—"}</p>
-            <p className="mt-1 text-sm text-stone-600">feltárt szervezeti folyamat</p>
-          </div>
-        </div>
-        {company?.profileHeadline ? (
-          <p className="mt-4 break-words text-sm leading-6 text-stone-700">{company.profileHeadline}</p>
-        ) : null}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
