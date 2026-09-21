@@ -14,60 +14,65 @@ const documentPage = () => read("src/app/cases/[caseId]/documents/page.tsx");
 const publicationPanel = () => read("src/components/documents/publication/ClientPublicationPanel.tsx");
 const handoffPanel = () => read("src/components/handoff/HandoffPackagePanel.tsx");
 
-test("Requirement 1: Legal analysis action in right panel has no scrollIntoView and renders LegalAnalysisIntakePanel", () => {
+test("Requirement 1: AI and legal analysis remain secondary approval tools", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must exist");
   const shell = shellMatch[0];
 
-  assert.match(shell, /contextualTab === 'elemzes'/);
+  assert.match(shell, /id="approval-ai-tools"/);
   assert.match(shell, /<LegalAnalysisIntakePanel/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-legal-analysis['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
+  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
 });
 
-test("Requirement 2: Publication action in right panel has no scrollIntoView and renders ClientPublicationPanel", () => {
+test("Requirement 2: Publication remains a secondary approval tool", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must exist");
   const shell = shellMatch[0];
 
-  assert.match(shell, /contextualTab === 'ugyfel'/);
+  assert.match(shell, /id="approval-publication-tools"/);
   assert.match(shell, /<ClientPublicationPanel/);
   assert.match(shell, /viewMode="document-only"/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-publication['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
+  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
 });
 
-test("Requirement 3: Handoff action in right panel has no scrollIntoView and renders HandoffPackagePanel", () => {
+test("Requirement 3: Handoff remains a secondary approval tool", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must exist");
   const shell = shellMatch[0];
 
-  assert.match(shell, /contextualTab === 'leadas'/);
+  assert.match(shell, /id="approval-handoff-tools"/);
   assert.match(shell, /<HandoffPackagePanel/);
   assert.match(shell, /compact/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-handoff['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
+  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
 });
 
-test("Requirement 4: Review, Elemzés, Ügyfél, Leadás tabs switch contextual working content in right shell", () => {
+test("Requirement 4: Four primary modes switch contextual working content in right shell", () => {
   const source = documentPage();
   const shellMatch = source.match(/<aside data-testid="canonical-right-shell"[\s\S]*?<\/aside>/);
   assert.ok(shellMatch, "Right shell must exist");
   const shell = shellMatch[0];
 
   // All 4 tabs present with active state switches
-  assert.match(shell, /contextualTab === 'review'/);
-  assert.match(shell, /contextualTab === 'elemzes'/);
-  assert.match(shell, /contextualTab === 'ugyfel'/);
-  assert.match(shell, /contextualTab === 'leadas'/);
+  for (const mode of ["overview", "changes", "comments", "approval"]) {
+    assert.match(shell, new RegExp(`contextualTab === '${mode}'`));
+  }
+  assert.doesNotMatch(shell, /onClick=\{\(\) => setContextualTab\('(elemzes|ugyfel|leadas)'\)\}/);
 
-  // Review contains annotation controls
-  assert.match(shell, /openAnnotationCount/);
-  assert.match(shell, /handleCreateAnnotation/);
-  assert.match(shell, /handleResolveAnnotation/);
+  // Comments owns annotation controls; approval remains review-only.
+  const commentsPanel = shell.slice(shell.indexOf('data-testid="contextual-comments-panel"'));
+  const approvalPanel = shell.slice(shell.indexOf('data-testid="contextual-approval-panel"'), shell.indexOf('data-testid="contextual-changes-panel"'));
+  assert.match(commentsPanel, /openAnnotationCount|handleCreateAnnotation/);
+  assert.match(commentsPanel, /handleResolveAnnotation/);
+  assert.doesNotMatch(approvalPanel, /handleCreateAnnotation|handleDeleteAnnotation|annotationDraft/);
 
   // Elemzés mounts LegalAnalysisIntakePanel
   assert.match(shell, /LegalAnalysisIntakePanel/);
@@ -93,7 +98,7 @@ test("Requirement 5: No duplicate legal-analysis editor is mounted simultaneousl
 
   // Lower section #document-legal-analysis is a summary/pointer card with tab switcher
   assert.match(source, /id="document-legal-analysis"/);
-  assert.match(source, /setContextualTab\('elemzes'\)/);
+  assert.match(source, /setContextualTab\('approval'\)/);
 });
 
 test("Requirement 6: No duplicate publication writer is mounted simultaneously", () => {
@@ -202,18 +207,15 @@ test("Requirement 16: Keep-alive visited tabs in canonical right shell preserve 
   assert.ok(shellMatch, "Right shell must exist");
   const shell = shellMatch[0];
 
-  // Visited tabs tracking initialized with review only
-  assert.match(source, /visitedContextualTabs,\s*setVisitedContextualTabs\]\s*=\s*useState<Record<string,\s*boolean>>\(\{\s*review:\s*true\s*\}\)/);
+  // Visited tabs tracking initialized with the overview mode only
+  assert.match(source, /visitedContextualTabs,\s*setVisitedContextualTabs\]\s*=\s*useState<Record<string,\s*boolean>>\(\{\s*overview:\s*true\s*\}\)/);
   // Visited tabs updated on tab switch
   assert.match(source, /setVisitedContextualTabs\(\(prev\)\s*=>\s*\(prev\[contextualTab\]\s*\?\s*prev\s*:\s*\{\s*\.\.\.prev,\s*\[contextualTab\]:\s*true\s*\}\)\)/);
   // Tab panels are kept mounted using 'hidden' class once visited
-  assert.match(shell, /className=\{contextualTab === 'review' \? 'space-y-4' : 'hidden'\}/);
-  assert.match(shell, /visitedContextualTabs\['elemzes'\]/);
-  assert.match(shell, /className=\{contextualTab === 'elemzes' \? 'space-y-4' : 'hidden'\}/);
-  assert.match(shell, /visitedContextualTabs\['ugyfel'\]/);
-  assert.match(shell, /className=\{contextualTab === 'ugyfel' \? 'space-y-4' : 'hidden'\}/);
-  assert.match(shell, /visitedContextualTabs\['leadas'\]/);
-  assert.match(shell, /className=\{contextualTab === 'leadas' \? 'space-y-4' : 'hidden'\}/);
+  assert.match(shell, /className=\{contextualTab === 'overview' \? 'space-y-4' : 'hidden'\}/);
+  assert.match(shell, /visitedContextualTabs\['approval'\]/);
+  assert.match(shell, /className=\{contextualTab === 'approval' \? 'space-y-4' : 'hidden'\}/);
+  assert.doesNotMatch(shell, /visitedContextualTabs\['(elemzes|ugyfel|leadas)'\]/);
 
   // Document switch resets visited tabs and clears annotation draft
   assert.match(source, /setVisitedContextualTabs\(\{\s*\[contextualTab\]:\s*true\s*\}\)/);
@@ -237,8 +239,8 @@ test("Requirement 17: Text selection anchor supports both canonical reader and d
 
 test("Annotation rail keeps comments active and focuses supported text anchors", () => {
   const source = documentPage();
-  const commentsPanel = source.match(/data-testid="contextual-comments-panel"[\s\S]*?<\/div>\s*\) : null}/)?.[0];
-  assert.ok(commentsPanel, "Comments panel must remain present");
+  const commentsPanel = source.slice(source.indexOf('data-testid="contextual-comments-panel"'));
+  assert.ok(commentsPanel.includes('data-testid="contextual-comments-panel"'), "Comments panel must remain present");
   assert.match(commentsPanel, /onClick=\{\(\) => focusAnnotation\(annotation\)\}/);
   assert.doesNotMatch(commentsPanel, /setContextualTab\('review'\)/);
   assert.match(source, /const focusAnnotation = \(annotation: DocumentAnnotationItem\) =>/);
@@ -294,7 +296,7 @@ test("Requirement 18: Canonical composer displays client-explanation draft field
 
   // Canonical composer checks isClientExplanationDraft
   assert.match(shell, /isClientExplanationDraft\(annotationDraft\.annotationType\)/);
-  assert.match(shell, /id="canonical-ann-client-draft"/);
+  assert.match(shell, /id="comments-ann-client-draft"/);
   assert.match(shell, /Ügyfélnek szánt magyarázat/);
   assert.match(shell, /<NotPublishedBadge \/>/);
   assert.match(shell, /value=\{annotationDraft\.clientExplanationDraft\}/);
@@ -325,7 +327,7 @@ test("Requirement 19: Client explanation to publication preparation bridge (A, B
   assert.match(source, /setPublicationPrefill\(\{\s*key:\s*`\$\{annotation\.id\}:\$\{Date\.now\(\)\}`,\s*title,\s*explanation,?\s*\}\)/);
 
   // C. Action switches to contextualTab='ugyfel'
-  assert.match(source, /setContextualTab\('ugyfel'\)/);
+  assert.match(source, /setContextualTab\('approval'\)/);
 
   // F & G. No createDocumentPublicationDraft or transitionDocumentPublication call in preparation action
   const prepareFnMatch = source.match(/const handlePreparePublicationFromAnnotation\s*=\s*\([\s\S]*?\n  \};/);

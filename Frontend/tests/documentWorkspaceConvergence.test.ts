@@ -14,8 +14,8 @@ test("Document workspace convergence keeps one reader and one comparison workspa
   assert.match(source, /data-testid="canonical-center-reading"/);
   assert.match(source, /data-testid="canonical-right-shell"/);
   assert.equal((source.match(/<ComparisonWorkspace/g) || []).length, 1);
-  assert.match(source, /data-testid="contextual-tab-changes"/);
-  assert.match(source, /data-testid="contextual-tab-comments"/);
+  assert.match(source, /<DocumentWorkspaceTabs active=\{contextualTab\} onChange=\{setContextualTab\}/);
+  assert.doesNotMatch(source, /data-testid="primary-document-work-modes"/);
 });
 
 test("Change map uses exact immutable versions and preserves truthful excerpts", () => {
@@ -26,6 +26,7 @@ test("Change map uses exact immutable versions and preserves truthful excerpts",
   assert.match(workspace, /!sameVersion/);
   assert.match(source, /setAiVersionPair\(\[baseVersionId, targetVersionId\]\)/);
   assert.match(source, /onRequestSegmentChanges=\{handleSegmentRequestChanges\}/);
+  assert.match(source, /onChanged=\{\(\) => selectedUploadedDocument \? refreshReviewProjection\(selectedUploadedDocument\.id\)/);
   assert.match(source, /<ComparisonWorkspace[\s\S]*?versions=\{versions\.map/);
 });
 
