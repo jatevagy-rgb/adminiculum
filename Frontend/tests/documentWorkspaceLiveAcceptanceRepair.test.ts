@@ -21,10 +21,11 @@ test("DW01 canonicalizes default selection with replace and user selection with 
 test("DW01 preserves query parameters and resolves browser deep-link changes without a routing loop", () => {
   assert.match(source, /new URLSearchParams\(searchParams\?\.toString\(\)\)/);
   assert.match(source, /const requestedDocumentId = searchParams\?\.get\("documentId"\)/);
-  assert.match(source, /if \(!requestedDocumentId \|\| \(!uploadedDocuments\.length && !contracts\.length\)\) return/);
-  const resolveEffectStart = source.indexOf("  useEffect(() => {\n    if (!requestedDocumentId");
-  const resolveEffectEnd = source.indexOf("  }, [contracts, requestedDocumentId", resolveEffectStart);
+  assert.match(source, /if \(!requestedDocumentId \|\| \(!uploadedDocuments\.length && !contracts\.length && !modifiedWorkingCopies\.length\)\) return/);
+  const resolveEffectStart = source.indexOf("if (!requestedDocumentId || (!uploadedDocuments.length");
+  const resolveEffectEnd = source.indexOf("}, [contracts, requestedDocumentId", resolveEffectStart);
   const resolveEffect = source.slice(resolveEffectStart, resolveEffectEnd);
+  assert.ok(resolveEffectStart > 0 && resolveEffectEnd > resolveEffectStart);
   assert.doesNotMatch(resolveEffect, /syncDocumentIdToUrl|router\[/);
 });
 
@@ -60,4 +61,14 @@ test("legacy metadata comparison keeps its canonical route and has no case-scope
   assert.match(source, /`\/documents\/compare\?caseId=/);
   assert.match(source, /router\.push\(metaCompareUrl\)/);
   assert.doesNotMatch(source, /\/cases\/\$\{[^}]*\}\/documents\/compare/);
+});
+
+test("DW01 resolves every selectable ledger kind from the URL and clears a deleted document id", () => {
+  const resolveEffectStart = source.indexOf("if (!requestedDocumentId || (!uploadedDocuments.length");
+  const resolveEffectEnd = source.indexOf("}, [contracts, requestedDocumentId", resolveEffectStart);
+  const resolveEffect = source.slice(resolveEffectStart, resolveEffectEnd);
+  assert.ok(resolveEffectStart > 0 && resolveEffectEnd > resolveEffectStart);
+  assert.match(resolveEffect, /modifiedWorkingCopies\.find\(\(document\) => document\.id === requestedDocumentId\)/);
+  assert.doesNotMatch(resolveEffect, /syncDocumentIdToUrl|router\[/);
+  assert.match(source, /syncDocumentIdToUrl\(null, "replace"\)/);
 });

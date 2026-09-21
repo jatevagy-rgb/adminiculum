@@ -598,8 +598,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   }, [caseRecord?.id, syncDocumentIdToUrl]);
 
   useEffect(() => {
-    if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length)) return;
-    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId);
+    if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length && !modifiedWorkingCopies.length)) return;
+    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId)
+      || modifiedWorkingCopies.find((document) => document.id === requestedDocumentId);
     if (uploadedMatch) {
       if (selectedLedgerItem?.kind !== "uploaded" || selectedLedgerItem.item.id !== uploadedMatch.id) {
         setSelectedLedgerItem({ kind: "uploaded", item: uploadedMatch });
@@ -612,7 +613,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setSelectedLedgerItem({ kind: "generated", item: contractMatch });
       setSelectedContract(contractMatch);
     }
-  }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments]);
+  }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments, modifiedWorkingCopies]);
 
   // Re-trigger loadData once caseRecord is resolved to CUID — only on mount
   useEffect(() => {
@@ -1025,6 +1026,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       await deleteDocument(deleteCandidate.id);
       setSelectedLedgerItem(null);
       setSelectedContract(null);
+      syncDocumentIdToUrl(null, "replace");
       await loadData(false);
       setActionResult({ type: 'success', message: 'A dokumentum törölve lett.' });
       setDeleteCandidate(null);
