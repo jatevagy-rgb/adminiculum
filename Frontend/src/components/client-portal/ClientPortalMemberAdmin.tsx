@@ -31,7 +31,9 @@ const DELIVERY_LABELS: Record<string, string> = {
   NOT_REQUIRED: "Meglévő azonosítóhoz rögzítve",
 };
 
-function deliverySummary(deliveryStatus?: string | null, codeSafe?: string | null): string {
+// Canonical delivery wording. Exported so the client-scoped portal control
+// surface reports the same delivery state without re-inventing labels.
+export function deliverySummary(deliveryStatus?: string | null, codeSafe?: string | null): string {
   if (codeSafe === "MAIL_PROVIDER_NOT_CONFIGURED") return "Meghívás rögzítve – e-mail-küldés jelenleg nem érhető el.";
   return DELIVERY_LABELS[String(deliveryStatus || "")] || "Meghívás rögzítve; kézbesítés állapota ellenőrizhető.";
 }

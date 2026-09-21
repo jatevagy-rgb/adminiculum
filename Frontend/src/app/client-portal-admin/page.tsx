@@ -77,9 +77,12 @@ function permissionList(permissions: string[]): string {
 }
 
 function portalStatusLabel(status: string): string {
-  if (status === "ACTIVE") return "Portál aktív";
-  if (status === "SUSPENDED") return "Portál szünetel";
-  if (status === "ARCHIVED") return "Archivált";
+  // Workspace state, never the customer portal state. "Portal active" would be a
+  // false claim: the workspace row says nothing about the client-level portal
+  // switch, membership or e-mail delivery.
+  if (status === "ACTIVE") return "Munkatér aktív";
+  if (status === "SUSPENDED") return "Munkatér szünetel";
+  if (status === "ARCHIVED") return "Munkatér archiválva";
   return status;
 }
 
@@ -534,12 +537,13 @@ function activationFromWorkspace(workspace: AdminWorkspaceDTO): { customerType: 
   };
 }
 
-function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
+function ActivationWizard({ clients, workspaces, busy, run, onActivated, reportInvitationOutcome }: {
   clients: Client[];
   workspaces: AdminWorkspaceDTO[];
   busy: boolean;
   run: (fn: () => Promise<void>, okText: string) => Promise<void>;
   onActivated: (workspaceId: string) => void;
+  reportInvitationOutcome: (text: string | null) => void;
 }) {
   const [clientSource, setClientSource] = useState<"existing" | "new">("existing");
   const [clientId, setClientId] = useState("");
@@ -583,6 +587,7 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
   }, [clientId, clientSource, workspaces]);
 
   const activate = async () => {
+    reportInvitationOutcome(null);
     let targetClient = client;
     if (clientSource === "new") {
       if (!newClient.name.trim()) return;
@@ -620,11 +625,26 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
       if (workspace.status === "SUSPENDED") workspace = await transitionAdminWorkspace(workspace.id, "activate", workspace.revision);
     }
     if (primaryEmail.trim()) {
-      await inviteAdminWorkspaceMember(workspace.id, {
-        email: primaryEmail.trim(),
-        displayName: primaryName.trim() || undefined,
-        role: portalRole,
-      });
+      // Invitation/delivery is a separate state from portal preparation and
+      // workspace activation. A delivery failure (or a failed invitation call)
+      // must never be reported as a failed activation, and an activated
+      // workspace must never be presented as a delivered invitation.
+      try {
+        const invitation = await inviteAdminWorkspaceMember(workspace.id, {
+          email: primaryEmail.trim(),
+          displayName: primaryName.trim() || undefined,
+          role: portalRole,
+        });
+        reportInvitationOutcome(
+          invitation.state === "PENDING_APPROVAL"
+            ? "A megadott e-mail már hitelesített portálfiókhoz tartozik: a munkatér-tagság jóváhagyásra vár, e-mail-küldés nem szükséges."
+            : invitation.emailSent
+              ? `A meghívás rögzítve és az e-mail elküldve (${primaryEmail.trim()}).`
+              : `A meghívás rögzítve, de az e-mail kézbesítése nem történt meg: ${deliverySummary(invitation.deliveryStatus, invitation.deliveryCodeSafe)}`,
+        );
+      } catch {
+        reportInvitationOutcome("A meghívás nem jött létre. A portál előkészítése és a munkatér aktiválása ettől függetlenül megtörtént; a meghívás a Felhasználók fülön megismételhető.");
+      }
     }
     if (customerType === "ORGANIZATION" && unitName.trim()) {
       await listWorkspaceUnits(workspace.id).then(async (page) => {
@@ -644,7 +664,7 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
           <h2 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Ügyfélportál aktiválása</h2>
           <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Az aktiválás a kanonikus ügyfélből indul, vagy itt hoz létre új ügyfelet ugyanazon ügyfélkezelési folyamaton keresztül. Ügyhozzáférés nem jön létre automatikusan.</p>
         </div>
-        <AdminBadge tone="gold">Ügyfélportál aktív lesz</AdminBadge>
+        <AdminBadge tone="gold">Portál előkészítés + munkatér aktiválás</AdminBadge>
       </div>
       <div className="mt-5 grid gap-4">
         <section className="grid gap-2">
@@ -708,7 +728,7 @@ function ActivationWizard({ clients, workspaces, busy, run, onActivated }: {
         <section className="grid gap-2 rounded-xl border border-[var(--adm-border)] p-3">
           <h3 className="text-sm font-semibold text-[var(--adm-text)]">Összegzés és aktiválás</h3>
           <p className="text-sm text-[var(--adm-text-muted)]">{targetName || "Nincs ügyfél megadva"} · {MODE_LABELS[mode]} · {customerType === "ORGANIZATION" ? RELATIONSHIP_LABELS[relationship] : "Magánügyfél portál"} · ügyhozzáférés nem jön létre.</p>
-          <AdminButton data-testid="activate-client-portal" variant="gold" disabled={busy || !canActivate} onClick={() => run(activate, "Ügyfélportál aktív. Következő lépés: felhasználó meghívása, szervezeti egység vagy vezetői rálátás beállítása.")}>Ügyfélportál aktiválása</AdminButton>
+          <AdminButton data-testid="activate-client-portal" variant="gold" disabled={busy || !canActivate} onClick={() => run(activate, "Portál előkészítve és a munkatér aktiválva. A meghívás kézbesítése külön állapot; ügyhozzáférés nem jött létre.")}>Ügyfélportál aktiválása</AdminButton>
         </section>
       </div>
     </AdminPanel>
@@ -749,7 +769,7 @@ function ClientPortalDetail({ workspace, client, memberships, cases, units, scop
         {[
           ["Ügyféltípus", MODE_LABELS[workspace.mode]],
           ["Együttműködés", RELATIONSHIP_LABELS[relationship]],
-          ["Portál státusza", portalStatusLabel(workspace.status)],
+          ["Munkatér állapota", portalStatusLabel(workspace.status)],
           ["Aktív felhasználók", String(workspace.activeMembershipCount)],
           ["Aktív ügyhozzáférések", String(workspace.activeCaseGrantCount)],
           ...(workspace.mode !== "INDIVIDUAL" ? [["Szervezeti egységek", String(units.length)], ["Vezetői rálátások", String(scopes.filter((scope) => scope.status === "ACTIVE").length)]] : []),
@@ -790,7 +810,7 @@ function ClientPortalDetail({ workspace, client, memberships, cases, units, scop
   );
 }
 
-function WorkspaceAdministration({ workspaces, clients, memberships, cases, busy, run }: { workspaces: AdminWorkspaceDTO[]; clients: Client[]; memberships: ActiveMembershipDTO[]; cases: CaseListItem[]; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void> }) {
+function WorkspaceAdministration({ workspaces, clients, memberships, cases, busy, run, reportInvitationOutcome }: { workspaces: AdminWorkspaceDTO[]; clients: Client[]; memberships: ActiveMembershipDTO[]; cases: CaseListItem[]; busy: boolean; run: (fn: () => Promise<void>, okText: string) => Promise<void>; reportInvitationOutcome: (text: string | null) => void }) {
   const [view, setView] = useState<"active" | "archived">("active");
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [unitCounts, setUnitCounts] = useState<Record<string, number>>({});
@@ -845,7 +865,7 @@ function WorkspaceAdministration({ workspaces, clients, memberships, cases, busy
 
   return (
     <div className="grid gap-5">
-      <ActivationWizard clients={clients} workspaces={workspaces} busy={busy} run={run} onActivated={setSelectedWorkspaceId} />
+      <ActivationWizard clients={clients} workspaces={workspaces} busy={busy} run={run} onActivated={setSelectedWorkspaceId} reportInvitationOutcome={reportInvitationOutcome} />
       <AdminPanel className="p-5" data-testid="client-centric-portal-list">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -859,7 +879,7 @@ function WorkspaceAdministration({ workspaces, clients, memberships, cases, busy
         </div>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[920px] border-separate border-spacing-y-2 text-left text-sm">
-            <thead className="text-xs uppercase tracking-[0.12em] text-[var(--adm-text-muted)]"><tr>{["Ügyfél", "Típus", "Együttműködés", "Portál státusza", "Aktív felhasználók", ...(visible.some((item) => item.mode !== "INDIVIDUAL") ? ["Szervezeti egységek"] : []), "Aktív ügyhozzáférések", ...(visible.some((item) => item.mode !== "INDIVIDUAL") ? ["Vezetői rálátások"] : []), "Utolsó változás", ""].map((head) => <th key={head} className="px-3 py-2">{head}</th>)}</tr></thead>
+            <thead className="text-xs uppercase tracking-[0.12em] text-[var(--adm-text-muted)]"><tr>{["Ügyfél", "Típus", "Együttműködés", "Munkatér állapota", "Aktív felhasználók", ...(visible.some((item) => item.mode !== "INDIVIDUAL") ? ["Szervezeti egységek"] : []), "Aktív ügyhozzáférések", ...(visible.some((item) => item.mode !== "INDIVIDUAL") ? ["Vezetői rálátások"] : []), "Utolsó változás", ""].map((head) => <th key={head} className="px-3 py-2">{head}</th>)}</tr></thead>
             <tbody>
               {visible.map((workspace) => {
                 const client = clients.find((item) => item.id === workspace.clientId);
@@ -890,6 +910,7 @@ function PageBody() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  const [invitationOutcome, setInvitationOutcome] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -970,6 +991,14 @@ function PageBody() {
         </div>
       )}
 
+      {invitationOutcome && (
+        <div data-testid="activation-invitation-outcome" role="status" className="rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-sm">
+          <p className="font-semibold text-[var(--adm-text)]">Meghívás és kézbesítés</p>
+          <p className="mt-1 text-[var(--adm-text-muted)]">{invitationOutcome}</p>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A munkatér aktiválása és a meghívás kézbesítése külön állapot; egyik sem bizonyítja a másikat.</p>
+        </div>
+      )}
+
       {loadError ? (
         <AdminPanel className="p-5" data-testid="client-portal-admin-load-error">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -987,7 +1016,7 @@ function PageBody() {
       {loadError ? null : (
       <>
 
-      <WorkspaceAdministration workspaces={workspaces} clients={clients} memberships={memberships} cases={cases} busy={busy} run={run} />
+      <WorkspaceAdministration workspaces={workspaces} clients={clients} memberships={memberships} cases={cases} busy={busy} run={run} reportInvitationOutcome={setInvitationOutcome} />
 
       <details className="rounded-2xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5">
         <summary className="cursor-pointer font-serif text-xl font-semibold text-[var(--adm-text)]">Haladó szervezeti eszközök és audit</summary>

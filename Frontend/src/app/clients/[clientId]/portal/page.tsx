@@ -13,7 +13,7 @@ import {
   type ClientPublishedContentDTO,
   type ClientPublishedContentItem,
 } from "@/lib/clientPublicationApi";
-import { ClientPortalMemberAdmin } from "@/components/client-portal/ClientPortalMemberAdmin";
+import { ClientPortalMemberAdmin, deliverySummary } from "@/components/client-portal/ClientPortalMemberAdmin";
 
 const modeLabels: Record<AdminWorkspaceDTO["mode"], string> = {
   INDIVIDUAL: "Magánügyfél",
@@ -106,6 +106,25 @@ export default function ClientPortalContextPage() {
   const organizationMode = workspace?.mode === "ORGANIZATION" || workspace?.mode === "CASE_RELAY";
   const clientColorDef = client ? getClientColorDefinition(client.colorKey) : null;
 
+  // Four separate, non-interchangeable state dimensions. Every value below comes
+  // from a canonical server read model (client portal switch, workspace row,
+  // workspace membership/invitation counts, publication projection). None is
+  // inferred from another: a delivery failure never changes the workspace state,
+  // and an active workspace never implies a delivered invitation.
+  const activeWorkspaces = workspaces.filter((item) => item.status !== "ARCHIVED");
+  const activeInvitationCount = activeWorkspaces.reduce((total, item) => total + item.pendingInvitationCount, 0);
+  const activeInvitations = activeWorkspaces.flatMap((item) => item.invitations.map((invitation) => ({ ...invitation, workspaceName: item.name })));
+  const publicationTypes: Array<[ClientPublishedContentItem["type"], number]> = published
+    ? [
+      ["MATTER", published.counts.matters],
+      ["DOCUMENT", published.counts.documents],
+      ["ACTION_REQUEST", published.counts.actionRequests],
+      ["UPDATE", published.counts.updates],
+    ]
+    : [];
+  // Zero categories are never presented as content.
+  const publishedTypesWithContent = publicationTypes.filter(([, count]) => count > 0);
+
   return (
     <AuthenticatedApp section="clients">
       <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
@@ -125,7 +144,7 @@ export default function ClientPortalContextPage() {
                     {workspace ? (
                       <>
                         <span className="rounded-full border border-[var(--adm-border)] px-3 py-1 text-xs font-semibold text-[var(--adm-text-muted)]">
-                          Portál: {statusLabels[workspace.status]}
+                          Munkatér: {statusLabels[workspace.status]}
                         </span>
                         <span className="rounded-full border border-[var(--adm-border)] px-3 py-1 text-xs font-semibold text-[var(--adm-text-muted)]">
                           {modeLabels[workspace.mode]}
@@ -139,34 +158,78 @@ export default function ClientPortalContextPage() {
                     </Link>
                   ) : null}
                 </div>
-                <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A portál státusza, tagsága, működési módja és az ügyfélnek publikált tartalom egy helyen.</p>
+                <p className="mt-2 text-sm text-[var(--adm-text-muted)]">A portál előkészítése, a munkatér állapota, a tagság, a meghívás kézbesítése és az ügyfélnek publikált tartalom külön állapotként jelenik meg.</p>
               </header>
 
-              {/* KPI — portal state, customer type, active members, published content */}
+              {/* Four labelled, non-interchangeable state dimensions. A delivery
+                  failure never makes an active workspace look inactive, and an
+                  active workspace never implies the invitation was delivered. */}
               <section className="adm-board-panel p-5" data-testid="portal-center-kpi">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Státusz</p>
                 <h2 className="mt-1 font-serif text-xl text-[var(--adm-text)]">Portál állapota</h2>
+                <p className="mt-1 text-sm text-[var(--adm-text-muted)]">
+                  A portál előkészítése, a munkatér állapota, a tagság, a meghívás kézbesítése és a publikált tartalom külön állapot. Egyik sem bizonyítja a másikat.
+                </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
-                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{workspace ? statusLabels[workspace.status] : "Nincs portál"}</p>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Portál állapota</p>
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4" data-testid="portal-dimension-portal-workspace">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Portál és munkatér</p>
+                    <p className="mt-2 text-lg font-semibold text-[var(--adm-text)]">{client.portalAccessEnabled ? "Portál előkészítve" : "Portál hozzáférés kikapcsolva"}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Munkatér: {workspace ? statusLabels[workspace.status] : "Nincs portál"}</p>
+                    {workspace ? (
+                      <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{workspace.name} · {modeLabels[workspace.mode]} · szervezeti ügyfél: {organizationMode ? "Igen" : "Nem"}</p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A portál-előkészítés ügyfélszintű kapcsoló; a munkatér állapota ettől független.</p>
+                    {activeWorkspaces.length > 1 ? (
+                      <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+                        Több aktív munkatér: {activeWorkspaces.map((item) => `${item.name} · ${statusLabels[item.status]}`).join("; ")}
+                      </p>
+                    ) : null}
+                    {!workspace ? (
+                      <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs létrehozott portál.</p>
+                    ) : null}
                   </div>
-                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
-                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{organizationMode ? "Igen" : "Nem"}</p>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Szervezeti ügyfél</p>
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4" data-testid="portal-dimension-membership">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Tagság</p>
+                    <p className="mt-2 text-lg font-semibold text-[var(--adm-text)]">{workspace ? workspace.activeMembershipCount : "—"}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív portál tag{workspace ? ` · ${workspace.name}` : ""}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Jóváhagyásra váró tagság: {workspace ? workspace.pendingApprovalCount : "—"}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A tagság önmagában nem ad ügyhozzáférést, és nem bizonyít e-mail-kézbesítést.</p>
                   </div>
-                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
-                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{workspace ? workspace.activeMembershipCount : "—"}</p>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív portál tag</p>
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4" data-testid="portal-dimension-invitation">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Meghívás és kézbesítés</p>
+                    <p className="mt-2 text-lg font-semibold text-[var(--adm-text)]">{activeInvitationCount}</p>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Aktív meghívás{activeWorkspaces.length > 1 ? " · összes nem archivált munkatér" : ""}</p>
+                    {activeInvitations.length ? (
+                      <ul className="mt-1 grid gap-0.5 text-xs text-[var(--adm-text-muted)]">
+                        {activeInvitations.map((invitation) => (
+                          <li key={invitation.id}>
+                            {activeWorkspaces.length > 1 ? `${invitation.workspaceName} · ` : ""}
+                            {invitation.intendedEmail || "—"} · {deliverySummary(invitation.deliveryStatus, invitation.deliveryCodeSafe)}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Nincs aktív meghívás.</p>
+                    )}
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A meghívás rögzítése nem jelenti, hogy az e-mail kézbesítve lett; a kézbesítési hiba a munkatér állapotát nem változtatja meg.</p>
                   </div>
-                  <div className="rounded-xl bg-[var(--adm-surface)] p-4">
-                    <p className="text-2xl font-semibold text-[var(--adm-text)]">{published ? published.counts.total : "—"}</p>
-                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Publikált tartalom</p>
+                  <div className="rounded-xl bg-[var(--adm-surface)] p-4" data-testid="portal-dimension-publication">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Publikált tartalom</p>
+                    {published && !publishedError ? (
+                      published.counts.total === 0 ? (
+                        <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Nincs publikált tartalom.</p>
+                      ) : (
+                        <>
+                          <p className="mt-2 text-lg font-semibold text-[var(--adm-text)]">{published.counts.total}</p>
+                          <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{publishedTypesWithContent.map(([type, count]) => `${publishedTypeLabels[type]}: ${count}`).join(" · ")}</p>
+                        </>
+                      )
+                    ) : (
+                      <p className="mt-2 text-sm text-[var(--adm-text-muted)]">—</p>
+                    )}
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A portál aktiválása nem publikál tartalmat; a publikáció külön, kifejezett lépés.</p>
                   </div>
                 </div>
-                {!workspace ? (
-                  <p className="mt-4 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyfélhez még nincs létrehozott portál.</p>
-                ) : null}
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Link href="/client-portal-admin" className="adm-link-button px-4 py-2 text-xs">Portál adminisztráció megnyitása</Link>
                   {organizationMode ? <Link href={`/clients/${encodeURIComponent(clientId)}/szervezet`} className="adm-link-button px-4 py-2 text-xs">Szervezeti kontextus</Link> : null}
@@ -253,7 +316,7 @@ export default function ClientPortalContextPage() {
                 ) : (
                   <>
                     <p className="mt-3 text-sm text-[var(--adm-text-muted)]">
-                      {published.counts.total} publikált elem · ügyállapot: {published.counts.matters} · dokumentum: {published.counts.documents} · teendő: {published.counts.actionRequests} · frissítés: {published.counts.updates}
+                      {published.counts.total} publikált elem{publishedTypesWithContent.length ? ` · ${publishedTypesWithContent.map(([type, count]) => `${publishedTypeLabels[type].toLowerCase()}: ${count}`).join(" · ")}` : ""}
                     </p>
                     <ul className="mt-3 grid gap-2" data-testid="published-content-list">
                       {published.items.map((item) => (
