@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, use, useEffect, useCallback, useMemo, useReducer, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
@@ -475,11 +475,35 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   });
 
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
   const requestedDocumentIdRef = useRef<string | null>(requestedDocumentId);
   if (requestedDocumentId) {
     requestedDocumentIdRef.current = requestedDocumentId;
   }
+
+  const syncDocumentIdToUrl = useCallback((documentId: string | null, history: "push" | "replace") => {
+    const params = new URLSearchParams(searchParams?.toString());
+    if (documentId) {
+      params.set("documentId", documentId);
+    } else {
+      params.delete("documentId");
+    }
+    const query = params.toString();
+    const nextUrl = query ? `${pathname}?${query}` : pathname;
+    const currentUrl = searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+    if (nextUrl === currentUrl) return;
+    router[history](nextUrl);
+  }, [pathname, router, searchParams]);
+
+  const selectLedgerItem = useCallback((
+    item: SelectedLedgerItem,
+    history: "push" | "replace" = "push",
+  ) => {
+    setSelectedLedgerItem(item);
+    setSelectedContract(item.kind === "generated" ? item.item : null);
+    syncDocumentIdToUrl(item.item.id, history);
+  }, [syncDocumentIdToUrl]);
 
   // Resolve a canonical case ID directly so document controls do not depend on
   // the case appearing in an arbitrary pagination window. Keep the list lookup
@@ -544,21 +568,25 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           if (uploadedMatch) {
             setSelectedLedgerItem({ kind: 'uploaded', item: uploadedMatch });
             setSelectedContract(null);
+            syncDocumentIdToUrl(uploadedMatch.id, "replace");
             requestedDocumentIdRef.current = null;
           } else {
             const contractMatch = contractsData.find(c => c.id === deepLinkedId);
             if (contractMatch) {
               setSelectedLedgerItem({ kind: 'generated', item: contractMatch });
               setSelectedContract(contractMatch);
+              syncDocumentIdToUrl(contractMatch.id, "replace");
               requestedDocumentIdRef.current = null;
             }
           }
         } else if (uploaded[0]) {
           setSelectedLedgerItem({ kind: 'uploaded', item: uploaded[0] });
           setSelectedContract(null);
+          syncDocumentIdToUrl(uploaded[0].id, "replace");
         } else if (contractsData[0]) {
           setSelectedLedgerItem({ kind: 'generated', item: contractsData[0] });
           setSelectedContract(contractsData[0]);
+          syncDocumentIdToUrl(contractsData[0].id, "replace");
         }
       }
     } catch (err) {
@@ -567,7 +595,24 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setIsInitialLoading(false);
       setIsRefreshing(false);
     }
-  }, [caseRecord?.id]);
+  }, [caseRecord?.id, syncDocumentIdToUrl]);
+
+  useEffect(() => {
+    if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length)) return;
+    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId);
+    if (uploadedMatch) {
+      if (selectedLedgerItem?.kind !== "uploaded" || selectedLedgerItem.item.id !== uploadedMatch.id) {
+        setSelectedLedgerItem({ kind: "uploaded", item: uploadedMatch });
+        setSelectedContract(null);
+      }
+      return;
+    }
+    const contractMatch = contracts.find((contract) => contract.id === requestedDocumentId);
+    if (contractMatch && (selectedLedgerItem?.kind !== "generated" || selectedLedgerItem.item.id !== contractMatch.id)) {
+      setSelectedLedgerItem({ kind: "generated", item: contractMatch });
+      setSelectedContract(contractMatch);
+    }
+  }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments]);
 
   // Re-trigger loadData once caseRecord is resolved to CUID — only on mount
   useEffect(() => {
@@ -796,8 +841,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const selectedUploaded = docs.find((doc) => doc.id === uploaded.id) || uploaded;
       setUploadedDocuments(uploadedOnly);
       setModifiedWorkingCopies(modified);
-      setSelectedLedgerItem({ kind: 'uploaded', item: selectedUploaded });
-      setSelectedContract(null);
+      selectLedgerItem({ kind: 'uploaded', item: selectedUploaded });
       setActionResult({ type: 'success', message: 'Dokumentum feltöltve. Szöveg kinyerése a szerkesztő megnyitásakor történik, ha a fájlformátum támogatott.' });
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -1974,9 +2018,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div data-testid="canonical-document-context-line" className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#3D4842]">
                         <span><b>Ügy:</b> {displayCaseId}</span>
                         {displayClient ? <span><b>Ügyfél:</b> {displayClient}</span> : null}
-                        <span><b>Felelős:</b> {activeWorkContextView?.owner?.name ?? '—'}</span>
-                        <span><b>Reviewer:</b> {activeWorkContextView?.reviewer?.name ?? '—'}</span>
-                        <span><b>Határidő:</b> {activeWorkContextView?.dueDateLabel ?? '—'}</span>
+                        {activeWorkContextView?.owner?.name ? <span><b>Felelős:</b> {activeWorkContextView.owner.name}</span> : null}
+                        {activeWorkContextView?.reviewer?.name ? <span><b>Reviewer:</b> {activeWorkContextView.reviewer.name}</span> : null}
+                        {activeWorkContextView?.dueDateLabel ? <span><b>Határidő:</b> {activeWorkContextView.dueDateLabel}</span> : null}
                       </div>
                       {activeWorkContextView?.workInstruction ? (
                         <p data-testid="canonical-document-work-instruction" className="mt-1 text-xs text-[#3D4842]">
@@ -2010,12 +2054,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         >
                           {isUploadingVersion ? 'Feltöltés...' : 'Új verzió feltöltése'}
                         </AdminButton>
-                      ) : null}
-                      {selectedUploadedDocument ? (
-                        <AdminButton variant="neutral" onClick={() => setContextualTab('changes')}>Változások</AdminButton>
-                      ) : null}
-                      {selectedUploadedDocument ? (
-                        <AdminButton variant="neutral" onClick={() => setAiPreparationOpen(true)}>AI előkészítés</AdminButton>
                       ) : null}
                       <AdminButton
                         variant="neutral"
@@ -2076,9 +2114,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 ) : null}
 
                 {/* 2. CANONICAL 3-COLUMN WORKSPACE: LEFT (LEDGER) | CENTER (READING) | RIGHT (CONTEXTUAL SHELL) */}
-                <div className={`grid min-w-0 grid-cols-1 gap-4 ${readingFocus ? "xl:grid-cols-[minmax(0,1fr)]" : "xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
+                <div className={`grid min-w-0 grid-cols-1 gap-4 ${readingFocus ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[230px_minmax(0,1fr)_290px] xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
                   {/* CANONICAL LEFT REGION: Document Ledger */}
-                  <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " xl:hidden" : ""}`}>
+                  <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " lg:hidden" : ""}`}>
                     <div className="order-2 border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-3">
                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Jogi munka</p>
                       <h2 className="font-serif text-lg font-semibold text-[var(--adm-text)]">AI / prompt előkészítés</h2>
@@ -2090,7 +2128,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
                     </div>
                     <div className="order-1 border-b border-[var(--adm-border)] bg-white p-3">
-                      <details data-testid="document-version-navigation">
+                      <details data-testid="document-version-navigation" open>
                         <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Dokumentumok és verziók</summary>
                         <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Dokumentumváltás, verzióváltás, feltöltés és letöltés.</p>
                       <label className="mt-2 block">
@@ -2132,7 +2170,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               fileType={getFileType(doc.fileName)}
                               active={isSelected}
                               variant="upload"
-                              onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
+                              onClick={() => selectLedgerItem({ kind: "uploaded", item: doc })}
                               status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : scanStatusLabel(doc.securityScanStatus)}</AdminBadge>}
                             />
                           );
@@ -2153,7 +2191,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               meta="Szöveges munkapéldány, nem Word változáskövetés"
                               active={isSelected}
                               variant="generated"
-                              onClick={() => { setSelectedLedgerItem({ kind: "uploaded", item: doc }); setSelectedContract(null); }}
+                              onClick={() => selectLedgerItem({ kind: "uploaded", item: doc })}
                               status={<AdminBadge tone={isSelected ? "gold" : "green"}>{isSelected ? "Aktív" : "Munkapéldány"}</AdminBadge>}
                             />
                           );
@@ -2175,7 +2213,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               fileType="DOCX"
                               active={isSelected}
                               variant="generated"
-                              onClick={() => { setSelectedLedgerItem({ kind: "generated", item: contract }); setSelectedContract(contract); }}
+                              onClick={() => selectLedgerItem({ kind: "generated", item: contract })}
                               status={<AdminBadge tone={isSelected ? "gold" : "neutral"}>{isSelected ? "Aktív" : getContractStatusLabel(contract)}</AdminBadge>}
                             />
                           );
@@ -2349,7 +2387,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </main>
 
                   {/* CANONICAL RIGHT REGION: Contextual Work-Panel Shell */}
-                  <aside data-testid="canonical-right-shell" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " xl:hidden" : ""}`}>
+                  <aside data-testid="canonical-right-shell" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " lg:hidden" : ""}`}>
                     <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-3">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">
@@ -2396,11 +2434,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         ) : (
                           <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Válassz dokumentumot az áttekintéshez.</p>
                         )}
-                        <div className="flex flex-wrap gap-2">
-                          <AdminButton size="sm" variant="neutral" onClick={() => setContextualTab('changes')} disabled={!selectedUploadedDocument}>Változások megnyitása</AdminButton>
-                          <AdminButton size="sm" variant="neutral" onClick={() => setContextualTab('comments')} disabled={!selectedUploadedDocument}>Megjegyzések megnyitása</AdminButton>
-                          <AdminButton size="sm" variant="primary" onClick={() => setContextualTab('approval')} disabled={!selectedUploadedDocument}>Jóváhagyás megnyitása</AdminButton>
-                        </div>
                       </div>
 
                       <div className={contextualTab === 'approval' ? 'space-y-4' : 'hidden'} data-testid="contextual-approval-panel">
