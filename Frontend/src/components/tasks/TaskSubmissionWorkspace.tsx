@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { WorkflowDialog } from "@/components/tasks/WorkflowDialog";
+import { TaskResponsibilityPanel } from "@/components/tasks/TaskResponsibilityPanel";
 import { getCaseDocuments, getTimeEntries, type DocumentItem, type TimeEntry } from "@/lib/api";
 import {
   StableMutationAttempt,
@@ -468,6 +469,16 @@ export function TaskSubmissionWorkspace({
                 {workflow.task.description ? <p className="mt-4 border-t border-[var(--adm-border)] pt-3 text-[12px] leading-5 text-[var(--adm-text-muted)]">{workflow.task.description}</p> : null}
                 {item.sourceCommunicationId ? <p className="mt-3 text-[11px]"><Link href={`/communications?communicationId=${encodeURIComponent(item.sourceCommunicationId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt kommunikáció megnyitása</Link></p> : null}
               </section>
+
+              <TaskResponsibilityPanel
+                taskId={item.id}
+                caseId={item.case.id}
+                currentAssigneeId={workflow.task.assignee?.id ?? item.assignedToId ?? null}
+                currentAssigneeName={workflow.task.assignee?.displayName ?? null}
+                plannedReviewerId={item.plannedReviewerId ?? null}
+                plannedReviewerName={item.plannedReviewer?.name ?? null}
+                onChanged={onWorkflowChanged}
+              />
 
               {!draft && workflow.permittedActions.createDraft ? (
                 <CompactState title="Még nincs Leadás piszkozat." detail="Hozzon létre piszkozatot, majd kapcsolja hozzá az eredményt, a munkaidőt és a reviewert." action={<AdminButton variant="primary" disabled={busyAction === "create-draft"} onClick={() => void createDraft()}>Leadás piszkozat létrehozása</AdminButton>} />
