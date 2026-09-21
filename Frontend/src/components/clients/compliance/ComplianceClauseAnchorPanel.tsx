@@ -108,6 +108,55 @@ const bindingReasonLabels: Record<string, string> = {
 };
 
 /**
+ * Readable Hungarian labels for the parser's internal processing codes.
+ *
+ * These stay visible to the internal reader as a plain-language signal, but the
+ * raw machine token (and any transported payload such as a source label) is
+ * never rendered in the normal workforce compliance card. Unknown codes fall
+ * back to a neutral phrase instead of leaking an unrecognized token.
+ */
+const ingestWarningLabels: Record<string, string> = {
+  RELATION_TYPE_MISSING: "A dokumentum nem jelöli a kapcsolat típusát",
+  RELATION_TYPE_UNPARSEABLE: "A dokumentum kapcsolat-típusa nem értelmezhető",
+  CLAUSE_VALUE_MISSING: "A hivatkozott pont megjelölése hiányzik",
+  CLAUSE_VALUE_FROM_ALIAS: "A pont megjelölése a dokumentum alternatív címkéjéből származik",
+  PENDING_ANCHOR_CONTROL: "A hivatkozás jelölése félkész a dokumentumban",
+  ANCHOR_DISPLAY_FROM_ALIAS: "A hivatkozás megnevezése alternatív címkéből származik",
+  ANCHOR_KEY_UNRESOLVED: "A dokumentum nem tartalmaz ehhez elég gépi azonosítót",
+  ORPHAN_ANCHOR_METADATA: "Gazdátlan hivatkozás-metaadat a dokumentumban",
+  LOOSE_ANCHOR_METADATA: "Táblázaton kívüli hivatkozás-metaadat a dokumentumban",
+  LEGACY_CITATION_COLUMNS: "Régi formátumú hivatkozás-oszlop a dokumentumban",
+  DUPLICATE_ANCHOR_METADATA: "Ismétlődő hivatkozás-metaadat a dokumentumban",
+  ROW_WITHOUT_ANCHOR_CONTROL: "Hivatkozás nélküli sor a dokumentumban",
+  ROW_WITHOUT_CLAUSE_CONTROL: "Pontmegjelölés nélküli sor a dokumentumban",
+  CONTROL_OUTSIDE_TABLE_ROW: "Táblázaton kívüli jelölő a dokumentumban",
+  TAG_MALFORMED: "Hibás szerkezetű jelölő a dokumentumban",
+  UNKNOWN_ADM_CONTROL_KIND: "Ismeretlen típusú jelölő a dokumentumban",
+  UNKNOWN_RELATION_TYPE: "Nem szokványos kapcsolat-típus a dokumentumban",
+  MULTILINE_CONTROL_VALUE: "Többsoros jelölőérték a dokumentumban",
+  RELATION_TYPE_SOURCE_LABEL: "A dokumentum saját kapcsolat-megjelölése",
+  ROW_LIMIT_REACHED: "A feldolgozott sorok száma elérte a korlátot",
+  XML_UNCLOSED_ELEMENTS: "Lezáratlan szerkezeti elem a dokumentumban",
+  HYPERLINK_LEGAL_ANCHOR_USED: "Hivatkozás alapján azonosított jogi forrás",
+  HYPERLINK_LEGAL_ANCHOR_NO_DISPLAY: "Hivatkozás jogi forrás megnevezése nélkül",
+  HYPERLINK_RELATIONSHIP_UNRESOLVED: "Nem feloldható hivatkozás a dokumentumban",
+  HYPERLINK_LIMIT_REACHED: "A feldolgozott hivatkozások száma elérte a korlátot",
+};
+
+const UNKNOWN_INGEST_WARNING_LABEL = "Feldolgozási jelzés a dokumentumból";
+
+/** Map one persisted processing code to its readable label, payload-stripped. */
+export function ingestWarningLabel(code: string): string {
+  const base = code.split(":")[0];
+  return ingestWarningLabels[base] ?? UNKNOWN_INGEST_WARNING_LABEL;
+}
+
+/** Readable, de-duplicated labels for a row's processing codes. */
+export function ingestWarningTexts(codes: string[]): string[] {
+  return [...new Set(codes.map(ingestWarningLabel))];
+}
+
+/**
  * Truthful canonical binding line (INTERNAL only).
  *
  * A resolved binding shows the stored canonical citation/title when the registry
@@ -195,7 +244,6 @@ function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
 
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {metaField({ label: "ELI", value: row.eli, mono: true, href: isHttpUrl(row.eli) ? row.eli : null })}
-        {metaField({ label: "CELEX", value: row.celex, mono: true })}
         {metaField({ label: "Norma helye (locator)", value: row.locator, mono: true })}
         {metaField({ label: "ECLI", value: row.ecli, mono: true })}
         {metaField({ label: "Ügyszám", value: caseIdentifier(row), mono: true })}
@@ -216,9 +264,7 @@ function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
         {row.canonicalReference
           ? metaField({ label: "Figyelési azonosító", value: row.canonicalReference, mono: true })
           : null}
-        {row.anchorKey ? (
-          metaField({ label: "Stabil hivatkozás-azonosító", value: row.anchorKey, mono: true })
-        ) : (
+        {row.anchorKey ? null : (
           <p className="text-xs text-[var(--adm-ochre-500)]" data-testid="anchor-key-unresolved">
             Nincs stabil hivatkozás-azonosító: a dokumentum nem tartalmaz ehhez elég gépi azonosítót.
           </p>
@@ -228,8 +274,8 @@ function clauseAnchorRow(row: ComplianceClauseAnchorRow) {
           <div className="mt-2" data-testid="clause-anchor-warnings">
             <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Belső feldolgozási jelzés</p>
             <ul className="mt-0.5 space-y-0.5">
-              {warnings.map((warning) => (
-                <li key={warning} className="font-mono text-[10px] text-[var(--adm-text-muted)]">{warning}</li>
+              {ingestWarningTexts(warnings).map((label) => (
+                <li key={label} className="text-[10px] text-[var(--adm-text-muted)]">{label}</li>
               ))}
             </ul>
           </div>

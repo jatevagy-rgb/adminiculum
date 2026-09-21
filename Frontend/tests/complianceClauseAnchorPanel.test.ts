@@ -129,7 +129,7 @@ const canonicalRefRow = baseRow({
 
 const LEGAL_ONLY = { documentId: 'document-1', versions: [{ documentVersionId: 'version-1', version: 1, isCurrent: true, rows: [baseRow()] }] };
 
-test('renders each relation with clause, relation type, anchor type and machine metadata', async () => {
+test('renders each relation with readable clause, relation type, anchor type and legal references', async () => {
   const h = await mount({ documentId: 'document-1', versions: [{ documentVersionId: 'version-1', version: 1, isCurrent: true, rows: [baseRow(), caseRow] }] });
   const tree = rerender(h);
   const text = textOf(tree);
@@ -140,15 +140,17 @@ test('renders each relation with clause, relation type, anchor type and machine 
   assert.match(text, /INTERPRETATION/);
   assert.match(text, /GDPR 28\. cikk \(3\)/);
   assert.match(text, /http:\/\/data\.europa\.eu\/eli\/reg\/2016\/679\/oj/);
-  assert.match(text, /32016R0679/);
   assert.match(text, /art=28;par=3/);
   assert.match(text, /EU:C:2023:949/);
   assert.match(text, /paras=41-45/);
-  assert.match(text, /LEGAL\|SID=la_baa4796f2169/);
   assert.match(text, /A szerzodeses pont es a jogszabalyi hely kapcsolata\./);
   // Anchor source kinds are labelled truthfully.
   assert.match(text, /Jogszabály/);
   assert.match(text, /Bírósági döntés/);
+  // The raw machine identity is internal only: the normal card renders the readable
+  // legal reference instead of the parser key or the implementation CELEX code.
+  assert.ok(!text.includes('LEGAL|SID='), 'the raw anchor key must not be rendered');
+  assert.ok(!text.includes('32016R0679'), 'the raw CELEX code must not be rendered');
 });
 
 test('shows DocumentVersion provenance and lets an older version be inspected', async () => {
@@ -250,9 +252,12 @@ test('surfaces internal processing warnings and an honest empty state', async ()
   const h = await mount({ documentId: 'document-1', versions: [{ documentVersionId: 'version-1', version: 1, isCurrent: true, rows: [authorityRow] }] });
   const tree = rerender(h);
   const warnings = byTestId(tree, 'clause-anchor-warnings');
-  assert.ok(warnings, 'internal warnings must be visible to the internal reader');
-  assert.match(textOf(warnings), /ANCHOR_KEY_UNRESOLVED/);
-  assert.match(textOf(warnings), /RELATION_TYPE_SOURCE_LABEL:NAIH/);
+  assert.ok(warnings, 'the readable processing signal must stay visible to the internal reader');
+  assert.match(textOf(warnings), /nem tartalmaz ehhez elég gépi azonosítót/);
+  assert.match(textOf(warnings), /A dokumentum saját kapcsolat-megjelölése/);
+  // The raw parser codes (and any transported payload) are never leaked here.
+  assert.ok(!textOf(warnings).includes('ANCHOR_KEY_UNRESOLVED'));
+  assert.ok(!textOf(warnings).includes('RELATION_TYPE_SOURCE_LABEL'));
 
   const empty = await mount({ documentId: 'document-1', versions: [] });
   const emptyTree = rerender(empty);
@@ -398,8 +403,9 @@ test('searches the free-text haystack across the meaningful row fields, not only
   assert.equal(rows(tree).length, 1, 'canonicalReference (Figyelési azonosító) must be searchable');
   assert.match(textOf(tree), /10\.1\./);
 
+  // The raw anchor key is internal-only: never rendered, but still a lookup value.
   tree = searchFor(h, 'LEGAL|REF=TV/2013/5/6:59/2');
-  assert.equal(rows(tree).length, 1, 'anchorKey (Stabil hivatkozás-azonosító) must be searchable');
+  assert.equal(rows(tree).length, 1, 'anchorKey must stay searchable even though it is not rendered');
 
   tree = searchFor(h, 'T/2013/5/6:59/2');
   assert.equal(rows(tree).length, 1, 'the Peter transport alias T/... must match the canonical TV/... row');
