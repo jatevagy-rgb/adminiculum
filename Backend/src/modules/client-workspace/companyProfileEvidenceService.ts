@@ -19,6 +19,10 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { lookupSafeControlLabel } from '../compliance/safeTopicRegistry';
+import { deriveControlEvidenceState, type ControlEvidenceState } from './controlEvidenceState';
+
+export { deriveControlEvidenceState };
+export type { ControlEvidenceState };
 
 type Db = PrismaClient;
 type Tx = Prisma.TransactionClient;
@@ -275,6 +279,7 @@ export interface ControlEvidenceJourneyItem {
   readonly relevance: ControlEvidenceRelevance;
   readonly implemented: boolean;
   readonly evidenceLinked: boolean;
+  readonly evidenceState: ControlEvidenceState;
   readonly stateHu: string;
 }
 
@@ -313,6 +318,11 @@ export async function getControlEvidenceJourney(identityId: string, workspaceId:
     const linked = links.some((link) => isCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
     const implemented = control?.implementationStatus === 'IMPLEMENTED' && linked;
     const hasStaleEvidence = links.some((link) => !isCurrent(link.evidenceRecord.validFrom, link.evidenceRecord.validUntil, now));
+    const evidenceState = deriveControlEvidenceState({
+      implementationStatus: control?.implementationStatus ?? null,
+      currentLinked: linked,
+      hasStaleEvidence,
+    });
     return {
       controlKey: entry.controlKey,
       module: entry.module,
@@ -320,13 +330,14 @@ export async function getControlEvidenceJourney(identityId: string, workspaceId:
       relevance: entry.relevance,
       implemented,
       evidenceLinked: linked,
-      stateHu: implemented
-        ? 'Rendben, bizonyítékkal alátámasztva.'
-        : control?.implementationStatus === 'NOT_IMPLEMENTED'
+      evidenceState,
+      stateHu: evidenceState === 'ANSWERED'
+        ? control?.implementationStatus === 'NOT_IMPLEMENTED'
           ? 'Hiányzó dokumentum vagy intézkedés.'
-          : hasStaleEvidence
-            ? 'A korábbi bizonyíték felülvizsgálatra szorul.'
-            : 'Még nincs kitöltve.',
+          : 'Rendben, bizonyítékkal alátámasztva.'
+        : evidenceState === 'STALE'
+          ? 'A korábbi bizonyíték felülvizsgálatra szorul.'
+          : 'Még nincs kitöltve.',
     };
   });
   return { items, reusableDocuments };
