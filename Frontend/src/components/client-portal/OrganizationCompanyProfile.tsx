@@ -17,6 +17,8 @@ import {
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
 import { companyProfileCompletion } from "@/lib/companyProfileCompletion";
+import { draftToPayload, seedDrafts, type DraftValue } from "@/lib/companyProfileDraft";
+import { countPendingEvidence, evidencePendingLabel } from "@/lib/companyProfileEvidence";
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const inputClass =
@@ -27,56 +29,6 @@ const chipOff = `${chipBase} border border-stone-300 text-stone-700 hover:bg-sto
 
 const TEAOR_UNAVAILABLE =
   "Az ágazati besorolás jelenleg nem érhető el. A korábban megadott tevékenységi adat megmaradt.";
-
-type DraftValue = {
-  status: "ANSWERED" | "UNKNOWN";
-  numberValue?: string;
-  booleanValue?: boolean;
-  stringValue?: string;
-  enumValue?: string;
-  jsonValue?: string[];
-};
-
-function valueToDraft(question: PortalCompanyProfileQuestion): DraftValue | undefined {
-  if (question.status !== "ANSWERED" || question.value === null || question.value === undefined) return undefined;
-  if (Array.isArray(question.value)) return { status: "ANSWERED", jsonValue: [...question.value] };
-  if (question.valueType === "NUMBER" && typeof question.value === "number") return { status: "ANSWERED", numberValue: String(question.value) };
-  if (question.valueType === "BOOLEAN" && typeof question.value === "boolean") return { status: "ANSWERED", booleanValue: question.value };
-  if (question.valueType === "ENUM" || question.valueType === "JURISDICTION") return { status: "ANSWERED", enumValue: String(question.value) };
-  return { status: "ANSWERED", stringValue: String(question.value) };
-}
-
-function draftToPayload(question: PortalCompanyProfileQuestion, draft: DraftValue): PortalCompanyProfileAnswerPayload | null {
-  if (draft.status === "UNKNOWN") return { status: "UNKNOWN" };
-  switch (question.valueType) {
-    case "NUMBER": {
-      const trimmed = (draft.numberValue ?? "").trim();
-      if (!trimmed) return null;
-      const parsed = Number(trimmed);
-      if (!Number.isFinite(parsed) || parsed < 0) return null;
-      if (question.integerOnly && !Number.isInteger(parsed)) return null;
-      return { status: "ANSWERED", numberValue: parsed };
-    }
-    case "BOOLEAN":
-      return typeof draft.booleanValue === "boolean" ? { status: "ANSWERED", booleanValue: draft.booleanValue } : null;
-    case "ENUM":
-      return draft.enumValue ? { status: "ANSWERED", enumValue: draft.enumValue } : null;
-    case "JURISDICTION": {
-      const code = (draft.enumValue ?? "").trim();
-      return code ? { status: "ANSWERED", enumValue: code.toUpperCase() } : null;
-    }
-    case "MULTI_ENUM": {
-      const values = draft.jsonValue ?? [];
-      return values.length ? { status: "ANSWERED", jsonValue: values } : null;
-    }
-    case "STRING": {
-      const value = (draft.stringValue ?? "").trim();
-      return value ? { status: "ANSWERED", stringValue: value } : null;
-    }
-    default:
-      return null;
-  }
-}
 
 // Customer-safe human label. The technical question key is never a display value.
 function questionLabel(question: PortalCompanyProfileQuestion): string {
@@ -211,20 +163,19 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
     [evidence],
   );
 
+  // "Megválaszolandó" counts only applicable controls that are still PENDING.
+  // It must never be the total applicable count: a persisted YES (current
+  // evidence linked) and a persisted NO (explicitly not implemented) are both
+  // answered, and stale evidence keeps its own truthful state instead of being
+  // presented as unanswered. The applicable total stays separately available.
+  const pendingEvidenceCount = useMemo(() => countPendingEvidence(applicableEvidence), [applicableEvidence]);
+
   const hasTeaorAtom = activeAtoms.some((atom) => atom.codeCatalog === "TEAOR25");
 
   // Seed drafts from persisted answers, and resolve TEÁOR labels for stored codes.
   useEffect(() => {
     if (!activeScreen) return;
-    setDrafts((previous) => {
-      const next = { ...previous };
-      for (const atom of activeAtoms) {
-        if (next[atom.questionKey]) continue;
-        const seeded = valueToDraft(atom);
-        if (seeded) next[atom.questionKey] = seeded;
-      }
-      return next;
-    });
+    setDrafts((previous) => seedDrafts(previous, activeAtoms));
     for (const atom of activeAtoms) {
       if (atom.codeCatalog !== "TEAOR25") continue;
       const draft = drafts[atom.questionKey];
@@ -558,7 +509,7 @@ export function OrganizationCompanyProfile({ onProfileUpdated }: { onProfileUpda
               </span>
             </span>
             <span className="shrink-0 text-xs font-semibold text-stone-500">
-              {applicableEvidence.length ? `${applicableEvidence.length} megválaszolandó` : "Részletek"}
+              {evidencePendingLabel(applicableEvidence.length, pendingEvidenceCount)}
             </span>
           </button>
           {evidenceOpen ? (

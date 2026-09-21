@@ -127,6 +127,11 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     const result = await submitControlEvidenceAnswer(representativeId, workspaceId, 'C-DATA-002', { answer: 'UNKNOWN' }, db);
     expect(result).toMatchObject({ route: 'LAWYER_REVIEW', implemented: false, documentVersionId: null });
     expect(await db.evidenceRecord.count({ where: { clientId } })).toBe(0);
+    // UNKNOWN evidence is NOT persisted as a distinct answer: no evidence link,
+    // no NOT_IMPLEMENTED status. The machine-readable state therefore stays
+    // PENDING after reload rather than pretending the customer answered.
+    const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    expect(journey.items.find((item) => item.controlKey === 'C-DATA-002')?.evidenceState).toBe('PENDING');
   });
 
   it('EVIDENCE_NO_REAL_GAP: a negative answer records a missing control, not evidence', async () => {
@@ -136,6 +141,9 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     const control = await db.clientControl.findFirstOrThrow({ where: { clientId, controlDefinitionId: definition.id } });
     expect(control.implementationStatus).toBe('NOT_IMPLEMENTED');
     expect(await db.evidenceRecord.count({ where: { clientId } })).toBe(0);
+    // A persisted NO is an ANSWER, so it must never be reported as pending.
+    const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
+    expect(journey.items.find((item) => item.controlKey === 'C-DATA-002')?.evidenceState).toBe('ANSWERED');
   });
 
   it('EVIDENCE_YES_REAL_PATH + DOCUMENTVERSION_REUSED: links an existing document version and reuses it', async () => {
@@ -177,7 +185,7 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
     expect(new Set(keys).size).toBe(keys.length);
     expect(keys).toEqual(['C-CYBER-001', 'C-CYBER-002', 'C-DATA-001', 'C-DATA-002', 'C-WB-001']);
     const gdpr = journey.items.find((item) => item.controlKey === 'C-DATA-002');
-    expect(gdpr).toMatchObject({ implemented: true, evidenceLinked: true });
+    expect(gdpr).toMatchObject({ implemented: true, evidenceLinked: true, evidenceState: 'ANSWERED' });
     expect(journey.items.map((item) => item.questionHu)).toEqual(expect.arrayContaining([
       'Van jelenleg hatályos adatkezelési tájékoztatótok?',
     ]));
@@ -258,7 +266,7 @@ describeWithDatabase('compliance module vertical slice (PostgreSQL)', () => {
 
     const journey = await getControlEvidenceJourney(representativeId, workspaceId, db);
     const item = journey.items.find((entry) => entry.controlKey === 'C-CYBER-001');
-    expect(item).toMatchObject({ implemented: false, evidenceLinked: false, relevance: 'LEGAL_REVIEW_REQUIRED' });
+    expect(item).toMatchObject({ implemented: false, evidenceLinked: false, relevance: 'LEGAL_REVIEW_REQUIRED', evidenceState: 'STALE' });
 
     await db.evidenceControlLink.deleteMany({ where: { clientId, clientControlId: control.id } });
     await db.evidenceRecord.deleteMany({ where: { id: expired.id } });

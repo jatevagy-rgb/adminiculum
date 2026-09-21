@@ -173,6 +173,20 @@ describe("Organization Customer Company Profile / AnswerState UI", () => {
     assert.doesNotMatch(views, /onProfileUpdated=\{load\}/);
   });
 
+  it("counts pending follow-up evidence (never the applicable total) and keeps UNKNOWN seeded", () => {
+    const src = profileSrc();
+    // The follow-up header is the machine-readable pending count, not the total.
+    assert.match(src, /countPendingEvidence\(applicableEvidence\)/);
+    assert.match(src, /evidencePendingLabel\(applicableEvidence\.length, pendingEvidenceCount\)/);
+    assert.doesNotMatch(src, /\$\{applicableEvidence\.length\} megválaszolandó/);
+    // Persisted UNKNOWN is reconstructed when drafts are seeded from discovery.
+    assert.match(src, /seedDrafts\(previous, activeAtoms\)/);
+    assert.match(src, /import \{ draftToPayload, seedDrafts, type DraftValue \} from "@\/lib\/companyProfileDraft"/);
+    const evidenceLib = read("src/lib/companyProfileEvidence.ts");
+    assert.match(evidenceLib, /Mind megválaszolva/);
+    assert.match(evidenceLib, /megválaszolandó/);
+  });
+
   it("refreshCompany preserves the previously loaded company summary on failure", () => {
     const views = viewsSrc();
     const refresh = views.slice(views.indexOf("const refreshCompany"), views.indexOf("const hasLeadership"));
