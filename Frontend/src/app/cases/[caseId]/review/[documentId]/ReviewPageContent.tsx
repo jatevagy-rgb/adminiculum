@@ -4,12 +4,12 @@
 import { useState, use, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  getCaseContracts, getCases, getCaseTimeline, approveDocument, rejectDocument,
+  getCaseContracts, getCases, getCaseById, getCaseTimeline, approveDocument, rejectDocument,
   submitDocumentForReview, downloadContract, uploadGeneratedContractToSharePoint,
   finalizeContractGeneration, backToReview, rejectApproval, getContractTimeline,
   createTask, getCommunications, createCommunication, getCaseCollaborators, getUsers,
   getClauseLibraryReviewGuidance, getReviewNotes, saveReviewNotes,
-  type CaseContractListItem, type TimelineEventItem, type CommunicationItem,
+  type CaseContractListItem, type CaseListItem, type TimelineEventItem, type CommunicationItem,
   type CaseCollaborator, type User, type ReviewGuidanceResult, type ReviewNotesResult,
 } from "@/lib/api";
 import { getPreference } from "@/lib/preferences";
@@ -162,8 +162,16 @@ export default function ReviewPageContent({ params }: ReviewPageProps) {
   useEffect(() => {
     const fetchCaseRecord = async () => {
       try {
-        const r = await getCases(1, 200);
-        const record = r.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId);
+        // Resolve the canonical Case.id directly first so an authorized case
+        // outside the first 200 rows of GET /cases still resolves. The list
+        // lookup is kept only as a legacy case-number URL fallback.
+        let record: CaseListItem | null = null;
+        try {
+          record = await getCaseById(resolvedParams.caseId);
+        } catch {
+          const r = await getCases(1, 200);
+          record = r.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
+        }
         if (record) setCaseRecord({ id: record.id, caseNumber: record.caseNumber, title: record.title, clientName: record.clientName, matterType: record.matterType, status: record.status });
       } catch { /* fall back */ }
     };

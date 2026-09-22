@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { ClientPublicationPanel } from "@/components/documents/publication/ClientPublicationPanel";
-import { getCases, type CaseListItem } from "@/lib/api";
+import { getCaseById, getCases, type CaseListItem } from "@/lib/api";
 
 type CaseClientPortalPageProps = {
   params: Promise<{ caseId: string }>;
@@ -23,10 +23,18 @@ function CaseClientPortalContent({ params }: CaseClientPortalPageProps) {
   const loadCase = useCallback(async () => {
     setLoadError(false);
     try {
-      const response = await getCases(1, 200);
-      const record = response.data.find(
-        (item: CaseListItem) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId,
-      );
+      // Resolve the canonical Case.id directly first so an authorized case that
+      // falls outside the first 200 rows of GET /cases is not reported as
+      // missing. The list lookup stays only for legacy case-number URLs.
+      let record: CaseListItem | null = null;
+      try {
+        record = await getCaseById(resolvedParams.caseId);
+      } catch {
+        const response = await getCases(1, 200);
+        record = response.data.find(
+          (item: CaseListItem) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId,
+        ) || null;
+      }
       if (!record) {
         setLoadError(true);
         return;
