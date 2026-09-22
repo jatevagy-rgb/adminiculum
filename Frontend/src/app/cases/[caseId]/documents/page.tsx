@@ -371,6 +371,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [versions, setVersions] = useState<DocumentVersionItem[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  // Which document the currently loaded `versions` array is authoritative for.
+  // null means "unknown / not loaded", so the URL->version effect never treats a
+  // not-yet-loaded (or failed) empty list as "this document has no versions".
+  const [versionsLoadedForDocumentId, setVersionsLoadedForDocumentId] = useState<string | null>(null);
   const [isPromotingVersion, setIsPromotingVersion] = useState<string | null>(null);
   const [uploadPhase, setUploadPhase] = useState<string | null>(null);
   const [isUploadingToSP, setIsUploadingToSP] = useState<string | null>(null);
@@ -477,17 +481,38 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
+  const requestedVersionId = searchParams?.get("versionId") ?? null;
   const requestedDocumentIdRef = useRef<string | null>(requestedDocumentId);
+  const requestedVersionIdRef = useRef<string | null>(requestedVersionId);
   if (requestedDocumentId) {
     requestedDocumentIdRef.current = requestedDocumentId;
   }
+  if (requestedVersionId) {
+    requestedVersionIdRef.current = requestedVersionId;
+  }
+  // Tracks the last version identity already reconciled from the URL. This keeps
+  // the URL->state effect from fighting an optimistic local version selection
+  // while the router transition is still in flight.
+  const reconciledVersionUrlRef = useRef<string | null | undefined>(undefined);
 
-  const syncDocumentIdToUrl = useCallback((documentId: string | null, history: "push" | "replace") => {
+  // Canonical navigation identity is documentId plus an optional explicit
+  // historical versionId. The current/default version stays implicit: it is
+  // never written to the URL, so there is exactly one "current version"
+  // identity. A versionId is only ever written together with its documentId.
+  const syncWorkspaceIdentityToUrl = useCallback((
+    identity: { documentId: string | null; versionId: string | null },
+    history: "push" | "replace",
+  ) => {
     const params = new URLSearchParams(searchParams?.toString());
-    if (documentId) {
-      params.set("documentId", documentId);
+    if (identity.documentId) {
+      params.set("documentId", identity.documentId);
     } else {
       params.delete("documentId");
+    }
+    if (identity.documentId && identity.versionId) {
+      params.set("versionId", identity.versionId);
+    } else {
+      params.delete("versionId");
     }
     const query = params.toString();
     const nextUrl = query ? `${pathname}?${query}` : pathname;
@@ -495,6 +520,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (nextUrl === currentUrl) return;
     router[history](nextUrl);
   }, [pathname, router, searchParams]);
+
+  // Selecting a document always drops any previously selected version identity:
+  // a versionId must never carry across documents.
+  const syncDocumentIdToUrl = useCallback((documentId: string | null, history: "push" | "replace") => {
+    syncWorkspaceIdentityToUrl({ documentId, versionId: null }, history);
+  }, [syncWorkspaceIdentityToUrl]);
 
   const selectLedgerItem = useCallback((
     item: SelectedLedgerItem,
@@ -568,14 +599,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           if (uploadedMatch) {
             setSelectedLedgerItem({ kind: 'uploaded', item: uploadedMatch });
             setSelectedContract(null);
-            syncDocumentIdToUrl(uploadedMatch.id, "replace");
+            syncWorkspaceIdentityToUrl({ documentId: uploadedMatch.id, versionId: requestedVersionIdRef.current }, "replace");
             requestedDocumentIdRef.current = null;
           } else {
             const contractMatch = contractsData.find(c => c.id === deepLinkedId);
             if (contractMatch) {
               setSelectedLedgerItem({ kind: 'generated', item: contractMatch });
               setSelectedContract(contractMatch);
-              syncDocumentIdToUrl(contractMatch.id, "replace");
+              syncWorkspaceIdentityToUrl({ documentId: contractMatch.id, versionId: requestedVersionIdRef.current }, "replace");
               requestedDocumentIdRef.current = null;
             }
           }
@@ -595,11 +626,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setIsInitialLoading(false);
       setIsRefreshing(false);
     }
-  }, [caseRecord?.id, syncDocumentIdToUrl]);
+  }, [caseRecord?.id, syncDocumentIdToUrl, syncWorkspaceIdentityToUrl]);
 
   useEffect(() => {
-    if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length)) return;
-    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId);
+    if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length && !modifiedWorkingCopies.length)) return;
+    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId)
+      || modifiedWorkingCopies.find((document) => document.id === requestedDocumentId);
     if (uploadedMatch) {
       if (selectedLedgerItem?.kind !== "uploaded" || selectedLedgerItem.item.id !== uploadedMatch.id) {
         setSelectedLedgerItem({ kind: "uploaded", item: uploadedMatch });
@@ -612,7 +644,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setSelectedLedgerItem({ kind: "generated", item: contractMatch });
       setSelectedContract(contractMatch);
     }
-  }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments]);
+  }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments, modifiedWorkingCopies]);
 
   // Re-trigger loadData once caseRecord is resolved to CUID — only on mount
   useEffect(() => {
@@ -719,11 +751,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     try {
       const response = await getDocumentVersions(documentId);
       setVersions(response.versions);
+      setVersionsLoadedForDocumentId(documentId);
       const current = response.versions.find((version) => version.isCurrent) || response.versions[0] || null;
       setSelectedVersionId((existing) => response.versions.some((version) => version.id === existing) ? existing : current?.id || null);
     } catch (err) {
       console.error('Document versions load failed:', err);
       setVersions([]);
+      setVersionsLoadedForDocumentId(null);
       setSelectedVersionId(null);
     } finally {
       setIsLoadingVersions(false);
@@ -736,8 +770,53 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     } else {
       setVersions([]);
       setSelectedVersionId(null);
+      // No version surface for this selection (generated contract, working copy,
+      // or nothing selected): the empty list is authoritative for that document.
+      setVersionsLoadedForDocumentId(selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null);
     }
-  }, [selectedUploadedDocument?.id, selectedUploadedDocument?.documentType, refreshSelectedDocumentVersions]);
+  }, [selectedUploadedDocument?.id, selectedUploadedDocument?.documentType, selectedGeneratedContract?.id, refreshSelectedDocumentVersions]);
+
+  // URL -> version identity. The current/default version is implicit (no
+  // versionId in the URL). An explicit versionId only binds when it belongs to
+  // the active document's immutable version list; a stale, foreign, or current
+  // id fails safely to the document's current/default version and is
+  // canonicalized out of the URL, so a version can never leak across documents.
+  useEffect(() => {
+    const activeDocumentId = selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null;
+    if (isLoadingVersions || !activeDocumentId) return;
+    // Only reconcile once the loaded version list is authoritative for the active
+    // document. Otherwise a not-yet-loaded (or failed) list must never be treated
+    // as "this document has no versions", which would drop a valid deep link.
+    if (versionsLoadedForDocumentId !== activeDocumentId) return;
+    if (reconciledVersionUrlRef.current === requestedVersionId) return;
+    reconciledVersionUrlRef.current = requestedVersionId;
+
+    const currentDefaultId = versions.find((version) => version.isCurrent)?.id || versions[0]?.id || null;
+
+    if (versions.length === 0) {
+      // Document has no immutable versions (e.g. a generated contract) or none
+      // loaded: there is no version identity to bind to.
+      if (selectedVersionId !== null) setSelectedVersionId(null);
+      if (requestedVersionId) {
+        syncWorkspaceIdentityToUrl({ documentId: activeDocumentId, versionId: null }, "replace");
+      }
+      return;
+    }
+
+    const match = requestedVersionId
+      ? versions.find((version) => version.id === requestedVersionId) || null
+      : null;
+
+    if (match && !match.isCurrent) {
+      if (selectedVersionId !== match.id) setSelectedVersionId(match.id);
+      return;
+    }
+
+    if (selectedVersionId !== currentDefaultId) setSelectedVersionId(currentDefaultId);
+    if (requestedVersionId) {
+      syncWorkspaceIdentityToUrl({ documentId: activeDocumentId, versionId: null }, "replace");
+    }
+  }, [isLoadingVersions, requestedVersionId, selectedUploadedDocument?.id, selectedGeneratedContract?.id, selectedVersionId, syncWorkspaceIdentityToUrl, versions, versionsLoadedForDocumentId]);
 
   const handleVersionFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -755,6 +834,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       });
       setVersions(response.versions);
       setSelectedVersionId(response.currentVersion?.id || response.versions.find((version) => version.isCurrent)?.id || null);
+      syncWorkspaceIdentityToUrl({ documentId: selectedUploadedDocument.id, versionId: null }, "replace");
       await loadData(false);
       setActionResult({ type: 'success', message: 'Új, változtathatatlan dokumentumverzió feltöltve.' });
       if (versionFileInputRef.current) {
@@ -807,6 +887,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const promoted = await promoteDocumentVersion(version.documentId, version.id);
       setVersions((items) => items.map((item) => ({ ...item, isCurrent: item.id === promoted.id })));
       setSelectedVersionId(promoted.id);
+      syncWorkspaceIdentityToUrl({ documentId: version.documentId, versionId: null }, "replace");
       await loadData(false);
       setActionResult({ type: 'success', message: `v${promoted.versionNumber} lett az aktuális verzió.` });
     } catch (err) {
@@ -1025,6 +1106,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       await deleteDocument(deleteCandidate.id);
       setSelectedLedgerItem(null);
       setSelectedContract(null);
+      syncDocumentIdToUrl(null, "replace");
       await loadData(false);
       setActionResult({ type: 'success', message: 'A dokumentum törölve lett.' });
       setDeleteCandidate(null);
@@ -1327,6 +1409,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const selectedVersion = versions.find((version) => version.id === selectedVersionId) || versions.find((version) => version.isCurrent) || versions[0] || null;
   const selectedVersionStableId = selectedVersion?.id || null;
   const selectedVersionDocumentId = selectedVersion?.documentId || null;
+
+  // Explicit version selection keeps the document identity, writes the
+  // immutable version id for a historical version, and canonicalizes the
+  // current/default version back to the implicit document-only identity.
+  const selectVersion = (version: DocumentVersionItem, history: "push" | "replace" = "push") => {
+    setSelectedVersionId(version.id);
+    const documentId = selectedUploadedDocument?.id ?? null;
+    if (!documentId) return;
+    syncWorkspaceIdentityToUrl({ documentId, versionId: version.isCurrent ? null : version.id }, history);
+  };
   const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId) || null;
   const selectedVersionFileType = getFileType(selectedVersion?.originalFileName || selectedUploadedDocument?.fileName);
   const canRenderTextVersion = selectedVersionFileType === 'TXT';
@@ -2900,7 +2992,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                     <button
                                       key={version.id}
                                       type="button"
-                                      onClick={() => setSelectedVersionId(version.id)}
+                                      onClick={() => selectVersion(version)}
                                       className={`w-full rounded-[12px] border p-3 text-left transition ${selectedVersion?.id === version.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white hover:bg-[var(--adm-surface)]'}`}
                                     >
                                       <div className="flex flex-wrap items-center justify-between gap-2">
