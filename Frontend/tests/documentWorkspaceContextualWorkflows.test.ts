@@ -173,13 +173,13 @@ test("Requirement 11: Desktop Word remains primary editor and browser edit remai
 
 test("Requirement 12: PR #181 text extraction semantics preserved", () => {
   const source = documentPage();
-  assert.match(source, /canRenderTextVersion/);
+  assert.match(source, /hasVersionScopedText/);
   assert.match(source, /selectedVersionBelongsToActiveDocument/);
   assert.match(source, /versionTextUnavailable/);
   assert.match(source, /setSelectedVersionId/);
 });
 
-test("Requirement 13: Historical non-TXT versions do not receive current text preview", () => {
+test("Requirement 13: versions without version-scoped text receive no current text preview", () => {
   const source = documentPage();
   assert.match(source, /data-testid="version-preview-unavailable"/);
   assert.match(source, /Stabil szövegkijelölés még nincs ehhez a formátumhoz/);

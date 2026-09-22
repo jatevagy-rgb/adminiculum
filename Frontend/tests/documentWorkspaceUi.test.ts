@@ -57,24 +57,37 @@ test("Current TXT versions keep the version-specific blob text path (A)", () => 
   assert.match(source, /downloadDocumentVersion\(selectedVersionDocumentId, selectedVersionStableId\)/);
   assert.match(source, /\.then\(\(blob\) => blob\.text\(\)\)/);
   assert.match(source, /setVersionText\(text\)/);
-  // Annotation capability is still derived from the TXT renderer only.
-  assert.match(source, /textRendered: canRenderTextVersion/);
-  assert.match(source, /canRenderTextVersion = selectedVersionFileType === 'TXT'/);
+  // Text-range capability requires the exact version text to be loaded.
+  assert.match(source, /textRendered: versionTextRendered/);
+  assert.match(source, /const versionTextRendered = hasVersionScopedText && versionText !== null/);
 });
 
-test("Current non-TXT versions load read-only preview via getDocumentText (B + C)", () => {
+test("Current and historical DOCX/PDF versions load exact version text (B + C)", () => {
   const source = documentPage();
-  assert.match(source, /getDocumentText\(selectedUploadedDocument\.id\)/);
-  assert.match(source, /versionTextPlan === 'DOCUMENT_TEXT'/);
+  assert.match(source, /getDocumentVersionText\(selectedVersionDocumentId, selectedVersionStableId\)/);
+  assert.match(source, /versionTextPlan === 'VERSION_TEXT'/);
   assert.match(source, /versionIsCurrent: Boolean\(selectedVersion\?\.isCurrent\)/);
   assert.match(source, /versionBelongsToSelectedDocument: annotationVersionEligible/);
   assert.match(source, /documentIsUploaded: Boolean\(\s*selectedUploadedDocument && selectedUploadedDocument\.documentType !== 'MODIFIED_WORKING_COPY',?\s*\)/);
+  // The exact version text flows into the same version-scoped channel that
+  // anchors/offsets/fingerprints are computed from.
+  assert.match(source, /resolveVersionTextLoadOutcome\(result\)/);
+  assert.match(source, /setVersionText\(outcome\.text\)/);
+  // Truthful states: endpoint-provided reason is shown; request failure is mapped.
+  assert.match(source, /setVersionTextUnavailableReason\(outcome\.unavailableReason \|\| VERSION_TEXT_NO_EXTRACTABLE_TEXT\)/);
+  assert.match(source, /versionTextRequestFailureMessage\(error\)/);
+  assert.doesNotMatch(source, /Nincs elérhető szöveg/);
+});
+
+test("Legacy non-extractable current versions keep the document-level preview", () => {
+  const source = documentPage();
+  assert.match(source, /getDocumentText\(selectedUploadedDocument\.id\)/);
+  assert.match(source, /versionTextPlan === 'DOCUMENT_TEXT'/);
   assert.match(source, /setDocumentTextPreview\(result\.text\)/);
   assert.match(source, /data-testid="version-preview-document-text"/);
   // Truthful states: endpoint-provided reason is shown; request failure is neutral.
   assert.match(source, /documentTextUnavailableReason \|\| 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg\.'/);
   assert.match(source, /A kinyert szöveg betöltése nem sikerült/);
-  assert.doesNotMatch(source, /Nincs elérhető szöveg/);
 });
 
 test("Document-level extracted text never becomes a version-scoped anchor source (D + E)", () => {
@@ -85,8 +98,8 @@ test("Document-level extracted text never becomes a version-scoped anchor source
   assert.ok(documentTextBranch, 'DOCUMENT_TEXT branch exists');
   const section = documentTextBranch.slice(0, documentTextBranch.indexOf('return () =>'));
   assert.doesNotMatch(section, /setVersionText|pendingTextAnchor|contentFingerprint|rendererVersion/);
-  // resolveAnnotationCapabilities input is unchanged: textRendered is still
-  // bound to the TXT renderer flag, not to any document-level text state.
+  // resolveAnnotationCapabilities input is bound to the loaded version text,
+  // never to any document-level text state.
   const capsCall = source.match(/resolveAnnotationCapabilities\(\{[\s\S]*?\}\)/);
   assert.ok(capsCall);
   assert.doesNotMatch(capsCall[0], /documentText|DocumentText/);
@@ -98,7 +111,7 @@ test("Version/document switch synchronously clears both text channels (F)", () =
   // any async fetch is issued — stale text can never flash or feed an anchor.
   assert.match(
     source,
-    /setVersionText\(null\);\s*setVersionTextUnavailable\(false\);\s*setDocumentTextPreview\(null\);\s*setDocumentTextUnavailableReason\(null\);\s*setDocumentTextFailed\(false\);/,
+    /setVersionText\(null\);\s*setVersionTextUnavailable\(false\);\s*setDocumentTextPreview\(null\);\s*setDocumentTextUnavailableReason\(null\);\s*setDocumentTextFailed\(false\);\s*setVersionTextUnavailableReason\(null\);/,
   );
   // Async results are cancellation-guarded on selection change.
   assert.match(source, /if \(cancelled\) return;\s*if \(result\.text/);

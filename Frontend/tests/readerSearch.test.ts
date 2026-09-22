@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   EMPTY_READER_SEARCH,
   buildReaderHighlightSegments,
+  buildReaderHighlightSegmentsInRange,
   findReaderMatchOffsets,
   isReaderSearchSupported,
   readerSearchReducer,
@@ -49,12 +50,30 @@ test('no-match state is truthful', () => {
   assert.deepEqual(findReaderMatchOffsets(null, 'alma'), []);
 });
 
-test('search is supported only on the plain surface', () => {
-  assert.equal(resolveReaderSearchSurface({ hasAnnotatedText: false, hasPlainText: true }), 'PLAIN');
+test('search is supported on the exact version-text and plain surfaces only', () => {
+  assert.equal(resolveReaderSearchSurface({ hasVersionText: true, hasPlainText: false }), 'VERSION_TEXT');
+  assert.equal(isReaderSearchSupported('VERSION_TEXT'), true);
+  assert.equal(resolveReaderSearchSurface({ hasVersionText: false, hasPlainText: true }), 'PLAIN');
   assert.equal(isReaderSearchSupported('PLAIN'), true);
-  assert.equal(resolveReaderSearchSurface({ hasAnnotatedText: true, hasPlainText: true }), 'ANNOTATED');
-  assert.equal(isReaderSearchSupported('ANNOTATED'), false);
+  // The version-scoped surface wins when both qualify (it is rendered first).
+  assert.equal(resolveReaderSearchSurface({ hasVersionText: true, hasPlainText: true }), 'VERSION_TEXT');
+  assert.equal(resolveReaderSearchSurface({ hasVersionText: false, hasPlainText: false }), 'NONE');
   assert.equal(isReaderSearchSupported('NONE'), false);
+});
+
+test('range highlighting keeps global match indexes and rejoins byte-for-byte', () => {
+  const offsets = findReaderMatchOffsets(TEXT, 'alma'); // [0, 11]
+  // Second half only: the [11, 15] match stays globally indexed as 1.
+  const tail = buildReaderHighlightSegmentsInRange(TEXT, 8, TEXT.length, offsets, 4);
+  assert.equal(tail.map((segment) => segment.text).join(''), TEXT.slice(8));
+  assert.deepEqual(tail.filter((s) => s.matchIndex !== null).map((s) => s.matchIndex), [1]);
+  // First half only: the [0, 4] match stays globally indexed as 0.
+  const head = buildReaderHighlightSegmentsInRange(TEXT, 0, 8, offsets, 4);
+  assert.equal(head.map((segment) => segment.text).join(''), TEXT.slice(0, 8));
+  assert.deepEqual(head.filter((s) => s.matchIndex !== null).map((s) => s.matchIndex), [0]);
+  // A range with no contained match is returned as one plain segment.
+  const none = buildReaderHighlightSegmentsInRange(TEXT, 4, 8, offsets, 4);
+  assert.deepEqual(none, [{ text: TEXT.slice(4, 8), matchIndex: null }]);
 });
 
 test('highlight segments rejoin to the original text byte-for-byte (canonical text unchanged)', () => {
