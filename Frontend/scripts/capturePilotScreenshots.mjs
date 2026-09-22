@@ -126,7 +126,17 @@ const MOCK_PORTAL_WORKSPACE = {
       actionUrl: "/portal/teendoim",
     },
   ],
-  documents: [],
+  documents: [
+    {
+      id: "doc-1",
+      title: "Adásvételi szerződés tervezete v1.docx",
+      kind: "SHARED_DOCUMENT",
+      status: "Elérhető",
+      publishedAt: "2026-03-20T10:00:00.000Z",
+      matterTitle: "Acme Kft. Ingatlan",
+      actionUrl: "/portal/documents/doc-1",
+    },
+  ],
   messages: [],
   upcomingDeadlines: [],
   matterCount: 1,
@@ -178,6 +188,8 @@ async function main() {
           status: 200,
           contentType: "application/json",
           body: JSON.stringify({
+            customer: { name: "Teszt Vállalat Kft." },
+            matters: [],
             actions: [
               {
                 id: "act-1",
@@ -196,14 +208,32 @@ async function main() {
                 href: "/portal/teendoim",
               },
             ],
+            recentDocuments: [],
+            contactSummary: { openCount: 0, unreadCount: 0, latestPreview: null, latestUpdatedAt: null },
+            complianceSummary: { attentionCount: 1, inProgressCount: 2, noActionExpectedCount: 5, topics: [] },
           }),
         });
       }
       if (url.includes("/client-portal/org/units")) {
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [{ id: "u-1", name: "Ingatlanjog" }] }) });
       }
       if (url.includes("/client-portal/org/cases")) {
-        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            items: [
+              {
+                id: "case-1",
+                caseNumber: "UGY-2026-001",
+                title: "Acme Kft. Ingatlan adásvételi szerződés",
+                status: "ACTIVE",
+                assignedUnit: "Ingatlanjog",
+                description: "Szerződéskötés előkészítése",
+              },
+            ],
+          }),
+        });
       }
       if (url.includes("/client-portal/org/intakes")) {
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [] }) });
@@ -216,6 +246,29 @@ async function main() {
       }
       if (url.includes("/client-portal/org/company")) {
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ companyName: "Teszt Vállalat Kft.", profileHeadline: "Vállalati működés.", groups: [], visibleMattersByArea: [], totalVisibleMatterCount: 0, milestones: [], initiatives: [] }) });
+      }
+      if (url.includes("/client-portal/compliance")) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            topics: [
+              {
+                topicId: "top-1",
+                topicLabel: "GDPR Adatkezelés",
+                state: "RESOLVED",
+                shortExplanation: "Adatkezelési tájékoztató és nyilvántartások felülvizsgálata.",
+                missingInformation: [],
+                nextAction: null,
+                documents: [],
+              },
+            ],
+            controlsSummary: [],
+            attentionCount: 1,
+            inProgressCount: 2,
+            noActionExpectedCount: 5,
+          }),
+        });
       }
       if (url.includes("/cases/attention")) {
         return route.fulfill({
@@ -410,11 +463,35 @@ async function main() {
     await page.waitForTimeout(1000);
     await page.screenshot({ path: path.join(OUT_DIR, "screen_3_settings_workflows.png"), fullPage: true });
 
-    // 4. Portal Tasks Page
+    // 4. Portal Tasks Page (PILOT)
     console.log("Capturing /portal/teendoim...");
     await page.goto(`${BASE_URL}/portal/teendoim`, { waitUntil: "networkidle" });
     await page.waitForTimeout(1000);
     await page.screenshot({ path: path.join(OUT_DIR, "screen_4_portal_teendoim.png"), fullPage: true });
+
+    // 5. Portal Home (NON-PILOT)
+    console.log("Capturing /portal...");
+    await page.goto(`${BASE_URL}/portal`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: path.join(OUT_DIR, "nonpilot_1_portal.png"), fullPage: true });
+
+    // 6. Portal Matters (NON-PILOT)
+    console.log("Capturing /portal/ugyek...");
+    await page.goto(`${BASE_URL}/portal/ugyek`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: path.join(OUT_DIR, "nonpilot_2_portal_ugyek.png"), fullPage: true });
+
+    // 7. Portal Documents (NON-PILOT)
+    console.log("Capturing /portal/dokumentumok...");
+    await page.goto(`${BASE_URL}/portal/dokumentumok`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: path.join(OUT_DIR, "nonpilot_3_portal_dokumentumok.png"), fullPage: true });
+
+    // 8. Portal Compliance (NON-PILOT)
+    console.log("Capturing /portal/megfeleles...");
+    await page.goto(`${BASE_URL}/portal/megfeleles`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(1000);
+    await page.screenshot({ path: path.join(OUT_DIR, "nonpilot_4_portal_megfeleles.png"), fullPage: true });
 
     console.log(`[${MODE.toUpperCase()}] screenshots captured successfully to:`, OUT_DIR);
   } finally {
