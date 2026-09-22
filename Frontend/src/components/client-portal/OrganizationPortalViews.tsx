@@ -68,7 +68,8 @@ type OrgState = {
   message: string | null;
 };
 
-const card = "min-w-0 rounded-2xl border border-[#E5E7E6] bg-white p-6 shadow-sm";
+const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
+const taskCard = "min-w-0 rounded-2xl border border-[#E5E7E6] bg-white p-6 shadow-sm";
 const input = "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40";
 
 function formatDate(value?: string | null) {
@@ -485,7 +486,7 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
   const submissions = dedupeCustomerItems(selectCustomerSubmissionDocuments(workspace.documents));
   return (
     <div className="space-y-6">
-      <section className={card}>
+      <section className={taskCard}>
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#B85C4B]">Teendők</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold text-[#1F2937]">Ami most Öntől kell</h1>
         <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">Az iroda által kért teendők, valamint a dokumentum- és adatbekérések egy helyen. A beküldött anyagot az iroda ellenőrzi, és szükség esetén hiánypótlást kér.</p>
