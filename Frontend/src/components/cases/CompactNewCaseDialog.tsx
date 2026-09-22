@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intake/intakeStyles";
 import {
   createCase,
@@ -11,6 +12,7 @@ import {
   getUsers,
   getCurrentUser,
   createUsableCaseType,
+  listWorkPackageCaseTypes,
   type CaseCreationOption,
   type Client,
   type User,
@@ -34,12 +36,27 @@ const ELIGIBLE_WORKFORCE_ROLES = new Set([
   "LEGAL_ASSISTANT",
 ]);
 
+// Read-only catalogue facts used only to tell the truth about why no case type
+// is offered. Never used to create taxonomy. Missing/rejected lookup degrades
+// to "no catalogue information" and the dialog keeps the honest empty state.
+type CatalogueTypeFact = { id: string; name: string; isActive: boolean };
+
+async function loadCatalogueTypeFacts(): Promise<CatalogueTypeFact[]> {
+  try {
+    const result = await listWorkPackageCaseTypes();
+    return (result?.items || []).map((type) => ({ id: type.id, name: type.name, isActive: type.isActive }));
+  } catch {
+    return [];
+  }
+}
+
 export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCommunicationId, initialTitle, initialDescription }: Props) {
   const router = useRouter();
 
   const [clients, setClients] = useState<Client[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [creationOptions, setCreationOptions] = useState<CaseCreationOption[]>([]);
+  const [catalogueTypes, setCatalogueTypes] = useState<CatalogueTypeFact[]>([]);
   const [canManageTypes, setCanManageTypes] = useState(false);
   const [typeName, setTypeName] = useState("");
   const [savingType, setSavingType] = useState(false);
@@ -62,11 +79,12 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
     setLoading(true);
     setError(null);
     setSavingType(false);
-    Promise.all([getClientList(), getCaseCreationOptions(), getUsers().catch(() => []), getCurrentUser().catch(() => null)])
-      .then(([c, o, u, actor]) => {
+    Promise.all([getClientList(), getCaseCreationOptions(), getUsers().catch(() => []), getCurrentUser().catch(() => null), loadCatalogueTypeFacts()])
+      .then(([c, o, u, actor, catalogue]) => {
         if (session !== openSession.current) return;
         setClients(c);
         setCreationOptions(o.items || []);
+        setCatalogueTypes(catalogue);
         setCanManageTypes(actor?.role === "ADMIN" || actor?.role === "PARTNER");
         setUsers(u.filter((user) => ELIGIBLE_WORKFORCE_ROLES.has(String(user.role || "").toUpperCase()) && user.status !== "INACTIVE"));
       })
@@ -103,6 +121,22 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
 
   const canSubmit = Boolean(clientId && title.trim() && selectedOption?.template && !submitting && !savingType);
   const matchingTypes = creationOptions.filter((option) => option.caseTypeDefinition.name.toLocaleLowerCase("hu-HU") === typeName.trim().toLocaleLowerCase("hu-HU"));
+
+  // Honest reason why no eligible case type can be selected. Shown to every role
+  // so "create a new global type" is never the silent only path.
+  const catalogueEmptyNotice = creationOptions.length > 0
+    ? null
+    : catalogueTypes.length === 0
+      ? "Még nincs ügytípus az irodában."
+      : !catalogueTypes.some((type) => type.isActive)
+        ? "Az irodában létező ügytípusok inaktívak, ezért ügylétrehozáshoz nem választhatók."
+        : "A létező ügytípusokhoz nincs aktív munkacsomag, ezért ügylétrehozáshoz nem választhatók.";
+
+  function selectExistingType(id: string) {
+    const option = creationOptions.find((item) => item.caseTypeDefinition.id === id);
+    setCaseTypeDefinitionId(option ? id : "");
+    setTypeName(option?.caseTypeDefinition.name || "");
+  }
 
   function changeTypeName(value: string) {
     setTypeName(value);
@@ -208,12 +242,19 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
 
           {!loading && (
             <>
-              {creationOptions.length === 0 && !canManageTypes && (
+              {catalogueEmptyNotice && (
                 <div role="alert" className="mb-3 rounded-md border border-[#DCCCA6] bg-[#FFF9E9] px-3 py-3 text-[12px] text-[var(--adm-text)]">
-                  Még nincs választható ügytípus.
+                  {catalogueEmptyNotice}
                   <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
-                    Kérj egy ügytípust az iroda adminisztrátorától vagy partnerétől.
+                    {canManageTypes
+                      ? "A létrehozáshoz előbb állíts be legalább egy ügytípust aktív munkacsomaggal."
+                      : "Kérj ügytípust az iroda adminisztrátorától vagy partnerétől."}
                   </span>
+                  {canManageTypes && (
+                    <Link href="/settings/work-packages" className={`${intake.secondaryAction} mt-2 inline-flex`}>
+                      Ügytípusok és munkacsomagok beállítása
+                    </Link>
+                  )}
                 </div>
               )}
               {/* Client + Title */}
@@ -246,14 +287,23 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                   <div className={intake.label}>
                     <label htmlFor="new-case-type">Ügytípus <span className={intake.required}>*</span></label>
                     {canManageTypes ? <>
-                      <input id="new-case-type" list="case-type-suggestions" value={typeName} onChange={(e) => changeTypeName(e.target.value)} disabled={savingType} className={intake.field} placeholder="Válassz vagy írj új ügytípust…" autoComplete="off" required />
+                      {creationOptions.length > 0 && <>
+                        <select id="existing-case-type" aria-label="Meglévő ügytípus kiválasztása" value={caseTypeDefinitionId} onChange={(e) => selectExistingType(e.target.value)} disabled={savingType} className={intake.field}>
+                          <option value="">Válassz meglévő ügytípust…</option>
+                          {creationOptions.map((option) => (
+                            <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name}</option>
+                          ))}
+                        </select>
+                        <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">Meglévő ügytípus választása. Új irodai ügytípust az alábbi mezőben hozhatsz létre.</span>
+                      </>}
+                      <input id="new-case-type" list="case-type-suggestions" value={typeName} onChange={(e) => changeTypeName(e.target.value)} disabled={savingType} className={intake.field} placeholder={creationOptions.length > 0 ? "Vagy írj új ügytípusnevet…" : "Írj új ügytípusnevet…"} autoComplete="off" required />
                       <datalist id="case-type-suggestions">{creationOptions.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.name} />)}</datalist>
                       {matchingTypes.length > 1 && <select aria-label="Azonos nevű ügytípusok" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
                         <option value="">Válassz a mentett ügytípusok közül…</option>
                         {matchingTypes.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name} · {option.caseTypeDefinition.description || option.template?.name}</option>)}
                       </select>}
                       {typeName.trim() && matchingTypes.length === 0 && !selectedOption && <button type="button" onClick={saveType} disabled={savingType} className={`${intake.secondaryAction} mt-2`}>
-                        {savingType ? "Mentés…" : `+ „${typeName.trim()}” mentése új ügytípusként`}
+                        {savingType ? "Mentés…" : `+ „${typeName.trim()}” mentése új ügytípusként (irodai szintű)`}
                       </button>}
                     </> : <select id="new-case-type" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
                       <option value="">Válassz ügytípust…</option>
