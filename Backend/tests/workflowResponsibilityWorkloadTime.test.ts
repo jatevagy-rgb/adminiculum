@@ -73,13 +73,44 @@ describe('workflow responsibility/workload/time safety contract', () => {
     expect(timeEntries).not.toContain('fallbackUser');
   });
 
-  it('keeps workload UI non-evaluative and free of passive tracking claims', () => {
+  it('keeps the workload view non-evaluative: manual persisted time only, no ranking or passive tracking', () => {
     const workloadPage = readRepoFile('Frontend/src/app/workload/page.tsx');
+    const workloadType = readRepoFile('Frontend/src/lib/api.ts');
+    const service = readRepoFile('Backend/src/modules/responsibility/service.ts');
 
-    expect(workloadPage).toContain('Nem teljesítmény-rangsor');
+    // Only manually recorded, persisted time is shown — never a live/passive timer.
     expect(workloadPage).toContain('Aktív/passzív időmérő nincs bekapcsolva');
-    expect(workloadPage).not.toContain('AI');
-    expect(workloadPage).not.toContain('n8n');
-    expect(workloadPage).not.toContain('performanceScore');
+    expect(workloadPage).toContain('kézzel rögzített időbejegyzéseket');
+    expect(workloadPage).toContain('recordedMinutes');
+    expect(workloadType).toContain('recordedMinutes: number');
+    expect(workloadType).toContain('passiveTracking: boolean');
+    expect(workloadType).toContain('activeTimerSupported: boolean');
+    expect(service).toContain('prisma.timeEntry.findMany');
+    expect(service).toContain('recordedMinutes: 0');
+    expect(service).toContain('activeTimerSupported: false');
+    expect(service).toContain('activeTimer: false');
+    expect(service).toContain('passiveTracking: false');
+
+    // No performance score, ranking metric or AI/n8n evaluation can be introduced
+    // silently — workload stays a descriptive operational view.
+    const forbiddenEvaluationTokens = [
+      'performanceScore',
+      'performance_score',
+      'productivityScore',
+      'efficiencyScore',
+      'rankingScore',
+      'leaderboard',
+    ];
+    for (const token of forbiddenEvaluationTokens) {
+      expect(workloadPage).not.toContain(token);
+      expect(workloadType).not.toContain(token);
+      expect(service).not.toContain(token);
+    }
+    expect(service).not.toMatch(/\b(performance|productivity|efficiency|ranking|leaderboard)[A-Za-z]*\s*[:=]/i);
+    expect(workloadPage).not.toMatch(/\b(score|scoreboard|leaderboard|ranking)\b/i);
+    expect(workloadPage).not.toContain('pontszám');
+    expect(workloadPage).not.toContain('rangsorolás');
+    expect(workloadPage).not.toMatch(/\bAI\b/);
+    expect(workloadPage).not.toMatch(/n8n/i);
   });
 });

@@ -171,10 +171,25 @@ describe('contract workspace document version foundation', () => {
     expect(api).toContain('uploadImmutableDocumentVersion');
     expect(api).toContain('downloadDocumentVersion');
     expect(api).toContain('promoteDocumentVersion');
-    expect(page).toContain('Contract Workspace');
-    expect(page).toContain('Változtathatatlan verziótörténet');
-    expect(page).toContain('Új verzió feltöltése');
-    expect(page).toContain('Legyen aktuális');
+    // Canonical version-history region of the document ledger, not decorative copy.
+    expect(page).toContain('data-testid="document-version-navigation"');
+    expect(page).toContain('id="document-versions"');
+
+    // The region is wired to the immutable-version API: list, immutable upload,
+    // exact download and current-version promotion.
+    expect(page).toContain('getDocumentVersions(');
+    expect(page).toMatch(/versions\.map\(/);
+    expect(page).toContain('uploadImmutableDocumentVersion(');
+    expect(page).toContain('downloadDocumentVersion(');
+    expect(page).toContain('promoteDocumentVersion(');
+
+    // The current version is an explicit, visible state of the version list, so
+    // historical versions can only be promoted — never edited in place.
+    expect(page).toContain('isCurrent');
+    expect(page).toMatch(/version\.isCurrent\s*\?/);
+
+    // No editor-style mutation of historical versions.
     expect(page).not.toContain('Track changes');
+    expect(page).not.toContain('contentEditable');
   });
 });
