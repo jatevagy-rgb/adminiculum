@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { Alert, Button, EmptyState, PageHeader, QuietLink, StatusChip } from "@/components/ui";
 import {
   completeTask,
   getWorkflowAgenda,
@@ -61,46 +62,37 @@ function AgendaItemCard({
 }) {
   const [draftDueAt, setDraftDueAt] = useState(inputDateTime(item.dueAt));
   const busy = busyId === item.id;
-  const danger = item.urgency === "OVERDUE";
 
   return (
-    <article className={`border bg-white px-3 py-3 shadow-[0_1px_0_rgba(2,48,71,0.04)] ${danger ? "border-[#d4b8b8]" : "border-[var(--adm-border)]"}`}>
+    <article className="px-3 py-3">
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_170px_auto] xl:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${danger ? "border-[#d4b8b8] bg-[#FEF2F2] text-[#8b3a3a]" : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]"}`}>
-              {URGENCY_LABELS[item.urgency]}
-            </span>
-            <span className="text-[10px] text-[var(--adm-text-muted)]">{SOURCE_LABELS[item.sourceType] || item.sourceType}</span>
+            <StatusChip tone={item.urgency === "OVERDUE" ? "danger" : item.urgency === "TODAY" ? "warning" : item.urgency === "TOMORROW" ? "gold" : "neutral"}>{URGENCY_LABELS[item.urgency]}</StatusChip>
+            <span className="text-xs text-[#6B7280]">{SOURCE_LABELS[item.sourceType] || item.sourceType}</span>
           </div>
-          <h3 className="mt-1 truncate text-[14px] font-semibold text-[var(--adm-text)]">{item.title}</h3>
-          {item.safeDescription && <p className="mt-1 truncate text-[11px] text-[var(--adm-text-muted)]">{item.safeDescription}</p>}
+          <h3 className="mt-1 truncate text-sm font-semibold text-[#1F2937]">{item.title}</h3>
+          {item.safeDescription && <p className="mt-1 truncate text-xs text-[#6B7280]">{item.safeDescription}</p>}
         </div>
-        <div className="text-[11px] text-[var(--adm-text-muted)]">
-          <p className="font-semibold text-[var(--adm-text)]">{item.source.displayName || "Kapcsolódó ügy"}</p>
+        <div className="text-xs text-[#6B7280]">
+          <p className="font-semibold text-[#1F2937]">{item.source.displayName || "Kapcsolódó ügy"}</p>
           <p>{item.responsibility.assignee?.displayName || item.responsibility.responsibleLawyer?.displayName || "Nincs kijelölve"}</p>
         </div>
         <div>
-          <p className="text-[11px] font-semibold text-[var(--adm-text)]">{formatDateTime(item.dueAt, timezone)}</p>
-          <p className="text-[10px] text-[var(--adm-text-muted)]">{STATUS_LABELS[item.status] || item.status}</p>
+          <p className="text-xs font-semibold text-[#1F2937]">{formatDateTime(item.dueAt, timezone)}</p>
+          <p className="text-xs text-[#6B7280]">{STATUS_LABELS[item.status] || item.status}</p>
         </div>
         <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
           {item.href && (
-            <Link href={item.href} className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">
-              Feladat megnyitása
-            </Link>
+            <QuietLink href={item.href} size="sm">Feladat megnyitása</QuietLink>
           )}
-          <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[10px] font-semibold text-[var(--adm-text)]">
-            Ügy megnyitása
-          </Link>
+          <QuietLink href={`/cases/${encodeURIComponent(item.caseId)}`} size="sm">Ügy megnyitása</QuietLink>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {item.capabilities.canComplete && item.sourceType === "TASK" && (
-          <button type="button" disabled={busy} onClick={() => onComplete(item)} className="bg-[var(--adm-green-800)] px-3 py-1.5 text-[10px] font-semibold text-white disabled:opacity-50">
-            Kész
-          </button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => onComplete(item)}>Kész</Button>
         )}
         {item.capabilities.canReschedule && item.sourceType === "TASK" && (
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
@@ -108,12 +100,10 @@ function AgendaItemCard({
               type="datetime-local"
               value={draftDueAt}
               onChange={(event) => setDraftDueAt(event.target.value)}
-              className="border border-[var(--adm-border)] bg-white px-2 py-1 text-[10px] text-[var(--adm-text)]"
+              className="h-8 rounded-[8px] border border-[#E5E7E6] bg-white px-2 py-1 text-xs text-[#1F2937]"
               aria-label="Új határidő"
             />
-            <button type="button" disabled={busy || !draftDueAt} onClick={() => onReschedule(item, draftDueAt)} className="border border-[var(--adm-ochre-500)] bg-white px-2 py-1 text-[10px] font-semibold text-[var(--adm-ochre-500)] disabled:opacity-50">
-              Átütemezés
-            </button>
+            <Button size="sm" variant="neutral" disabled={busy || !draftDueAt} onClick={() => onReschedule(item, draftDueAt)}>Átütemezés</Button>
           </div>
         )}
       </div>
@@ -219,42 +209,36 @@ function DeadlinesAgendaContent() {
   };
 
   return (
-    <div className="deadlines-surface min-h-screen bg-[var(--adm-surface)]">
+    <div className="deadlines-surface min-h-screen bg-white text-[#1F2937]">
       <div className="mx-auto max-w-[1480px] p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="font-serif text-[28px] text-[var(--adm-text)]">Határidők</h1>
-            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
-              {agenda ? `${agenda.range.from} – ${agenda.range.to}` : "Aktuális munkasor"}
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/tasks?newTask=1" className="border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-2 text-[10px] font-semibold text-white">Új határidős feladat</Link>
-            <button type="button" onClick={() => setScope("MY_WORK")} className={`border px-3 py-2 text-[10px] font-semibold ${scope === "MY_WORK" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Saját munkám</button>
-            <button type="button" onClick={() => setScope("MY_CASES")} className={`border px-3 py-2 text-[10px] font-semibold ${scope === "MY_CASES" ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>Saját ügyeim</button>
+        <PageHeader
+          title="Határidők"
+          subtitle={agenda ? `${agenda.range.from} – ${agenda.range.to}` : "Aktuális munkasor"}
+          primaryAction={<Link href="/tasks?newTask=1" className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#0F3D32] bg-[#0F3D32] px-4 text-sm font-medium text-white hover:bg-[#062B22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32] focus-visible:ring-offset-2">Új határidős feladat</Link>}
+          actions={<>
+            <Button size="sm" variant={scope === "MY_WORK" ? "primary" : "neutral"} aria-pressed={scope === "MY_WORK"} onClick={() => setScope("MY_WORK")}>Saját munkám</Button>
+            <Button size="sm" variant={scope === "MY_CASES" ? "primary" : "neutral"} aria-pressed={scope === "MY_CASES"} onClick={() => setScope("MY_CASES")}>Saját ügyeim</Button>
             {scope === "CASE" && (
-              <span className="border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)]">
-                Ügy agenda
-              </span>
+              <Button size="sm" variant="primary" aria-pressed onClick={() => setScope("CASE")}>Ügy agenda</Button>
             )}
-            <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text)]">
+            <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} aria-label="Állapot szűrő" className="h-8 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-1 text-xs font-medium text-[#1F2937]">
               <option value="OPEN">Nyitott</option>
               <option value="COMPLETED">Lezárt</option>
               <option value="ALL">Összes</option>
             </select>
-          </div>
-        </div>
+          </>}
+        />
 
-        <div className="mt-3 flex flex-wrap gap-1 border border-[var(--adm-border)] bg-white p-2" aria-label="Naptárnézet">
+        <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Naptárnézet">
           {([[
             "agenda",
             "Munkasor",
           ], ["day", "Napi nézet"], ["week", "Heti nézet"]] as Array<["agenda" | "day" | "week", string]>).map(([view, label]) => (
-            <button key={view} type="button" onClick={() => selectCalendarView(view)} className={`px-3 py-1.5 text-[10px] font-semibold ${calendarView === view ? "bg-[var(--adm-blue-950)] text-white" : "bg-[var(--adm-surface)] text-[var(--adm-text)]"}`}>{label}</button>
+            <Button key={view} size="sm" variant={calendarView === view ? "primary" : "neutral"} aria-pressed={calendarView === view} onClick={() => selectCalendarView(view)}>{label}</Button>
           ))}
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-5">
+        <div className="mt-3 grid gap-0 overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white sm:grid-cols-5">
           {[
             ["OVERDUE", "Lejárt", agenda?.summary.overdue ?? 0],
             ["TODAY", "Ma", agenda?.summary.today ?? 0],
@@ -262,31 +246,30 @@ function DeadlinesAgendaContent() {
             ["THIS_WEEK", "Ezen a héten", agenda?.summary.thisWeek ?? 0],
             ["LATER", "Később", agenda?.summary.later ?? 0],
           ].map(([valueKey, label, value]) => (
-            <button key={label} type="button" onClick={() => setUrgencyFilter(urgencyFilter === valueKey ? "ALL" : valueKey as WorkflowDeadlineUrgency)} className={`flex items-center justify-between border px-3 py-2 text-left ${urgencyFilter === valueKey ? "border-[var(--adm-ochre-500)] bg-[var(--adm-ivory-100)]" : "border-[var(--adm-border)] bg-white hover:bg-[var(--adm-surface)]"}`}>
-              <p className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{label}</p>
-              <p className="text-[14px] font-bold text-[var(--adm-text)]">{value}</p>
+            <button key={label} type="button" aria-pressed={urgencyFilter === valueKey} onClick={() => setUrgencyFilter(urgencyFilter === valueKey ? "ALL" : valueKey as WorkflowDeadlineUrgency)} className={`flex items-center justify-between border-r border-[#E5E7E6] px-3 py-3 text-left last:border-r-0 ${urgencyFilter === valueKey ? "bg-[#F8FAF9] outline outline-1 outline-inset outline-[#0F3D32]" : "bg-white hover:bg-[#F8FAF9]"}`}>
+              <p className="text-xs font-semibold text-[#6B7280]">{label}</p>
+              <p className="text-base font-bold text-[#1F2937]">{value}</p>
             </button>
           ))}
         </div>
 
-        {error && <p className="mt-4 border border-[#d4b8b8] bg-[#FEF2F2] p-3 text-xs text-[#8b3a3a]">{error}</p>}
+        {error && <Alert variant="error" className="mt-4">{error}</Alert>}
 
         {loading ? (
           <p className="mt-5 text-xs text-[var(--adm-text-muted)]">Határidők betöltése…</p>
         ) : visibleItems.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-dashed border-[var(--adm-border)] bg-white p-4">
-            <p className="text-sm font-semibold text-[var(--adm-text)]">Nincs határidős tétel ebben a nézetben.</p>
-            <button type="button" onClick={() => { setUrgencyFilter("ALL"); setStatus("OPEN"); }} className="mt-3 border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs">Szűrők törlése</button>
+          <div className="mt-4 rounded-[12px] border border-[#E5E7E6] bg-white p-4">
+            <EmptyState title="Nincs határidős tétel ebben a nézetben." action={<Button size="sm" variant="neutral" onClick={() => { setUrgencyFilter("ALL"); setStatus("OPEN"); }}>Szűrők törlése</Button>} />
           </div>
         ) : (
           <div className="mt-4 space-y-4">
             {groupedItems.map((group) => (
-              <section key={group.urgency} className="rounded-xl border border-[var(--adm-border)] bg-white p-3">
+              <section key={group.urgency} className="overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white">
                 <div className="mb-2 flex items-center justify-between">
-                  <h2 className="text-[12px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">{URGENCY_LABELS[group.urgency]}</h2>
-                  <span className="text-[10px] text-[var(--adm-text-muted)]">{group.items.length} tétel</span>
+                  <h2 className="px-3 pt-3 text-xs font-bold uppercase tracking-[0.18em] text-[#6B7280]">{URGENCY_LABELS[group.urgency]}</h2>
+                  <span className="px-3 pt-3 text-xs text-[#6B7280]">{group.items.length} tétel</span>
                 </div>
-                <div className="space-y-2">
+                <div className="divide-y divide-[#E5E7E6]">
                   {group.items.map((item) => (
                     <AgendaItemCard key={item.id} item={item} timezone={agenda?.timezone || "Europe/Budapest"} busyId={busyId} onComplete={completeDeadline} onReschedule={rescheduleDeadline} />
                   ))}
