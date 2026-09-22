@@ -7,6 +7,7 @@ import {
   createClauseLibraryClause,
   generateContractEditDraftRevision,
   getCases,
+  getCaseById,
   getClauseLibraryProfiles,
   getContractEditDraft,
   getContractEditSuggestions,
@@ -16,6 +17,7 @@ import {
   type ClauseKind,
   type ContractEditSuggestionItem,
   type EditDraftBlock,
+  type CaseListItem,
   type RepresentedSide,
 } from "@/lib/api";
 
@@ -118,10 +120,18 @@ function ContractEditPageContent({ params }: EditPageProps) {
   useEffect(() => {
     const fetchCaseRecord = async () => {
       try {
-        const response = await getCases(1, 200);
-        const record = response.data.find(
-          (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
-        );
+        // Resolve the canonical Case.id directly first so an authorized case
+        // outside the first 200 rows of GET /cases still resolves. The list
+        // lookup is kept only as a legacy case-number URL fallback.
+        let record: CaseListItem | null = null;
+        try {
+          record = await getCaseById(resolvedParams.caseId);
+        } catch {
+          const response = await getCases(1, 200);
+          record = response.data.find(
+            (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
+          ) || null;
+        }
         if (record) {
           setCaseRecord({
             id: record.id,

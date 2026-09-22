@@ -12,8 +12,10 @@ import {
   addCommunicationAttachment,
   createCommunication,
   getCases,
+  getCaseById,
   getCaseCollaborators,
   type CommunicationItem,
+  type CaseListItem,
   type CommunicationDetail,
   type TaskListItem,
   type DocumentItem,
@@ -175,14 +177,21 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
     loadCommunications();
   }, [loadCommunications]);
 
-  // Load case from backend
+  // Load case from backend. Resolve the canonical Case.id directly first so an
+  // authorized case outside the first 200 rows of GET /cases is not reported as
+  // unavailable. The list lookup is kept only as a legacy case-number fallback.
   useEffect(() => {
     const loadCase = async () => {
       try {
-        const response = await getCases(1, 200);
-        const record = response.data.find(
-          (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
-        );
+        let record: CaseListItem | null = null;
+        try {
+          record = await getCaseById(resolvedParams.caseId);
+        } catch {
+          const response = await getCases(1, 200);
+          record = response.data.find(
+            (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
+          ) || null;
+        }
         if (record) {
           setCaseRecord({
             id: record.id,
