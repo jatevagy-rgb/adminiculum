@@ -137,7 +137,7 @@ function portalWorkspaceStatusLabel(status: string): string {
 
 function WorkspaceActionCard({ action }: { action: PortalWorkspaceAction }) {
   return (
-    <Link className="cp-row cp-card-hover block p-4 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={action.actionUrl}>
+    <Link className="cp-row cp-card-hover block p-4 rounded-xl border border-[#E5E7E6] bg-white transition-colors hover:border-[#0F3D32] focus:outline-none focus:ring-2 focus:ring-[#0F3D32]/20" href={action.actionUrl}>
       <p className="cp-kicker">{action.matterTitle}</p>
       <h3 className="cp-title mt-1 text-lg">{action.title}</h3>
       <p className="mt-2 text-sm text-[var(--adm-text-muted)]">{portalWorkspaceStatusLabel(action.status)}{action.dueAt ? ` · Határidő: ${formatDate(action.dueAt)}` : ''}</p>
