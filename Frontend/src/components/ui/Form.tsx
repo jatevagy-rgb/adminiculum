@@ -26,14 +26,13 @@ function findExplicitControlId(children: ReactNode): string | undefined {
   React.Children.forEach(children, (child) => {
     if (found || !React.isValidElement(child)) return;
     const props = child.props as { id?: string; children?: ReactNode };
-    if (typeof props.id === "string" && props.id.length > 0) {
-      found = props.id;
+    const isCanonicalControl =
+      child.type === Input || child.type === Textarea || child.type === Select;
+    if (isCanonicalControl) {
+      if (typeof props.id === "string" && props.id.length > 0) found = props.id;
       return;
     }
-    if (props.children) {
-      const nested = findExplicitControlId(props.children);
-      if (nested) found = nested;
-    }
+    if (props.children) found = findExplicitControlId(props.children);
   });
   return found;
 }
@@ -195,7 +194,7 @@ export function FormField({
   ...props
 }: FormFieldProps) {
   const generatedId = useId();
-  const resolvedId = controlId ?? findExplicitControlId(children) ?? generatedId;
+  const resolvedId = findExplicitControlId(children) ?? controlId ?? generatedId;
   const helpId = `${resolvedId}-help`;
   const errorId = `${resolvedId}-error`;
   const describedBy =
