@@ -1,11 +1,27 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../../prisma/prisma.service';
-import { evaluateTransition, candidateActions, type ReviewAction, type ReviewStatus } from './reviewWorkflow';
+import { evaluateTransition, candidateActions, versionReviewStatusFor, type ReviewAction, type ReviewStatus } from './reviewWorkflow';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = { userId: string; role?: string };
 
 const ACTIVE_REVIEW_STATUSES = ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as const;
+
+/**
+ * Write-through of the canonical review verdict onto the exact version under
+ * review. `DocumentVersion.reviewStatus` is the review state of ONE immutable
+ * version (distinct from `Document.workStatus` and from `DocumentReview.status`).
+ * Without this, a version whose review is active would keep its upload-time
+ * default `NOT_IN_REVIEW` and the version-level surfaces would falsely claim
+ * "no review" while the review rail is in progress. See also
+ * `resolveVersionReviewStatus`, which reconciles legacy rows at read time.
+ */
+async function mirrorVersionReviewStatus(tx: Db, versionId: string, reviewStatus: ReviewStatus) {
+  await tx.documentVersion.update({
+    where: { id: versionId },
+    data: { reviewStatus: versionReviewStatusFor(reviewStatus) as any },
+  });
+}
 const UNRESOLVED_POINT_STATUSES = ['OPEN', 'ANSWERED'] as const;
 const RATIONALE_LIMIT = 2000;
 const TITLE_LIMIT = 240;
@@ -227,6 +243,16 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
       await tx.documentReview.update({ where: { id: reviewId }, data });
       await tx.documentReviewRound.update({ where: { id: review.currentRoundId! }, data: { status: verdict.nextStatus as any, startedAt: action === 'START' ? new Date() : review.currentRound!.startedAt, completedAt: ['APPROVE','CLOSE','CANCEL','REQUEST_CHANGES'].includes(action) ? new Date() : review.currentRound!.completedAt, revision: { increment: 1 } } });
     }
+
+    // Mirror the canonical verdict onto the exact version under review so the
+    // version-level surfaces (document workspace, version DTO, case summary) can
+    // never contradict the review rail. A CLOSE/CANCEL of an already-approved
+    // review must never clear the recorded approval on that version.
+    const preserveRecordedApproval = (action === 'CLOSE' || action === 'CANCEL') && Boolean(review.approvedVersionId);
+    if (!preserveRecordedApproval) {
+      await mirrorVersionReviewStatus(tx, versionId, verdict.nextStatus as ReviewStatus);
+    }
+
     const decisionAction = ({ ASSIGN: 'ASSIGNED', START: 'STARTED', REQUEST_CHANGES: 'CHANGES_REQUESTED', RESUBMIT: 'RESUBMITTED', APPROVE: 'APPROVED', CANCEL: 'CANCELLED', CLOSE: 'CLOSED' } as Record<ReviewAction, string>)[action];
     await decision(tx, { reviewId, reviewRoundId: roundId, action: decisionAction, actorId: actor.userId, versionId, safeRationale: input.safeRationale, metadataSafe: { fromStatus: review.status, toStatus: verdict.nextStatus }, idempotencyKey: input.idempotencyKey || null });
     await auditAndNotify(tx, { action: decisionAction, actorId: actor.userId, caseId: review.document.caseId, documentId: review.documentId, reviewId, roundId, versionId, recipientId: action === 'ASSIGN' ? reviewerId || null : review.ownerId });

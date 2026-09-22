@@ -34,9 +34,76 @@ export type ReviewPointStatus = 'OPEN' | 'ANSWERED' | 'RESOLVED' | 'REJECTED' | 
 const TERMINAL: ReadonlySet<ReviewStatus> = new Set(['APPROVED', 'CANCELLED', 'CLOSED']);
 const REVIEWABLE: ReadonlySet<ReviewStatus> = new Set(['IN_REVIEW', 'RESUBMITTED']);
 
+/**
+ * VERSION-LEVEL review state of ONE immutable DocumentVersion. Deliberately
+ * distinct from the document-level DocumentReview status and from Document.workStatus.
+ */
+export type VersionReviewStatus = 'NOT_IN_REVIEW' | 'IN_REVIEW' | 'CHANGES_REQUESTED' | 'APPROVED';
+
 /** A review round is "active" (occupies the one-active-round slot) until terminal. */
 export function isActiveStatus(status: ReviewStatus): boolean {
   return !TERMINAL.has(status);
+}
+
+/** True while a review still occupies the document's single active slot. */
+export function isActiveReviewStatus(status: unknown): boolean {
+  return !TERMINAL.has(String(status) as ReviewStatus);
+}
+
+/**
+ * The exact version a review is bound to: the version of its ACTIVE ROUND. A
+ * RESUBMIT moves the review onto a newer version while keeping its original
+ * anchor `documentVersionId`, so reading only the anchor would be version-untruthful.
+ */
+export function activeReviewVersionId(review: {
+  currentRound?: { reviewVersionId?: string | null } | null;
+  documentVersionId?: string | null;
+} | null | undefined): string | null {
+  return review?.currentRound?.reviewVersionId || review?.documentVersionId || null;
+}
+
+/**
+ * VERSION-LEVEL projection of a canonical review status (never the other way
+ * around). DRAFT means the review exists but has not started; CLOSED/CANCELLED
+ * mean the workflow ended, so that version is no longer under active review.
+ */
+export function versionReviewStatusFor(reviewStatus: ReviewStatus): VersionReviewStatus {
+  switch (reviewStatus) {
+    case 'ASSIGNED':
+    case 'IN_REVIEW':
+    case 'RESUBMITTED':
+      return 'IN_REVIEW';
+    case 'CHANGES_REQUESTED':
+      return 'CHANGES_REQUESTED';
+    case 'APPROVED':
+      return 'APPROVED';
+    default:
+      return 'NOT_IN_REVIEW';
+  }
+}
+
+/**
+ * Resolves the truthful version-level review status for one immutable version,
+ * preferring the canonical active review bound to it, then a recorded approval,
+ * and finally the stored (legacy/manual) value. Keeps existing rows truthful even
+ * before any new transition has mirrored the value.
+ */
+export function resolveVersionReviewStatus(params: {
+  versionId: string;
+  storedStatus: string | null | undefined;
+  reviews: Array<{
+    status: unknown;
+    documentVersionId?: string | null;
+    currentRound?: { reviewVersionId?: string | null } | null;
+    approvedVersionId?: string | null;
+  }>;
+}): string {
+  const { versionId, storedStatus, reviews } = params;
+  const bound = reviews.filter((review) => activeReviewVersionId(review) === versionId);
+  const active = bound.find((review) => isActiveReviewStatus(review.status));
+  if (active) return versionReviewStatusFor(String(active.status) as ReviewStatus);
+  if (reviews.some((review) => review.approvedVersionId === versionId)) return 'APPROVED';
+  return storedStatus || 'NOT_IN_REVIEW';
 }
 
 /** Only an exactly-matching approved version counts — approval is never inherited. */

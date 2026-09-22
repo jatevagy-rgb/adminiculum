@@ -514,6 +514,11 @@ export interface CaseWorkspace {
       currentVersionNumber: number | null; currentVersionId: string | null;
       previousVersionNumber: number | null; previousVersionId: string | null;
       reviewId: string | null; reviewVersionId: string | null; reviewStatus: string | null;
+      activeReviewId?: string | null; activeReviewStatus?: string | null;
+      activeReviewVersionId?: string | null; activeReviewVersionNumber?: number | null;
+      reviewVersionNumber?: number | null;
+      reviewVersionRelationship?: 'NONE' | 'ON_CURRENT_VERSION' | 'ON_OTHER_VERSION' | null;
+      approvedVersionId?: string | null; approvedVersionNumber?: number | null;
       openPointCount: number; blockingPointCount: number;
       comparisonId: string | null; comparisonStatus: string | null;
       totalSegments: number; reviewedSegments: number; unresolvedSegments: number;
