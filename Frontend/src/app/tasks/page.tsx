@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
-import { CompactState, OperationalPageHeader } from "@/components/adminiculum/OperationalPrimitives";
-import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
+import { CompactState } from "@/components/adminiculum/OperationalPrimitives";
+import { AdminButton } from "@/components/adminiculum/ui";
+import { Badge, Button, DataTable, DataTableBody, DataTableCell, DataTableHead, DataTableHeaderCell, DataTableRow, EmptyState, PageHeader, QuietLink, StatusChip } from "@/components/ui";
 import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
 import { WorkflowDialog } from "@/components/tasks/WorkflowDialog";
 import {
@@ -90,6 +90,12 @@ function attentionTone(category?: AttentionCategory | null): "green" | "gold" | 
   return "neutral";
 }
 
+function canonicalTone(tone: ReturnType<typeof statusTone>): "green" | "gold" | "danger" | "neutral" | "teal" {
+  if (tone === "burgundy") return "danger";
+  if (tone === "blue") return "teal";
+  return tone;
+}
+
 function taskEffortText(task: { attentionCategory?: AttentionCategory | null; estimatedMinutes?: number | null }): string {
   if (!task.attentionCategory) return "Nincs becsült idő";
   if (task.estimatedMinutes) return formatEstimateRange(task.estimatedMinutes, task.estimatedMinutes);
@@ -101,7 +107,7 @@ function TaskAttentionBadge({ task }: { task: TaskLifecycleListItem }) {
   const label = category ? attentionPresentation(category).label : UNCLASSIFIED_LABEL;
   return (
     <div className="min-w-[150px]">
-      <AdminStatusPill tone={attentionTone(category)}>{label}</AdminStatusPill>
+      <StatusChip tone={canonicalTone(attentionTone(category))}>{label}</StatusChip>
       <span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">{taskEffortText(task)}</span>
     </div>
   );
@@ -393,66 +399,64 @@ function TasksPageContent() {
   ];
 
   return (
-    <div className="adm-board-page flex-1 overflow-y-auto">
-      <div className="adm-board-container space-y-4">
-        <OperationalPageHeader title="Feladatok" count={`${filteredTasks.length} tétel`} subtitle="A feladat állapota és a Leadás revision külön látható; a következő műveletet a backend határozza meg." primaryAction={<AdminButton variant="primary" onClick={() => setShowCreateModal(true)}>Új feladat</AdminButton>} secondaryActions={<Link href="/reviews" className="adm-link-button px-3 py-2 text-[11px]">Review munkatér</Link>} />
+    <div className="min-h-screen bg-white text-[#1F2937]">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
+        <PageHeader title="Feladatok" badge={<Badge tone="neutral">{filteredTasks.length} tétel</Badge>} primaryAction={<Button variant="primary" onClick={() => setShowCreateModal(true)}>Új feladat</Button>} actions={<QuietLink href="/reviews">Review munkatér</QuietLink>} />
 
-        <section className="rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-white p-3">
-          <div className="flex flex-wrap items-center gap-2">{quickFilters.map((filter) => <button key={filter.id} type="button" onClick={() => setQuickFilter(filter.id)} className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${quickFilter === filter.id ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white" : "border-[var(--adm-border)] bg-white text-[var(--adm-text)]"}`}>{filter.label} <span className="ml-1 opacity-70">{filter.count}</span></button>)}</div>
+        <section className="rounded-[12px] border border-[#E5E7E6] bg-white p-3">
+          <div className="flex flex-wrap items-center gap-2">{quickFilters.map((filter) => <Button key={filter.id} size="sm" variant={quickFilter === filter.id ? "primary" : "neutral"} aria-pressed={quickFilter === filter.id} onClick={() => setQuickFilter(filter.id)}>{filter.label} <span className="ml-1 opacity-70">{filter.count}</span></Button>)}</div>
           <div className="mt-3 grid gap-2 md:grid-cols-[minmax(220px,2fr)_minmax(180px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(170px,1fr)]">
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Keresés feladat, ügy vagy ügyfél szerint" aria-label="Feladatok keresése" className="adm-board-field px-3 py-2 text-[11px]" />
-            <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} aria-label="Ügy szűrő" className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}</select>
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Feladatállapot szűrő" className="adm-board-field px-3 py-2 text-[11px]"><option value="open">Nyitott feladatok</option><option value="all">Minden állapot</option><option value="PENDING">Teendő</option><option value="IN_PROGRESS">Folyamatban</option><option value="IN_REVIEW">Review alatt</option><option value="DONE">Lezárva</option></select>
-            <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} aria-label="Prioritás szűrő" className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden prioritás</option><option value="URGENT">Magas</option><option value="HIGH">Magas</option><option value="MEDIUM">Közepes</option><option value="LOW">Alacsony</option></select>
-            <select value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as AttentionFilter)} aria-label="Figyelmi kategória szűrő" className="adm-board-field px-3 py-2 text-[11px]"><option value="all">Minden figyelmi kategória</option>{ATTENTION_PRESENTATIONS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}<option value="UNCLASSIFIED">{UNCLASSIFIED_LABEL}</option></select>
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Keresés feladat, ügy vagy ügyfél szerint" aria-label="Feladatok keresése" className="h-10 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]" />
+            <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} aria-label="Ügy szűrő" className="h-10 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}</select>
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Feladatállapot szűrő" className="h-10 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="open">Nyitott feladatok</option><option value="all">Minden állapot</option><option value="PENDING">Teendő</option><option value="IN_PROGRESS">Folyamatban</option><option value="IN_REVIEW">Review alatt</option><option value="DONE">Lezárva</option></select>
+            <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} aria-label="Prioritás szűrő" className="h-10 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="all">Minden prioritás</option><option value="URGENT">Magas</option><option value="HIGH">Magas</option><option value="MEDIUM">Közepes</option><option value="LOW">Alacsony</option></select>
+            <select value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as AttentionFilter)} aria-label="Figyelmi kategória szűrő" className="h-10 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="all">Minden figyelmi kategória</option>{ATTENTION_PRESENTATIONS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}<option value="UNCLASSIFIED">{UNCLASSIFIED_LABEL}</option></select>
           </div>
         </section>
 
         {error ? <div role="alert"><CompactState tone="error" title="A feladatművelet nem fejeződött be." detail={error} action={<AdminButton size="sm" variant="neutral" onClick={() => void loadTasks()}>Adatok újratöltése</AdminButton>} /></div> : null}
 
-        <section className="overflow-hidden rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-white">
-          {isLoading ? <div className="p-4"><CompactState title="Feladatok betöltése…" /></div> : filteredTasks.length === 0 ? <div className="p-4"><CompactState title={tasks.length === 0 ? "Nincs kijelölt feladat." : "Nincs találat a kiválasztott nézetben."} detail={tasks.length === 0 ? "Új feladat egy meglévő ügyhöz hozható létre." : "Módosítsa a keresést vagy a szűrőket."} action={<AdminButton size="sm" variant="primary" onClick={() => setShowCreateModal(true)}>Új feladat</AdminButton>} /></div> : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] text-left">
-                <thead className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)]"><tr className="text-[10px] uppercase tracking-[0.12em] text-[var(--adm-text-muted)]"><th scope="col" className="px-3 py-2.5">Feladat</th><th scope="col" className="px-3 py-2.5">Ügy / ügyfél</th><th scope="col" className="px-3 py-2.5">Felelős</th><th scope="col" className="px-3 py-2.5">Figyelmi munka</th><th scope="col" className="px-3 py-2.5">Prioritás</th><th scope="col" className="px-3 py-2.5">Határidő</th><th scope="col" className="px-3 py-2.5">Állapot</th><th scope="col" className="px-3 py-2.5">Leadás</th><th scope="col" className="px-3 py-2.5 text-right">Következő lépés</th></tr></thead>
-                <tbody className="divide-y divide-[var(--adm-border)]">
+        <section>
+          {isLoading ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><CompactState title="Feladatok betöltése…" /></div> : filteredTasks.length === 0 ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><EmptyState title={tasks.length === 0 ? "Nincs kijelölt feladat." : "Nincs találat a kiválasztott nézetben."} description={tasks.length === 0 ? "Új feladat egy meglévő ügyhöz hozható létre." : "Módosítsa a keresést vagy a szűrőket."} action={<Button size="sm" variant="secondary" onClick={() => setShowCreateModal(true)}>Új feladat</Button>} /></div> : (
+            <DataTable minWidth={1180}>
+              <DataTableHead><tr><DataTableHeaderCell>Feladat</DataTableHeaderCell><DataTableHeaderCell>Ügy / ügyfél</DataTableHeaderCell><DataTableHeaderCell>Felelős</DataTableHeaderCell><DataTableHeaderCell>Figyelmi munka</DataTableHeaderCell><DataTableHeaderCell>Prioritás</DataTableHeaderCell><DataTableHeaderCell>Határidő</DataTableHeaderCell><DataTableHeaderCell>Állapot</DataTableHeaderCell><DataTableHeaderCell>Leadás</DataTableHeaderCell><DataTableHeaderCell align="right">Következő lépés</DataTableHeaderCell></tr></DataTableHead>
+              <DataTableBody>
                   {filteredTasks.map((task) => {
                     const action = primaryAction(task);
                     return (
-                      <tr key={task.id} ref={task.id === deepLinkedTaskId ? focusedRowRef : undefined} className={selectedTaskId === task.id ? "bg-[var(--adm-sand-100)]/45" : "hover:bg-[var(--adm-surface)]"}>
-                        <td className={`border-l-[5px] px-3 py-3 ${getClientAccentBorderClass(task.case.clientColorKey)}`}>
+                      <DataTableRow key={task.id} ref={task.id === deepLinkedTaskId ? focusedRowRef : undefined} selected={selectedTaskId === task.id}>
+                        <DataTableCell className={`border-l-[5px] ${getClientAccentBorderClass(task.case.clientColorKey)}`}>
                           <button type="button" onClick={() => setSelectedTaskId(task.id)} className="max-w-[290px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
-                            <span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{task.title}</span>
-                            {task.description ? <span className="mt-1 block truncate text-[11px] text-[var(--adm-text-muted)]">{task.description}</span> : null}
+                            <span className="block truncate font-semibold text-[#1F2937]">{task.title}</span>
+                            {task.description ? <span className="mt-1 block truncate text-xs text-[#6B7280]">{task.description}</span> : null}
                           </button>
-                        </td>
-                        <td className="px-3 py-3 text-[11px]">
-                          <Link href={`/cases/${task.case.id}`} className="font-semibold text-[var(--adm-text)] hover:underline">{task.case.caseNumber}</Link>
-                          <span className="mt-1 block max-w-[180px] truncate text-[var(--adm-text-muted)]">{task.case.clientName} · {task.case.matterType}</span>
-                        </td>
-                        <td className="px-3 py-3 text-[11px] text-[var(--adm-text-muted)]">{task.assignedToId === currentUser?.id ? currentUser.name || "Én" : task.assignedToId ? "Kijelölt felelős" : "Nincs felelős"}</td>
-                        <td className="px-3 py-3 text-[11px]">
+                        </DataTableCell>
+                        <DataTableCell>
+                          <QuietLink href={`/cases/${task.case.id}`} size="sm">{task.case.caseNumber}</QuietLink>
+                          <span className="mt-1 block max-w-[180px] truncate text-xs text-[#6B7280]">{task.case.clientName} · {task.case.matterType}</span>
+                        </DataTableCell>
+                        <DataTableCell muted>{task.assignedToId === currentUser?.id ? currentUser.name || "Én" : task.assignedToId ? "Kijelölt felelős" : "Nincs felelős"}</DataTableCell>
+                        <DataTableCell>
                           <TaskAttentionBadge task={task} />
-                        </td>
-                        <td className="px-3 py-3 text-[11px] font-semibold">{PRIORITY_LABELS[task.priority] || "Közepes"}</td>
-                        <td className={`px-3 py-3 text-[11px] ${isOverdue(task) ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{formatDate(task.dueDate)}</td>
-                        <td className="px-3 py-3"><AdminStatusPill tone={statusTone(task.status)}>{taskStatusLabel(task.status)}</AdminStatusPill></td>
-                        <td className="px-3 py-3">
-                          <AdminStatusPill tone={submissionTone(task.submissionStatus)}>{submissionLabelFromItem(task)}</AdminStatusPill>
-                          {task.assignedReviewer?.displayName ? <span className="mt-1 block text-[10px] text-[var(--adm-text-muted)]">Reviewer: {task.assignedReviewer.displayName}</span> : null}
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          {action.kind === "start" ? <AdminButton size="sm" variant="primary" disabled={busyTaskId === task.id} onClick={() => void startSelectedTask(task)}>{action.label}</AdminButton> : action.kind === "review" ? <Link href={action.href} className="adm-link-button adm-link-button-primary px-3 py-2 text-[11px]">{action.label}</Link> : action.kind === "workspace" ? <AdminButton size="sm" variant={task.nextActionCode === "CONTINUE_RETURNED_WORK" ? "warning" : "neutral"} onClick={() => setSelectedTaskId(task.id)}>{action.label}</AdminButton> : <span className="text-[10px] text-[var(--adm-text-muted)]">{action.label}</span>}
-                        </td>
-                      </tr>
+                        </DataTableCell>
+                        <DataTableCell className="font-semibold">{PRIORITY_LABELS[task.priority] || "Közepes"}</DataTableCell>
+                        <DataTableCell className={isOverdue(task) ? "font-semibold text-[#B85C4B]" : "text-[#6B7280]"}>{formatDate(task.dueDate)}</DataTableCell>
+                        <DataTableCell><StatusChip tone={canonicalTone(statusTone(task.status))}>{taskStatusLabel(task.status)}</StatusChip></DataTableCell>
+                        <DataTableCell>
+                          <StatusChip tone={canonicalTone(submissionTone(task.submissionStatus))}>{submissionLabelFromItem(task)}</StatusChip>
+                          {task.assignedReviewer?.displayName ? <span className="mt-1 block text-xs text-[#6B7280]">Reviewer: {task.assignedReviewer.displayName}</span> : null}
+                        </DataTableCell>
+                        <DataTableCell align="right">
+                          {action.kind === "start" ? <Button size="sm" variant="primary" disabled={busyTaskId === task.id} onClick={() => void startSelectedTask(task)}>{action.label}</Button> : action.kind === "review" ? <QuietLink href={action.href} size="sm">{action.label}</QuietLink> : action.kind === "workspace" ? <Button size="sm" variant={task.nextActionCode === "CONTINUE_RETURNED_WORK" ? "accent" : "neutral"} onClick={() => setSelectedTaskId(task.id)}>{action.label}</Button> : <span className="text-xs text-[#6B7280]">{action.label}</span>}
+                        </DataTableCell>
+                      </DataTableRow>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
+              </DataTableBody>
+            </DataTable>
           )}
         </section>
-      </div>
+      </main>
 
       {selectedTask ? <TaskAttentionEditor task={selectedTask} onSaved={loadTasks} /> : null}
       {selectedTask ? <TaskSubmissionWorkspace item={selectedTask} onClose={() => setSelectedTaskId(null)} onWorkflowChanged={loadTasks} /> : null}
