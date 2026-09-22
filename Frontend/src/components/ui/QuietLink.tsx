@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import type { ComponentProps, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 
 type Common = {
   children: ReactNode;
@@ -15,9 +15,10 @@ type LinkVariant = Common & {
   href: string;
 } & Omit<ComponentProps<typeof Link>, "href" | "className" | "children">;
 
-type ButtonVariant = Common & {
+type ButtonVariant = Common &
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "disabled" | "onClick" | "type"> & {
   href?: undefined;
-  onClick: () => void;
+  onClick: NonNullable<ButtonHTMLAttributes<HTMLButtonElement>["onClick"]>;
   disabled?: boolean;
   type?: "button";
 };
@@ -35,7 +36,7 @@ export function QuietLink(props: QuietLinkProps) {
   );
 
   if ("href" in props && props.href !== undefined) {
-    const { href, ...linkProps } = props;
+    const { href, children: _children, icon: _icon, size: _size, className: _className, ...linkProps } = props;
     return (
       <Link href={href} className={classes} {...linkProps}>
         {content}
@@ -43,9 +44,9 @@ export function QuietLink(props: QuietLinkProps) {
     );
   }
 
-  const { onClick, disabled, type = "button" } = props;
+  const { onClick, disabled, type = "button", children: _children, icon: _icon, size: _size, className: _className, ...buttonProps } = props;
   return (
-    <button type={type} onClick={onClick} disabled={disabled} className={classes}>
+    <button type={type} onClick={onClick} disabled={disabled} className={classes} {...buttonProps}>
       {content}
     </button>
   );

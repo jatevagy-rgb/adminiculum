@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { Alert, Button, DataTable, DataTableBody, DataTableCell, DataTableEmpty, DataTableHead, DataTableHeaderCell, DataTableRow, EmptyState, PageHeader, QuietLink } from "@/components/ui";
 import { getWorkflowWorkload, type WorkflowWorkloadResponse } from "@/lib/api";
-import { getCaseMatterTypeLabel } from "@/lib/caseLabels";
 
 type Scope = "MY_WORK" | "MY_CASES" | "TEAM";
 const SCOPE_LABELS: Record<Scope, string> = { MY_WORK: "Saját munka", MY_CASES: "Ügyeim", TEAM: "Csapatnézet" };
@@ -53,9 +53,12 @@ function WorkloadContent() {
   return (
     <div className="min-h-screen bg-white text-[#1F2937]">
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6">
-        <PageHeader title="Munkaterhelés" actions={scopeOptions.map((option) => (
-          <Button key={option} size="sm" variant={scope === option ? "primary" : "neutral"} aria-pressed={scope === option} onClick={() => setScope(option)}>{SCOPE_LABELS[option]}</Button>
-        ))} />
+        <PageHeader title="Munkaterhelés" actions={<>
+          {scopeOptions.map((option) => (
+            <Button key={option} size="sm" variant={scope === option ? "primary" : "neutral"} aria-pressed={scope === option} onClick={() => setScope(option)}>{SCOPE_LABELS[option]}</Button>
+          ))}
+          <Link href="/time-entries" className="inline-flex h-8 items-center justify-center rounded-[6px] border border-[#0F3D32] bg-white px-3 text-xs font-medium text-[#0F3D32] transition-colors hover:bg-[#F8FAF9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32] focus-visible:ring-offset-2">Időrögzítés megnyitása</Link>
+        </>} />
         {loading ? (
           <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-5 text-sm text-[#6B7280]">Munkateher adatok betöltése…</div>
         ) : error ? (
@@ -94,9 +97,8 @@ function WorkloadContent() {
                   <div key={caseItem.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
                     <div>
                       <QuietLink href={`/cases/${caseItem.id}`}>{caseItem.caseNumber} · {caseItem.title}</QuietLink>
-                      <p className="mt-1 text-xs text-[#6B7280]">{getCaseMatterTypeLabel(caseItem.title)} · {dateLabel(caseItem.deadline)} · {caseItem.openTaskCount} nyitott feladat</p>
+                      <p className="mt-1 text-xs text-[#6B7280]">{dateLabel(caseItem.deadline)} · {caseItem.openTaskCount} nyitott feladat</p>
                     </div>
-                    {data.availability.caseTime ? <Button size="sm" variant="secondary" onClick={() => window.location.assign(`/time-entries?caseId=${caseItem.id}`)}>Időrögzítés</Button> : null}
                   </div>
                 )) : <EmptyState className="border-0 rounded-none" title="Nincs ügy ebben a munkateher nézetben." />}
               </div>

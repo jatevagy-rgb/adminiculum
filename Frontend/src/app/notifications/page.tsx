@@ -125,6 +125,7 @@ function NotificationsInbox() {
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
         <PageHeader
           title="Értesítések"
+          subtitle="A kommunikációs üzenetek külön munkatéren érhetők el."
           badge={<Badge tone={unreadCount > 0 ? "terracotta" : "neutral"} data-testid="notification-unread-count">{unreadCount > 0 ? `${unreadCount} olvasatlan` : "Nincs olvasatlan"}</Badge>}
           primaryAction={<Button variant="secondary" size="sm" onClick={() => void handleMarkAllRead()} disabled={unreadCount === 0 || isMarkingAll} data-testid="notification-mark-all-read">{isMarkingAll ? "Megjelölés…" : "Összes olvasottként"}</Button>}
         />
@@ -159,7 +160,7 @@ function NotificationsInbox() {
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {href ? (
                         <>
-                          <QuietLink href={href} size="sm" onClick={() => openNotification(item, href)} data-testid="notification-open" aria-label="Megnyitás">Megnyitás</QuietLink>
+                          <QuietLink size="sm" onClick={() => openNotification(item, href)} disabled={isPending} data-testid="notification-open">Megnyitás</QuietLink>
                           <span className="text-xs text-[#6B7280]" title={href}>{notificationHrefLabel(href)}</span>
                         </>
                       ) : null}
