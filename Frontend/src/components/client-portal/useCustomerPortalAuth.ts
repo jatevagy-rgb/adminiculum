@@ -5,6 +5,7 @@ import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-bro
 import { useMsal } from '@azure/msal-react';
 import { customerApiScopes, customerTenantId, pickAccountByTenant } from '@/lib/authConfig';
 import { setAuthToken } from '@/lib/api';
+import { isCustomerProviderConfigured } from '@/lib/customerAuth';
 
 export type CustomerAuthState = 'loading' | 'login' | 'ready' | 'error';
 
@@ -17,11 +18,16 @@ export type CustomerAuthState = 'loading' | 'login' | 'ready' | 'error';
 export function useCustomerPortalAuth(): CustomerAuthState {
   const { instance, accounts, inProgress } = useMsal();
   const account = pickAccountByTenant(accounts, customerTenantId);
+  // Same fail-closed provider policy as ClientPortalShell: an unconfigured
+  // customer External ID provider never starts a silent acquisition or an
+  // interactive Microsoft redirect on any customer route.
+  const providerConfigured = isCustomerProviderConfigured();
   const [state, setState] = useState<CustomerAuthState>('loading');
 
   useEffect(() => {
     let cancelled = false;
     async function acquire() {
+      if (!providerConfigured) { setState('error'); return; }
       if (!account) { setState('login'); return; }
       if (inProgress !== InteractionStatus.None) return;
       try {
@@ -38,7 +44,7 @@ export function useCustomerPortalAuth(): CustomerAuthState {
     }
     acquire();
     return () => { cancelled = true; };
-  }, [account, inProgress, instance]);
+  }, [account, inProgress, instance, providerConfigured]);
 
   return state;
 }

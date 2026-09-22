@@ -6,7 +6,7 @@ import { InteractionRequiredAuthError, InteractionStatus } from '@azure/msal-bro
 import { useMsal } from '@azure/msal-react';
 import { customerApiScopes, customerTenantId, pickAccountByTenant } from '@/lib/authConfig';
 import { ApiError, getAuthToken, setAuthToken } from '@/lib/api';
-import { useCustomerAuth } from '@/lib/customerAuth';
+import { isCustomerProviderConfigured, useCustomerAuth } from '@/lib/customerAuth';
 import { PortalEntryLanding } from './PortalEntryLanding';
 import { PortalOnboarding } from './PortalOnboarding';
 import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
@@ -67,6 +67,7 @@ const ORG_MOBILE_PRIMARY_HREFS = ['/portal', '/portal/teendoim', '/portal/dokume
 
 type LoadState =
   | { status: 'loading' }
+  | { status: 'provider-unavailable' }
   | { status: 'login' }
   | { status: 'select'; context: PortalIdentityContext }
   | { status: 'onboarding'; context: PortalIdentityContext }
@@ -90,6 +91,25 @@ function SectionHeader({ kicker, title, link, linkLabel }: { kicker?: string; ti
 
 function EmptyState() {
   return <div className="cp-empty">Jelenleg nincs közzétett aktív ügye.</div>;
+}
+
+/**
+ * Customer-safe, fail-closed state for an unconfigured customer identity
+ * provider. Mirrors the canonical login launcher's `customer-auth-unavailable`
+ * surface and deliberately offers no Microsoft sign-in affordance, so no route
+ * can start an unintended interaction.
+ */
+function CustomerProviderUnavailable() {
+  return (
+    <main className="cp-shell flex min-h-screen items-center justify-center px-4 text-[var(--adm-text)]" data-testid="portal-provider-unavailable">
+      <div className="cp-card max-w-xl p-6 text-center">
+        <h1 className="cp-title text-3xl">Ügyfélportál belépés</h1>
+        <p data-testid="customer-auth-unavailable" role="status" className="cp-subtitle mt-4">
+          Az ügyfélbelépés jelenleg nem érhető el. Kérjük, próbálja meg később, vagy vegye fel a kapcsolatot az irodával.
+        </p>
+      </div>
+    </main>
+  );
 }
 
 function MatterCard({ matter }: { matter: PortalMatter }) {
@@ -305,6 +325,11 @@ function ActionView({ action }: { action: PortalActionRequest }) {
 export function ClientPortalShell({ view, resourceId, requestId }: Props) {
   const { instance, accounts, inProgress } = useMsal();
   const account = pickAccountByTenant(accounts, customerTenantId);
+  // Canonical customer-provider policy (same source the login launcher uses). When
+  // the customer External ID provider is not configured, the portal fails closed:
+  // it never starts a silent acquisition or an interactive Microsoft redirect,
+  // because that could send a customer to the wrong (workforce) sign-in surface.
+  const providerConfigured = isCustomerProviderConfigured();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [selectedReference, setSelectedReference] = useState<string | null>(() => getStoredPortalWorkspace());
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -315,6 +340,10 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      if (!providerConfigured) {
+        setState({ status: 'provider-unavailable' });
+        return;
+      }
       if (!account) {
         setState({ status: 'login' });
         return;
@@ -389,7 +418,7 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
     }
     load();
     return () => { cancelled = true; };
-  }, [account, inProgress, instance, requestId, resourceId, selectedReference, view, reloadNonce]);
+  }, [account, inProgress, instance, providerConfigured, requestId, resourceId, selectedReference, view, reloadNonce]);
 
   const nav = useMemo(() => {
     if (state.status !== 'ready' || !state.context.selectedWorkspace) return [];
@@ -438,6 +467,10 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
     ].filter(Boolean) as string[][];
   }, [state]);
 
+  // Route-consistent, fail-closed state: an unconfigured customer identity provider
+  // is resolved identically on every customer route and never starts an
+  // interactive Microsoft redirect from any of them.
+  if (state.status === 'provider-unavailable') return <CustomerProviderUnavailable />;
   if (state.status === 'login' && view === 'home') return <PortalEntryLanding />;
 
   // Customer context label. For a workspace we prefer the canonical client/private
