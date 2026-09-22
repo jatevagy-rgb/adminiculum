@@ -200,7 +200,7 @@ test('FormField preserves explicit caller-supplied control id', () => {
   assert.equal(tagAttr(html, 'label', 'for'), 'caller-chosen-id');
 });
 
-test('FormField controlId prop is authoritative and reflected everywhere', () => {
+test('FormField controlId prop is used when the child has no explicit id', () => {
   const html = renderToStaticMarkup(
     React.createElement(
       FormField,
@@ -210,6 +210,67 @@ test('FormField controlId prop is authoritative and reflected everywhere', () =>
   );
   assert.equal(tagAttr(html, 'input', 'id'), 'field-id-prop');
   assert.equal(tagAttr(html, 'label', 'for'), 'field-id-prop');
+});
+
+test('FormField explicit child Textarea and Select ids drive label htmlFor', () => {
+  const ta = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'A' }, React.createElement(Textarea, { id: 'ta-explicit' }))
+  );
+  assert.equal(tagAttr(ta, 'textarea', 'id'), 'ta-explicit');
+  assert.equal(tagAttr(ta, 'label', 'for'), 'ta-explicit');
+
+  const sel = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'A' }, React.createElement(Select, { id: 'sel-explicit' }, React.createElement('option', null, 'x')))
+  );
+  assert.equal(tagAttr(sel, 'select', 'id'), 'sel-explicit');
+  assert.equal(tagAttr(sel, 'label', 'for'), 'sel-explicit');
+});
+
+test('FormField: explicit child id wins over conflicting FormField controlId (Input/Textarea/Select)', () => {
+  const cases: Array<[React.ElementType, string]> = [
+    [Input, 'input'],
+    [Textarea, 'textarea'],
+    [Select, 'select'],
+  ];
+  for (const [Comp, tag] of cases) {
+    const html = renderToStaticMarkup(
+      React.createElement(
+        FormField,
+        { label: 'A', controlId: 'field-a', help: 'h', error: 'e' },
+        React.createElement(Comp, { id: 'field-b' }, tag === 'select' ? React.createElement('option', null, 'x') : undefined)
+      )
+    );
+    assert.equal(tagAttr(html, tag, 'id'), 'field-b', `${tag} keeps explicit id`);
+    assert.equal(tagAttr(html, 'label', 'for'), 'field-b', `${tag} label follows explicit id`);
+    assert.equal(tagAttr(html, tag, 'aria-describedby'), 'field-b-help field-b-error', `${tag} describedby derives from resolved id`);
+    assert.ok(!html.includes('field-a'), `${tag}: conflicting controlId must not leak into markup`);
+  }
+});
+
+test('FormField ignores wrapper element ids and still associates the nested control', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      FormField,
+      { label: 'A' },
+      React.createElement('div', { id: 'wrapper-id' }, React.createElement(Input, null))
+    )
+  );
+  const inputId = tagAttr(html, 'input', 'id');
+  assert.ok(inputId && inputId !== 'wrapper-id', 'wrapper id must not become the control id');
+  assert.equal(tagAttr(html, 'label', 'for'), inputId);
+  assert.equal((html.match(/id="wrapper-id"/g) ?? []).length, 1, 'no duplicate ids');
+});
+
+test('FormField finds explicit nested control id through a wrapper', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      FormField,
+      { label: 'A' },
+      React.createElement('div', { id: 'wrapper-id' }, React.createElement(Input, { id: 'nested-explicit' }))
+    )
+  );
+  assert.equal(tagAttr(html, 'input', 'id'), 'nested-explicit');
+  assert.equal(tagAttr(html, 'label', 'for'), 'nested-explicit');
 });
 
 test('FormField sets aria-describedby for help, error, and both', () => {

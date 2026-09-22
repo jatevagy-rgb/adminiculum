@@ -161,10 +161,29 @@ async function runClientsModalFlow(page) {
   });
   check("Shift+Tab from first wraps to last", wrappedToLast);
 
-  // 7. type deterministic text into the name field
+  // 7. key-by-key typing: every keystroke rerenders the parent (/clients owns
+  //    formData state), so focus must stay on the same field throughout.
   const nameInput = dialog.locator("input").first();
-  const marker = "QA TESZT UGYFEL KFT";
-  await nameInput.fill(marker);
+  const marker = "ADMINICULUM FOCUS TEST";
+  await nameInput.focus();
+  const isNameFocused = () => page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return document.activeElement === d?.querySelector("input");
+  });
+  let focusStable = await isNameFocused();
+  for (const ch of marker) {
+    await page.keyboard.type(ch, { delay: 15 });
+    if (!(await isNameFocused())) focusStable = false;
+  }
+  check("focus stays on field during key-by-key typing (parent rerenders)", focusStable);
+  check("full typed value present after key-by-key typing", (await nameInput.inputValue()) === marker);
+
+  // parent rerender without close must NOT restore focus to trigger
+  const focusStillInside = await page.evaluate(() => {
+    const d = document.querySelector('[role="dialog"]');
+    return d && d.contains(document.activeElement);
+  });
+  check("parent rerenders do not restore focus to trigger while open", focusStillInside);
 
   // 8-10. outside (overlay) click: modal stays open, data preserved
   await page.mouse.click(8, 8);

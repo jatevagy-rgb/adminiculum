@@ -59,8 +59,15 @@ export function Modal({
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  const initialFocusRefRef = useRef(initialFocusRef);
   const titleId = useId();
   const descriptionId = useId();
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    initialFocusRefRef.current = initialFocusRef;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -72,7 +79,7 @@ export function Modal({
 
     const raf = requestAnimationFrame(() => {
       if (!dialog) return;
-      const preferred = initialFocusRef?.current;
+      const preferred = initialFocusRefRef.current?.current;
       if (preferred && dialog.contains(preferred) && !isProbablyDestructive(preferred)) {
         preferred.focus();
         return;
@@ -84,7 +91,7 @@ export function Modal({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !dialog) return;
@@ -124,7 +131,7 @@ export function Modal({
       }
       previousFocusRef.current = null;
     };
-  }, [open, onClose, initialFocusRef]);
+  }, [open]);
 
   if (!open) return null;
 
