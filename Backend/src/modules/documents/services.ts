@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { driveService } from '../sharepoint';
+import { isTextExtractable } from './comparison/versionText';
 import { hrConfidentialReadAllowed } from './authorization';
 import { transitionReview, DocumentReviewWorkflowError } from './review/reviewService';
 import { queueDocumentVersionScan, securityScanBlock } from './securityScan.service';
@@ -70,7 +71,7 @@ const buildVersionStorageFileName = (originalFileName: string, documentId: strin
   return `${safeBase}.v${versionNumber}.${documentId.slice(0, 8)}${extension}`;
 };
 
-const mapDocumentVersion = (version: any): DocumentVersionDto => ({
+export const mapDocumentVersion = (version: any): DocumentVersionDto => ({
   id: version.id,
   documentId: version.documentId,
   versionNumber: version.version,
@@ -92,6 +93,10 @@ const mapDocumentVersion = (version: any): DocumentVersionDto => ({
   spItemId: version.spItemId || version.storageReference || null,
   spWebUrl: version.spWebUrl || null,
   securityScanStatus: version.securityScanStatus || 'CLEAN',
+  // Format-level truth derived from THIS version's own metadata (never storage
+  // or comparison metadata) so the UI can stop inferring comparability from
+  // incidental metadata such as file type.
+  textExtractable: isTextExtractable(version.mimeType || null, version.originalFileName || version.name || null),
 });
 
 const countOptionalDependency = async (query: Promise<number>): Promise<number> => {

@@ -299,6 +299,113 @@ describeWithDatabase('Comparison PostgreSQL persistence lifecycle', () => {
     expect(stored.segments[0].targetExcerpt).toContain('250 EUR');
   });
 
+  it('persists a comparison from the mandated V1/V2 liability-clause fixture with exact version text', async () => {
+    // Mandated UAT fixture contract sentences — the exact immutable version text
+    // must drive the comparison (never a latest-version/document fallback).
+    const V1_EXACT_TEXT = 'A szolgáltató felelőssége korlátlan.';
+    const V2_EXACT_TEXT = 'A szolgáltató teljes felelőssége a nettó éves díj összegére korlátozott.';
+
+    const fixtureDocId = 'c4000000-0000-4000-8000-000000000003';
+    const fixtureV1Id = 'c5000000-0000-4000-8000-000000000005';
+    const fixtureV2Id = 'c5000000-0000-4000-8000-000000000006';
+
+    await db.document.create({
+      data: {
+        id: fixtureDocId,
+        name: 'Liability clause fixture document',
+        fileName: 'felelosseg-fixture.docx',
+        category: 'CONTRACT',
+        documentType: 'CONTRACT',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        caseId: ids.case,
+        clientId: ids.client,
+        currentVersion: 2,
+        currentVersionInt: 2,
+        version: '2',
+      },
+    });
+
+    await db.documentVersion.createMany({
+      data: [
+        {
+          id: fixtureV1Id,
+          documentId: fixtureDocId,
+          version: 1,
+          name: 'felelosseg-v1.docx',
+          originalFileName: 'felelosseg-v1.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: 1000,
+          storageReference: 'fixture-v1-storage',
+          spItemId: 'fixture-v1-storage',
+          isCurrent: false,
+          uploadSource: 'LAWYER_UPLOAD',
+          versionType: 'ORIGINAL',
+          uploadedById: ids.user,
+        },
+        {
+          id: fixtureV2Id,
+          documentId: fixtureDocId,
+          version: 2,
+          name: 'felelosseg-v2.docx',
+          originalFileName: 'felelosseg-v2.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: 1000,
+          storageReference: 'fixture-v2-storage',
+          spItemId: 'fixture-v2-storage',
+          isCurrent: true,
+          uploadSource: 'LAWYER_UPLOAD',
+          versionType: 'WORKING_COPY',
+          uploadedById: ids.user,
+          previousVersionId: fixtureV1Id,
+        },
+      ],
+    });
+
+    const v1Buf = await Packer.toBuffer(
+      new Document({ sections: [{ children: [new Paragraph({ children: [new TextRun(V1_EXACT_TEXT)] })] }] })
+    );
+    const v2Buf = await Packer.toBuffer(
+      new Document({ sections: [{ children: [new Paragraph({ children: [new TextRun(V2_EXACT_TEXT)] })] }] })
+    );
+    const bytesByStorage: Record<string, Buffer> = {
+      'fixture-v1-storage': v1Buf,
+      'fixture-v2-storage': v2Buf,
+    };
+
+    const extracted: Record<string, boolean> = {};
+    const comparison = await createOrGetComparison({
+      actorId: ids.user,
+      documentId: fixtureDocId,
+      baseVersionId: fixtureV1Id,
+      targetVersionId: fixtureV2Id,
+    }, {
+      prisma: db,
+      resolveText: async (version) => {
+        const resolved = await resolveVersionText(version, async (_documentId, versionId) => {
+          const storage = versionId === fixtureV1Id ? 'fixture-v1-storage' : 'fixture-v2-storage';
+          return bytesByStorage[storage];
+        });
+        extracted[version.id] = resolved.supported;
+        return resolved;
+      },
+    });
+
+    expect(extracted[fixtureV1Id]).toBe(true);
+    expect(extracted[fixtureV2Id]).toBe(true);
+    expect(comparison.status).toBe('READY');
+    expect(comparison.replaceCount).toBe(1);
+    expect(comparison.totalSegmentCount).toBe(1);
+
+    const stored = await db.documentComparison.findUniqueOrThrow({
+      where: { id: comparison.id },
+      include: { segments: { orderBy: { sequence: 'asc' } } },
+    });
+    expect(stored.segments).toHaveLength(1);
+    expect(stored.segments[0].changeType).toBe('REPLACE');
+    expect(stored.segments[0].baseExcerpt).toContain('korlátlan');
+    expect(stored.segments[0].targetExcerpt).toContain('korlátozott');
+  });
+
   it('recomputes stale extractionRevision 1 comparison row to revision 2 in PostgreSQL', async () => {
     const staleDocId = 'c4000000-0000-4000-8000-000000000099';
     const v1Id = 'c5000000-0000-4000-8000-000000000091';

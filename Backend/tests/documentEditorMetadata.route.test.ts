@@ -189,16 +189,22 @@ describe('document text route production-compatible projection', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('uses an explicit drift-safe document projection and returns a safe unavailable state', async () => {
-    (prisma as any).document.findUnique.mockResolvedValueOnce({
-      id: 'doc-1',
-      documentType: 'CLIENT_INPUT',
-      workspaceText: null,
-      updatedAt: new Date('2026-07-14T08:00:00.000Z'),
-      spItemId: null,
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      fileName: 'Szerződés.docx',
-      name: 'Szerződés.docx',
-    });
+    // First lookup: the object-authorization middleware resolves the owning case.
+    // Second lookup: the route's own explicit, drift-safe document projection.
+    (prisma as any).document.findUnique
+      .mockResolvedValueOnce({ caseId: 'case-1' })
+      .mockResolvedValueOnce({
+        id: 'doc-1',
+        documentType: 'CLIENT_INPUT',
+        workspaceText: null,
+        updatedAt: new Date('2026-07-14T08:00:00.000Z'),
+        spItemId: null,
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        fileName: 'Szerződés.docx',
+        name: 'Szerződés.docx',
+        versions: [],
+      });
+    (prisma as any).case.findUnique.mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'owner' });
 
     const res = await requestJson(createApp(), 'GET', '/documents/doc-1/text');
 
@@ -208,6 +214,8 @@ describe('document text route production-compatible projection', () => {
       source: 'UPLOADED',
       text: '',
     });
+    // The projection stays explicit (never `include`) and now additionally carries
+    // exactly the current-version fields the version-bound text resolution needs.
     expect((prisma as any).document.findUnique).toHaveBeenCalledWith({
       where: { id: 'doc-1' },
       select: {
@@ -219,6 +227,21 @@ describe('document text route production-compatible projection', () => {
         mimeType: true,
         fileName: true,
         name: true,
+        versions: {
+          where: { isCurrent: true },
+          select: {
+            id: true,
+            documentId: true,
+            version: true,
+            securityScanStatus: true,
+            originalFileName: true,
+            mimeType: true,
+            size: true,
+            storageReference: true,
+            spItemId: true,
+          },
+          take: 1,
+        },
       },
     });
   });
