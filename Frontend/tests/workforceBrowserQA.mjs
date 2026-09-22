@@ -221,7 +221,8 @@ function responseFor(url, mode = "populated") {
   if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workflow-history`)) return { status: 200, body: [] };
   if (url.includes("/users")) return { status: 200, body: { data: [AUTH_ME] } };
   if (url.includes(`/tasks?`)) return { status: 200, body: [WORKFORCE_FIXTURE.task] };
-  if (url.includes("/cases?")) return { status: 200, body: { data: [WORKFORCE_FIXTURE.case], page: 1, limit: 100, total: 1, totalPages: 1 } };
+  if (url.includes("/cases?")) return { status: 200, body: mode === "case-out-of-window" ? { data: [], page: 1, limit: 100, total: 0, totalPages: 1 } : { data: [WORKFORCE_FIXTURE.case], page: 1, limit: 100, total: 1, totalPages: 1 } };
+  if (mode === "case-out-of-window" && url.endsWith(`/cases/${WORKFORCE_FIXTURE.case.id}`)) return { status: 200, body: WORKFORCE_FIXTURE.case };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/operating-profile`)) return { status: 200, body: null };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/assessments`)) return {
     status: 200,
@@ -403,6 +404,20 @@ async function main() {
         await assertComplianceMode(browser, mode, viewport);
       }
     }
+
+    // Canonical case identity: an authorized case opened by its Case.id must
+    // render even when it is absent from the GET /cases pagination window.
+    console.log("Verifying canonical case identity outside the list window...");
+    const identityQa = await newPage(browser, "case-out-of-window", VIEWPORTS[0]);
+    await identityQa.page.goto(`${BASE_URL}/cases/${WORKFORCE_FIXTURE.case.id}`, { waitUntil: "networkidle" });
+    const identityBody = await identityQa.page.locator("body").innerText();
+    if (identityBody.includes("Az ügy nem található")) {
+      throw new Error("authorized case outside the list window was reported as not found");
+    }
+    if (!identityBody.includes(WORKFORCE_FIXTURE.case.caseNumber)) {
+      throw new Error("resolved case workspace did not render the canonical case identity");
+    }
+    await identityQa.context.close();
 
     // 4. Test real section tab navigation & browser back/forward on Company Workspace
     console.log("Verifying real tab cockpit navigation and history state...");
