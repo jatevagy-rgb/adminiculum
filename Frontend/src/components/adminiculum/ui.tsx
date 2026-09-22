@@ -1,6 +1,6 @@
 "use client";
 
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
+import React, { type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode } from "react";
 
 export const adminUi = {
   paper: "var(--adm-surface-raised)",
@@ -57,7 +57,7 @@ export function AdminButton({ variant = "neutral", size = "md", className = "", 
   return (
     <button
       type={type}
-      className={`inline-flex items-center justify-center gap-2 rounded-[5px] border font-semibold leading-none tracking-[0.005em] transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${buttonSizes[size]} ${buttonClasses[variant]} ${className}`}
+      className={`inline-flex items-center justify-center gap-2 rounded-[5px] border font-semibold leading-none tracking-[0.005em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-55 ${buttonSizes[size]} ${buttonClasses[variant]} ${className}`}
       {...props}
     />
   );
