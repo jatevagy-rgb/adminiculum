@@ -149,8 +149,8 @@ function ClientsPageContent() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-[#E5E7E6] pt-3">
-            <Link href={`/clients/${client.id}`} className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[#0F3D32] bg-[#0F3D32] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#062B22] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32] focus-visible:ring-offset-2">Ügyfél dosszié</Link>
-            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex h-9 items-center justify-center rounded-[6px] border border-[#E5E7E6] bg-white px-3 text-xs font-semibold text-[#1F2937] transition-colors hover:bg-[#F8FAF9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32] focus-visible:ring-offset-2">+ Új ügy</Link>
+            <Link href={`/clients/${client.id}`} className="inline-flex min-h-11 items-center justify-center rounded-[6px] border border-[#0F3D32] bg-[#0F3D32] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#062B22] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F3D32]">Ügyfél dosszié</Link>
+            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex min-h-11 items-center justify-center rounded-[6px] border border-[#E5E7E6] bg-white px-3 py-2 text-[13px] font-semibold text-[#1F2937] transition-colors hover:bg-[#F8FAF9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F3D32]">+ Új ügy</Link>
           </div>
         </div>
       </AdminPanel>
@@ -209,7 +209,7 @@ function ClientsPageContent() {
                 <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#6B7280]">Ügyfelek</h2>
                 <span className="text-[11px] text-[#6B7280]">{filteredClients.length} találat</span>
               </div>
-              <div className="grid gap-4 xl:grid-cols-2">{filteredClients.map(renderClientCard)}</div>
+              <div className="grid gap-3 xl:grid-cols-2">{filteredClients.map(renderClientCard)}</div>
             </section>
           ) : (
             <EmptyState
