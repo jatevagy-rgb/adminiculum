@@ -1,10 +1,10 @@
 "use client";
 
-import React, { type ReactNode } from "react";
+import React, { type HTMLAttributes, type ReactNode } from "react";
 
 export type AlertVariant = "success" | "warning" | "error" | "info";
 
-export interface AlertProps {
+export interface AlertProps extends HTMLAttributes<HTMLDivElement> {
   variant?: AlertVariant;
   title?: string;
   action?: ReactNode;
@@ -64,6 +64,7 @@ export function Alert({
   action,
   children,
   className = "",
+  ...props
 }: AlertProps) {
   const styles = variantStyles[variant];
   const role = variant === "error" || variant === "warning" ? "alert" : "status";
@@ -72,6 +73,7 @@ export function Alert({
     <div
       role={role}
       className={`flex items-start gap-3 rounded-[8px] border p-3.5 text-xs ${styles.container} ${className}`}
+      {...props}
     >
       <div className={`shrink-0 mt-0.5 ${styles.icon}`}>{styles.defaultIcon}</div>
       <div className="flex-1 min-w-0">
