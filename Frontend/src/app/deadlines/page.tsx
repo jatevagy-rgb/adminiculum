@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
-import { Alert, Button, EmptyState, PageHeader, QuietLink, StatusChip } from "@/components/ui";
+import { Alert, Badge, Button, EmptyState, PageHeader, QuietLink, StatusChip } from "@/components/ui";
 import {
   completeTask,
   getWorkflowAgenda,
@@ -219,7 +219,7 @@ function DeadlinesAgendaContent() {
             <Button size="sm" variant={scope === "MY_WORK" ? "primary" : "neutral"} aria-pressed={scope === "MY_WORK"} onClick={() => setScope("MY_WORK")}>Saját munkám</Button>
             <Button size="sm" variant={scope === "MY_CASES" ? "primary" : "neutral"} aria-pressed={scope === "MY_CASES"} onClick={() => setScope("MY_CASES")}>Saját ügyeim</Button>
             {scope === "CASE" && (
-              <Button size="sm" variant="primary" aria-pressed onClick={() => setScope("CASE")}>Ügy agenda</Button>
+              <Badge tone="green">Ügy agenda</Badge>
             )}
             <select value={status} onChange={(event) => setStatus(event.target.value as typeof status)} aria-label="Állapot szűrő" className="h-8 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-1 text-xs font-medium text-[#1F2937]">
               <option value="OPEN">Nyitott</option>
