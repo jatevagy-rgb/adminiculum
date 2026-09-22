@@ -126,6 +126,72 @@ test("Document review insight uses a neutral label for unknown canonical statuse
   assert.equal(fallback?.action?.href, "/cases/case-1/documents?documentId=doc-1");
 });
 
+test("Document review insight keeps a historical-version review truthful instead of claiming no review", () => {
+  const canonical = workspace();
+  canonical.documents[0].reviewSummary = {
+    documentId: "doc-1", caseId: "case-1", documentTitle: "Szerződés.docx", category: null, workStatus: "IN_PROGRESS",
+    currentVersionNumber: 2, currentVersionId: "version-2", previousVersionNumber: 1, previousVersionId: "version-1",
+    // Current-version binding is empty ...
+    reviewId: null, reviewVersionId: null, reviewStatus: null,
+    // ... but the document-level active review is explicit and on v1.
+    activeReviewId: "review-1", activeReviewStatus: "IN_REVIEW",
+    activeReviewVersionId: "version-1", activeReviewVersionNumber: 1,
+    reviewVersionNumber: null, reviewVersionRelationship: "ON_OTHER_VERSION",
+    approvedVersionId: null, approvedVersionNumber: null,
+    openPointCount: 2, blockingPointCount: 1, comparisonId: null, comparisonStatus: null,
+    totalSegments: 0, reviewedSegments: 0, unresolvedSegments: 0,
+    aiPromptDraftId: null, aiDraftStatus: null, aiApproved: false,
+    nextAction: { code: "REVIEW_ON_OTHER_VERSION", label: "Véleményezés másik verzióhoz kapcsolódik", rationale: "A review a v1 verzióhoz tartozik." },
+  };
+  const tile = deriveCaseInsightTiles(canonical, "case-1").find((item) => item.key === "document-review");
+  assert.equal(tile?.status, "Véleményezés alatt");
+  assert.match(tile?.detail || "", /Verzió: v2/);
+  assert.match(tile?.detail || "", /Review verzió: v1/);
+  assert.match(tile?.detail || "", /2 nyitott észrevétel/);
+  assert.match(tile?.detail || "", /1 blokkoló észrevétel/);
+  assert.doesNotMatch(`${tile?.status} ${tile?.detail}`, /Nincs felülvizsgálat alatt|Nincs aktív felülvizsgálat|Ismeretlen review állapot/);
+  assert.doesNotMatch(`${tile?.status} ${tile?.detail}`, /ON_OTHER_VERSION|REVIEW_ON_OTHER_VERSION|IN_REVIEW/);
+});
+
+test("Document review insight distinguishes a truly absent review from a review on another version", () => {
+  const none = workspace();
+  none.documents[0].reviewSummary = {
+    documentId: "doc-1", caseId: "case-1", documentTitle: "Szerződés.docx", category: null, workStatus: "IN_PROGRESS",
+    currentVersionNumber: 2, currentVersionId: "version-2", previousVersionNumber: 1, previousVersionId: "version-1",
+    reviewId: null, reviewVersionId: null, reviewStatus: null,
+    activeReviewId: null, activeReviewStatus: null, activeReviewVersionId: null, activeReviewVersionNumber: null,
+    reviewVersionNumber: null, reviewVersionRelationship: "NONE",
+    approvedVersionId: null, approvedVersionNumber: null,
+    openPointCount: 0, blockingPointCount: 0, comparisonId: null, comparisonStatus: null,
+    totalSegments: 0, reviewedSegments: 0, unresolvedSegments: 0,
+    aiPromptDraftId: null, aiDraftStatus: null, aiApproved: false,
+    nextAction: { code: "START_REVIEW", label: "Véleményezés indítása", rationale: "Nincs aktív review." },
+  };
+  const tile = deriveCaseInsightTiles(none, "case-1").find((item) => item.key === "document-review");
+  assert.equal(tile?.status, "Nincs aktív felülvizsgálat");
+  assert.doesNotMatch(`${tile?.status} ${tile?.detail}`, /Ismeretlen review állapot/);
+});
+
+test("Document review insight shows an approved version explicitly", () => {
+  const approved = workspace();
+  approved.documents[0].reviewSummary = {
+    documentId: "doc-1", caseId: "case-1", documentTitle: "Szerződés.docx", category: null, workStatus: "APPROVED",
+    currentVersionNumber: 2, currentVersionId: "version-2", previousVersionNumber: 1, previousVersionId: "version-1",
+    reviewId: "review-2", reviewVersionId: "version-2", reviewStatus: "APPROVED",
+    activeReviewId: "review-2", activeReviewStatus: "APPROVED",
+    activeReviewVersionId: "version-2", activeReviewVersionNumber: 2,
+    reviewVersionNumber: 2, reviewVersionRelationship: "ON_CURRENT_VERSION",
+    approvedVersionId: "version-2", approvedVersionNumber: 2,
+    openPointCount: 0, blockingPointCount: 0, comparisonId: null, comparisonStatus: null,
+    totalSegments: 0, reviewedSegments: 0, unresolvedSegments: 0,
+    aiPromptDraftId: null, aiDraftStatus: null, aiApproved: false,
+    nextAction: { code: "READY_FOR_CLIENT", label: "Kész ügyfél átadásra", rationale: "Jóváhagyva." },
+  };
+  const tile = deriveCaseInsightTiles(approved, "case-1").find((item) => item.key === "document-review");
+  assert.equal(tile?.status, "Jóváhagyva");
+  assert.doesNotMatch(tile?.detail || "", /Review verzió:/);
+});
+
 test("Insight presentation maps document enums instead of rendering raw backend values", () => {
   assert.match(source, /humanEnumLabel\(activeReason === "REVIEW_PENDING"/);
   assert.doesNotMatch(source, /\{document\.workStatus\}/);

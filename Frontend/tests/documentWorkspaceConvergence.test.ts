@@ -74,3 +74,17 @@ test("Document-level change requests require both visible inputs and exact revis
   assert.match(source, /safeRationale: `Indok:\\n\$\{changeReason\.trim\(\)\}\\n\\nKért módosítás:/);
   assert.match(source, /expectedRevision: review\.revision/);
 });
+
+test("Review panel states the review version and the opened version explicitly and never collapses them", () => {
+  const source = read("src/components/documents/review/DocumentReviewWorkflowPanel.tsx");
+  // Distinct, explicit version context rows.
+  assert.match(source, /label="Review verzió"/);
+  assert.match(source, /label="Megnyitott verzió"/);
+  assert.match(source, /label="Jóváhagyott verzió"/);
+  // Explicit human wording when the active review is bound to another version.
+  assert.match(source, /A folyamatban lévő review a\(z\)/);
+  assert.match(source, /verzióhoz tartozik/);
+  assert.match(source, /data-testid="review-version-warning"/);
+  // The badge carries the reviewed version, so status and version are never split.
+  assert.match(source, /`\$\{statusLabel\[String\(review\.status\)\] \|\| review\.status\}\$\{reviewVersionLabel \? ` · \$\{reviewVersionLabel\}` : ""\}`/);
+});

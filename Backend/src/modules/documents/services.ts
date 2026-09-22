@@ -10,6 +10,7 @@ import { driveService } from '../sharepoint';
 import { isTextExtractable } from './comparison/versionText';
 import { hrConfidentialReadAllowed } from './authorization';
 import { transitionReview, DocumentReviewWorkflowError } from './review/reviewService';
+import { resolveVersionReviewStatus } from './review/reviewWorkflow';
 import { queueDocumentVersionScan, securityScanBlock } from './securityScan.service';
 import {
   CreateDocumentInput,
@@ -71,7 +72,7 @@ const buildVersionStorageFileName = (originalFileName: string, documentId: strin
   return `${safeBase}.v${versionNumber}.${documentId.slice(0, 8)}${extension}`;
 };
 
-export const mapDocumentVersion = (version: any): DocumentVersionDto => ({
+export const mapDocumentVersion = (version: any, reviewStatusOverride?: string | null): DocumentVersionDto => ({
   id: version.id,
   documentId: version.documentId,
   versionNumber: version.version,
@@ -86,7 +87,7 @@ export const mapDocumentVersion = (version: any): DocumentVersionDto => ({
   storageReference: version.storageReference || version.spItemId || null,
   previousVersionId: version.previousVersionId || null,
   isCurrent: Boolean(version.isCurrent),
-  reviewStatus: version.reviewStatus || 'NOT_IN_REVIEW',
+  reviewStatus: reviewStatusOverride || version.reviewStatus || 'NOT_IN_REVIEW',
   publicationStatus: version.publicationStatus || 'INTERNAL_ONLY',
   uploadSource: version.uploadSource || 'LAWYER_UPLOAD',
   versionType: version.versionType || 'WORKING_COPY',
@@ -98,6 +99,33 @@ export const mapDocumentVersion = (version: any): DocumentVersionDto => ({
   // incidental metadata such as file type.
   textExtractable: isTextExtractable(version.mimeType || null, version.originalFileName || version.name || null),
 });
+
+/**
+ * Bounded, read-only load of the reviews needed to reconcile a version's
+ * version-level review status with the canonical review workflow. Never writes.
+ */
+const loadReviewsForVersionReconciliation = async (documentId: string): Promise<Array<{
+  status: unknown;
+  documentVersionId?: string | null;
+  currentRound?: { reviewVersionId?: string | null } | null;
+  approvedVersionId?: string | null;
+}>> => {
+  try {
+    return await prisma.documentReview.findMany({
+      where: { documentId },
+      select: {
+        status: true,
+        documentVersionId: true,
+        approvedVersionId: true,
+        currentRound: { select: { reviewVersionId: true } },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+    });
+  } catch (error) {
+    if (isMissingDatabaseObjectError(error)) return [];
+    throw error;
+  }
+};
 
 const countOptionalDependency = async (query: Promise<number>): Promise<number> => {
   try {
@@ -744,7 +772,13 @@ class DocumentsService {
       include: { uploadedBy: { select: { id: true, name: true } } },
       orderBy: { version: 'desc' },
     });
-    return versions.map(mapDocumentVersion);
+    // Read-time reconciliation: a version whose canonical review is active must not
+    // read the stored upload-time default NOT_IN_REVIEW. This keeps legacy rows
+    // (created before the workflow mirrored its verdict) truthful immediately.
+    const reviews = await loadReviewsForVersionReconciliation(documentId);
+    return versions.map((version) =>
+      mapDocumentVersion(version, resolveVersionReviewStatus({ versionId: version.id, storedStatus: version.reviewStatus, reviews })),
+    );
   }
 
   async getDocumentVersion(documentId: string, versionId: string): Promise<DocumentVersionDto | null> {
@@ -752,7 +786,9 @@ class DocumentsService {
       where: { id: versionId, documentId },
       include: { uploadedBy: { select: { id: true, name: true } } },
     });
-    return version ? mapDocumentVersion(version) : null;
+    if (!version) return null;
+    const reviews = await loadReviewsForVersionReconciliation(documentId);
+    return mapDocumentVersion(version, resolveVersionReviewStatus({ versionId: version.id, storedStatus: version.reviewStatus, reviews }));
   }
 
   async promoteCurrentVersion(documentId: string, versionId: string, userId: string): Promise<DocumentVersionDto | null> {

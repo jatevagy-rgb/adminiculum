@@ -13,6 +13,18 @@ import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 
 export type AiSourceMode = 'EXACT_VERSION_PAIR' | 'CURRENT_VERSION' | 'MIXED_VERSION_CONTEXT' | 'LEGACY_DOCUMENT';
 
+/**
+ * Explicit relationship between a document's active review and the version the
+ * caller is currently looking at. The three states are semantically different
+ * and MUST NOT be collapsed into a single "in review / not in review" flag:
+ *
+ *   NONE               -> no review exists for this document at all
+ *   ON_CURRENT_VERSION -> the active review is bound to the current version
+ *   ON_OTHER_VERSION   -> a review exists, but it is bound to a different
+ *                         (typically historical) version than the current one
+ */
+export type ReviewVersionRelationship = 'NONE' | 'ON_CURRENT_VERSION' | 'ON_OTHER_VERSION';
+
 export interface DocumentReviewVersionDto {
   id: string;
   version: number;
@@ -36,6 +48,21 @@ export interface DocumentReviewSummaryDto {
   reviewId: string | null;
   reviewVersionId: string | null;
   reviewStatus: string | null;
+  /**
+   * DOCUMENT-LEVEL active review truth, independent of the current version.
+   * `activeReview*` always reflects the document's active review even when it is
+   * bound to a historical version, while `reviewId/reviewVersionId/reviewStatus`
+   * above stay strictly bound to the current version (exact-version binding).
+   */
+  activeReviewId: string | null;
+  activeReviewStatus: string | null;
+  activeReviewVersionId: string | null;
+  activeReviewVersionNumber: number | null;
+  /** Version number of the version the current-version-bound review applies to. */
+  reviewVersionNumber: number | null;
+  reviewVersionRelationship: ReviewVersionRelationship;
+  approvedVersionId: string | null;
+  approvedVersionNumber: number | null;
   openPointCount: number;
   blockingPointCount: number;
   comparisonId: string | null;
@@ -93,6 +120,9 @@ export interface DocumentReviewProjectionDto {
     dueAt: string | null;
     currentRoundNumber: number;
     updatedAt: string;
+    /** Exact version recorded as approved by the review, if any. */
+    approvedVersionId?: string | null;
+    approvedVersionNumber?: number | null;
   } | null;
 
   reviewContext: {
@@ -104,6 +134,18 @@ export interface DocumentReviewProjectionDto {
       versionNumber: number | null;
       status: string;
     } | null;
+    /** Version actually under review (active round version), or null. */
+    reviewedVersionId: string | null;
+    reviewedVersionNumber: number | null;
+    /** Explicit document-vs-version relationship for the active review. */
+    relationship: ReviewVersionRelationship;
+    /** Document-level active review, even when bound to another version. */
+    activeReviewId: string | null;
+    activeReviewStatus: string | null;
+    activeReviewVersionId: string | null;
+    activeReviewVersionNumber: number | null;
+    approvedVersionId: string | null;
+    approvedVersionNumber: number | null;
   };
 
   comparison: {
@@ -330,8 +372,14 @@ export function deriveNextAction(params: {
   review: DocumentReviewProjectionDto['review'];
   comparison: DocumentReviewProjectionDto['comparison'];
   ai: DocumentReviewProjectionDto['ai'];
+  /**
+   * Optional explicit document-vs-version relationship. When supplied it lets the
+   * projection report "a review exists, but on another version" instead of the
+   * false "no review started" state. Omitted => legacy behaviour (START_REVIEW).
+   */
+  reviewContext?: Pick<DocumentReviewProjectionDto['reviewContext'], 'relationship' | 'reviewedVersionNumber'> | null;
 }): { code: string; label: string; rationale: string } {
-  const { currentVersion, previousVersion, review, comparison, ai } = params;
+  const { currentVersion, previousVersion, review, comparison, ai, reviewContext } = params;
 
   // 1. No version uploaded
   if (!currentVersion) {
@@ -390,7 +438,19 @@ export function deriveNextAction(params: {
     }
   }
 
-  // 4. Exact-version review state binding
+  // 4. Explicit document-level review, bound to a DIFFERENT version. This is not
+  // "no review": reporting START_REVIEW here would contradict the review rail.
+  if (!review && reviewContext?.relationship === 'ON_OTHER_VERSION') {
+    return {
+      code: 'REVIEW_ON_OTHER_VERSION',
+      label: 'Véleményezés másik verzióhoz kapcsolódik',
+      rationale: reviewContext.reviewedVersionNumber != null
+        ? `A folyamatban lévő véleményezés a v${reviewContext.reviewedVersionNumber} verzióhoz tartozik, nem az aktuális verzióhoz.`
+        : 'A folyamatban lévő véleményezés egy másik verzióhoz tartozik, nem az aktuális verzióhoz.',
+    };
+  }
+
+  // 5. Exact-version review state binding
   if (!review) {
     return {
       code: 'START_REVIEW',
@@ -556,16 +616,59 @@ export async function getDocumentReviewProjection(
       }
     : null;
 
-  // 2. Exact Review-Version Binding
+  // 2. Canonical review resolution.
+  //
+  // A review is "bound" to the version of its ACTIVE ROUND (a resubmission moves
+  // the review to a newer version while keeping the original anchor version), so
+  // binding on the immutable `documentReview.documentVersionId` alone is
+  // version-untruthful after RESUBMIT. We therefore resolve the active round
+  // version explicitly, and separately expose the document-level active review
+  // even when it is bound to a different (historical) version.
   let reviewProjection: DocumentReviewProjectionDto['review'] = null;
-  let otherVersionReview: any = null;
+  let otherVersionReview:
+    | DocumentReviewProjectionDto['reviewContext']['otherVersionReview']
+    | null = null;
+  let activeReview: DocumentReviewProjectionDto['review'] = null;
+
+  const versionNumberById = new Map<string, number>(versions.map((v: any) => [v.id, v.version]));
+  const isActiveReviewStatus = (status: unknown) => !['CLOSED', 'CANCELLED'].includes(String(status));
+  const activeVersionIdOf = (review: any): string | null =>
+    review?.currentRound?.reviewVersionId || review?.documentVersionId || null;
+
+  const buildReviewProjection = (review: any): DocumentReviewProjectionDto['review'] => {
+    const openPoints = (review.points || []).filter((p: any) => p.status === 'OPEN' || p.status === 'ANSWERED');
+    const blockingPoints = openPoints.filter((p: any) => p.severity === 'BLOCKING');
+    const pointsLinkedToSegments = (review.points || []).filter((p: any) => Boolean(p.comparisonSegmentId));
+    const openPointsLinkedToSegments = openPoints.filter((p: any) => Boolean(p.comparisonSegmentId));
+    const reviewVersionId = activeVersionIdOf(review) || review.documentVersionId;
+
+    return {
+      reviewId: review.id,
+      documentVersionId: review.documentVersionId,
+      reviewVersionId,
+      status: review.status,
+      reviewer: review.assignedReviewer
+        ? {
+            id: review.assignedReviewer.id,
+            name: review.assignedReviewer.name,
+            email: review.assignedReviewer.email,
+          }
+        : null,
+      openPointCount: openPoints.length,
+      blockingPointCount: blockingPoints.length,
+      pointsLinkedToSegmentsCount: pointsLinkedToSegments.length,
+      openPointsLinkedToSegmentsCount: openPointsLinkedToSegments.length,
+      dueAt: iso(review.dueAt),
+      currentRoundNumber: review.currentRoundNumber,
+      updatedAt: iso(review.updatedAt) || new Date().toISOString(),
+      approvedVersionId: review.approvedVersionId ?? review.approvedVersion?.id ?? null,
+      approvedVersionNumber: review.approvedVersion?.version ?? null,
+    };
+  };
 
   if (currentVerRow) {
-    const currentReview = await db.documentReview.findFirst({
-      where: {
-        documentId,
-        documentVersionId: currentVerRow.id, // EXACT BINDING: must belong to current version
-      },
+    const reviews = await db.documentReview.findMany({
+      where: { documentId },
       include: {
         assignedReviewer: { select: { id: true, name: true, email: true } },
         points: {
@@ -576,65 +679,64 @@ export async function getDocumentReviewProjection(
             comparisonSegmentId: true,
           },
         },
+        currentRound: { select: { reviewVersionId: true } },
+        approvedVersion: { select: { id: true, version: true } },
       },
       orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
     });
 
-    if (currentReview) {
-      const openPoints = currentReview.points.filter((p: any) => p.status === 'OPEN' || p.status === 'ANSWERED');
-      const blockingPoints = openPoints.filter((p: any) => p.severity === 'BLOCKING');
-      const pointsLinkedToSegments = currentReview.points.filter((p: any) => Boolean(p.comparisonSegmentId));
-      const openPointsLinkedToSegments = openPoints.filter((p: any) => Boolean(p.comparisonSegmentId));
-
-      reviewProjection = {
-        reviewId: currentReview.id,
-        documentVersionId: currentReview.documentVersionId,
-        reviewVersionId: currentReview.documentVersionId,
-        status: currentReview.status,
-        reviewer: currentReview.assignedReviewer
-          ? {
-              id: currentReview.assignedReviewer.id,
-              name: currentReview.assignedReviewer.name,
-              email: currentReview.assignedReviewer.email,
-            }
-          : null,
-        openPointCount: openPoints.length,
-        blockingPointCount: blockingPoints.length,
-        pointsLinkedToSegmentsCount: pointsLinkedToSegments.length,
-        openPointsLinkedToSegmentsCount: openPointsLinkedToSegments.length,
-        dueAt: iso(currentReview.dueAt),
-        currentRoundNumber: currentReview.currentRoundNumber,
-        updatedAt: iso(currentReview.updatedAt) || new Date().toISOString(),
-      };
+    const activeReviews = reviews.filter((r: any) => isActiveReviewStatus(r.status));
+    const documentLevelReview = activeReviews[0] || reviews[0] || null;
+    if (documentLevelReview) {
+      activeReview = buildReviewProjection(documentLevelReview);
     }
 
-    // Check if another version has a review (to prevent cross-version misattribution while maintaining awareness)
-    otherVersionReview = await db.documentReview.findFirst({
-      where: {
-        documentId,
-        documentVersionId: { not: currentVerRow.id },
-      },
-      select: {
-        id: true,
-        documentVersionId: true,
-        status: true,
-        documentVersion: { select: { version: true } },
-      },
-      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-    });
+    // EXACT BINDING: a review belongs to the current version only when its active
+    // round reviews the current version.
+    const currentVersionReview =
+      reviews.find((r: any) => activeVersionIdOf(r) === currentVerRow!.id) || null;
+    if (currentVersionReview) {
+      reviewProjection = buildReviewProjection(currentVersionReview);
+    }
+
+    // Awareness of a review on another version (prefer an active one).
+    const otherReview =
+      reviews.find((r: any) => activeVersionIdOf(r) !== currentVerRow!.id && isActiveReviewStatus(r.status)) ||
+      reviews.find((r: any) => activeVersionIdOf(r) !== currentVerRow!.id) ||
+      null;
+    if (otherReview) {
+      const otherVersionId = activeVersionIdOf(otherReview);
+      otherVersionReview = {
+        reviewId: otherReview.id,
+        documentVersionId: otherVersionId || otherReview.documentVersionId,
+        versionNumber: otherVersionId ? versionNumberById.get(otherVersionId) ?? null : null,
+        status: otherReview.status,
+      };
+    }
   }
 
-  const reviewContext = {
+  const reviewedVersionId = reviewProjection?.reviewVersionId ?? null;
+  const reviewRelationship: ReviewVersionRelationship = reviewProjection
+    ? 'ON_CURRENT_VERSION'
+    : otherVersionReview
+      ? 'ON_OTHER_VERSION'
+      : 'NONE';
+
+  const reviewContext: DocumentReviewProjectionDto['reviewContext'] = {
     boundToCurrentVersion: Boolean(reviewProjection),
     hasReviewForOtherVersion: Boolean(otherVersionReview),
-    otherVersionReview: otherVersionReview
-      ? {
-          reviewId: otherVersionReview.id,
-          documentVersionId: otherVersionReview.documentVersionId,
-          versionNumber: otherVersionReview.documentVersion?.version ?? null,
-          status: otherVersionReview.status,
-        }
+    otherVersionReview,
+    reviewedVersionId,
+    reviewedVersionNumber: reviewedVersionId ? versionNumberById.get(reviewedVersionId) ?? null : null,
+    relationship: reviewRelationship,
+    activeReviewId: activeReview?.reviewId ?? null,
+    activeReviewStatus: activeReview?.status ?? null,
+    activeReviewVersionId: activeReview?.reviewVersionId ?? null,
+    activeReviewVersionNumber: activeReview?.reviewVersionId
+      ? versionNumberById.get(activeReview.reviewVersionId) ?? null
       : null,
+    approvedVersionId: reviewProjection?.approvedVersionId ?? activeReview?.approvedVersionId ?? null,
+    approvedVersionNumber: reviewProjection?.approvedVersionNumber ?? activeReview?.approvedVersionNumber ?? null,
   };
 
   // 3. DocumentComparison & ChangeSegments
@@ -837,6 +939,7 @@ export async function getDocumentReviewProjection(
     review: reviewProjection,
     comparison: comparisonProjection,
     ai: aiProjection,
+    reviewContext: { relationship: reviewContext.relationship, reviewedVersionNumber: reviewContext.reviewedVersionNumber },
   });
 
   const result: DocumentReviewProjectionDto = {
@@ -969,7 +1072,6 @@ export async function getCaseDocumentReviewSummaries(
 
   const currentVersionMap = new Map<string, DocumentReviewVersionDto | null>();
   const previousVersionMap = new Map<string, DocumentReviewVersionDto | null>();
-  const currentVersionIds: string[] = [];
   const pairConditions: Array<{ documentId: string; targetVersionId: string; baseVersionId: string }> = [];
 
   for (const doc of documents) {
@@ -991,10 +1093,6 @@ export async function getCaseDocumentReviewSummaries(
         }
       : null;
     currentVersionMap.set(doc.id, curVer);
-
-    if (currentVerRow) {
-      currentVersionIds.push(currentVerRow.id);
-    }
 
     let prevVerRow: any = null;
     if (currentVerRow) {
@@ -1028,33 +1126,33 @@ export async function getCaseDocumentReviewSummaries(
     }
   }
 
-  // 3. BATCH QUERY: Reviews for all current versions (exact version binding)
-  const reviews = currentVersionIds.length > 0
-    ? await db.documentReview.findMany({
-        where: {
-          documentId: { in: docIds },
-          documentVersionId: { in: currentVersionIds },
+  // 3. BATCH QUERY: All reviews for the case's documents. We resolve the active
+  // round version in memory (a resubmission moves the review onto a newer version
+  // while keeping its anchor `documentVersionId`), so a document-level active
+  // review on a historical version is never silently dropped.
+  const reviews = await db.documentReview.findMany({
+    where: { documentId: { in: docIds } },
+    include: {
+      assignedReviewer: { select: { id: true, name: true, email: true } },
+      points: {
+        select: {
+          id: true,
+          status: true,
+          severity: true,
+          comparisonSegmentId: true,
         },
-        include: {
-          assignedReviewer: { select: { id: true, name: true, email: true } },
-          points: {
-            select: {
-              id: true,
-              status: true,
-              severity: true,
-              comparisonSegmentId: true,
-            },
-          },
-        },
-        orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
-      })
-    : [];
+      },
+      currentRound: { select: { reviewVersionId: true } },
+      approvedVersion: { select: { id: true, version: true } },
+    },
+    orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+  });
 
-  const reviewsByVersionId = new Map<string, any>();
+  const reviewsByDoc = new Map<string, any[]>();
   for (const r of reviews) {
-    if (!reviewsByVersionId.has(r.documentVersionId)) {
-      reviewsByVersionId.set(r.documentVersionId, r);
-    }
+    const list = reviewsByDoc.get(r.documentId) || [];
+    list.push(r);
+    reviewsByDoc.set(r.documentId, list);
   }
 
   // 4. BATCH QUERY: Comparisons for all exact (previous->current) version pairs
@@ -1118,37 +1216,69 @@ export async function getCaseDocumentReviewSummaries(
     const currentVersion = currentVersionMap.get(doc.id) || null;
     const previousVersion = previousVersionMap.get(doc.id) || null;
 
+    const docVersions = versionsByDoc.get(doc.id) || [];
+    const versionNumberById = new Map<string, number>(docVersions.map((v: any) => [v.id, v.version]));
+    const docReviews = reviewsByDoc.get(doc.id) || [];
+
+    const buildSummaryReview = (r: any): DocumentReviewProjectionDto['review'] => {
+      const openPoints = r.points.filter((p: any) => p.status === 'OPEN' || p.status === 'ANSWERED');
+      const blockingPoints = openPoints.filter((p: any) => p.severity === 'BLOCKING');
+      const pointsLinkedToSegments = r.points.filter((p: any) => Boolean(p.comparisonSegmentId));
+      const openPointsLinkedToSegments = openPoints.filter((p: any) => Boolean(p.comparisonSegmentId));
+      const reviewVersionId = r.currentRound?.reviewVersionId || r.documentVersionId;
+
+      return {
+        reviewId: r.id,
+        documentVersionId: r.documentVersionId,
+        reviewVersionId,
+        status: r.status,
+        reviewer: r.assignedReviewer
+          ? {
+              id: r.assignedReviewer.id,
+              name: r.assignedReviewer.name,
+              email: r.assignedReviewer.email,
+            }
+          : null,
+        openPointCount: openPoints.length,
+        blockingPointCount: blockingPoints.length,
+        pointsLinkedToSegmentsCount: pointsLinkedToSegments.length,
+        openPointsLinkedToSegmentsCount: openPointsLinkedToSegments.length,
+        dueAt: iso(r.dueAt),
+        currentRoundNumber: r.currentRoundNumber,
+        updatedAt: iso(r.updatedAt) || new Date().toISOString(),
+        approvedVersionId: r.approvedVersionId ?? r.approvedVersion?.id ?? null,
+        approvedVersionNumber: r.approvedVersion?.version ?? null,
+      };
+    };
+
+    const activeVersionIdOf = (r: any): string | null =>
+      r.currentRound?.reviewVersionId || r.documentVersionId || null;
+    const isActiveReviewStatus = (status: unknown) => !['CLOSED', 'CANCELLED'].includes(String(status));
+
     let reviewProjection: DocumentReviewProjectionDto['review'] = null;
     if (currentVersion) {
-      const r = reviewsByVersionId.get(currentVersion.id);
+      const r = docReviews.find((candidate: any) => activeVersionIdOf(candidate) === currentVersion.id) || null;
       if (r) {
-        const openPoints = r.points.filter((p: any) => p.status === 'OPEN' || p.status === 'ANSWERED');
-        const blockingPoints = openPoints.filter((p: any) => p.severity === 'BLOCKING');
-        const pointsLinkedToSegments = r.points.filter((p: any) => Boolean(p.comparisonSegmentId));
-        const openPointsLinkedToSegments = openPoints.filter((p: any) => Boolean(p.comparisonSegmentId));
-
-        reviewProjection = {
-          reviewId: r.id,
-          documentVersionId: r.documentVersionId,
-          reviewVersionId: r.documentVersionId,
-          status: r.status,
-          reviewer: r.assignedReviewer
-            ? {
-                id: r.assignedReviewer.id,
-                name: r.assignedReviewer.name,
-                email: r.assignedReviewer.email,
-              }
-            : null,
-          openPointCount: openPoints.length,
-          blockingPointCount: blockingPoints.length,
-          pointsLinkedToSegmentsCount: pointsLinkedToSegments.length,
-          openPointsLinkedToSegmentsCount: openPointsLinkedToSegments.length,
-          dueAt: iso(r.dueAt),
-          currentRoundNumber: r.currentRoundNumber,
-          updatedAt: iso(r.updatedAt) || new Date().toISOString(),
-        };
+        reviewProjection = buildSummaryReview(r);
       }
     }
+
+    const documentLevelReview =
+      docReviews.find((r: any) => isActiveReviewStatus(r.status)) || docReviews[0] || null;
+    const activeReview = documentLevelReview ? buildSummaryReview(documentLevelReview) : null;
+
+    const otherVersionReview = currentVersion
+      ? docReviews.find((r: any) => activeVersionIdOf(r) !== currentVersion.id && isActiveReviewStatus(r.status)) ||
+        docReviews.find((r: any) => activeVersionIdOf(r) !== currentVersion.id) ||
+        null
+      : null;
+
+    const reviewedVersionId = reviewProjection?.reviewVersionId ?? null;
+    const reviewRelationship: ReviewVersionRelationship = reviewProjection
+      ? 'ON_CURRENT_VERSION'
+      : otherVersionReview
+        ? 'ON_OTHER_VERSION'
+        : 'NONE';
 
     let comparisonProjection: DocumentReviewProjectionDto['comparison'] = null;
     if (currentVersion && previousVersion) {
@@ -1219,6 +1349,10 @@ export async function getCaseDocumentReviewSummaries(
       review: reviewProjection,
       comparison: comparisonProjection,
       ai: aiProjection,
+      reviewContext: {
+        relationship: reviewRelationship,
+        reviewedVersionNumber: otherVersionReview?.versionNumber ?? null,
+      },
     });
 
     items.push({
@@ -1232,10 +1366,20 @@ export async function getCaseDocumentReviewSummaries(
       previousVersionNumber: previousVersion?.version ?? null,
       previousVersionId: previousVersion?.id ?? null,
       reviewId: reviewProjection?.reviewId ?? null,
-      reviewVersionId: reviewProjection?.documentVersionId ?? null,
+      reviewVersionId: reviewProjection?.reviewVersionId ?? null,
       reviewStatus: reviewProjection?.status ?? null,
-      openPointCount: reviewProjection?.openPointCount ?? 0,
-      blockingPointCount: reviewProjection?.blockingPointCount ?? 0,
+      activeReviewId: activeReview?.reviewId ?? null,
+      activeReviewStatus: activeReview?.status ?? null,
+      activeReviewVersionId: activeReview?.reviewVersionId ?? null,
+      activeReviewVersionNumber: activeReview?.reviewVersionId
+        ? versionNumberById.get(activeReview.reviewVersionId) ?? null
+        : null,
+      reviewVersionNumber: reviewedVersionId ? versionNumberById.get(reviewedVersionId) ?? null : null,
+      reviewVersionRelationship: reviewRelationship,
+      approvedVersionId: reviewProjection?.approvedVersionId ?? activeReview?.approvedVersionId ?? null,
+      approvedVersionNumber: reviewProjection?.approvedVersionNumber ?? activeReview?.approvedVersionNumber ?? null,
+      openPointCount: reviewProjection?.openPointCount ?? activeReview?.openPointCount ?? 0,
+      blockingPointCount: reviewProjection?.blockingPointCount ?? activeReview?.blockingPointCount ?? 0,
       comparisonId: comparisonProjection?.comparisonId ?? null,
       comparisonStatus: comparisonProjection?.status ?? null,
       totalSegments: comparisonProjection?.totalSegments ?? 0,

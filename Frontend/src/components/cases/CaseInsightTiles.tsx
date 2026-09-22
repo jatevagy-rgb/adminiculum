@@ -129,8 +129,24 @@ export const CASE_INSIGHT_TILE_REGISTRY: CaseInsightTileDefinition[] = [
       if (!document) return null;
       const reviewSummary = document.reviewSummary;
       if (reviewSummary) {
+        // DOCUMENT-LEVEL vs CURRENT-VERSION review truth. A review can be bound to
+        // a historical version while the current version has none; that is NOT
+        // "no review". We expose the document-level active review, the version it
+        // reviews, and the version the user is looking at as distinct facts.
+        const documentReviewStatus = reviewSummary.activeReviewStatus ?? reviewSummary.reviewStatus;
+        const hasAnyReview = Boolean(reviewSummary.activeReviewId ?? reviewSummary.reviewId);
+        const reviewVersionNumber = reviewSummary.activeReviewVersionNumber
+          ?? reviewSummary.reviewVersionNumber
+          ?? (reviewSummary.reviewVersionId && reviewSummary.reviewVersionId === reviewSummary.currentVersionId
+            ? reviewSummary.currentVersionNumber
+            : null);
+        const currentVersionLabel = reviewSummary.currentVersionNumber !== null ? `v${reviewSummary.currentVersionNumber}` : null;
+        const reviewVersionLabel = reviewVersionNumber !== null ? `v${reviewVersionNumber}` : null;
+        const reviewOnAnotherVersion = Boolean(hasAnyReview && reviewVersionLabel && currentVersionLabel && reviewVersionLabel !== currentVersionLabel);
+
         const detail = [
-          reviewSummary.currentVersionNumber !== null ? `Verzió: v${reviewSummary.currentVersionNumber}` : null,
+          currentVersionLabel ? `Verzió: ${currentVersionLabel}` : null,
+          reviewOnAnotherVersion ? `Review verzió: ${reviewVersionLabel}` : null,
           reviewSummary.comparisonId && reviewSummary.totalSegments > 0
             ? `${reviewSummary.reviewedSegments} / ${reviewSummary.totalSegments} változás ellenőrizve`
             : null,
@@ -142,7 +158,7 @@ export const CASE_INSIGHT_TILE_REGISTRY: CaseInsightTileDefinition[] = [
           key: "document-review",
           title: "Dokumentum / review állapot",
           accent: "ochre",
-          status: reviewStatusLabel(reviewSummary.reviewStatus),
+          status: documentReviewStatus ? reviewStatusLabel(documentReviewStatus) : hasAnyReview ? "Ismeretlen review állapot" : "Nincs aktív felülvizsgálat",
           body: reviewSummary.documentTitle || document.fileName,
           detail: detail || undefined,
           action: { label: "Dokumentum munkatér", href: `/cases/${encodeURIComponent(caseId)}/documents?documentId=${encodeURIComponent(document.id)}` },

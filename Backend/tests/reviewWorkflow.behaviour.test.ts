@@ -11,9 +11,66 @@ import {
   approvalAppliesToVersion,
   canOpenNewRound,
   isActiveStatus,
+  versionReviewStatusFor,
+  activeReviewVersionId,
+  isActiveReviewStatus,
+  resolveVersionReviewStatus,
 } from '../src/modules/documents/review/reviewWorkflow';
 
 const OK = { actorAuthorized: true, reviewerHasAccess: true };
+
+describe('version-level review projection (DocumentVersion.reviewStatus)', () => {
+  it('maps document-level review states onto the version-level enum', () => {
+    expect(versionReviewStatusFor('DRAFT')).toBe('NOT_IN_REVIEW');
+    expect(versionReviewStatusFor('ASSIGNED')).toBe('IN_REVIEW');
+    expect(versionReviewStatusFor('IN_REVIEW')).toBe('IN_REVIEW');
+    expect(versionReviewStatusFor('RESUBMITTED')).toBe('IN_REVIEW');
+    expect(versionReviewStatusFor('CHANGES_REQUESTED')).toBe('CHANGES_REQUESTED');
+    expect(versionReviewStatusFor('APPROVED')).toBe('APPROVED');
+    expect(versionReviewStatusFor('CLOSED')).toBe('NOT_IN_REVIEW');
+    expect(versionReviewStatusFor('CANCELLED')).toBe('NOT_IN_REVIEW');
+  });
+
+  it('binds a review to its active round version, not its anchor version', () => {
+    expect(activeReviewVersionId({ documentVersionId: 'v1', currentRound: { reviewVersionId: 'v2' } })).toBe('v2');
+    expect(activeReviewVersionId({ documentVersionId: 'v1', currentRound: null })).toBe('v1');
+    expect(activeReviewVersionId(null)).toBeNull();
+  });
+
+  it('treats only APPROVED/CANCELLED/CLOSED as terminal', () => {
+    expect(isActiveReviewStatus('IN_REVIEW')).toBe(true);
+    expect(isActiveReviewStatus('CHANGES_REQUESTED')).toBe(true);
+    expect(isActiveReviewStatus('APPROVED')).toBe(false);
+    expect(isActiveReviewStatus('CLOSED')).toBe(false);
+  });
+
+  it('reconciles a stored NOT_IN_REVIEW version with its canonical active review', () => {
+    expect(resolveVersionReviewStatus({
+      versionId: 'v1',
+      storedStatus: 'NOT_IN_REVIEW',
+      reviews: [{ status: 'IN_REVIEW', documentVersionId: 'v1', currentRound: { reviewVersionId: 'v1' } }],
+    })).toBe('IN_REVIEW');
+
+    expect(resolveVersionReviewStatus({
+      versionId: 'v2',
+      storedStatus: 'NOT_IN_REVIEW',
+      reviews: [{ status: 'RESUBMITTED', documentVersionId: 'v1', currentRound: { reviewVersionId: 'v2' } }],
+    })).toBe('IN_REVIEW');
+  });
+
+  it('keeps a recorded approval on the exact version even after the review closes', () => {
+    expect(resolveVersionReviewStatus({
+      versionId: 'v3',
+      storedStatus: 'NOT_IN_REVIEW',
+      reviews: [{ status: 'CLOSED', documentVersionId: 'v3', currentRound: { reviewVersionId: 'v3' }, approvedVersionId: 'v3' }],
+    })).toBe('APPROVED');
+  });
+
+  it('never invents review state for a version with no canonical review', () => {
+    expect(resolveVersionReviewStatus({ versionId: 'v1', storedStatus: 'NOT_IN_REVIEW', reviews: [] })).toBe('NOT_IN_REVIEW');
+    expect(resolveVersionReviewStatus({ versionId: 'v1', storedStatus: 'APPROVED', reviews: [] })).toBe('APPROVED');
+  });
+});
 
 describe('lifecycle transitions', () => {
   it('assigns a reviewer from DRAFT', () => {
