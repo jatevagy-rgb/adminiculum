@@ -77,14 +77,14 @@ test("Canonical center region provides read-only extracted text preview with Wor
   assert.match(center, /Kanonikus olvasófelület/);
   assert.match(center, /Read-only előnézet · Word a szerkesztő/);
   assert.match(center, /data-testid="version-preview-document-text"/);
-  assert.match(center, /canRenderTextVersion/);
+  assert.match(center, /hasVersionScopedText\s*&&\s*selectedVersionBelongsToActiveDocument/);
   assert.match(center, /versionTextPlan === 'DOCUMENT_TEXT'/);
   assert.match(source, /versionTextPlan === 'VERSION_BLOB'/);
   assert.match(center, /renderAnnotatedText\(\)/);
   assert.doesNotMatch(center, /contentEditable/);
 });
 
-test("Canonical center region preserves truthful fallback for historical non-TXT versions", () => {
+test("Canonical center region preserves truthful fallback for versions without version-scoped text", () => {
   const source = documentPage();
   const centerMatch = source.match(/<main data-testid="canonical-center-reading"[\s\S]*?<\/main>/);
   assert.ok(centerMatch, "Center reading surface must be found");
@@ -201,8 +201,8 @@ test("Old TXT state cannot qualify for the center rendering path after selected 
   assert.ok(centerMatch, "Center reading surface must be found");
   const center = centerMatch[0];
 
-  // Must guard text version rendering with selectedVersionBelongsToActiveDocument
-  assert.match(center, /canRenderTextVersion\s*&&\s*selectedVersionBelongsToActiveDocument/);
+  // Must guard version-scoped text rendering with selectedVersionBelongsToActiveDocument
+  assert.match(center, /hasVersionScopedText\s*&&\s*selectedVersionBelongsToActiveDocument/);
   // Center badge must use canonicalActiveVersion
   assert.match(center, /canonicalActiveVersion \? <AdminBadge tone=\{canonicalActiveVersion\.isCurrent/);
 });
@@ -428,16 +428,19 @@ test("Selection quick toolbar maps to canonical annotation types and never creat
   assert.doesNotMatch(fnBody, /createTask|createDocumentTask|onCreateTask/);
 });
 
-test("Reader search is truthful: plain-surface only, real scroll navigation, no annotation risk", () => {
+test("Reader search is truthful: exact displayed text, real scroll navigation, no annotation risk", () => {
   const source = documentPage();
   assert.match(source, /data-testid="reader-search-input"/);
   assert.match(source, /data-testid="reader-search-prev"/);
   assert.match(source, /data-testid="reader-search-next"/);
   assert.match(source, /data-testid="reader-search-clear"/);
-  // search is enabled only on the surface that can highlight + navigate
+  // search is enabled only on a surface that can highlight + navigate
   assert.match(source, /const readerSearchSupported = isReaderSearchSupported\(readerSearchSurface\)/);
-  assert.match(source, /const readerSearchableText = readerSearchSupported \? documentTextPreview : null/);
-  assert.match(source, /'Keresés ezen a felületen nem támogatott'/);
+  // version-scoped surface searches the exact version text; the legacy plain
+  // surface searches the document-level preview.
+  assert.match(source, /readerSearchSurface === 'VERSION_TEXT' \? versionText : documentTextPreview/);
+  assert.match(source, /const readerSearchSurface = resolveReaderSearchSurface\(\{/);
+  assert.match(source, /hasVersionText: Boolean\(hasVersionScopedText && selectedVersionBelongsToActiveDocument && versionText\)/);
   assert.match(source, /'Nincs kereshető szöveg'/);
   assert.match(source, /'Nincs találat'/);
   // active match scrolls into view via a stable presentation index
@@ -445,10 +448,8 @@ test("Reader search is truthful: plain-surface only, real scroll navigation, no 
   assert.match(source, /scrollIntoView\(/);
   // stale query/active match is reset on document/version switch
   assert.match(source, /readerSearchDispatch\(\{ type: 'RESET' \}\)/);
-  // presentation-only highlight applied to the plain extracted-text surface
+  // presentation-only highlight applied to the exact rendered version text
   assert.match(source, /data-testid="reader-search-match"/);
-  assert.match(source, /renderReaderHighlights\(documentTextPreview\)/);
-  // the annotation-anchored surface stays un-highlighted so offsets are untouched
+  assert.match(source, /buildReaderHighlightSegmentsInRange\(text, rangeStart, rangeEnd, readerMatchOffsets, readerSearchTerm\.length\)/);
   assert.match(source, /renderAnnotatedText\(\)/);
-  assert.doesNotMatch(source, /renderReaderHighlights\(renderAnnotatedText/);
 });

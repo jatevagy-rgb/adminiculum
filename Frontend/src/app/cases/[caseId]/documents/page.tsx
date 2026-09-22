@@ -5,11 +5,18 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
-import { resolveVersionTextPlan } from "@/lib/documents/versionTextPlan";
+import { resolveVersionTextPlan, isVersionScopedTextPlan } from "@/lib/documents/versionTextPlan";
+import {
+  VERSION_TEXT_NO_EXTRACTABLE_TEXT,
+  VERSION_TEXT_REQUEST_FAILED,
+  resolveVersionTextLoadOutcome,
+  versionTextRequestFailureMessage,
+} from "@/lib/documents/versionTextAvailability";
 import { filterLedgerItems } from "@/lib/documents/ledgerSearch";
 import {
   EMPTY_READER_SEARCH,
   buildReaderHighlightSegments,
+  buildReaderHighlightSegmentsInRange,
   findReaderMatchOffsets,
   isReaderSearchSupported,
   readerSearchReducer,
@@ -27,6 +34,7 @@ import {
   downloadDocument,
   downloadDocumentVersion,
   getDocumentText,
+  getDocumentVersionText,
   createDocumentAnnotation,
   createDocumentAnnotationComment,
   deleteDocumentAnnotation,
@@ -451,6 +459,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // cannot be fetched (e.g. an invalid/synthetic storage reference). Truthful
   // domain state — never a raw provider error surfaced to the console/UI.
   const [versionTextUnavailable, setVersionTextUnavailable] = useState(false);
+  // Truthful, product-level reason shown when a version's exact text cannot be
+  // produced (no stored bytes, unsupported format, empty extraction, scan block,
+  // or request error). Never carries a raw backend implementation code.
+  const [versionTextUnavailableReason, setVersionTextUnavailableReason] = useState<string | null>(null);
   // Read-only document-level preview for the CURRENT version of an uploaded
   // non-TXT document (extracted server-side via `GET /documents/:id/text`).
   // Kept separate from `versionText` on purpose: annotations persist
@@ -1439,14 +1451,46 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
   const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId) || null;
   const selectedVersionFileType = getFileType(selectedVersion?.originalFileName || selectedUploadedDocument?.fileName);
-  const canRenderTextVersion = selectedVersionFileType === 'TXT';
+
+  // Canonical shell safety invariant: prove the selected version actually belongs
+  // to the active uploaded document and was resolved from the current loaded versions list.
+  // During document switch (A -> B), this prevents stale metadata and old version text of doc A
+  // from briefly flashing or qualifying for rendering under doc B.
+  const selectedVersionBelongsToActiveDocument =
+    !isLoadingVersions &&
+    Boolean(selectedUploadedDocument?.id) &&
+    Boolean(selectedVersion?.id) &&
+    selectedVersion?.documentId === selectedUploadedDocument?.id &&
+    versions.some((v) => v.id === selectedVersion?.id);
+
+  const annotationVersionEligible = selectedVersionBelongsToActiveDocument;
+
+  // Version-truthful text plan: TXT reads its own stored bytes; DOCX/PDF read
+  // the exact selected version's backend-extracted text; the document-level
+  // extracted text is a read-only preview that is only valid while the selected
+  // version is the document's current version.
+  const versionTextPlan = resolveVersionTextPlan({
+    hasSelectedVersion: Boolean(selectedVersionStableId && selectedVersionDocumentId),
+    fileType: selectedVersionFileType,
+    versionIsCurrent: Boolean(selectedVersion?.isCurrent),
+    versionBelongsToSelectedDocument: annotationVersionEligible,
+    documentIsUploaded: Boolean(
+      selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY',
+    ),
+  });
+  // The plan requests version-scoped text; the exact text is only truly rendered
+  // once it has loaded (or its truthful unavailable state is shown).
+  const hasVersionScopedText = isVersionScopedTextPlan(versionTextPlan);
+  const versionTextRendered = hasVersionScopedText && versionText !== null;
+
   // Single source of truth for which annotation tools may be offered. Support is
   // derived from the renderer that will actually display this version — never from
   // the file extension alone — so no tool is offered over a placeholder surface.
+  // Text-range support therefore requires the exact version text to be loaded.
   const annotationCapabilities = resolveAnnotationCapabilities({
     mimeType: selectedVersion?.mimeType,
     fileName: selectedVersion?.originalFileName || selectedUploadedDocument?.fileName,
-    textRendered: canRenderTextVersion,
+    textRendered: versionTextRendered,
   });
   const canCreateGeometry =
     annotationCapabilities.canCreatePageRectangle ||
@@ -1526,19 +1570,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   }, []);
 
-  // Canonical shell safety invariant: prove the selected version actually belongs
-  // to the active uploaded document and was resolved from the current loaded versions list.
-  // During document switch (A -> B), this prevents stale metadata and old TXT previews of doc A
-  // from briefly flashing or qualifying for rendering under doc B.
-  const selectedVersionBelongsToActiveDocument =
-    !isLoadingVersions &&
-    Boolean(selectedUploadedDocument?.id) &&
-    Boolean(selectedVersion?.id) &&
-    selectedVersion?.documentId === selectedUploadedDocument?.id &&
-    versions.some((v) => v.id === selectedVersion?.id);
-
-  const annotationVersionEligible = selectedVersionBelongsToActiveDocument;
-
   // Safe active version for canonical shell rendering
   const canonicalActiveVersion = selectedVersionBelongsToActiveDocument ? selectedVersion : null;
   // Read-only work context for the consolidated header. Independent of
@@ -1547,16 +1578,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedVersion: canonicalActiveVersion?.versionNumber ?? null,
   });
 
-  // Reader search is enabled only on the surface where matches can actually be
-  // highlighted and navigated (the plain extracted-text surface). The
-  // annotation-anchored surface is deliberately not searchable so canonical
-  // annotation offsets are never at risk. No backend search.
+  // Reader search operates on the EXACT text the reader displays. On the
+  // version-scoped surface that is the selected version's own text, so a
+  // historical v1 search can never scan v2's text. No backend search.
   const readerSearchSurface = resolveReaderSearchSurface({
-    hasAnnotatedText: Boolean(canRenderTextVersion && selectedVersionBelongsToActiveDocument && versionText),
+    hasVersionText: Boolean(hasVersionScopedText && selectedVersionBelongsToActiveDocument && versionText),
     hasPlainText: Boolean(documentTextPreview),
   });
   const readerSearchSupported = isReaderSearchSupported(readerSearchSurface);
-  const readerSearchableText = readerSearchSupported ? documentTextPreview : null;
+  const readerSearchableText = readerSearchSupported
+    ? (readerSearchSurface === 'VERSION_TEXT' ? versionText : documentTextPreview)
+    : null;
   const readerSearchTerm = readerSearchState.query.trim();
   const readerMatchOffsets = findReaderMatchOffsets(readerSearchableText, readerSearchTerm);
   const readerMatchCount = readerMatchOffsets.length;
@@ -1576,6 +1608,29 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       return (
         <mark
           key={`reader-segment-${index}`}
+          data-testid="reader-search-match"
+          data-reader-search-index={segment.matchIndex}
+          ref={isActive ? readerSearchActiveRef : undefined}
+          className={isActive ? 'bg-[#F2CE5A] text-[#1f2a24]' : 'bg-[#FBF0C7] text-[#1f2a24]'}
+        >
+          {segment.text}
+        </mark>
+      );
+    });
+  };
+
+  // Presentation-only highlighting of the version-scoped reader surface, split
+  // per range so TEXT_RANGE anchors keep their exact boundaries. Match indexes
+  // stay global, and rejoining the segments returns the exact version text.
+  const renderReaderHighlightsInRange = (rangeStart: number, rangeEnd: number): React.ReactNode => {
+    const text = versionText ?? '';
+    if (!readerSearchTerm || readerMatchCount === 0) return text.slice(rangeStart, rangeEnd);
+    return buildReaderHighlightSegmentsInRange(text, rangeStart, rangeEnd, readerMatchOffsets, readerSearchTerm.length).map((segment, index) => {
+      if (segment.matchIndex === null) return segment.text;
+      const isActive = segment.matchIndex === readerActiveMatch;
+      return (
+        <mark
+          key={`version-segment-${rangeStart}-${index}`}
           data-testid="reader-search-match"
           data-reader-search-index={segment.matchIndex}
           ref={isActive ? readerSearchActiveRef : undefined}
@@ -1644,19 +1699,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         ? "Publikálva"
         : "Nincs publikálva";
 
-  // Version-truthful text plan: TXT always reads its own stored bytes; the
-  // document-level extracted text is a read-only preview that is only valid
-  // while the selected version is the document's current version.
-  const versionTextPlan = resolveVersionTextPlan({
-    hasSelectedVersion: Boolean(selectedVersionStableId && selectedVersionDocumentId),
-    fileType: selectedVersionFileType,
-    versionIsCurrent: Boolean(selectedVersion?.isCurrent),
-    versionBelongsToSelectedDocument: annotationVersionEligible,
-    documentIsUploaded: Boolean(
-      selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY',
-    ),
-  });
-
   useEffect(() => {
     // Annotations are version-scoped, so a selection never survives a version
     // switch. Clearing it first prevents the comments effect from re-firing with
@@ -1679,6 +1721,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     setDocumentTextPreview(null);
     setDocumentTextUnavailableReason(null);
     setDocumentTextFailed(false);
+    setVersionTextUnavailableReason(null);
     setIsLoadingDocumentText(false);
     setPendingTextAnchor(null);
     setPendingVisualAnchor(null);
@@ -1696,7 +1739,37 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           // storage reference). Show a controlled, truthful state — never log the
           // provider's error body or surface a storage identifier. Runs once per
           // version, so there is no retry loop.
-          if (!cancelled) setVersionTextUnavailable(true);
+          if (!cancelled) {
+            setVersionTextUnavailable(true);
+            setVersionTextUnavailableReason(VERSION_TEXT_REQUEST_FAILED);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoadingVersionText(false);
+        });
+    } else if (versionTextPlan === 'VERSION_TEXT' && selectedVersionDocumentId && selectedVersionStableId) {
+      // Canonical exact-version text for DOCX/PDF: the endpoint reads THIS
+      // version's own storage/bytes and never falls back to the current version.
+      // The response is truthful about unavailability, so the reader mirrors it.
+      setIsLoadingVersionText(true);
+      getDocumentVersionText(selectedVersionDocumentId, selectedVersionStableId)
+        .then((result) => {
+          if (cancelled) return;
+          const outcome = resolveVersionTextLoadOutcome(result);
+          if (outcome.text) {
+            setVersionText(outcome.text);
+          } else {
+            setVersionTextUnavailable(true);
+            setVersionTextUnavailableReason(outcome.unavailableReason || VERSION_TEXT_NO_EXTRACTABLE_TEXT);
+          }
+        })
+        .catch((error) => {
+          // Request-level failure (404 / scan block / storage error): a
+          // controlled reason only — never a raw backend implementation code.
+          if (!cancelled) {
+            setVersionTextUnavailable(true);
+            setVersionTextUnavailableReason(versionTextRequestFailureMessage(error));
+          }
         })
         .finally(() => {
           if (!cancelled) setIsLoadingVersionText(false);
@@ -1888,7 +1961,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         internalNote: annotationDraft.internalNote || undefined,
         reviewComment: annotationDraft.reviewComment || undefined,
         clientExplanationDraft: annotationDraft.clientExplanationDraft || undefined,
-        rendererVersion: canRenderTextVersion ? 'txt-readonly-v1' : 'visual-placeholder-v1',
+        rendererVersion: versionTextRendered ? 'txt-readonly-v1' : 'visual-placeholder-v1',
         idempotencyKey: `${selectedVersion.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
       };
       const created = await createDocumentAnnotation(selectedUploadedDocument.id, selectedVersion.id, payload);
@@ -2003,7 +2076,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const start = Math.max(0, annotation.startOffset || 0);
       const end = Math.min(versionText.length, annotation.endOffset || start);
       if (start < cursor || end <= start) continue;
-      if (start > cursor) nodes.push(<span key={`text-${cursor}`}>{versionText.slice(cursor, start)}</span>);
+      if (start > cursor) nodes.push(<span key={`text-${cursor}`}>{renderReaderHighlightsInRange(cursor, start)}</span>);
       nodes.push(
         <mark
           key={annotation.id}
@@ -2013,12 +2086,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           className={`cursor-pointer rounded px-0.5 ${selectedAnnotationId === annotation.id ? 'bg-[#D8C58E]' : 'bg-[#FEF3C7]'}`}
           onClick={() => focusAnnotation(annotation)}
         >
-          {versionText.slice(start, end)}
+          {renderReaderHighlightsInRange(start, end)}
         </mark>
       );
       cursor = end;
     }
-    if (cursor < versionText.length) nodes.push(<span key={`text-${cursor}`}>{versionText.slice(cursor)}</span>);
+    if (cursor < versionText.length) nodes.push(<span key={`text-${cursor}`}>{renderReaderHighlightsInRange(cursor, versionText.length)}</span>);
     return nodes;
   };
 
@@ -2423,7 +2496,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </label>
                       <span data-testid="reader-search-status" className="text-[10px] text-[#7B776D]" aria-live="polite">
                         {!readerSearchSupported
-                          ? (readerSearchSurface === 'ANNOTATED' ? 'Keresés ezen a felületen nem támogatott' : 'Nincs kereshető szöveg')
+                          ? 'Nincs kereshető szöveg'
                           : readerSearchTerm
                             ? (readerMatchCount > 0 ? `${readerActiveMatch + 1} / ${readerMatchCount}` : 'Nincs találat')
                             : ''}
@@ -2459,12 +2532,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
                       ) : (
                         <div>
-                          {canRenderTextVersion && selectedVersionBelongsToActiveDocument ? (
+                          {hasVersionScopedText && selectedVersionBelongsToActiveDocument ? (
                             versionTextUnavailable && !isLoadingVersionText ? (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                 <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
                               </div>
                             ) : (
                               <div className="max-h-[74vh] overflow-auto bg-[#efece4] p-4 sm:p-6">
@@ -3125,12 +3198,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         onPointerUp={canCreateGeometry ? handleVisualPointerUp : undefined}
                                         className={`relative mt-4 min-h-[420px] overflow-hidden rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white ${visualMode ? 'cursor-crosshair' : ''}`}
                                       >
-                                    {canRenderTextVersion ? (
+                                    {hasVersionScopedText && selectedVersionBelongsToActiveDocument ? (
                                       versionTextUnavailable && !isLoadingVersionText ? (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                           <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
                                         </div>
                                       ) : (
                                         <div className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">

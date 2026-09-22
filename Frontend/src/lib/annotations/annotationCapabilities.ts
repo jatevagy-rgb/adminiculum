@@ -6,16 +6,20 @@
  * file extension alone — it is derived from the renderer that will actually be
  * used to display the selected immutable DocumentVersion.
  *
- * Verified state of the current viewer (Slice 2):
+ * Verified state of the current viewer:
  *   - TXT  : rendered as real text from the exact stored version → stable
  *            character offsets → TEXT_RANGE anchors are genuine.
- *   - PDF  : NOT rendered. The viewer shows a placeholder card. There is no
- *            page surface, no page count, no text layer.
- *   - DOCX : NOT rendered. Same placeholder card.
+ *   - PDF  : when the exact version's extracted text is available
+ *            (`GET /documents/:id/versions/:versionId/text`), it is rendered as
+ *            real, version-scoped text → stable character offsets → TEXT_RANGE
+ *            anchors are genuine. Without usable text there is no text layer,
+ *            so no text tool is offered.
+ *   - DOCX : same as PDF — real version text when the backend extractor returns
+ *            it, otherwise nothing.
  *
  * Because no format currently renders real document pages, page geometry
  * (rectangle / ellipse / point) is NOT supported for any format. Drawing shapes
- * onto the placeholder card would normalize coordinates against a container that
+ * onto a placeholder card would normalize coordinates against a container that
  * has no relationship to the real document page — an anchor that points at
  * nothing. Such simulated anchors are deliberately disabled.
  */
@@ -111,6 +115,21 @@ export function resolveAnnotationCapabilities(input: {
   }
 
   if (format === 'PDF' || format === 'DOCX') {
+    // The backend version-text endpoint can serve this format's exact version
+    // text; only then does a real text layer exist. Without it the surface is a
+    // placeholder and no tool may be offered.
+    if (input.textRendered) {
+      return {
+        format,
+        canRender: true,
+        ...NO_CREATION,
+        canCreateTextRange: true,
+        canNavigateToTextAnchor: true,
+        canNavigateToPageAnchor: false,
+        supportsZoomAlignedOverlays: false,
+        rendererVersion: TEXT_RENDERER_VERSION,
+      };
+    }
     return {
       format,
       canRender: false,
@@ -120,8 +139,8 @@ export function resolveAnnotationCapabilities(input: {
       supportsZoomAlignedOverlays: false,
       rendererVersion: NO_RENDERER_VERSION,
       explanation:
-        `A ${format} formátumhoz jelenleg nincs beépített dokumentum-megjelenítő, ezért nem hozható létre ` +
-        'megbízható horgony. A meglévő annotációk olvashatók az oldalsávban, és a fájl változatlanul letölthető.',
+        `A ${format} verzió szövege nem tölthető be, ezért most nem rögzíthető horgony. ` +
+        'A meglévő annotációk olvashatók az oldalsávban, és a fájl változatlanul letölthető.',
     };
   }
 

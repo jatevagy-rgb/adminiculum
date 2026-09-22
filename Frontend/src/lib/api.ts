@@ -2268,6 +2268,41 @@ export async function getDocumentText(documentId: string): Promise<DocumentTextR
   return fetchApi<DocumentTextResult>(`/documents/${documentId}/text`);
 }
 
+/**
+ * Version-bound extracted text DTO. Mirrors the backend `DocumentVersionTextDto`:
+ * `text` is derived from the EXACT immutable DocumentVersion's stored bytes —
+ * never from the document workspace text, the current/latest version, or another
+ * version. An unavailable version still resolves with HTTP 200 and an empty
+ * `text` plus a truthful `reasonCode`/`unavailableReason`.
+ */
+export interface DocumentVersionTextResult {
+  documentId: string;
+  versionId: string;
+  versionNumber: number;
+  source: 'UPLOADED';
+  text: string;
+  format?: string;
+  pageCount?: number;
+  extractedAt?: string;
+  reasonCode?: string;
+  unavailableReason?: string;
+}
+
+/**
+ * Canonical exact-version text source for the Document Workspace reader
+ * (`GET /documents/:id/versions/:versionId/text`). This is the version-scoped
+ * channel used for historical/current DOCX/PDF text; it must never be replaced
+ * by the document-level `getDocumentText` preview.
+ */
+export async function getDocumentVersionText(
+  documentId: string,
+  versionId: string
+): Promise<DocumentVersionTextResult> {
+  return fetchApi<DocumentVersionTextResult>(
+    `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/text`
+  );
+}
+
 export type LegalAnalysisStatus =
   | 'DRAFT'
   | 'CANDIDATE_REVIEW'
