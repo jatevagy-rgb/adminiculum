@@ -2,8 +2,9 @@
 
 import { useState, use, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { getCaseContracts, getCaseDocuments, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, safeUploadErrorMessage, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
+import { getCaseContracts, getCaseDocuments, getCaseById, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, safeUploadErrorMessage, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
 import { closeCaseLifecycle, archiveCaseLifecycle } from "@/lib/api";
+import type { CaseListItem } from "@/lib/api";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -536,13 +537,19 @@ export function CaseDetail({ params }: CaseDetailProps) {
       // those calls would 404. The caseList lookup below populates caseRecord, and
       // the useEffect will re-trigger once caseRecord changes.
       if (!caseRecord) {
-        // Still fetch the case list to resolve the CUID
-        const [caseList] = await Promise.all([
-          getCases(1, 200).catch(() => ({ data: [] })),
-        ]);
-        const record = caseList.data.find(
-          (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
-        ) || null;
+        // Resolve the canonical case identity directly by id first, so case
+        // controls do not depend on the case appearing in an arbitrary
+        // pagination window of GET /cases. Keep the list lookup only as a
+        // fallback for legacy case-number URLs.
+        let record: CaseListItem | null = null;
+        try {
+          record = await getCaseById(resolvedParams.caseId);
+        } catch {
+          const caseList = await getCases(1, 200).catch(() => ({ data: [] }));
+          record = caseList.data.find(
+            (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
+          ) || null;
+        }
         if (record) {
           setCaseRecord({
             id: record.id,
