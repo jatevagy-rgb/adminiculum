@@ -155,6 +155,117 @@ test('Form primitives render inputs, labels, and error states', () => {
   assert.ok(formFieldHtml.includes('role="alert"'));
 });
 
+function tagAttr(html: string, tag: string, attrName: string): string | null {
+  const re = new RegExp(`<${tag}[^>]*\\s${attrName}="([^"]*)"`);
+  const m = html.match(re);
+  return m ? m[1] : null;
+}
+
+test('FormField associates label with generated Input id', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'Név' }, React.createElement(Input, null))
+  );
+  const labelFor = tagAttr(html, 'label', 'for');
+  const inputId = tagAttr(html, 'input', 'id');
+  assert.ok(labelFor, 'Label must render htmlFor');
+  assert.ok(inputId, 'Input must render generated id');
+  assert.equal(labelFor, inputId, 'label htmlFor must equal control id');
+});
+
+test('FormField associates label with generated Textarea and Select ids', () => {
+  const textareaHtml = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'Megjegyzés' }, React.createElement(Textarea, null))
+  );
+  assert.equal(tagAttr(textareaHtml, 'label', 'for'), tagAttr(textareaHtml, 'textarea', 'id'));
+
+  const selectHtml = renderToStaticMarkup(
+    React.createElement(
+      FormField,
+      { label: 'Típus' },
+      React.createElement(Select, null, React.createElement('option', null, 'Egy'))
+    )
+  );
+  assert.equal(tagAttr(selectHtml, 'label', 'for'), tagAttr(selectHtml, 'select', 'id'));
+});
+
+test('FormField preserves explicit caller-supplied control id', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      FormField,
+      { label: 'Név' },
+      React.createElement(Input, { id: 'caller-chosen-id' })
+    )
+  );
+  assert.equal(tagAttr(html, 'input', 'id'), 'caller-chosen-id');
+  assert.equal(tagAttr(html, 'label', 'for'), 'caller-chosen-id');
+});
+
+test('FormField controlId prop is authoritative and reflected everywhere', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      FormField,
+      { label: 'Név', controlId: 'field-id-prop' },
+      React.createElement(Input, null)
+    )
+  );
+  assert.equal(tagAttr(html, 'input', 'id'), 'field-id-prop');
+  assert.equal(tagAttr(html, 'label', 'for'), 'field-id-prop');
+});
+
+test('FormField sets aria-describedby for help, error, and both', () => {
+  const helpOnly = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'A', help: 'Segítség' }, React.createElement(Input, null))
+  );
+  const helpId = tagAttr(helpOnly, 'p', 'id');
+  assert.ok(helpId);
+  assert.equal(tagAttr(helpOnly, 'input', 'aria-describedby'), helpId);
+
+  const errorOnly = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'A', error: 'Hiba' }, React.createElement(Input, null))
+  );
+  const errorId = tagAttr(errorOnly, 'p', 'id');
+  assert.ok(errorId);
+  assert.equal(tagAttr(errorOnly, 'input', 'aria-describedby'), errorId);
+
+  const both = renderToStaticMarkup(
+    React.createElement(
+      FormField,
+      { label: 'A', help: 'Segítség', error: 'Hiba' },
+      React.createElement(Input, null)
+    )
+  );
+  const bothHelp = tagAttr(both, 'input', 'aria-describedby') ?? '';
+  const ids = bothHelp.split(' ');
+  assert.equal(ids.length, 2, 'describedby must reference help and error ids');
+  assert.ok(both.includes(`id="${ids[0]}"`), 'first describedby id must exist in markup');
+  assert.ok(both.includes(`id="${ids[1]}"`), 'second describedby id must exist in markup');
+});
+
+test('FormField marks control aria-invalid on error only', () => {
+  const invalid = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'A', error: 'Hiba' }, React.createElement(Input, null))
+  );
+  assert.equal(tagAttr(invalid, 'input', 'aria-invalid'), 'true');
+
+  const valid = renderToStaticMarkup(
+    React.createElement(FormField, { label: 'A' }, React.createElement(Input, null))
+  );
+  assert.equal(tagAttr(valid, 'input', 'aria-invalid'), null);
+});
+
+test('FormField merges caller-provided aria-describedby with field descriptors', () => {
+  const html = renderToStaticMarkup(
+    React.createElement(
+      FormField,
+      { label: 'A', help: 'Segítség' },
+      React.createElement(Input, { 'aria-describedby': 'external-hint' })
+    )
+  );
+  const describedBy = tagAttr(html, 'input', 'aria-describedby') ?? '';
+  assert.ok(describedBy.includes('external-hint'), 'caller descriptor must be preserved');
+  assert.equal(describedBy.split(' ').length, 2, 'caller and field descriptors must merge');
+});
+
 test('AdminButton and legacy components remain 100% backward compatible', () => {
   const adminBtnHtml = renderToStaticMarkup(
     React.createElement(AdminButton, { variant: 'primary', size: 'md' }, 'Régi gomb')
