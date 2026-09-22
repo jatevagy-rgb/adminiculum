@@ -43,6 +43,7 @@ import {
 } from "@/lib/api";
 
 import { loadTimeEntryCases, timeEntryCaseLabel } from "@/lib/timeEntryCaseSelection";
+import { Badge, Button, ConfirmationDialog, PageHeader, QuietLink, StatusChip } from "@/components/ui";
 
 const WORK_TYPES = ["TANÁCSADÁS", "IRATELENÉS", "FELÜLVIZSGÁLAT", "KOMMUNIKÁCIÓ", "KUTATÁS", "EGYÉB"];
 
@@ -1039,21 +1040,21 @@ function TimeEntriesPageContent() {
   };
 
   return (
-    <div className="flex-1 p-2 md:p-4 time-entries-surface bg-[var(--adm-surface)]">
+    <div className="time-entries-surface min-h-screen flex-1 bg-white p-2 text-[#1F2937] md:p-4">
           <div className="mb-3 flex flex-col gap-3 rounded-xl adm-board-panel-tight p-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-2xl font-serif text-[var(--adm-text)]">Munkaórák</h1>
-              <p className="text-xs text-[var(--adm-text-muted)] mt-1">
-                {entryPeriod} · {formatMinutes(totals.totalMinutes)} rögzített idő · {currentUser?.name || currentUser?.email || "Bejelentkezett felhasználó"}
-              </p>
-            </div>
-            <button
-              onClick={handleCreate}
-              disabled={isLoading}
-              className="px-4 py-2 bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)] text-xs uppercase tracking-[0.2em] hover:bg-[#173824] transition-colors rounded self-start"
+            <PageHeader
+              title="Munkaórák"
+              subtitle={`${entryPeriod} · ${formatMinutes(totals.totalMinutes)} rögzített idő · ${currentUser?.name || currentUser?.email || "Bejelentkezett felhasználó"}`}
             >
-              Munkaóra rögzítése
-            </button>
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={isLoading}
+                className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#0F3D32] bg-[#0F3D32] px-4 text-sm font-medium text-white transition-colors hover:border-[#062B22] hover:bg-[#062B22] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Munkaóra rögzítése
+              </button>
+            </PageHeader>
           </div>
 
           {(deepLinkedClientId || deepLinkedCaseId) && (
@@ -1062,13 +1063,13 @@ function TimeEntriesPageContent() {
                 <p className="text-sm font-semibold text-[var(--adm-text)]">{deepLinkedClientId ? (clientScopeLabel || "Ügyfél szerinti munkaóra-szűrés aktív") : "Ügy szerinti munkaóra-szűrés aktív"}</p>
                 <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">A lista szerveroldali ügyfél- és ügykapcsolat alapján töltődött be.</p>
               </div>
-              <button type="button" onClick={() => router.push("/time-entries")} className="min-h-10 rounded border border-[var(--adm-border)] px-3 py-2 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-800)]">Szűrés törlése</button>
+              <Button size="sm" variant="neutral" type="button" onClick={() => router.push("/time-entries")}>Szűrés törlése</Button>
             </div>
           )}
 
           {deepLinkedCaseId && <div className="mb-3 rounded-lg border border-[var(--adm-border)] px-3 py-2 text-sm">
             {isLoading ? "Ügy betöltése…" : deepLinkedCase ? timeEntryCaseLabel(deepLinkedCase) : "Az ügy nem érhető el a jelenlegi szűrésben."}
-            <Link href={`/cases/${deepLinkedCaseId}`} className="ml-3 underline">Ügy megnyitása</Link>
+            <QuietLink href={`/cases/${deepLinkedCaseId}`} size="sm" className="ml-3">Ügy megnyitása</QuietLink>
           </div>}
 
           {error && (
@@ -1077,13 +1078,9 @@ function TimeEntriesPageContent() {
               <p className="mt-1 text-[11px] text-[#6E4B4B]">
                 A munkaóra-folyamat nem áll le: ellenőrizd a kapcsolatot, majd próbáld újra.
               </p>
-              <button
-                type="button"
-                onClick={loadEntries}
-                className="mt-2 inline-flex items-center justify-center rounded border border-[#8b3a3a] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#8b3a3a] hover:bg-[#fff7f6]"
-              >
+              <Button size="sm" variant="neutral" type="button" onClick={loadEntries}>
                 Újrapróbálás
-              </button>
+              </Button>
             </div>
           )}
           {!error && loadWarning && <div className="mb-6 p-4 bg-[var(--adm-surface)] border border-[var(--adm-border)] text-[var(--adm-text-muted)] text-xs rounded">{loadWarning}</div>}
@@ -1095,18 +1092,16 @@ function TimeEntriesPageContent() {
                   ["entries", "Bejegyzések"],
                   ["reports", "Kimutatás"],
                 ].map(([value, label]) => (
-                  <button
+                  <Button
                     key={value}
                     type="button"
+                    size="sm"
+                    variant={activeTab === value ? "primary" : "neutral"}
+                    aria-pressed={activeTab === value}
                     onClick={() => setActiveTab(value as "entries" | "reports")}
-                    className={`rounded border px-3 py-2 text-[11px] font-semibold ${
-                      activeTab === value
-                        ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]"
-                        : "border-[var(--adm-border)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
-                    }`}
                   >
                     {label}
-                  </button>
+                  </Button>
                 ))}
               </div>
               {activeTab === "entries" && (
@@ -1692,10 +1687,10 @@ function TimeEntriesPageContent() {
                     {selectedClientGroup.cases.map((caseGroup) => {
                       const isExpanded = expandedCaseKeys[caseGroup.caseKey] ?? true;
                       return (
-                        <div key={caseGroup.caseKey} className="border border-[var(--adm-border)] rounded bg-white overflow-hidden">
+                        <div key={caseGroup.caseKey} className="overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white">
                           <button
                             onClick={() => toggleCaseExpanded(caseGroup.caseKey)}
-                            className="w-full px-4 py-3 bg-[var(--adm-ivory-100)] border-b border-[var(--adm-border)] flex items-center justify-between"
+                            className="flex w-full items-center justify-between border-b border-[#E5E7E6] bg-white px-4 py-3 text-left"
                           >
                             <div className="text-left">
                               <p className="text-sm font-semibold text-[var(--adm-text)]">
@@ -1722,14 +1717,14 @@ function TimeEntriesPageContent() {
                                   <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1">
                                       <div className="flex items-center gap-2 mb-2">
-                                        <span className="text-xs font-semibold text-[var(--adm-text)]">Időtartam: {formatMinutes(entry.minutes)}</span>
+                                        <span className="text-xs font-semibold text-[var(--adm-text)]">{formatMinutes(entry.minutes)}</span>
                                         {(entry.billable || WORK_TYPE_LABEL_MAP[entry.workType]) && (
-                                        <span className={`text-[10px] uppercase tracking-[0.1em] px-2 py-1 rounded ${entry.billable ? "bg-[#ECF7F0] text-[var(--adm-green-800)]" : "bg-[var(--adm-ivory-200)] text-[#6B665D]"}`}>
+                                        <Badge tone="neutral">
                                           Munkatípus: {WORK_TYPE_LABEL_MAP[entry.workType] ?? "Egyéb"}
-                                        </span>
+                                        </Badge>
                                       )}
                                       </div>
-                                      <p className="text-xs text-[var(--adm-text-muted)]"><span className="font-semibold text-[var(--adm-text)]">Leírás:</span> {entry.description}</p>
+                                      <p className="text-xs text-[var(--adm-text-muted)]">{entry.description}</p>
                                       <div className="flex items-center gap-4 mt-2">
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyvéd: {entry.user?.name || "Ismeretlen"}</span>
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Osztály: {entry.department?.name || "Nincs osztály"}</span>
@@ -1737,47 +1732,28 @@ function TimeEntriesPageContent() {
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyféloldali szervezeti egység: {entry.requester?.organizationGroup?.name || "Nincs megadva"}</span>
                                         {entry.task ? <span className="text-[10px] text-[var(--adm-text-muted)]">Feladat: {entry.task.title} · {entry.task.status}</span> : <span className="text-[10px] text-[var(--adm-text-muted)]">Nincs feladathoz kötve</span>}
                                         <span className="text-[10px] text-[var(--adm-text-soft)]">Dátum: {formatDate(entry.workDate)}</span>
-                                        <span className="text-[10px] text-[var(--adm-text-muted)]">{entry.billable ? "Elszámolható" : "Nem elszámolható"}</span>
+                                        <StatusChip tone={entry.billable ? "green" : "neutral"}>{entry.billable ? "Elszámolható" : "Nem elszámolható"}</StatusChip>
                                         <span className={`text-[10px] font-semibold ${entry.attributionKind === "AMBIGUOUS" || entry.attributionKind === "MATTER_ONLY" ? "text-[var(--adm-ochre-700)]" : "text-[var(--adm-text-muted)]"}`}>{entry.attributionKind === "TASK_DERIVED_CASE" ? "Feladat alapján ügyhöz rendelve" : entry.attributionKind === "EXACT_CASE" ? "Ügyhöz rendelve" : "Ellenőrizendő"}</span>
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Munkacsomag: {caseGroup.caseTitle}</span>
                                         {caseGroup.caseId && (
-                                          <Link href={`/cases/${caseGroup.caseId}`} className="text-[10px] text-[var(--adm-ochre-500)] hover:underline">
+                                          <QuietLink href={`/cases/${caseGroup.caseId}`} size="sm">
                                             Ugrás az ügyre
-                                          </Link>
+                                          </QuietLink>
                                         )}
                                       </div>
                                     </div>
 
                                     <div className="flex items-center gap-2">
                                       <button
+                                        type="button"
                                         onClick={() => handleEdit(entry)}
-                                        className="px-2 py-1 text-[10px] text-[#6D695F] hover:text-[var(--adm-green-800)] border border-[var(--adm-border)] rounded"
+                                        className="inline-flex h-8 items-center justify-center rounded-[6px] border border-[#E5E7E6] bg-white px-3 text-xs font-medium text-[#1F2937] transition-colors hover:border-[#D1D5DB] hover:bg-[#F8FAF9]"
                                       >
                                         Szerkeszt
                                       </button>
-                                      {deleteConfirm === entry.id ? (
-                                        <div className="flex items-center gap-1">
-                                          <button
-                                            onClick={() => handleDelete(entry.id)}
-                                            className="px-2 py-1 text-[10px] text-white bg-[#DC2626] rounded"
-                                          >
-                                            Törlés OK
-                                          </button>
-                                          <button
-                                            onClick={() => setDeleteConfirm(null)}
-                                            className="px-2 py-1 text-[10px] text-[var(--adm-text-muted)] border border-[var(--adm-border)] rounded"
-                                          >
-                                            Mégsem
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <button
-                                          onClick={() => setDeleteConfirm(entry.id)}
-                                          className="px-2 py-1 text-[10px] text-[var(--adm-text-muted)] hover:text-[var(--adm-terracotta-700)] border border-[var(--adm-border)] rounded"
-                                        >
-                                          Törlés
-                                        </button>
-                                      )}
+                                      <Button size="sm" variant="danger-outline" onClick={() => setDeleteConfirm(entry.id)}>
+                                        Törlés
+                                      </Button>
                                     </div>
                                   </div>
                                 </div>
@@ -1921,7 +1897,18 @@ function TimeEntriesPageContent() {
           </div>
         </div>
       )}
+      <ConfirmationDialog
+        open={deleteConfirm !== null}
+        variant="danger"
+        title="Időbejegyzés törlése"
+        description="A bejegyzés véglegesen törlődik."
+        confirmLabel="Törlés"
+        cancelLabel="Mégsem"
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={() => {
+          if (deleteConfirm) void handleDelete(deleteConfirm);
+        }}
+      />
     </div>
   );
 }
-
