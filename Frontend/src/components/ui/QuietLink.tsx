@@ -13,7 +13,6 @@ type Common = {
 
 type LinkVariant = Common & {
   href: string;
-  onClick?: never;
 } & Omit<ComponentProps<typeof Link>, "href" | "className" | "children">;
 
 type ButtonVariant = Common & {
