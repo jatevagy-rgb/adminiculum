@@ -136,9 +136,14 @@ function bodyFor(url) {
   return undefined;
 }
 
-function createResponder(unmatched) {
+function createResponder(unmatched, mutations) {
   return async (route) => {
     const url = route.request().url();
+    if (route.request().method() === "DELETE") {
+      mutations.push(`${route.request().method()} ${url}`);
+      await route.fulfill({ status: 204, body: "" });
+      return;
+    }
     const body = bodyFor(url);
     if (body === undefined) {
       unmatched.add(`${route.request().method()} ${url}`);
@@ -161,6 +166,7 @@ function check(condition, message, counts) {
 
 async function runRoute(browser, routeName) {
   const unmatched = new Set();
+  const mutations = [];
   const counts = { pass: 0, fail: 0 };
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
@@ -168,7 +174,7 @@ async function runRoute(browser, routeName) {
     localStorage.setItem("auth_token", "qa-operational-token");
     sessionStorage.setItem("adminiculum_auth_profile", JSON.stringify(profile));
   }, { profile: AUTH_ME });
-  await page.route("**/api/v1/**", createResponder(unmatched));
+  await page.route("**/api/v1/**", createResponder(unmatched, mutations));
   await page.goto(`${BASE_URL}${ROUTE_ALIASES[routeName]}`, { waitUntil: "networkidle" });
   const heading = page.getByRole("heading", { name: new RegExp(ROUTE_HEADINGS[routeName].join("|")) }).first();
   await heading.waitFor({ state: "visible", timeout: 15000 });
@@ -188,8 +194,24 @@ async function runRoute(browser, routeName) {
   } else if (routeName === "deadlines") {
     check(await rows.count() >= 3, "deadlines: agenda fixtures rendered", counts);
     check(await page.getByRole("link", { name: "Új határidős feladat" }).count() > 0, "deadlines: primary action present", counts);
+  } else if (routeName === "time-entries") {
+    check(await page.getByText("Jogi kutatás").count() > 0 && await page.getByText("Dokumentum ellenőrzés").count() > 0, "time-entries: entry fixtures rendered", counts);
+    const deleteButton = page.getByRole("button", { name: "Törlés", exact: true }).first();
+    await deleteButton.click();
+    const dialog = page.getByRole("dialog");
+    await dialog.waitFor({ state: "visible" });
+    check(await dialog.getByRole("button", { name: "Törlés", exact: true }).count() === 1, "time-entries: delete confirmation present", counts);
+    check(await page.evaluate(() => document.activeElement?.textContent?.trim() === "Mégsem"), "time-entries: delete confirmation focuses cancel", counts);
+    await page.keyboard.press("Escape");
+    check(await page.getByRole("dialog").count() === 0, "time-entries: Escape cancels delete", counts);
+    await deleteButton.click();
+    const deleteRequest = page.waitForRequest((request) => request.method() === "DELETE" && /\/time-entries\/[^/?]+$/.test(request.url()));
+    await page.getByRole("dialog").getByRole("button", { name: "Törlés", exact: true }).click();
+    await deleteRequest;
+    check(mutations.some((request) => /DELETE .*\/time-entries\/[^/?]+$/.test(request)), "time-entries: confirm issues DELETE request", counts);
+    await page.getByRole("dialog").waitFor({ state: "hidden" });
+    check(await page.getByRole("dialog").count() === 0, "time-entries: delete confirmation closes", counts);
   }
-  else if (routeName === "time-entries") check(await page.getByText("Jogi kutatás").count() > 0 && await page.getByText("Dokumentum ellenőrzés").count() > 0, "time-entries: entry fixtures rendered", counts);
   await page.screenshot({ path: path.join(EVIDENCE_ROOT, routeName, `${label}-${SHA}.png`), fullPage: true });
   await context.close();
   return { route: routeName, label, sha: SHA, path: path.join(EVIDENCE_ROOT, routeName, `${label}-${SHA}.png`), timestamp: new Date().toISOString(), pass: counts.pass, fail: counts.fail, unmatched: [...unmatched] };
