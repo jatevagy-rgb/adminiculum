@@ -178,9 +178,17 @@ async function runRoute(browser, routeName) {
   if (routeName === "notifications") {
     check(await page.locator('[data-testid="notification-row"]').count() === 3, "notifications: three rows rendered", counts);
     check(await page.getByRole("button", { name: "Összes olvasottként" }).count() > 0, "notifications: bulk action present", counts);
-  } else if (routeName === "reviews") check(await page.getByText("Beküldött revision").count() > 0 && await page.getByText("Korábbi review").count() > 0, "reviews: queue fixtures rendered", counts);
-  else if (routeName === "tasks") check(await rows.count() >= 2, "tasks: task fixtures rendered", counts);
-  else if (routeName === "deadlines") check(await rows.count() >= 3, "deadlines: agenda fixtures rendered", counts);
+  } else if (routeName === "reviews") {
+    check(await page.getByText("Beküldött revision").count() > 0 && await page.getByText("Korábbi review").count() > 0, "reviews: queue fixtures rendered", counts);
+    check(await page.getByRole("link", { name: "Feladatok" }).count() > 0, "reviews: task workspace action present", counts);
+  } else if (routeName === "tasks") {
+    check(await rows.count() >= 2, "tasks: task fixtures rendered", counts);
+    check(await page.getByRole("button", { name: "Új feladat" }).count() > 0, "tasks: primary action present", counts);
+    check(await page.getByRole("columnheader", { name: "Leadás" }).count() === 1, "tasks: Leadás header present", counts);
+  } else if (routeName === "deadlines") {
+    check(await rows.count() >= 3, "deadlines: agenda fixtures rendered", counts);
+    check(await page.getByRole("link", { name: "Új határidős feladat" }).count() > 0, "deadlines: primary action present", counts);
+  }
   else if (routeName === "time-entries") check(await page.getByText("Jogi kutatás").count() > 0 && await page.getByText("Dokumentum ellenőrzés").count() > 0, "time-entries: entry fixtures rendered", counts);
   await page.screenshot({ path: path.join(EVIDENCE_ROOT, routeName, `${label}-${SHA}.png`), fullPage: true });
   await context.close();
