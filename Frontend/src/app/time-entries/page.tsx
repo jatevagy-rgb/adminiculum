@@ -121,6 +121,8 @@ function TimeEntriesPageContent() {
   const [showModal, setShowModal] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TimeEntry | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const deleteInFlightRef = useRef(false);
   const [isSaving, setIsSaving] = useState(false);
   const [templates, setTemplates] = useState<TimesheetReportTemplate[]>([]);
   const [presets, setBeállításkészlets] = useState<TimesheetPreset[]>([]);
@@ -1903,9 +1905,17 @@ function TimeEntriesPageContent() {
         description="A bejegyzés véglegesen törlődik."
         confirmLabel="Törlés"
         cancelLabel="Mégsem"
+        busy={isDeleting}
+        busyLabel="Törlés…"
         onCancel={() => setDeleteConfirm(null)}
         onConfirm={() => {
-          if (deleteConfirm) void handleDelete(deleteConfirm);
+          if (!deleteConfirm || deleteInFlightRef.current) return;
+          deleteInFlightRef.current = true;
+          setIsDeleting(true);
+          void handleDelete(deleteConfirm).finally(() => {
+            deleteInFlightRef.current = false;
+            setIsDeleting(false);
+          });
         }}
       />
     </div>
