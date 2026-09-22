@@ -1041,21 +1041,20 @@ function TimeEntriesPageContent() {
 
   return (
     <div className="time-entries-surface min-h-screen flex-1 bg-white p-2 text-[#1F2937] md:p-4">
-          <div className="mb-3 flex flex-col gap-3 rounded-xl adm-board-panel-tight p-3 md:flex-row md:items-start md:justify-between">
-            <PageHeader
-              title="Munkaórák"
-              subtitle={`${entryPeriod} · ${formatMinutes(totals.totalMinutes)} rögzített idő · ${currentUser?.name || currentUser?.email || "Bejelentkezett felhasználó"}`}
-            >
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={isLoading}
-                className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#0F3D32] bg-[#0F3D32] px-4 text-sm font-medium text-white transition-colors hover:border-[#062B22] hover:bg-[#062B22] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Munkaóra rögzítése
-              </button>
-            </PageHeader>
-          </div>
+      <PageHeader
+        title="Munkaórák"
+        subtitle={`${entryPeriod} · ${formatMinutes(totals.totalMinutes)} rögzített idő · ${currentUser?.name || currentUser?.email || "Bejelentkezett felhasználó"}`}
+        className="relative mb-3"
+      >
+        <button
+          type="button"
+          onClick={handleCreate}
+          disabled={isLoading}
+          className="inline-flex h-10 items-center justify-center rounded-[8px] border border-[#0F3D32] bg-[#0F3D32] px-4 text-sm font-medium text-white transition-colors hover:border-[#062B22] hover:bg-[#062B22] disabled:cursor-not-allowed disabled:opacity-50 sm:absolute sm:bottom-4 sm:right-0"
+        >
+          Munkaóra rögzítése
+        </button>
+      </PageHeader>
 
           {(deepLinkedClientId || deepLinkedCaseId) && (
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--adm-border)] bg-white px-3 py-2">
@@ -1714,8 +1713,8 @@ function TimeEntriesPageContent() {
                             <div className="divide-y divide-[#EEE7D9]">
                               {caseGroup.entries.map((entry) => (
                                 <div key={entry.id} className={`p-4 border-l-2 ${entry.billable ? "border-l-[#2F5E49]" : "border-l-[#CFC8BA]"}`}>
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="flex-1">
+                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div className="min-w-0 flex-1">
                                       <div className="flex items-center gap-2 mb-2">
                                         <span className="text-xs font-semibold text-[var(--adm-text)]">{formatMinutes(entry.minutes)}</span>
                                         {(entry.billable || WORK_TYPE_LABEL_MAP[entry.workType]) && (
@@ -1725,7 +1724,7 @@ function TimeEntriesPageContent() {
                                       )}
                                       </div>
                                       <p className="text-xs text-[var(--adm-text-muted)]">{entry.description}</p>
-                                      <div className="flex items-center gap-4 mt-2">
+                                      <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyvéd: {entry.user?.name || "Ismeretlen"}</span>
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Osztály: {entry.department?.name || "Nincs osztály"}</span>
                                         <span className="text-[10px] text-[var(--adm-text-muted)]">Ügyféloldali kérő: {entry.requester?.name || "Nincs megadva"}</span>
@@ -1743,7 +1742,7 @@ function TimeEntriesPageContent() {
                                       </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
+                                    <div className="shrink-0 flex items-center gap-2">
                                       <button
                                         type="button"
                                         onClick={() => handleEdit(entry)}
