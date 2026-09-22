@@ -24,8 +24,9 @@ import {
 } from "@/lib/api";
 import { getCaseDisplayTitle, getCaseMatterTypeLabel } from "@/lib/caseLabels";
 import { getClientAccentBorderClass } from "@/lib/clientColors";
-import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
-import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { AdminButton } from "@/components/adminiculum/ui";
+import { PageHeader, Badge, StatusChip, EmptyState } from "@/components/ui";
+import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 
 import { matchesCaseScope, caseStatusLabel, casePriorityLabel, caseDeadline, attentionForCase, matchesOperationalFilter, nextActionLabel, loadCaseAttentionPages } from '@/lib/casesOperational';
 
@@ -344,19 +345,27 @@ export function CasesList() {
   }, [backendCases, availableClients, selectedClientId]);
 
   return (
-    <section className="space-y-3">
-      <OperationalPageHeader
+    <section className="space-y-4">
+      <PageHeader
         title="Ügyek"
-        count={`${filteredCases.length} ügy a betöltött ${backendCases.length} közül (legfeljebb 200)`}
+        badge={
+          <Badge tone="neutral" className="text-xs px-2 py-0.5">
+            {filteredCases.length} ügy a betöltött {backendCases.length} közül (legfeljebb 200)
+          </Badge>
+        }
         subtitle="Válassz ügyet a következő feladat, dokumentum vagy határidő megnyitásához."
-        primaryAction={<AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>Új ügy</AdminButton>}
+        primaryAction={
+          <AdminButton variant="primary" onClick={() => setShowNewCaseModal(true)}>
+            Új ügy
+          </AdminButton>
+        }
       />
 
-      <div className="border border-[var(--adm-border)] bg-white px-3 py-3">
+      <div className="rounded-lg border border-[#E5E7E6] bg-white p-3.5 shadow-sm">
         <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
           <div className="flex flex-col gap-1">
-            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">Nézet</span>
-            <div className="flex overflow-hidden rounded-[5px] border border-[var(--adm-border)]">
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">Nézet</span>
+            <div className="flex overflow-hidden rounded-md border border-[#E5E7E6]">
               {[
                 ["ACTIVE", "Aktív", caseEntrypointStats.activeCases],
                 ["MINE", "Hozzám rendelve", backendCases.filter((item) => matchesCaseScope(item, 'MINE', currentUser?.id)).length],
@@ -366,25 +375,33 @@ export function CasesList() {
                   key={String(value)}
                   type="button"
                   onClick={() => setScopeFilter(value as "ACTIVE" | "MINE" | "CLOSED")}
-                  className={`border-l border-[var(--adm-border)] px-3 py-2 text-[11px] font-semibold first:border-l-0 ${scopeFilter === value ? "bg-[var(--adm-green-800)] text-[var(--adm-ivory-50)]" : "bg-[var(--adm-surface)] text-[var(--adm-text)] hover:bg-[var(--adm-sand-100)]"}`}
+                  className={`border-l border-[#E5E7E6] px-3 py-1.5 text-[11px] font-medium transition-colors first:border-l-0 ${
+                    scopeFilter === value
+                      ? "bg-[#0F3D32] text-white"
+                      : "bg-[#F8FAF9] text-[#374151] hover:bg-[#EAEFEA]"
+                  }`}
                 >
                   {label} <span className="ml-1 opacity-70">{count}</span>
                 </button>
               ))}
             </div>
           </div>
-          <span className="hidden self-stretch border-l border-[var(--adm-border)] lg:block" aria-hidden="true" />
-          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+          <span className="hidden self-stretch border-l border-[#E5E7E6] lg:block" aria-hidden="true" />
+          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">
             Szakterület
-            <select value={practiceArea} onChange={(e) => setPracticeArea(e.target.value)} className="adm-board-field mt-1 block h-9 w-44 px-2 text-xs">
+            <select
+              value={practiceArea}
+              onChange={(e) => setPracticeArea(e.target.value)}
+              className="block h-9 w-44 rounded-md border border-[#E5E7E6] bg-white px-2.5 text-xs text-[#1F2937] outline-none transition-colors focus:border-[#0F3D32] focus:ring-2 focus:ring-[#0F3D32]/20"
+            >
               <option value="all">Mind</option>
               {matterTypes.filter((type) => type.value !== "CUSTOM").map((type) => (
                 <option key={type.value} value={type.value}>{type.label}</option>
               ))}
             </select>
           </label>
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">
               Ügyfél
               <input
                 value={clientName}
@@ -392,17 +409,17 @@ export function CasesList() {
                   setClientName(e.target.value);
                   if (selectedClientId) setSelectedClientId("");
                 }}
-                className="adm-board-field mt-1 block h-9 w-48 px-2 text-xs"
+                className="mt-1 block h-9 w-48 rounded-md border border-[#E5E7E6] bg-white px-2.5 text-xs text-[#1F2937] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[#0F3D32] focus:ring-2 focus:ring-[#0F3D32]/20"
                 placeholder="Ügyfél keresése"
               />
             </label>
             {selectedClientId && (
-              <div className="mt-1 flex items-center gap-1 rounded bg-[var(--adm-sand-100)] px-2 py-0.5 text-[10px] text-[var(--adm-text)]">
-                <span className="font-semibold">{filteredClientLabel}</span>
+              <div className="flex items-center gap-1 rounded border border-[#BCE4CE] bg-[#E8F5EE] px-2 py-0.5 text-[10px] text-[#0F3D32]">
+                <span className="font-medium">{filteredClientLabel}</span>
                 <button
                   type="button"
                   onClick={() => setSelectedClientId("")}
-                  className="ml-auto font-bold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
+                  className="ml-auto font-bold text-[#0F3D32]/70 hover:text-[#0F3D32]"
                   title="Ügyfélszűrő törlése"
                   aria-label="Ügyfélszűrő törlése"
                 >
@@ -411,9 +428,13 @@ export function CasesList() {
               </div>
             )}
           </div>
-          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">
             Munkaprioritás
-            <select value={workPriorityFilter} onChange={(e) => setWorkPriorityFilter(e.target.value)} className="adm-board-field mt-1 block h-9 w-40 px-2 text-xs">
+            <select
+              value={workPriorityFilter}
+              onChange={(e) => setWorkPriorityFilter(e.target.value)}
+              className="block h-9 w-40 rounded-md border border-[#E5E7E6] bg-white px-2.5 text-xs text-[#1F2937] outline-none transition-colors focus:border-[#0F3D32] focus:ring-2 focus:ring-[#0F3D32]/20"
+            >
               <option value="all">Mind</option>
               <option value="Alacsony">Alacsony</option>
               <option value="Közepes">Közepes</option>
@@ -421,9 +442,14 @@ export function CasesList() {
               <option value="Sürgős">Sürgős</option>
             </select>
           </label>
-          <label className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--adm-text-muted)]">
+          <label className="flex flex-col gap-1 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B7280]">
             Teendők
-            <select aria-label="Teendők szűrése" value={operationalFilter} onChange={e => setOperationalFilter(e.target.value)} className="adm-board-field mt-1 block h-9 w-40 px-2 text-xs">
+            <select
+              aria-label="Teendők szűrése"
+              value={operationalFilter}
+              onChange={(e) => setOperationalFilter(e.target.value)}
+              className="block h-9 w-40 rounded-md border border-[#E5E7E6] bg-white px-2.5 text-xs text-[#1F2937] outline-none transition-colors focus:border-[#0F3D32] focus:ring-2 focus:ring-[#0F3D32]/20"
+            >
               <option value="all">Mind</option>
               <option value="attention">Figyelmet igényel</option>
               <option value="deadline">Határidős</option>
@@ -447,7 +473,7 @@ export function CasesList() {
         </div>
       </div>
 
-      <div className="overflow-hidden border border-[var(--adm-border)] bg-white">
+      <div className="overflow-hidden rounded-lg border border-[#E5E7E6] bg-white shadow-sm">
         {isLoadingCases ? (
           <div className="p-4"><CompactState title="Ügyek betöltése…" /></div>
         ) : caseLoadError ? (
@@ -456,7 +482,7 @@ export function CasesList() {
           <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left">
             <thead>
-              <tr className="border-b border-[var(--adm-border)] bg-[var(--adm-surface)] text-[10px] uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">
+              <tr className="border-b border-[#E5E7E6] bg-[#F8FAF9] text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6B7280]">
                 <th className="px-3 py-2.5">Ügy</th>
                 <th className="px-3 py-2.5">Határidő</th>
                 <th className="px-3 py-2.5">Következő teendő</th>
@@ -467,24 +493,28 @@ export function CasesList() {
                 <th className="px-3 py-2.5 text-right">Művelet</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[var(--adm-border)]">
+            <tbody className="divide-y divide-[#E5E7E6]">
               {filteredCases.map((item) => {
                 const attention = attentionForCase(attentionItems, item.id);
                 const deadline = caseDeadline(item, attention);
                 return (
-                <tr key={item.id} className="cursor-pointer hover:bg-[var(--adm-surface)] focus-within:bg-[var(--adm-surface)]" onClick={() => router.push(`/cases/${item.id}`)}>
-                  <td className={`max-w-[300px] border-l-[5px] px-3 py-2.5 align-top ${getClientAccentBorderClass(item.clientColorKey)}`}>
-                    <span className="block truncate text-[13px] font-semibold text-[var(--adm-text)]">{getCaseDisplayTitle(item)}</span>
-                    <span className="mt-0.5 block truncate text-[10.5px] text-[var(--adm-text-muted)]">{item.caseNumber} · {formatMatterType(item.matterType)}</span>
+                <tr
+                  key={item.id}
+                  className="cursor-pointer transition-colors hover:bg-[#F8FAF9] focus-within:bg-[#F8FAF9]"
+                  onClick={() => router.push(`/cases/${item.id}`)}
+                >
+                  <td className={`max-w-[300px] border-l-[4px] px-3 py-2.5 align-top ${getClientAccentBorderClass(item.clientColorKey)}`}>
+                    <span className="block truncate text-[13px] font-semibold text-[#1F2937]">{getCaseDisplayTitle(item)}</span>
+                    <span className="mt-0.5 block truncate text-[10.5px] text-[#6B7280]">{item.caseNumber} · {formatMatterType(item.matterType)}</span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5 align-top">
                     {deadline.dueAt ? (
-                      <span className={`block text-[13px] font-semibold ${deadline.overdue ? 'text-red-700' : 'text-[var(--adm-text)]'}`}>{deadline.label}</span>
+                      <span className={`block text-[13px] font-semibold ${deadline.overdue ? 'text-red-700' : 'text-[#1F2937]'}`}>{deadline.label}</span>
                     ) : (
-                      <span className={`block text-xs text-[var(--adm-text-muted)]${deadline.state === 'UNKNOWN' ? ' italic' : ''}`}>{deadline.label}</span>
+                      <span className={`block text-xs text-[#6B7280]${deadline.state === 'UNKNOWN' ? ' italic' : ''}`}>{deadline.label}</span>
                     )}
                     {deadline.overdue ? <span className="mt-0.5 block text-[10px] font-bold uppercase tracking-[0.08em] text-red-700">Lejárt</span> : null}
-                    {deadline.sourceLabel ? <span className="mt-0.5 block text-[10px] text-[var(--adm-text-muted)]">{deadline.sourceLabel}</span> : null}
+                    {deadline.sourceLabel ? <span className="mt-0.5 block text-[10px] text-[#6B7280]">{deadline.sourceLabel}</span> : null}
                   </td>
                   <td className="max-w-[300px] px-3 py-2.5 align-top">
                     {attention.state === 'KNOWN' && (attention.attention.urgency === 'URGENT' || attention.attention.urgency === 'ATTENTION') ? (
@@ -493,20 +523,39 @@ export function CasesList() {
                         {attention.attention.urgency === 'URGENT' ? 'Sürgős' : 'Figyelmet igényel'}
                       </span>
                     ) : null}
-                    <span className={`block text-xs leading-5 line-clamp-2 ${attention.state === 'UNKNOWN' ? 'italic text-[var(--adm-text-muted)]' : 'text-[#3D4842]'}`}>{nextActionLabel(attention)}</span>
+                    <span className={`block text-xs leading-5 line-clamp-2 ${attention.state === 'UNKNOWN' ? 'italic text-[#6B7280]' : 'text-[#374151]'}`}>{nextActionLabel(attention)}</span>
                   </td>
-                  <td className="px-3 py-2.5 align-top text-[13px] text-[var(--adm-text)]">{item.clientName || "Nincs megadva"}</td>
-                  <td className="px-3 py-2.5 align-top"><AdminStatusPill tone="neutral">{caseStatusLabel(item.status)}</AdminStatusPill></td>
-                  <td className="px-3 py-2.5 align-top text-xs">{item.assignedLawyer?.name ? <span className="text-[#3D4842]">{item.assignedLawyer.name}</span> : <span className="text-[var(--adm-text-muted)]">Nincs felelős</span>}</td>
-                  <td className="px-3 py-2.5 align-top"><AdminBadge tone={item.priority === 'URGENT' ? 'burgundy' : item.priority === 'HIGH' ? 'amber' : 'neutral'}>{deriveWorkPriorityLabel(item.priority)}</AdminBadge></td>
+                  <td className="px-3 py-2.5 align-top text-[13px] text-[#1F2937]">{item.clientName || "Nincs megadva"}</td>
+                  <td className="px-3 py-2.5 align-top">
+                    <StatusChip
+                      status={item.status === 'ACTIVE' ? 'active' : item.status === 'ON_HOLD' ? 'warning' : 'closed'}
+                    >
+                      {caseStatusLabel(item.status)}
+                    </StatusChip>
+                  </td>
+                  <td className="px-3 py-2.5 align-top text-xs">{item.assignedLawyer?.name ? <span className="text-[#374151]">{item.assignedLawyer.name}</span> : <span className="text-[#9CA3AF]">Nincs felelős</span>}</td>
+                  <td className="px-3 py-2.5 align-top">
+                    <Badge
+                      status={item.priority === 'URGENT' ? 'urgent' : item.priority === 'HIGH' ? 'warning' : 'completed'}
+                      tone={item.priority === 'URGENT' ? 'terracotta' : item.priority === 'HIGH' ? 'gold' : 'neutral'}
+                    >
+                      {deriveWorkPriorityLabel(item.priority)}
+                    </Badge>
+                  </td>
                   <td className="px-3 py-2.5 align-top text-right" onClick={(e) => e.stopPropagation()}>
-                    <AdminButton size="sm" variant="primary" onClick={() => router.push(`/cases/${item.id}`)}>Ügy megnyitása</AdminButton>
+                    <AdminButton size="sm" variant="neutral" className="border-[#0F3D32] text-[#0F3D32] hover:bg-[#E8F5EE]" onClick={() => router.push(`/cases/${item.id}`)}>Ügy megnyitása</AdminButton>
                   </td>
                 </tr>
               ); })}
               {filteredCases.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="p-4"><CompactState title="Nincs megjeleníthető ügy." detail="Módosítsd a szűrőket, vagy hozz létre új ügyet." /></td>
+                  <td colSpan={8} className="p-8">
+                    <EmptyState
+                      className="border-0 bg-transparent py-4"
+                      title="Nincs megjeleníthető ügy."
+                      description="Módosítsd a szűrőket, vagy hozz létre új ügyet."
+                    />
+                  </td>
                 </tr>
               )}
             </tbody>
