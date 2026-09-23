@@ -441,13 +441,9 @@ export function OrgGrowView() {
   // Published, customer-safe opportunities only (already publication-filtered by the DTO).
   const publishedOpportunitiesCount = data?.opportunities?.length ?? 0;
 
-  const uncompletedPacks = useMemo(() => packs.filter((p) => p.status !== "COMPLETED"), [packs]);
-  const activeInitiatives = useMemo(
-    () =>
-      initiatives.filter(
-        (i) => i.statusLabel === "Folyamatban" || i.statusLabel.toLowerCase().includes("folyamat")
-      ),
-    [initiatives]
+  const uncompletedPacks = packs.filter((p) => p.status !== "COMPLETED");
+  const activeInitiatives = initiatives.filter(
+    (i) => i.statusLabel === "Folyamatban" || i.statusLabel.toLowerCase().includes("folyamat")
   );
 
   // Filtered packs for Felmérések catalogue
