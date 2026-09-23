@@ -119,7 +119,9 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
     setTypeName(selectedOption.caseTypeDefinition.name);
   }, [selectedOption]);
 
-  const canSubmit = Boolean(clientId && title.trim() && selectedOption?.template && !submitting && !savingType);
+  // A selected existing case type is enough to create the case. The active work
+  // package is optional enrichment; its absence no longer blocks ordinary creation.
+  const canSubmit = Boolean(clientId && title.trim() && selectedOption && !submitting && !savingType);
   const matchingTypes = creationOptions.filter((option) => option.caseTypeDefinition.name.toLocaleLowerCase("hu-HU") === typeName.trim().toLocaleLowerCase("hu-HU"));
 
   // Honest reason why no eligible case type can be selected. Shown to every role
@@ -130,7 +132,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
       ? "Még nincs ügytípus az irodában."
       : !catalogueTypes.some((type) => type.isActive)
         ? "Az irodában létező ügytípusok inaktívak, ezért ügylétrehozáshoz nem választhatók."
-        : "A létező ügytípusokhoz nincs aktív munkacsomag, ezért ügylétrehozáshoz nem választhatók.";
+        : null;
 
   function selectExistingType(id: string) {
     const option = creationOptions.find((item) => item.caseTypeDefinition.id === id);
@@ -213,6 +215,23 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
 
   if (!open) return null;
 
+  // Explicit, opt-in office-wide case type creation. It is NEVER part of the
+  // ordinary "select an existing type" path and is only reachable from the
+  // manager-only block below.
+  const managerTypeCreation = (
+    <>
+      <input id="new-case-type" list="case-type-suggestions" value={typeName} onChange={(e) => changeTypeName(e.target.value)} disabled={savingType} className={intake.field} placeholder="Írj új ügytípusnevet…" autoComplete="off" />
+      <datalist id="case-type-suggestions">{creationOptions.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.name} />)}</datalist>
+      {matchingTypes.length > 1 && <select aria-label="Azonos nevű ügytípusok" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field}>
+        <option value="">Válassz a mentett ügytípusok közül…</option>
+        {matchingTypes.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name} · {option.caseTypeDefinition.description || option.template?.name}</option>)}
+      </select>}
+      {typeName.trim() && matchingTypes.length === 0 && !selectedOption && <button type="button" onClick={saveType} disabled={savingType} className={`${intake.secondaryAction} mt-2`}>
+        {savingType ? "Mentés…" : `+ „${typeName.trim()}” mentése új ügytípusként (irodai szintű)`}
+      </button>}
+    </>
+  );
+
   return createPortal(
     <div className={intake.overlay} onClick={onClose}>
       <div
@@ -247,7 +266,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                   {catalogueEmptyNotice}
                   <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
                     {canManageTypes
-                      ? "A létrehozáshoz előbb állíts be legalább egy ügytípust aktív munkacsomaggal."
+                      ? "A létrehozáshoz előbb hozz létre legalább egy ügytípust."
                       : "Kérj ügytípust az iroda adminisztrátorától vagy partnerétől."}
                   </span>
                   {canManageTypes && (
@@ -285,34 +304,40 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
               <div className={`${intake.area} mb-3`}>
                 <div className={intake.grid}>
                   <div className={intake.label}>
-                    <label htmlFor="new-case-type">Ügytípus <span className={intake.required}>*</span></label>
-                    {canManageTypes ? <>
-                      {creationOptions.length > 0 && <>
-                        <select id="existing-case-type" aria-label="Meglévő ügytípus kiválasztása" value={caseTypeDefinitionId} onChange={(e) => selectExistingType(e.target.value)} disabled={savingType} className={intake.field}>
-                          <option value="">Válassz meglévő ügytípust…</option>
-                          {creationOptions.map((option) => (
-                            <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name}</option>
-                          ))}
-                        </select>
-                        <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">Meglévő ügytípus választása. Új irodai ügytípust az alábbi mezőben hozhatsz létre.</span>
-                      </>}
-                      <input id="new-case-type" list="case-type-suggestions" value={typeName} onChange={(e) => changeTypeName(e.target.value)} disabled={savingType} className={intake.field} placeholder={creationOptions.length > 0 ? "Vagy írj új ügytípusnevet…" : "Írj új ügytípusnevet…"} autoComplete="off" required />
-                      <datalist id="case-type-suggestions">{creationOptions.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.name} />)}</datalist>
-                      {matchingTypes.length > 1 && <select aria-label="Azonos nevű ügytípusok" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
-                        <option value="">Válassz a mentett ügytípusok közül…</option>
-                        {matchingTypes.map((option) => <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name} · {option.caseTypeDefinition.description || option.template?.name}</option>)}
-                      </select>}
-                      {typeName.trim() && matchingTypes.length === 0 && !selectedOption && <button type="button" onClick={saveType} disabled={savingType} className={`${intake.secondaryAction} mt-2`}>
-                        {savingType ? "Mentés…" : `+ „${typeName.trim()}” mentése új ügytípusként (irodai szintű)`}
-                      </button>}
-                    </> : <select id="new-case-type" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
-                      <option value="">Válassz ügytípust…</option>
-                      {creationOptions.map((o) => (
-                        <option key={o.caseTypeDefinition.id} value={o.caseTypeDefinition.id}>
-                          {o.caseTypeDefinition.name}
-                        </option>
-                      ))}
-                    </select>}
+                    <label htmlFor={canManageTypes && creationOptions.length > 0 ? "existing-case-type" : "new-case-type"}>Ügytípus <span className={intake.required}>*</span></label>
+
+                    {/* Ordinary path: select an existing case type. Required for every role. */}
+                    {canManageTypes && creationOptions.length > 0 && (
+                      <select id="existing-case-type" aria-label="Meglévő ügytípus kiválasztása" value={caseTypeDefinitionId} onChange={(e) => selectExistingType(e.target.value)} disabled={savingType} className={intake.field} required>
+                        <option value="">Válassz meglévő ügytípust…</option>
+                        {creationOptions.map((option) => (
+                          <option key={option.caseTypeDefinition.id} value={option.caseTypeDefinition.id}>{option.caseTypeDefinition.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    {!canManageTypes && (
+                      <select id="new-case-type" value={caseTypeDefinitionId} onChange={(e) => setCaseTypeDefinitionId(e.target.value)} className={intake.field} required>
+                        <option value="">Válassz ügytípust…</option>
+                        {creationOptions.map((o) => (
+                          <option key={o.caseTypeDefinition.id} value={o.caseTypeDefinition.id}>
+                            {o.caseTypeDefinition.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {selectedOption && !selectedOption.template && (
+                      <span role="note" className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
+                        Ehhez az ügytípushoz nincs aktív munkacsomag; az ügy munkacsomag nélkül jön létre.
+                      </span>
+                    )}
+
+                    {/* Separate, explicit office-wide taxonomy creation. Never the ordinary path. */}
+                    {canManageTypes && (creationOptions.length === 0 ? managerTypeCreation : (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer text-[11px] text-[var(--adm-text-muted)]">Új irodai ügytípus létrehozása</summary>
+                        {managerTypeCreation}
+                      </details>
+                    ))}
                   </div>
                   <label className={intake.label}>
                     Felelős ügyvéd
@@ -377,14 +402,6 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                       );
                     })}
                   </div>
-                </div>
-              )}
-
-              {!selectedOption?.template && caseTypeDefinitionId && (
-                <div className={`${intake.area} mb-3 border-[#A8442A]/30 bg-[#FBF0EC]`}>
-                  <p className="text-[12px] text-[#A8442A]">
-                    A kiválasztott ügytípushoz nem tartozik aktív munkacsomag sablon.
-                  </p>
                 </div>
               )}
 

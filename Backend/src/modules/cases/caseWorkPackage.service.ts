@@ -55,6 +55,8 @@ export async function createCaseWorkPackageSnapshot(
   if (!caseType) return null;
   if (!caseType.isActive) throw new CaseWorkPackageError('CASE_TYPE_INACTIVE', 'The selected case type is inactive.', 409);
 
+  const requested = selectedKeys(input.selectedModuleKeys);
+
   const template = await tx.workPackageTemplate.findFirst({
     where: { caseTypeDefinitionId: caseType.id, status: 'ACTIVE' },
     orderBy: { version: 'desc' },
@@ -63,9 +65,16 @@ export async function createCaseWorkPackageSnapshot(
       defaultWorkflowTemplate: true,
     },
   });
-  if (!template) throw new CaseWorkPackageError('ACTIVE_WORK_PACKAGE_NOT_FOUND', 'No active work package exists for the selected case type.', 409);
-
-  const requested = selectedKeys(input.selectedModuleKeys);
+  if (!template) {
+    // A case type does not need an active work package to start a case: the case is
+    // created with the selected type and no work package snapshot, mirroring the
+    // legacy no-template path that already returns null. Only an explicit module
+    // selection is impossible without a template to bind the modules to.
+    if (requested && requested.size > 0) {
+      throw new CaseWorkPackageError('ACTIVE_WORK_PACKAGE_NOT_FOUND', 'No active work package exists for the selected case type.', 409);
+    }
+    return null;
+  }
   const available = new Set(template.items.map((item) => item.moduleKey));
   if (requested) {
     for (const key of requested) {
