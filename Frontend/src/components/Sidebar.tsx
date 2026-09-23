@@ -178,7 +178,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
           </div>
           {!collapsed && (
             <div className="hidden md:block">
-              <h1 className="font-serif text-[22px] leading-none text-[var(--adm-ivory-50)]">Adminiculum</h1>
+              <p className="font-serif text-[22px] leading-none text-[var(--adm-ivory-50)]">Adminiculum</p>
               <p className={`mt-1 text-[9.5px] uppercase tracking-[0.22em] ${isSignal ? "text-[#6B7280]" : "text-[var(--adm-sage-300)]"}`}>Legal ops</p>
             </div>
           )}

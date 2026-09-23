@@ -91,6 +91,7 @@ const inputClass =
 function IntakePageContent() {
   return (
     <div className="mx-auto max-w-[1200px] space-y-4">
+      <h1 className="sr-only">Ügyfelvétel</h1>
       <NewMatterWizard />
       <IntakeQueuePanel />
     </div>

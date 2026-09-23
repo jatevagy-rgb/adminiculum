@@ -221,7 +221,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
                 {urgency.label}
               </span>
             </div>
-            <h1 className="mt-1 font-serif text-[27px] font-semibold leading-tight text-[var(--adm-text)]">{c.title}</h1>
+            <h2 className="mt-1 font-serif text-[27px] font-semibold leading-tight text-[var(--adm-text)]">{c.title}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[var(--adm-text-muted)]">
               <span className="font-semibold text-[var(--adm-text)]">{c.client?.name || "Nincs ügyfél"}</span>
               <span aria-hidden="true">·</span><span>{c.matterType || "Ügytípus nincs"}</span>

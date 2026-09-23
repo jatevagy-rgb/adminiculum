@@ -969,6 +969,7 @@ function PageBody() {
       <AdminSectionHeader
         eyebrow="Ügyfélportál"
         title="Ügyfélportál adminisztráció"
+        titleAs="h1"
         subtitle="Aktív ügyfélportálok kezelése, felhasználók meghívása és ügyhozzáférések áttekintése."
       />
 

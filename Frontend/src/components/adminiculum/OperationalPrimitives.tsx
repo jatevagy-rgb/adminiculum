@@ -10,6 +10,12 @@ type OperationalPageHeaderProps = {
   subtitle?: string;
   primaryAction?: ReactNode;
   secondaryActions?: ReactNode;
+  /**
+   * Heading level for the page title. Defaults to "h1" so this header owns the
+   * route-level H1. Pass "h2" on routes that already have a page-level H1
+   * (for example the case workspace nav).
+   */
+  level?: "h1" | "h2";
 };
 
 export function OperationalPageHeader({
@@ -18,12 +24,14 @@ export function OperationalPageHeader({
   subtitle,
   primaryAction,
   secondaryActions,
+  level = "h1",
 }: OperationalPageHeaderProps) {
+  const titleClass = "font-serif text-[30px] font-medium leading-tight text-[var(--adm-text)]";
   return (
     <header className="flex flex-col gap-3 border-b border-[var(--adm-border)] pb-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-2">
-          <h1 className="font-serif text-[30px] font-medium leading-tight text-[var(--adm-text)]">{title}</h1>
+          {level === "h2" ? <h2 className={titleClass}>{title}</h2> : <h1 className={titleClass}>{title}</h1>}
           {count !== null && count !== undefined ? (
             <span className="text-[12px] font-semibold text-[var(--adm-text-muted)]">{count}</span>
           ) : null}

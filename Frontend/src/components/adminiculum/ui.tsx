@@ -107,12 +107,13 @@ export function AdminPanel({ className = "", ...props }: HTMLAttributes<HTMLDivE
   return <div className={`rounded-[8px] border border-[rgba(22,32,26,0.10)] bg-white ${className}`} {...props} />;
 }
 
-export function AdminSectionHeader({ eyebrow, title, subtitle, action }: { eyebrow?: string; title: string; subtitle?: string; action?: ReactNode }) {
+export function AdminSectionHeader({ eyebrow, title, subtitle, action, titleAs = "h3" }: { eyebrow?: string; title: string; subtitle?: string; action?: ReactNode; titleAs?: "h1" | "h2" | "h3" }) {
+  const titleClass = "font-serif text-xl font-medium leading-tight text-[#16201A]";
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[rgba(22,32,26,0.10)] px-4 py-3">
       <div>
         {eyebrow ? <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#7A8479]">{eyebrow}</p> : null}
-        <h3 className="font-serif text-xl font-medium leading-tight text-[#16201A]">{title}</h3>
+        {titleAs === "h1" ? <h1 className={titleClass}>{title}</h1> : titleAs === "h2" ? <h2 className={titleClass}>{title}</h2> : <h3 className={titleClass}>{title}</h3>}
         {subtitle ? <p className="mt-1 text-[11.5px] text-[#7A8479]">{subtitle}</p> : null}
       </div>
       {action}
