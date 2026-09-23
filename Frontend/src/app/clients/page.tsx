@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminPanel } from "@/components/adminiculum/ui";
-import { Button, PageHeader, Modal, EmptyState, Alert } from "@/components/ui";
+import { Button, PageHeader, Modal, EmptyState, Alert, DataTable, DataTableHead, DataTableHeaderCell, DataTableBody, DataTableRow, DataTableCell, Badge, QuietLink } from "@/components/ui";
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { createClient, getClients, updateClient, type Client, type CreateClientData, type UpdateClientData } from "@/lib/api";
 import { getClientColorDefinition } from "@/lib/clientColors";
@@ -55,6 +55,7 @@ function ClientsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState<CreateClientData>(emptyClientForm());
@@ -163,8 +164,13 @@ function ClientsPageContent() {
         <div className="mx-auto max-w-7xl space-y-6">
           <PageHeader
             kicker="Ügyfelek"
-            title="Ügyféldossziék"
+            title="Ügyfelek"
             subtitle="Ügyféladatok, dossziék és kapcsolt ügyindítás egy helyen."
+            badge={
+              <Badge shape="pill" tone="neutral">
+                {filteredClients.length} ügyfél
+              </Badge>
+            }
             primaryAction={
               <Button variant="primary" onClick={handleCreate}>
                 + Új ügyfél
@@ -172,17 +178,40 @@ function ClientsPageContent() {
             }
           />
 
-          <div className="rounded-lg border border-[#E5E7E6] bg-white p-3.5 shadow-sm">
-            <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">
-              Keresés
-              <input
-                type="search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Név, email, kapcsolattartó vagy adószám"
-                className="mt-1.5 block w-full rounded-md border border-[#E5E7E6] bg-white px-3 py-2 text-sm text-[#1F2937] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[#0F3D32] focus:ring-2 focus:ring-[#0F3D32]/20"
-              />
-            </label>
+          <div className="flex flex-col gap-3 rounded-lg border border-[#E5E7E6] bg-white p-3.5 shadow-sm sm:flex-row sm:items-end sm:justify-between">
+            <div className="w-full max-w-lg">
+              <label className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">
+                Keresés
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Név, email, kapcsolattartó vagy adószám"
+                  className="mt-1.5 block w-full rounded-md border border-[#E5E7E6] bg-white px-3 py-2 text-sm text-[#1F2937] outline-none transition-colors placeholder:text-[#9CA3AF] focus:border-[#0F3D32] focus:ring-2 focus:ring-[#0F3D32]/20"
+                />
+              </label>
+            </div>
+            <div className="flex items-center gap-3 self-end sm:self-auto">
+              <span className="text-xs text-[#6B7280]">{filteredClients.length} találat</span>
+              <div className="inline-flex rounded-lg border border-[#E5E7E6] bg-[#F8FAF9] p-0.5 text-xs font-medium" role="group" aria-label="Nézet kiválasztása">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("table")}
+                  className={`rounded-md px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D32] ${viewMode === "table" ? "bg-white font-semibold text-[#0F3D32] shadow-sm" : "text-[#6B7280] hover:text-[#1F2937]"}`}
+                  aria-pressed={viewMode === "table"}
+                >
+                  Lista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("cards")}
+                  className={`rounded-md px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D32] ${viewMode === "cards" ? "bg-white font-semibold text-[#0F3D32] shadow-sm" : "text-[#6B7280] hover:text-[#1F2937]"}`}
+                  aria-pressed={viewMode === "cards"}
+                >
+                  Kártyák
+                </button>
+              </div>
+            </div>
           </div>
 
           {error ? (
@@ -209,7 +238,85 @@ function ClientsPageContent() {
                 <h2 className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#6B7280]">Ügyfelek</h2>
                 <span className="text-[11px] text-[#6B7280]">{filteredClients.length} találat</span>
               </div>
-              <div className="grid gap-3 xl:grid-cols-2">{filteredClients.map(renderClientCard)}</div>
+              {viewMode === "table" ? (
+                <DataTable minWidth={760}>
+                  <DataTableHead>
+                    <tr>
+                      <DataTableHeaderCell>Ügyfél neve</DataTableHeaderCell>
+                      <DataTableHeaderCell>Kapcsolattartó</DataTableHeaderCell>
+                      <DataTableHeaderCell>Elérhetőség</DataTableHeaderCell>
+                      <DataTableHeaderCell>Státusz</DataTableHeaderCell>
+                      <DataTableHeaderCell align="right">Műveletek</DataTableHeaderCell>
+                    </tr>
+                  </DataTableHead>
+                  <DataTableBody>
+                    {filteredClients.map((client) => {
+                      const color = getClientColorDefinition(client.colorKey);
+                      return (
+                        <DataTableRow key={client.id}>
+                          <DataTableCell className={`border-l-4 ${color.key ? color.accentBorderClass : "border-l-transparent"}`}>
+                            <Link
+                              href={`/clients/${client.id}`}
+                              className="group inline-flex flex-col font-medium text-[#1F2937] hover:text-[#0F3D32] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F3D32]"
+                            >
+                              <span className="font-semibold text-[13.5px] group-hover:underline">{client.name}</span>
+                              {client.taxNumber ? (
+                                <span className="text-[11px] text-[#6B7280]">Adószám: {client.taxNumber}</span>
+                              ) : null}
+                            </Link>
+                          </DataTableCell>
+                          <DataTableCell muted>
+                            {client.contactPerson ? (
+                              <span className="font-medium text-[#1F2937]">{client.contactPerson}</span>
+                            ) : (
+                              "—"
+                            )}
+                          </DataTableCell>
+                          <DataTableCell muted>
+                            <div className="space-y-0.5">
+                              {client.email ? (
+                                <div>
+                                  <a href={`mailto:${client.email}`} className="text-[#1F2937] hover:underline">
+                                    {client.email}
+                                  </a>
+                                </div>
+                              ) : null}
+                              {client.phone ? (
+                                <div className="text-[11px] text-[#6B7280]">{client.phone}</div>
+                              ) : null}
+                              {!client.email && !client.phone ? "—" : null}
+                            </div>
+                          </DataTableCell>
+                          <DataTableCell>
+                            <Badge shape="pill" tone={client.relationshipMode === "PORTAL_CENTRIC" ? "teal" : "neutral"} dot>
+                              {client.relationshipMode === "PORTAL_CENTRIC" ? "Portál ügyfél" : "Ügyfél"}
+                            </Badge>
+                          </DataTableCell>
+                          <DataTableCell align="right">
+                            <div className="flex items-center justify-end gap-2.5">
+                              <QuietLink
+                                href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`}
+                                size="sm"
+                                aria-label={`Új ügy indítása: ${client.name}`}
+                              >
+                                + Új ügy
+                              </QuietLink>
+                              <Link
+                                href={`/clients/${client.id}`}
+                                className="inline-flex min-h-8 items-center justify-center rounded-[5px] border border-[#E5E7E6] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#1F2937] transition-colors hover:bg-[#F8FAF9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F3D32]"
+                              >
+                                Dosszié
+                              </Link>
+                            </div>
+                          </DataTableCell>
+                        </DataTableRow>
+                      );
+                    })}
+                  </DataTableBody>
+                </DataTable>
+              ) : (
+                <div className="grid gap-3 xl:grid-cols-2">{filteredClients.map(renderClientCard)}</div>
+              )}
             </section>
           ) : (
             <EmptyState
