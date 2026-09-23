@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { getCaseContracts, getCaseDocuments, getCaseById, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, safeUploadErrorMessage, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
 import { closeCaseLifecycle, archiveCaseLifecycle } from "@/lib/api";
 import type { CaseListItem } from "@/lib/api";
-import { findCaseByReference } from "@/lib/workspace/identityResolution";
+import { findCaseByReference, isCaseLookupAuthorizationDenial } from "@/lib/workspace/identityResolution";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -547,11 +547,17 @@ export function CaseDetail({ params }: CaseDetailProps) {
         let record: CaseListItem | null = null;
         try {
           record = await getCaseById(resolvedParams.caseId);
-        } catch {
-          record = await findCaseByReference(
-            resolvedParams.caseId,
-            (page, limit) => getCases(page, limit),
-          ).catch(() => null);
+        } catch (error) {
+          // An explicit 403 is a known authorization denial, not identity-format
+          // ambiguity: terminate here and fail closed. Only a non-403 failure
+          // (404 on a legacy caseNumber, transport/5xx) may fall back to the
+          // paginated exact-reference alias scan.
+          record = isCaseLookupAuthorizationDenial(error)
+            ? null
+            : await findCaseByReference(
+                resolvedParams.caseId,
+                (page, limit) => getCases(page, limit),
+              ).catch(() => null);
         }
         if (record) {
           setCaseRecord({

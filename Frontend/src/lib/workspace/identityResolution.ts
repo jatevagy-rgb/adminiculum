@@ -11,6 +11,10 @@
  *      exhaustive across pages, not restricted to an arbitrary first page window.
  *
  * Both id formats are equally valid. Format never implies validity.
+ *
+ *   3. An explicit HTTP 403 from the direct case lookup is terminal. It is a
+ *      known authorization denial, not identity-format ambiguity, so the alias
+ *      scan must not run and expose the list as an enumeration oracle.
  */
 
 export type IdentifiedItem = { id: string };
@@ -136,4 +140,23 @@ export async function findCaseByReference<T extends CaseReference>(
   }
 
   return null;
+}
+
+/**
+ * True when a failed direct case lookup is an explicit authorization denial
+ * (HTTP 403) rather than identity-format ambiguity / not-found (HTTP 404).
+ *
+ * A 403 means the server identified the case and refused access. That is a
+ * terminal outcome: the paginated `GET /cases` alias fallback must NOT run,
+ * because the reference cannot legitimately resolve and scanning the list
+ * would turn the resolver into an authorization-enumeration probe. A 404 (or
+ * a network/5xx error) keeps the legacy alias fallback intact, because the
+ * reference may be a non-`id` legacy `caseNumber`.
+ *
+ * Inspects `status` structurally so this module stays framework-free and does
+ * not need to import the API client's `ApiError`.
+ */
+export function isCaseLookupAuthorizationDenial(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  return (error as { status?: unknown }).status === 403;
 }

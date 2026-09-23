@@ -20,6 +20,7 @@ import path from 'node:path';
 import {
   findCaseByReference,
   findRequestedDocument,
+  isCaseLookupAuthorizationDenial,
   isRequestedDocumentUnresolved,
   readDocumentIdFromSearch,
   resolveRequestedDocumentId,
@@ -200,6 +201,83 @@ describe('F-001 document identity resolution', () => {
     assert.equal(isRequestedDocumentUnresolved(COMPACT_DOC_ID, true, null), true);
     assert.equal(isRequestedDocumentUnresolved(COMPACT_DOC_ID, true, { id: COMPACT_DOC_ID }), false);
     assert.equal(isRequestedDocumentUnresolved(null, true, null), false);
+  });
+});
+
+describe('403 is a terminal authorization denial (defense in depth)', () => {
+  it('classifies an explicit HTTP 403 as terminal', () => {
+    assert.equal(isCaseLookupAuthorizationDenial({ status: 403 }), true);
+    assert.equal(
+      isCaseLookupAuthorizationDenial(Object.assign(new Error('forbidden'), { status: 403 })),
+      true,
+    );
+  });
+
+  it('does NOT treat 404 / transport / 5xx as authorization denial, preserving legacy alias fallback', () => {
+    assert.equal(isCaseLookupAuthorizationDenial({ status: 404 }), false);
+    assert.equal(isCaseLookupAuthorizationDenial({ status: 400 }), false);
+    assert.equal(isCaseLookupAuthorizationDenial({ status: 500 }), false);
+    assert.equal(isCaseLookupAuthorizationDenial({ status: 0 }), false);
+    assert.equal(isCaseLookupAuthorizationDenial(new Error('network')), false);
+    assert.equal(isCaseLookupAuthorizationDenial(null), false);
+    assert.equal(isCaseLookupAuthorizationDenial(undefined), false);
+  });
+
+  it('both case surfaces gate the alias scan behind the terminal-403 check', () => {
+    const documentsPageSource = read('src/app/cases/[caseId]/documents/page.tsx');
+    const caseDetailSource = read('src/components/CaseDetail.tsx');
+    for (const source of [documentsPageSource, caseDetailSource]) {
+      const gateIndex = source.indexOf('isCaseLookupAuthorizationDenial(error)');
+      const fallbackIndex = source.indexOf('findCaseByReference(');
+      const gateValueIndex = source.indexOf('? null', gateIndex);
+      assert.ok(gateIndex >= 0, 'the terminal-403 gate must be present');
+      assert.ok(fallbackIndex > gateIndex, 'the alias scan must sit after the 403 check');
+      assert.ok(
+        gateValueIndex > gateIndex && gateValueIndex < fallbackIndex,
+        'a 403 must resolve to null before the alias scan is considered',
+      );
+    }
+  });
+});
+
+describe('interaction with authorization-scoped GET /cases', () => {
+  // Mirrors the #357 backend scope: unauthorized rows never leave the database and
+  // pagination.total counts only authorized rows.
+  const AUTHORIZED_ROWS: CaseRow[] = [
+    { id: COMPACT_CASE_ID, caseNumber: LEGACY_CASE_NUMBER },
+    { id: OTHER_CASE_ID, caseNumber: OTHER_CASE_NUMBER },
+  ];
+  const UNAUTHORIZED_ROW: CaseRow = { id: UUID_CASE_ID, caseNumber: 'CASE-SECRET-1' };
+
+  function makeScopedApi() {
+    return async (page: number, limit: number): Promise<CaseReferencePage<CaseRow>> => {
+      const start = (page - 1) * limit;
+      return {
+        data: AUTHORIZED_ROWS.slice(start, start + limit),
+        pagination: { page, limit, total: AUTHORIZED_ROWS.length },
+      };
+    };
+  }
+
+  it('resolves an authorized legacy caseNumber alias', async () => {
+    const resolved = await findCaseByReference(LEGACY_CASE_NUMBER, makeScopedApi());
+    assert.equal(resolved?.id, COMPACT_CASE_ID);
+  });
+
+  it('cannot resolve an unauthorized UUID or caseNumber through the scoped list', async () => {
+    assert.equal(await findCaseByReference(UNAUTHORIZED_ROW.id, makeScopedApi()), null);
+    assert.equal(await findCaseByReference(UNAUTHORIZED_ROW.caseNumber, makeScopedApi()), null);
+  });
+
+  it('the paginated fallback cannot enumerate unauthorized cases', async () => {
+    const seen: string[] = [];
+    const fetchPage = makeScopedApi();
+    for (let page = 1; page <= 5; page += 1) {
+      const response = await fetchPage(page, 1);
+      seen.push(...response.data.map((row) => row.id));
+    }
+    assert.ok(!seen.includes(UNAUTHORIZED_ROW.id), 'unauthorized case must never appear in a page');
+    assert.equal(await findCaseByReference(UNAUTHORIZED_ROW.id, makeScopedApi()), null);
   });
 });
 

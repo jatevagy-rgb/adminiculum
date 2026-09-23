@@ -16,6 +16,7 @@ import { filterLedgerItems } from "@/lib/documents/ledgerSearch";
 import {
   findCaseByReference,
   findRequestedDocument,
+  isCaseLookupAuthorizationDenial,
   isRequestedDocumentUnresolved,
   resolveRequestedDocumentId,
   shouldDefaultSelectDocument,
@@ -601,11 +602,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         let record;
         try {
           record = await getCaseById(resolvedParams.caseId);
-        } catch {
-          record = await findCaseByReference(
-            resolvedParams.caseId,
-            (page, limit) => getCases(page, limit),
-          );
+        } catch (error) {
+          // An explicit 403 is a known authorization denial, not identity-format
+          // ambiguity: terminate here (fail closed) and never scan GET /cases.
+          // A non-403 failure (404 legacy caseNumber, transport/5xx) still falls
+          // back to the paginated exact-reference alias scan.
+          record = isCaseLookupAuthorizationDenial(error)
+            ? null
+            : await findCaseByReference(
+                resolvedParams.caseId,
+                (page, limit) => getCases(page, limit),
+              );
         }
         if (cancelled) return;
         if (record) {
