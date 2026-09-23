@@ -6,12 +6,12 @@ const source = readFileSync('src/app/clients/page.tsx', 'utf8');
 
 test('client directory provides a compact DataTable comparison view by default', () => {
   assert.match(source, /const \[viewMode, setViewMode\] = useState<"table" \| "cards">\("table"\);/);
-  assert.match(source, /<DataTable minWidth=\{760\}>/);
+  assert.match(source, /<DataTable className="md:min-w-\[760px\]">/);
   assert.match(source, /<DataTableHead>/);
   assert.match(source, /<DataTableHeaderCell>Ügyfél neve<\/DataTableHeaderCell>/);
-  assert.match(source, /<DataTableHeaderCell>Kapcsolattartó<\/DataTableHeaderCell>/);
-  assert.match(source, /<DataTableHeaderCell>Elérhetőség<\/DataTableHeaderCell>/);
-  assert.match(source, /<DataTableHeaderCell>Státusz<\/DataTableHeaderCell>/);
+  assert.match(source, /<DataTableHeaderCell className="hidden md:table-cell">Kapcsolattartó<\/DataTableHeaderCell>/);
+  assert.match(source, /<DataTableHeaderCell className="hidden md:table-cell">Elérhetőség<\/DataTableHeaderCell>/);
+  assert.match(source, /<DataTableHeaderCell className="hidden md:table-cell">Státusz<\/DataTableHeaderCell>/);
   assert.match(source, /<DataTableHeaderCell align="right">Műveletek<\/DataTableHeaderCell>/);
   assert.match(source, /<DataTableBody>/);
   assert.match(source, /<DataTableRow key=\{client\.id\}>/);
