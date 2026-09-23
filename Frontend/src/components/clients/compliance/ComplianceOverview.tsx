@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link";
 import { getCases, type CaseListItem } from "@/lib/api";
 import { bindComplianceProposal, confirmComplianceProposal, createComplianceProposal, listComplianceProposals, proposalKinds, rejectComplianceProposal, startCaseFromComplianceProposal, updateComplianceProposal, type ComplianceProposal } from "@/lib/complianceProposalApi";
+import { complianceOverviewApi, type ComplianceEvidenceRecordView, type ComplianceEvidenceSourceType, type ComplianceEvidenceStatus } from "@/lib/complianceOverviewApi";
 
 export type ComplianceApplicabilityStatus =
   | "APPLIES"
@@ -38,9 +39,13 @@ export type ComplianceControlSummary = {
     title: string;
     controls: Array<{
       title: string;
+      controlDefinitionId?: string;
+      controlId?: string | null;
       implementationStatus: string | null;
       owner: string | null;
+      lastReviewedAt?: string | null;
       nextReviewAt: string | null;
+      evidence?: ComplianceEvidenceRecordView[];
       evidenceSummary: { acceptedCurrent: number; stale: number; missing: boolean };
       /** Canonical workforce gap classification. Optional for older payloads. */
       gap?: ComplianceControlGap | null;
@@ -95,16 +100,168 @@ export function deriveControlEvidenceGap(control: {
   return "MISSING_EVIDENCE";
 }
 
+export const complianceEvidenceSourceLabels: Record<ComplianceEvidenceSourceType, string> = {
+  DOCUMENT_VERSION: "Dokumentumverzió",
+  CLIENT_FACT: "Vállalati adat",
+  OBSERVATION: "Megfigyelés",
+  EXTERNAL_REFERENCE: "Külső hivatkozás",
+};
+
+export const complianceEvidenceStatusLabels: Record<ComplianceEvidenceStatus, string> = {
+  PROVIDED: "Rögzítve",
+  UNDER_REVIEW: "Felülvizsgálat alatt",
+  ACCEPTED: "Elfogadva",
+  REJECTED: "Elutasítva",
+};
+
+type ComplianceControlEntry = ComplianceControlSummary["requirements"][number]["controls"][number];
+
+function controlKey(control: ComplianceControlEntry, index: number): string {
+  return control.controlDefinitionId || `${control.title}-${index}`;
+}
+
+export function ComplianceControlEvidencePanel({
+  control,
+  busy,
+  adding,
+  title,
+  reference,
+  error,
+  onToggleAdd,
+  onTitleChange,
+  onReferenceChange,
+  onCancelAdd,
+  onSubmitAdd,
+  onReview,
+}: {
+  control: ComplianceControlEntry;
+  busy: boolean;
+  adding: boolean;
+  title: string;
+  reference: string;
+  error: string | null;
+  onToggleAdd: () => void;
+  onTitleChange: (value: string) => void;
+  onReferenceChange: (value: string) => void;
+  onCancelAdd: () => void;
+  onSubmitAdd: () => void;
+  onReview: (evidenceId: string, status: ComplianceEvidenceStatus) => void;
+}) {
+  const evidenceRecords = control.evidence || [];
+  return (
+    <div className="mt-2 space-y-2">
+      {error ? <p role="alert" className="mb-2 text-xs text-red-800">{error}</p> : null}
+      {evidenceRecords.length ? (
+        <ul className="space-y-2">
+          {evidenceRecords.map((evidence) => (
+            <li key={evidence.id} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-[var(--adm-text)]">{evidence.title}</p>
+                  <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">
+                    {complianceEvidenceSourceLabels[evidence.sourceType] || "Bizonyíték"} · {complianceEvidenceStatusLabels[evidence.status] || evidence.status}
+                  </p>
+                </div>
+                {evidence.status === "PROVIDED" || evidence.status === "UNDER_REVIEW" ? (
+                  <div className="flex gap-1">
+                    <button type="button" disabled={busy} onClick={() => onReview(evidence.id, "ACCEPTED")} className="rounded border border-[var(--adm-green-800)] bg-white px-2 py-1 text-[11px] text-[var(--adm-green-800)] disabled:opacity-50">Elfogadás</button>
+                    <button type="button" disabled={busy} onClick={() => onReview(evidence.id, "REJECTED")} className="rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-[11px] text-[var(--adm-text)] disabled:opacity-50">Elutasítás</button>
+                  </div>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-[var(--adm-text-muted)]">Ehhez az intézkedéshez még nincs rögzített bizonyíték.</p>
+      )}
+      {adding ? (
+        <form className="space-y-2" onSubmit={(event) => { event.preventDefault(); onSubmitAdd(); }}>
+          <input aria-label="Bizonyíték címe" required value={title} onChange={(event) => onTitleChange(event.target.value)} placeholder="Bizonyíték címe" className="w-full rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]" />
+          <input aria-label="Külső hivatkozás" required value={reference} onChange={(event) => onReferenceChange(event.target.value)} placeholder="Külső hivatkozás (pl. szabályzat hivatkozása vagy URL)" className="w-full rounded border border-[var(--adm-border)] bg-white px-2 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]" />
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="rounded border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Bizonyíték hozzáadása</button>
+            <button type="button" disabled={busy} onClick={onCancelAdd} className="rounded border border-[var(--adm-border)] bg-white px-3 py-1.5 text-xs text-[var(--adm-text)] disabled:opacity-50">Mégse</button>
+          </div>
+        </form>
+      ) : (
+        <button
+          type="button"
+          disabled={busy || !control.controlDefinitionId}
+          onClick={onToggleAdd}
+          className="rounded border border-[var(--adm-border)] bg-white px-2 py-1 text-[11px] text-[var(--adm-text)] disabled:opacity-50"
+        >
+          Bizonyíték hozzáadása
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function ComplianceControlsSection({
   state,
   onRetry,
+  clientId,
+  onChanged,
 }: {
   state: ComplianceControlsState;
   onRetry: () => void;
+  clientId?: string;
+  onChanged?: () => void;
 }) {
   const controls = state.status === "success"
     ? state.summary.requirements.flatMap((item) => item.controls)
     : [];
+  const interactive = Boolean(clientId);
+  const [expandedControl, setExpandedControl] = useState<string | null>(null);
+  const [addingFor, setAddingFor] = useState<string | null>(null);
+  const [evidenceTitle, setEvidenceTitle] = useState("");
+  const [evidenceReference, setEvidenceReference] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const addEvidence = async (control: ComplianceControlEntry) => {
+    if (!clientId || busy) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      let controlId = control.controlId;
+      if (!controlId) {
+        if (!control.controlDefinitionId) throw new Error("no-control-definition");
+        const created = await complianceOverviewApi.createClientControl(clientId, { controlDefinitionId: control.controlDefinitionId });
+        controlId = created.id;
+      }
+      const evidence = await complianceOverviewApi.createEvidenceRecord(clientId, {
+        sourceType: "EXTERNAL_REFERENCE",
+        title: evidenceTitle.trim(),
+        externalReference: evidenceReference.trim(),
+      });
+      await complianceOverviewApi.linkEvidenceToControl(clientId, controlId, evidence.id);
+      setAddingFor(null);
+      setEvidenceTitle("");
+      setEvidenceReference("");
+      onChanged?.();
+    } catch {
+      setActionError("A bizonyíték rögzítése nem sikerült. Ellenőrizd az adatokat, majd próbáld újra.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const review = async (evidenceId: string, status: ComplianceEvidenceStatus) => {
+    if (!clientId || busy) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await complianceOverviewApi.reviewEvidenceRecord(clientId, evidenceId, { status });
+      onChanged?.();
+    } catch {
+      setActionError("A felülvizsgálat nem sikerült. Próbáld újra.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section className="mt-4 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-5" data-testid="compliance-controls-section">
       <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Intézkedések és bizonyítékok</h2>
@@ -120,6 +277,7 @@ export function ComplianceControlsSection({
         <ul className="mt-3 space-y-3">
           {controls.map((control, index) => {
             const gap = deriveControlEvidenceGap(control);
+            const key = controlKey(control, index);
             return (
             <li key={`${control.title}-${index}`} className="rounded border border-[var(--adm-border)] p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -132,6 +290,33 @@ export function ComplianceControlsSection({
                 Bizonyíték: {control.evidenceSummary.acceptedCurrent} aktuális · {control.evidenceSummary.stale} felülvizsgálandó
               </p>
               {control.nextReviewAt ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Következő felülvizsgálat: {control.nextReviewAt.slice(0, 10)}</p> : null}
+              {interactive ? (
+                <div className="mt-3 border-t border-[var(--adm-border)] pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedControl(expandedControl === key ? null : key)}
+                    className="text-xs text-[var(--adm-ochre-500)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]"
+                  >
+                    {expandedControl === key ? "Bizonyítékok elrejtése" : "Bizonyítékok kezelése"}
+                  </button>
+                  {expandedControl === key ? (
+                    <ComplianceControlEvidencePanel
+                      control={control}
+                      busy={busy}
+                      adding={addingFor === key}
+                      title={evidenceTitle}
+                      reference={evidenceReference}
+                      error={actionError}
+                      onToggleAdd={() => { setAddingFor(key); setEvidenceTitle(""); setEvidenceReference(""); }}
+                      onTitleChange={setEvidenceTitle}
+                      onReferenceChange={setEvidenceReference}
+                      onCancelAdd={() => setAddingFor(null)}
+                      onSubmitAdd={() => { void addEvidence(control); }}
+                      onReview={(evidenceId, status) => { void review(evidenceId, status); }}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
             </li>
             );
           })}

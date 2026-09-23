@@ -146,6 +146,11 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     await expect(linkEvidenceToControl(actor, secondClientId, first.id, current.id, db)).rejects.toBeTruthy();
     expect((await getControlCoverage(actor, clientId, db)).requirements[0].controls[0].evidenceSummary.stale).toBe(1);
     expect((await getControlCoverage(actor, clientId, db)).requirements[0].controls[0].gap).toBe('EVIDENCED');
+    const coverageEntry = (await getControlCoverage(actor, clientId, db)).requirements[0].controls[0];
+    expect(coverageEntry.controlDefinitionId).toBeTruthy();
+    expect(coverageEntry.controlId).toBeTruthy();
+    expect(coverageEntry.evidence.some((item) => item.id === current.id && item.status === 'ACCEPTED')).toBe(true);
+    expect(coverageEntry.evidence.some((item) => item.id === stale.id && item.status === 'ACCEPTED')).toBe(true);
     expect((await db.evidenceRecord.findUniqueOrThrow({ where: { id: stale.id } })).status).toBe('ACCEPTED');
     expect((await db.clientControl.findUniqueOrThrow({ where: { id: first.id } })).implementationStatus).toBe('NOT_ASSESSED');
     void definition;

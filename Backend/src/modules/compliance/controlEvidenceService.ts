@@ -288,10 +288,21 @@ export async function getControlCoverage(actor: InternalActor, clientId: string,
         const current = accepted.filter((item) => isEvidenceCurrent(item.validFrom, item.validUntil, now));
         return {
           title: map.controlDefinition.title,
+          controlDefinitionId: map.controlDefinitionId,
+          controlId: control?.id ?? null,
           implementationStatus: control ? String(control.implementationStatus) : null,
           owner: control?.ownerUser?.name || null,
           lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,
           nextReviewAt: control?.nextReviewAt?.toISOString() || null,
+          evidence: evidence.map((item) => ({
+            id: item.id,
+            title: item.title,
+            description: item.description,
+            status: String(item.status),
+            sourceType: String(item.sourceType),
+            validFrom: item.validFrom?.toISOString() ?? null,
+            validUntil: item.validUntil?.toISOString() ?? null,
+          })),
           evidenceSummary: { acceptedCurrent: current.length, stale: accepted.length - current.length, missing: current.length === 0 },
           gap: classifyControlEvidenceGap({
             implementationStatus: control ? String(control.implementationStatus) : 'NOT_ASSESSED',

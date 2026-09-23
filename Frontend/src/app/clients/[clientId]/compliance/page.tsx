@@ -412,7 +412,7 @@ export default function ClientCompliancePage() {
                     error={complianceError}
                     onRetry={() => { void loadCompliance(); }}
                   />
-                  <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} />
+                  <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} clientId={client.id} onChanged={() => { void loadCompliance(); }} />
 
                   {/* 5. Javasolt műveletek */}
                   <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />
