@@ -28,11 +28,16 @@ test("Document add and immutable version upload remain distinct", () => {
   assert.doesNotMatch(source, /contentEditable/);
 });
 
-test("Document workspace resolves the case directly before the legacy paginated fallback", () => {
+test("Document workspace resolves the case directly before the exact legacy-reference fallback", () => {
   const source = documentPage();
   assert.match(source, /getCaseById\(resolvedParams\.caseId\)/);
-  assert.match(source, /getCases\(1, 200\)/);
-  assert.match(source, /item\.caseNumber === resolvedParams\.caseId/);
+  const directIndex = source.indexOf('getCaseById(resolvedParams.caseId)');
+  const fallbackIndex = source.indexOf('findCaseByReference(');
+  assert.ok(directIndex >= 0 && fallbackIndex > directIndex,
+    'the canonical id lookup must run before the legacy-reference fallback');
+  assert.match(source, /findCaseByReference\(/);
+  assert.doesNotMatch(source, /getCases\(1, 200\)/,
+    'the case fallback must not depend on an arbitrary first-page window');
 });
 
 test("Document Workspace surfaces existing Legal Analysis only for a real versioned document", () => {

@@ -14,6 +14,13 @@ import {
 } from "@/lib/documents/versionTextAvailability";
 import { filterLedgerItems } from "@/lib/documents/ledgerSearch";
 import {
+  findCaseByReference,
+  findRequestedDocument,
+  isRequestedDocumentUnresolved,
+  resolveRequestedDocumentId,
+  shouldDefaultSelectDocument,
+} from "@/lib/workspace/identityResolution";
+import {
   EMPTY_READER_SEARCH,
   buildReaderHighlightSegments,
   buildReaderHighlightSegmentsInRange,
@@ -428,6 +435,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const hasLoadedOnceRef = useRef(false);
+  // Explicit identity resolution state. A requested case that cannot be resolved
+  // must fail closed (truthful not-found), never spin forever and never select
+  // another case.
+  const [caseResolution, setCaseResolution] = useState<'loading' | 'resolved' | 'not-found'>('loading');
+  // True once a requested documentId could not be matched in this case. The URL is
+  // left untouched and nothing else is selected.
+  const [requestedDocumentUnresolved, setRequestedDocumentUnresolved] = useState(false);
 
   // Handoff package creation state
   const [isCreatingHandoffPackage, setIsCreatingHandoffPackage] = useState(false);
@@ -513,10 +527,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const pathname = usePathname();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
   const requestedVersionId = searchParams?.get("versionId") ?? null;
-  const requestedDocumentIdRef = useRef<string | null>(requestedDocumentId);
+  // The requested document identity is authoritative and must survive the first
+  // client render, before the router has hydrated search params. Without the live
+  // location fallback the workspace lost the deep link and default-selected another
+  // document, rewriting the URL (live P1 F-001).
+  const resolvedRequestedDocumentId = resolveRequestedDocumentId(
+    requestedDocumentId,
+    typeof window !== "undefined" ? window.location.search : null,
+  );
+  const requestedDocumentIdRef = useRef<string | null>(resolvedRequestedDocumentId);
   const requestedVersionIdRef = useRef<string | null>(requestedVersionId);
-  if (requestedDocumentId) {
-    requestedDocumentIdRef.current = requestedDocumentId;
+  if (resolvedRequestedDocumentId) {
+    requestedDocumentIdRef.current = resolvedRequestedDocumentId;
   }
   if (requestedVersionId) {
     requestedVersionIdRef.current = requestedVersionId;
@@ -567,19 +589,25 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     syncDocumentIdToUrl(item.item.id, history);
   }, [syncDocumentIdToUrl]);
 
-  // Resolve a canonical case ID directly so document controls do not depend on
-  // the case appearing in an arbitrary pagination window. Keep the list lookup
-  // only for legacy case-number URLs.
+  // Resolve the requested case reference authoritatively: canonical Case.id first
+  // (UUID-like OR compact/legacy), then an exact legacy case-number alias scan.
+  // The alias scan is exhaustive across pages, never a first-page window, and never
+  // a positional/unrelated case. If nothing matches, fail closed.
   useEffect(() => {
+    let cancelled = false;
     const fetchCaseRecord = async () => {
+      setCaseResolution('loading');
       try {
         let record;
         try {
           record = await getCaseById(resolvedParams.caseId);
         } catch {
-          const response = await getCases(1, 200);
-          record = response.data.find((item) => item.caseNumber === resolvedParams.caseId);
+          record = await findCaseByReference(
+            resolvedParams.caseId,
+            (page, limit) => getCases(page, limit),
+          );
         }
+        if (cancelled) return;
         if (record) {
           setCaseRecord({
             id: record.id,
@@ -591,12 +619,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             matterType: record.matterType,
             status: record.status,
           });
+          setCaseResolution('resolved');
+        } else {
+          setCaseResolution('not-found');
         }
       } catch {
-        // Fall back to mock data
+        if (!cancelled) setCaseResolution('not-found');
       }
     };
     fetchCaseRecord();
+    return () => {
+      cancelled = true;
+    };
   }, [resolvedParams.caseId]);
 
   const loadData = useCallback(async (isFirstLoad: boolean) => {
@@ -620,35 +654,43 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setUploadedDocuments(uploaded);
       setModifiedWorkingCopies(modified);
       setTimeline(timelineData);
-      // Auto-select deep-linked document if requested, otherwise default first-available.
-      // Only run selection logic on first load to avoid flicker from re-selection on refresh
+      // A requested document identity is authoritative. Resolve it by exact match;
+      // only default to the first available document when the URL requests none.
+      // A requested-but-unresolved document fails closed: nothing is selected and
+      // the requested URL is left untouched (live P1 F-001).
       if (!hasLoadedOnceRef.current) {
         hasLoadedOnceRef.current = true;
         const deepLinkedId = requestedDocumentIdRef.current;
-        if (deepLinkedId) {
-          const uploadedMatch = uploadedDocsData.find(doc => doc.id === deepLinkedId);
-          if (uploadedMatch) {
-            setSelectedLedgerItem({ kind: 'uploaded', item: uploadedMatch });
-            setSelectedContract(null);
-            syncWorkspaceIdentityToUrl({ documentId: uploadedMatch.id, versionId: requestedVersionIdRef.current }, "replace");
-            requestedDocumentIdRef.current = null;
-          } else {
-            const contractMatch = contractsData.find(c => c.id === deepLinkedId);
-            if (contractMatch) {
-              setSelectedLedgerItem({ kind: 'generated', item: contractMatch });
-              setSelectedContract(contractMatch);
-              syncWorkspaceIdentityToUrl({ documentId: contractMatch.id, versionId: requestedVersionIdRef.current }, "replace");
-              requestedDocumentIdRef.current = null;
-            }
-          }
-        } else if (uploaded[0]) {
-          setSelectedLedgerItem({ kind: 'uploaded', item: uploaded[0] });
+        const deepLinkedUploaded = findRequestedDocument(deepLinkedId, [uploadedDocsData]);
+        const deepLinkedContract = deepLinkedUploaded
+          ? null
+          : findRequestedDocument(deepLinkedId, [contractsData]);
+        if (deepLinkedUploaded) {
+          setSelectedLedgerItem({ kind: 'uploaded', item: deepLinkedUploaded });
           setSelectedContract(null);
-          syncDocumentIdToUrl(uploaded[0].id, "replace");
-        } else if (contractsData[0]) {
-          setSelectedLedgerItem({ kind: 'generated', item: contractsData[0] });
-          setSelectedContract(contractsData[0]);
-          syncDocumentIdToUrl(contractsData[0].id, "replace");
+          syncWorkspaceIdentityToUrl({ documentId: deepLinkedUploaded.id, versionId: requestedVersionIdRef.current }, "replace");
+          setRequestedDocumentUnresolved(false);
+          requestedDocumentIdRef.current = null;
+        } else if (deepLinkedContract) {
+          setSelectedLedgerItem({ kind: 'generated', item: deepLinkedContract });
+          setSelectedContract(deepLinkedContract);
+          syncWorkspaceIdentityToUrl({ documentId: deepLinkedContract.id, versionId: requestedVersionIdRef.current }, "replace");
+          setRequestedDocumentUnresolved(false);
+          requestedDocumentIdRef.current = null;
+        } else if (shouldDefaultSelectDocument(deepLinkedId)) {
+          if (uploaded[0]) {
+            setSelectedLedgerItem({ kind: 'uploaded', item: uploaded[0] });
+            setSelectedContract(null);
+            syncDocumentIdToUrl(uploaded[0].id, "replace");
+          } else if (contractsData[0]) {
+            setSelectedLedgerItem({ kind: 'generated', item: contractsData[0] });
+            setSelectedContract(contractsData[0]);
+            syncDocumentIdToUrl(contractsData[0].id, "replace");
+          }
+        } else {
+          setSelectedLedgerItem(null);
+          setSelectedContract(null);
+          setRequestedDocumentUnresolved(true);
         }
       }
     } catch (err) {
@@ -661,20 +703,27 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   useEffect(() => {
     if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length && !modifiedWorkingCopies.length)) return;
-    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId)
-      || modifiedWorkingCopies.find((document) => document.id === requestedDocumentId);
+    const uploadedMatch = findRequestedDocument(requestedDocumentId, [uploadedDocuments, modifiedWorkingCopies]);
     if (uploadedMatch) {
+      setRequestedDocumentUnresolved(false);
       if (selectedLedgerItem?.kind !== "uploaded" || selectedLedgerItem.item.id !== uploadedMatch.id) {
         setSelectedLedgerItem({ kind: "uploaded", item: uploadedMatch });
         setSelectedContract(null);
       }
       return;
     }
-    const contractMatch = contracts.find((contract) => contract.id === requestedDocumentId);
-    if (contractMatch && (selectedLedgerItem?.kind !== "generated" || selectedLedgerItem.item.id !== contractMatch.id)) {
-      setSelectedLedgerItem({ kind: "generated", item: contractMatch });
-      setSelectedContract(contractMatch);
+    const contractMatch = findRequestedDocument(requestedDocumentId, [contracts]);
+    if (contractMatch) {
+      setRequestedDocumentUnresolved(false);
+      if (selectedLedgerItem?.kind !== "generated" || selectedLedgerItem.item.id !== contractMatch.id) {
+        setSelectedLedgerItem({ kind: "generated", item: contractMatch });
+        setSelectedContract(contractMatch);
+      }
+      return;
     }
+    // The URL requests a document that does not exist in this case. Stay truthful:
+    // never select another document, never rewrite the requested URL.
+    setRequestedDocumentUnresolved(isRequestedDocumentUnresolved(requestedDocumentId, true, null));
   }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments, modifiedWorkingCopies]);
 
   // Re-trigger loadData once caseRecord is resolved to CUID — only on mount
@@ -2120,7 +2169,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             {isUploading && uploadPhase ? <div className="rounded-[10px] border border-[#D8C58E] bg-[var(--adm-surface)] p-3 text-sm font-semibold text-[#6D5418]">{uploadPhase}</div> : null}
             {isRefreshing ? <div className="rounded-[10px] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-2 text-xs text-[var(--adm-text-muted)]">Frissítés...</div> : null}
 
-            {isInitialLoading ? (
+            {caseResolution === "not-found" ? (
+              <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Az ügy nem található</AdminPanel>
+            ) : isInitialLoading ? (
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
               <div className="space-y-6">
@@ -2138,6 +2189,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </Link>
                         {displayMatterName ? <span className="truncate text-[var(--adm-text-muted)]">· {displayMatterName}</span> : null}
                       </div>
+                      {requestedDocumentUnresolved ? (
+                        <p data-testid="requested-document-unresolved" className="mb-1 text-[11px] font-medium text-[var(--adm-terracotta-700)]">
+                          A hivatkozott dokumentum nem található ebben az ügyben.
+                        </p>
+                      ) : null}
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">
                           Kanonikus dokumentum felület

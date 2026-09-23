@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { getCaseContracts, getCaseDocuments, getCaseById, getCases, getCaseTimeline, downloadContract, downloadDocument, deleteDocument, uploadCaseDocument, getCaseAnonymousDocuments, getCaseTasks, startTask, submitTask, completeTask, blockTask, unblockTask, getWorkflowGraph, getCaseWorkflowHistory, getUsers, assignCase, updateCaseStatus, updateCase, getCommunications, createCommunication, getCaseCollaborators, addCaseCollaborator, removeCaseCollaborator, getCaseWorkflowSummary, getCaseWorkItems, getCaseActivity, getWorkflowAgenda, getCaseResponsibility, createDocumentSourceTask, createCommunicationSourceTask, ApiError, safeUploadErrorMessage, type DocumentItem, type CaseWorkflowSummary, type CaseWorkItemsResponse, type CaseWorkItem, type CaseActivityResponse, type CaseActivityItem, type CommunicationItem, type TimelineEventItem, type AnonymousDocumentListItem, type ImportAIResponseResult, type TaskItem, type WorkflowGraph, type WorkflowNode, type CaseWorkflowHistoryItem, type User, type CaseCollaborator, type WorkflowAgendaResponse, type WorkflowDeadlineItem, type CaseResponsibilityResponse } from "@/lib/api";
 import { closeCaseLifecycle, archiveCaseLifecycle } from "@/lib/api";
 import type { CaseListItem } from "@/lib/api";
+import { findCaseByReference } from "@/lib/workspace/identityResolution";
 import { AnonymizeModal, type AnonymizeResult } from "@/components/documents/AnonymizeModal";
 import { RehydrateModal } from "@/components/documents/RehydrateModal";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
@@ -539,16 +540,18 @@ export function CaseDetail({ params }: CaseDetailProps) {
       if (!caseRecord) {
         // Resolve the canonical case identity directly by id first, so case
         // controls do not depend on the case appearing in an arbitrary
-        // pagination window of GET /cases. Keep the list lookup only as a
-        // fallback for legacy case-number URLs.
+        // pagination window of GET /cases. The legacy case-number alias is
+        // resolved by an EXACT reference scan across pages — never a positional
+        // or "first case" fallback. If nothing matches the requested reference,
+        // fail closed and never display a different case.
         let record: CaseListItem | null = null;
         try {
           record = await getCaseById(resolvedParams.caseId);
         } catch {
-          const caseList = await getCases(1, 200).catch(() => ({ data: [] }));
-          record = caseList.data.find(
-            (item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId
-          ) || null;
+          record = await findCaseByReference(
+            resolvedParams.caseId,
+            (page, limit) => getCases(page, limit),
+          ).catch(() => null);
         }
         if (record) {
           setCaseRecord({
@@ -568,10 +571,9 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setIsLoadingWorkflowSummary(true);
       setWorkflowSummaryError(null);
       setWorkItemsError(null);
-      const [contracts, timeline, caseList, backendDocuments, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse, caseResponsibilityResponse] = await Promise.all([
+      const [contracts, timeline, backendDocuments, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse, caseResponsibilityResponse] = await Promise.all([
         getCaseContracts(effectiveCaseId).catch(() => []),
         getCaseTimeline(effectiveCaseId).catch(() => []),
-        getCases(1, 200).catch(() => ({ data: [] })),
         getCaseDocuments(effectiveCaseId).catch(() => []),
         getCommunications({ caseId: effectiveCaseId, limit: 50 }).catch(() => ({ communications: [], pagination: { total: 0, limit: 50, offset: 0 } })),
         getCaseWorkflowSummary(effectiveCaseId).catch((error) => {
@@ -596,19 +598,6 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setCaseActivity(caseActivityResponse);
       setCaseAgenda(caseAgendaResponse);
       setCaseResponsibility(caseResponsibilityResponse);
-      const record = caseList.data.find((item) => item.caseNumber === resolvedParams.caseId || item.id === resolvedParams.caseId) || null;
-      if (!caseRecord && record) {
-        setCaseRecord({
-          id: record.id,
-          caseNumber: record.caseNumber,
-          title: record.title ?? null,
-          clientName: record.clientName ?? null,
-          matterType: record.matterType ?? null,
-          status: record.status,
-          clientRole: (record as any).clientRole ?? null,
-          deadline: record.deadline ?? null,
-        });
-      }
       setDocuments(backendDocuments.map(mapDocumentItemToCaseDocument));
     } catch (err) {
       console.error('Failed to load backend data:', err);
