@@ -105,6 +105,12 @@ function WorkspaceAreaRow({ area }: { area: ComplianceWorkspaceArea }) {
           {sourceSupportLabels[area.sourceSupportState] ? (
             <p className="text-xs text-[var(--adm-text-muted)]">Forrástámogatás: {sourceSupportLabels[area.sourceSupportState]}</p>
           ) : null}
+          {area.normativeStatement ? (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Előírt követelmény</p>
+              <p className="mt-1 text-sm text-[var(--adm-text)]">{area.normativeStatement}</p>
+            </div>
+          ) : null}
           {area.requirementVersionKey || area.ruleVersionKey ? (
             <p className="text-xs text-[var(--adm-text-muted)]">
               {area.requirementVersionKey ? `Követelményverzió: ${area.requirementVersionKey}` : null}

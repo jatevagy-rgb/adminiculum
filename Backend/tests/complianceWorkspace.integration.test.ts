@@ -134,7 +134,7 @@ describeWithDatabase('compliance workspace read model (PostgreSQL)', () => {
     expect(workspace.summary.doesNotApply).toBe(1);
     expect(workspace.summary.openFindings).toBe(0);
     const area = workspace.areas[0];
-    expect(area).toMatchObject({ title: 'Követelmény cím', outcome: 'DOES_NOT_APPLY', scopeType: 'EMPLOYEE', subjectLabel: 'Minta munkavállaló', activeFindingId: null });
+    expect(area).toMatchObject({ title: 'Követelmény cím', normativeStatement: 'Pinned wording', outcome: 'DOES_NOT_APPLY', scopeType: 'EMPLOYEE', subjectLabel: 'Minta munkavállaló', activeFindingId: null });
     expect(area.usedFacts).toEqual([{ factKey: `fact_used_${suffix}`, label: null, value: '9' }]);
     expect(area.missingFacts).toEqual([{ factKey: `fact_missing_${suffix}`, label: null, profileAnswerable: false }]);
     expect(JSON.stringify(area)).not.toMatch(/ruleAst|astJson|snapshot|ruleDigest/i);

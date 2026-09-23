@@ -33,15 +33,33 @@ export type ComplianceControlGap =
   | "MISSING_EVIDENCE"
   | "NOT_ASSESSED";
 
+export type ComplianceEvidenceFreshness = "CURRENT" | "STALE";
+
+export type ComplianceEvidenceRecordSummary = {
+  title: string;
+  status: string;
+  validFrom: string | null;
+  validUntil: string | null;
+  freshness: ComplianceEvidenceFreshness;
+};
+
 export type ComplianceControlSummary = {
   requirements: Array<{
     title: string;
     controls: Array<{
       title: string;
+      /** Persisted control description — the canonical "what evidence is expected" wording. */
+      description?: string | null;
+      type?: string | null;
+      /** Stored review cadence in days. */
+      reviewCadenceDays?: number | null;
       implementationStatus: string | null;
       owner: string | null;
+      lastReviewedAt?: string | null;
       nextReviewAt: string | null;
       evidenceSummary: { acceptedCurrent: number; stale: number; missing: boolean };
+      /** Recorded evidence records. Optional for older payloads. */
+      evidence?: ComplianceEvidenceRecordSummary[] | null;
       /** Canonical workforce gap classification. Optional for older payloads. */
       gap?: ComplianceControlGap | null;
     }>;
@@ -77,6 +95,24 @@ export const complianceGapClass: Record<ComplianceControlGap, string> = {
   MISSING_EVIDENCE: "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]",
   NOT_ASSESSED: "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]",
 };
+
+export const complianceEvidenceStatusLabels: Record<string, string> = {
+  PROVIDED: "Megadva",
+  UNDER_REVIEW: "Felülvizsgálat alatt",
+  ACCEPTED: "Elfogadva",
+  REJECTED: "Elutasítva",
+};
+
+export const complianceEvidenceFreshnessLabels: Record<ComplianceEvidenceFreshness, string> = {
+  CURRENT: "Érvényes",
+  STALE: "Nem érvényes",
+};
+
+function formatEvidenceDate(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("hu-HU");
+}
 
 /**
  * Presentation-only fallback for payloads produced before the canonical gap
@@ -128,9 +164,30 @@ export function ComplianceControlsSection({
               </div>
               <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Állapot: {complianceControlStatusLabels[control.implementationStatus || "NOT_ASSESSED"] || "Nincs felmérve"}</p>
               {control.owner ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Felelős: {control.owner}</p> : null}
+              {control.description ? (
+                <p className="mt-1 text-xs text-[var(--adm-text)]">Elvárt bizonyíték: {control.description}</p>
+              ) : null}
+              {control.reviewCadenceDays ? (
+                <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Felülvizsgálati ütem: {control.reviewCadenceDays} nap</p>
+              ) : null}
               <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
                 Bizonyíték: {control.evidenceSummary.acceptedCurrent} aktuális · {control.evidenceSummary.stale} felülvizsgálandó
               </p>
+              {Array.isArray(control.evidence) ? (
+                control.evidence.length ? (
+                  <ul className="mt-1 space-y-1">
+                    {control.evidence.map((record, recordIndex) => (
+                      <li key={`${record.title}-${recordIndex}`} className="text-xs text-[var(--adm-text)]">
+                        {record.title}
+                        <span className="text-[var(--adm-text-muted)]"> · {complianceEvidenceStatusLabels[record.status] || record.status} · {complianceEvidenceFreshnessLabels[record.freshness]}</span>
+                        {record.validUntil ? <span className="text-[var(--adm-text-muted)]"> · érvényes eddig: {formatEvidenceDate(record.validUntil)}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Nincs csatolt bizonyíték.</p>
+                )
+              ) : null}
               {control.nextReviewAt ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Következő felülvizsgálat: {control.nextReviewAt.slice(0, 10)}</p> : null}
             </li>
             );

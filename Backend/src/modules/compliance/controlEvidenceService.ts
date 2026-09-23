@@ -288,11 +288,24 @@ export async function getControlCoverage(actor: InternalActor, clientId: string,
         const current = accepted.filter((item) => isEvidenceCurrent(item.validFrom, item.validUntil, now));
         return {
           title: map.controlDefinition.title,
+          /** Persisted control description — the canonical "what evidence is expected" wording. */
+          description: map.controlDefinition.description ?? null,
+          type: String(map.controlDefinition.type),
+          reviewCadenceDays: map.controlDefinition.defaultReviewCadenceDays ?? null,
           implementationStatus: control ? String(control.implementationStatus) : null,
           owner: control?.ownerUser?.name || null,
           lastReviewedAt: control?.lastReviewedAt?.toISOString() || null,
           nextReviewAt: control?.nextReviewAt?.toISOString() || null,
           evidenceSummary: { acceptedCurrent: current.length, stale: accepted.length - current.length, missing: current.length === 0 },
+          // Recorded evidence only. Existence is never equated with compliance;
+          // `gap` and `evidenceSummary` remain the authoritative state.
+          evidence: evidence.map((item) => ({
+            title: item.title,
+            status: String(item.status),
+            validFrom: item.validFrom?.toISOString() || null,
+            validUntil: item.validUntil?.toISOString() || null,
+            freshness: freshness(item.validFrom, item.validUntil, now),
+          })),
           gap: classifyControlEvidenceGap({
             implementationStatus: control ? String(control.implementationStatus) : 'NOT_ASSESSED',
             acceptedCurrent: current.length,
