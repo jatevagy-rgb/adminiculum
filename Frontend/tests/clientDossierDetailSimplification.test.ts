@@ -43,7 +43,7 @@ test("primary order: identity → Kapcsolt ügyek → További eszközök → se
   const iCases = order("Kapcsolt ügyek", source.indexOf(">Kapcsolt ügyek<"));
   const iTools = order("További eszközök", source.indexOf('aria-label="További eszközök"'));
   const iRate = order("HourlyRateCard", source.indexOf("<HourlyRateCard"));
-  const iHouse = order("House style", source.indexOf('id="house-style"'));
+  const iHouse = order("Dokumentumstílus", source.indexOf('id="house-style"'));
   const iCorp = order("Vállalati modulok", source.indexOf("Vállalati governance és háttér"));
 
   assert.ok(iIdentity < iCases, "identity must come before related cases");

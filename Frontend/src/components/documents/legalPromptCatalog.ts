@@ -723,16 +723,16 @@ Ne állítsd, hogy hiteles fordítást készítettél. Írd: „fordítási munk
 
   {
     id: "houseStyleAdaptation",
-    label: "Ügyfél house style alkalmazása",
-    shortLabel: "House style",
+    label: "Ügyfél dokumentumstílus alkalmazása",
+    shortLabel: "Dokumentumstílus",
     category: "formatting",
     description: "Szerződéses munkaszöveg ügyfél-stílusra alakítása.",
     requiresDocumentText: true,
     buildBody: () =>
-      `Alakítsd át a szerződéses munkaszöveget ügyfél house style követelmények szerint.
+      `Alakítsd át a szerződéses munkaszöveget ügyfél dokumentumstílus követelmények szerint.
 
-Ha nincs megadva house style profil, először készíts ellenőrző listát:
-| House style elem | Státusz | Megjegyzés |
+Ha nincs megadva dokumentumstílus profil, először készíts ellenőrző listát:
+| Dokumentumstílus elem | Státusz | Megjegyzés |
 |---|---|---|
 (soronként)
 

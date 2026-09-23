@@ -156,7 +156,7 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
           setIsEditing(false);
           return;
         }
-        setError("A house style profil most nem érhető el.");
+        setError("A dokumentumstílus profil most nem érhető el.");
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -179,10 +179,10 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
       setProfile(saved);
       setForm(toForm(saved));
       setIsEditing(false);
-      setMessage("House style profil mentve.");
+      setMessage("Dokumentumstílus profil mentve.");
       onSaved?.();
     } catch {
-      setError("A house style profil mentése sikertelen.");
+      setError("A dokumentumstílus profil mentése sikertelen.");
     } finally {
       setIsSaving(false);
     }
@@ -207,7 +207,7 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
     <section className={`border border-[var(--adm-border)] bg-[var(--adm-surface)] ${compact ? "p-3" : "p-4"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyfélprofil / house style</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyfélprofil / dokumentumstílus</p>
           <h3 className="mt-1 font-serif text-xl font-medium text-[var(--adm-text)]">{clientName || "Ügyfél"}</h3>
           <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">
             Ez a profil prompt- és dokumentum-előkészítési segédlet. Nem módosítja automatikusan a Word-dokumentumot.
@@ -224,7 +224,7 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
 
       {!isLoading && !error && !hasProfileContent(profile) && !isEditing ? (
         <div className="mt-3 rounded border border-[var(--adm-border)] bg-white p-3">
-          <p className="text-xs font-semibold text-[var(--adm-text)]">Ehhez az ügyfélhez még nincs részletes house style profil.</p>
+          <p className="text-xs font-semibold text-[var(--adm-text)]">Ehhez az ügyfélhez még nincs részletes dokumentumstílus profil.</p>
           <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">A profil csak akkor jelenik meg, ha valós ügyfél-specifikus stílus- és dokumentumelvárásokat rögzítesz.</p>
           <AdminButton size="sm" variant="neutral" onClick={() => setIsEditing(true)} className="mt-3">Profil létrehozása</AdminButton>
         </div>
@@ -233,7 +233,7 @@ export function ClientHouseStylePanel({ clientId, clientName, compact = false, o
       {!isLoading && !error && hasProfileContent(profile) && !isEditing ? (
         <div className="mt-3 space-y-3">
           <p className="rounded border border-[var(--adm-border)] bg-white p-3 text-xs text-[#3D4842]">
-            {summary || "Ehhez az ügyfélhez még nincs részletes house style profil."}
+            {summary || "Ehhez az ügyfélhez még nincs részletes dokumentumstílus profil."}
           </p>
           <div className="rounded border border-[var(--adm-border)] bg-white p-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Fejléc / arculati minta</p>

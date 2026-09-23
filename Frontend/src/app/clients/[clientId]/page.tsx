@@ -485,7 +485,7 @@ function ClientDetailContent() {
                 {clientColorDef.key && (
                   <span className={`h-2 w-2 rounded-full ${clientColorDef.accentClass}`} aria-hidden="true" />
                 )}
-                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">House style</h3>
+                <h3 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Dokumentumstílus</h3>
               </div>
               <p className="text-[10px] text-[var(--adm-text-muted)]">
                 Ügyfél-specifikus dokumentumstílus és külső prompt-copy instrukciós kontextus.

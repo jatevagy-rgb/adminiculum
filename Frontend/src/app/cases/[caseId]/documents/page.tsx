@@ -2513,7 +2513,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           Kanonikus olvasófelület
                         </span>
                         <span className="rounded bg-white px-2 py-0.5 text-[10px] font-semibold text-[#3D4842] border border-[rgba(22,32,26,0.10)]">
-                          Read-only előnézet · Word a szerkesztő
+                          Csak olvasható előnézet · Word a szerkesztő
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -2619,7 +2619,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               <div className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
                                 <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
-                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be read-only előnézetként.</p>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be csak olvasható előnézetként.</p>
                               </div>
                             ) : documentTextPreview ? (
                               <div className="max-h-[74vh] overflow-auto bg-[#efece4] p-4 sm:p-6">
@@ -3237,8 +3237,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                     <div className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
                                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="min-w-0">
-                                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Anchored annotations · v{selectedVersion.versionNumber}</p>
-                                          <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Read-only review surface</h4>
+                                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Horgonyzott annotációk · v{selectedVersion.versionNumber}</p>
+                                          <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Csak olvasható felület</h4>
                                           <p className="mt-1 text-xs text-[#3D4842]">
                                             Az annotációk ehhez az immutable verzióhoz kötődnek. Nincs szerkesztés, nincs automatikus migráció verziók között.
                                           </p>
@@ -3278,7 +3278,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <div className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
                                           <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
-                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be read-only előnézetként.</p>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be csak olvasható előnézetként.</p>
                                         </div>
                                       ) : documentTextPreview ? (
                                         <div data-testid="version-preview-document-text" className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">
@@ -3302,7 +3302,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
                                         <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Stabil szövegkijelölés még nincs ehhez a formátumhoz</h5>
                                         <p className="mt-2 max-w-lg text-sm text-[#3D4842]">
-                                          PDF/DOCX annotációhoz most normalizált vizuális horgonyt lehet rögzíteni ezen a read-only felületen. A letöltött fájl változatlan marad.
+                                          PDF/DOCX annotációhoz most normalizált vizuális horgonyt lehet rögzíteni ezen a csak olvasható felületen. A letöltött fájl változatlan marad.
                                         </p>
                                       </div>
                                     )}
@@ -3583,13 +3583,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <AdminPanel className="border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélprofil / house style</p>
+                        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélprofil / dokumentumstílus</p>
                         <p className="mt-1 text-xs text-[#3D4842]">
                           {isLoadingHouseStyle
                             ? "Profil betöltése..."
                             : clientHouseStyle
-                              ? houseStyleHasContent ? "House style profil elérhető." : "Profil létrehozva, de nincs kitöltve."
-                              : "Ehhez az ügyfélhez még nincs house style profil."}
+                              ? houseStyleHasContent ? "Dokumentumstílus profil elérhető." : "Profil létrehozva, de nincs kitöltve."
+                              : "Ehhez az ügyfélhez még nincs dokumentumstílus profil."}
                         </p>
                         <p className="mt-1 text-xs text-[#3D4842]">{caseRecord?.clientName || "Ügyfél"}</p>
                       </div>
