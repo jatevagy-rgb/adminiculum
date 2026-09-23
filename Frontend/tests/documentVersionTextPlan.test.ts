@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveVersionTextPlan } from '../src/lib/documents/versionTextPlan';
+import { isVersionScopedTextPlan, resolveVersionTextPlan } from '../src/lib/documents/versionTextPlan';
 
 const currentUploaded = {
   hasSelectedVersion: true,
@@ -21,23 +21,40 @@ test('non-current TXT version still uses its own stored bytes', () => {
   );
 });
 
-// B + C. Current non-TXT uploaded document -> document-level extracted text preview.
-test('current DOCX version uses the document-level text endpoint', () => {
-  assert.equal(resolveVersionTextPlan({ ...currentUploaded, fileType: 'DOCX' }), 'DOCUMENT_TEXT');
+// B. DOCX/PDF — current AND historical — use the exact version-text API.
+test('current DOCX version uses the exact version-text endpoint', () => {
+  assert.equal(resolveVersionTextPlan({ ...currentUploaded, fileType: 'DOCX' }), 'VERSION_TEXT');
 });
 
-test('current PDF version uses the document-level text endpoint', () => {
-  assert.equal(resolveVersionTextPlan({ ...currentUploaded, fileType: 'PDF' }), 'DOCUMENT_TEXT');
+test('current PDF version uses the exact version-text endpoint', () => {
+  assert.equal(resolveVersionTextPlan({ ...currentUploaded, fileType: 'PDF' }), 'VERSION_TEXT');
 });
 
-test('other current non-TXT file types also use the document-level text endpoint', () => {
+test('historical DOCX/PDF versions are version-scoped too — no document-level substitution', () => {
+  for (const fileType of ['DOCX', 'PDF']) {
+    assert.equal(
+      resolveVersionTextPlan({ ...currentUploaded, versionIsCurrent: false, fileType }),
+      'VERSION_TEXT',
+    );
+  }
+});
+
+test('version-scoped plans are explicitly identifiable', () => {
+  assert.equal(isVersionScopedTextPlan('VERSION_TEXT'), true);
+  assert.equal(isVersionScopedTextPlan('VERSION_BLOB'), true);
+  assert.equal(isVersionScopedTextPlan('DOCUMENT_TEXT'), false);
+  assert.equal(isVersionScopedTextPlan('NONE'), false);
+});
+
+// C. Non-version / non-extractable formats keep the legacy read-only preview
+// only while they are the document's CURRENT version.
+test('other current non-extractable file types keep the document-level preview', () => {
   assert.equal(resolveVersionTextPlan({ ...currentUploaded, fileType: 'FILE' }), 'DOCUMENT_TEXT');
   assert.equal(resolveVersionTextPlan({ ...currentUploaded, fileType: null }), 'DOCUMENT_TEXT');
 });
 
-// D. Non-current non-TXT — document-level current text is never substituted.
-test('non-current DOCX/PDF stays at truthful NONE — no document-level substitution', () => {
-  for (const fileType of ['DOCX', 'PDF', 'FILE']) {
+test('non-current non-extractable versions stay at truthful NONE', () => {
+  for (const fileType of ['FILE', null]) {
     assert.equal(
       resolveVersionTextPlan({ ...currentUploaded, versionIsCurrent: false, fileType }),
       'NONE',
@@ -45,11 +62,10 @@ test('non-current DOCX/PDF stays at truthful NONE — no document-level substitu
   }
 });
 
-// E. Only VERSION_BLOB (TXT) can ever feed version-scoped text anchors:
-// DOCUMENT_TEXT is a separate display channel that never reaches versionText.
+// D. Only version-scoped plans can ever feed versionText anchors:
+// DOCUMENT_TEXT is a separate display channel.
 test('document-level text plan exists only for the current version', () => {
   const states = [
-    { ...currentUploaded, versionIsCurrent: false },
     { ...currentUploaded, versionBelongsToSelectedDocument: false },
     { ...currentUploaded, documentIsUploaded: false },
     { ...currentUploaded, hasSelectedVersion: false },
@@ -60,34 +76,22 @@ test('document-level text plan exists only for the current version', () => {
   }
 });
 
-// F. Document switch: a version that has not reconciled to the selected
-// document must not trigger any fetch — including the TXT blob path, whose
-// stored bytes would otherwise render the old document's content on the new
-// document's surface.
-test('unreconciled TXT version during a document switch yields NONE', () => {
-  assert.equal(
-    resolveVersionTextPlan({
-      hasSelectedVersion: true,
-      fileType: 'TXT',
-      versionIsCurrent: true,
-      versionBelongsToSelectedDocument: false,
-      documentIsUploaded: true,
-    }),
-    'NONE',
-  );
-});
-
-test('unreconciled version during a document switch yields NONE', () => {
-  assert.equal(
-    resolveVersionTextPlan({
-      hasSelectedVersion: true,
-      fileType: 'DOCX',
-      versionIsCurrent: true,
-      versionBelongsToSelectedDocument: false,
-      documentIsUploaded: true,
-    }),
-    'NONE',
-  );
+// E. Document switch: a version that has not reconciled to the selected
+// document must not trigger any fetch — including the TXT blob and version-text
+// paths, whose stored content would otherwise render the old document's text.
+test('unreconciled version during a document switch yields NONE for every format', () => {
+  for (const fileType of ['TXT', 'DOCX', 'PDF']) {
+    assert.equal(
+      resolveVersionTextPlan({
+        hasSelectedVersion: true,
+        fileType,
+        versionIsCurrent: true,
+        versionBelongsToSelectedDocument: false,
+        documentIsUploaded: true,
+      }),
+      'NONE',
+    );
+  }
 });
 
 test('no selected version yields NONE', () => {
@@ -97,7 +101,7 @@ test('no selected version yields NONE', () => {
   );
 });
 
-test('non-uploaded document types never use the document-level preview', () => {
+test('non-uploaded document types never use the version/doc text channels', () => {
   assert.equal(
     resolveVersionTextPlan({ ...currentUploaded, documentIsUploaded: false, fileType: 'DOCX' }),
     'NONE',

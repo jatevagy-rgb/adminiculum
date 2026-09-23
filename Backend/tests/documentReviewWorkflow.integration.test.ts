@@ -106,6 +106,8 @@ describeWithDatabase('Document review PostgreSQL workflow persistence', () => {
     expect(assigned.status).toBe('ASSIGNED');
     await expect(transitionReview(review.id, 'START', { userId: ids.outsider, role: 'LEGAL_ASSISTANT' }, {}, db)).rejects.toMatchObject({ code: 'ACTOR_NOT_AUTHORIZED' });
     await transitionReview(review.id, 'START', { userId: ids.reviewer, role: 'LAWYER' }, { expectedRevision: assigned.revision }, db);
+    // VERSION-LEVEL truth: the exact version under review must no longer read NOT_IN_REVIEW.
+    expect((await db.documentVersion.findUniqueOrThrow({ where: { id: ids.v2 } })).reviewStatus).toBe('IN_REVIEW');
     const whole = await addPoint(review.id, actor, { type: 'WHOLE_DOCUMENT', title: 'Whole document review point', severity: 'NORMAL', linkedTaskId: ids.task }, db);
     expect(whole.type).toBe('WHOLE_DOCUMENT');
     await expect(addPoint(review.id, actor, { type: 'ANNOTATION', title: 'Bad annotation', annotationId: ids.otherAnnotation }, db)).rejects.toMatchObject({ code: 'ANNOTATION_NOT_IN_REVIEW_DOCUMENT' });
@@ -123,12 +125,16 @@ describeWithDatabase('Document review PostgreSQL workflow persistence', () => {
     let review = await db.documentReview.findFirstOrThrow({ where: { documentId: ids.document } });
     await expect(transitionReview(review.id, 'APPROVE', actor, { versionId: ids.v2, expectedRevision: review.revision }, db)).rejects.toMatchObject({ code: 'BLOCKING_POINTS_OPEN' });
     await transitionReview(review.id, 'REQUEST_CHANGES', actor, { safeRationale: 'Changes are required for blocking point.', expectedRevision: review.revision }, db);
+    expect((await db.documentVersion.findUniqueOrThrow({ where: { id: ids.v2 } })).reviewStatus).toBe('CHANGES_REQUESTED');
     review = await db.documentReview.findFirstOrThrow({ where: { documentId: ids.document } });
     await expect(transitionReview(review.id, 'RESUBMIT', actor, { versionId: ids.v2, expectedRevision: review.revision }, db)).rejects.toMatchObject({ code: 'NEWER_VERSION_REQUIRED' });
     const resubmitted = await transitionReview(review.id, 'RESUBMIT', actor, { versionId: ids.v3, expectedRevision: review.revision }, db);
     expect(resubmitted.status).toBe('RESUBMITTED');
     expect(resubmitted.currentRoundNumber).toBe(2);
     expect(resubmitted.currentRound?.reviewVersionId).toBe(ids.v3);
+    // Resubmission moves the version-level review state onto the new round version.
+    expect((await db.documentVersion.findUniqueOrThrow({ where: { id: ids.v3 } })).reviewStatus).toBe('IN_REVIEW');
+    expect((await db.documentVersion.findUniqueOrThrow({ where: { id: ids.v2 } })).reviewStatus).toBe('CHANGES_REQUESTED');
     const rounds = await db.documentReviewRound.findMany({ where: { reviewId: review.id }, orderBy: { roundNumber: 'asc' } });
     expect(rounds.map((r) => r.reviewVersionId)).toEqual([ids.v2, ids.v3]);
     const carried = await db.reviewPoint.findFirstOrThrow({ where: { reviewId: review.id, carriedFromPointId: { not: null }, severity: 'BLOCKING' } });
@@ -142,10 +148,14 @@ describeWithDatabase('Document review PostgreSQL workflow persistence', () => {
     const approved = await transitionReview(review.id, 'APPROVE', actor, { versionId: ids.v3, expectedRevision: refreshed.revision }, db);
     expect(approved.approvedVersionId).toBe(ids.v3);
     expect(approvalAppliesToVersion(approved.approvedVersionId, ids.v2)).toBe(false);
+    expect((await db.documentVersion.findUniqueOrThrow({ where: { id: ids.v3 } })).reviewStatus).toBe('APPROVED');
+    expect((await db.documentVersion.findUniqueOrThrow({ where: { id: ids.v2 } })).reviewStatus).toBe('CHANGES_REQUESTED');
     expect((await db.documentChangeSegment.findUniqueOrThrow({ where: { id: ids.segment } })).reviewState).toBe(beforeComparison.reviewState);
     expect((await db.documentAnnotation.findUniqueOrThrow({ where: { id: ids.annotation } })).status).toBe(beforeAnnotation.status);
     const closed = await transitionReview(review.id, 'CLOSE', actor, { expectedRevision: approved.revision }, db);
     expect(closed.status).toBe('CLOSED');
+    // Closing an approved review must never clear the recorded version approval.
+    expect((await db.documentVersion.findUniqueOrThrow({ where: { id: ids.v3 } })).reviewStatus).toBe('APPROVED');
     expect(await db.notification.count({ where: { userId: ids.reviewer, type: 'REVIEW_REQUESTED' } })).toBeGreaterThan(0);
     expect(await db.timelineEvent.count({ where: { documentId: ids.document, type: { startsWith: 'DOCUMENT_REVIEW_' } } })).toBeGreaterThan(0);
     const decisionCount = await db.$queryRaw<Array<{ count: number }>>`SELECT count(*)::int AS count FROM review_decisions WHERE "reviewId" = ${review.id}`;

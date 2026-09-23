@@ -29,6 +29,8 @@ import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../c
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
 import { retryDocumentVersionScan, securityScanBlock } from './securityScan.service';
+import { readVersionContentText, planDocumentTextSources, VERSION_CONTENT_SOURCE } from './versionContent.service';
+import type { DocumentVersionTextDto } from './types';
 import { scheduleInternalAnalysisIngestion } from '../compliance-doc-intelligence/service';
 import {
   createDocumentComment,
@@ -661,6 +663,72 @@ router.get('/:id/versions/:versionId', authenticate, requireDocumentReadAccess, 
 });
 
 /**
+ * GET /api/v1/documents/:id/versions/:versionId/text
+ * Version-bound extracted text for EXACTLY the selected immutable version.
+ *
+ * This is the canonical version-text source for historical versions: the text
+ * is read from this version's own storage reference and this version's own
+ * mimeType/filename. It never substitutes the document workspace text, the
+ * current/latest version, or another version's extraction — so a caller may
+ * safely build a version-true text range from it. Unsupported/empty/unavailable
+ * versions return a truthful typed reason instead of fabricated text.
+ */
+router.get('/:id/versions/:versionId/text', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id, versionId } = req.params as { id: string; versionId: string };
+    const version = await prisma.documentVersion.findFirst({
+      where: { id: versionId, documentId: id },
+      select: {
+        id: true, documentId: true, version: true, securityScanStatus: true,
+        originalFileName: true, name: true, mimeType: true, size: true,
+        storageReference: true, spItemId: true,
+      },
+    });
+    if (!version) {
+      res.status(404).json({ status: 404, code: 'DOCUMENT_VERSION_NOT_FOUND', message: 'Document version not found.' });
+      return;
+    }
+
+    const blocked = securityScanBlock(version.securityScanStatus || 'CLEAN');
+    if (blocked) {
+      res.status(blocked.status).json(blocked);
+      return;
+    }
+
+    const driveService = (await import('../sharepoint/driveService.js')).default;
+    const result = await readVersionContentText(version, (storageId) => driveService.downloadDocument(storageId));
+
+    const base = {
+      documentId: id,
+      versionId: version.id,
+      versionNumber: version.version,
+      source: VERSION_CONTENT_SOURCE as 'UPLOADED',
+    };
+    if (!result.available) {
+      const payload: DocumentVersionTextDto = {
+        ...base,
+        text: '',
+        reasonCode: result.reasonCode ?? undefined,
+        unavailableReason: result.unavailableReason ?? undefined,
+      };
+      res.json(payload);
+      return;
+    }
+    const payload: DocumentVersionTextDto = {
+      ...base,
+      text: result.text ?? '',
+      format: result.format ?? undefined,
+      pageCount: result.pageCount ?? undefined,
+      extractedAt: new Date().toISOString(),
+    };
+    res.json(payload);
+  } catch (error) {
+    console.error('Extract document version text error:', error);
+    res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'A verzió szövegének kinyerése sikertelen.' });
+  }
+});
+
+/**
  * GET /api/v1/documents/:id/versions/:versionId/download
  */
 router.get('/:id/versions/:versionId/download', authenticate, requireDocumentReadAccess, async (req: Request, res: Response): Promise<void> => {
@@ -762,7 +830,19 @@ router.get('/:id', authenticate, requireDocumentObjectReadAccess, async (req: Re
 
 /**
  * GET /api/v1/documents/:id/text
- * Extract readable text from the real SharePoint-backed document when available.
+ * Read-only extracted text preview of the document's CURRENT content.
+ *
+ * The canonical content source for an uploaded document is its current
+ * immutable DocumentVersion: this handler first resolves text from the exact
+ * current version's own storage reference and own mimeType/filename. Only when
+ * the version records no storage reference does it fall back to the legacy
+ * document-level SharePoint pointer — so a document is not reported as
+ * text-less merely because its document-level pointer is missing or stale.
+ * MODIFIED_WORKING_COPY workspace text keeps its existing dedicated path.
+ *
+ * This endpoint is document/current-version scoped and is NOT an annotation
+ * anchor source; historical version text comes from
+ * `GET /:id/versions/:versionId/text`.
  */
 router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -778,7 +858,15 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
         mimeType: true,
         fileName: true,
         name: true,
-        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
+        versions: {
+          where: { isCurrent: true },
+          select: {
+            id: true, documentId: true, version: true, securityScanStatus: true,
+            originalFileName: true, mimeType: true, size: true,
+            storageReference: true, spItemId: true,
+          },
+          take: 1,
+        },
       },
     });
 
@@ -787,7 +875,8 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
       return;
     }
 
-    const textBlocked = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+    const currentVersion = document.versions?.[0] || null;
+    const textBlocked = securityScanBlock(currentVersion?.securityScanStatus || 'CLEAN');
     if (textBlocked) {
       res.status(textBlocked.status).json(textBlocked);
       return;
@@ -803,47 +892,75 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
       return;
     }
 
-    if (!document.spItemId) {
-      res.json({
-        documentId: id,
-        source: 'UPLOADED',
-        text: '',
-        unavailableReason: 'A dokumentumhoz nincs SharePoint azonosító, ezért a szöveg nem nyerhető ki.',
-      });
-      return;
-    }
-
     const driveService = (await import('../sharepoint/driveService.js')).default;
-    const fileBuffer = await driveService.downloadDocument(document.spItemId);
-    if (!fileBuffer) {
-      res.json({
-        documentId: id,
-        source: 'UPLOADED',
-        text: '',
-        unavailableReason: 'A dokumentum letöltése SharePointból nem sikerült.',
-      });
-      return;
-    }
+    const attempts = planDocumentTextSources({ currentVersion, documentStorageId: document.spItemId });
 
-    const extraction = await extractText(fileBuffer, document.mimeType || 'application/octet-stream', document.fileName || document.name || undefined);
-    if (!extraction.success || !extraction.text?.trim()) {
+    // Most authoritative source first: the current immutable version's own bytes
+    // and own mimeType/filename. The legacy document-level pointer is only an
+    // additional attempt (pre-version-foundation rows).
+    let versionUnavailableReason: string | null = null;
+    for (const attempt of attempts) {
+      if (attempt.source === 'VERSION' && currentVersion) {
+        const versionText = await readVersionContentText(currentVersion, (storageId) => driveService.downloadDocument(storageId));
+        if (versionText.available) {
+          res.json({
+            documentId: id,
+            source: VERSION_CONTENT_SOURCE,
+            text: versionText.text,
+            format: versionText.format ?? undefined,
+            pageCount: versionText.pageCount ?? undefined,
+            versionId: currentVersion.id,
+            versionNumber: currentVersion.version,
+            extractedAt: new Date().toISOString(),
+          });
+          return;
+        }
+        versionUnavailableReason = versionText.unavailableReason;
+        continue;
+      }
+
+      const fileBuffer = await driveService.downloadDocument(attempt.storageId);
+      if (!fileBuffer) {
+        res.json({
+          documentId: id,
+          source: 'UPLOADED',
+          text: '',
+          unavailableReason: 'A dokumentum letöltése SharePointból nem sikerült.',
+        });
+        return;
+      }
+
+      const extraction = await extractText(fileBuffer, document.mimeType || 'application/octet-stream', document.fileName || document.name || undefined);
+      if (!extraction.success || !extraction.text?.trim()) {
+        res.json({
+          documentId: id,
+          source: 'UPLOADED',
+          text: '',
+          format: extraction.format,
+          unavailableReason: extraction.error || 'A dokumentum nem tartalmaz olvasható szöveget.',
+        });
+        return;
+      }
+
       res.json({
         documentId: id,
         source: 'UPLOADED',
-        text: '',
+        text: extraction.text,
         format: extraction.format,
-        unavailableReason: extraction.error || 'A dokumentum nem tartalmaz olvasható szöveget.',
+        pageCount: extraction.pageCount,
+        extractedAt: new Date().toISOString(),
       });
       return;
     }
 
+    // No storage recorded anywhere, or the only recorded storage could not serve
+    // its content: report the truthful reason. The no-storage message is kept
+    // unchanged for the legacy metadata-only case.
     res.json({
       documentId: id,
       source: 'UPLOADED',
-      text: extraction.text,
-      format: extraction.format,
-      pageCount: extraction.pageCount,
-      extractedAt: new Date().toISOString(),
+      text: '',
+      unavailableReason: versionUnavailableReason || 'A dokumentumhoz nincs SharePoint azonosító, ezért a szöveg nem nyerhető ki.',
     });
   } catch (error) {
     console.error('Extract document text error:', error);

@@ -134,6 +134,17 @@ export const clientOrganizationApi = {
   },
 };
 
+/**
+ * Canonical current/active organization-person semantics, mirrored from the
+ * backend company-workspace projection (ACTIVE_PERSON_STATUS). ACTIVE and
+ * ON_LEAVE are current; INACTIVE and ENDED are history and must never be
+ * presented as a current active responsibility.
+ */
+export function isCurrentOrganizationPerson(status: string | null | undefined): boolean {
+  const normalized = String(status ?? '').toUpperCase();
+  return normalized === 'ACTIVE' || normalized === 'ON_LEAVE';
+}
+
 export function personStatusLabel(status: string): string {
   const labels: Record<string, string> = {
     ACTIVE: 'Aktív',

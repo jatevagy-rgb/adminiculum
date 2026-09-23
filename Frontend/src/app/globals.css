@@ -88,6 +88,40 @@
   --adm-shadow-sm: 0 1px 2px rgba(20, 36, 27, 0.06);
   --adm-shadow-md: 0 8px 24px rgba(20, 36, 27, 0.08);
   --adm-shadow-shell: 0 12px 36px rgba(20, 36, 27, 0.11);
+
+  /* Adminiculum Canonical Design Tokens (Phase 1 Foundation) */
+  --adm-brand-green: #0F3D32;
+  --adm-brand-deep: #062B22;
+  --adm-brand-terracotta: #B85C4B;
+  --adm-brand-terracotta-soft: #F1D7D1;
+  --adm-canvas-white: #FFFFFF;
+  --adm-canvas-subtle: #F8FAF9;
+  --adm-border-canonical: #E5E7E6;
+  --adm-text-primary: #1F2937;
+  --adm-text-secondary: #6B7280;
+
+  /* Semantic feedback */
+  --adm-semantic-success: #1E7E51;
+  --adm-semantic-success-soft: #E8F5EE;
+  --adm-semantic-success-border: #BCE4CE;
+  --adm-semantic-warning: #D97706;
+  --adm-semantic-warning-soft: #FEF3C7;
+  --adm-semantic-warning-border: #FDE68A;
+  --adm-semantic-danger: #DC2626;
+  --adm-semantic-danger-soft: #FEE2E2;
+  --adm-semantic-danger-border: #FECACA;
+  --adm-semantic-info: #2563EB;
+  --adm-semantic-info-soft: #EFF6FF;
+  --adm-semantic-info-border: #BFDBFE;
+
+  /* Supporting palette */
+  --adm-palette-teal: #2E7DBA;
+  --adm-palette-gold: #F4A51C;
+  --adm-palette-navy: #1E3A5F;
+  --adm-palette-brick: #8B4B4B;
+
+  /* Canonical focus ring */
+  --adm-focus-ring: 0 0 0 2px #FFFFFF, 0 0 0 4px #0F3D32;
 }
 
 * {

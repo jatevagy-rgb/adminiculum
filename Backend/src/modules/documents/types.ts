@@ -64,6 +64,33 @@ export interface DocumentVersionDto {
   securityScanStatus: 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
   spItemId: string | null;
   spWebUrl: string | null;
+  /**
+   * Format-level truth: whether this version's format supports authoritative
+   * text extraction (DOCX/PDF/TXT). Derived from the version's own mimeType /
+   * filename only — never from SharePoint or comparison metadata. Actual
+   * comparison/reader success additionally requires the exact stored bytes to
+   * be downloadable; this flag exists so callers stop guessing comparability
+   * from incidental metadata.
+   */
+  textExtractable: boolean;
+}
+
+/**
+ * Version-bound extracted text DTO. `text` is derived from the exact immutable
+ * DocumentVersion's stored bytes — never from the document workspace text or
+ * another version. `reasonCode`/`unavailableReason` are always truthful.
+ */
+export interface DocumentVersionTextDto {
+  documentId: string;
+  versionId: string;
+  versionNumber: number;
+  source: 'UPLOADED';
+  text: string;
+  format?: string;
+  pageCount?: number;
+  extractedAt?: string;
+  reasonCode?: string;
+  unavailableReason?: string;
 }
 
 export interface DocumentSearchItem {

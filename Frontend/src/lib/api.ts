@@ -514,6 +514,11 @@ export interface CaseWorkspace {
       currentVersionNumber: number | null; currentVersionId: string | null;
       previousVersionNumber: number | null; previousVersionId: string | null;
       reviewId: string | null; reviewVersionId: string | null; reviewStatus: string | null;
+      activeReviewId?: string | null; activeReviewStatus?: string | null;
+      activeReviewVersionId?: string | null; activeReviewVersionNumber?: number | null;
+      reviewVersionNumber?: number | null;
+      reviewVersionRelationship?: 'NONE' | 'ON_CURRENT_VERSION' | 'ON_OTHER_VERSION' | null;
+      approvedVersionId?: string | null; approvedVersionNumber?: number | null;
       openPointCount: number; blockingPointCount: number;
       comparisonId: string | null; comparisonStatus: string | null;
       totalSegments: number; reviewedSegments: number; unresolvedSegments: number;
@@ -2261,6 +2266,41 @@ export interface DocumentTextResult {
 
 export async function getDocumentText(documentId: string): Promise<DocumentTextResult> {
   return fetchApi<DocumentTextResult>(`/documents/${documentId}/text`);
+}
+
+/**
+ * Version-bound extracted text DTO. Mirrors the backend `DocumentVersionTextDto`:
+ * `text` is derived from the EXACT immutable DocumentVersion's stored bytes —
+ * never from the document workspace text, the current/latest version, or another
+ * version. An unavailable version still resolves with HTTP 200 and an empty
+ * `text` plus a truthful `reasonCode`/`unavailableReason`.
+ */
+export interface DocumentVersionTextResult {
+  documentId: string;
+  versionId: string;
+  versionNumber: number;
+  source: 'UPLOADED';
+  text: string;
+  format?: string;
+  pageCount?: number;
+  extractedAt?: string;
+  reasonCode?: string;
+  unavailableReason?: string;
+}
+
+/**
+ * Canonical exact-version text source for the Document Workspace reader
+ * (`GET /documents/:id/versions/:versionId/text`). This is the version-scoped
+ * channel used for historical/current DOCX/PDF text; it must never be replaced
+ * by the document-level `getDocumentText` preview.
+ */
+export async function getDocumentVersionText(
+  documentId: string,
+  versionId: string
+): Promise<DocumentVersionTextResult> {
+  return fetchApi<DocumentVersionTextResult>(
+    `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/text`
+  );
 }
 
 export type LegalAnalysisStatus =

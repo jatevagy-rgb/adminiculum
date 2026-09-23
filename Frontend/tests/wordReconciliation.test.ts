@@ -8,13 +8,32 @@ const read = (file: string) => readFileSync(file, 'utf8');
 
 test('communication intake is case-first and retains secondary task capabilities', () => {
   const source = read('src/components/communications/CommunicationWorkspace.tsx');
-  const actions = source.slice(source.indexOf('<section aria-label="Ügyindítás'), source.indexOf('</section>', source.indexOf('<section aria-label="Ügyindítás')));
-  assert.match(actions, /Új ügy létrehozása/);
-  assert.match(actions, /onCreateCase\(item\)/);
-  assert.match(actions, /onAssign\(item\)/);
+  // Canonical structural boundary: the classification section was renamed from
+  // "Ügyindítás és ügyhöz rendelés" to "Ügybesorolás és feladatműveletek" when the
+  // intake became case-first. Keep the assertions scoped to this section.
+  const sectionStart = source.indexOf('<section aria-label="Ügybesorolás és feladatműveletek"');
+  const sectionEnd = source.indexOf('</section>', sectionStart);
+  assert.ok(sectionStart > 0 && sectionEnd > sectionStart, 'the communication classification section must exist');
+  const actions = source.slice(sectionStart, sectionEnd);
+  // The ternary inside the section separates the associated branch from the
+  // case-first branch (an unsorted communication has no case yet).
+  const branchSplit = actions.indexOf(') : (');
+  assert.ok(branchSplit > 0, 'the associated and case-first branches of the classification section must exist');
+  // Already associated branch: the canonical case link and re-assignment stay available.
+  const assigned = actions.slice(0, branchSplit);
+  assert.match(assigned, /href=\{`\/cases\/\$\{encodeURIComponent\(item.caseId\)\}/);
+  assert.match(assigned, /onAssign\(item\)/);
+  // Case-first branch: an unsorted communication is assigned to an existing case or starts a new one.
+  const unassigned = actions.slice(branchSplit);
+  assert.match(unassigned, /Meglévő ügyhöz kapcsolás/);
+  assert.match(unassigned, /Új ügy létrehozása/);
+  assert.match(unassigned, /onCreateCase\(item\)/);
+  assert.match(unassigned, /onAssign\(item\)/);
+  // Task creation and linking stay secondary: they live under the subordinate
+  // "Feladatműveletek" block of the associated branch and never in the case-first branch.
+  assert.match(assigned, /Feladatműveletek[\s\S]*onCreateTask\(item\)[\s\S]*onLinkTask\(item\)/);
+  assert.doesNotMatch(unassigned, /onCreateTask\(item\)|onLinkTask\(item\)/);
   assert.match(source, /caseId: result.communication.caseId, clientId: result.communication.clientId/);
-  assert.match(actions, /href=\{`\/cases\/\$\{encodeURIComponent\(item.caseId\)\}/);
-  assert.match(actions, /<details[\s\S]*onCreateTask\(item\)[\s\S]*onLinkTask\(item\)[\s\S]*<\/details>/);
   for (const contract of ['CompactNewCaseDialog', 'sourceCommunicationId={createCaseTarget?.id}', 'initialClientId={createCaseTarget?.clientId', 'linkCommunicationToCase(assignTarget.id, selectedCaseId)']) assert.ok(source.includes(contract));
 });
 

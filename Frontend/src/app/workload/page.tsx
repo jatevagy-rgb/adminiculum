@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { Alert, Button, DataTable, DataTableBody, DataTableCell, DataTableEmpty, DataTableHead, DataTableHeaderCell, DataTableRow, EmptyState, PageHeader, QuietLink } from "@/components/ui";
 import { getWorkflowWorkload, type WorkflowWorkloadResponse } from "@/lib/api";
 
 type Scope = "MY_WORK" | "MY_CASES" | "TEAM";
-
-const SCOPE_LABELS: Record<Scope, string> = {
-  MY_WORK: "Saját munka",
-  MY_CASES: "Ügyeim",
-  TEAM: "Csapatnézet",
+const SCOPE_LABELS: Record<Scope, string> = { MY_WORK: "Saját munka", MY_CASES: "Ügyeim", TEAM: "Csapatnézet" };
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Adminisztrátor", PARTNER: "Partner", LAWYER: "Ügyvéd", TRAINEE: "Ügyvédjelölt",
+  LEGAL_ASSISTANT: "Jogi asszisztens", CLIENT: "Ügyfél", EXTERNAL_REVIEWER: "Külső bíráló", COLLAB_LAWYER: "Együttműködő ügyvéd",
 };
 
 function minutesLabel(minutes: number): string {
@@ -23,8 +23,7 @@ function minutesLabel(minutes: number): string {
 function dateLabel(value: string | null): string {
   if (!value) return "Nincs határidő";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Nincs határidő";
-  return date.toLocaleDateString("hu-HU", { dateStyle: "medium" });
+  return Number.isNaN(date.getTime()) ? "Nincs határidő" : date.toLocaleDateString("hu-HU", { dateStyle: "medium" });
 }
 
 function WorkloadContent() {
@@ -32,13 +31,11 @@ function WorkloadContent() {
   const [data, setData] = useState<WorkflowWorkloadResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const load = useCallback(async (nextScope: Scope) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await getWorkflowWorkload({ scope: nextScope });
-      setData(response);
+      setData(await getWorkflowWorkload({ scope: nextScope }));
     } catch (loadError) {
       setData(null);
       setError(loadError instanceof Error ? loadError.message : "A munkateher nézet most nem elérhető.");
@@ -47,119 +44,66 @@ function WorkloadContent() {
     }
   }, []);
 
-  useEffect(() => {
-    void load(scope);
-  }, [load, scope]);
-
+  useEffect(() => { void load(scope); }, [load, scope]);
   const scopeOptions = useMemo(() => {
     const teamAvailable = data?.availability.teamScope || scope === "TEAM";
     return (["MY_WORK", "MY_CASES", "TEAM"] as Scope[]).filter((item) => item !== "TEAM" || teamAvailable);
   }, [data?.availability.teamScope, scope]);
 
   return (
-    <div className="min-h-screen bg-[var(--adm-bg)] text-[var(--adm-ink)]">
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-6 py-8">
-        <section className="rounded-[28px] border border-[var(--adm-border)] bg-white p-6 shadow-[0_18px_55px_rgba(2,48,71,0.08)]">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--adm-steel)]">Felelősség · munkateher · idő</p>
-              <h1 className="mt-2 text-3xl font-semibold text-[var(--adm-ink)]">Munkaszervezési központ</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--adm-slate)]">
-                Belső, ügyközpontú áttekintés nyitott feladatokról, határidős figyelmet igénylő munkáról és rögzített időről. Nem teljesítmény-rangsor és nem passzív időmérés.
-              </p>
-            </div>
-            <Link href="/time-entries" className="rounded-full border border-[var(--adm-border)] px-4 py-2 text-sm font-semibold text-[var(--adm-ink)] transition hover:border-[var(--adm-ink)]">
-              Időrögzítés megnyitása
-            </Link>
-          </div>
-        </section>
-
-        <section className="flex flex-wrap gap-2">
+    <div className="min-h-screen bg-white text-[#1F2937]">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6">
+        <PageHeader title="Munkaterhelés" actions={<>
           {scopeOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setScope(option)}
-              className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
-                scope === option
-                  ? "border-[var(--adm-ink)] bg-[var(--adm-ink)] text-white"
-                  : "border-[var(--adm-border)] bg-white text-[var(--adm-slate)] hover:border-[var(--adm-ink)]"
-              }`}
-            >
-              {SCOPE_LABELS[option]}
-            </button>
+            <Button key={option} size="sm" variant={scope === option ? "primary" : "neutral"} aria-pressed={scope === option} onClick={() => setScope(option)}>{SCOPE_LABELS[option]}</Button>
           ))}
-        </section>
-
+          <Link href="/time-entries" className="inline-flex h-8 items-center justify-center rounded-[6px] border border-[#0F3D32] bg-white px-3 text-xs font-medium text-[#0F3D32] transition-colors hover:bg-[#F8FAF9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32] focus-visible:ring-offset-2">Időrögzítés megnyitása</Link>
+        </>} />
         {loading ? (
-          <div className="rounded-3xl border border-[var(--adm-border)] bg-white p-6 text-sm text-[var(--adm-slate)]">Munkateher adatok betöltése…</div>
+          <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-5 text-sm text-[#6B7280]">Munkateher adatok betöltése…</div>
         ) : error ? (
-          <div className="rounded-3xl border border-[#FCD34D] bg-[#FFFBEB] p-6 text-sm text-[#92400E]">{error}</div>
+          <Alert variant="warning">{error}</Alert>
         ) : data ? (
           <>
-            <section className="grid gap-4 md:grid-cols-4">
-              <SummaryCard label="Ügyek" value={String(data.summary.caseCount)} />
-              <SummaryCard label="Nyitott feladat" value={String(data.summary.openTaskCount)} />
-              <SummaryCard label="Lejárt figyelem" value={String(data.summary.overdueTaskCount)} accent="terracotta" />
-              <SummaryCard label="Rögzített idő" value={minutesLabel(data.summary.recordedMinutes)} />
+            <section className="grid gap-px overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-[#E5E7E6] md:grid-cols-4">
+              <SummaryCell label="Ügyek" value={String(data.summary.caseCount)} />
+              <SummaryCell label="Nyitott feladat" value={String(data.summary.openTaskCount)} />
+              <SummaryCell label="Lejárt figyelem" value={String(data.summary.overdueTaskCount)} overdue={data.summary.overdueTaskCount > 0} />
+              <SummaryCell label="Rögzített idő" value={minutesLabel(data.summary.recordedMinutes)} />
             </section>
-
-            <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
-              <div className="rounded-[28px] border border-[var(--adm-border)] bg-white p-5">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-[var(--adm-ink)]">Felelősök és nyitott munka</h2>
-                  <span className="rounded-full bg-[var(--adm-blue-50)] px-3 py-1 text-xs font-semibold text-[var(--adm-blue-700)]">operatív nézet</span>
-                </div>
-                {data.people.length ? (
-                  <div className="space-y-3">
-                    {data.people.map((person) => (
-                      <div key={person.user.id} className="rounded-2xl border border-[var(--adm-border)] p-4">
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                          <div>
-                            <p className="font-semibold text-[var(--adm-ink)]">{person.user.name || person.user.email || "Névtelen felhasználó"}</p>
-                            <p className="text-xs text-[var(--adm-steel)]">{person.caseCount} ügy · {person.user.role || "belső szerep"}</p>
-                          </div>
-                          <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                            <span className="rounded-full bg-[var(--adm-blue-50)] px-3 py-1 text-[var(--adm-blue-700)]">{person.openTaskCount} nyitott</span>
-                            <span className="rounded-full bg-[#FFF7ED] px-3 py-1 text-[#C2410C]">{person.overdueTaskCount} lejárt</span>
-                            <span className="rounded-full bg-[#F0FDFA] px-3 py-1 text-[#0F766E]">{minutesLabel(person.recordedMinutes)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+            <section className="space-y-3">
+              <h2 className="text-base font-semibold">Felelősök és nyitott munka</h2>
+              <DataTable>
+                <DataTableHead><DataTableRow>
+                  <DataTableHeaderCell>Munkatárs</DataTableHeaderCell><DataTableHeaderCell>Szerep</DataTableHeaderCell><DataTableHeaderCell>Ügyek</DataTableHeaderCell><DataTableHeaderCell>Nyitott feladat</DataTableHeaderCell><DataTableHeaderCell>Lejárt</DataTableHeaderCell><DataTableHeaderCell>Rögzített idő</DataTableHeaderCell>
+                </DataTableRow></DataTableHead>
+                <DataTableBody>
+                  {data.people.length ? data.people.map((person) => (
+                    <DataTableRow key={person.user.id}>
+                      <DataTableCell>{person.user.name || person.user.email || "Névtelen felhasználó"}</DataTableCell>
+                      <DataTableCell muted>{ROLE_LABELS[person.user.role || ""] || person.user.role || "Belső szerep"}</DataTableCell>
+                      <DataTableCell>{person.caseCount}</DataTableCell><DataTableCell>{person.openTaskCount}</DataTableCell>
+                      <DataTableCell className={person.overdueTaskCount > 0 ? "text-[#B85C4B]" : undefined}>{person.overdueTaskCount}</DataTableCell>
+                      <DataTableCell>{minutesLabel(person.recordedMinutes)}</DataTableCell>
+                    </DataTableRow>
+                  )) : <DataTableEmpty colSpan={6}><EmptyState className="border-0 rounded-none" title="Nincs megjeleníthető nyitott munka." /></DataTableEmpty>}
+                </DataTableBody>
+              </DataTable>
+            </section>
+            <section className="space-y-3">
+              <h2 className="text-base font-semibold">Ügyek, ahol érdemes folytatni</h2>
+              <div className="overflow-hidden rounded-[12px] border border-[#E5E7E6] bg-white divide-y divide-[#E5E7E6]">
+                {data.cases.length ? data.cases.slice(0, 8).map((caseItem) => (
+                  <div key={caseItem.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                    <div>
+                      <QuietLink href={`/cases/${caseItem.id}`}>{caseItem.caseNumber} · {caseItem.title}</QuietLink>
+                      <p className="mt-1 text-xs text-[#6B7280]">{dateLabel(caseItem.deadline)} · {caseItem.openTaskCount} nyitott feladat</p>
+                    </div>
                   </div>
-                ) : (
-                  <p className="rounded-2xl border border-dashed border-[var(--adm-border)] p-5 text-sm text-[var(--adm-slate)]">
-                    Ebben a nézetben nincs megjeleníthető nyitott feladat vagy rögzített idő.
-                  </p>
-                )}
-              </div>
-
-              <div className="rounded-[28px] border border-[var(--adm-border)] bg-white p-5">
-                <h2 className="text-lg font-semibold text-[var(--adm-ink)]">Ügyek, ahol érdemes folytatni</h2>
-                <div className="mt-4 space-y-3">
-                  {data.cases.slice(0, 8).map((caseItem) => (
-                    <Link
-                      key={caseItem.id}
-                      href={`/cases/${caseItem.id}`}
-                      className="block rounded-2xl border border-[var(--adm-border)] p-4 transition hover:border-[var(--adm-blue-500)] hover:bg-[var(--adm-blue-50)]"
-                    >
-                      <p className="text-sm font-semibold text-[var(--adm-ink)]">{caseItem.caseNumber} · {caseItem.title}</p>
-                      <p className="mt-1 text-xs text-[var(--adm-steel)]">{dateLabel(caseItem.deadline)} · {caseItem.openTaskCount} nyitott feladat</p>
-                    </Link>
-                  ))}
-                  {!data.cases.length && (
-                    <p className="rounded-2xl border border-dashed border-[var(--adm-border)] p-5 text-sm text-[var(--adm-slate)]">
-                      Nincs ügy ebben a munkateher nézetben.
-                    </p>
-                  )}
-                </div>
+                )) : <EmptyState className="border-0 rounded-none" title="Nincs ügy ebben a munkateher nézetben." />}
               </div>
             </section>
-
-            <section className="rounded-3xl border border-[var(--adm-border)] bg-white p-5 text-sm text-[var(--adm-slate)]">
-              Aktív/passzív időmérő nincs bekapcsolva. A nézet csak kézzel rögzített, matter-alapú időbejegyzéseket mutat ott, ahol ez a jelenlegi adatmodellben támogatott.
-            </section>
+            <p className="text-sm text-[#6B7280]">Aktív/passzív időmérő nincs bekapcsolva. A nézet csak kézzel rögzített időbejegyzéseket mutat.</p>
           </>
         ) : null}
       </main>
@@ -167,19 +111,10 @@ function WorkloadContent() {
   );
 }
 
-function SummaryCard({ label, value, accent }: { label: string; value: string; accent?: "terracotta" }) {
-  return (
-    <div className={`rounded-[24px] border bg-white p-5 ${accent === "terracotta" ? "border-[#FDBA74]" : "border-[var(--adm-border)]"}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--adm-steel)]">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-[var(--adm-ink)]">{value}</p>
-    </div>
-  );
+function SummaryCell({ label, value, overdue = false }: { label: string; value: string; overdue?: boolean }) {
+  return <div className="bg-white p-4"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280]">{label}</p><p className={`mt-2 text-xl font-semibold ${overdue ? "text-[#B85C4B]" : "text-[#1F2937]"}`}>{value}</p></div>;
 }
 
 export default function WorkloadPage() {
-  return (
-    <AuthenticatedApp section="tasks">
-      <WorkloadContent />
-    </AuthenticatedApp>
-  );
+  return <AuthenticatedApp section="tasks"><WorkloadContent /></AuthenticatedApp>;
 }

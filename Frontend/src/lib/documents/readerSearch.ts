@@ -2,7 +2,7 @@
 // tested executably. Search is presentation-only: it never mutates the loaded
 // canonical text and never touches annotation offsets.
 
-export type ReaderSearchSurface = "ANNOTATED" | "PLAIN" | "NONE";
+export type ReaderSearchSurface = "VERSION_TEXT" | "PLAIN" | "NONE";
 
 export interface ReaderSearchState {
   query: string;
@@ -18,24 +18,27 @@ export type ReaderSearchAction =
 
 /**
  * Decide which reader surface is actually in front of the user.
- * - PLAIN: the extracted-text surface — matches can be highlighted and navigated
- *   safely because there are no annotation text-range anchors on it.
- * - ANNOTATED: the annotation-anchored surface — visual search highlighting
- *   cannot be added without risking canonical annotation offsets.
+ * - VERSION_TEXT: the exact selected immutable version's text (TXT bytes or
+ *   backend-extracted DOCX/PDF text). Matches are highlighted inside the same
+ *   `versionText` string the reader renders and the anchors are computed
+ *   against, so search can never read another version's text. Annotation
+ *   offsets are untouched (highlighting is presentation-only).
+ * - PLAIN: the document-level extracted-text surface (legacy/non-version
+ *   formats) — display-only, carries no text-range anchors.
  */
 export function resolveReaderSearchSurface(input: {
-  hasAnnotatedText: boolean;
+  hasVersionText: boolean;
   hasPlainText: boolean;
 }): ReaderSearchSurface {
-  // The annotated surface is rendered first when it qualifies, so it wins.
-  if (input.hasAnnotatedText) return "ANNOTATED";
+  // The version-scoped surface is rendered first when it qualifies, so it wins.
+  if (input.hasVersionText) return "VERSION_TEXT";
   if (input.hasPlainText) return "PLAIN";
   return "NONE";
 }
 
-/** Search (with visual highlight + navigation) is only supported on PLAIN. */
+/** Search (with visual highlight + navigation) needs real, exact reader text. */
 export function isReaderSearchSupported(surface: ReaderSearchSurface): boolean {
-  return surface === "PLAIN";
+  return surface === "VERSION_TEXT" || surface === "PLAIN";
 }
 
 export function normalizeReaderSearchTerm(query: string): string {
@@ -113,4 +116,37 @@ export function buildReaderHighlightSegments(
   });
   if (cursor < text.length) segments.push({ text: text.slice(cursor), matchIndex: null });
   return segments;
+}
+
+/**
+ * Same segmentation as `buildReaderHighlightSegments`, but restricted to one
+ * slice `[rangeStart, rangeEnd)` of the full text. Match indexes stay the global
+ * index into `offsets` so the active-match navigation keeps working, and only
+ * matches fully contained in the range are highlighted (a match straddling an
+ * annotation boundary is left plain rather than split). Rejoining the returned
+ * segments returns exactly `text.slice(rangeStart, rangeEnd)`.
+ */
+export function buildReaderHighlightSegmentsInRange(
+  text: string,
+  rangeStart: number,
+  rangeEnd: number,
+  offsets: number[],
+  termLength: number,
+): ReaderHighlightSegment[] {
+  const start = Math.max(0, Math.min(rangeStart, text.length));
+  const end = Math.max(start, Math.min(rangeEnd, text.length));
+  const inner = text.slice(start, end);
+  if (termLength <= 0 || inner.length === 0) return [{ text: inner, matchIndex: null }];
+  const segments: ReaderHighlightSegment[] = [];
+  let cursor = 0;
+  offsets.forEach((offset, index) => {
+    if (offset < start || offset + termLength > end) return;
+    const local = offset - start;
+    if (local < cursor) return;
+    if (local > cursor) segments.push({ text: inner.slice(cursor, local), matchIndex: null });
+    segments.push({ text: inner.slice(local, local + termLength), matchIndex: index });
+    cursor = local + termLength;
+  });
+  if (cursor < inner.length) segments.push({ text: inner.slice(cursor), matchIndex: null });
+  return segments.length > 0 ? segments : [{ text: inner, matchIndex: null }];
 }

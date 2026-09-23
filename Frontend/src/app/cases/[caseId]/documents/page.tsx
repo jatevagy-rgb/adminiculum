@@ -5,11 +5,18 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
-import { resolveVersionTextPlan } from "@/lib/documents/versionTextPlan";
+import { resolveVersionTextPlan, isVersionScopedTextPlan } from "@/lib/documents/versionTextPlan";
+import {
+  VERSION_TEXT_NO_EXTRACTABLE_TEXT,
+  VERSION_TEXT_REQUEST_FAILED,
+  resolveVersionTextLoadOutcome,
+  versionTextRequestFailureMessage,
+} from "@/lib/documents/versionTextAvailability";
 import { filterLedgerItems } from "@/lib/documents/ledgerSearch";
 import {
   EMPTY_READER_SEARCH,
   buildReaderHighlightSegments,
+  buildReaderHighlightSegmentsInRange,
   findReaderMatchOffsets,
   isReaderSearchSupported,
   readerSearchReducer,
@@ -27,6 +34,7 @@ import {
   downloadDocument,
   downloadDocumentVersion,
   getDocumentText,
+  getDocumentVersionText,
   createDocumentAnnotation,
   createDocumentAnnotationComment,
   deleteDocumentAnnotation,
@@ -349,6 +357,25 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [aiPreparationOpen, setAiPreparationOpen] = useState(false);
   const [aiVersionPair, setAiVersionPair] = useState<string[] | null>(null);
   const [readingFocus, setReadingFocus] = useState(false);
+  // Left document rail: a drawer on narrow/tablet, collapsible on medium and up.
+  const [leftRailOpen, setLeftRailOpen] = useState(false);
+  const [leftRailCollapsed, setLeftRailCollapsed] = useState(false);
+
+  // Medium viewports (below the xl breakpoint) collapse the document rail by
+  // default so the reader keeps the dominant flexible column instead of being
+  // squeezed into an unusably thin strip. The header toggle reopens it.
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(max-width: 1279px)");
+    const apply = () => setLeftRailCollapsed(query.matches);
+    apply();
+    if (typeof query.addEventListener === "function") {
+      query.addEventListener("change", apply);
+      return () => query.removeEventListener("change", apply);
+    }
+    query.addListener(apply);
+    return () => query.removeListener(apply);
+  }, []);
   const [readerZoom, setReaderZoom] = useState(100);
   const [caseRecord, setCaseRecord] = useState<{
     id: string;
@@ -371,6 +398,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [isLoadingVersions, setIsLoadingVersions] = useState(false);
   const [versions, setVersions] = useState<DocumentVersionItem[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string | null>(null);
+  // Which document the currently loaded `versions` array is authoritative for.
+  // null means "unknown / not loaded", so the URL->version effect never treats a
+  // not-yet-loaded (or failed) empty list as "this document has no versions".
+  const [versionsLoadedForDocumentId, setVersionsLoadedForDocumentId] = useState<string | null>(null);
   const [isPromotingVersion, setIsPromotingVersion] = useState<string | null>(null);
   const [uploadPhase, setUploadPhase] = useState<string | null>(null);
   const [isUploadingToSP, setIsUploadingToSP] = useState<string | null>(null);
@@ -428,6 +459,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   // cannot be fetched (e.g. an invalid/synthetic storage reference). Truthful
   // domain state — never a raw provider error surfaced to the console/UI.
   const [versionTextUnavailable, setVersionTextUnavailable] = useState(false);
+  // Truthful, product-level reason shown when a version's exact text cannot be
+  // produced (no stored bytes, unsupported format, empty extraction, scan block,
+  // or request error). Never carries a raw backend implementation code.
+  const [versionTextUnavailableReason, setVersionTextUnavailableReason] = useState<string | null>(null);
   // Read-only document-level preview for the CURRENT version of an uploaded
   // non-TXT document (extracted server-side via `GET /documents/:id/text`).
   // Kept separate from `versionText` on purpose: annotations persist
@@ -477,17 +512,38 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
+  const requestedVersionId = searchParams?.get("versionId") ?? null;
   const requestedDocumentIdRef = useRef<string | null>(requestedDocumentId);
+  const requestedVersionIdRef = useRef<string | null>(requestedVersionId);
   if (requestedDocumentId) {
     requestedDocumentIdRef.current = requestedDocumentId;
   }
+  if (requestedVersionId) {
+    requestedVersionIdRef.current = requestedVersionId;
+  }
+  // Tracks the last version identity already reconciled from the URL. This keeps
+  // the URL->state effect from fighting an optimistic local version selection
+  // while the router transition is still in flight.
+  const reconciledVersionUrlRef = useRef<string | null | undefined>(undefined);
 
-  const syncDocumentIdToUrl = useCallback((documentId: string | null, history: "push" | "replace") => {
+  // Canonical navigation identity is documentId plus an optional explicit
+  // historical versionId. The current/default version stays implicit: it is
+  // never written to the URL, so there is exactly one "current version"
+  // identity. A versionId is only ever written together with its documentId.
+  const syncWorkspaceIdentityToUrl = useCallback((
+    identity: { documentId: string | null; versionId: string | null },
+    history: "push" | "replace",
+  ) => {
     const params = new URLSearchParams(searchParams?.toString());
-    if (documentId) {
-      params.set("documentId", documentId);
+    if (identity.documentId) {
+      params.set("documentId", identity.documentId);
     } else {
       params.delete("documentId");
+    }
+    if (identity.documentId && identity.versionId) {
+      params.set("versionId", identity.versionId);
+    } else {
+      params.delete("versionId");
     }
     const query = params.toString();
     const nextUrl = query ? `${pathname}?${query}` : pathname;
@@ -495,6 +551,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (nextUrl === currentUrl) return;
     router[history](nextUrl);
   }, [pathname, router, searchParams]);
+
+  // Selecting a document always drops any previously selected version identity:
+  // a versionId must never carry across documents.
+  const syncDocumentIdToUrl = useCallback((documentId: string | null, history: "push" | "replace") => {
+    syncWorkspaceIdentityToUrl({ documentId, versionId: null }, history);
+  }, [syncWorkspaceIdentityToUrl]);
 
   const selectLedgerItem = useCallback((
     item: SelectedLedgerItem,
@@ -568,14 +630,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           if (uploadedMatch) {
             setSelectedLedgerItem({ kind: 'uploaded', item: uploadedMatch });
             setSelectedContract(null);
-            syncDocumentIdToUrl(uploadedMatch.id, "replace");
+            syncWorkspaceIdentityToUrl({ documentId: uploadedMatch.id, versionId: requestedVersionIdRef.current }, "replace");
             requestedDocumentIdRef.current = null;
           } else {
             const contractMatch = contractsData.find(c => c.id === deepLinkedId);
             if (contractMatch) {
               setSelectedLedgerItem({ kind: 'generated', item: contractMatch });
               setSelectedContract(contractMatch);
-              syncDocumentIdToUrl(contractMatch.id, "replace");
+              syncWorkspaceIdentityToUrl({ documentId: contractMatch.id, versionId: requestedVersionIdRef.current }, "replace");
               requestedDocumentIdRef.current = null;
             }
           }
@@ -595,11 +657,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setIsInitialLoading(false);
       setIsRefreshing(false);
     }
-  }, [caseRecord?.id, syncDocumentIdToUrl]);
+  }, [caseRecord?.id, syncDocumentIdToUrl, syncWorkspaceIdentityToUrl]);
 
   useEffect(() => {
-    if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length)) return;
-    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId);
+    if (!requestedDocumentId || (!uploadedDocuments.length && !contracts.length && !modifiedWorkingCopies.length)) return;
+    const uploadedMatch = uploadedDocuments.find((document) => document.id === requestedDocumentId)
+      || modifiedWorkingCopies.find((document) => document.id === requestedDocumentId);
     if (uploadedMatch) {
       if (selectedLedgerItem?.kind !== "uploaded" || selectedLedgerItem.item.id !== uploadedMatch.id) {
         setSelectedLedgerItem({ kind: "uploaded", item: uploadedMatch });
@@ -612,7 +675,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setSelectedLedgerItem({ kind: "generated", item: contractMatch });
       setSelectedContract(contractMatch);
     }
-  }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments]);
+  }, [contracts, requestedDocumentId, selectedLedgerItem, uploadedDocuments, modifiedWorkingCopies]);
 
   // Re-trigger loadData once caseRecord is resolved to CUID — only on mount
   useEffect(() => {
@@ -719,11 +782,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     try {
       const response = await getDocumentVersions(documentId);
       setVersions(response.versions);
+      setVersionsLoadedForDocumentId(documentId);
       const current = response.versions.find((version) => version.isCurrent) || response.versions[0] || null;
       setSelectedVersionId((existing) => response.versions.some((version) => version.id === existing) ? existing : current?.id || null);
     } catch (err) {
       console.error('Document versions load failed:', err);
       setVersions([]);
+      setVersionsLoadedForDocumentId(null);
       setSelectedVersionId(null);
     } finally {
       setIsLoadingVersions(false);
@@ -736,8 +801,53 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     } else {
       setVersions([]);
       setSelectedVersionId(null);
+      // No version surface for this selection (generated contract, working copy,
+      // or nothing selected): the empty list is authoritative for that document.
+      setVersionsLoadedForDocumentId(selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null);
     }
-  }, [selectedUploadedDocument?.id, selectedUploadedDocument?.documentType, refreshSelectedDocumentVersions]);
+  }, [selectedUploadedDocument?.id, selectedUploadedDocument?.documentType, selectedGeneratedContract?.id, refreshSelectedDocumentVersions]);
+
+  // URL -> version identity. The current/default version is implicit (no
+  // versionId in the URL). An explicit versionId only binds when it belongs to
+  // the active document's immutable version list; a stale, foreign, or current
+  // id fails safely to the document's current/default version and is
+  // canonicalized out of the URL, so a version can never leak across documents.
+  useEffect(() => {
+    const activeDocumentId = selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null;
+    if (isLoadingVersions || !activeDocumentId) return;
+    // Only reconcile once the loaded version list is authoritative for the active
+    // document. Otherwise a not-yet-loaded (or failed) list must never be treated
+    // as "this document has no versions", which would drop a valid deep link.
+    if (versionsLoadedForDocumentId !== activeDocumentId) return;
+    if (reconciledVersionUrlRef.current === requestedVersionId) return;
+    reconciledVersionUrlRef.current = requestedVersionId;
+
+    const currentDefaultId = versions.find((version) => version.isCurrent)?.id || versions[0]?.id || null;
+
+    if (versions.length === 0) {
+      // Document has no immutable versions (e.g. a generated contract) or none
+      // loaded: there is no version identity to bind to.
+      if (selectedVersionId !== null) setSelectedVersionId(null);
+      if (requestedVersionId) {
+        syncWorkspaceIdentityToUrl({ documentId: activeDocumentId, versionId: null }, "replace");
+      }
+      return;
+    }
+
+    const match = requestedVersionId
+      ? versions.find((version) => version.id === requestedVersionId) || null
+      : null;
+
+    if (match && !match.isCurrent) {
+      if (selectedVersionId !== match.id) setSelectedVersionId(match.id);
+      return;
+    }
+
+    if (selectedVersionId !== currentDefaultId) setSelectedVersionId(currentDefaultId);
+    if (requestedVersionId) {
+      syncWorkspaceIdentityToUrl({ documentId: activeDocumentId, versionId: null }, "replace");
+    }
+  }, [isLoadingVersions, requestedVersionId, selectedUploadedDocument?.id, selectedGeneratedContract?.id, selectedVersionId, syncWorkspaceIdentityToUrl, versions, versionsLoadedForDocumentId]);
 
   const handleVersionFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -755,6 +865,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       });
       setVersions(response.versions);
       setSelectedVersionId(response.currentVersion?.id || response.versions.find((version) => version.isCurrent)?.id || null);
+      syncWorkspaceIdentityToUrl({ documentId: selectedUploadedDocument.id, versionId: null }, "replace");
       await loadData(false);
       setActionResult({ type: 'success', message: 'Új, változtathatatlan dokumentumverzió feltöltve.' });
       if (versionFileInputRef.current) {
@@ -807,6 +918,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const promoted = await promoteDocumentVersion(version.documentId, version.id);
       setVersions((items) => items.map((item) => ({ ...item, isCurrent: item.id === promoted.id })));
       setSelectedVersionId(promoted.id);
+      syncWorkspaceIdentityToUrl({ documentId: version.documentId, versionId: null }, "replace");
       await loadData(false);
       setActionResult({ type: 'success', message: `v${promoted.versionNumber} lett az aktuális verzió.` });
     } catch (err) {
@@ -1025,6 +1137,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       await deleteDocument(deleteCandidate.id);
       setSelectedLedgerItem(null);
       setSelectedContract(null);
+      syncDocumentIdToUrl(null, "replace");
       await loadData(false);
       setActionResult({ type: 'success', message: 'A dokumentum törölve lett.' });
       setDeleteCandidate(null);
@@ -1315,7 +1428,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     : selectedGeneratedContract
       ? getContractStatusLabel(selectedGeneratedContract)
       : 'Válassz dokumentumot';
-  const selectedDocumentActionLabel = activeTitle || "nincs kiválasztva";
   const selectedMetaItems = [
     selectedUploadedDocument?.version ? `Verzió: ${selectedUploadedDocument.version}` : selectedGeneratedContract?.revisionNumber ? `Verzió: v${selectedGeneratedContract.revisionNumber}` : null,
     selectedUploadedDocument?.createdAt ? `Dátum: ${formatShortDate(selectedUploadedDocument.createdAt)}` : selectedGeneratedContract?.generatedAt ? `Dátum: ${formatShortDate(selectedGeneratedContract.generatedAt)}` : null,
@@ -1327,16 +1439,58 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const selectedVersion = versions.find((version) => version.id === selectedVersionId) || versions.find((version) => version.isCurrent) || versions[0] || null;
   const selectedVersionStableId = selectedVersion?.id || null;
   const selectedVersionDocumentId = selectedVersion?.documentId || null;
+
+  // Explicit version selection keeps the document identity, writes the
+  // immutable version id for a historical version, and canonicalizes the
+  // current/default version back to the implicit document-only identity.
+  const selectVersion = (version: DocumentVersionItem, history: "push" | "replace" = "push") => {
+    setSelectedVersionId(version.id);
+    const documentId = selectedUploadedDocument?.id ?? null;
+    if (!documentId) return;
+    syncWorkspaceIdentityToUrl({ documentId, versionId: version.isCurrent ? null : version.id }, history);
+  };
   const selectedAnnotation = annotations.find((annotation) => annotation.id === selectedAnnotationId) || null;
   const selectedVersionFileType = getFileType(selectedVersion?.originalFileName || selectedUploadedDocument?.fileName);
-  const canRenderTextVersion = selectedVersionFileType === 'TXT';
+
+  // Canonical shell safety invariant: prove the selected version actually belongs
+  // to the active uploaded document and was resolved from the current loaded versions list.
+  // During document switch (A -> B), this prevents stale metadata and old version text of doc A
+  // from briefly flashing or qualifying for rendering under doc B.
+  const selectedVersionBelongsToActiveDocument =
+    !isLoadingVersions &&
+    Boolean(selectedUploadedDocument?.id) &&
+    Boolean(selectedVersion?.id) &&
+    selectedVersion?.documentId === selectedUploadedDocument?.id &&
+    versions.some((v) => v.id === selectedVersion?.id);
+
+  const annotationVersionEligible = selectedVersionBelongsToActiveDocument;
+
+  // Version-truthful text plan: TXT reads its own stored bytes; DOCX/PDF read
+  // the exact selected version's backend-extracted text; the document-level
+  // extracted text is a read-only preview that is only valid while the selected
+  // version is the document's current version.
+  const versionTextPlan = resolveVersionTextPlan({
+    hasSelectedVersion: Boolean(selectedVersionStableId && selectedVersionDocumentId),
+    fileType: selectedVersionFileType,
+    versionIsCurrent: Boolean(selectedVersion?.isCurrent),
+    versionBelongsToSelectedDocument: annotationVersionEligible,
+    documentIsUploaded: Boolean(
+      selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY',
+    ),
+  });
+  // The plan requests version-scoped text; the exact text is only truly rendered
+  // once it has loaded (or its truthful unavailable state is shown).
+  const hasVersionScopedText = isVersionScopedTextPlan(versionTextPlan);
+  const versionTextRendered = hasVersionScopedText && versionText !== null;
+
   // Single source of truth for which annotation tools may be offered. Support is
   // derived from the renderer that will actually display this version — never from
   // the file extension alone — so no tool is offered over a placeholder surface.
+  // Text-range support therefore requires the exact version text to be loaded.
   const annotationCapabilities = resolveAnnotationCapabilities({
     mimeType: selectedVersion?.mimeType,
     fileName: selectedVersion?.originalFileName || selectedUploadedDocument?.fileName,
-    textRendered: canRenderTextVersion,
+    textRendered: versionTextRendered,
   });
   const canCreateGeometry =
     annotationCapabilities.canCreatePageRectangle ||
@@ -1416,19 +1570,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   }, []);
 
-  // Canonical shell safety invariant: prove the selected version actually belongs
-  // to the active uploaded document and was resolved from the current loaded versions list.
-  // During document switch (A -> B), this prevents stale metadata and old TXT previews of doc A
-  // from briefly flashing or qualifying for rendering under doc B.
-  const selectedVersionBelongsToActiveDocument =
-    !isLoadingVersions &&
-    Boolean(selectedUploadedDocument?.id) &&
-    Boolean(selectedVersion?.id) &&
-    selectedVersion?.documentId === selectedUploadedDocument?.id &&
-    versions.some((v) => v.id === selectedVersion?.id);
-
-  const annotationVersionEligible = selectedVersionBelongsToActiveDocument;
-
   // Safe active version for canonical shell rendering
   const canonicalActiveVersion = selectedVersionBelongsToActiveDocument ? selectedVersion : null;
   // Read-only work context for the consolidated header. Independent of
@@ -1437,16 +1578,17 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     selectedVersion: canonicalActiveVersion?.versionNumber ?? null,
   });
 
-  // Reader search is enabled only on the surface where matches can actually be
-  // highlighted and navigated (the plain extracted-text surface). The
-  // annotation-anchored surface is deliberately not searchable so canonical
-  // annotation offsets are never at risk. No backend search.
+  // Reader search operates on the EXACT text the reader displays. On the
+  // version-scoped surface that is the selected version's own text, so a
+  // historical v1 search can never scan v2's text. No backend search.
   const readerSearchSurface = resolveReaderSearchSurface({
-    hasAnnotatedText: Boolean(canRenderTextVersion && selectedVersionBelongsToActiveDocument && versionText),
+    hasVersionText: Boolean(hasVersionScopedText && selectedVersionBelongsToActiveDocument && versionText),
     hasPlainText: Boolean(documentTextPreview),
   });
   const readerSearchSupported = isReaderSearchSupported(readerSearchSurface);
-  const readerSearchableText = readerSearchSupported ? documentTextPreview : null;
+  const readerSearchableText = readerSearchSupported
+    ? (readerSearchSurface === 'VERSION_TEXT' ? versionText : documentTextPreview)
+    : null;
   const readerSearchTerm = readerSearchState.query.trim();
   const readerMatchOffsets = findReaderMatchOffsets(readerSearchableText, readerSearchTerm);
   const readerMatchCount = readerMatchOffsets.length;
@@ -1466,6 +1608,29 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       return (
         <mark
           key={`reader-segment-${index}`}
+          data-testid="reader-search-match"
+          data-reader-search-index={segment.matchIndex}
+          ref={isActive ? readerSearchActiveRef : undefined}
+          className={isActive ? 'bg-[#F2CE5A] text-[#1f2a24]' : 'bg-[#FBF0C7] text-[#1f2a24]'}
+        >
+          {segment.text}
+        </mark>
+      );
+    });
+  };
+
+  // Presentation-only highlighting of the version-scoped reader surface, split
+  // per range so TEXT_RANGE anchors keep their exact boundaries. Match indexes
+  // stay global, and rejoining the segments returns the exact version text.
+  const renderReaderHighlightsInRange = (rangeStart: number, rangeEnd: number): React.ReactNode => {
+    const text = versionText ?? '';
+    if (!readerSearchTerm || readerMatchCount === 0) return text.slice(rangeStart, rangeEnd);
+    return buildReaderHighlightSegmentsInRange(text, rangeStart, rangeEnd, readerMatchOffsets, readerSearchTerm.length).map((segment, index) => {
+      if (segment.matchIndex === null) return segment.text;
+      const isActive = segment.matchIndex === readerActiveMatch;
+      return (
+        <mark
+          key={`version-segment-${rangeStart}-${index}`}
           data-testid="reader-search-match"
           data-reader-search-index={segment.matchIndex}
           ref={isActive ? readerSearchActiveRef : undefined}
@@ -1534,19 +1699,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         ? "Publikálva"
         : "Nincs publikálva";
 
-  // Version-truthful text plan: TXT always reads its own stored bytes; the
-  // document-level extracted text is a read-only preview that is only valid
-  // while the selected version is the document's current version.
-  const versionTextPlan = resolveVersionTextPlan({
-    hasSelectedVersion: Boolean(selectedVersionStableId && selectedVersionDocumentId),
-    fileType: selectedVersionFileType,
-    versionIsCurrent: Boolean(selectedVersion?.isCurrent),
-    versionBelongsToSelectedDocument: annotationVersionEligible,
-    documentIsUploaded: Boolean(
-      selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY',
-    ),
-  });
-
   useEffect(() => {
     // Annotations are version-scoped, so a selection never survives a version
     // switch. Clearing it first prevents the comments effect from re-firing with
@@ -1569,6 +1721,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     setDocumentTextPreview(null);
     setDocumentTextUnavailableReason(null);
     setDocumentTextFailed(false);
+    setVersionTextUnavailableReason(null);
     setIsLoadingDocumentText(false);
     setPendingTextAnchor(null);
     setPendingVisualAnchor(null);
@@ -1586,7 +1739,37 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           // storage reference). Show a controlled, truthful state — never log the
           // provider's error body or surface a storage identifier. Runs once per
           // version, so there is no retry loop.
-          if (!cancelled) setVersionTextUnavailable(true);
+          if (!cancelled) {
+            setVersionTextUnavailable(true);
+            setVersionTextUnavailableReason(VERSION_TEXT_REQUEST_FAILED);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoadingVersionText(false);
+        });
+    } else if (versionTextPlan === 'VERSION_TEXT' && selectedVersionDocumentId && selectedVersionStableId) {
+      // Canonical exact-version text for DOCX/PDF: the endpoint reads THIS
+      // version's own storage/bytes and never falls back to the current version.
+      // The response is truthful about unavailability, so the reader mirrors it.
+      setIsLoadingVersionText(true);
+      getDocumentVersionText(selectedVersionDocumentId, selectedVersionStableId)
+        .then((result) => {
+          if (cancelled) return;
+          const outcome = resolveVersionTextLoadOutcome(result);
+          if (outcome.text) {
+            setVersionText(outcome.text);
+          } else {
+            setVersionTextUnavailable(true);
+            setVersionTextUnavailableReason(outcome.unavailableReason || VERSION_TEXT_NO_EXTRACTABLE_TEXT);
+          }
+        })
+        .catch((error) => {
+          // Request-level failure (404 / scan block / storage error): a
+          // controlled reason only — never a raw backend implementation code.
+          if (!cancelled) {
+            setVersionTextUnavailable(true);
+            setVersionTextUnavailableReason(versionTextRequestFailureMessage(error));
+          }
         })
         .finally(() => {
           if (!cancelled) setIsLoadingVersionText(false);
@@ -1778,7 +1961,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         internalNote: annotationDraft.internalNote || undefined,
         reviewComment: annotationDraft.reviewComment || undefined,
         clientExplanationDraft: annotationDraft.clientExplanationDraft || undefined,
-        rendererVersion: canRenderTextVersion ? 'txt-readonly-v1' : 'visual-placeholder-v1',
+        rendererVersion: versionTextRendered ? 'txt-readonly-v1' : 'visual-placeholder-v1',
         idempotencyKey: `${selectedVersion.id}:${Date.now()}:${Math.random().toString(36).slice(2)}`,
       };
       const created = await createDocumentAnnotation(selectedUploadedDocument.id, selectedVersion.id, payload);
@@ -1893,7 +2076,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       const start = Math.max(0, annotation.startOffset || 0);
       const end = Math.min(versionText.length, annotation.endOffset || start);
       if (start < cursor || end <= start) continue;
-      if (start > cursor) nodes.push(<span key={`text-${cursor}`}>{versionText.slice(cursor, start)}</span>);
+      if (start > cursor) nodes.push(<span key={`text-${cursor}`}>{renderReaderHighlightsInRange(cursor, start)}</span>);
       nodes.push(
         <mark
           key={annotation.id}
@@ -1903,12 +2086,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
           className={`cursor-pointer rounded px-0.5 ${selectedAnnotationId === annotation.id ? 'bg-[#D8C58E]' : 'bg-[#FEF3C7]'}`}
           onClick={() => focusAnnotation(annotation)}
         >
-          {versionText.slice(start, end)}
+          {renderReaderHighlightsInRange(start, end)}
         </mark>
       );
       cursor = end;
     }
-    if (cursor < versionText.length) nodes.push(<span key={`text-${cursor}`}>{versionText.slice(cursor)}</span>);
+    if (cursor < versionText.length) nodes.push(<span key={`text-${cursor}`}>{renderReaderHighlightsInRange(cursor, versionText.length)}</span>);
     return nodes;
   };
 
@@ -1932,30 +2115,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               </div>
             )}
 
-            <header className="adm-board-panel overflow-hidden">
-              <div className="flex flex-col gap-3 bg-white px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h1 className="font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">Dokumentum munkatér</h1>
-                    <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6D5418]">
-                      {totalLedgerDocuments} irat
-                    </span>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>
-                    {isUploading ? "Hozzáadás..." : "Dokumentum hozzáadása"}
-                  </AdminButton>
-                </div>
-              </div>
-              <div className="border-t border-[var(--adm-border)] bg-white px-4 pt-2">
-                <DocumentWorkspaceTabs active={contextualTab} onChange={setContextualTab} />
-              </div>
-              <div className="border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-4 py-2 text-[11px] text-[#3D4842]">
-                <span className="font-bold text-[var(--adm-green-800)]">Workspace fókusz:</span> {selectedDocumentActionLabel}
-              </div>
-            </header>
-
             <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleFileUpload} className="hidden" />
             <input ref={versionFileInputRef} type="file" accept=".pdf,.doc,.docx,.txt" onChange={handleVersionFileUpload} className="hidden" />
             {isUploading && uploadPhase ? <div className="rounded-[10px] border border-[#D8C58E] bg-[var(--adm-surface)] p-3 text-sm font-semibold text-[#6D5418]">{uploadPhase}</div> : null}
@@ -1966,8 +2125,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             ) : (
               <div className="space-y-6">
                 {/* 1. CANONICAL TOP REGION */}
-                <section data-testid="canonical-top-region" className="adm-board-panel overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4 shadow-sm">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <section data-testid="canonical-top-region" className="adm-board-panel overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm">
+                  <div className="flex flex-col gap-3 p-4 pb-3 xl:flex-row xl:items-center xl:justify-between">
                     <div className="min-w-0 flex-1">
                       <div data-testid="document-workspace-case-breadcrumb" className="mb-1 flex flex-wrap items-center gap-2 text-[11px]">
                         <Link
@@ -2029,6 +2188,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      <AdminButton
+                        variant={activeDocument ? "neutral" : "primary"}
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={!caseRecord?.id || isUploading}
+                      >
+                        {isUploading ? "Hozzáadás..." : "Dokumentum hozzáadása"}
+                      </AdminButton>
                       {selectedUploadedDocument ? (
                         <AdminButton
                           variant="neutral"
@@ -2055,18 +2221,32 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           {isUploadingVersion ? 'Feltöltés...' : 'Új verzió feltöltése'}
                         </AdminButton>
                       ) : null}
-                      <AdminButton
-                        variant="neutral"
-                        onClick={() => {
-                          const tools = document.getElementById('preserved-extended-tools-shell') as HTMLDetailsElement | null;
-                          if (tools) tools.open = true;
-                          const el = document.getElementById('preserved-extended-tools');
-                          if (el) el.scrollIntoView({ behavior: 'smooth' });
-                        }}
+                      <button
+                        type="button"
+                        data-testid="ledger-rail-toggle"
+                        aria-pressed={leftRailOpen}
+                        onClick={() => setLeftRailOpen((value) => !value)}
+                        className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-sm font-semibold text-[#3D4842] lg:hidden"
                       >
-                        Eszközök ↓
-                      </AdminButton>
+                        {leftRailOpen ? "Iratlista elrejtése" : "Iratlista"}
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="ledger-rail-collapse"
+                        aria-pressed={!leftRailCollapsed}
+                        onClick={() => setLeftRailCollapsed((value) => !value)}
+                        className="hidden rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-sm font-semibold text-[#3D4842] lg:inline-flex"
+                      >
+                        {leftRailCollapsed ? "Iratlista megjelenítése" : "Iratlista elrejtése"}
+                      </button>
                     </div>
+                  </div>
+                  <div className="border-t border-[var(--adm-border)] px-4 pt-1">
+                    <DocumentWorkspaceTabs active={contextualTab} onChange={setContextualTab} />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-4 py-1.5 text-[11px] text-[#3D4842]">
+                    <span><b>{totalLedgerDocuments}</b> irat</span>
+                    {reviewProjection?.nextAction?.label ? <span><b>Következő teendő:</b> {reviewProjection.nextAction.label}</span> : null}
                   </div>
                 </section>
 
@@ -2114,18 +2294,18 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 ) : null}
 
                 {/* 2. CANONICAL 3-COLUMN WORKSPACE: LEFT (LEDGER) | CENTER (READING) | RIGHT (CONTEXTUAL SHELL) */}
-                <div className={`grid min-w-0 grid-cols-1 gap-4 ${readingFocus ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[230px_minmax(0,1fr)_290px] xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
+                <div className={`grid min-w-0 grid-cols-1 gap-4 ${readingFocus ? "lg:grid-cols-[minmax(0,1fr)]" : leftRailCollapsed ? "lg:grid-cols-[minmax(0,1fr)_290px] xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[230px_minmax(0,1fr)_290px] xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
                   {/* CANONICAL LEFT REGION: Document Ledger */}
-                  <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " lg:hidden" : ""}`}>
-                    <div className="order-2 border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Jogi munka</p>
-                      <h2 className="font-serif text-lg font-semibold text-[var(--adm-text)]">AI / prompt előkészítés</h2>
-                      <p className="mt-1 text-[11px] text-[#3D4842]">Másodlagos előkészítési eszköz a kanonikus Prompt Systemen keresztül.</p>
+                  <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " lg:hidden" : ""}${leftRailCollapsed ? " lg:hidden" : ""}${leftRailOpen ? "" : " max-lg:hidden"}`}>
+                    <div className="order-2 border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-3 py-2">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Előkészítés</p>
                       {selectedUploadedDocument ? (
-                        <AdminButton className="mt-3 w-full justify-start" variant="primary" size="xs" onClick={() => { setAiVersionPair(null); setAiPreparationOpen(true); }}>
+                        <AdminButton className="mt-1 w-full justify-start" variant="neutral" size="xs" onClick={() => { setAiVersionPair(null); setAiPreparationOpen(true); }}>
                           AI előkészítés megnyitása
                         </AdminButton>
-                      ) : null}
+                      ) : (
+                        <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Dokumentum kiválasztása után érhető el.</p>
+                      )}
                     </div>
                     <div className="order-1 border-b border-[var(--adm-border)] bg-white p-3">
                       <details data-testid="document-version-navigation" open>
@@ -2220,6 +2400,37 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         })}
                       </section>
 
+                      {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
+                        <section id="document-versions" className="space-y-2 border-t border-[var(--adm-border)] pt-3">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Verziótörténet</h3>
+                            <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--adm-green-800)]">{versions.length}</span>
+                          </div>
+                          {isLoadingVersions ? (
+                            <p className="text-[11px] text-[var(--adm-text-muted)]">Verziótörténet betöltése...</p>
+                          ) : versions.length === 0 ? (
+                            <p className="text-[11px] text-[var(--adm-text-muted)]">Ehhez a dokumentumhoz még nincs verziórekord.</p>
+                          ) : versions.map((version) => {
+                            const isSelected = selectedVersion?.id === version.id;
+                            return (
+                              <button
+                                key={version.id}
+                                type="button"
+                                onClick={() => selectVersion(version)}
+                                className={`w-full rounded-[10px] border p-2 text-left transition ${isSelected ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white hover:bg-[var(--adm-surface)]'}`}
+                              >
+                                <span className="flex flex-wrap items-center justify-between gap-1">
+                                  <span className="text-[12px] font-semibold text-[var(--adm-text)]">v{version.versionNumber}</span>
+                                  {version.isCurrent ? <AdminBadge tone="gold">Aktuális</AdminBadge> : null}
+                                </span>
+                                <span className="mt-0.5 block truncate text-[11px] text-[#3D4842]">{version.originalFileName}</span>
+                                <span className="mt-0.5 block text-[10px] text-[var(--adm-text-muted)]">{formatShortDate(version.uploadedAt)} · {version.uploadedBy.name}</span>
+                              </button>
+                            );
+                          })}
+                        </section>
+                      ) : null}
+
                       {ledgerSearchTerm
                         && filteredUploadedDocuments.length === 0
                         && filteredModifiedWorkingCopies.length === 0
@@ -2285,7 +2496,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </label>
                       <span data-testid="reader-search-status" className="text-[10px] text-[#7B776D]" aria-live="polite">
                         {!readerSearchSupported
-                          ? (readerSearchSurface === 'ANNOTATED' ? 'Keresés ezen a felületen nem támogatott' : 'Nincs kereshető szöveg')
+                          ? 'Nincs kereshető szöveg'
                           : readerSearchTerm
                             ? (readerMatchCount > 0 ? `${readerActiveMatch + 1} / ${readerMatchCount}` : 'Nincs találat')
                             : ''}
@@ -2313,23 +2524,23 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </div>
                     ) : null}
 
-                    <div className="min-h-[460px] flex-1">
+                    <div className="min-h-[560px] flex-1">
                       {!activeDocument ? (
-                        <div className="adm-board-empty flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
+                        <div className="adm-board-empty flex min-h-[560px] flex-col items-center justify-center p-8 text-center">
                           <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">Nincs kiválasztott dokumentum</h3>
                           <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Tölts fel egy dokumentumot, vagy válassz az iratlistából a bal oldali panelen.</p>
                         </div>
                       ) : (
                         <div>
-                          {canRenderTextVersion && selectedVersionBelongsToActiveDocument ? (
+                          {hasVersionScopedText && selectedVersionBelongsToActiveDocument ? (
                             versionTextUnavailable && !isLoadingVersionText ? (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                 <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
+                                <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
                               </div>
                             ) : (
-                              <div className="max-h-[680px] overflow-auto bg-[#efece4] p-4 sm:p-6">
+                              <div className="max-h-[74vh] overflow-auto bg-[#efece4] p-4 sm:p-6">
                                 <div
                                   ref={annotationSurfaceRef}
                                   onMouseUp={annotationCapabilities.canCreateTextRange ? handleTextSelectionAnchor : undefined}
@@ -2348,7 +2559,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be read-only előnézetként.</p>
                               </div>
                             ) : documentTextPreview ? (
-                              <div className="max-h-[680px] overflow-auto bg-[#efece4] p-4 sm:p-6">
+                              <div className="max-h-[74vh] overflow-auto bg-[#efece4] p-4 sm:p-6">
                                 <div data-testid="version-preview-document-text" style={{ zoom: readerZoom / 100 }} className="mx-auto max-w-[840px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border)] bg-white p-8 font-serif text-[15px] leading-7 text-[#1f2a24] shadow-sm">
                                   {renderReaderHighlights(documentTextPreview)}
                                 </div>
@@ -2388,24 +2599,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                   {/* CANONICAL RIGHT REGION: Contextual Work-Panel Shell */}
                   <aside data-testid="canonical-right-shell" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " lg:hidden" : ""}`}>
-                    <div className="border-b border-[var(--adm-border)] bg-[var(--adm-sand-100)] p-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">
-                          Kontextus panel
-                        </span>
-                        <span className="text-[11px] text-[var(--adm-text-muted)]">Munkafelületek</span>
-                      </div>
-                      <p className="mt-2 text-xs text-[#3D4842]">
-                        {contextualTab === 'overview'
-                          ? 'A dokumentum aktuális állapota és következő teendője.'
-                          : contextualTab === 'changes'
-                            ? 'Pontos immutable verziópár változásai.'
-                            : contextualTab === 'comments'
-                              ? 'Verzióhoz kötött annotációk és kommentfolyamok.'
-                              : 'Dokumentumszintű döntés és jóváhagyás.'}
-                      </p>
-                    </div>
-
                     <div className="flex-1 max-h-[720px] overflow-y-auto p-4">
                       <div className={contextualTab === 'overview' ? 'space-y-4' : 'hidden'} data-testid="contextual-overview-panel">
                         <div>
@@ -2763,30 +2956,22 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </div>
 
                 {/* 3. PRESERVED EXTENDED TOOLS SECTION */}
-                <details id="preserved-extended-tools-shell" data-testid="preserved-extended-tools-shell" className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-                  <summary className="cursor-pointer font-serif text-lg font-semibold text-[var(--adm-text)]">
+                <details id="preserved-extended-tools-shell" data-testid="preserved-extended-tools-shell" className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-4 py-3">
+                  <summary className="cursor-pointer text-xs font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
                     Haladó eszközök
-                    <span className="ml-2 text-xs font-normal text-[var(--adm-text-muted)]">Haladó dokumentumfunkciók</span>
+                    <span className="ml-2 text-[11px] font-normal normal-case tracking-normal text-[var(--adm-text-soft)]">Megőrzött dokumentumfunkciók</span>
                   </summary>
-                <section id="preserved-extended-tools" data-testid="preserved-extended-tools" className="mt-8 space-y-6 border-t-2 border-[rgba(22,32,26,0.12)] pt-6">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">További meglévő dokumentumeszközök</h3>
-                      <p className="text-xs text-[var(--adm-text-muted)]">
-                        Konszolidáció alatt álló munkafelületek · Minden meglévő funkció elérhető és változatlan
-                      </p>
-                    </div>
-                    <span className="rounded-full border border-[#D8C58E] bg-[var(--adm-sand-100)] px-3 py-1 text-[11px] font-bold text-[#6D5418]">
-                      Megőrzött eszközök
-                    </span>
-                  </div>
+                <section id="preserved-extended-tools" data-testid="preserved-extended-tools" className="mt-4 space-y-4 border-t border-[rgba(22,32,26,0.12)] pt-4">
+                  <p className="text-[11px] text-[var(--adm-text-muted)]">
+                    További meglévő dokumentumeszközök · minden korábbi funkció elérhető és változatlan
+                  </p>
 
                   {/* Operational work context and existing tool panels */}
                   <section className="adm-board-panel min-w-0 overflow-hidden">
-                  <div className="flex min-w-0 gap-3 border-b border-[rgba(22,32,26,0.12)] bg-white/70 p-3 sm:gap-4 sm:p-5">
-                    <div className="mt-1 h-16 w-1.5 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
+                  <div className="flex min-w-0 gap-3 border-b border-[rgba(22,32,26,0.12)] bg-white/70 p-3">
+                    <div className="mt-1 h-8 w-1 shrink-0 rounded-full bg-[var(--adm-ochre-500)]" />
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--adm-green-800)]">Contract Workspace</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Contract Workspace</p>
                       {selectedUploadedDocument ? (
                         /* Operational work-context identity — the same legal context the
                            cockpit card and the editor show, derived from one model.
@@ -2875,85 +3060,48 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
 
                         {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
-                          <div id="document-versions" className="scroll-mt-24 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
-                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                              <div>
-                                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Contract Workspace · verziók</p>
-                                <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">Változtathatatlan verziótörténet</h3>
-                                <p className="mt-1 max-w-2xl text-sm text-[#3D4842]">
-                                  Minden feltöltés új tartalmi verziót hoz létre. A korábbi verziók letölthetők, de nem szerkeszthetők és nem íródnak felül.
-                                </p>
-                              </div>
-                              <AdminButton variant="primary" onClick={() => versionFileInputRef.current?.click()} disabled={isUploadingVersion || isLoadingVersions}>
-                                {isUploadingVersion ? 'Verzió feltöltése...' : 'Új verzió feltöltése'}
-                              </AdminButton>
-                            </div>
-
-                            {isLoadingVersions ? (
-                              <p className="mt-4 rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">Verziótörténet betöltése...</p>
-                            ) : versions.length === 0 ? (
-                              <p className="mt-4 rounded-[10px] border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">Ehhez a dokumentumhoz még nincs verziórekord.</p>
-                            ) : (
-                              <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
-                                <div className="min-w-0 space-y-2">
-                                  {versions.map((version) => (
-                                    <button
-                                      key={version.id}
-                                      type="button"
-                                      onClick={() => setSelectedVersionId(version.id)}
-                                      className={`w-full rounded-[12px] border p-3 text-left transition ${selectedVersion?.id === version.id ? 'border-[#D8C58E] bg-[var(--adm-sand-100)]' : 'border-[rgba(22,32,26,0.12)] bg-white hover:bg-[var(--adm-surface)]'}`}
-                                    >
-                                      <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <span className="font-serif text-lg font-semibold text-[var(--adm-text)]">v{version.versionNumber}</span>
-                                        <span className="flex flex-wrap gap-2">
-                                          {version.isCurrent ? <AdminBadge tone="gold">Aktuális</AdminBadge> : null}
-                                          <AdminBadge tone="neutral">{documentEnumLabel(version.versionType)}</AdminBadge>
-                                        </span>
-                                      </div>
-                                      <p className="mt-1 truncate text-sm font-semibold text-[#3D4842]">{version.originalFileName}</p>
-                                      <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">
-                                        {version.uploadedBy.name} · {formatDateTime(version.uploadedAt)} · {formatFileSize(version.size)}
-                                      </p>
-                                    </button>
-                                  ))}
+                          <div className="scroll-mt-24 space-y-4">
+                            <details className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                              <summary className="cursor-pointer text-xs font-semibold text-[var(--adm-text)]">Kiválasztott verzió részletei és műveletei</summary>
+                              <div className="mt-3 space-y-3">
+                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">
+                                    Verzió: {selectedVersion ? `v${selectedVersion.versionNumber}` : 'nincs kijelölve'}
+                                  </p>
+                                  <AdminButton variant="neutral" size="xs" onClick={() => versionFileInputRef.current?.click()} disabled={isUploadingVersion || isLoadingVersions}>
+                                    {isUploadingVersion ? 'Verzió feltöltése...' : 'Új verzió feltöltése'}
+                                  </AdminButton>
                                 </div>
-
-                                <aside className="min-w-0 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
-                                  {selectedVersion ? (
-                                    <div className="space-y-3">
-                                      <div>
-                                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Kiválasztott verzió</p>
-                                        <h4 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">v{selectedVersion.versionNumber}</h4>
-                                      </div>
-                                      <div className="space-y-1 text-xs text-[#3D4842]">
-                                        <p><b>Fájlnév:</b> {selectedVersion.originalFileName}</p>
-                                        <p><b>Feltöltő:</b> {selectedVersion.uploadedBy.name}</p>
-                                        <p><b>Feltöltve:</b> {formatDateTime(selectedVersion.uploadedAt)}</p>
-                                        <p><b>Méret:</b> {formatFileSize(selectedVersion.size)}</p>
-                                        <p><b>MIME:</b> {selectedVersion.mimeType || 'application/octet-stream'}</p>
-                                        <p><b>Típus:</b> {documentEnumLabel(selectedVersion.versionType)}</p>
-                                        <p><b>Review:</b> {documentEnumLabel(selectedVersion.reviewStatus)}</p>
-                                        <p><b>Publikáció:</b> {documentEnumLabel(selectedVersion.publicationStatus)}</p>
-                                        <p><b>Forrás:</b> {documentEnumLabel(selectedVersion.uploadSource)}</p>
-                                        <p><b>Előző verzió:</b> {selectedVersion.previousVersionId ? 'Kapcsolva' : 'Nincs'}</p>
-                                        {selectedVersion.securityScanStatus !== 'CLEAN' ? <p className="font-semibold text-[#92400E]">{scanStatusLabel(selectedVersion.securityScanStatus)}</p> : null}
-                                      </div>
-                                      <div className="space-y-2 border-t border-[rgba(22,32,26,0.12)] pt-3">
-                                        <AdminButton className="w-full justify-start" variant="neutral" onClick={() => handleDownloadVersion(selectedVersion)} disabled={isDownloading === selectedVersion.id || selectedVersion.securityScanStatus !== 'CLEAN'}>
-                                          {isDownloading === selectedVersion.id ? 'Letöltés...' : 'Verzió letöltése'}
-                                        </AdminButton>
-                                        {selectedVersion.securityScanStatus === 'SCAN_FAILED' ? <AdminButton className="w-full justify-start" variant="gold" onClick={() => void handleRetrySecurityScan(selectedVersion)}>Ellenőrzés újraindítása</AdminButton> : null}
-                                        <AdminButton className="w-full justify-start" variant="gold" onClick={() => handlePromoteVersion(selectedVersion)} disabled={selectedVersion.isCurrent || isPromotingVersion === selectedVersion.id}>
-                                          {selectedVersion.isCurrent ? 'Már aktuális' : isPromotingVersion === selectedVersion.id ? 'Kijelölés...' : 'Legyen aktuális'}
-                                        </AdminButton>
-                                      </div>
+                                {selectedVersion ? (
+                                  <>
+                                    <div className="grid min-w-0 gap-1 text-xs text-[#3D4842] sm:grid-cols-2">
+                                      <p><b>Fájlnév:</b> {selectedVersion.originalFileName}</p>
+                                      <p><b>Feltöltő:</b> {selectedVersion.uploadedBy.name}</p>
+                                      <p><b>Feltöltve:</b> {formatDateTime(selectedVersion.uploadedAt)}</p>
+                                      <p><b>Méret:</b> {formatFileSize(selectedVersion.size)}</p>
+                                      <p><b>MIME:</b> {selectedVersion.mimeType || 'application/octet-stream'}</p>
+                                      <p><b>Típus:</b> {documentEnumLabel(selectedVersion.versionType)}</p>
+                                      <p><b>Review:</b> {documentEnumLabel(selectedVersion.reviewStatus)}</p>
+                                      <p><b>Publikáció:</b> {documentEnumLabel(selectedVersion.publicationStatus)}</p>
+                                      <p><b>Forrás:</b> {documentEnumLabel(selectedVersion.uploadSource)}</p>
+                                      <p><b>Előző verzió:</b> {selectedVersion.previousVersionId ? 'Kapcsolva' : 'Nincs'}</p>
+                                      {selectedVersion.securityScanStatus !== 'CLEAN' ? <p className="font-semibold text-[#92400E]">{scanStatusLabel(selectedVersion.securityScanStatus)}</p> : null}
                                     </div>
-                                  ) : (
-                                    <p className="text-sm text-[var(--adm-text-muted)]">Válassz verziót.</p>
-                                  )}
-                                </aside>
+                                    <div className="flex flex-wrap gap-2 border-t border-[rgba(22,32,26,0.12)] pt-3">
+                                      <AdminButton variant="neutral" size="sm" onClick={() => handleDownloadVersion(selectedVersion)} disabled={isDownloading === selectedVersion.id || selectedVersion.securityScanStatus !== 'CLEAN'}>
+                                        {isDownloading === selectedVersion.id ? 'Letöltés...' : 'Verzió letöltése'}
+                                      </AdminButton>
+                                      {selectedVersion.securityScanStatus === 'SCAN_FAILED' ? <AdminButton variant="gold" size="sm" onClick={() => void handleRetrySecurityScan(selectedVersion)}>Ellenőrzés újraindítása</AdminButton> : null}
+                                      <AdminButton variant="gold" size="sm" onClick={() => handlePromoteVersion(selectedVersion)} disabled={selectedVersion.isCurrent || isPromotingVersion === selectedVersion.id}>
+                                        {selectedVersion.isCurrent ? 'Már aktuális' : isPromotingVersion === selectedVersion.id ? 'Kijelölés...' : 'Legyen aktuális'}
+                                      </AdminButton>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <p className="text-sm text-[var(--adm-text-muted)]">Válassz verziót az iratlistában.</p>
+                                )}
                               </div>
-                            )}
+                            </details>
 
                             <div id="document-review" className="mt-4 scroll-mt-24">
                               <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
@@ -3050,12 +3198,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                         onPointerUp={canCreateGeometry ? handleVisualPointerUp : undefined}
                                         className={`relative mt-4 min-h-[420px] overflow-hidden rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white ${visualMode ? 'cursor-crosshair' : ''}`}
                                       >
-                                    {canRenderTextVersion ? (
+                                    {hasVersionScopedText && selectedVersionBelongsToActiveDocument ? (
                                       versionTextUnavailable && !isLoadingVersionText ? (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
                                           <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
-                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.</p>
+                                          <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
                                         </div>
                                       ) : (
                                         <div className="max-h-[620px] overflow-auto whitespace-pre-wrap p-5 font-mono text-[12px] leading-6 text-[#1f2a24]">

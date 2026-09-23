@@ -62,9 +62,25 @@ export function DocumentReviewWorkflowPanel({
 
   const selectedVersion = versions.find((v) => v.id === selectedVersionId) || null;
   const reviewVersion = versions.find((v) => v.id === review?.reviewVersionId) || null;
+  const approvedVersion = versions.find((v) => v.id === review?.approvedVersionId) || null;
   const latestVersion = [...versions].sort((a, b) => b.versionNumber - a.versionNumber)[0] || null;
   const mismatch = Boolean(review && selectedVersionId && review.reviewVersionId && selectedVersionId !== review.reviewVersionId);
   const canAttemptApproval = Boolean(review && ["IN_REVIEW", "RESUBMITTED"].includes(String(review.status)));
+
+  // Explicit, human-readable version context. A review can legitimately be bound
+  // to a historical version while the user looks at the current one; that is NOT
+  // the same as "no review", so we never collapse those states into one label.
+  const reviewVersionLabel = reviewVersion
+    ? `v${reviewVersion.versionNumber}`
+    : review?.reviewVersionId
+      ? review.reviewVersionId.slice(0, 8)
+      : null;
+  const selectedVersionLabel = selectedVersion ? `v${selectedVersion.versionNumber}${selectedVersion.isCurrent ? " · aktuális" : ""}` : null;
+  const approvedVersionLabel = approvedVersion
+    ? `v${approvedVersion.versionNumber}`
+    : review?.approvedVersionId
+      ? review.approvedVersionId.slice(0, 8)
+      : null;
 
   const load = useCallback(async () => {
     const reviews = await listDocumentReviews(documentId);
@@ -114,14 +130,17 @@ export function DocumentReviewWorkflowPanel({
           <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]" data-testid="review-summary-title">Review mód</h3>
           <p className="mt-1 text-sm text-[#3D4842]">Belső jóváhagyás pontos immutable verzióra. Nem publikál ügyfélportálra.</p>
         </div>
-        <AdminBadge tone={review?.status === "APPROVED" ? "green" : review ? "gold" : "neutral"}>{review ? statusLabel[String(review.status)] || review.status : "Nincs review"}</AdminBadge>
+        <AdminBadge tone={review?.status === "APPROVED" ? "green" : review ? "gold" : "neutral"}>{review ? `${statusLabel[String(review.status)] || review.status}${reviewVersionLabel ? ` · ${reviewVersionLabel}` : ""}` : "Nincs review"}</AdminBadge>
       </div>
 
       {error ? <p role="alert" className="rounded border border-[#F2DAD6] bg-[var(--adm-terracotta-100)] p-2 text-xs font-semibold text-[var(--adm-terracotta-700)]">{error}</p> : null}
 
       {!review ? (
         <div data-testid="review-empty" className="rounded border border-dashed border-[rgba(22,32,26,0.18)] bg-[var(--adm-surface)] p-4">
-          <p className="text-sm text-[#3D4842]">Ehhez a dokumentumhoz még nincs aktív belső review workflow.</p>
+          <p className="text-sm text-[#3D4842]">Ehhez a dokumentumhoz még nincs belső review workflow.</p>
+          <p className="mt-1 text-xs text-[var(--adm-text-muted)]" data-testid="review-empty-version-context">
+            {selectedVersionLabel ? `A most megnyitott verzió: ${selectedVersionLabel}. Az új review ehhez a verzióhoz jön létre.` : "Nincs kiválasztott verzió."}
+          </p>
           <AdminButton className="mt-3" variant="primary" disabled={busy || !selectedVersionId} onClick={() => run(() => createDocumentReview(documentId, { reviewVersionId: selectedVersionId || undefined }))}>Review létrehozása</AdminButton>
         </div>
       ) : (
@@ -129,15 +148,21 @@ export function DocumentReviewWorkflowPanel({
           <div data-testid="review-summary" className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <Info label="Státusz" value={statusLabel[String(review.status)] || review.status} />
             <Info label="Kör" value={`#${review.currentRoundNumber}`} />
-            <Info label="Review verzió" value={reviewVersion ? `v${reviewVersion.versionNumber}` : review.reviewVersionId?.slice(0, 8) || "—"} />
-            <Info label="Jóváhagyott verzió" value={review.approvedVersionId ? (versions.find((v) => v.id === review.approvedVersionId) ? `v${versions.find((v) => v.id === review.approvedVersionId)?.versionNumber}` : review.approvedVersionId.slice(0, 8)) : "—"} />
+            <Info label="Review verzió" value={reviewVersionLabel || "—"} />
+            <Info label="Megnyitott verzió" value={selectedVersionLabel || "Nincs kiválasztva"} />
+            <Info label="Jóváhagyott verzió" value={approvedVersionLabel || "—"} />
             <Info label="Reviewer" value={review.reviewer?.name || "Nincs kijelölve"} />
             <Info label="Határidő" value={review.dueAt ? new Date(review.dueAt).toLocaleDateString("hu-HU") : "—"} />
             <Info label="Nyitott / blokkoló" value={`${review.counts.open} / ${review.counts.blocking}`} />
             <Info label="Utolsó döntés" value={review.lastDecision?.action || "—"} />
           </div>
 
-          {mismatch ? <p data-testid="review-version-warning" className="rounded border border-[#E7DECB] bg-[var(--adm-sand-100)] p-3 text-xs font-semibold text-[#8A6A20]">A kiválasztott verzió eltér a review verziótól: a review döntés csak a review verzióra vonatkozik.</p> : null}
+          {mismatch ? (
+            <div data-testid="review-version-warning" className="rounded border border-[#E7DECB] bg-[var(--adm-sand-100)] p-3 text-xs font-semibold text-[#8A6A20]">
+              <p>A folyamatban lévő review a(z) {reviewVersionLabel || "ismeretlen"} verzióhoz tartozik{selectedVersionLabel ? `, nem a most megnyitott ${selectedVersionLabel} verzióhoz` : ""}.</p>
+              <p className="mt-1 font-normal">A review döntés és a review pontok kizárólag a(z) {reviewVersionLabel || "review"} immutable verzióra vonatkoznak.</p>
+            </div>
+          ) : null}
 
           <div data-testid="review-actions" className="flex flex-wrap gap-2">
             <input value={reviewerId} onChange={(e) => setReviewerId(e.target.value)} placeholder="Reviewer felhasználó ID" className="min-w-[220px] rounded border border-[rgba(22,32,26,0.16)] px-3 py-2 text-sm" />

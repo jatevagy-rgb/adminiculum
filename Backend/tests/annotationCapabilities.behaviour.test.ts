@@ -54,20 +54,39 @@ describe('capability matrix is truthful about the current renderer', () => {
     expect(caps.rendererVersion).toBe(TEXT_RENDERER_VERSION);
   });
 
-  it('PDF offers NO creation tools because there is no real renderer', () => {
+  it('PDF offers NO creation tools while the exact version text is not rendered', () => {
     const caps = resolveAnnotationCapabilities({ mimeType: 'application/pdf' });
     expect(caps.canRender).toBe(false);
     expect(hasNoCreationCapability(caps)).toBe(true);
     expect(caps.supportsZoomAlignedOverlays).toBe(false);
     expect(caps.rendererVersion).toBe(NO_RENDERER_VERSION);
-    expect(caps.explanation).toMatch(/megjelenítő/i);
+    expect(caps.explanation).toMatch(/nem tölthető be/i);
   });
 
-  it('DOCX offers NO creation tools because there is no real renderer', () => {
+  it('PDF supports text range (never page geometry) once exact version text is rendered', () => {
+    const caps = resolveAnnotationCapabilities({ mimeType: 'application/pdf', textRendered: true });
+    expect(caps.canRender).toBe(true);
+    expect(caps.canCreateTextRange).toBe(true);
+    expect(caps.canNavigateToTextAnchor).toBe(true);
+    expect(caps.canCreatePageRectangle).toBe(false);
+    expect(caps.canCreatePageEllipse).toBe(false);
+    expect(caps.canCreatePagePoint).toBe(false);
+    expect(caps.rendererVersion).toBe(TEXT_RENDERER_VERSION);
+  });
+
+  it('DOCX offers NO creation tools while the exact version text is not rendered', () => {
     const caps = resolveAnnotationCapabilities({ mimeType: 'application/msword' });
     expect(caps.canRender).toBe(false);
     expect(hasNoCreationCapability(caps)).toBe(true);
     expect(caps.explanation).toBeTruthy();
+  });
+
+  it('DOCX supports text range once exact version text is rendered', () => {
+    const caps = resolveAnnotationCapabilities({ mimeType: 'application/msword', textRendered: true });
+    expect(caps.canRender).toBe(true);
+    expect(caps.canCreateTextRange).toBe(true);
+    expect(caps.canNavigateToTextAnchor).toBe(true);
+    expect(hasNoCreationCapability(caps)).toBe(false);
   });
 
   it('denies text capability when the version text failed to render', () => {

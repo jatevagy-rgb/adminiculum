@@ -26,7 +26,7 @@ import { prisma } from '../src/prisma/prisma.service';
 import { driveService } from '../src/modules/sharepoint';
 import documentsService from '../src/modules/documents/services';
 
-function makeReview(status: string, revision = 0, reviewVersionId = 'ver-1') {
+function makeReview(status: string, revision = 0, reviewVersionId = 'ver-1', approvedVersionId: string | null = null) {
   return {
     id: 'review-1',
     documentId: 'doc-1',
@@ -41,7 +41,7 @@ function makeReview(status: string, revision = 0, reviewVersionId = 'ver-1') {
       reviewVersionId, status, startedAt: new Date(),
       submittedAt: null, completedAt: null, revision: 0,
     },
-    approvedVersionId: null,
+    approvedVersionId,
     revision,
     createdById: 'user-1',
     assignedReviewerId: 'user-1',
@@ -74,21 +74,22 @@ describe('Document Review transition P1 hotfix', () => {
   let checkins: number;
   let documentFolder: string;
   let directStatusWrites: number;
+  let versionReviewStatuses: Record<string, string>;
   let documentUpdateCalls: number;
   let checkinCalls: number;
   let timelineCalls: number;
 
-  function wireMocks(opts?: { openPoints?: number; openBlockingPoints?: number; noReview?: boolean }) {
+  function wireMocks(opts?: { openPoints?: number; openBlockingPoints?: number; noReview?: boolean; approvedVersionId?: string }) {
     const openPoints = opts?.openPoints ?? 0;
     const openBlockingPoints = opts?.openBlockingPoints ?? 0;
     prismaMock.document = { findUnique: jest.fn().mockResolvedValue(document) };
     prismaMock.documentReview = {
       findFirst: jest.fn().mockImplementation(async () =>
-        opts?.noReview ? null : makeReview(reviewStatus, reviewRevision),
+        opts?.noReview ? null : makeReview(reviewStatus, reviewRevision, 'ver-1', opts?.approvedVersionId ?? null),
       ),
       findUnique: jest.fn().mockImplementation(async () => {
         if (opts?.noReview) return null;
-        return makeReview(reviewStatus, reviewRevision);
+        return makeReview(reviewStatus, reviewRevision, 'ver-1', opts?.approvedVersionId ?? null);
       }),
       update: jest.fn().mockImplementation(async ({ data }: any) => {
         directStatusWrites += 1;
@@ -106,6 +107,11 @@ describe('Document Review transition P1 hotfix', () => {
       findUnique: jest.fn().mockResolvedValue({ id: 'ver-1', version: 1, documentId: 'doc-1' }),
       findFirst: jest.fn().mockResolvedValue({ id: 'ver-1', version: 1, documentId: 'doc-1' }),
       findFirstOrThrow: jest.fn().mockResolvedValue({ id: 'ver-1', version: 1 }),
+      // VERSION-LEVEL projection of the canonical review status.
+      update: jest.fn().mockImplementation(async ({ where, data }: any) => {
+        if (where?.id && data?.reviewStatus) versionReviewStatuses[where.id] = data.reviewStatus;
+        return {};
+      }),
     };
     prismaMock.reviewPoint = {
       count: jest.fn()
@@ -147,6 +153,7 @@ describe('Document Review transition P1 hotfix', () => {
     timelineEvents = 0;
     checkins = 0;
     directStatusWrites = 0;
+    versionReviewStatuses = {};
     documentUpdateCalls = 0;
     checkinCalls = 0;
     timelineCalls = 0;
@@ -231,5 +238,39 @@ describe('Document Review transition P1 hotfix', () => {
     // No publication API is ever invoked on approve.
     await documentsService.approveDocument('doc-1', 'user-1', 'ok', 'LAWYER');
     expect(prismaMock.clientPublication || prismaMock.clientPortalPublication || prismaMock.publication).toBeUndefined();
+  });
+
+  it('9. mirrors the canonical review status onto the exact version under review', async () => {
+    wireMocks();
+    await documentsService.approveDocument('doc-1', 'user-1', 'ok', 'LAWYER');
+    expect(versionReviewStatuses['ver-1']).toBe('APPROVED');
+  });
+
+  it('10. request-changes mirrors CHANGES_REQUESTED onto the reviewed version', async () => {
+    wireMocks({ openPoints: 1 });
+    await documentsService.rejectDocument('doc-1', 'user-1', 'Please fix clause 4', 'LAWYER');
+    expect(versionReviewStatuses['ver-1']).toBe('CHANGES_REQUESTED');
+  });
+
+  it('11. a failed transition never mirrors any version review status', async () => {
+    wireMocks({ openBlockingPoints: 1 });
+    await expect(documentsService.approveDocument('doc-1', 'user-1', 'ok', 'LAWYER')).rejects.toThrow('transition is not allowed');
+    expect(versionReviewStatuses['ver-1']).toBeUndefined();
+  });
+
+  it('12. CLOSE of an approved review never clears the recorded version approval', async () => {
+    const { transitionReview } = require('../src/modules/documents/review/reviewService');
+    reviewStatus = 'APPROVED';
+    wireMocks({ approvedVersionId: 'ver-1' });
+    await transitionReview('review-1', 'CLOSE', { userId: 'user-1', role: 'LAWYER' }, {}, prismaMock);
+    expect(versionReviewStatuses['ver-1']).toBeUndefined();
+  });
+
+  it('13. CLOSE of a never-approved review mirrors NOT_IN_REVIEW onto the reviewed version', async () => {
+    const { transitionReview } = require('../src/modules/documents/review/reviewService');
+    reviewStatus = 'IN_REVIEW';
+    wireMocks();
+    await transitionReview('review-1', 'CLOSE', { userId: 'user-1', role: 'LAWYER' }, {}, prismaMock);
+    expect(versionReviewStatuses['ver-1']).toBe('NOT_IN_REVIEW');
   });
 });

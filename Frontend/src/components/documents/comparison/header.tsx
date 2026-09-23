@@ -13,7 +13,18 @@ import {
 } from "@/lib/documents/comparisonModel";
 import type { ComparisonDto } from "@/lib/documents/comparisonApi";
 
-export interface VersionOption { id: string; versionNumber: number; isCurrent: boolean; supported: boolean }
+/**
+ * Version option for the pair selector.
+ *
+ * `supported` is retained for call-site compatibility only. It is NOT
+ * authoritative: comparability is decided by the backend from the exact stored
+ * bytes and the version's real format (DOCX/PDF/TXT are all extractable), not
+ * from a filename guess. Marking a version "nem összehasonlítható" before the
+ * comparison runs was therefore a false claim for every DOCX/PDF version, so
+ * the selector no longer renders it — a genuinely unsupported pair is still
+ * reported truthfully by the comparison status (`UNSUPPORTED` + reason code).
+ */
+export interface VersionOption { id: string; versionNumber: number; isCurrent: boolean; supported?: boolean }
 
 export function VersionPairSelector({
   versions, baseId, targetId, onChange, disabled,
@@ -26,7 +37,7 @@ export function VersionPairSelector({
 }) {
   const sel = "rounded-md border border-[var(--adm-border)] bg-white px-2 py-1 text-[12.5px] disabled:opacity-60";
   const current = versions.find((v) => v.isCurrent);
-  const opt = (v: VersionOption) => `v${v.versionNumber}${v.isCurrent ? " (aktuális)" : ""}${v.supported ? "" : " — nem összehasonlítható"}`;
+  const opt = (v: VersionOption) => `v${v.versionNumber}${v.isCurrent ? " (aktuális)" : ""}`;
   const reversed = baseId && targetId && (() => {
     const b = versions.find((v) => v.id === baseId); const t = versions.find((v) => v.id === targetId);
     return b && t && b.versionNumber > t.versionNumber;

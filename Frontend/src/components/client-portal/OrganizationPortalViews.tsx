@@ -69,6 +69,7 @@ type OrgState = {
 };
 
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
+const taskCard = "min-w-0 rounded-2xl border border-[#E5E7E6] bg-white p-6 shadow-sm";
 const input = "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40";
 
 function formatDate(value?: string | null) {
@@ -484,44 +485,53 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
   const requests = dedupeCustomerItems(selectCustomerRequestDocuments(workspace.documents));
   const submissions = dedupeCustomerItems(selectCustomerSubmissionDocuments(workspace.documents));
   return (
-    <div className="space-y-5">
-      <section className={card}>
-        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Teendők</p>
-        <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Ami most Öntől kell</h1>
-        <p className="mt-2 text-sm text-stone-600">Az iroda által kért teendők, valamint a dokumentum- és adatbekérések egy helyen. A beküldött anyagot az iroda ellenőrzi, és szükség esetén hiánypótlást kér.</p>
+    <div className="space-y-6">
+      <section className={taskCard}>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#B85C4B]">Teendők</p>
+        <h1 className="mt-2 font-serif text-3xl font-semibold text-[#1F2937]">Ami most Öntől kell</h1>
+        <p className="mt-2 text-sm leading-relaxed text-[#6B7280]">Az iroda által kért teendők, valamint a dokumentum- és adatbekérések egy helyen. A beküldött anyagot az iroda ellenőrzi, és szükség esetén hiánypótlást kér.</p>
       </section>
       {pendingCanonical ? (
         <Section title="Most szükséges" empty={false}>
-          <p role="status" className="rounded-2xl border border-stone-200 bg-white p-4 text-sm text-stone-600">Teendők betöltése…</p>
+          <p role="status" className="rounded-xl border border-[#E5E7E6] bg-white p-4 text-sm text-[#6B7280]">Teendők betöltése…</p>
         </Section>
       ) : (
         taskGroups.map(([bucket, label]) => {
           const items = rows.filter((item) => item.bucket === bucket);
-          return <Section key={bucket} title={label} empty={!items.length} emptyText={bucket === "completed" ? "Még nincs teljesített teendő." : "Jelenleg nincs Öntől szükséges teendő."}>{items.slice(0, 10).map((item) => <Link key={item.id} href={item.href} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm"><b className="block text-stone-950">{item.title}</b><span className="mt-1 block text-stone-600">{item.context}{item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}</span></Link>)}</Section>;
+          return (
+            <Section key={bucket} title={label} empty={!items.length} emptyText={bucket === "completed" ? "Még nincs teljesített teendő." : "Jelenleg nincs Öntől szükséges teendő."}>
+              {items.slice(0, 10).map((item) => (
+                <Link key={item.id} href={item.href} className="rounded-xl border border-[#E5E7E6] bg-white p-4 text-sm transition-colors hover:border-[#0F3D32] hover:bg-[#F8FAF9] focus:outline-none focus:ring-2 focus:ring-[#0F3D32]/20">
+                  <b className="block text-[#1F2937]">{item.title}</b>
+                  <span className="mt-1 block text-[#6B7280]">{item.context}{item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}</span>
+                </Link>
+              ))}
+            </Section>
+          );
         })
       )}
       <Section title="Dokumentum- és adatbekérések" empty={!requests.length} emptyText="Jelenleg nincs Öntől szükséges dokumentum- vagy adatbekérés.">
         {requests.map((item) => (
-          <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-2xl border border-[#eadfbf] bg-[#fffaf0] p-4 text-sm transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+          <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-xl border border-[#F1D7D1] bg-[#FBF0EE]/50 p-4 text-sm transition-colors hover:border-[#B85C4B] hover:bg-[#FBF0EE] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30">
             <div className="flex flex-wrap items-start justify-between gap-2">
-              <b className="block break-words text-stone-950">{item.title}</b>
-              {item.status ? <span className="rounded-full bg-white px-3 py-1 text-xs text-stone-700">{item.status}</span> : null}
+              <b className="block break-words text-[#1F2937]">{item.title}</b>
+              {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-white px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
             </div>
-            <span className="mt-1 block text-stone-600">{item.matterTitle || "Közzétett ügy"}</span>
-            {item.description ? <span className="mt-1 block break-words text-stone-600">{item.description}</span> : null}
-            <span className="mt-2 inline-flex font-semibold text-[#7a5f18]">Bekérés megnyitása →</span>
+            <span className="mt-1 block text-[#6B7280]">{item.matterTitle || "Közzétett ügy"}</span>
+            {item.description ? <span className="mt-1 block break-words text-[#6B7280]">{item.description}</span> : null}
+            <span className="mt-2 inline-flex font-semibold text-[#B85C4B]">Bekérés megnyitása →</span>
           </Link>
         ))}
       </Section>
       {submissions.length ? (
         <Section title="Beküldött anyagaim">
           {submissions.slice(0, 10).map((item) => (
-            <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 text-sm transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-xl border border-[#E5E7E6] bg-white p-4 text-sm transition-colors hover:border-[#0F3D32] hover:bg-[#F8FAF9] focus:outline-none focus:ring-2 focus:ring-[#0F3D32]/20">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <b className="block break-words text-stone-950">{item.title}</b>
-                {item.status ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.status}</span> : null}
+                <b className="block break-words text-[#1F2937]">{item.title}</b>
+                {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-[#F8FAF9] px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
               </div>
-              <span className="mt-1 block text-stone-600">{item.matterTitle || "Közzétett ügy"}{item.publishedAt ? ` · Beküldve: ${formatDate(item.publishedAt)}` : ""}</span>
+              <span className="mt-1 block text-[#6B7280]">{item.matterTitle || "Közzétett ügy"}{item.publishedAt ? ` · Beküldve: ${formatDate(item.publishedAt)}` : ""}</span>
             </Link>
           ))}
         </Section>

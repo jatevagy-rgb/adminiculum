@@ -9,8 +9,9 @@ const source = readFileSync(
 );
 
 test("DW01 canonicalizes default selection with replace and user selection with push", () => {
+  assert.match(source, /const syncWorkspaceIdentityToUrl = useCallback/);
   assert.match(source, /const syncDocumentIdToUrl = useCallback/);
-  assert.match(source, /params\.set\("documentId", documentId\)/);
+  assert.match(source, /params\.set\("documentId", identity\.documentId\)/);
   assert.match(source, /syncDocumentIdToUrl\([^,]+, "replace"\)/);
   assert.match(source, /const selectLedgerItem = useCallback/);
   assert.match(source, /history: "push" \| "replace" = "push"/);
@@ -21,10 +22,11 @@ test("DW01 canonicalizes default selection with replace and user selection with 
 test("DW01 preserves query parameters and resolves browser deep-link changes without a routing loop", () => {
   assert.match(source, /new URLSearchParams\(searchParams\?\.toString\(\)\)/);
   assert.match(source, /const requestedDocumentId = searchParams\?\.get\("documentId"\)/);
-  assert.match(source, /if \(!requestedDocumentId \|\| \(!uploadedDocuments\.length && !contracts\.length\)\) return/);
-  const resolveEffectStart = source.indexOf("  useEffect(() => {\n    if (!requestedDocumentId");
-  const resolveEffectEnd = source.indexOf("  }, [contracts, requestedDocumentId", resolveEffectStart);
+  assert.match(source, /if \(!requestedDocumentId \|\| \(!uploadedDocuments\.length && !contracts\.length && !modifiedWorkingCopies\.length\)\) return/);
+  const resolveEffectStart = source.indexOf("if (!requestedDocumentId || (!uploadedDocuments.length");
+  const resolveEffectEnd = source.indexOf("}, [contracts, requestedDocumentId", resolveEffectStart);
   const resolveEffect = source.slice(resolveEffectStart, resolveEffectEnd);
+  assert.ok(resolveEffectStart > 0 && resolveEffectEnd > resolveEffectStart);
   assert.doesNotMatch(resolveEffect, /syncDocumentIdToUrl|router\[/);
 });
 
@@ -61,3 +63,55 @@ test("legacy metadata comparison keeps its canonical route and has no case-scope
   assert.match(source, /router\.push\(metaCompareUrl\)/);
   assert.doesNotMatch(source, /\/cases\/\$\{[^}]*\}\/documents\/compare/);
 });
+
+test("DW01 resolves every selectable ledger kind from the URL and clears a deleted document id", () => {
+  const resolveEffectStart = source.indexOf("if (!requestedDocumentId || (!uploadedDocuments.length");
+  const resolveEffectEnd = source.indexOf("}, [contracts, requestedDocumentId", resolveEffectStart);
+  const resolveEffect = source.slice(resolveEffectStart, resolveEffectEnd);
+  assert.ok(resolveEffectStart > 0 && resolveEffectEnd > resolveEffectStart);
+  assert.match(resolveEffect, /modifiedWorkingCopies\.find\(\(document\) => document\.id === requestedDocumentId\)/);
+  assert.doesNotMatch(resolveEffect, /syncDocumentIdToUrl|router\[/);
+  assert.match(source, /syncDocumentIdToUrl\(null, "replace"\)/);
+});
+
+test("DW06 writes version identity only as documentId plus explicit historical versionId", () => {
+  assert.match(source, /const requestedVersionId = searchParams\?\.get\("versionId"\)/);
+  assert.match(source, /params\.set\("versionId", identity\.versionId\)/);
+  assert.match(source, /params\.delete\("versionId"\)/);
+  // A versionId is only ever written together with its documentId.
+  assert.match(source, /if \(identity\.documentId && identity\.versionId\)/);
+  // Document switch always drops any previous version identity.
+  assert.match(source, /syncWorkspaceIdentityToUrl\(\{ documentId, versionId: null \}, history\)/);
+  // Current/default version stays implicit; only historical versions are written.
+  assert.match(source, /const selectVersion = \(version: DocumentVersionItem/);
+  assert.match(source, /versionId: version\.isCurrent \? null : version\.id/);
+  assert.match(source, /onClick=\{\(\) => selectVersion\(version\)\}/);
+  // Promoting or uploading a new current version canonicalizes back to document-only.
+  assert.match(source, /syncWorkspaceIdentityToUrl\(\{ documentId: version\.documentId, versionId: null \}, "replace"\)/);
+  assert.match(source, /syncWorkspaceIdentityToUrl\(\{ documentId: selectedUploadedDocument\.id, versionId: null \}, "replace"\)/);
+});
+
+test("DW06 resolves explicit historical versions from the URL and blocks cross-document leakage", () => {
+  const effectStart = source.indexOf("const activeDocumentId = selectedUploadedDocument?.id ?? selectedGeneratedContract?.id ?? null;");
+  const effectEnd = source.indexOf("}, [isLoadingVersions, requestedVersionId, selectedUploadedDocument?.id, selectedGeneratedContract?.id, selectedVersionId, syncWorkspaceIdentityToUrl, versions, versionsLoadedForDocumentId]);", effectStart);
+  const effect = source.slice(effectStart, effectEnd);
+  assert.ok(effectStart > 0 && effectEnd > effectStart);
+  // Wait until the loaded version list is authoritative for the active document; never
+  // reconcile against another document's versions (or a not-yet-loaded empty list).
+  assert.match(source, /setVersionsLoadedForDocumentId\(documentId\)/);
+  assert.match(effect, /versionsLoadedForDocumentId !== activeDocumentId/);
+  // Explicit historical versions bind; stale/foreign/current ids canonicalize to the document's current version.
+  assert.match(effect, /if \(match && !match\.isCurrent\)/);
+  assert.match(effect, /syncWorkspaceIdentityToUrl\(\{ documentId: activeDocumentId, versionId: null \}, "replace"\)/);
+  assert.match(effect, /if \(versions\.length === 0\)/);
+  // URL-driven reconciliation must never issue router navigation itself (no loop).
+  assert.doesNotMatch(effect, /router\[/);
+});
+
+test("DW06 keeps version-bound annotation and review projection context on the selected immutable version", () => {
+  assert.match(source, /refreshAnnotations\(selectedUploadedDocument\.id, selectedVersion\.id\)/);
+  assert.match(source, /annotationsVersionId === canonicalActiveVersion\.id/);
+  assert.match(source, /reviewProjection\.currentVersion\.id === selectedVersion\?\.id/);
+  assert.match(source, /approval-current-version-note/);
+});
+

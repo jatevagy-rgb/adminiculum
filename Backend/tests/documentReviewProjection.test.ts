@@ -427,22 +427,23 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
           ]),
         },
         documentReview: {
-          findFirst: jest.fn().mockImplementation((args: any) => {
-            // When querying for current version v2: return null!
-            if (args.where?.documentVersionId === 'v2') {
-              return null;
-            }
-            // When querying for other version: return the old v1 review!
-            if (args.where?.documentVersionId?.not === 'v2') {
-              return {
-                id: 'review-v1',
-                documentVersionId: 'v1',
-                status: 'APPROVED',
-                documentVersion: { version: 1 },
-              };
-            }
-            return null;
-          }),
+          // Canonical resolution loads all reviews for the document and binds each
+          // one to the version of its ACTIVE ROUND in memory.
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'review-v1',
+              documentVersionId: 'v1',
+              status: 'APPROVED',
+              approvedVersionId: 'v1',
+              approvedVersion: { id: 'v1', version: 1 },
+              currentRound: { reviewVersionId: 'v1' },
+              currentRoundNumber: 1,
+              assignedReviewer: null,
+              points: [],
+              dueAt: null,
+              updatedAt: new Date('2026-09-02'),
+            },
+          ]),
         },
         documentComparison: {
           findFirst: jest.fn().mockResolvedValue(null),
@@ -494,24 +495,24 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
           ]),
         },
         documentReview: {
-          findFirst: jest.fn().mockImplementation((args: any) => {
-            if (args.where?.documentVersionId === 'v2') {
-              return {
-                id: 'review-v2',
-                documentVersionId: 'v2',
-                status: 'IN_REVIEW',
-                assignedReviewer: { id: 'u1', name: 'dr. Ügyvéd', email: 'u@example.com' },
-                points: [
-                  { id: 'pt-1', status: 'OPEN', severity: 'NORMAL', comparisonSegmentId: 'seg-1' },
-                  { id: 'pt-2', status: 'RESOLVED', severity: 'BLOCKING', comparisonSegmentId: null },
-                ],
-                currentRoundNumber: 2,
-                dueAt: new Date('2026-09-10'),
-                updatedAt: new Date('2026-09-03'),
-              };
-            }
-            return null;
-          }),
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'review-v2',
+              documentVersionId: 'v2',
+              status: 'IN_REVIEW',
+              approvedVersionId: null,
+              approvedVersion: null,
+              currentRound: { reviewVersionId: 'v2' },
+              assignedReviewer: { id: 'u1', name: 'dr. Ügyvéd', email: 'u@example.com' },
+              points: [
+                { id: 'pt-1', status: 'OPEN', severity: 'NORMAL', comparisonSegmentId: 'seg-1' },
+                { id: 'pt-2', status: 'RESOLVED', severity: 'BLOCKING', comparisonSegmentId: null },
+              ],
+              currentRoundNumber: 2,
+              dueAt: new Date('2026-09-10'),
+              updatedAt: new Date('2026-09-03'),
+            },
+          ]),
         },
         documentComparison: {
           findFirst: jest.fn().mockResolvedValue(null),
@@ -555,7 +556,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'v1', version: 1, originalFileName: 'Szerződés.pdf', name: 'Szerződés.pdf', mimeType: 'application/pdf', size: 1000, isCurrent: true, previousVersionId: null, securityScanStatus: 'CLEAN', storageReference: 'SECRET_SHAREPOINT_DRIVE_ITEM_123', createdAt: new Date() },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: {
@@ -618,7 +619,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
         documentVersion: {
           findMany: jest.fn().mockResolvedValue([]), // No versions!
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
@@ -885,15 +886,21 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
           ]),
         },
         documentReview: {
-          findFirst: jest.fn().mockResolvedValue({
-            id: 'review-1',
-            documentVersionId: 'v2',
-            status: 'IN_REVIEW',
-            points: [], // openPointCount = 0, blockingPointCount = 0
-            currentRoundNumber: 1,
-            dueAt: null,
-            updatedAt: new Date(),
-          }),
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'review-1',
+              documentVersionId: 'v2',
+              status: 'IN_REVIEW',
+              approvedVersionId: null,
+              approvedVersion: null,
+              currentRound: { reviewVersionId: 'v2' },
+              assignedReviewer: null,
+              points: [], // openPointCount = 0, blockingPointCount = 0
+              currentRoundNumber: 1,
+              dueAt: null,
+              updatedAt: new Date(),
+            },
+          ]),
         },
         documentComparison: {
           findFirst: jest.fn().mockResolvedValue({
@@ -972,7 +979,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'v0', version: 0, originalFileName: 'v0.docx', name: 'v0.docx', mimeType: 'application/docx', size: 1800, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-01') },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: {
           findFirst: jest.fn().mockImplementation((args: any) => {
             // Service must search strictly for baseVersionId: 'v1' and targetVersionId: 'v2'
@@ -1024,7 +1031,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'v1', version: 1, originalFileName: 'v1.docx', name: 'v1.docx', mimeType: 'application/docx', size: 1800, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-01') },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: {
           findFirst: jest.fn().mockImplementation((args: any) => {
             if (args.where?.baseVersionId === 'v1' && args.where?.targetVersionId === 'v2') {
@@ -1172,7 +1179,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'v1', version: 1, isCurrent: false, createdAt: new Date() },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1216,7 +1223,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'v2', version: 2, isCurrent: true, createdAt: new Date() },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1244,7 +1251,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'v2', version: 2, isCurrent: true, createdAt: new Date() },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1278,7 +1285,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
         documentVersion: {
           findMany: jest.fn().mockResolvedValue([]), // No versions!
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1309,7 +1316,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'ver-target', version: 1, isCurrent: true, createdAt: new Date() },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1340,7 +1347,7 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
             { id: 'v1', version: 1, isCurrent: true, createdAt: new Date() },
           ]),
         },
-        documentReview: { findFirst: jest.fn().mockResolvedValue(null) },
+        documentReview: { findMany: jest.fn().mockResolvedValue([]) },
         documentComparison: { findFirst: jest.fn().mockResolvedValue(null) },
         documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
         aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
@@ -1363,6 +1370,180 @@ describe('Document Review Projection Unit & Behavioral Tests', () => {
       expect(serialized).not.toContain('contentFingerprint');
       expect(serialized).not.toContain('rectX');
       expect(serialized).not.toContain('pointX');
+    });
+  });
+
+  describe('Canonical review/version state truthfulness (regression)', () => {
+    function reviewRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'review-1',
+        documentVersionId: 'v1',
+        status: 'IN_REVIEW',
+        approvedVersionId: null,
+        approvedVersion: null,
+        currentRound: { reviewVersionId: 'v1' },
+        currentRoundNumber: 1,
+        assignedReviewer: null,
+        points: [],
+        dueAt: null,
+        updatedAt: new Date('2026-09-05'),
+        ...overrides,
+      };
+    }
+
+    function projectionPrisma(options: {
+      reviews?: any[];
+      comparison?: any;
+      versions?: any[];
+    } = {}) {
+      const versions = options.versions ?? [
+        { id: 'v2', version: 2, originalFileName: 'v2.docx', name: 'v2.docx', mimeType: null, size: 2, isCurrent: true, previousVersionId: 'v1', securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-02') },
+        { id: 'v1', version: 1, originalFileName: 'v1.docx', name: 'v1.docx', mimeType: null, size: 1, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date('2026-09-01') },
+      ];
+      return {
+        document: {
+          findUnique: jest.fn().mockResolvedValue({ id: 'doc-1', caseId: 'case-1', name: 'd.docx', fileName: 'd.docx', title: 'Dokumentum', category: 'CONTRACT', workStatus: 'IN_PROGRESS' }),
+        },
+        documentVersion: { findMany: jest.fn().mockResolvedValue(versions) },
+        documentReview: { findMany: jest.fn().mockResolvedValue(options.reviews ?? []) },
+        documentComparison: { findFirst: jest.fn().mockResolvedValue(options.comparison ?? null) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+      };
+    }
+
+    it('deriveNextAction reports REVIEW_ON_OTHER_VERSION instead of a false START_REVIEW', () => {
+      const action = deriveNextAction({
+        currentVersion: { id: 'v2', version: 2, fileName: 'v2.docx', mimeType: null, size: 2, securityScanStatus: 'CLEAN', createdAt: new Date().toISOString() },
+        previousVersion: null,
+        review: null,
+        comparison: null,
+        ai: null,
+        reviewContext: { relationship: 'ON_OTHER_VERSION', reviewedVersionNumber: 1 },
+      });
+      expect(action.code).toBe('REVIEW_ON_OTHER_VERSION');
+      expect(action.rationale).toContain('v1');
+    });
+
+    it('review on v1 while viewing current v2 is ON_OTHER_VERSION, never "no review"', async () => {
+      const projection = await getDocumentReviewProjection('doc-1', {
+        prisma: projectionPrisma({
+          reviews: [reviewRow({ points: [{ id: 'p1', status: 'OPEN', severity: 'BLOCKING', comparisonSegmentId: null }] })],
+          comparison: { id: 'comp-ready', baseVersionId: 'v1', targetVersionId: 'v2', status: 'READY', totalSegmentCount: 0, reviewedSegmentCount: 0, insertCount: 0, deleteCount: 0, replaceCount: 0, formatOnlyCount: 0, moveCandidateCount: 0 },
+        }),
+      });
+      expect(projection).not.toBeNull();
+      // Current-version review binding stays exact and empty.
+      expect(projection!.review).toBeNull();
+      // But the document-level truth is explicit and non-contradictory.
+      expect(projection!.reviewContext.relationship).toBe('ON_OTHER_VERSION');
+      expect(projection!.reviewContext.boundToCurrentVersion).toBe(false);
+      expect(projection!.reviewContext.hasReviewForOtherVersion).toBe(true);
+      expect(projection!.reviewContext.otherVersionReview?.versionNumber).toBe(1);
+      expect(projection!.reviewContext.activeReviewStatus).toBe('IN_REVIEW');
+      expect(projection!.reviewContext.activeReviewVersionNumber).toBe(1);
+      expect(projection!.nextAction.code).toBe('REVIEW_ON_OTHER_VERSION');
+    });
+
+    it('resubmitted review binds to its active round version, not its anchor version', async () => {
+      const projection = await getDocumentReviewProjection('doc-1', {
+        prisma: projectionPrisma({
+          reviews: [reviewRow({ status: 'RESUBMITTED', currentRound: { reviewVersionId: 'v2' }, currentRoundNumber: 2 })],
+        }),
+      });
+      expect(projection!.review).not.toBeNull();
+      expect(projection!.review!.reviewVersionId).toBe('v2');
+      expect(projection!.review!.documentVersionId).toBe('v1');
+      expect(projection!.review!.status).toBe('RESUBMITTED');
+      expect(projection!.reviewContext.relationship).toBe('ON_CURRENT_VERSION');
+      expect(projection!.reviewContext.reviewedVersionNumber).toBe(2);
+    });
+
+    const readyComparison = {
+      id: 'comp-ready', baseVersionId: 'v1', targetVersionId: 'v2', status: 'READY',
+      totalSegmentCount: 0, reviewedSegmentCount: 0,
+      insertCount: 0, deleteCount: 0, replaceCount: 0, formatOnlyCount: 0, moveCandidateCount: 0,
+    };
+
+    it('approval exposes the exact approved version explicitly', async () => {
+      const projection = await getDocumentReviewProjection('doc-1', {
+        prisma: projectionPrisma({
+          reviews: [reviewRow({ status: 'APPROVED', currentRound: { reviewVersionId: 'v2' }, approvedVersionId: 'v2', approvedVersion: { id: 'v2', version: 2 } })],
+          comparison: readyComparison,
+        }),
+      });
+      expect(projection!.review!.approvedVersionId).toBe('v2');
+      expect(projection!.review!.approvedVersionNumber).toBe(2);
+      expect(projection!.reviewContext.approvedVersionId).toBe('v2');
+      expect(projection!.reviewContext.approvedVersionNumber).toBe(2);
+      expect(projection!.nextAction.code).toBe('READY_FOR_CLIENT');
+    });
+
+    it('changes requested and closed states are surfaced truthfully', async () => {
+      const changes = await getDocumentReviewProjection('doc-1', {
+        prisma: projectionPrisma({ reviews: [reviewRow({ status: 'CHANGES_REQUESTED', currentRound: { reviewVersionId: 'v2' } })], comparison: readyComparison }),
+      });
+      expect(changes!.review!.status).toBe('CHANGES_REQUESTED');
+      expect(changes!.nextAction.code).toBe('CHANGES_REQUESTED');
+
+      const closed = await getDocumentReviewProjection('doc-1', {
+        prisma: projectionPrisma({ reviews: [reviewRow({ status: 'CLOSED', currentRound: { reviewVersionId: 'v2' } })], comparison: readyComparison }),
+      });
+      expect(closed!.review!.status).toBe('CLOSED');
+      expect(closed!.nextAction.code).toBe('REVIEW_CLOSED');
+    });
+
+    it('missing reviewer stays explicit instead of being silently invented', async () => {
+      const projection = await getDocumentReviewProjection('doc-1', {
+        prisma: projectionPrisma({ reviews: [reviewRow({ currentRound: { reviewVersionId: 'v2' } })] }),
+      });
+      expect(projection!.review!.reviewer).toBeNull();
+    });
+
+    it('no review at all yields NONE relationship and START_REVIEW', async () => {
+      const projection = await getDocumentReviewProjection('doc-1', {
+        prisma: projectionPrisma({ reviews: [] }),
+      });
+      expect(projection!.review).toBeNull();
+      expect(projection!.reviewContext.relationship).toBe('NONE');
+      expect(projection!.reviewContext.activeReviewId).toBeNull();
+      expect(projection!.nextAction.code).toBe('RUN_COMPARISON');
+    });
+
+    it('case summary carries document-level active review even when bound to a historical version', async () => {
+      const prisma = {
+        document: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'doc-1', caseId: 'case-1', title: 'Doc', fileName: 'd.docx', category: 'CONTRACT', workStatus: 'IN_PROGRESS' },
+          ]),
+        },
+        documentVersion: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'v2', documentId: 'doc-1', version: 2, isCurrent: true, previousVersionId: 'v1', securityScanStatus: 'CLEAN', createdAt: new Date() },
+            { id: 'v1', documentId: 'doc-1', version: 1, isCurrent: false, previousVersionId: null, securityScanStatus: 'CLEAN', createdAt: new Date() },
+          ]),
+        },
+        documentReview: {
+          findMany: jest.fn().mockResolvedValue([
+            { id: 'review-v1', documentId: 'doc-1', documentVersionId: 'v1', status: 'IN_REVIEW', approvedVersionId: null, approvedVersion: null, currentRound: { reviewVersionId: 'v1' }, currentRoundNumber: 1, assignedReviewer: null, points: [{ id: 'p1', status: 'OPEN', severity: 'NORMAL', comparisonSegmentId: null }], dueAt: null, updatedAt: new Date() },
+          ]),
+        },
+        documentComparison: { findMany: jest.fn().mockResolvedValue([]) },
+        documentChangeSegment: { groupBy: jest.fn().mockResolvedValue([]) },
+        aiPromptDraft: { findMany: jest.fn().mockResolvedValue([]) },
+      };
+
+      const result = await getCaseDocumentReviewSummaries('case-1', { prisma });
+      const item = result.items[0];
+      expect(item.currentVersionNumber).toBe(2);
+      // Current-version binding stays null ...
+      expect(item.reviewStatus).toBeNull();
+      expect(item.reviewId).toBeNull();
+      // ... while the document-level truth is explicit and truthful.
+      expect(item.activeReviewStatus).toBe('IN_REVIEW');
+      expect(item.activeReviewVersionNumber).toBe(1);
+      expect(item.reviewVersionRelationship).toBe('ON_OTHER_VERSION');
+      expect(item.openPointCount).toBe(1);
     });
   });
 

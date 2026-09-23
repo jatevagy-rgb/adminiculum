@@ -10,9 +10,11 @@ import { componentHarness, flatten, textOf, tick } from './helpers/componentHarn
  *
  * A row anchored through a canonical hyperlink target exposes the derived
  * `canonicalReference` on the INTERNAL panel as "Figyelési azonosító", and its
- * unresolved C3A state is NOT described as a malformed CELEX identifier. CELEX
- * rows keep their existing presentation untouched. Nothing about the canonical
- * reference may appear on a customer portal surface.
+ * unresolved C3A state is NOT described as a malformed CELEX identifier. The raw
+ * parser key (`LEGAL|REF=...`) and the implementation CELEX code are internal
+ * machine identity and are not rendered; CELEX rows keep their readable source
+ * presentation. Nothing about the canonical reference may appear on a customer
+ * portal surface.
  */
 
 const frontendRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -99,8 +101,8 @@ test('C4A: shows the canonical reference as Figyelési azonosító for a hyperli
   const text = textOf(tree);
   assert.match(text, /Figyelési azonosító/);
   assert.match(text, /TV\/2001\/108\/5\/2\/b/);
-  // The internal anchor key is still shown truthfully.
-  assert.match(text, /LEGAL\|REF=TV\/2001\/108\/5\/2\/b/);
+  // The raw parser key is internal identity: kept in the read model, never rendered.
+  assert.doesNotMatch(text, /LEGAL\|REF=TV\/2001\/108\/5\/2\/b/);
 });
 
 test('C4A: does not present a TV reference as a malformed CELEX identifier', async () => {

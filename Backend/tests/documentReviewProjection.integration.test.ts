@@ -251,15 +251,16 @@ describeWithDatabase('Document Review Projection PostgreSQL Integration', () => 
     expect(projection!.review).toBeNull(); // No review for v2 yet!
     expect(projection!.reviewContext.boundToCurrentVersion).toBe(false);
     expect(projection!.reviewContext.hasReviewForOtherVersion).toBe(true);
+    // A review exists, but on the OTHER version: explicitly not "no review".
+    expect(projection!.reviewContext.relationship).toBe('ON_OTHER_VERSION');
     expect(projection!.reviewContext.otherVersionReview).toEqual({
       reviewId: ids.reviewV1,
       documentVersionId: ids.v1,
       versionNumber: 1,
       status: 'APPROVED',
     });
-
-    // Next action must be to start review for v2, NOT claim it is approved
-    expect(projection!.nextAction.code).toBe('START_REVIEW');
+    expect(projection!.reviewContext.activeReviewId).toBe(ids.reviewV1);
+    expect(projection!.nextAction.code).toBe('REVIEW_ON_OTHER_VERSION');
   });
 
   it('binds review to v2 when v2 gets its own review, and reports comparison segment stats', async () => {
@@ -282,6 +283,8 @@ describeWithDatabase('Document Review Projection PostgreSQL Integration', () => 
     expect(projection!.review!.documentVersionId).toBe(ids.v2);
     expect(projection!.review!.status).toBe('IN_REVIEW');
     expect(projection!.review!.reviewer?.id).toBe(ids.collaborator);
+    expect(projection!.reviewContext.relationship).toBe('ON_CURRENT_VERSION');
+    expect(projection!.reviewContext.activeReviewVersionNumber).toBe(2);
 
     // Comparison stats
     expect(projection!.comparison).not.toBeNull();
@@ -337,6 +340,9 @@ describeWithDatabase('Document Review Projection PostgreSQL Integration', () => 
     expect(item.currentVersionNumber).toBe(2);
     expect(item.previousVersionNumber).toBe(1);
     expect(item.reviewStatus).toBe('IN_REVIEW');
+    expect(item.reviewVersionRelationship).toBe('ON_CURRENT_VERSION');
+    expect(item.activeReviewStatus).toBe('IN_REVIEW');
+    expect(item.activeReviewVersionNumber).toBe(2);
     expect(item.comparisonStatus).toBe('READY');
     expect(item.unresolvedSegments).toBe(1);
     expect(item.aiApproved).toBe(true);

@@ -137,11 +137,29 @@ describe('Organization internal UI (structural)', () => {
     assert.match(src, /onManagePermissionChanged/);
   });
 
-  it('renders each person once: manager roots are excluded from their group card list and cross-group reports do not recurse', () => {
+  it('renders each current person once: manager roots are excluded from their group card list and cross-group reports do not recurse', () => {
     const src = component();
-    assert.match(src, /organizationGroupStarts\(filteredPersons, group\.id\)/);
-    assert.match(src, /organizationReportsInScope\(filteredPersons, person\.id, groupScope\)/);
-    assert.match(src, /organizationRootPeople\(filteredPersons\)/);
+    assert.match(src, /organizationGroupStarts\(currentPersons, group\.id\)/);
+    assert.match(src, /organizationReportsInScope\(currentPersons, person\.id, groupScope\)/);
+    assert.match(src, /organizationRootPeople\(currentPersons\)/);
+  });
+
+  it('treats INACTIVE people as history, never as the current organization or responsibility holders', () => {
+    const src = component();
+    const apiSrc = api();
+    // Canonical active semantics mirror the backend ACTIVE_PERSON_STATUS.
+    assert.match(apiSrc, /isCurrentOrganizationPerson/);
+    assert.match(src, /isCurrentOrganizationPerson\(person\.employmentStatus\)/);
+    // Current aggregates derive from currentPersons only.
+    assert.match(src, /const responsibilityPeople = currentPersons\.filter/);
+    assert.match(src, /const activePortalPeople = currentPersons\.filter/);
+    // Inactive people stay reachable as truthful history.
+    assert.match(src, /Korábbi, nem aktuális munkatársak/);
+    assert.match(src, /data-testid="organization-historical-persons"/);
+    assert.match(src, /organization-historical-responsibility-note/);
+    // The current hierarchy must not be built from the unfiltered list.
+    assert.doesNotMatch(src, /organizationRootPeople\(filteredPersons\)/);
+    assert.doesNotMatch(src, /organizationGroupStarts\(filteredPersons/);
   });
 
   it('renders root and nested groups as visible hierarchy nodes', () => {
