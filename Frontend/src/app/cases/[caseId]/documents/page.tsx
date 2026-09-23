@@ -312,6 +312,33 @@ const documentEnumLabel = (value?: string | null): string => {
   return documentEnumLabels[value] || 'Ismeretlen állapot';
 };
 
+// Review projection nextAction.code → the contextual work mode that hosts the
+// matching control. Presentation-only focus routing: the primary next-action
+// button navigates to the mode, it never performs the review/approval transition
+// itself, so backend review logic and version-identity semantics stay untouched.
+const NEXT_ACTION_TARGET_TAB: Record<string, 'overview' | 'changes' | 'comments' | 'approval'> = {
+  START_REVIEW: 'approval',
+  SUBMIT_FOR_REVIEW: 'approval',
+  RESOLVE_BLOCKING_POINTS: 'approval',
+  RESOLVE_REVIEW_POINTS: 'approval',
+  APPROVE_REVIEW: 'approval',
+  READY_FOR_CLIENT: 'approval',
+  REVIEW_CHANGE_SEGMENTS: 'changes',
+};
+
+// Concrete forward work steps get a single dominant primary action; status-only
+// codes such as NO_ACTION_REQUIRED, REVIEW_CLOSED, CHANGES_REQUESTED or the
+// COMPARISON_* states remain plain status text in the count strip.
+const NEXT_ACTION_FORWARD_CODES = new Set([
+  'START_REVIEW',
+  'SUBMIT_FOR_REVIEW',
+  'RESOLVE_BLOCKING_POINTS',
+  'RESOLVE_REVIEW_POINTS',
+  'APPROVE_REVIEW',
+  'READY_FOR_CLIENT',
+  'REVIEW_CHANGE_SEGMENTS',
+]);
+
 const fileToBase64 = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1755,6 +1782,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         ? "Publikálva"
         : "Nincs publikálva";
 
+  const nextActionCode = reviewProjection?.nextAction?.code ?? null;
+  const nextActionLabel = reviewProjection?.nextAction?.label ?? null;
+  const nextActionTargetTab: 'overview' | 'changes' | 'comments' | 'approval' | null =
+    nextActionCode && NEXT_ACTION_FORWARD_CODES.has(nextActionCode)
+      ? NEXT_ACTION_TARGET_TAB[nextActionCode] ?? null
+      : null;
+  const focusNextAction = () => {
+    if (nextActionTargetTab) setContextualTab(nextActionTargetTab);
+  };
+
   useEffect(() => {
     // Annotations are version-scoped, so a selection never survives a version
     // switch. Clearing it first prevents the comments effect from re-firing with
@@ -2251,6 +2288,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      {nextActionTargetTab ? (
+                        <AdminButton
+                          variant="primary"
+                          data-testid="document-next-action"
+                          onClick={focusNextAction}
+                          disabled={isReviewLoading}
+                        >
+                          {nextActionLabel}
+                        </AdminButton>
+                      ) : null}
                       <AdminButton
                         variant={activeDocument ? "neutral" : "primary"}
                         onClick={() => fileInputRef.current?.click()}
@@ -2277,7 +2324,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
                       {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
                         <AdminButton
-                          variant="gold"
+                          variant="neutral"
                           onClick={() => versionFileInputRef.current?.click()}
                           disabled={isUploadingVersion || isLoadingVersions}
                         >
