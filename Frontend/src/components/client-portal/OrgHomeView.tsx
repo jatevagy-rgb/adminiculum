@@ -455,6 +455,7 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         title="Megfelelés"
         empty={!compliance || (compliance.attentionCount === 0 && compliance.inProgressCount === 0 && compliance.noActionExpectedCount === 0)}
         emptyText="A megfelelési vizsgálat jelenleg nincs közzétéve."
+        note="Az összesítő a megfelelési területek számát mutatja, nem a teendők számát."
         actionLink="/portal/megfeleles"
         actionLabel="Megfelelési áttekintés"
       >
@@ -469,7 +470,7 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
           </div>
           <div className="rounded-2xl bg-emerald-50 p-4 border border-emerald-100">
             <p className="text-2xl font-semibold text-emerald-950">{compliance?.noActionExpectedCount ?? 0}</p>
-              <p className="mt-1 text-xs text-emerald-800">Jelenleg nincs ügyfélteendő</p>
+              <p className="mt-1 text-xs text-emerald-800">Nincs nyitott lépés</p>
           </div>
         </div>
         {compliance && compliance.topics && compliance.topics.length > 0 ? (
