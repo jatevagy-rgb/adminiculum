@@ -198,17 +198,19 @@ describe('Client-level module information architecture convergence (structural)'
     assert.doesNotMatch(src, /rounded-\[var\(--adm-radius-md\)\] border border-\[#DCCCA6\]/);
   });
 
-  it('18. Grow journey/diagnostics behavior is unchanged', () => {
+  it('18. Grow operational workbench sits below the client shell and preserves the legacy deep link', () => {
     const src = read(GROW);
     const tabsIndex = src.indexOf('<ClientWorkspaceTabs');
     const subNavIndex = src.indexOf('data-testid="grow-sub-nav"');
     assert.ok(tabsIndex >= 0 && subNavIndex >= 0);
     assert.ok(tabsIndex < subNavIndex, 'Client shell must stay above the Grow sub-navigation');
+    // The methodology-led journey is preserved as a legacy deep link, not the default.
     assert.match(src, /<GrowJourney clientId=\{client\.id\} clientName=\{client\.name\} \/>/);
-    assert.match(src, /<GrowDiagnosticWorkbench/);
-    assert.match(src, /Munkafolyamat/);
-    assert.match(src, /Diagnosztika/);
+    // The operational workbench is the default primary surface.
+    assert.match(src, /<GrowWorkbench/);
+    // Legacy deep-link aliases survive the IA change.
     assert.match(src, /view === "diagnostics"/);
+    assert.match(src, /view === "journey"/);
   });
 
   it('19. No backend, API client or data-fetch contract was altered', () => {
