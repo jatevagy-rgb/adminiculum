@@ -116,7 +116,18 @@ describe("Organization home compliance summary labels match the next-actor meani
     const src = orgHome();
     assert.ok(src.includes("Öntől szükséges"), "attention must read Öntől szükséges");
     assert.ok(src.includes("Irodánál van"), "office bucket must read Irodánál van");
-    assert.ok(src.includes("Jelenleg nincs ügyfélteendő"), "no-action bucket must read Jelenleg nincs ügyfélteendő");
+    assert.ok(src.includes("Nincs nyitott lépés"), "no-action bucket must read Nincs nyitott lépés");
+  });
+
+  it("labels the summary unit explicitly as compliance areas, not tasks", () => {
+    const src = orgHome();
+    assert.ok(
+      src.includes("Az összesítő a megfelelési területek számát mutatja, nem a teendők számát."),
+      "compliance summary must state it counts compliance areas, not tasks",
+    );
+    // The no-action bucket must not reuse task-language ("ügyfélteendő"), which
+    // collides with the separate open-task list.
+    assert.ok(!src.includes("ügyfélteendő"), "no-action bucket must not reuse the task unit");
   });
 
   it("does not keep the stale office/attention wording and does not overload Állapot", () => {
