@@ -102,6 +102,12 @@ function WorkspaceAreaRow({ area }: { area: ComplianceWorkspaceArea }) {
       </button>
       {open ? (
         <div className="mt-3 space-y-3 border-t border-[var(--adm-border)] pt-3 text-sm">
+          {area.normativeStatement ? (
+            <div className="mt-2 rounded border border-[var(--adm-border)] bg-[var(--adm-surface-subtle)] p-2 text-xs">
+              <p className="font-semibold text-[var(--adm-text)]">Előírt követelmény:</p>
+              <p className="text-[var(--adm-text-muted)]">{area.normativeStatement}</p>
+            </div>
+          ) : null}
           {sourceSupportLabels[area.sourceSupportState] ? (
             <p className="text-xs text-[var(--adm-text-muted)]">Forrástámogatás: {sourceSupportLabels[area.sourceSupportState]}</p>
           ) : null}
@@ -412,7 +418,7 @@ export default function ClientCompliancePage() {
                     error={complianceError}
                     onRetry={() => { void loadCompliance(); }}
                   />
-                  <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} />
+                  <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} clientId={clientId} onChanged={() => { void loadCompliance(); }} />
 
                   {/* 5. Javasolt műveletek */}
                   <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />

@@ -52,4 +52,11 @@ describe('compliance workspace read model (static)', () => {
     expect(service).toContain('legalSourceVersion');
     expect(service).toContain('canonicalCitation');
   });
+
+  it('projects the canonical requirement normative statement without rule internals', () => {
+    // WHAT is required is the persisted RequirementVersion wording, never derived.
+    expect(service).toContain('normativeStatement: true');
+    expect(service).toContain('normativeStatement: row.requirementVersion?.normativeStatement ?? null');
+    expect(service).not.toMatch(/ruleAst|astJson|snapshotDigest|ruleDigest/);
+  });
 });

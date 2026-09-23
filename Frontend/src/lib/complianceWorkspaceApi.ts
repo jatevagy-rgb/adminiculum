@@ -37,6 +37,7 @@ export type ComplianceWorkspaceArea = {
   requirementVersionKey: string | null;
   ruleVersionKey: string | null;
   title: string;
+  normativeStatement: string | null;
   domainLabel: string | null;
   outcome: ComplianceWorkspaceOutcome;
   scopeType: string | null;
