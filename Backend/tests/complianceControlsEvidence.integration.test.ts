@@ -146,6 +146,11 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     await expect(linkEvidenceToControl(actor, secondClientId, first.id, current.id, db)).rejects.toBeTruthy();
     expect((await getControlCoverage(actor, clientId, db)).requirements[0].controls[0].evidenceSummary.stale).toBe(1);
     expect((await getControlCoverage(actor, clientId, db)).requirements[0].controls[0].gap).toBe('EVIDENCED');
+    const coverageEntry = (await getControlCoverage(actor, clientId, db)).requirements[0].controls[0];
+    expect(coverageEntry.controlDefinitionId).toBeTruthy();
+    expect(coverageEntry.controlId).toBeTruthy();
+    expect(coverageEntry.evidence.some((item) => item.id === current.id && item.status === 'ACCEPTED')).toBe(true);
+    expect(coverageEntry.evidence.some((item) => item.id === stale.id && item.status === 'ACCEPTED')).toBe(true);
     expect((await db.evidenceRecord.findUniqueOrThrow({ where: { id: stale.id } })).status).toBe('ACCEPTED');
     expect((await db.clientControl.findUniqueOrThrow({ where: { id: first.id } })).implementationStatus).toBe('NOT_ASSESSED');
     void definition;
@@ -238,6 +243,45 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     await db.requirementApplicability.create({ data: snapshot('APPLIES', new Date(nextEvaluation.getTime() + 2000)) });
     expect((await getControlCoverage(actor, clientId, db)).requirements).toHaveLength(1);
     void definition;
+  });
+
+  it('REQUIREMENT_EVIDENCE_CONTRACT: expected-evidence wording, cadence and per-record freshness are projected', async () => {
+    const definition = await createControlDefinition(actor, {
+      key: `contract_${suffix}`,
+      title: 'Contract control',
+      description: 'Csatolja a felülvizsgálati jegyzőkönyvet.',
+      type: 'PROCEDURAL',
+      defaultReviewCadenceDays: 365,
+    }, db);
+    await mapControlToRequirement(actor, { requirementVersionId: versionId, controlDefinitionId: definition.id }, db);
+    const control = await createClientControl(actor, clientId, { controlDefinitionId: definition.id }, db);
+    const currentEvidence = await createEvidenceRecord(actor, clientId, {
+      sourceType: 'EXTERNAL_REFERENCE',
+      title: 'Current record',
+      externalReference: 'https://example.invalid/contract-current',
+      validFrom: new Date('2026-01-01'),
+      validUntil: new Date('2099-01-01'),
+    }, db);
+    await reviewEvidenceRecord(actor, clientId, currentEvidence.id, { status: 'ACCEPTED' }, db);
+    await linkEvidenceToControl(actor, clientId, control.id, currentEvidence.id, db);
+
+    const coverage = await getControlCoverage(actor, clientId, db);
+    const projected = coverage.requirements.flatMap((item) => item.controls).find((item) => item.title === 'Contract control');
+    expect(projected).toMatchObject({
+      description: 'Csatolja a felülvizsgálati jegyzőkönyvet.',
+      reviewCadenceDays: 365,
+      // A current, human-accepted record is EVIDENCED; existence alone never decides.
+      gap: 'EVIDENCED',
+    });
+    expect(projected?.evidence).toHaveLength(1);
+    expect(projected?.evidence[0]).toMatchObject({ title: 'Current record', status: 'ACCEPTED', freshness: 'CURRENT' });
+    expect(projected?.evidence[0].validUntil).toBe('2099-01-01T00:00:00.000Z');
+
+    await db.evidenceControlLink.deleteMany({ where: { clientControlId: control.id } });
+    await db.evidenceRecord.deleteMany({ where: { id: currentEvidence.id } });
+    await db.clientControl.deleteMany({ where: { id: control.id } });
+    await db.requirementControlMap.deleteMany({ where: { controlDefinitionId: definition.id } });
+    await db.controlDefinition.deleteMany({ where: { id: definition.id } });
   });
 
   it('DISTINCT_CONTROL_GAPS: missing control, stale evidence, missing evidence and not assessed stay distinct', async () => {

@@ -47,6 +47,8 @@ export interface ComplianceWorkspaceArea {
   /** Canonical ApplicabilityRuleVersion identity that produced the outcome. */
   ruleVersionKey: string | null;
   title: string;
+  /** Canonical normative wording of the evaluated requirement version (WHAT is required). */
+  normativeStatement: string | null;
   domainLabel: string | null;
   outcome: string;
   scopeType: string | null;
@@ -176,6 +178,7 @@ export async function getComplianceWorkspace(
           select: {
             versionKey: true,
             title: true,
+            normativeStatement: true,
             requirement: { select: { key: true, domain: { select: { label: true } } } },
             citations: {
               select: {
@@ -276,6 +279,7 @@ export async function getComplianceWorkspace(
       requirementVersionKey: row.requirementVersion?.versionKey ?? null,
       ruleVersionKey: row.ruleVersion?.ruleVersionKey ?? null,
       title: row.requirementVersion?.title ?? 'Ismeretlen követelmény',
+      normativeStatement: row.requirementVersion?.normativeStatement ?? null,
       domainLabel: row.requirementVersion?.requirement.domain?.label ?? null,
       outcome: String(row.outcome),
       scopeType: row.scopeType ? String(row.scopeType) : null,
