@@ -216,8 +216,12 @@ export async function listTemplates(caseTypeDefinitionId: string, actor: Actor, 
 
 export async function listCaseCreationOptions(actor: Actor, db: Db = defaultPrisma) {
   internal(actor);
+  // Every ACTIVE case type is selectable for case creation. An active work package
+  // is optional enrichment, not an eligibility gate: a type without one still
+  // produces a case (no work package snapshot), so ordinary case creation never
+  // requires a manager to author global taxonomy first.
   const rows = await db.caseTypeDefinition.findMany({
-    where: { isActive: true, workPackageTemplates: { some: { status: 'ACTIVE' } } },
+    where: { isActive: true },
     orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     select: {
       id: true, slug: true, name: true, description: true, icon: true,

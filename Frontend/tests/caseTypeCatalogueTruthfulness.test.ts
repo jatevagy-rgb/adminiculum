@@ -57,10 +57,23 @@ test('empty eligible catalogue is stated honestly and offers no automatic global
   assert.equal(flatten(tree).find((node) => node.type === 'button' && node.props.type === 'submit').props.disabled, true);
 });
 
-test('existing but unusable types explain the missing active work package instead of hiding it', async () => {
-  const { h } = harness({ role: 'ADMIN', options: [], types: [{ id: 'type-1', name: 'Szerződésvéleményezés', isActive: true, sortOrder: 0 }] });
+test('existing types without an active work package are selectable and say so plainly', async () => {
+  // The catalogue returns an ACTIVE type with no active work package. It is a
+  // selectable creation option; the missing work package is an informational
+  // note, not a reason to hide the type or to author global taxonomy.
+  const { h, created } = harness({
+    role: 'ADMIN',
+    options: [{ caseTypeDefinition: { id: 'type-1', name: 'Szerződésvéleményezés', slug: 'type-1' }, template: null }],
+    types: [{ id: 'type-1', name: 'Szerződésvéleményezés', isActive: true, sortOrder: 0 }],
+  });
   const tree = await settle(h, { open: true, onClose() {}, initialClientId: 'client-1' });
-  assert.match(textOf(tree), /nincs aktív munkacsomag/i);
+  const list = flatten(tree).find((node) => node.props?.id === 'existing-case-type');
+  assert.ok(list, 'the existing type must be selectable');
+  assert.ok(flatten(list).some((node) => node.type === 'option' && node.props.value === 'type-1'));
+  list.props.onChange({ target: { value: 'type-1' } });
+  const afterSelect = h.render({ open: true, onClose() {}, initialClientId: 'client-1' });
+  assert.match(textOf(afterSelect), /nincs aktív munkacsomag/i);
+  assert.deepEqual(created, []);
 });
 
 test('inactive-only catalogue is reported as inactive rather than as a missing type', async () => {
