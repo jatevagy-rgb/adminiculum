@@ -40,6 +40,11 @@ import {
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { GrowIntake } from "@/components/clients/GrowIntake";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
+import {
+  getDiagnosticWorkbench,
+  verificationStatusLabelHu,
+  type DiagnosticWorkbenchDto,
+} from "@/lib/diagnosticWorkbenchApi";
 
 type GrowScreen = "home" | "feed" | "detail" | "progress" | "results";
 
@@ -118,6 +123,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
   const [canPublishOpportunities, setCanPublishOpportunities] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<GrowOpportunityDetail | null>(null);
+  const [workbench, setWorkbench] = useState<DiagnosticWorkbenchDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [researchBusy, setResearchBusy] = useState(false);
@@ -144,7 +150,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
     setLoading(true);
     setError(null);
     try {
-      const [homeRes, oppRes, acceptedRes, outcomeRes, processRes, initiativeRes, milestoneRes, taskRes] = await Promise.all([
+      const [homeRes, oppRes, acceptedRes, outcomeRes, processRes, initiativeRes, milestoneRes, taskRes, workbenchRes] = await Promise.all([
         growApi.getHome(clientId),
         growApi.listOpportunities(clientId),
         growApi.listOpportunities(clientId, "ACCEPTED").catch(() => ({ items: [] as GrowOpportunityItem[] })),
@@ -153,6 +159,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
         clientCompanyApi.listInitiatives(clientId).catch(() => ({ items: [] as DevelopmentInitiative[] })),
         clientCompanyApi.listMilestones(clientId).catch(() => ({ items: [] as CompanyMilestone[] })),
         listTaskLifecycleItems().catch(() => [] as TaskLifecycleListItem[]),
+        getDiagnosticWorkbench(clientId).catch(() => null),
       ]);
       setHome(homeRes);
       setOpportunities(oppRes.items);
@@ -162,6 +169,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
       setInitiatives(initiativeRes.items);
       setMilestones(milestoneRes.items);
       setTasks(taskRes.filter((t) => t.case.clientId === clientId));
+      setWorkbench(workbenchRes);
     } catch {
       setError("A Grow felület adatai jelenleg nem tölthetők be.");
     } finally {
@@ -332,12 +340,19 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
           {screen === "home" ? (
             <GrowHomeScreen
               home={home}
+              workbench={workbench}
               onShowFeed={() => setScreen("feed")}
+              onShowProgress={() => setScreen("progress")}
+              onShowResults={() => setScreen("results")}
               onRunResearch={() => void runResearch()}
               researchBusy={researchBusy}
               researchNote={researchNote}
               clientId={clientId}
               processes={processes}
+              initiatives={initiatives}
+              milestones={milestones}
+              outcomes={outcomes}
+              acceptedOpportunities={acceptedOpportunities}
               canRunResearch={home?.canRunResearch ?? false}
               onSubmitted={load}
               onOpenDetail={(id) => void openDetail(id)}
@@ -357,6 +372,7 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
               onChanged={load}
               onRefreshDetail={refreshDetail}
               onShowFeed={() => setScreen("feed")}
+              onShowProgress={() => setScreen("progress")}
               processes={processes}
               canPublishOpportunities={canPublishOpportunities}
             />
@@ -380,33 +396,500 @@ export function GrowJourney({ clientId, clientName }: { clientId: string; client
   );
 }
 
+/* -------------------------- Causal Chain Tracker ---------------------------- */
+
+function CausalChainTracker({
+  knownFactsCount,
+  diagnosesCount,
+  snapshotsCount,
+  observationsCount,
+  evidenceCount,
+  opportunitiesCount,
+  acceptedCount,
+  activeInitiativesCount,
+  milestonesCount,
+  measuredOutcomesCount,
+  calculatedOutcomesCount,
+  onShowFeed,
+  onShowProgress,
+  onShowResults,
+  clientId,
+}: {
+  knownFactsCount: number;
+  diagnosesCount: number;
+  snapshotsCount: number;
+  observationsCount: number;
+  evidenceCount: number;
+  opportunitiesCount: number;
+  acceptedCount: number;
+  activeInitiativesCount: number;
+  milestonesCount: number;
+  measuredOutcomesCount: number;
+  calculatedOutcomesCount: number;
+  onShowFeed: () => void;
+  onShowProgress: () => void;
+  onShowResults: () => void;
+  clientId: string;
+}) {
+  const steps = [
+    {
+      num: 1,
+      title: "1. Vállalati állapot",
+      question: "Mit tudunk a cégről?",
+      stat: `${knownFactsCount} ismert tény`,
+      href: `/clients/${clientId}/vallalati-mukodes`,
+      actionLabel: "Vállalati profil →",
+    },
+    {
+      num: 2,
+      title: "2. Diagnosztika",
+      question: "Mit azonosítottunk?",
+      stat: `${diagnosesCount} levezetett diagnózis`,
+      href: `/clients/${clientId}/grow?view=diagnostics`,
+      actionLabel: "Diagnosztika →",
+    },
+    {
+      num: 3,
+      title: "3. Támogató jelek",
+      question: "Miért gondoljuk ezt?",
+      stat: `${snapshotsCount} mért · ${observationsCount} deklarált`,
+      href: `/clients/${clientId}/grow?view=diagnostics`,
+      actionLabel: "Megfigyelések →",
+    },
+    {
+      num: 4,
+      title: "4. Bizonyítékok",
+      question: "Milyen bizonyíték támasztja alá?",
+      stat: `${evidenceCount} kutatási hivatkozás`,
+      href: `/clients/${clientId}/grow?view=diagnostics`,
+      actionLabel: "Bizonyítékok →",
+    },
+    {
+      num: 5,
+      title: "5. Javasolt irányok",
+      question: "Mi javíthat rajta?",
+      stat: `${opportunitiesCount} feltárt lehetőség`,
+      onClick: onShowFeed,
+      actionLabel: "Lehetőségek →",
+    },
+    {
+      num: 6,
+      title: "6. Döntéshozatal",
+      question: "Miről döntöttünk?",
+      stat: `${acceptedCount} elfogadva`,
+      onClick: onShowProgress,
+      actionLabel: "Döntések →",
+    },
+    {
+      num: 7,
+      title: "7. Cél & mérföldkövek",
+      question: "Milyen célért dolgozunk?",
+      stat: `${activeInitiativesCount} aktív (${milestonesCount} mérföldkő)`,
+      onClick: onShowProgress,
+      actionLabel: "Folyamatban →",
+    },
+    {
+      num: 8,
+      title: "8. Mért eredmények",
+      question: "Mit értünk el ténylegesen?",
+      stat: `${measuredOutcomesCount} mért (${calculatedOutcomesCount} becsült)`,
+      onClick: onShowResults,
+      actionLabel: "Eredmények →",
+    },
+  ];
+
+  return (
+    <div
+      className="rounded-3xl border border-[#e8ded1] bg-white p-5 sm:p-6 shadow-xs"
+      data-testid="grow-causal-chain"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#f0ece1] pb-3.5">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">
+            Oksági lánc
+          </p>
+          <h2 className="font-serif text-base sm:text-lg font-bold text-[#1b382b]">
+            A fejlődés logikai folyamata
+          </h2>
+        </div>
+        <p className="max-w-md text-right text-[11px] text-[#788274] hidden sm:block">
+          A Grow with us a tényektől és megfigyelésektől a döntéseken át az igazolt üzleti eredményekig vezet.
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-8">
+        {steps.map((s) => (
+          <div
+            key={s.num}
+            className="flex flex-col justify-between rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-3 transition-colors hover:border-[#2d5a43]/50 hover:bg-[#faf6ee]/30"
+          >
+            <div>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1b382b] text-[10px] font-bold text-white">
+                {s.num}
+              </span>
+              <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#667062]">
+                {s.title}
+              </p>
+              <p className="mt-0.5 text-xs font-semibold text-[#1b382b] leading-tight">
+                {s.question}
+              </p>
+              <p className="mt-1 text-[11px] text-[#556052]">
+                {s.stat}
+              </p>
+            </div>
+            <div className="mt-2.5 border-t border-[#f0ece1] pt-2">
+              {s.href ? (
+                <Link
+                  href={s.href}
+                  className="text-[11px] font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
+                >
+                  {s.actionLabel}
+                </Link>
+              ) : s.onClick ? (
+                <button
+                  type="button"
+                  onClick={s.onClick}
+                  className="text-[11px] font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
+                >
+                  {s.actionLabel}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------- Company State Card ---------------------------- */
+
+function CompanyStateCard({
+  workbench,
+  processes,
+  clientId,
+}: {
+  workbench: DiagnosticWorkbenchDto | null;
+  processes: BusinessProcessDTO[];
+  clientId: string;
+}) {
+  const profile = workbench?.client.operatingProfile;
+  const facts = workbench?.known.facts ?? [];
+  const verifiedFacts = facts.filter((f) => f.verificationStatus === "VERIFIED");
+  const systems = workbench?.known.systems ?? [];
+  const hasUnknownFacts = workbench?.missing.hasUnknownFacts ?? false;
+
+  return (
+    <Panel
+      title="Vállalati alapállapot és működési profil"
+      kicker="1. lépés · Mit tudunk jelenleg a cégről?"
+      className="border-[#e8ded1]"
+    >
+      <div data-testid="grow-company-state-panel" className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-[#e8ded1] bg-[#faf6ee] p-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-[#1b382b]">
+              {profile?.summary || "Kanonikus vállalati profil rögzítve."}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-[#556052]">
+              <span>
+                Megfelelőségi státusz:{" "}
+                <strong className="text-[#1b382b]">
+                  {profile?.complianceEnrollmentStatus || "Nincs beállítva"}
+                </strong>
+              </span>
+              {profile?.lastReviewedAt ? (
+                <span>
+                  Utolsó felülvizsgálat:{" "}
+                  {new Date(profile.lastReviewedAt).toLocaleDateString("hu-HU")}
+                </span>
+              ) : null}
+              {profile?.nextReviewAt ? (
+                <span>
+                  Következő esedékes:{" "}
+                  {new Date(profile.nextReviewAt).toLocaleDateString("hu-HU")}
+                </span>
+              ) : null}
+            </div>
+          </div>
+          <Link
+            href={`/clients/${clientId}/vallalati-mukodes`}
+            className="inline-flex items-center gap-1 rounded-xl bg-[#1b382b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#2d5a43] transition-colors"
+          >
+            Vállalati működés →
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#667062]">Kanonikus tények</p>
+            <p className="mt-1 font-serif text-xl font-bold text-[#1b382b]">
+              {facts.length > 0 ? `${facts.length} tény` : "Nincs rögzítve"}
+            </p>
+            <p className="mt-1 text-[11px] text-[#788274]">
+              {verifiedFacts.length} hitelesített ({facts.length - verifiedFacts.length} deklarált/becsült)
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#667062]">Működési folyamatok</p>
+            <p className="mt-1 font-serif text-xl font-bold text-[#1b382b]">
+              {processes.length > 0 ? `${processes.length} folyamat` : "Nincs folyamat"}
+            </p>
+            <p className="mt-1 text-[11px] text-[#788274]">
+              Lépések és felelősök nyilvántartásban
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-3.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#667062]">Érintett rendszerek</p>
+            <p className="mt-1 font-serif text-xl font-bold text-[#1b382b]">
+              {systems.length > 0 ? `${systems.length} rendszer` : "Nincs rendszer"}
+            </p>
+            <p className="mt-1 text-[11px] text-[#788274]">
+              Alkalmazások és infrastruktúra
+            </p>
+          </div>
+        </div>
+
+        {facts.length > 0 ? (
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Kiemelt vállalati tények</p>
+            <div className="mt-2 divide-y divide-[#f0ece1] rounded-2xl border border-[#e8ded1] bg-white">
+              {facts.slice(0, 4).map((f) => (
+                <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 p-3 text-xs">
+                  <div className="min-w-0">
+                    <span className="font-semibold text-[#1b382b]">
+                      {f.factDefinition?.key || f.type}
+                    </span>
+                    <span className="ml-2 text-[#556052]">{f.value}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {f.determinationMethod ? (
+                      <span className="text-[10px] text-[#788274]">
+                        {f.determinationMethod}
+                      </span>
+                    ) : null}
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+                        f.verificationStatus === "VERIFIED"
+                          ? "border-[#2d5a43]/40 bg-[#2d5a43]/10 text-[#1b382b]"
+                          : "border-[#e8ded1] bg-[#fcfbf9] text-[#788274]"
+                      }`}
+                    >
+                      {verificationStatusLabelHu(f.verificationStatus)}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {hasUnknownFacts ? (
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-2.5">
+            Egyes vállalati alapadatok még ismeretlenek vagy nincsenek hitelesítve. A megbízható javaslatokhoz a Vállalati működés felületen adhatók meg további tények.
+          </p>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
+/* ----------------------- Diagnostic Overview Card -------------------------- */
+
+function DiagnosticOverviewCard({
+  workbench,
+  clientId,
+}: {
+  workbench: DiagnosticWorkbenchDto | null;
+  clientId: string;
+}) {
+  const diagnoses = workbench?.problems.diagnoses ?? [];
+  const observations = workbench?.observed.observations ?? [];
+  const snapshots = workbench?.observed.processSnapshots ?? [];
+  const unresolved = workbench?.missing.unresolvedItems ?? [];
+
+  return (
+    <Panel
+      title="Azonosított problémák és diagnosztikai jelek"
+      kicker="2–4. lépés · Diagnosztikai szintézis"
+      className="border-[#e8ded1]"
+    >
+      <div data-testid="grow-diagnostic-overview-panel" className="space-y-4">
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">
+              Levezetett diagnózisok ({diagnoses.length})
+            </p>
+            <Link
+              href={`/clients/${clientId}/grow?view=diagnostics`}
+              className="text-xs font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
+            >
+              Részletes diagnosztikai munkaasztal →
+            </Link>
+          </div>
+          {diagnoses.length === 0 ? (
+            <div className="mt-2 rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/50 p-4 text-xs text-[#556052]">
+              Még nincs rögzített levezetett diagnózis ehhez a céghez.
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2.5">
+              {diagnoses.slice(0, 3).map((d) => (
+                <div
+                  key={d.id}
+                  className="rounded-2xl border border-[#e8ded1] bg-[#fcfbf9] p-3.5 transition-colors hover:border-[#2d5a43]/40"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[#1b382b]">{d.title}</p>
+                      <p className="mt-0.5 text-xs text-[#556052]">
+                        {d.problemDomain ? d.problemDomain.name : "Általános működés"}
+                        {d.businessProcess ? ` · ${d.businessProcess.name}` : ""}
+                      </p>
+                      {d.summary ? (
+                        <p className="mt-1 text-xs text-[#333e30] leading-relaxed">{d.summary}</p>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                        {d.status || "Aktív"}
+                      </span>
+                      <span className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-medium text-sky-800">
+                        {d.evidence?.length ?? 0} bizonyíték
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Observed Signals: Declared vs Measured */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#f0ece1]">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">
+              Deklarált megfigyelések ({observations.length})
+            </p>
+            {observations.length === 0 ? (
+              <p className="mt-1 text-xs text-[#788274]">
+                Nincs még felmérési vagy bejelentési adat.
+              </p>
+            ) : (
+              <div className="mt-1.5 space-y-1.5">
+                {observations.slice(0, 2).map((obs) => (
+                  <div key={obs.id} className="rounded-xl border border-[#e8ded1] bg-white p-2.5 text-xs">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-semibold text-[#1b382b]">{obs.source?.name || obs.observationType}</span>
+                      <span className="text-[10px] text-[#788274]">
+                        {new Date(obs.observedAt).toLocaleDateString("hu-HU")}
+                      </span>
+                    </div>
+                    <span className="mt-1 inline-block rounded bg-[#faf6ee] px-1.5 py-0.5 text-[10px] text-[#556052]">
+                      Deklarált forrás
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">
+              Mért folyamatpillanatképek ({snapshots.length})
+            </p>
+            {snapshots.length === 0 ? (
+              <p className="mt-1 text-xs text-[#788274]">
+                Nincs még folyamatmérési pillanatkép.
+              </p>
+            ) : (
+              <div className="mt-1.5 space-y-1.5">
+                {snapshots.slice(0, 2).map((snap) => (
+                  <div key={snap.id} className="rounded-xl border border-[#e8ded1] bg-white p-2.5 text-xs">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="font-semibold text-[#1b382b]">{snap.businessProcess?.name || "Folyamat"}</span>
+                      <span className="text-[10px] text-[#788274]">
+                        {new Date(snap.observedAt).toLocaleDateString("hu-HU")}
+                      </span>
+                    </div>
+                    <span className="mt-1 inline-block rounded bg-teal-50 text-teal-800 border border-teal-200 px-1.5 py-0.5 text-[10px]">
+                      {snap.metrics?.length ?? 0} mért mutató
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {unresolved.length > 0 ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-3 text-xs text-amber-950">
+            <p className="font-semibold">További adat szükséges a döntéshozatalhoz:</p>
+            <ul className="mt-1 list-disc pl-4 space-y-0.5 text-[11px]">
+              {unresolved.map((u, i) => (
+                <li key={i}>{u.message}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </Panel>
+  );
+}
+
 /* ---------------------------------- Screen 1: Home ------------------------------ */
 
 function GrowHomeScreen({
   home,
+  workbench,
   onShowFeed,
+  onShowProgress,
+  onShowResults,
   onRunResearch,
   researchBusy,
   researchNote,
   clientId,
   processes,
+  initiatives,
+  milestones,
+  outcomes,
+  acceptedOpportunities,
   canRunResearch,
   onSubmitted,
   onOpenDetail,
 }: {
   home: GrowHomeSummary | null;
+  workbench: DiagnosticWorkbenchDto | null;
   onShowFeed: () => void;
+  onShowProgress: () => void;
+  onShowResults: () => void;
   onRunResearch: () => void;
   researchBusy: boolean;
   researchNote: string | null;
   clientId: string;
   processes: BusinessProcessDTO[];
+  initiatives: DevelopmentInitiative[];
+  milestones: CompanyMilestone[];
+  outcomes: OutcomeMeasurementDTO[];
+  acceptedOpportunities: GrowOpportunityItem[];
   canRunResearch: boolean;
   onSubmitted: () => void;
   onOpenDetail: (id: string) => void;
 }) {
   const counts = home?.opportunityCounts;
   const processWithSteps = processes.find((p) => (p.steps?.length ?? 0) > 0);
+
+  const knownFactsCount = workbench?.known.facts.length ?? 0;
+  const diagnosesCount = workbench?.problems.diagnoses.length ?? 0;
+  const snapshotsCount = workbench?.observed.processSnapshots.length ?? 0;
+  const observationsCount = workbench?.observed.observations.length ?? 0;
+  const evidenceCount = (workbench?.evidence.records.length ?? 0) + (workbench?.evidence.research.length ?? 0);
+  const opportunitiesCount = counts?.total ?? 0;
+  const acceptedCount = acceptedOpportunities.length;
+  const activeInitiatives = initiatives.filter((i) => ["PLANNED", "ACTIVE", "ON_HOLD"].includes(i.status));
+  const activeInitiativesCount = activeInitiatives.length;
+  const milestonesCount = milestones.length;
+  const measuredOutcomes = outcomes.filter((o) => o.basis === "MEASURED");
+  const calculatedOutcomes = outcomes.filter((o) => o.basis === "CALCULATED" || o.basis === "ESTIMATED");
 
   return (
     <div className="space-y-6">
@@ -464,6 +947,38 @@ function GrowHomeScreen({
         <p className="mt-3 text-[11px] text-[#788274]">
           Nincs érettségi pontszám. A rendszer rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve.
         </p>
+      </div>
+
+      {/* Causal Chain Stepper */}
+      <CausalChainTracker
+        knownFactsCount={knownFactsCount}
+        diagnosesCount={diagnosesCount}
+        snapshotsCount={snapshotsCount}
+        observationsCount={observationsCount}
+        evidenceCount={evidenceCount}
+        opportunitiesCount={opportunitiesCount}
+        acceptedCount={acceptedCount}
+        activeInitiativesCount={activeInitiativesCount}
+        milestonesCount={milestonesCount}
+        measuredOutcomesCount={measuredOutcomes.length}
+        calculatedOutcomesCount={calculatedOutcomes.length}
+        onShowFeed={onShowFeed}
+        onShowProgress={onShowProgress}
+        onShowResults={onShowResults}
+        clientId={clientId}
+      />
+
+      {/* Two Columns: Company Foundation & Diagnostic Overview */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <CompanyStateCard
+          workbench={workbench}
+          processes={processes}
+          clientId={clientId}
+        />
+        <DiagnosticOverviewCard
+          workbench={workbench}
+          clientId={clientId}
+        />
       </div>
 
       {/* Two Columns: Left = Opportunities / Findings, Right = Grow Method Journey & Process Map */}
@@ -720,6 +1235,7 @@ function GrowDetailScreen({
   onChanged,
   onRefreshDetail,
   onShowFeed,
+  onShowProgress,
   processes,
   canPublishOpportunities,
 }: {
@@ -729,6 +1245,7 @@ function GrowDetailScreen({
   onChanged: () => Promise<void>;
   onRefreshDetail: () => Promise<void>;
   onShowFeed: () => void;
+  onShowProgress: () => void;
   processes: BusinessProcessDTO[];
   canPublishOpportunities: boolean;
 }) {
@@ -880,7 +1397,10 @@ function GrowDetailScreen({
         <p className="text-sm text-[#1b382b] leading-relaxed">{detail.direction}</p>
         {detail.interventionCodes.length ? (
           <div className="mt-4">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Szóba jövő beavatkozások</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Javasolt fejlesztési irányok</p>
+            <p className="mt-1 text-[11px] text-[#788274]">
+              Általános fejlesztési irányok — nem megvásárolható külső termékek, nem BlackBelt termékek és nem véglegesített megvalósítási tervek.
+            </p>
             <ul className="mt-2 list-disc pl-5 text-xs text-[#1b382b] space-y-1">
               {detail.interventionCodes.map((code) => (
                 <li key={code}>{interventionLabelHu(code)}</li>
@@ -1011,6 +1531,15 @@ function GrowDetailScreen({
                 className="mt-3 rounded-xl border border-[#1b382b] bg-white px-4 py-2 text-xs font-semibold text-[#1b382b] hover:bg-[#faf6ee] transition-colors"
               >
                 {busy === "initiative" ? "Indítás…" : "Kezdeményezés indítása"}
+              </button>
+            ) : null}
+            {detail.opportunity?.developmentInitiativeId ? (
+              <button
+                type="button"
+                onClick={onShowProgress}
+                className="mt-3 block text-xs font-semibold text-[#2d5a43] hover:text-[#1b382b] hover:underline"
+              >
+                Kezdeményezés megtekintése a Folyamatban nézetben →
               </button>
             ) : null}
           </div>
@@ -1464,6 +1993,11 @@ function GrowProgressScreen({
                     </span>
                   </div>
 
+                  <div className="mt-2.5 rounded-xl border border-[#e8ded1] bg-[#faf6ee] p-2.5 text-xs text-[#556052]">
+                    <span className="font-semibold text-[#1b382b]">Oksági lánc:</span>{" "}
+                    Diagnózis → Javítási lehetőség: <span className="font-semibold text-[#1b382b]">{relatedOpportunity ? relatedOpportunity.title : "Nincs közvetlen kapcsolat"}</span> → Kezdeményezés → Mérföldkövek → Eredmény
+                  </div>
+
                   <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-[minmax(120px,auto)_1fr]">
                     <dt className="text-[#667062]">Kiinduló helyzet</dt>
                     <dd className="text-[#1b382b]">{initiative.currentState || "Nincs adat."}</dd>
@@ -1498,7 +2032,12 @@ function GrowProgressScreen({
                   </div>
 
                   <div className="mt-4 border-t border-[#f0ece1] pt-3">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Mérföldkövek</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-[#667062]">Mérföldkövek</p>
+                      <span className="text-[10px] text-[#788274]">
+                        A határidő lejárta nem azonos elért üzleti hatással
+                      </span>
+                    </div>
                     {initiativeMilestones.length === 0 ? (
                       <p className="mt-1.5 text-xs text-[#788274]">Ehhez a kezdeményezéshez még nincsenek mérföldkövek rögzítve.</p>
                     ) : (
@@ -1605,6 +2144,9 @@ function GrowResultsScreen({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) 
   return (
     <div className="space-y-6">
       <Panel title="Mit értünk el?" kicker="Rögzített eredmények és hatások">
+        <p className="mb-4 text-xs text-[#556052] leading-relaxed">
+          A hatásvizsgálat kizárólag azonos ügyfél azonos folyamatához tartozó, rögzített előtte/utána mérésekből származik. A rendszer nem számol fiktív megtérülést vagy automatikus sikerességi pontszámot.
+        </p>
         {achievedCount === 0 ? (
           <div className="rounded-2xl border border-[#e8ded1] bg-[#faf6ee]/50 p-6 text-sm text-[#556052] leading-relaxed">
             Még nincs rögzített eredmény. Az eredmények az elfogadott lehetőségek előtte/utána méréséből származnak — ugyanannál a cégnél, ugyanahhoz a folyamathoz.
