@@ -22,17 +22,28 @@ describe('case detail canonical identity resolution', () => {
       'CaseDetail must resolve the route identity via the canonical GET /cases/:caseId lookup',
     );
     const directIndex = caseDetail.indexOf('record = await getCaseById(resolvedParams.caseId)');
-    const listIndex = caseDetail.indexOf('const caseList = await getCases(1, 200)');
-    assert.ok(directIndex >= 0 && listIndex >= 0 && directIndex < listIndex,
-      'the canonical id lookup must run before the list fallback');
+    const fallbackIndex = caseDetail.indexOf('await findCaseByReference(');
+    assert.ok(directIndex >= 0 && fallbackIndex >= 0 && directIndex < fallbackIndex,
+      'the canonical id lookup must run before the legacy-reference fallback');
+    assert.doesNotMatch(
+      caseDetail,
+      /getCases\(1,\s*200\)[\s\S]{0,120}caseNumber === resolvedParams\.caseId/,
+      'the legacy fallback must not be an arbitrary first-200 pagination window',
+    );
   });
 
-  it('keeps the legacy case-number alias as an explicit fallback only', () => {
+  it('keeps the legacy case-number alias as an exact-reference fallback only', () => {
     const caseDetail = read('src/components/CaseDetail.tsx');
     assert.match(
       caseDetail,
-      /item\.caseNumber === resolvedParams\.caseId \|\| item\.id === resolvedParams\.caseId/,
-      'legacy case-number URLs must still fall back to the list lookup',
+      /findCaseByReference\(/,
+      'legacy case-number URLs must resolve through the exact-reference scan',
+    );
+    const resolver = read('src/lib/workspace/identityResolution.ts');
+    assert.match(
+      resolver,
+      /item\.id === wanted \|\| item\.caseNumber === wanted/,
+      'the fallback must match the requested reference exactly, never a positional case',
     );
   });
 

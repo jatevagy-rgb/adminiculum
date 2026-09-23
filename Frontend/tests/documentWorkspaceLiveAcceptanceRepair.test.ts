@@ -69,7 +69,7 @@ test("DW01 resolves every selectable ledger kind from the URL and clears a delet
   const resolveEffectEnd = source.indexOf("}, [contracts, requestedDocumentId", resolveEffectStart);
   const resolveEffect = source.slice(resolveEffectStart, resolveEffectEnd);
   assert.ok(resolveEffectStart > 0 && resolveEffectEnd > resolveEffectStart);
-  assert.match(resolveEffect, /modifiedWorkingCopies\.find\(\(document\) => document\.id === requestedDocumentId\)/);
+  assert.match(resolveEffect, /findRequestedDocument\(requestedDocumentId, \[uploadedDocuments, modifiedWorkingCopies\]\)/);
   assert.doesNotMatch(resolveEffect, /syncDocumentIdToUrl|router\[/);
   assert.match(source, /syncDocumentIdToUrl\(null, "replace"\)/);
 });
