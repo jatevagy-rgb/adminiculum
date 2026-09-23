@@ -671,9 +671,9 @@ export function DocumentEditorWorkbench({ documentId }: { documentId: string | n
             ← Ügy
           </button>
           <div className="min-w-0">
-            <p className="truncate text-[13px] font-bold leading-tight text-[#16201A]" title={meta?.name || "Új munkapéldány"}>
+            <h1 className="truncate text-[13px] font-bold leading-tight text-[#16201A]" title={meta?.name || "Új munkapéldány"}>
               {meta?.name || "Új munkapéldány (szerződéstervezet)"}
-            </p>
+            </h1>
             <p className="truncate text-[10px] leading-tight text-[#7A8479]">
               {[context.caseReference, context.clientDisplayName, meta?.version ? `v${meta.version} (metaadat)` : null]
                 .filter(Boolean)

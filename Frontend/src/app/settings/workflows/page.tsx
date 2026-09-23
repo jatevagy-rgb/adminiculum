@@ -285,7 +285,7 @@ function WorkflowTemplatesAdmin() {
           </Card>
         ) : (
           <div className="rounded-lg border border-dashed border-[#E5E7E6] bg-white p-6 text-sm text-[#6B7280] shadow-xs">
-            Válassz egy tervezetet szerkesztésre, vagy hozz létre új munkafolyamatot. Aktiváláskor a rendszer ellenőrzi, hogy a függőségek körmentes DAG-ot alkotnak-e.
+            Válassz egy tervezetet szerkesztésre, vagy hozz létre új munkafolyamatot. Aktiváláskor a rendszer ellenőrzi, hogy a lépések sorrendje érvényes-e, és a függőségek nem alkotnak kört.
           </div>
         )}
       </div>

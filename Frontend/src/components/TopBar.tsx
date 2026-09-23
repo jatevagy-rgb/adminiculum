@@ -46,7 +46,7 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
       <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-4">
         <div className="min-w-0">
           <p className={`text-[9.5px] uppercase tracking-[0.2em] ${isSignal ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>Adminiculum</p>
-          <h1 className={`truncate font-serif text-[21px] leading-tight ${isSignal ? "text-[#E5E7EB]" : "text-[var(--adm-text)]"}`}>{title}</h1>
+          <p data-testid="shell-context" className={`truncate text-[11px] font-semibold uppercase tracking-[0.16em] ${isSignal ? "text-[#CBD5E1]" : "text-[var(--adm-text-muted)]"}`}>{title}</p>
         </div>
 
         <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-auto sm:flex-none">
