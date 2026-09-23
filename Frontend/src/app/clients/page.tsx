@@ -239,13 +239,13 @@ function ClientsPageContent() {
                 <span className="text-[11px] text-[#6B7280]">{filteredClients.length} találat</span>
               </div>
               {viewMode === "table" ? (
-                <DataTable minWidth={760}>
+                <DataTable className="md:min-w-[760px]">
                   <DataTableHead>
                     <tr>
                       <DataTableHeaderCell>Ügyfél neve</DataTableHeaderCell>
-                      <DataTableHeaderCell>Kapcsolattartó</DataTableHeaderCell>
-                      <DataTableHeaderCell>Elérhetőség</DataTableHeaderCell>
-                      <DataTableHeaderCell>Státusz</DataTableHeaderCell>
+                      <DataTableHeaderCell className="hidden md:table-cell">Kapcsolattartó</DataTableHeaderCell>
+                      <DataTableHeaderCell className="hidden md:table-cell">Elérhetőség</DataTableHeaderCell>
+                      <DataTableHeaderCell className="hidden md:table-cell">Státusz</DataTableHeaderCell>
                       <DataTableHeaderCell align="right">Műveletek</DataTableHeaderCell>
                     </tr>
                   </DataTableHead>
@@ -264,15 +264,20 @@ function ClientsPageContent() {
                                 <span className="text-[11px] text-[#6B7280]">Adószám: {client.taxNumber}</span>
                               ) : null}
                             </Link>
+                            <div className="mt-1.5 md:hidden">
+                              <Badge shape="pill" tone={client.relationshipMode === "PORTAL_CENTRIC" ? "teal" : "neutral"} dot>
+                                {client.relationshipMode === "PORTAL_CENTRIC" ? "Portál ügyfél" : "Ügyfél"}
+                              </Badge>
+                            </div>
                           </DataTableCell>
-                          <DataTableCell muted>
+                          <DataTableCell muted className="hidden md:table-cell">
                             {client.contactPerson ? (
                               <span className="font-medium text-[#1F2937]">{client.contactPerson}</span>
                             ) : (
                               "—"
                             )}
                           </DataTableCell>
-                          <DataTableCell muted>
+                          <DataTableCell muted className="hidden md:table-cell">
                             <div className="space-y-0.5">
                               {client.email ? (
                                 <div>
@@ -287,16 +292,17 @@ function ClientsPageContent() {
                               {!client.email && !client.phone ? "—" : null}
                             </div>
                           </DataTableCell>
-                          <DataTableCell>
+                          <DataTableCell className="hidden md:table-cell">
                             <Badge shape="pill" tone={client.relationshipMode === "PORTAL_CENTRIC" ? "teal" : "neutral"} dot>
                               {client.relationshipMode === "PORTAL_CENTRIC" ? "Portál ügyfél" : "Ügyfél"}
                             </Badge>
                           </DataTableCell>
                           <DataTableCell align="right">
-                            <div className="flex items-center justify-end gap-2.5">
+                            <div className="flex flex-col items-stretch gap-1.5 md:flex-row md:items-center md:justify-end md:gap-2.5">
                               <QuietLink
                                 href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`}
                                 size="sm"
+                                className="max-md:min-h-8 max-md:justify-center"
                                 aria-label={`Új ügy indítása: ${client.name}`}
                               >
                                 + Új ügy
