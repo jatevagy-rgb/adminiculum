@@ -441,6 +441,15 @@ export function OrgGrowView() {
   // Published, customer-safe opportunities only (already publication-filtered by the DTO).
   const publishedOpportunitiesCount = data?.opportunities?.length ?? 0;
 
+  const uncompletedPacks = useMemo(() => packs.filter((p) => p.status !== "COMPLETED"), [packs]);
+  const activeInitiatives = useMemo(
+    () =>
+      initiatives.filter(
+        (i) => i.statusLabel === "Folyamatban" || i.statusLabel.toLowerCase().includes("folyamat")
+      ),
+    [initiatives]
+  );
+
   // Filtered packs for Felmérések catalogue
   const filteredPacks = packs.filter((p) => {
     if (assessmentFilter === "uncompleted") return p.status !== "COMPLETED";
@@ -588,9 +597,9 @@ export function OrgGrowView() {
             </div>
           </div>
 
-          {/* Two-column overview layout: Hol érdemes körülnézni? + Grow Módszertan */}
+          {/* Row 1: Current State & Required Customer Action */}
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Aggregated findings section */}
+            {/* Aggregated findings section: Mit látunk eddig? */}
             <section className={card} data-testid="grow-aggregated-findings">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Összegzés</p>
@@ -652,43 +661,230 @@ export function OrgGrowView() {
               )}
             </section>
 
-            {/* Process Development Journey Panel */}
-            <section className={card}>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Módszertan</p>
-              <h2 className="mt-1 font-serif text-2xl font-semibold text-[#1b382b]">A Grow folyamat</h2>
-              <p className="mt-1 text-xs text-stone-600">
-                Hogyan jutunk el a működési jelzéstől a mért és számított eredményekig?
-              </p>
-              <div className="mt-4 space-y-2.5">
-                {[
-                  { step: "1. Feltárás", desc: "Kérdőíves felmérések és a napi működési szűk keresztmetszetek rögzítése." },
-                  { step: "2. Elemzés", desc: "Szakértői felülvizsgálat és összevetés a vonatkozó szakirodalmi háttérrel." },
-                  { step: "3. Tervezés", desc: "Célorientált fejlesztési javaslatok és megvalósítási lépések kidolgozása." },
-                  { step: "4. Megvalósítás", desc: "Folyamatoptimalizálási beavatkozások és intézkedések végrehajtása." },
-                  { step: "5. Eredmények", desc: "Kapacitásfelszabadulás, időmegtakarítás és folyamatminőség ellenőrzött mérése." },
-                ].map((item, idx) => (
-                  <div key={idx} className="flex items-start gap-3 rounded-xl border border-stone-200/80 bg-stone-50/50 p-2.5">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#f4efe6] text-[11px] font-bold text-[#1b382b]">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-stone-900">{item.step}</p>
-                      <p className="text-[11px] leading-4 text-stone-600">{item.desc}</p>
+            {/* Required customer action: Mi igényel figyelmet? */}
+            <section className={card} data-testid="grow-action-required-section">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#a84318]">Ügyféli teendő</p>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("felmeresek")}
+                  className="text-xs font-semibold text-[#a84318] hover:underline"
+                >
+                  Összes felmérés ({packs.length}) →
+                </button>
+              </div>
+              <h2 className="mt-1 font-serif text-2xl font-semibold text-[#1b382b]">Mi igényel figyelmet?</h2>
+              {uncompletedPacks.length > 0 ? (
+                <>
+                  <p className="mt-1 text-xs text-stone-600">
+                    Jelenleg <strong className="text-stone-900">{uncompletedPacks.length} felmérés</strong> kitöltése segíti a működés pontosabb feltárását.
+                  </p>
+                  <div className="mt-4 rounded-2xl border border-[#e8ded1] bg-[#fdfbf7] p-4 shadow-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="rounded-full bg-[#a84318]/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#a84318]">
+                        Kitöltésre vár
+                      </span>
+                      <span className="text-[11px] text-stone-500">
+                        ~{uncompletedPacks[0].estimatedMinutes} perc · {uncompletedPacks[0].questionCount} kérdés
+                      </span>
+                    </div>
+                    <p className="mt-2 font-semibold text-stone-950 text-sm">{uncompletedPacks[0].titleHu}</p>
+                    <p className="mt-1 text-xs leading-5 text-stone-700 line-clamp-2">{uncompletedPacks[0].descriptionHu}</p>
+                    <div className="mt-3 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => startAssessment(uncompletedPacks[0].packKey)}
+                        className="rounded-full bg-[#1b382b] px-4 py-2 text-xs font-semibold text-white shadow-xs hover:bg-[#2d4a3e]"
+                      >
+                        Felmérés kitöltése →
+                      </button>
+                      {uncompletedPacks.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => handleTabChange("felmeresek")}
+                          className="text-xs font-medium text-stone-600 hover:text-stone-900 hover:underline"
+                        >
+                          +{uncompletedPacks.length - 1} további
+                        </button>
+                      ) : null}
                     </div>
                   </div>
-                ))}
-              </div>
-
-              {/* Methodology principle demoted out of the hero, kept truthful and explicit. */}
-              <div className="mt-4 rounded-xl border border-[#e8ded1] bg-[#fdfbf7] p-3.5">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-[#2d5a43]" />
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#7a5f18]">Módszertani alapelv</p>
+                </>
+              ) : packs.length > 0 ? (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-5">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-600 text-white text-[11px] font-bold">✓</span>
+                    <p className="text-sm font-semibold text-emerald-950">Minden felmérés kitöltve</p>
+                  </div>
+                  <p className="mt-2 text-xs leading-relaxed text-emerald-900">
+                    Jelenleg nincs kitöltésre váró kérdéssor. Az eredményeket a Felmérések fülön tekintheti át, vagy az alábbi űrlapon oszthat meg közvetlen működési észrevételt.
+                  </p>
                 </div>
-                <p className="mt-1.5 text-xs italic leading-relaxed text-stone-700">
-                  Nincs elméleti érettségi besorolás. A rendszer rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve.
-                </p>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/60 p-5">
+                  <p className="text-sm font-semibold text-stone-900">Nincs kijelölt felmérés.</p>
+                  <p className="mt-1 text-xs text-stone-600">A felmérések betöltését követően itt jelennek meg a teendők.</p>
+                </div>
+              )}
+            </section>
+          </div>
+
+          {/* Row 2: What the Office is Doing & Recorded Outcomes */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* Active Initiatives & Next Milestones */}
+            <section className={card} data-testid="grow-active-initiatives-section">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#2d4a3e]">Irodai munkavégzés</p>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("kezdemenyezesek")}
+                  className="text-xs font-semibold text-[#2d4a3e] hover:underline"
+                >
+                  Kezdeményezések ({initiatives.length}) →
+                </button>
               </div>
+              <h2 className="mt-1 font-serif text-2xl font-semibold text-[#1b382b]">Min dolgozunk jelenleg?</h2>
+              {activeInitiatives.length > 0 ? (
+                <>
+                  <p className="mt-1 text-xs text-stone-600">
+                    {activeInitiatives.length} jóváhagyott kezdeményezés megvalósítása van folyamatban.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {activeInitiatives.slice(0, 2).map((item) => {
+                      const nextMilestone =
+                        item.milestones.find((m) => m.statusLabel !== "Teljesítve" && m.statusLabel !== "Törölve") ||
+                        item.milestones[0];
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => handleSelectInitiative(item.id)}
+                          className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs transition hover:border-[#1b382b]/60 cursor-pointer"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-900">
+                              {item.statusLabel}
+                            </span>
+                            {item.targetAt ? (
+                              <span className="text-[11px] text-stone-500">
+                                Célhatáridő: {formatDate(item.targetAt)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-2 text-sm font-semibold text-stone-950">{item.title}</p>
+                          {item.targetState ? (
+                            <p className="mt-1 text-xs text-stone-600 line-clamp-2">
+                              <span className="font-medium text-stone-700">Célállapot:</span> {item.targetState}
+                            </p>
+                          ) : null}
+                          {nextMilestone ? (
+                            <div className="mt-3 rounded-xl border border-stone-100 bg-[#fdfbf7] p-2.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-[10px] font-bold uppercase tracking-wider text-[#7a5f18]">Következő mérföldkő</p>
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${milestoneTone(nextMilestone.statusLabel).chip}`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full ${milestoneTone(nextMilestone.statusLabel).dot}`} />
+                                  {nextMilestone.statusLabel}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs font-semibold text-stone-900">{nextMilestone.title}</p>
+                              {nextMilestone.date ? (
+                                <p className="text-[11px] text-stone-500">{formatDate(nextMilestone.date)}</p>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {activeInitiatives.length > 2 ? (
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange("kezdemenyezesek")}
+                      className="mt-3 text-xs font-semibold text-[#1b382b] hover:underline"
+                    >
+                      További {activeInitiatives.length - 2} aktív kezdeményezés megtekintése →
+                    </button>
+                  ) : null}
+                </>
+              ) : plannedInitiativesCount > 0 ? (
+                <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/60 p-5">
+                  <p className="text-sm font-semibold text-stone-900">Jelenleg nincs aktív megvalósítás alatt lévő kezdeményezés.</p>
+                  <p className="mt-1 text-xs text-stone-600">{plannedInitiativesCount} kezdeményezés áll tervezés és egyeztetés alatt.</p>
+                  <button
+                    type="button"
+                    onClick={() => handleTabChange("kezdemenyezesek")}
+                    className="mt-3 text-xs font-semibold text-[#1b382b] hover:underline"
+                  >
+                    Tervezett kezdeményezések áttekintése →
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/60 p-5">
+                  <p className="text-sm font-semibold text-stone-900">Még nincs rögzített fejlesztési kezdeményezés.</p>
+                  <p className="mt-1 text-xs text-stone-600">A felmérések és működési jelzések értékelése után közösen jelöljük ki a beavatkozásokat.</p>
+                </div>
+              )}
+            </section>
+
+            {/* Recorded Outcomes */}
+            <section className={card} data-testid="grow-overview-outcomes-section">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-800">Eredmények</p>
+                <button
+                  type="button"
+                  onClick={() => handleTabChange("eredmenyek")}
+                  className="text-xs font-semibold text-emerald-800 hover:underline"
+                >
+                  Összes eredmény ({measuredOutcomes.length + estimatedOutcomes.length}) →
+                </button>
+              </div>
+              <h2 className="mt-1 font-serif text-2xl font-semibold text-[#1b382b]">Rögzített eredmények és hatások</h2>
+              {measuredOutcomes.length > 0 || estimatedOutcomes.length > 0 ? (
+                <>
+                  <p className="mt-1 text-xs text-stone-600">
+                    {measuredOutcomes.length} mért és {estimatedOutcomes.length} számított / becsült eredmény.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {[...measuredOutcomes, ...estimatedOutcomes].slice(0, 3).map((item) => (
+                      <div key={item.id} className="rounded-2xl border border-stone-200 bg-white p-4 shadow-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                              item.basis === "MEASURED"
+                                ? "bg-emerald-100 text-emerald-900"
+                                : "bg-amber-100 text-amber-900"
+                            }`}
+                          >
+                            {item.basis === "MEASURED" ? "Mért eredmény" : "Számított / becsült"}
+                          </span>
+                          <span className="text-[11px] text-stone-500">{item.basisLabel}</span>
+                        </div>
+                        <p className="mt-2 text-sm font-semibold text-stone-950">
+                          {item.initiativeTitle || item.processName || "Rögzített működési eredmény"}
+                        </p>
+                        {item.processName && item.initiativeTitle ? (
+                          <p className="mt-0.5 text-xs text-stone-500">Folyamat: {item.processName}</p>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                  {measuredOutcomes.length + estimatedOutcomes.length > 3 ? (
+                    <button
+                      type="button"
+                      onClick={() => handleTabChange("eredmenyek")}
+                      className="mt-3 text-xs font-semibold text-emerald-800 hover:underline"
+                    >
+                      További {measuredOutcomes.length + estimatedOutcomes.length - 3} eredmény megtekintése →
+                    </button>
+                  ) : null}
+                </>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-stone-200 bg-stone-50/60 p-5">
+                  <p className="text-sm font-semibold text-stone-900">Még nincsenek rögzített eredmények.</p>
+                  <p className="mt-1 text-xs text-stone-600">
+                    A kezdeményezések végrehajtását követően itt jelennek meg a rögzített működési hatások.
+                  </p>
+                </div>
+              )}
             </section>
           </div>
 
@@ -830,6 +1026,52 @@ export function OrgGrowView() {
               </div>
             ) : null}
           </section>
+
+          {/* Methodology: secondary progressive disclosure */}
+          <details className="group rounded-3xl border border-[#e8ded1] bg-white p-5 shadow-xs transition" data-testid="grow-methodology-section">
+            <summary className="flex cursor-pointer list-none items-center justify-between font-serif text-lg font-semibold text-[#1b382b] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#1b382b] rounded-xl py-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-[0.18em] text-[#7a5f18]">Módszertan</span>
+                <span className="text-sm font-semibold text-stone-900">— A Grow folyamat és szakmai alapelvek</span>
+              </div>
+              <span className="text-xs font-sans font-medium text-stone-500 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div className="mt-4 border-t border-stone-100 pt-4">
+              <p className="text-xs text-stone-600">
+                Hogyan jutunk el a működési jelzéstől a mért és számított eredményekig?
+              </p>
+              <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+                {[
+                  { step: "1. Feltárás", desc: "Kérdőíves felmérések és a napi működési szűk keresztmetszetek rögzítése." },
+                  { step: "2. Elemzés", desc: "Szakértői felülvizsgálat és összevetés a vonatkozó szakirodalmi háttérrel." },
+                  { step: "3. Tervezés", desc: "Célorientált fejlesztési javaslatok és megvalósítási lépések kidolgozása." },
+                  { step: "4. Megvalósítás", desc: "Folyamatoptimalizálási beavatkozások és intézkedések végrehajtása." },
+                  { step: "5. Eredmények", desc: "Kapacitásfelszabadulás, időmegtakarítás és folyamatminőség ellenőrzött mérése." },
+                ].map((item, idx) => (
+                  <div key={idx} className="flex flex-col rounded-xl border border-stone-200/80 bg-stone-50/50 p-3">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#f4efe6] text-[10px] font-bold text-[#1b382b]">
+                        {idx + 1}
+                      </span>
+                      <p className="text-xs font-semibold text-stone-900">{item.step}</p>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-4 text-stone-600">{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Methodology principle demoted out of the hero, kept truthful and explicit. */}
+              <div className="mt-4 rounded-xl border border-[#e8ded1] bg-[#fdfbf7] p-3.5">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-[#2d5a43]" />
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[#7a5f18]">Módszertani alapelv</p>
+                </div>
+                <p className="mt-1.5 text-xs italic leading-relaxed text-stone-700">
+                  Nincs elméleti érettségi besorolás. A rendszer rögzített megfigyelésekből, felmérési válaszokból, mérésekből és elérhető bizonyítékokból építkezik, azok forrását elkülönítve.
+                </p>
+              </div>
+            </div>
+          </details>
         </div>
       ) : null}
 
