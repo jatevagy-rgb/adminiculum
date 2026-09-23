@@ -4,8 +4,8 @@ import { readFileSync } from 'node:fs';
 
 const source = readFileSync('src/app/clients/page.tsx', 'utf8');
 
-test('client directory provides a compact DataTable comparison view by default', () => {
-  assert.match(source, /const \[viewMode, setViewMode\] = useState<"table" \| "cards">\("table"\);/);
+test('client directory provides a compact tile grid by default and table view as secondary toggle', () => {
+  assert.match(source, /const \[viewMode, setViewMode\] = useState<"cards" \| "table">\("cards"\);/);
   assert.match(source, /<DataTable className="md:min-w-\[760px\]">/);
   assert.match(source, /<DataTableHead>/);
   assert.match(source, /<DataTableHeaderCell>Ügyfél neve<\/DataTableHeaderCell>/);
