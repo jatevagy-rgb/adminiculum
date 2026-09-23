@@ -1,143 +1,318 @@
-# Grow With Us ResearchEvidence Corpus Plan
+# Grow With Us — Research and Data Science Evidence Corpus Integration Plan
 
-This is a documentation-only inventory of the repository-seeded `ResearchEvidence` corpus. It does not change the runtime corpus, schema, migrations, or recommendation gates. `ResearchEvidence` remains research grounding and never becomes canonical company fact.
+**Status:** research/evidence architecture plan; documentation only
+**Reviewed master:** `ab980019a4809f545ef7d8bf3f3a813ba9e9dedf`
+**Scope:** Grow With Us research corpus, evidence provenance, diagnostic use, and future data-science readiness
+**Out of scope:** runtime implementation, schema migration, customer data changes, automatic recommendations, legal advice, and a replacement of the existing Grow journey
 
-## Verification boundary
+## 1. Purpose and permanent product contract
 
-- `VERIFIED` entries may support the existing sufficiency path when the client-specific evidence and applicability gates also pass.
-- `UNVERIFIED` entries remain context/backlog only. They must never be promoted because they are useful or because a process appears similar.
-- No effect sizes or benchmark numbers are imported into Adminiculum from this plan.
+Grow With Us is a research-backed decision-support capability. Its permanent value is the disciplined chain from an organization’s known state, through declared or measured evidence, to a bounded diagnosis, a human-reviewed recommendation, and a measured outcome. Research is a permanent approved capability of the product. This plan makes that capability auditable and extensible without turning a benchmark into a fact, a survey answer into a measurement, or a recommendation into an automatic action.
 
-Corpus inventory: **18 VERIFIED**, **7 UNVERIFIED**, **25 seeded entries**.
+The governing rule is **evidence before assertion**:
 
-## Seeded corpus inventory
+1. A client fact is an authoritative, client-scoped state with a source and verification lifecycle.
+2. A declared observation is what a person or organization reported; it is useful evidence but is not silently promoted to measured truth.
+3. A measured snapshot is a reproducible calculation from canonical process data, with metric version, input digest, snapshot digest, and provenance.
+4. An EvidenceRecord is a client-scoped supporting artifact or reference that can be reviewed and accepted or rejected.
+5. ResearchEvidence is an external or internal research-library item with a bounded claim, provenance, verification state, strength, domain coverage, limitations, and intervention/outcome mappings.
+6. Diagnosis and recommendation are derived artifacts. They must retain their supporting evidence and sufficiency decision.
+7. Outcomes are recorded separately from expectations. A calculated or estimated ROI is not a measured result.
 
-| CORPUS_KEY | TITLE | ORIGIN | SOURCE_TYPE | VERIFICATION | STRENGTH | BOUNDED_CLAIM | DOMAIN_KEYS | LIMITATIONS | APPLICABILITY | CLIENT_SPECIFIC_EVIDENCE_NEEDED | INTERVENTION_RELEVANCE | OUTCOME_RELEVANCE |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| paper:bps-standardization-goel-bandara-gable-2023 | Conceptualizing Business Process Standardization: A Review and Synthesis | ONLINE_VERIFIED | PAPER | VERIFIED | STRONG | A szisztematikus áttekintés szerint a folyamatstandardizálás csökkenti a varianciát és a kézi újramunkát; az áttekintés nem állít konkrét százalékos megtakarítást. | MANUAL_ADMIN_LOAD, DUPLICATE_DATA_ENTRY, REWORK, GENERAL_FLOW | Szakirodalmi szintézis, nem konkrét cégmérés; a hatás nagysága kontextusfüggő. | Szisztematikus szakirodalmi áttekintés a folyamatstandardizálásról: a standardizált folyamatok csökkentik a varianciát, a kézi újramunkát és a többszörös adatrögzítést. | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | STANDARDIZE_PROCESS, REDESIGN_BEFORE_AUTOMATING | TOTAL_ACTIVE_MINUTES, REWORK_INDICATOR |
-| paper:process-owner-role-davenport-1990 | The New Industrial Engineering: Information Technology and Business Process Redesign | ONLINE_VERIFIED | PAPER | VERIFIED | MODERATE | A cikk elvi szinten érvel amellett, hogy a folyamatfelelős és az IT-támogatás együtt csökkenti a rendszerközi váltást és a felelősségi réseket. | UNCLEAR_OWNERSHIP, SYSTEM_SWITCHING, GENERAL_FLOW | Korai, pre-digitalizációs cikk; elvi irányok, nem mért hatások. | Klasszikus érvelés: a folyamatfelelős és az IT-támogatás együtt csökkenti a rendszerközi váltást és a felelősségi réseket. | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | CLARIFY_PROCESS_OWNERSHIP, INTEGRATE_SYSTEMS, ALIGN_IT_WITH_BUSINESS_GOALS | SYSTEM_SWITCH_COUNT, UNASSIGNED_STEP_COUNT |
-| paper:reengineering-work-hammer-1990 | Reengineering Work: Don't Automate, Obliterate | ONLINE_VERIFIED | PAPER | VERIFIED | MODERATE | A cikk elvi szinten érvel amellett, hogy a felesleges jóváhagyási és várakozási rétegek eltörlése — nem automatizálása — csökkenti az átfutási időt. | APPROVAL_DELAY, MANUAL_ADMIN_LOAD, SYSTEM_SWITCHING | Esettanulmány-alapú érvelés; nem kontrollált mérés — irányadó, nem hatásnagyságot igazoló. | A klasszikus reengineering-érvelés: a felesleges jóváhagyási és várakozási rétegek eltörlése (nem automatizálása) csökkenti az átfutási időt. | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | REMOVE_NON_VALUE_ADDING_STEP, REDESIGN_APPROVAL_ROUTING, REDESIGN_BEFORE_AUTOMATING | TOTAL_WAITING_MINUTES, TOTAL_CYCLE_MINUTES |
-| benchmark:unverified-sme-admin-share | Iparági állítás: az adminisztráció aránya kis- és középvállalkozásoknál | USER_LIBRARY | BENCHMARK | UNVERIFIED | WEAK | Felhasználói könyvtári állítás; bibliográfiai forrás nem ellenőrizhető. | UNMEASURED_COST, MANUAL_ADMIN_LOAD | Nem ellenőrizhető forrás — nem támaszthat alá SUPPORTED javaslatot. | Csak tájékozódási kontextus; forráshivatkozás nélküli gyakori állítás. | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | — | — |
-| benchmark:unverified-approval-cycle-time | Iparági állítás: a jóváhagyási átfutás lerövidíthető | USER_LIBRARY | BENCHMARK | UNVERIFIED | WEAK | Felhasználói könyvtári állítás; bibliográfiai forrás nem ellenőrizhető. | APPROVAL_DELAY | Nem ellenőrizhető forrás — mérés nélkül nem hivatkozható. | Tájékoztató kontextus a jóváhagyási várakozásokhoz. | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | — | — |
-| pack:EV-DMM-2024-001 | Key Dimensions That Measure the Digital Maturity Levels of Small and Medium-Sized Enterprises (SMEs) | USER_LIBRARY | SYSTEMATIC_REVIEW | VERIFIED | STRONG | SME digital maturity is multidimensional rather than technology-only; recurring dimensions include strategy, leadership, culture, organization, people, technology, processes, products and customers. | SYSTEM_SWITCHING, UNMEASURED_COST, GENERAL_FLOW | Review covers models published mainly during 2011-2021; dimensions do not by themselves prove that a specific intervention causes a specific firm outcome. | SME GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | ALIGN_IT_WITH_BUSINESS_GOALS, TRAIN_DIGITAL_SKILLS, IMPLEMENT_PROCESS_MEASUREMENT | QUALITY, COST, DIGITAL_SKILL_COVERAGE |
-| pack:EV-SME-DT-2024-001 | Toward SMEs digital transformation success: a systematic literature review | ONLINE_VERIFIED | SYSTEMATIC_REVIEW | VERIFIED | STRONG | SME digital transformation should reflect the firm's baseline, limitations and idiosyncrasies; incremental learning, alignment and measurable cost-benefit reasoning recur as success factors. | SYSTEM_SWITCHING, UNMEASURED_COST, GENERAL_FLOW | Literature is heterogeneous and concentrated in developed-country contexts; recommendations are not universal causal prescriptions. | SME GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | ALIGN_IT_WITH_BUSINESS_GOALS, PHASE_DIGITAL_INVESTMENT, TRAIN_DIGITAL_SKILLS | COST, QUALITY, DIGITAL_SKILL_COVERAGE |
-| pack:EV-KOUMAS-2021-001 | Digital Transformation of Small and Medium Sized Enterprises Production Manufacturing | USER_LIBRARY | FRAMEWORK | VERIFIED | MODERATE | A progressive SME transformation framework combines organizational improvement with technology, cost-quality-time performance criteria and human/training considerations. | MANUAL_ADMIN_LOAD, APPROVAL_DELAY, REWORK, SYSTEM_SWITCHING, GENERAL_FLOW | Manufacturing-focused framework and use cases; should not be directly generalized to professional-services processes. The paper's own numerical decision rules must not be imported as Adminiculum thresholds. | SME MANUFACTURING | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | REMOVE_NON_VALUE_ADDING_STEP, TRAIN_DIGITAL_SKILLS, PHASE_DIGITAL_INVESTMENT, REDESIGN_BEFORE_AUTOMATING | CYCLE_TIME, COST, QUALITY, DIGITAL_SKILL_COVERAGE |
-| pack:EV-IP-BPM-2022-001 | How to Enhance Intellectual Property Business Organizations' Capabilities? A Business Process Maturity Perspective | USER_LIBRARY | SURVEY | VERIFIED | MODERATE | In IP/legal professional-service organizations, process roles/responsibilities, strategy-process linkage, governance and professional capabilities are relevant maturity areas; professional work should not be treated like factory output. | UNCLEAR_OWNERSHIP, UNMEASURED_COST, SYSTEM_SWITCHING, MANUAL_ADMIN_LOAD, GENERAL_FLOW | Specific to IP-related organizations and based on expert weighting/AHP; some conclusions reflect respondent perceptions rather than controlled outcome measurement. | PROFESSIONAL_SERVICES LAW_FIRM IN_HOUSE_LEGAL | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | CLARIFY_PROCESS_OWNERSHIP, IMPLEMENT_PROCESS_MEASUREMENT, ALIGN_IT_WITH_BUSINESS_GOALS, STANDARDIZE_PROCESS | PROCESS_OWNERSHIP_COVERAGE, QUALITY, COST, CYCLE_TIME |
-| pack:EV-HU-OECD-2026-001 | OECD Economic Surveys: Hungary 2026 - Enhancing opportunities for SMEs | ONLINE_VERIFIED | INSTITUTIONAL_EVIDENCE | VERIFIED | STRONG | Hungarian SMEs lag in digitalisation and digital training; assessment initiatives should be followed by evaluation of what follow-up actions firms actually undertake. | SYSTEM_SWITCHING, UNMEASURED_COST, GENERAL_FLOW | Institutional economic survey, not a causal trial of any Adminiculum intervention. | SME HUNGARY | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | TRAIN_DIGITAL_SKILLS, IMPLEMENT_PROCESS_MEASUREMENT | DIGITAL_SKILL_COVERAGE |
-| pack:EV-DT-ROI-2024-001 | Digital initiative outcome and ROI measurement (maturity dimensions review) | USER_LIBRARY | SYSTEMATIC_REVIEW | VERIFIED | STRONG | Digital initiatives should be tracked with KPIs and evaluated after implementation using business-performance measures such as ROI where applicable, complemented by intermediate process metrics. | UNMEASURED_COST, SYSTEM_SWITCHING, GENERAL_FLOW | Review synthesizes maturity-model literature; it does not prescribe one universal ROI formula or effect size. | SME GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | IMPLEMENT_PROCESS_MEASUREMENT, ALIGN_IT_WITH_BUSINESS_GOALS | COST, CYCLE_TIME, QUALITY |
-| pack:EV-DMM-CRITIQUE-2023-001 | A decade of digital maturity models: much ado about nothing? | ONLINE_VERIFIED | SYSTEMATIC_REVIEW | VERIFIED | STRONG | Digital maturity models vary substantially in quality and empirical grounding; maturity scores should not be treated as self-validating proof of business performance. | SYSTEM_SWITCHING, UNMEASURED_COST, GENERAL_FLOW | Focuses on maturity-model literature generally, not on one SME sector. | GENERIC SME | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | ALIGN_IT_WITH_BUSINESS_GOALS, IMPLEMENT_PROCESS_MEASUREMENT | QUALITY, COST |
-| pack:EV-PROJECT-TAXONOMY-2024-001 | Digital transformation in SMEs: A taxonomy of externally supported digital innovation projects | ONLINE_VERIFIED | FRAMEWORK | VERIFIED | MODERATE | Externally supported SME digital innovation projects can be structured around why/what/how dimensions rather than selected solely by technology category. | SYSTEM_SWITCHING, UNMEASURED_COST, GENERAL_FLOW | Taxonomy supports project initiation/classification; it is not causal evidence that a specific project type improves a specific metric. | SME GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | ALIGN_IT_WITH_BUSINESS_GOALS, PHASE_DIGITAL_INVESTMENT | COST, QUALITY, CUSTOMER_TIME_TO_VALUE |
-| pack:EV-TECH-TRANSFORM-2023-001 | Systematic literature review on technological transformation in SMEs: technology assimilation and business model innovation | ONLINE_VERIFIED | SYSTEMATIC_REVIEW | VERIFIED | STRONG | Technology transformation outcomes should distinguish assimilation/deployment from business-model and performance outcomes; adoption itself is not equivalent to realized value. | SYSTEM_SWITCHING, UNMEASURED_COST, GENERAL_FLOW | Broad technology-transformation review; outcome metrics vary by study. | SME GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | ALIGN_IT_WITH_BUSINESS_GOALS, PHASE_DIGITAL_INVESTMENT | QUALITY, COST |
-| pack:EV-PHASED-CBA-2026-001 | Economic Evaluation of Phased Digital Transformation Investments in SMEs: A Cost–Benefit Analysis in the Turkish Metal Processing Sector | ONLINE_VERIFIED | CASE_STUDY | VERIFIED | MODERATE | A phased digital-transformation investment can condition later spending on measurable earlier-stage performance, limiting downside under uncertainty while preserving option value. | UNMEASURED_COST, GENERAL_FLOW | Single-sector/firms context; financial assumptions and thresholds are case-specific and must not be copied as general Adminiculum rules. | SME MANUFACTURING | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | PHASE_DIGITAL_INVESTMENT, IMPLEMENT_PROCESS_MEASUREMENT | COST, LABOR_HOURS, CYCLE_TIME |
-| pack:EV-DECISION-RIGHTS-2019-001 | Empirical research on decision-rights delegation in hierarchical credit approval | ONLINE_VERIFIED | CASE_STUDY | VERIFIED | MODERATE | Empirical research on hierarchical decision rights shows that information transmission and escalation can be costly and that delegation can alter decision speed/quality trade-offs. | APPROVAL_DELAY, UNCLEAR_OWNERSHIP | Banking/credit-decision context; delegation must remain compatible with risk and control requirements. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | REDESIGN_APPROVAL_ROUTING, CLARIFY_PROCESS_OWNERSHIP | WAITING_TIME, CYCLE_TIME, PROCESS_OWNERSHIP_COVERAGE |
-| pack:EV-BPM-RPA-SLR-2026-001 | Systematic literature review on BPM and robotic process automation | ONLINE_VERIFIED | SYSTEMATIC_REVIEW | VERIFIED | STRONG | Process quality and suitability should be assessed before automation because automating an unstable or poorly designed process can reproduce or accelerate waste and errors. | REWORK, MANUAL_ADMIN_LOAD, DUPLICATE_DATA_ENTRY, GENERAL_FLOW | Automation/RPA literature is heterogeneous; the evidence supports screening process suitability rather than a universal redesign recipe. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | REDESIGN_BEFORE_AUTOMATING, STANDARDIZE_PROCESS | CYCLE_TIME, REWORK_RATE, ERROR_RATE |
-| pack:EV-DT-REDESIGN-2024-001 | Systematic review and case synthesis on digital process redesign | ONLINE_VERIFIED | SYSTEMATIC_REVIEW | VERIFIED | STRONG | Digital transformation creates more value when technology capabilities are used to redesign processes rather than merely replace legacy technology one-for-one. | REWORK, MANUAL_ADMIN_LOAD, GENERAL_FLOW | Cross-industry case synthesis; exact effects are context-dependent. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | REDESIGN_BEFORE_AUTOMATING, STANDARDIZE_PROCESS | CYCLE_TIME, QUALITY, LABOR_HOURS |
-| pack:EV-APP-LANDSCAPE-2011-001 | Empirical Results for Application Landscape Complexity | ONLINE_VERIFIED | CASE_STUDY | VERIFIED | MODERATE | Application-landscape complexity and redundancy can be measured and used as evidence for rationalization review; mere application count is insufficient. | SYSTEM_SWITCHING | Application-landscape complexity metrics do not by themselves prove consolidation is optimal; capability overlap and business criticality require human review. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | CONSOLIDATE_SYSTEMS | COST, LABOR_HOURS, SYSTEM_SWITCH_COUNT |
-| pack:EV-DATA-TRANSFER-2025-001 | Application-assisted electronic data transfer study | ONLINE_VERIFIED | CASE_STUDY | VERIFIED | MODERATE | Application-assisted electronic data transfer can reduce manual transcription burden and error compared with repeated manual entry where source data already exists digitally. | DUPLICATE_DATA_ENTRY, SYSTEM_SWITCHING, MANUAL_ADMIN_LOAD | Healthcare data-transfer context; numerical effect sizes are not transferable to law/SME workflows. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | INTEGRATE_SYSTEMS, AUTOMATE_REPETITIVE_STEP | ERROR_RATE, LABOR_HOURS, CYCLE_TIME |
-| pack:EV-ECON-TCE-001 | General transaction-cost and coordination-cost reasoning | GENERAL_KNOWLEDGE | GENERAL_ECONOMIC_PRINCIPLE | UNVERIFIED | WEAK | Coordination, search, contracting and information-transfer frictions can create transaction costs; reducing avoidable coordination burden may create economic value. | MANUAL_ADMIN_LOAD, SYSTEM_SWITCHING, UNCLEAR_OWNERSHIP, GENERAL_FLOW | General economic reasoning, not empirical evidence that any particular handoff/system switch is wasteful. Legal/control-required coordination may be valuable. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | STANDARDIZE_PROCESS, INTEGRATE_SYSTEMS, CLARIFY_PROCESS_OWNERSHIP | LABOR_HOURS, COST, CYCLE_TIME |
-| pack:EV-ECON-OPPCOST-001 | General opportunity-cost and capacity-value reasoning | GENERAL_KNOWLEDGE | GENERAL_ECONOMIC_PRINCIPLE | UNVERIFIED | WEAK | Time saved is capacity released, not automatically cash saved. Financial ROI should distinguish avoided cash cost from redeployable employee capacity. | DUPLICATE_DATA_ENTRY, MANUAL_ADMIN_LOAD | Accounting treatment depends on whether staffing spend actually changes or capacity is redeployed; a modelling discipline, not a causal claim. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | AUTOMATE_REPETITIVE_STEP, DIGITIZE_INTAKE | LABOR_HOURS, COST |
-| pack:EV-STD-CASE-2019-001 | User-library standardization case study (2019) | USER_LIBRARY | CASE_STUDY | UNVERIFIED | MODERATE | A manufacturing SME case combining standardization, line balancing and time-and-motion redesign reported material improvements in standard time, movement and throughput. | REWORK, MANUAL_ADMIN_LOAD | Single manufacturing SME case with no verifiable locator; numerical effect sizes must not be transferred to professional services. | SME MANUFACTURING | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | STANDARDIZE_PROCESS | CYCLE_TIME, LABOR_HOURS, QUALITY |
-| pack:EV-APPROVAL-DELPHI-2026-001 | User-library approval bottleneck / decision-rights Delphi evidence | USER_LIBRARY | SURVEY | UNVERIFIED | MODERATE | Hierarchical approval bottlenecks can justify reviewing decision rights, escalation and risk-calibrated oversight when delay is demonstrably concentrated in approvals. | APPROVAL_DELAY, UNCLEAR_OWNERSHIP | Expert/Delphi evidence with no verifiable locator; control requirements may legitimately require approvals. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | REDESIGN_APPROVAL_ROUTING, CLARIFY_PROCESS_OWNERSHIP | WAITING_TIME, CYCLE_TIME, PROCESS_OWNERSHIP_COVERAGE |
-| pack:EV-INTAKE-GENERAL-001 | General structured-intake and single-source capture reasoning | GENERAL_KNOWLEDGE | GENERAL_ECONOMIC_PRINCIPLE | UNVERIFIED | WEAK | Capturing required data once in a structured format can reduce repeated collection and downstream transcription when the same information is reused. | MANUAL_ADMIN_LOAD, DUPLICATE_DATA_ENTRY | Design heuristic only; should be upgraded with sector-specific empirical evidence before strong recommendation claims. | GENERIC | Client-specific fact, process/system record, or measured observation is required; this item alone never proves the client condition. | DIGITIZE_INTAKE | MANUAL_DATA_ENTRY_COUNT, ERROR_RATE, LABOR_HOURS, CYCLE_TIME |
+No roadmap capability is removed by this plan. `ROADMAP_CAPABILITIES_REMOVED=NONE`. The plan strengthens the existing research path and records where future work remains explicitly gated.
 
-## Current evidence coverage
+## 2. Current repository inventory
 
-### Stronger/useful clusters
+### 2.1 Canonical read model and routes
 
-| CLUSTER | CURRENT SUPPORT | BOUNDARY |
+The current master contains the GWU-2A diagnostic workbench at `Backend/src/modules/company-growth/diagnostic/workbenchService.ts`. Its bounded DTO separates the following provenance classes:
+
+| Workbench section | Provenance class | Meaning |
 |---|---|---|
-| Manual administration | Goel/Bandara/Gable; Hammer; BPM/RPA review; digital redesign; data-transfer study | General or cross-sector evidence; measure the client process before claiming effect. |
-| Duplicate entry | Goel/Bandara/Gable; BPM/RPA review; data-transfer study; structured-intake reasoning | The unverified reasoning entries cannot satisfy a supported recommendation. |
-| Approval waiting | Hammer; decision-rights delegation; approval Delphi (unverified) | Approval may be legally/control-required; only measured concentration justifies redesign review. |
-| Handoffs | Davenport/Short; decision-rights delegation; process snapshot handoff metrics | A handoff is not waste by itself; preserve ownership and control context. |
-| System switching | Davenport/Short; digital maturity reviews; application-landscape study; data-transfer study | Application count alone is insufficient; capability overlap and criticality require review. |
-| Rework | Goel/Bandara/Gable; BPM/RPA; digital redesign; unverified manufacturing case | Manufacturing effect claims do not transfer to professional services. |
-| Unclear ownership | Davenport/Short; Fu/Chou; decision-rights delegation; approval Delphi | Use actual owner/person/group state; do not infer RACI. |
-| Unmeasured cost | SME digital-transformation reviews; OECD Hungary; ROI review; phased CBA; opportunity-cost reasoning | Time saved is not automatically cash saved; measure capacity and financial outcomes separately. |
+| `client`, operating profile | `CANONICAL_STATE` | persisted client and profile state |
+| `known.facts`, processes, systems | `CANONICAL_STATE` | current structured operating facts |
+| `observed.observations` | `DECLARED_OBSERVATION` | declared survey or source observations |
+| `observed.processSnapshots` | `MEASURED_SNAPSHOT` | versioned process metrics |
+| `problems.domains`, diagnoses | `DERIVED_DIAGNOSIS` | research-derived problem framing |
+| `proposed.recommendations` | `RECOMMENDATION` | bounded, human-reviewable candidates |
+| `evidence.records` | `EVIDENCE_RECORD` | client evidence artifacts |
+| `evidence.research` | `RESEARCH_EVIDENCE` | curated research-library evidence |
+| `missing` | safety state | unknown facts, conflicts, insufficient recommendations, unresolved items |
 
-### Direct/weak gaps
+The workforce route is `GET /clients/:clientId/grow/diagnostic-workbench`. Existing adjacent routes remain canonical for their own responsibilities: `/grow/home`, `/grow/evidence`, `/grow/research-runs`, `/grow/opportunities`, opportunity review, initiative handoff, and outcome measurement. Observatory intake and observation routes remain the source boundary for external-source runs and declared observations. Customer routes expose the customer-safe survey, assessment, and compliance projections; they do not expose raw research payloads or unapproved recommendations.
 
-- Contract operations: no direct contract-lifecycle research item is seeded.
-- Management reporting: measurement/ROI evidence exists, but no dedicated reporting-control study is seeded.
-- Dedicated data quality: data-transfer/error themes exist, but no dedicated data-quality corpus item is seeded.
-- HR lifecycle: no dedicated Hire-to-Retire evidence item is seeded.
-- Incident lifecycle: no dedicated incident/complaint/request evidence item is seeded.
-- O2C-specific effect evidence: no order-to-cash-specific item is seeded.
-- P2P-specific effect evidence: no procure-to-pay-specific item is seeded.
+### 2.2 Existing data models
 
-## Evidence matrices
+The existing Prisma schema is sufficient for the current corpus and evidence lifecycle:
 
-The matrices identify what must be observed for a client. `RESEARCH_SUPPORT` names only seeded corpus keys/themes; it does not claim a causal result for the client.
-### Order-to-Cash
+* **`ResearchEvidence`** is the global or client-scoped research library. It carries `corpusKey`, kind, title, authors, venue, year, DOI, locator, origin, bounded claim, evidence type, verification status, strength, domain keys, supported interventions, supported outcomes, applicability notes, and limitations. A `clientId` of `NULL` denotes global research evidence.
+* **`EvidenceRecord`** is client-scoped evidence with source type (`DOCUMENT_VERSION`, `CLIENT_FACT`, `OBSERVATION`, or `EXTERNAL_REFERENCE`), review status, validity dates, and optional links to the canonical fact, document version, or observation.
+* **`DiagnosisEvidenceLink`** and **`RecommendationEvidenceLink`** preserve the evidence chain for derived artifacts.
+* **`ProblemDomain`**, **`DiagnosisCandidate`**, and **`RecommendationCandidate`** hold bounded problem framing and proposed directions. Diagnosis and recommendation status are explicit; no row is an implicit task.
+* **`SufficiencyDecision`** records whether a recommendation is supported, needs more data, insufficient, conflicting, out of scope, or requires human domain review.
+* **`RecommendationRun`** provides idempotent research-cycle execution.
+* **`ProcessObservationSnapshot`** stores metric version, observed time, input digest, snapshot digest, metrics, and provenance.
+* **`OutcomeMeasurement`** records before/after snapshots, metrics summary, ROI, measurement basis, and synthetic flag. The basis ladder is `MEASURED`, `CALCULATED`, `ESTIMATED`, and `ASSUMED`.
 
-| PROCESS_STAGE | CLIENT_SIGNAL_REQUIRED | METRIC_REQUIRED | RESEARCH_SUPPORT | VERIFICATION_STATUS | LEGAL_HOOK | INTERVENTION | OUTCOME_TO_MEASURE | EVIDENCE_GAP |
-|---|---|---|---|---|---|---|---|---|
-| Intake/order capture | structured intake, duplicate entry, system switching | manual entry count, error count, cycle time | EV-DATA-TRANSFER-2025-001; EV-INTAKE-GENERAL-001 | VERIFIED + UNVERIFIED context | customer/order record controls | DIGITIZE_INTAKE / INTEGRATE_SYSTEMS | manual entry, error, cycle time | No O2C-specific study |
-| Approval/credit decision | approval wait and escalation concentration | waiting minutes, approval step count, escalation count | EV-DECISION-RIGHTS-2019-001; reengineering-work-hammer-1990 | VERIFIED | delegation and control requirements | REDESIGN_APPROVAL_ROUTING | waiting and cycle time | No O2C-specific effect evidence |
-| Fulfilment/invoicing handoff | owner changes and system switching | handoff count, system-switch count, unassigned steps | process-owner-role-davenport-1990 | VERIFIED | record ownership and segregation | CLARIFY_PROCESS_OWNERSHIP / INTEGRATE_SYSTEMS | ownership coverage, switching | Client process mapping required |
+The schema does not currently persist a first-class methodology, study population, geography, freshness date, or supersession relation on `ResearchEvidence`. Those are real metadata gaps for a larger library, but they are not a reason to add a migration in this documentation-only slice. The first implementation should keep them in a versioned registry or manifest and only add queryable columns when a product contract requires filtering or enforcement at runtime.
 
-### Procure-to-Pay
+### 2.3 Existing services and boundaries
 
-| PROCESS_STAGE | CLIENT_SIGNAL_REQUIRED | METRIC_REQUIRED | RESEARCH_SUPPORT | VERIFICATION_STATUS | LEGAL_HOOK | INTERVENTION | OUTCOME_TO_MEASURE | EVIDENCE_GAP |
-|---|---|---|---|---|---|---|---|---|
-| Request and supplier intake | repeated collection and manual administration | data-entry count, error count, cycle time | EV-DATA-TRANSFER-2025-001; EV-BPM-RPA-SLR-2026-001 | VERIFIED | supplier and approval controls | DIGITIZE_INTAKE / STANDARDIZE_PROCESS | error and active time | No P2P-specific effect evidence |
-| Purchase approval | approval queue and decision rights | waiting minutes, approval count, cycle time | EV-DECISION-RIGHTS-2019-001; EV-APPROVAL-DELPHI-2026-001 | VERIFIED + UNVERIFIED context | approval authority and audit trail | REDESIGN_APPROVAL_ROUTING | waiting and cycle time | Delphi item remains unverified |
-| Invoice/payment reconciliation | system switching and rework | switch count, rework indicator, error count | EV-APP-LANDSCAPE-2011-001; EV-DT-REDESIGN-2024-001 | VERIFIED | financial control evidence | CONSOLIDATE_SYSTEMS / REDESIGN_BEFORE_AUTOMATING | rework, cost, quality | No P2P-specific study |
+* `research/corpus.ts` owns the typed seeded corpus, idempotent seeding, DTO projection, internal evidence registration, and domain lookup.
+* `research/service.ts` consumes observations and snapshots, registers internal evidence, derives diagnoses and recommendations, applies sufficiency, and keeps the research run idempotent. Only `SUPPORTED` recommendations are actionable; `NEEDS_MORE_DATA` remains a prompt for evidence collection.
+* `research/observationSignals.ts` is the fail-closed normalization boundary. It accepts only canonical `DECLARED_SURVEY` observations and known Grow schemas/categories. Unknown payloads and categories produce no signal.
+* `research/interventions.ts` is the backend-owned intervention taxonomy and safety gate. Every intervention requires human review; contraindications can substitute a redesign recommendation for blind automation.
+* `research/roiEngine.ts` produces reproducible low/base/high ranges and keeps time saved separate from cash saved. It records formula version, inputs, computation time, basis, and provenance type.
+* `assessments/registry.ts` owns the four first-party assessment packs and their explicit answer-to-finding rules. It has no percentage score or fabricated maturity index; `UNKNOWN` and `NOT_APPLICABLE` never trigger a negative finding.
+* `observation/processObservationService.ts` and `metrics/*` own process snapshots and metric calculations.
+* `company-observatory/ingestion/*` owns source connections, discovery runs, and observation intake.
+* Compliance services continue to own legal applicability and canonical fact evaluation. Grow evidence can inform a diagnostic conversation, but it cannot create a legal conclusion.
 
-### Hire-to-Retire
+## 3. Corpus inventory and normalization
 
-| PROCESS_STAGE | CLIENT_SIGNAL_REQUIRED | METRIC_REQUIRED | RESEARCH_SUPPORT | VERIFICATION_STATUS | LEGAL_HOOK | INTERVENTION | OUTCOME_TO_MEASURE | EVIDENCE_GAP |
-|---|---|---|---|---|---|---|---|---|
-| Recruitment/onboarding intake | duplicate entry and unclear ownership | manual entry, owner coverage, cycle time | process-owner-role-davenport-1990; EV-IP-BPM-2022-001 | VERIFIED | employment/privacy controls | CLARIFY_PROCESS_OWNERSHIP / DIGITIZE_INTAKE | ownership and active time | No dedicated HR lifecycle item |
-| People/approval handoff | handoffs and approval waiting | handoff count, waiting minutes, owner changes | EV-DECISION-RIGHTS-2019-001; reengineering-work-hammer-1990 | VERIFIED | employment authorization and review controls | REDESIGN_APPROVAL_ROUTING | waiting and cycle time | No HR-specific effect evidence |
-| Payroll/records/system changes | system switching and rework | switch count, error/rework count | EV-DATA-TRANSFER-2025-001; EV-BPM-RPA-SLR-2026-001 | VERIFIED | access and record-integrity controls | INTEGRATE_SYSTEMS / STANDARDIZE_PROCESS | error and quality | Client HR evidence required |
+### 3.1 Documents found and content availability
 
-### Contract Lifecycle
+No repository `research/`, `data/`, or `fixtures/` directory containing paper text or PDFs exists on current master. Research material is encoded in the canonical registry and assessment pack references. The product and UX benchmark documents under `docs/` are contextual product documents, not automatically admissible ResearchEvidence: they lack a source-specific evidence record and bounded study claims. They must not be promoted into the corpus merely because they mention a market or competitor.
 
-| PROCESS_STAGE | CLIENT_SIGNAL_REQUIRED | METRIC_REQUIRED | RESEARCH_SUPPORT | VERIFICATION_STATUS | LEGAL_HOOK | INTERVENTION | OUTCOME_TO_MEASURE | EVIDENCE_GAP |
-|---|---|---|---|---|---|---|---|---|
-| Request and drafting | unclear ownership and repeated data entry | owner coverage, manual entry, cycle time | process-owner-role-davenport-1990; EV-INTAKE-GENERAL-001 | VERIFIED + UNVERIFIED context | legal review and source-document controls | CLARIFY_PROCESS_OWNERSHIP / DIGITIZE_INTAKE | cycle time and active time | No direct contract corpus item |
-| Review/approval/signature | approval waiting and handoffs | waiting minutes, approval count, handoff count | EV-DECISION-RIGHTS-2019-001; reengineering-work-hammer-1990 | VERIFIED | approval and signature authority | REDESIGN_APPROVAL_ROUTING | waiting and cycle time | Contract-specific effect evidence absent |
-| Obligation/renewal | unmeasured cost and ownership gaps | owner coverage, next-critical-date completeness, cycle time | EV-IP-BPM-2022-001; EV-DT-ROI-2024-001 | VERIFIED | obligation and renewal controls | IMPLEMENT_PROCESS_MEASUREMENT | ownership and cost | Contract lifecycle research is a priority gap |
+`RESEARCH_DOCUMENTS_CONTENT_AVAILABLE=NO` for standalone source full text. The registry has bibliographic metadata and bounded claims for the entries marked verified; a later evidence-ingestion project may attach locators or source extracts. Until then, no stronger claim or effect size may be inferred from a title alone.
 
-### Incident / Complaint / Request
+### 3.2 Seeded corpus count and quality classes
 
-| PROCESS_STAGE | CLIENT_SIGNAL_REQUIRED | METRIC_REQUIRED | RESEARCH_SUPPORT | VERIFICATION_STATUS | LEGAL_HOOK | INTERVENTION | OUTCOME_TO_MEASURE | EVIDENCE_GAP |
-|---|---|---|---|---|---|---|---|---|
-| Intake and triage | manual administration and unclear ownership | intake-to-owner time, unassigned count, rework | process-owner-role-davenport-1990; EV-BPM-RPA-SLR-2026-001 | VERIFIED | recording, privacy, and escalation controls | CLARIFY_PROCESS_OWNERSHIP / STANDARDIZE_PROCESS | cycle time and rework | No incident lifecycle item |
-| Investigation/escalation | handoffs and approval delay | handoff count, waiting minutes, escalation count | EV-DECISION-RIGHTS-2019-001; EV-APPROVAL-DELPHI-2026-001 | VERIFIED + UNVERIFIED context | incident severity and escalation authority | REDESIGN_APPROVAL_ROUTING | waiting and quality | Unverified Delphi is context only |
-| Resolution/closure | rework and unmeasured cost | reopen/rework count, cycle time, labor hours | EV-DT-REDESIGN-2024-001; EV-PHASED-CBA-2026-001 | VERIFIED | evidence and closure audit trail | REDESIGN_BEFORE_AUTOMATING / IMPLEMENT_PROCESS_MEASUREMENT | rework and cost | No incident-specific effect evidence |
+The current `SEEDED_CORPUS` contains **25** entries. They normalize into these operational classes:
 
-### Management Reporting / Approval
+| Class | Count / examples | Use |
+|---|---:|---|
+| Verified external evidence | 18 | eligible to support a `SUPPORTED` recommendation when an internal client signal also exists |
+| Unverified user-library or general reasoning | 7 | context, hypothesis generation, or evidence-gap prompts; never sufficient alone |
+| Internal client evidence | runtime-created | registered from observations and measurements with `CLIENT_INTERNAL` origin |
 
-| PROCESS_STAGE | CLIENT_SIGNAL_REQUIRED | METRIC_REQUIRED | RESEARCH_SUPPORT | VERIFICATION_STATUS | LEGAL_HOOK | INTERVENTION | OUTCOME_TO_MEASURE | EVIDENCE_GAP |
-|---|---|---|---|---|---|---|---|---|
-| Data collection | duplicate entry and data quality | manual entry, error rate, source completeness | EV-DATA-TRANSFER-2025-001; EV-DT-ROI-2024-001 | VERIFIED | reporting provenance and reviewability | INTEGRATE_SYSTEMS / IMPLEMENT_PROCESS_MEASUREMENT | error and active time | No dedicated reporting study |
-| Report preparation | manual administration and system switching | active minutes, switch count, rework count | EV-APP-LANDSCAPE-2011-001; EV-DT-REDESIGN-2024-001 | VERIFIED | management information controls | STANDARDIZE_PROCESS / CONSOLIDATE_SYSTEMS | active time and quality | Client measurement required |
-| Approval and follow-up | approval waiting and unclear ownership | waiting minutes, decision time, follow-up completion | EV-DECISION-RIGHTS-2019-001; EV-HU-OECD-2026-001 | VERIFIED | decision authority and audit trail | REDESIGN_APPROVAL_ROUTING / IMPLEMENT_PROCESS_MEASUREMENT | waiting and outcome completion | No dedicated reporting-control study |
+The 25 registry entries are:
 
-## Research acquisition backlog
+**Core verified papers and reviews**
 
-### Priority 1 — direct operational research for first diagnostic packs
+* `paper:bps-standardization-goel-bandara-gable-2023` — Goel, Bandara & Gable, 2023, business-process standardization review; DOI `10.1007/s41471-023-00158-y`.
+* `paper:process-owner-role-davenport-1990` — Davenport & Short, 1990, process ownership and IT-supported redesign.
+* `paper:reengineering-work-hammer-1990` — Hammer, 1990, remove waste and redesign before automating.
 
-1. Obtain verified O2C and P2P operational studies with process-level measures, not generic transformation claims.
-2. Obtain verified Hire-to-Retire and incident/request lifecycle studies with handoff, waiting, rework, and ownership measures.
-3. Obtain professional-services/legal process research that reports measurement definitions and limitations.
+**Unverified context entries**
 
-### Priority 2 — contract lifecycle, reporting, and data quality
+* `benchmark:unverified-sme-admin-share` and `benchmark:unverified-approval-cycle-time` — user-library industry claims without a verifiable bibliography.
+* `pack:EV-ECON-TCE-001` — general transaction/coordination-cost reasoning.
+* `pack:EV-ECON-OPPCOST-001` — capacity and opportunity-cost reasoning.
+* `pack:EV-STD-CASE-2019-001` — an unverified manufacturing standardization case.
+* `pack:EV-APPROVAL-DELPHI-2026-001` — an unverified approval bottleneck Delphi claim.
+* `pack:EV-INTAKE-GENERAL-001` — an unverified structured-intake design heuristic.
 
-1. Acquire direct contract lifecycle research covering drafting, review, signature, obligations, renewal, and control evidence.
-2. Acquire management reporting/approval research with provenance, review latency, and decision-rights measures.
-3. Acquire data-quality research covering duplicate entry, reconciliation, completeness, and error correction.
+**Verified pack evidence**
 
-### Priority 3 — sector-specific benchmarks
+* `pack:EV-DMM-2024-001` — multidimensional SME digital maturity review.
+* `pack:EV-SME-DT-2024-001` — SME digital-transformation success systematic review.
+* `pack:EV-KOUMAS-2021-001` — progressive SME transformation framework.
+* `pack:EV-IP-BPM-2022-001` — process maturity in IP/legal professional services.
+* `pack:EV-HU-OECD-2026-001` — OECD Hungary SME digitalisation/training context.
+* `pack:EV-DT-ROI-2024-001` — outcome and ROI measurement review.
+* `pack:EV-DMM-CRITIQUE-2023-001` — critique of digital maturity models.
+* `pack:EV-PROJECT-TAXONOMY-2024-001` — taxonomy of supported SME digital projects.
+* `pack:EV-TECH-TRANSFORM-2023-001` — technology assimilation versus realized value review.
+* `pack:EV-PHASED-CBA-2026-001` — phased digital investment case study.
+* `pack:EV-DECISION-RIGHTS-2019-001` — decision-rights delegation case study.
+* `pack:EV-BPM-RPA-SLR-2026-001` — BPM/RPA suitability review.
+* `pack:EV-DT-REDESIGN-2024-001` — digital process redesign synthesis.
+* `pack:EV-APP-LANDSCAPE-2011-001` — application-landscape complexity case study.
+* `pack:EV-DATA-TRANSFER-2025-001` — application-assisted electronic data transfer case study.
 
-1. Acquire sector-specific SME benchmarks only when source, population, period, and metric definition are verifiable.
-2. Keep proposed benchmarks separate from accepted corpus and never copy effect sizes into runtime thresholds.
+The registry currently contains some entries whose origin is `USER_LIBRARY` but whose verification status is `VERIFIED`. That combination means the source was supplied through the library and then verified; it is not a license to copy source text. Every item still needs an accessible locator and a review record before it is treated as production-grade in a future corpus UI.
 
-## Proposed-source policy
+### 3.3 Normalized research item contract
 
-External candidates may be recorded as `PROPOSED` only after title/source verification. A proposed source is not accepted corpus evidence, cannot satisfy the verified-evidence gate, and must not create a client fact or benchmark number.
+Every future normalized item should have:
 
-RESEARCH_CORPUS_STATUS=INVENTORIED_FROM_REPOSITORY_SEED
-RESEARCH_DOCS_PR=DOCS_ONLY; NO_RUNTIME_OR_SCHEMA_CHANGE
+* stable `corpusKey` and version;
+* kind, title, authors, venue, year, DOI or locator where available;
+* origin and verification status;
+* one bounded claim written so it cannot be mistaken for a client-specific finding;
+* evidence type and strength;
+* explicit domain keys, intervention codes, and outcome metrics;
+* population, sector, geography, methodology, sample/setting, freshness, and limitations in the registry manifest;
+* a supersession/retraction pointer when a source is replaced;
+* a license/access note for any excerpt or derived summary.
+
+The canonical runtime `ResearchEvidence` remains the published, bounded projection. Full documents, extracted passages, and licensed artifacts belong in a controlled research repository, not in tenant rows or unbounded API JSON.
+
+## 4. Evidence quality framework
+
+### 4.1 Four independent axes
+
+Quality is not one score. Each item is judged on four independent axes:
+
+1. **Source verification:** `VERIFIED`, `UNVERIFIED`, or `DISPUTED`.
+2. **Evidence strength:** `STRONG`, `MODERATE`, or `WEAK`.
+3. **Applicability:** how well the setting, sector, process, and decision context fit the client.
+4. **Freshness and status:** current, superseded, retracted, or pending review.
+
+`VERIFIED` means the citation/locator and bounded claim have been checked. `STRONG` describes the weight of the source for the bounded claim; it does not mean the intervention is guaranteed. A verified paper in another sector can still have low applicability.
+
+### 4.2 Recommendation gate
+
+The existing sufficiency states are the runtime contract:
+
+| Decision | Required state | Product consequence |
+|---|---|---|
+| `SUPPORTED` | verified external evidence plus an internal client signal | recommendation candidate may enter human review |
+| `NEEDS_MORE_DATA` | internal signal but no verified external backing | show what evidence is missing; do not present as supported |
+| `INSUFFICIENT_EVIDENCE` | no internal signal and no verified backing | retain a diagnosis/evidence gap only |
+| `CONFLICTING_EVIDENCE` | verified and disputed evidence conflict | require resolution or domain review |
+| `OUT_OF_SCOPE` | domain is outside Grow taxonomy | do not coerce into `GENERAL_FLOW` |
+| `HUMAN_DOMAIN_REVIEW` | disputed evidence only | human review before any direction |
+
+The gate is deliberately conservative. A research benchmark never creates a client fact, and a client declaration never proves a causal effect.
+
+### 4.3 Reproducibility and audit
+
+Research runs must remain idempotent by client and idempotency key. Derived artifacts retain evidence links, run identity, and status transitions. Metric snapshots retain input and output digests. ROI retains formula version and explicit provenance. Any future corpus refresh must preserve old versions and record the supersession relationship instead of rewriting historical decisions.
+
+## 5. Domain evidence map
+
+The current canonical domain vocabulary is intentionally small:
+
+| Domain key | Operational question | Strongest current evidence | Typical internal signal |
+|---|---|---|---|
+| `MANUAL_ADMIN_LOAD` | Where is avoidable hands-on work consuming capacity? | standardization and redesign reviews; RPA suitability review | active minutes, manual/repetitive steps |
+| `APPROVAL_DELAY` | Where is approval or escalation creating waiting time? | reengineering and decision-rights research | approval step count, waiting share |
+| `DUPLICATE_DATA_ENTRY` | Is the same information captured repeatedly? | standardization and data-transfer studies | data-entry step count, repeated-entry declaration |
+| `SYSTEM_SWITCHING` | How much work crosses systems or application boundaries? | process-owner, application-landscape, data-transfer and transformation reviews | system count, switch count |
+| `UNCLEAR_OWNERSHIP` | Are responsibilities and escalation paths explicit? | process-owner and decision-rights research; legal-services survey | unassigned steps, absent owner |
+| `REWORK` | Is work repeated because the process or input is unstable? | standardization, redesign, and BPM/RPA reviews | rework declaration, rework indicator |
+| `UNMEASURED_COST` | Is there no baseline for cost, time, or capacity? | ROI/maturity and phased-investment reviews | missing baseline or measured snapshot |
+| `GENERAL_FLOW` | Is the process concern broader than one narrow domain? | cross-cutting transformation and process reviews | bounded general concern, never an unknown fallback |
+
+Future domains such as data quality, security/control burden, customer experience, and workforce change should be added only with a domain definition, signal source, evidence mapping, intervention guardrails, and metric contract. They must not be smuggled in under `GENERAL_FLOW`.
+
+## 6. Order-to-cash evidence matrix
+
+Order-to-cash (O2C) is a useful cross-domain example, not a new product module. The matrix below shows how the existing taxonomy can describe O2C without pretending that a benchmark proves a client result.
+
+| O2C stage | Evidence question | Internal evidence to collect | Candidate domain | Research-backed direction | Outcome to measure |
+|---|---|---|---|---|---|
+| order intake | Is required order data captured once and validated? | intake fields, duplicate entry count, exception count | `DUPLICATE_DATA_ENTRY`, `MANUAL_ADMIN_LOAD` | digitize intake only when the intake signal is explicit | data-entry count, error rate, active minutes |
+| credit/terms approval | Where is the order waiting for a decision? | approval timestamps, approval count, escalation path | `APPROVAL_DELAY`, `UNCLEAR_OWNERSHIP` | review decision rights and routing; do not remove required controls | waiting minutes, cycle minutes, owner coverage |
+| order entry | Is information retyped across systems? | system switches, handoff steps, source/destination fields | `DUPLICATE_DATA_ENTRY`, `SYSTEM_SWITCHING` | integrate or standardize after process suitability review | switch count, handoff count, errors |
+| fulfillment coordination | Is ownership clear across sales, operations, and finance? | responsible person per step, reassignment history | `UNCLEAR_OWNERSHIP` | clarify process ownership | unassigned steps, owner-present boolean |
+| delivery and acceptance | Are exceptions and rework visible? | rework events, returned documents, exception reason | `REWORK`, `GENERAL_FLOW` | standardize and redesign before automating | rework rate, active minutes |
+| invoicing | Does approved delivery information flow once into billing? | duplicate fields, invoice correction count, source system | `DUPLICATE_DATA_ENTRY`, `SYSTEM_SWITCHING` | integrate systems where the source is authoritative | error rate, labor hours, cycle time |
+| collections | Are reminders and escalation rules explicit? | reminder steps, approval waits, ownership | `APPROVAL_DELAY`, `UNCLEAR_OWNERSHIP` | redesign routing only with measured approval signal | waiting share, cycle time |
+| cash application | Are payments matched through stable rules? | match exceptions, manual entries, system switches | `MANUAL_ADMIN_LOAD`, `REWORK` | standardize exception handling; automation follows stability proof | exception count, active minutes |
+
+O2C conclusions require client-specific evidence. The matrix is a discovery and measurement plan, not a generic diagnosis.
+
+## 7. Assessment-pack evidence matrices
+
+### 7.1 Digital maturity (`DIGITAL_MATURITY`)
+
+The pack uses `EV-DMM-2024-001`, `EV-DMM-CRITIQUE-2023-001`, and `EV-DT-ROI-2024-001`. It covers strategy alignment, outcome measurement, leadership review, digital skills, process support, data access, ownership, prioritization, and customer feedback. Findings map to `ALIGN_IT_WITH_BUSINESS_GOALS`, `IMPLEMENT_PROCESS_MEASUREMENT`, and `TRAIN_DIGITAL_SKILLS`. Strategy, leadership, culture, and customer dimensions remain assessment-level unless a canonical process signal exists; they are never forced into a process diagnosis.
+
+### 7.2 Transformation readiness (`TRANSFORMATION_READINESS`)
+
+The pack uses `EV-SME-DT-2024-001`, `EV-KOUMAS-2021-001`, `EV-PROJECT-TAXONOMY-2024-001`, and `EV-PHASED-CBA-2026-001`. It tests goal clarity, sponsorship, capacity, involvement, training, baseline, phasing, and review. Findings map to alignment, phased investment, training, and measurement. A missing baseline is an evidence gap, not proof that an investment failed.
+
+### 7.3 Process automation readiness (`PROCESS_AUTOMATION_READINESS`)
+
+The pack uses the standardization, redesign, RPA suitability, data-transfer, reengineering, and process-owner entries. It asks whether a process is owned, documented, stable, repetitive, rework-prone, approval-heavy, measured, and suitable for automation. Its key safety rule is preserved: process variability, rework, or unclear ownership defers `AUTOMATE_REPETITIVE_STEP` in favor of `REDESIGN_BEFORE_AUTOMATING`.
+
+### 7.4 Systems and data flow (`SYSTEMS_DATA_FLOW`)
+
+The pack covers system inventory, ownership, handoffs, duplication, data access, and integration readiness. It uses the application-landscape, data-transfer, digital transformation, and process-owner evidence. `CONSOLIDATE_SYSTEMS` requires a high-switch signal; application count alone is not sufficient. A system recommendation remains a human-reviewed direction, not a procurement decision.
+
+## 8. Intervention and outcome mapping
+
+### 8.1 Existing intervention codes
+
+The canonical registry contains 13 codes:
+
+`STANDARDIZE_PROCESS`, `REDESIGN_APPROVAL_ROUTING`, `DIGITIZE_INTAKE`, `CONSOLIDATE_SYSTEMS`, `INTEGRATE_SYSTEMS`, `AUTOMATE_REPETITIVE_STEP`, `CLARIFY_PROCESS_OWNERSHIP`, `TRAIN_DIGITAL_SKILLS`, `ALIGN_IT_WITH_BUSINESS_GOALS`, `IMPLEMENT_PROCESS_MEASUREMENT`, `PHASE_DIGITAL_INVESTMENT`, `REMOVE_NON_VALUE_ADDING_STEP`, and `REDESIGN_BEFORE_AUTOMATING`.
+
+Each code declares allowed domains, required signals, contraindications, supported outcome metrics, and `humanReviewRequired=true`. The registry deliberately blocks unsafe leaps: long cycle time alone does not imply approval redesign; a multi-system process alone does not imply consolidation; a single-person dependency alone does not prove ownership ambiguity; manual entry alone does not prove intake digitization.
+
+### 8.2 Existing outcome metrics
+
+Current process metrics include `TOTAL_ACTIVE_MINUTES`, `TOTAL_WAITING_MINUTES`, `TOTAL_CYCLE_MINUTES`, `WAITING_SHARE`, `APPROVAL_STEP_COUNT`, `DATA_ENTRY_STEP_COUNT`, `HANDOFF_STEP_COUNT`, `RESPONSIBLE_PERSON_CHANGE_COUNT`, `SYSTEM_COUNT`, `SYSTEM_SWITCH_COUNT`, `UNASSIGNED_STEP_COUNT`, and `PROCESS_OWNER_PRESENT`. The corpus also maps to `REWORK_INDICATOR`, `REWORK_RATE`, `ERROR_RATE`, `LABOR_HOURS`, `COST`, `QUALITY`, `DIGITAL_SKILL_COVERAGE`, `CUSTOMER_TIME_TO_VALUE`, and other outcome labels. The mapping is a measurement vocabulary, not a promise that every metric is available for every client.
+
+The ROI engine's six provenance types are `MEASURED`, `CALCULATED`, `CLIENT_ESTIMATE`, `CONSULTANT_ESTIMATE`, `RESEARCH_BENCHMARK`, and `GENERAL_ASSUMPTION`. Time saved is explicitly different from cash saved. A future outcome dashboard must preserve that distinction and show the basis beside every number.
+
+### 8.3 Gaps
+
+The current metric registry lacks dedicated first-class measures for data quality, control burden, customer experience, adoption, and change sustainability. Those are `METRIC_GAPS`, not reasons to infer them from existing minutes. Any addition should specify unit, collection source, before/after semantics, missingness, privacy, and whether it is measured or estimated.
+
+## 9. Legal and factual boundary
+
+Grow research is not a legal advice engine. A legal conclusion requires the canonical client facts, an authoritative legal source, an approved applicability rule, and human review wherever the legal workflow requires it. ResearchEvidence can explain why a process intervention is worth investigating; it cannot establish a regulatory duty or substitute for a compliance applicability decision.
+
+External company facts such as NAV, KOMA, e-beszámoló, VIES, public registries, or paid provider results are a separate source family. They must enter the canonical `ClientFact` lifecycle only after source-specific verification, with observed/effective validity and conflict handling. They are not silently inserted into `ResearchEvidence`, and a research benchmark is never treated as a client fact.
+
+The customer-safe projection must expose bounded claims, source status, limitations, and missing evidence. It must not expose raw observation payloads, tenant-to-tenant data, full licensed text, or unapproved recommendation candidates.
+
+## 10. Future cross-client data science boundary
+
+Cross-tenant analytics is not used by the current product path (`CROSS_TENANT_DATA_USED=NO`). A future data-science program may use only aggregated, privacy-safe, sufficiently sized cohorts with explicit purpose limitation, tenant isolation, retention, access control, and disclosure review. It must not train on or expose raw client payloads, identifiable process text, legal documents, secrets, or a client's ResearchEvidence links to another client. Cohort-derived benchmarks must carry population, geography, period, and sampling limitations and must remain clearly distinct from client facts.
+
+## 11. Missing corpus and research acquisition plan
+
+The next corpus work should fill evidence gaps without inflating claims:
+
+1. **Professional-services and legal operations:** verifiable studies on matter intake, document handoffs, approval controls, and client communication, with clear sector limits.
+2. **Hungarian SME evidence:** primary or institutional sources with locators, date, population, and geography; never copy an unverified percentage from a presentation.
+3. **Data quality and control cost:** evidence for correction loops, auditability, and controlled automation.
+4. **Customer experience and adoption:** validated measures that can be collected without exposing client communications.
+5. **Sustainability:** longitudinal evidence for training, adoption, and post-implementation review.
+
+Each acquisition follows the same path: source discovery, license/access check, bibliographic verification, bounded-claim drafting, applicability review, domain/intervention/outcome mapping, limitations, registry version, and test fixture. Items without a reliable locator remain `UNVERIFIED` and cannot satisfy the recommendation gate.
+
+## 12. Implementation sequence (documentation-first, no current runtime change)
+
+### Phase A — registry and governance
+
+Create a versioned corpus manifest beside the existing registry. Add methodology, population, geography, freshness, supersession, license/access, and reviewer fields in the manifest first. Add CI checks for stable keys, no duplicate DOI, bounded-claim length, valid domain/intervention/outcome references, and no unverified item marked as sufficient.
+
+### Phase B — evidence operations
+
+Add an internal review workflow for verification, dispute, supersession, and retraction. Preserve old versions and link decisions to the version used. Keep the existing `ensureCorpusSeeded` idempotence and never rewrite client historical evidence links.
+
+### Phase C — workbench and customer-safe projections
+
+Use the existing diagnostic workbench as the workforce read model. Extend only through additive, bounded DTO fields after a product decision. Keep customer projections separate: expose assessment explanations and approved, customer-safe artifacts; do not publish raw research records or unreviewed recommendations.
+
+### Phase D — measurement and outcome learning
+
+Add missing metrics only with collection and privacy contracts. Require before snapshots for outcome claims, retain the ROI basis, and distinguish capacity value from cash realization. Use outcomes to review intervention usefulness, never to retroactively rewrite the source evidence.
+
+### Phase E — privacy-safe analytics
+
+Only after sufficient cohort size, governance approval, and tenant isolation should aggregate benchmarks be considered. A cohort benchmark receives its own ResearchEvidence item with methodology and limitations; it does not become a fact for any individual client.
+
+## 13. Acceptance and regression inventory
+
+This plan preserves the following already-working capabilities:
+
+* four customer assessment packs and their explicit answer-to-finding rules;
+* fail-closed observation normalization and cross-client process-reference protection;
+* global and client-scoped ResearchEvidence with verification and strength;
+* canonical facts, processes, systems, observations, and process snapshots;
+* sufficiency states and human review before opportunities or initiatives;
+* idempotent research runs and evidence links;
+* intervention contraindications and redesign-before-automation safety;
+* ROI provenance, low/base/high ranges, and time-versus-cash separation;
+* diagnostic workbench provenance classes and missing-evidence projection;
+* compliance legal boundary and customer-safe projection;
+* historical outcome records and Grow journey continuity.
+
+The authoritative checks for a later implementation are the existing Grow research, observation convergence, assessment, outcome, compliance, and customer-portal PostgreSQL suites, plus backend typecheck/build and the repository's migration gate. This document itself changes none of those systems.
+
+## 14. Decision summary
+
+The current ResearchEvidence schema and services are sufficient for the present corpus, assessment packs, and GWU-2A read model. The immediate need is corpus governance and metadata discipline, not a migration. Research documents with unavailable full content remain bounded registry references; no citation or result is fabricated. The next product slice should publish only human-approved customer-safe recommendations, while preserving the existing survey and assessment journey.
+
+**Roadmap status:**
+
+* `ROADMAP_CAPABILITIES_REMOVED=NONE`
+* `ROADMAP_CAPABILITIES_DEFERRED=corpus metadata manifest; missing professional-services/Hungarian SME/control/adoption evidence; customer-safe publication of approved recommendations; privacy-safe cohort analytics`
+* `ROADMAP_CAPABILITIES_BLOCKED=none at schema level; implementation remains gated by source verification, human review, privacy controls, and product acceptance`
