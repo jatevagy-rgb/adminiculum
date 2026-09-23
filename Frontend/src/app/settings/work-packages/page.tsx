@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
+import { AdminStatusPill } from "@/components/adminiculum/ui";
 import {
   createUsableCaseType, getCurrentUser, listWorkPackageCaseTypes, listWorkPackageTemplates,
   setWorkPackageCaseTypeActive, createWorkPackageTemplate, activateWorkPackageTemplate,
@@ -70,9 +71,12 @@ function WorkPackagesContent() {
     <div className="grid gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="rounded-lg border border-[var(--adm-border)] bg-white p-4">
         <h2 className="mb-3 font-semibold">Mentett ügytípusok</h2>
-        <div className="space-y-1">{types.map((type) => <button key={type.id} type="button" disabled={busy} onClick={() => setSelectedId(type.id)} aria-pressed={selectedId === type.id} className={`w-full rounded border px-3 py-2 text-left text-sm ${selectedId === type.id ? "border-[var(--adm-ochre-500)] bg-[var(--adm-ivory-100)]" : "border-transparent hover:border-[var(--adm-border)]"}`}>
-          {type.name}<span className="ml-2 text-xs text-[var(--adm-text-muted)]">{type.isActive ? "Aktív" : "Inaktív"}</span>
-        </button>)}</div>
+        <div className="space-y-1">{types.map((type) => <div key={type.id} className="flex items-center gap-2">
+          <button type="button" disabled={busy} onClick={() => setSelectedId(type.id)} aria-pressed={selectedId === type.id} className={`min-w-0 flex-1 rounded border px-3 py-2 text-left text-sm ${selectedId === type.id ? "border-[var(--adm-ochre-500)] bg-[var(--adm-ivory-100)]" : "border-transparent hover:border-[var(--adm-border)]"}`}>
+            <span className="block truncate">{type.name}</span>
+          </button>
+          <AdminStatusPill tone={type.isActive ? "sage" : "neutral"}>{type.isActive ? "Aktív" : "Inaktív"}</AdminStatusPill>
+        </div>)}</div>
         {canManage && <form onSubmit={(event) => { event.preventDefault(); void run(async () => { const option = await createUsableCaseType(name.trim()); setName(""); setSelectedId(option.caseTypeDefinition.id); }, "Az ügytípus létrejött és már választható az Új ügy ablakban."); }} className="mt-5 border-t border-[var(--adm-border)] pt-4">
           <label htmlFor="case-type-name" className="mb-2 block text-sm font-semibold">Új ügytípus neve</label>
           <input id="case-type-name" required maxLength={200} disabled={busy} value={name} onChange={(e) => setName(e.target.value)} placeholder="Pl. Munkajog" className="mb-3 w-full rounded border px-3 py-2 text-sm" />
