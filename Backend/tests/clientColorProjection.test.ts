@@ -45,7 +45,7 @@ describe('client color read projections', () => {
     }]);
     (prisma.case.count as jest.Mock).mockResolvedValue(1);
 
-    const result = await casesService.getCases({ page: 1, limit: 20 });
+    const result = await casesService.getCases({ page: 1, limit: 20, userId: 'admin-1', userRole: 'ADMIN' });
     expect(result.data[0]).toMatchObject({ clientName: 'Szintetikus ügyfél', clientColorKey: 'GREEN' });
     expect((prisma.case.findMany as jest.Mock).mock.calls[0][0].include.client.select.colorKey).toBe(true);
     expect(prisma.case.findMany).toHaveBeenCalledTimes(1);

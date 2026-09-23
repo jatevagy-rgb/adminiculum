@@ -172,7 +172,15 @@ router.get('/', authenticate, async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const result = await casesService.getCases({ page, limit, status, assignedLawyerId, clientId });
+    const result = await casesService.getCases({
+      page,
+      limit,
+      status,
+      assignedLawyerId,
+      clientId,
+      userId: req.user?.userId,
+      userRole: req.user?.role,
+    });
     res.json(result);
     } catch (error) {
       console.error('Get cases error:', error);

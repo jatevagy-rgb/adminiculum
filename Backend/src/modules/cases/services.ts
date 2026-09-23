@@ -8,6 +8,7 @@ import { driveService } from '../sharepoint';
 import { workflowService } from '../workflow';
 import { instantiateCaseWorkflow } from './caseWorkflowOrchestration';
 import { createCaseWorkPackageSnapshot, CaseWorkPackageError } from './caseWorkPackage.service';
+import { buildCaseReadScope } from './authorization';
 import { isWorkforceRole } from '../../middleware/workforceAuthorization';
 
 // Prisma schema enum values
@@ -137,21 +138,38 @@ class CasesService {
   /**
    * Get all cases with pagination
    */
-  async getCases(params: { page?: number; limit?: number; status?: string; assignedLawyerId?: string; clientId?: string }): Promise<{ data: CaseListItem[]; pagination: { page: number; limit: number; total: number } }> {
+  async getCases(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    assignedLawyerId?: string;
+    clientId?: string;
+    userId?: string | null;
+    userRole?: string | null;
+  }): Promise<{ data: CaseListItem[]; pagination: { page: number; limit: number; total: number } }> {
     const { page = 1, limit = 20 } = params;
-    const where: Record<string, any> = {};
+    const filters: Record<string, any> = {};
     if (params.status) {
       const status = params.status;
       if (workflowService.isValidStatus(status)) {
-        where.status = status;
+        filters.status = status;
       }
     }
     if (params.assignedLawyerId) {
-      where.assignedLawyerId = params.assignedLawyerId;
+      filters.assignedLawyerId = params.assignedLawyerId;
     }
     if (params.clientId) {
-      where.clientId = params.clientId;
+      filters.clientId = params.clientId;
     }
+
+    // Canonical case-read scope (same predicate as userCanReadCase / requireCaseReadAccess).
+    // Applied inside the database query so unauthorized cases never leave the DB and
+    // pagination.total reflects only the authorized result set. Privileged roles get
+    // a null scope, which preserves their broad access unchanged.
+    const caseReadScope = buildCaseReadScope(params.userId, params.userRole);
+    const where: Record<string, any> | undefined = caseReadScope
+      ? { AND: [caseReadScope, ...(Object.keys(filters).length ? [filters] : [])] }
+      : (Object.keys(filters).length ? filters : undefined);
 
     const [cases, total] = await Promise.all([
       prisma.case.findMany({
@@ -175,9 +193,9 @@ class CasesService {
             },
           },
         },
-        ...(Object.keys(where).length ? { where } : {})
+        ...(where ? { where } : {})
       }),
-      prisma.case.count(Object.keys(where).length ? { where } : undefined)
+      prisma.case.count(where ? { where } : undefined)
     ]);
 
     const data: CaseListItem[] = cases.map((c: any) => ({
