@@ -162,6 +162,35 @@ describeWithDatabase('Document review PostgreSQL workflow persistence', () => {
     expect(decisionCount[0].count).toBeGreaterThanOrEqual(9);
   });
 
+  it('fails closed on approval while the reviewed-version comparison has unresolved segments, then approves after review', async () => {
+    // Seed a v2 -> v3 comparison with one UNREVIEWED segment and no review point,
+    // proving the segment dimension is enforced independently of review points.
+    await db.documentComparison.createMany({ data: [
+      { id: 'e7000000-0000-4000-8000-000000000003', documentId: ids.document, baseVersionId: ids.v2, targetVersionId: ids.v3, status: 'READY', algorithmRevision: 1, extractionRevision: 1, createdById: ids.owner, insertCount: 0, deleteCount: 0, replaceCount: 1, formatOnlyCount: 0, moveCandidateCount: 0, totalSegmentCount: 1, reviewedSegmentCount: 0 },
+    ] });
+    await db.documentChangeSegment.createMany({ data: [
+      { id: 'e8000000-0000-4000-8000-000000000003', comparisonId: 'e7000000-0000-4000-8000-000000000003', sequence: 0, changeType: 'REPLACE', baseExcerpt: 'old-v2', targetExcerpt: 'new-v3', confidence: 0.9, category: 'AMOUNT', categorySource: 'MANUAL', reviewState: 'UNREVIEWED' },
+    ] });
+
+    // A fresh review bound to v3 (the previous review on this document is CLOSED).
+    let review = await createReview(ids.document, actor, { reviewVersionId: ids.v3, reviewerId: ids.reviewer, idempotencyKey: 'review-create-segment-gate' }, db);
+    review = await transitionReview(review.id, 'ASSIGN', actor, { reviewerId: ids.reviewer, expectedRevision: review.revision }, db);
+    review = await transitionReview(review.id, 'START', { userId: ids.reviewer, role: 'LAWYER' }, { expectedRevision: review.revision }, db);
+
+    // Zero review points, zero blocking points, but the v3 comparison still has an
+    // UNREVIEWED segment: approval must fail closed.
+    const before = await db.documentReview.findUniqueOrThrow({ where: { id: review.id } });
+    await expect(transitionReview(review.id, 'APPROVE', actor, { versionId: ids.v3, expectedRevision: before.revision }, db))
+      .rejects.toMatchObject({ code: 'COMPARISON_SEGMENTS_UNRESOLVED' });
+
+    // Once the lawyer reviews the segment, approval succeeds on the exact version.
+    const segment = await db.documentChangeSegment.findUniqueOrThrow({ where: { id: 'e8000000-0000-4000-8000-000000000003' } });
+    await db.documentChangeSegment.update({ where: { id: segment.id }, data: { reviewState: 'ACCEPTED', revision: { increment: 1 } } });
+    const after = await db.documentReview.findUniqueOrThrow({ where: { id: review.id } });
+    const approved = await transitionReview(review.id, 'APPROVE', actor, { versionId: ids.v3, expectedRevision: after.revision }, db);
+    expect(approved.approvedVersionId).toBe(ids.v3);
+  });
+
   it('keeps decision history immutable and DTO-safe at the table level', async () => {
     const review = await db.documentReview.findFirstOrThrow({ where: { documentId: ids.document } });
     const decisions = await listDecisions(review.id, actor, { limit: 100 }, db);

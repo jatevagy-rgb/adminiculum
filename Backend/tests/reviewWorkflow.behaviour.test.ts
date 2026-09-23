@@ -120,6 +120,17 @@ describe('approval invariants', () => {
     expect(r).toMatchObject({ allowed: true, nextStatus: 'APPROVED', approvedVersionId: 'v2' });
   });
 
+  it('is blocked while the exact comparison has unresolved change segments even with no blocking point', () => {
+    expect(evaluateTransition('IN_REVIEW', 'APPROVE', { ...OK, openBlockingPoints: 0, unresolvedSegments: 1, reviewVersionId: 'v2', approveVersionId: 'v2' }))
+      .toMatchObject({ allowed: false, reason: 'COMPARISON_SEGMENTS_UNRESOLVED' });
+    expect(evaluateTransition('IN_REVIEW', 'APPROVE', { ...OK, openBlockingPoints: 0, unresolvedSegments: 0, reviewVersionId: 'v2', approveVersionId: 'v2' }))
+      .toMatchObject({ allowed: true, nextStatus: 'APPROVED', approvedVersionId: 'v2' });
+    // Unresolved comparison work is independent of review points: zero open or
+    // blocking points must not let approval bypass unresolved change segments.
+    expect(evaluateTransition('IN_REVIEW', 'APPROVE', { ...OK, openPoints: 0, openBlockingPoints: 0, unresolvedSegments: 2, reviewVersionId: 'v2', approveVersionId: 'v2' }))
+      .toMatchObject({ allowed: false, reason: 'COMPARISON_SEGMENTS_UNRESOLVED' });
+  });
+
   it('refuses to approve a different (historical or newer) version by accident', () => {
     expect(evaluateTransition('IN_REVIEW', 'APPROVE', { ...OK, openBlockingPoints: 0, reviewVersionId: 'v2', approveVersionId: 'v1' }))
       .toMatchObject({ allowed: false, reason: 'APPROVE_VERSION_MISMATCH' });
