@@ -9,24 +9,20 @@ import { createRequire } from 'node:module';
 // renders the real hook with react-dom and StrictMode and asserts the invariant
 // that a discarded render never invalidates the committed route.
 //
-// A DOM is required. `jsdom` is a devDependency; when it is not installed the
-// test is skipped rather than failing the suite (CI installs devDependencies).
+// A DOM is required. `jsdom` is an explicit devDependency that canonical
+// frontend CI installs, so it must be importable here. A missing jsdom is a TEST
+// FAILURE, not a skip: a skipped real-React proof proves nothing. There is no
+// silent-success fallback.
 
 const require = createRequire(import.meta.url);
 
-let jsdomModule: any = null;
-try {
-  jsdomModule = require('jsdom');
-} catch {
-  jsdomModule = null;
-}
+// Fail-closed: if jsdom cannot be resolved or loaded, this throws and the test
+// file fails. It is never conditionally downgraded to `test.skip`.
+const { JSDOM } = require('jsdom') as { JSDOM: new (html?: string, options?: any) => any };
 
-const realReact = jsdomModule ? test : test.skip;
-
-realReact(
+test(
   'real React StrictMode: a discarded/suspended route render cannot invalidate the committed route',
   async () => {
-    const { JSDOM } = jsdomModule;
     const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
       pretendToBeVisual: true,
     });
