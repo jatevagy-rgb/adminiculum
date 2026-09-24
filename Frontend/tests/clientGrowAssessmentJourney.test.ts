@@ -23,7 +23,7 @@ test('catalogue: customer Grow view renders the assessment catalogue section', (
   const src = read(VIEW);
   assert.match(src, /data-testid="grow-assessments-section"/);
   assert.match(src, /data-testid="grow-assessment-catalogue"/);
-  assert.match(src, /Cégfelmérések \/ diagnózisok/);
+  assert.match(src, /Felmérési csomagok/);
   assert.match(src, /listPortalGrowAssessments/);
 });
 
@@ -155,7 +155,7 @@ test('catalogue failure is local: base Grow stays and no raw error leaks', () =>
 test('aggregated empty states: NO_COMPLETION / ZERO_FINDINGS / UNKNOWN / WITH_FINDINGS', () => {
   const src = read(VIEW);
   assert.match(src, /hasCompletedPack/);
-  assert.match(src, /Még nincs kitöltött felmérés/);
+  assert.match(src, /Még nincs kitöltött adatkérés/);
   assert.match(src, /jelenleg nem azonosítottunk figyelmet igénylő pontot/);
   assert.match(src, /aggregatedUnknownAreaCount/);
   assert.match(src, /aggregatedFindings\.length > 0/);
