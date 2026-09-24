@@ -78,18 +78,18 @@ test('LEGACY_TAB_MAPPING=PASS — old bookmarks resolve deterministically', () =
 test('OVERVIEW_NOT_ASSESSMENT_FIRST=PASS — operational summaries lead', () => {
   const src = read(VIEW);
   assert.match(src, /data-testid="grow-overview-tab"/);
-  for (const label of ['Nyitott teendők', 'Fejlesztési irányok', 'Aktív kezdeményezések', 'Rögzített eredmények']) {
+  for (const label of ['Felmérések és jelzések', 'Fejlesztési irányok', 'Aktív kezdeményezések', 'Rögzített eredmények']) {
     assert.ok(src.includes(label), `missing overview summary: ${label}`);
   }
   // The survey/assessment input channel does not appear on Overview.
   assert.doesNotMatch(src, /label: "Felmérések"/);
 });
 
-test('INPUT_CHANNEL_FRAMING=PASS — inputs are framed as requests for information', () => {
+test('INPUT_CHANNEL_FRAMING=PASS — inputs are framed as optional available data', () => {
   const src = read(VIEW);
-  assert.match(src, /Adatot kérünk Öntől/);
+  assert.match(src, /Opcionális adatmegadás/);
   assert.match(src, /Felmérési csomagok/);
-  assert.match(src, /Nyitott teendők/);
+  assert.match(src, /Felmérések és jelzések/);
   assert.match(src, /A felmérések a vállalat által megadott válaszokat és működési megfigyeléseket rendszerezik/);
 });
 

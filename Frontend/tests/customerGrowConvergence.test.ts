@@ -65,8 +65,8 @@ test('ASSESSMENTS: catalogue, runner, submit, completed result, unavailable, pro
   assert.match(src, /data-testid="grow-assessment-process-scope"/);
   assert.match(src, /data-testid="grow-assessment-result-scopes"/);
   assert.match(src, /idempotencyKey: assessmentKeyRef\.current/);
-  // Unfinished input is framed as intake, never as development progress.
-  assert.match(src, /Nyitott teendők/);
+  // Unfinished input is framed as availability, never as office-assigned work.
+  assert.match(src, /Felmérések és jelzések/);
 });
 
 test('SURVEY: submit, history and failure semantics preserved', () => {

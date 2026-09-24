@@ -533,7 +533,7 @@ export function OrgGrowView() {
 
   const TABS: Array<{ id: GrowTab; label: string; count?: number }> = [
     { id: "attekintes", label: "Áttekintés" },
-    { id: "teendok", label: "Teendők", count: uncompletedPacksCount },
+    { id: "teendok", label: "Teendők" },
     { id: "fejlesztesi-iranyok", label: "Fejlesztési irányok", count: publishedOpportunitiesCount },
     { id: "kezdemenyezesek", label: "Kezdeményezések", count: initiatives.length },
     { id: "eredmenyek", label: "Eredmények", count: measuredOutcomes.length + estimatedOutcomes.length },
@@ -600,15 +600,15 @@ export function OrgGrowView() {
           <div className="grid gap-4 lg:grid-cols-2">
             <SummaryPanel
               testId="grow-overview-actions"
-              eyebrow="Adatot kérünk Öntől"
-              title="Nyitott teendők"
+              eyebrow="Adatmegadás"
+              title="Felmérések és jelzések"
               value={uncompletedPacksCount}
               detail={
                 uncompletedPacksCount > 0
-                  ? `${uncompletedPacksCount} adatkérés segíti a működés pontosabb feltárását.`
+                  ? `${uncompletedPacksCount} elérhető felmérés segíthet a működés pontosításában.`
                   : packs.length > 0
-                    ? "Minden kijelölt adatkérés kitöltve. Új jelzést bármikor küldhet."
-                    : "Jelenleg nincs kijelölt adatkérés."
+                    ? "Minden elérhető felmérés kitöltve. Új működési jelzést továbbra is küldhet."
+                    : "Jelenleg nincs elérhető felmérés. Működési jelzést továbbra is küldhet."
               }
               action={
                 <AdminButton size="sm" variant="neutral" onClick={() => handleTabChange("teendok")}>
@@ -928,15 +928,15 @@ export function OrgGrowView() {
             ) : (
               <div data-testid="grow-assessment-catalogue">
                 <AdminSectionHeader
-                  eyebrow="Adatot kérünk Öntől"
+                  eyebrow="Opcionális adatmegadás"
                   title="Felmérési csomagok"
-                  subtitle="Segítsen pontosítani a működést. Minden csomag kérdésenként halad, és a végén megállapításokat, javasolt irányokat és a mögöttük álló szakirodalmi hátteret mutatja."
+                  subtitle="Az alábbi felmérések elérhető lehetőségek: kitöltésükkel pontosíthatja a működés megértését. Minden csomag kérdésenként halad, és a végén megállapításokat, javasolt irányokat és a mögöttük álló szakirodalmi hátteret mutatja."
                   titleAs="h2"
                   action={
                     <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Felmérés szűrők">
                       {[
                         { id: "all", label: `Összes (${packs.length})` },
-                        { id: "uncompleted", label: `Kitöltésre vár (${uncompletedPacksCount})` },
+                        { id: "uncompleted", label: `Még nincs kitöltve (${uncompletedPacksCount})` },
                         { id: "completed", label: `Befejezett (${completedPacksCount})` },
                       ].map((f) => (
                         <AdminButton
@@ -990,7 +990,7 @@ export function OrgGrowView() {
                                 <div className="flex flex-wrap items-center justify-between gap-3">
                                   <div className="flex min-w-0 items-center gap-3">
                                     <AdminStatusPill tone={statusTone}>
-                                      {pack.status === "COMPLETED" ? "Kitöltve" : "Nincs kitöltve"}
+                                      {pack.status === "COMPLETED" ? "Kitöltve" : "Még nincs kitöltve"}
                                     </AdminStatusPill>
                                     <div className="min-w-0">
                                       <h3 className="truncate font-serif text-[16px] font-medium text-[var(--adm-text)]">
@@ -1037,7 +1037,7 @@ export function OrgGrowView() {
                               <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                   <AdminStatusPill tone={statusTone}>
-                                    {pack.status === "COMPLETED" ? "Kitöltve" : "Kitöltésre vár"}
+                                    {pack.status === "COMPLETED" ? "Kitöltve" : "Elérhető"}
                                   </AdminStatusPill>
                                   <h3 className="mt-2 font-serif text-[18px] font-medium leading-tight text-[var(--adm-text)]">
                                     {pack.titleHu}
@@ -1145,7 +1145,7 @@ export function OrgGrowView() {
                     <AdminPanel className={PANEL} data-testid="grow-assessment-guide">
                       <p className={`text-[10.5px] font-bold uppercase tracking-[0.14em] ${SOFT}`}>Módszertani útmutató</p>
                       <h3 className="mt-1 font-serif text-[17px] font-medium text-[var(--adm-text)]">
-                        Mi történik az adatkérés után?
+                        Mi történik a kitöltés után?
                       </h3>
                       <p className={`mt-1.5 text-[11px] leading-5 ${MUTED}`}>
                         A kitöltés a konkrét működési rések és beavatkozási irányok megalapozását szolgálja, nem
@@ -1222,8 +1222,8 @@ export function OrgGrowView() {
                 </p>
               ) : (
                 <CompactState
-                  title="Még nincs kitöltött adatkérés."
-                  detail="Töltse ki az egyik felmérési csomagot, és itt összegződnek a megállapítások."
+                  title="Még nincs kitöltött felmérés."
+                  detail="Töltse ki az egyik elérhető felmérési csomagot, és itt összegződnek a megállapítások."
                 />
               )}
             </div>
@@ -2018,7 +2018,7 @@ export function OrgGrowView() {
           {packs.length > 0 || surveys.length > 0 ? (
             <div className="mt-6 border-t border-[var(--adm-border)] pt-5">
               <h3 className={`mb-3 text-[11px] font-bold uppercase tracking-[0.12em] ${SOFT}`}>
-                Korábbi adatkérések és visszajelzések
+                Korábbi felmérések és visszajelzések
               </h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
