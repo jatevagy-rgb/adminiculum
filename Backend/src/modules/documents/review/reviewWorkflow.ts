@@ -17,6 +17,9 @@
  *   - changes cannot be requested without open points or an explicit rationale;
  *   - a version cannot be resubmitted without a newer eligible version;
  *   - approval is blocked while any blocking review point is unresolved;
+ *   - approval is blocked while the exact relevant comparison still has unresolved
+ *     change segments (UNREVIEWED / NEEDS_DISCUSSION / REJECTED), because human
+ *     comparison review is authoritative and independent of review points;
  *   - the reviewer must have case/document access;
  *   - closing a review never publishes anything to a client.
  */
@@ -125,6 +128,13 @@ export interface TransitionContext {
   openBlockingPoints?: number;
   /** Total number of open points (any severity). */
   openPoints?: number;
+  /**
+   * Number of unresolved change segments (UNREVIEWED / NEEDS_DISCUSSION /
+   * REJECTED) in the exact previous->reviewed-version comparison. Distinct from
+   * review points: a segment can be unresolved without any corresponding review
+   * point, and human comparison review must still be resolved before approval.
+   */
+  unresolvedSegments?: number;
   /** Whether a concise rationale accompanies the action. */
   hasRationale?: boolean;
   /** Version currently under review. */
@@ -208,6 +218,13 @@ export function evaluateTransition(status: ReviewStatus, action: ReviewAction, c
       if (!REVIEWABLE.has(status)) return deny('INVALID_STATE');
       // No approval while blocking points remain open.
       if ((ctx.openBlockingPoints ?? 0) > 0) return deny('BLOCKING_POINTS_OPEN');
+      // No approval while the exact relevant comparison still has unresolved
+      // change segments. This is a separate dimension from review points: the
+      // comparison engine creates segments with a default UNREVIEWED state and a
+      // segment can be moved to NEEDS_DISCUSSION without any review point, so
+      // approval must fail closed until the lawyer has actually reviewed the
+      // changes. Human review remains authoritative; AI never gates approval.
+      if ((ctx.unresolvedSegments ?? 0) > 0) return deny('COMPARISON_SEGMENTS_UNRESOLVED');
       // Approval must target exactly the version under review — never a
       // historical or newer version selected by accident.
       const approveId = ctx.approveVersionId ?? ctx.reviewVersionId;
