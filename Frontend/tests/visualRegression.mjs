@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Adminiculum Playwright Visual Regression Suite
  * 
  * Baselines (Candidate Canonical Baselines — User Review Pending):
@@ -96,6 +96,7 @@ function startDevServer() {
         env: {
           ...process.env,
           PORT: String(PORT),
+          NODE_ENV: hasBuild ? "production" : (process.env.NODE_ENV ?? "development"),
           ADMINICULUM_ENABLE_UI_SHOWROOM: "true",
         },
         stdio: ["ignore", "pipe", "pipe"],
@@ -154,6 +155,8 @@ export async function compareImages(baselinePngBuf, actualPngBuf, options = {}) 
       baselineDimensions: { width, height },
       actualDimensions: { width: img2.info.width, height: img2.info.height },
       diffPngBuffer: null,
+      width,
+      height,
     };
   }
 
@@ -187,17 +190,89 @@ export async function compareImages(baselinePngBuf, actualPngBuf, options = {}) 
     diffPixels: numDiffPixels,
     diffRatio,
     diffPngBuffer,
+    width,
+    height,
+    dimensionMismatch: false,
   };
+}
+
+/**
+ * Deterministic font and layout readiness assertion contract (Phase 2)
+ */
+export async function assertDeterministicReadiness(page, options = {}) {
+  const timeoutMs = options.timeout ?? 15000;
+
+  // 1. Wait for document.fonts.ready with bounded timeout
+  await Promise.race([
+    page.evaluate(async () => {
+      await document.fonts.ready;
+    }),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout waiting for document.fonts.ready")), timeoutMs)
+    ),
+  ]);
+
+  // 2. Inspect document.fonts.status and verify resolved font families
+  const fontAudit = await page.evaluate(() => {
+    const fontsStatus = document.fonts.status;
+    const bodyFont = window.getComputedStyle(document.body).fontFamily;
+    const headingEl = document.querySelector("h1, h2, h3, h4");
+    const headingFont = headingEl ? window.getComputedStyle(headingEl).fontFamily : "";
+    const buttonEl = document.querySelector("button");
+    const buttonFont = buttonEl ? window.getComputedStyle(buttonEl).fontFamily : "";
+    const loadedFaces = Array.from(document.fonts)
+      .filter((f) => f.status === "loaded")
+      .map((f) => f.family);
+
+    return {
+      fontsStatus,
+      bodyFont,
+      headingFont,
+      buttonFont,
+      loadedFaces,
+    };
+  });
+
+  if (fontAudit.fontsStatus !== "loaded") {
+    throw new Error(
+      `Font readiness failed: document.fonts.status is "${fontAudit.fontsStatus}" (expected "loaded")`
+    );
+  }
+
+  // Canonical font is Inter (Next.js font variable --font-inter resolves to Inter or __Inter)
+  const hasInter =
+    fontAudit.bodyFont.includes("Inter") ||
+    fontAudit.bodyFont.includes("__Inter") ||
+    fontAudit.loadedFaces.some((f) => f.includes("Inter"));
+
+  if (!hasInter && fontAudit.loadedFaces.length > 0) {
+    throw new Error(
+      `Canonical font verification failed: Inter not resolved in body font ("${fontAudit.bodyFont}")`
+    );
+  }
+
+  // 3. Post-layout settling (300ms) only after font readiness is proven
+  await page.waitForTimeout(300);
+
+  return fontAudit;
 }
 
 /**
  * Generate human review contact sheet for a viewport
  */
-export async function generateContactSheet(viewportId) {
-  const vpDir = path.join(BASELINES_DIR, viewportId);
-  if (!fs.existsSync(vpDir)) return null;
+export async function generateContactSheet(viewportId, options = {}) {
+  const dir = options.dir ?? path.join(BASELINES_DIR, viewportId);
+  const suffix = options.suffix ?? ".png";
+  const defaultOutName = `adminiculum-ui-baselines-${viewportId}-contact-sheet.png`;
+  const outPath = options.outPath ?? path.join(BASELINES_DIR, defaultOutName);
 
-  const imageFiles = VIEWS.map((v) => path.join(vpDir, `${v.id}.png`)).filter((p) => fs.existsSync(p));
+  if (!fs.existsSync(dir)) return null;
+
+  const imageFiles = VIEWS.map((v) => {
+    const filename = suffix.startsWith("-") ? `${v.id}${suffix}` : `${v.id}.png`;
+    return path.join(dir, filename);
+  }).filter((p) => fs.existsSync(p));
+
   if (imageFiles.length === 0) return null;
 
   const loadedImages = await Promise.all(
@@ -205,7 +280,7 @@ export async function generateContactSheet(viewportId) {
       // Normalize width for consistent column stacking
       const targetWidth = viewportId === "desktop" ? 800 : 390;
       const resized = await sharp(f).resize({ width: targetWidth }).toBuffer({ resolveWithObject: true });
-      return { file: f, name: path.basename(f, ".png"), ...resized };
+      return { file: f, name: path.basename(f, suffix), ...resized };
     })
   );
 
@@ -234,7 +309,7 @@ export async function generateContactSheet(viewportId) {
     .png()
     .toBuffer();
 
-  const outPath = path.join(BASELINES_DIR, `adminiculum-ui-baselines-${viewportId}-contact-sheet.png`);
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, sheetBuffer);
   console.log(`Generated contact sheet: ${path.relative(FRONTEND_ROOT, outPath)}`);
   return outPath;
@@ -272,6 +347,7 @@ export async function run() {
   let failures = 0;
   let passed = 0;
   let updated = 0;
+  const allResults = [];
 
   try {
     browser = await chromium.launch({
@@ -288,6 +364,9 @@ export async function run() {
       const context = await browser.newContext({
         viewport: { width: vp.width, height: vp.height },
         deviceScaleFactor: 1,
+        locale: "hu-HU",
+        colorScheme: "light",
+        timezoneId: "Europe/Budapest",
         reducedMotion: "reduce",
       });
 
@@ -316,7 +395,8 @@ export async function run() {
             `,
           });
 
-          await page.waitForTimeout(300);
+          // Deterministic font and layout readiness contract (Phase 2)
+          await assertDeterministicReadiness(page);
 
           let screenshotBuf;
           const targetLocator = page.locator(view.selector);
@@ -341,6 +421,17 @@ export async function run() {
                 )}. CHECK mode is read-only and never writes baselines.`
               );
               failures++;
+              allResults.push({
+                viewport: vp.id,
+                view: view.id,
+                match: false,
+                missingBaseline: true,
+                expectedDimensions: { width: 0, height: 0 },
+                actualDimensions: { width: 0, height: 0 },
+                diffPixels: 0,
+                diffRatio: 100,
+                dimensionMismatch: true,
+              });
               continue;
             }
 
@@ -371,10 +462,32 @@ export async function run() {
               }
               failures++;
             }
+
+            allResults.push({
+              viewport: vp.id,
+              view: view.id,
+              match: comp.match,
+              expectedDimensions: comp.dimensionMismatch ? comp.baselineDimensions : { width: comp.width, height: comp.height },
+              actualDimensions: comp.dimensionMismatch ? comp.actualDimensions : { width: comp.width, height: comp.height },
+              diffPixels: comp.diffPixels,
+              diffRatio: Number((comp.diffRatio * 100).toFixed(4)),
+              dimensionMismatch: Boolean(comp.dimensionMismatch),
+            });
           }
         } catch (err) {
           console.error(`[ERROR]   ${vp.name.padEnd(16)} : ${view.id} - ${err.message}`);
           failures++;
+          allResults.push({
+            viewport: vp.id,
+            view: view.id,
+            match: false,
+            error: err.message,
+            expectedDimensions: { width: 0, height: 0 },
+            actualDimensions: { width: 0, height: 0 },
+            diffPixels: 0,
+            diffRatio: 100,
+            dimensionMismatch: true,
+          });
         }
       }
 
@@ -393,6 +506,37 @@ export async function run() {
       await generateContactSheet(vp.id);
     }
   } else {
+    // Phase 9: Write machine-readable failure summary and Linux candidate contact sheets
+    if (allResults.length > 0) {
+      fs.mkdirSync(DIFFS_DIR, { recursive: true });
+      fs.writeFileSync(path.join(DIFFS_DIR, "summary.json"), JSON.stringify(allResults, null, 2));
+
+      const summaryLines = allResults.map((r) =>
+        `[${r.match ? "PASS" : "FAIL"}] ${r.viewport.padEnd(8)} / ${r.view.padEnd(24)} ` +
+        `expected: ${r.expectedDimensions.width}x${r.expectedDimensions.height} ` +
+        `actual: ${r.actualDimensions.width}x${r.actualDimensions.height} ` +
+        `diff: ${r.diffRatio.toFixed(3)}% (${r.diffPixels}px)` +
+        (r.dimensionMismatch ? " [DIMENSION MISMATCH]" : "") +
+        (r.error ? ` [ERROR: ${r.error}]` : "")
+      );
+      fs.writeFileSync(path.join(DIFFS_DIR, "summary.txt"), summaryLines.join("\n") + "\n");
+
+      // Generate Linux candidate contact sheets from actual screenshots in visual-diffs
+      for (const vp of VIEWPORTS) {
+        const actualDir = path.join(DIFFS_DIR, vp.id);
+        const outContactSheet = path.join(DIFFS_DIR, `adminiculum-ui-linux-${vp.id}-candidate-contact-sheet.png`);
+        try {
+          await generateContactSheet(vp.id, {
+            dir: actualDir,
+            suffix: "-actual.png",
+            outPath: outContactSheet,
+          });
+        } catch {
+          // Skip if actual images are not available
+        }
+      }
+    }
+
     console.log(`Passed: ${passed} | Failed: ${failures}`);
     if (failures > 0) {
       console.error("\nVisual regression check FAILED. See visual-diffs/ for expected, actual, and diff outputs.");

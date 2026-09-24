@@ -78,3 +78,15 @@ test('CHECK_MODE_WRITES_BASELINE=NO: check mode source code never writes baselin
   assert.match(source, /\[FAIL - MISSING BASELINE\]/);
   assert.match(source, /CHECK mode is read-only and never writes baselines/);
 });
+
+test('DETERMINISTIC_READINESS: assertDeterministicReadiness contract is enforced in source', () => {
+  const scriptPath = path.resolve('tests/visualRegression.mjs');
+  const source = fs.readFileSync(scriptPath, 'utf8');
+
+  assert.match(source, /export async function assertDeterministicReadiness/);
+  assert.match(source, /await document\.fonts\.ready/);
+  assert.match(source, /document\.fonts\.status/);
+  assert.match(source, /fontAudit\.fontsStatus !== "loaded"/);
+  assert.match(source, /Inter/);
+});
+
