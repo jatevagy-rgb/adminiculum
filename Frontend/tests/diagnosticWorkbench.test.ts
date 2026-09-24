@@ -40,6 +40,7 @@ const root = path.resolve(here, "..");
 const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
 
 const GROW_PAGE = "src/app/clients/[clientId]/grow/page.tsx";
+const WORKBENCH_IA = "src/components/clients/GrowWorkbench.tsx";
 const WORKBENCH = "src/components/clients/diagnostic-workbench/GrowDiagnosticWorkbench.tsx";
 const CANONICAL_PANEL = "src/components/clients/diagnostic-workbench/CanonicalStatePanel.tsx";
 const OBSERVATION_PANEL = "src/components/clients/diagnostic-workbench/ObservationPanel.tsx";
@@ -48,36 +49,37 @@ const EVIDENCE_PANEL = "src/components/clients/diagnostic-workbench/EvidenceSuff
 const RECOMMENDATION_PANEL = "src/components/clients/diagnostic-workbench/InternalRecommendationPanel.tsx";
 const API = "src/lib/diagnosticWorkbenchApi.ts";
 
-test("1. Default /clients/[id]/grow renders existing GrowJourney", () => {
+test("1. Default /clients/[id]/grow renders the operational Grow workbench", () => {
   const pageSrc = read(GROW_PAGE);
-  assert.match(pageSrc, /view === "diagnostics"\s*\?\s*\(?\s*<GrowDiagnosticWorkbench/);
+  // The methodology-led GrowJourney is no longer the default landing; the
+  // seven-tab operational workbench is. GrowJourney stays reachable through the
+  // legacy `?view=journey` deep link.
+  assert.match(pageSrc, /<GrowWorkbench\s+clientId=\{client\.id\}\s+clientName=\{client\.name\}\s+activeTab=\{activeTab\}\s*\/>/);
   assert.match(pageSrc, /<GrowJourney clientId=\{client\.id\} clientName=\{client\.name\} \/>/);
-  assert.match(pageSrc, /href=\{`\/clients\/\$\{client\.id\}\/grow`\}/);
+  assert.match(pageSrc, /return "attekintes"/);
 });
 
-test("2. ?view=diagnostics renders diagnostic workbench", () => {
+test("2. ?view=diagnostics maps to the Diagnosztika workbench tab", () => {
   const pageSrc = read(GROW_PAGE);
   assert.match(pageSrc, /view === "diagnostics"/);
-  assert.match(pageSrc, /<GrowDiagnosticWorkbench\s+clientId=\{client\.id\}\s+clientName=\{client\.name\}\s*\/>/);
-  assert.match(pageSrc, /href=\{`\/clients\/\$\{client\.id\}\/grow\?view=diagnostics`\}/);
+  assert.match(pageSrc, /return "diagnosztika"/);
+  assert.match(pageSrc, /data-testid=\{`grow-subnav-\$\{item\.id\}`\}/);
 });
 
-test("3. Switching back renders original GrowJourney", () => {
+test("3. The seven-tab operational navigation is the primary Grow surface", () => {
   const pageSrc = read(GROW_PAGE);
+  const wbSrc = read(WORKBENCH_IA);
   assert.match(pageSrc, /data-testid="grow-sub-nav"/);
-  assert.match(pageSrc, /data-testid="grow-subnav-journey"/);
-  assert.match(pageSrc, /data-testid="grow-subnav-diagnostics"/);
-  assert.match(pageSrc, /Munkafolyamat/);
-  assert.match(pageSrc, /Diagnosztika/);
+  assert.match(pageSrc, /href=\{`\/clients\/\$\{client\.id\}\/grow\?tab=\$\{item\.id\}`\}/);
+  for (const label of ["Áttekintés", "Diagnosztika", "Bizonyítékok", "Döntések", "Kezdeményezések", "Eredmények", "Adatforrások"]) {
+    assert.ok(wbSrc.includes(label), `missing tab label: ${label}`);
+  }
 });
 
-test("4. Invalid view fails safe", () => {
+test("4. Invalid view/tab fails safe to Áttekintés", () => {
   const pageSrc = read(GROW_PAGE);
-  // Any value other than "diagnostics" strictly falls through to GrowJourney
-  assert.match(
-    pageSrc,
-    /view === "diagnostics"\s*\?\s*\(?\s*<GrowDiagnosticWorkbench[^>]*>\s*\)?\s*:\s*\(?\s*<GrowJourney/
-  );
+  assert.match(pageSrc, /if \(tab && TAB_IDS\.includes\(tab\)\) return tab as GrowWorkbenchTab/);
+  assert.match(pageSrc, /return "attekintes"/);
 });
 
 test("5. No diagnostics mutation controls exist (WORKBENCH_MUTATION_CONTROLS=0)", () => {

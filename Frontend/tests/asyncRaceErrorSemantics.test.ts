@@ -24,7 +24,18 @@ function growHarness(listAdminWorkspaces: () => Promise<any>) {
   return createRaceHarness('src/app/clients/[clientId]/grow/page.tsx', 'GrowPageContent', {
     '@/components/AuthenticatedApp': { AuthenticatedApp: 'div' },
     '@/components/clients/GrowJourney': { GrowJourney: 'div' },
-    '@/components/clients/diagnostic-workbench/GrowDiagnosticWorkbench': { GrowDiagnosticWorkbench: 'div' },
+    '@/components/clients/GrowWorkbench': {
+      GrowWorkbench: 'div',
+      GROW_TABS: [
+        { id: 'attekintes', label: 'Áttekintés' },
+        { id: 'diagnosztika', label: 'Diagnosztika' },
+        { id: 'bizonyitekok', label: 'Bizonyítékok' },
+        { id: 'dontesek', label: 'Döntések' },
+        { id: 'kezdemenyezesek', label: 'Kezdeményezések' },
+        { id: 'eredmenyek', label: 'Eredmények' },
+        { id: 'adatforrasok', label: 'Adatforrások' },
+      ],
+    },
     '@/components/clients/ClientWorkspaceTabs': { ClientWorkspaceTabs: 'div' },
     '@/components/adminiculum/OperationalPrimitives': { SafePanelError: 'div' },
     '@/lib/api': { getClient: async () => ({ id: 'B', name: 'B Ügyfél' }) },

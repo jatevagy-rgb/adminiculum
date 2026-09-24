@@ -5,17 +5,34 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { GrowJourney } from "@/components/clients/GrowJourney";
-import { GrowDiagnosticWorkbench } from "@/components/clients/diagnostic-workbench/GrowDiagnosticWorkbench";
+import {
+  GROW_TABS,
+  GrowWorkbench,
+  type GrowWorkbenchTab,
+} from "@/components/clients/GrowWorkbench";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { getClient, type Client } from "@/lib/api";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
 import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { useRouteGeneration } from "@/lib/routeGeneration";
 
+const TAB_IDS = GROW_TABS.map((t) => t.id) as string[];
+
+function resolveTab(view: string | null, tab: string | null): GrowWorkbenchTab | "journey" {
+  // Legacy deep links are preserved: `?view=diagnostics` maps to the
+  // canonical Diagnosztika tab, `?view=journey` keeps the full detail/
+  // publication flow reachable.
+  if (view === "journey") return "journey";
+  if (view === "diagnostics") return "diagnosztika";
+  if (tab && TAB_IDS.includes(tab)) return tab as GrowWorkbenchTab;
+  return "attekintes";
+}
+
 function GrowPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const view = searchParams.get("view");
+  const tab = searchParams.get("tab");
   const clientId = String(params?.clientId || "");
   const route = useRouteGeneration(clientId);
   const [client, setClient] = useState<Client | null>(null);
@@ -23,6 +40,8 @@ function GrowPageContent() {
   const [error, setError] = useState(false);
   const [modeError, setModeError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
+
+  const activeTab = resolveTab(view, tab);
 
   useEffect(() => {
     if (!clientId) return;
@@ -86,43 +105,40 @@ function GrowPageContent() {
                     organizationMode={organizationMode}
                   />
 
-                  {/* Secondary Grow sub-navigation: Journey vs Diagnostics */}
-                  <div
+                  {/* Primary Grow navigation: operational workbench tabs */}
+                  <nav
                     data-testid="grow-sub-nav"
-                    className="flex items-center gap-2 border-b border-[var(--adm-border)] pb-2 text-xs font-medium"
+                    aria-label="Grow nézetek"
+                    className="flex flex-wrap items-center gap-1 border-b border-[var(--adm-border)] pb-2"
                   >
-                    <Link
-                      href={`/clients/${client.id}/grow`}
-                      data-testid="grow-subnav-journey"
-                      className={`rounded-md px-3 py-1.5 transition-colors ${
-                        view !== "diagnostics"
-                          ? "bg-[var(--adm-surface)] font-semibold text-[var(--adm-text)] shadow-xs"
-                          : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
-                      }`}
-                    >
-                      Munkafolyamat
-                    </Link>
-                    <Link
-                      href={`/clients/${client.id}/grow?view=diagnostics`}
-                      data-testid="grow-subnav-diagnostics"
-                      className={`rounded-md px-3 py-1.5 transition-colors ${
-                        view === "diagnostics"
-                          ? "bg-[var(--adm-surface)] font-semibold text-[var(--adm-text)] shadow-xs"
-                          : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
-                      }`}
-                    >
-                      Diagnosztika
-                    </Link>
-                  </div>
+                    {GROW_TABS.map((item) => {
+                      const isActive = activeTab === item.id;
+                      return (
+                        <Link
+                          key={item.id}
+                          href={`/clients/${client.id}/grow?tab=${item.id}`}
+                          data-testid={`grow-subnav-${item.id}`}
+                          aria-current={isActive ? "page" : undefined}
+                          className={`rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-xs font-semibold transition-colors ${
+                            isActive
+                              ? "bg-[var(--adm-green-800)] text-white"
+                              : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </nav>
 
-                  {/* Additive view branching: preserve default GrowJourney */}
-                  {view === "diagnostics" ? (
-                    <GrowDiagnosticWorkbench
+                  {activeTab === "journey" ? (
+                    <GrowJourney clientId={client.id} clientName={client.name} />
+                  ) : (
+                    <GrowWorkbench
                       clientId={client.id}
                       clientName={client.name}
+                      activeTab={activeTab}
                     />
-                  ) : (
-                    <GrowJourney clientId={client.id} clientName={client.name} />
                   )}
                 </>
               ) : (

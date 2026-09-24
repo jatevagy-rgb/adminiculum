@@ -2,17 +2,17 @@
  * GWU-2A: Internal Read-Only Diagnostic Workbench — Production-Server Browser QA.
  *
  * Proves in a real headless Chromium browser:
- *  1. /clients/[clientId]/grow loads existing GrowJourney by default.
- *  2. /clients/[clientId]/grow?view=diagnostics loads GrowDiagnosticWorkbench.
- *  3. Munkafolyamat → Diagnosztika navigation works.
- *  4. Diagnosztika → Munkafolyamat works.
+ *  1. /clients/[clientId]/grow loads the operational Grow workbench by default.
+ *  2. /clients/[clientId]/grow?tab=diagnosztika loads GrowDiagnosticWorkbench.
+ *  3. Áttekintés → Diagnosztika navigation works.
+ *  4. Diagnosztika → Áttekintés works.
  *  5. Browser back/forward behaves correctly.
  *  6. No diagnostics mutation controls exist (WORKBENCH_MUTATION_CONTROLS=0).
  *  7. DECLARED and MEASURED sections render distinctly.
  *  8. EVIDENCE_RECORD and RESEARCH_EVIDENCE render distinctly.
  *  9. Linked vs unlinked research distinction is truthful.
  * 10. UNKNOWN wording is precise (explicit unknown, not completeness/unverified).
- * 11. Current GrowJourney functionality still renders.
+ * 11. Legacy ?view=journey still renders GrowJourney (detail/publication flow).
  * 12. No uncaught browser/page errors.
  * 13. Verified at desktop (1440x900) and mobile (390x844) viewports.
  */
@@ -391,14 +391,14 @@ async function runGrowDiagnosticBrowserQA() {
 
       const growUrl = `/clients/${WORKFORCE_FIXTURE.client.id}/grow`;
 
-      // 1. Default loads existing GrowJourney
+      // 1. Default loads the operational workbench (Áttekintés), not GrowJourney
       await page.goto(`${BASE_URL}${growUrl}`, { waitUntil: "networkidle" });
       await page.waitForSelector("[data-testid='grow-sub-nav']", { timeout: 10000 });
-      const journeyVisible = await page.getByTestId("grow-subnav-journey").isVisible();
-      if (!journeyVisible) throw new Error("Sub-nav Munkafolyamat link is not visible");
+      const overviewVisible = await page.getByTestId("grow-overview-tab").isVisible();
+      if (!overviewVisible) throw new Error("Overview workbench is not visible on default route");
       const defaultContent = await page.textContent("body");
-      if (!defaultContent.includes("Munkafolyamat") || !defaultContent.includes("Diagnosztika")) {
-        throw new Error("Missing Munkafolyamat or Diagnosztika selectors in subnav");
+      for (const label of ["Áttekintés", "Diagnosztika", "Bizonyítékok", "Döntések", "Kezdeményezések", "Eredmények", "Adatforrások"]) {
+        if (!defaultContent.includes(label)) throw new Error(`Missing sub-nav label: ${label}`);
       }
       // Ensure diagnostic workbench is NOT rendered by default
       const wbOnDefault = await page.locator("[data-testid='grow-diagnostic-workbench']").count();
@@ -406,9 +406,9 @@ async function runGrowDiagnosticBrowserQA() {
 
       await page.screenshot({ path: path.join(SHOTS, `grow-default-${viewport.name}.png`), fullPage: true });
 
-      // 2. Click Diagnosztika link to navigate to ?view=diagnostics
-      await page.getByTestId("grow-subnav-diagnostics").click();
-      await page.waitForURL(`**${growUrl}?view=diagnostics`, { timeout: 10000 });
+      // 2. Click Diagnosztika link to navigate to ?tab=diagnosztika
+      await page.getByTestId("grow-subnav-diagnosztika").click();
+      await page.waitForURL(`**${growUrl}?tab=diagnosztika`, { timeout: 10000 });
       await page.waitForSelector("[data-testid='grow-diagnostic-workbench']", { timeout: 10000 });
 
       // 3. Verify Workbench Content
@@ -484,19 +484,25 @@ async function runGrowDiagnosticBrowserQA() {
 
       await page.screenshot({ path: path.join(SHOTS, `grow-diagnostics-${viewport.name}.png`), fullPage: true });
 
-      // 4. Diagnosztika → Munkafolyamat navigation via subnav link
-      await page.getByTestId("grow-subnav-journey").click();
-      await page.waitForURL(`**${growUrl}`, { timeout: 10000 });
-      const wbAfterJourneyClick = await page.locator("[data-testid='grow-diagnostic-workbench']").count();
-      if (wbAfterJourneyClick !== 0) throw new Error("Workbench did not disappear after navigating back to Munkafolyamat");
+      // 4. Diagnosztika → Áttekintés navigation via subnav link
+      await page.getByTestId("grow-subnav-attekintes").click();
+      await page.waitForURL(`**${growUrl}?tab=attekintes`, { timeout: 10000 });
+      const wbAfterOverviewClick = await page.locator("[data-testid='grow-diagnostic-workbench']").count();
+      if (wbAfterOverviewClick !== 0) throw new Error("Workbench did not disappear after navigating back to Áttekintés");
 
       // 5. Browser back / forward behaves correctly
       await page.goBack();
-      await page.waitForURL(`**${growUrl}?view=diagnostics`, { timeout: 10000 });
+      await page.waitForURL(`**${growUrl}?tab=diagnosztika`, { timeout: 10000 });
       await page.waitForSelector("[data-testid='grow-diagnostic-workbench']", { timeout: 10000 });
 
       await page.goForward();
-      await page.waitForURL(`**${growUrl}`, { timeout: 10000 });
+      await page.waitForURL(`**${growUrl}?tab=attekintes`, { timeout: 10000 });
+
+      // 5b. Legacy ?view=journey still renders GrowJourney (full detail/publication flow)
+      await page.goto(`${BASE_URL}${growUrl}?view=journey`, { waitUntil: "networkidle" });
+      await page.waitForSelector("[data-testid='grow-sub-nav']", { timeout: 10000 });
+      const journeyStillRenders = await page.locator("[data-testid='grow-journey']").count();
+      if (journeyStillRenders === 0) throw new Error("Legacy ?view=journey no longer renders GrowJourney");
 
       // 6. Check for hard page errors
       if (hardErrors.length > 0) {
