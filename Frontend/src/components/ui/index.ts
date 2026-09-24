@@ -9,3 +9,22 @@ export * from "./Form";
 export * from "./QuietLink";
 export * from "./DataTable";
 export * from "./ConfirmationDialog";
+export * from "./tokens";
+
+// Adminiculum Canonical Primitives
+export {
+  AdminButton,
+  AdminBadge,
+  AdminStatusPill,
+  AdminPanel,
+  AdminSectionHeader,
+  AdminDocumentRow,
+  adminUi,
+} from "../adminiculum/ui";
+
+export {
+  OperationalPageHeader,
+  CompactState,
+  SafePanelError,
+} from "../adminiculum/OperationalPrimitives";
+
