@@ -218,3 +218,4 @@ frontend-patch/
 Backend/check-table.mjs
 Backend/templates/document.xml.extracted
 Backend/templates/isolation-tests/
+Frontend/visual-diffs/
