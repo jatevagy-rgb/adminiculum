@@ -1,10 +1,17 @@
 /**
- * Focused browser QA for the /clients directory convergence.
+ * Focused browser QA for the /clients directory convergence and the #374
+ * client-color authorization repair.
  *
  * Uses the canonical workforce QA pattern: a production `next start` server
  * receives a deterministic synthetic session and contract-compatible API
  * responses. It never contacts Azure, PostgreSQL, or production data and it
  * does not build any new auth infrastructure.
+ *
+ * Covers:
+ *   - manager roles (ADMIN, PARTNER): color-edit control visible, save works
+ *   - non-manager roles (LAWYER, TRAINEE, LEGAL_ASSISTANT): read-only — tile and
+ *     color identity render, no color-edit control, zero PATCH attempts
+ *   - 1440 and 390 layouts
  *
  * Run after `npm run build`:  node tests/clientsBrowserQA.mjs
  */
@@ -21,14 +28,7 @@ const PORT = Number(process.env.CLIENTS_QA_PORT || 3097);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const SHOTS = path.join(os.tmpdir(), "kilo", "clients-directory-qa");
 
-const AUTH_ME = {
-  id: "qa-user",
-  email: "qa-user@adminiculum.test",
-  name: "Dr. Adminiculum Ügyvéd",
-  role: "ADMIN",
-};
-
-let MOCK_CLIENTS = [
+const BASE_CLIENTS = [
   { id: "c1", name: "Acme Corp Kft.", colorKey: "BLUE", contactPerson: "Kovács János", email: "kovacs@acme.test", phone: "+36 30 123 4567", taxNumber: "12345678-2-41", relationshipMode: "PORTAL_CENTRIC" },
   { id: "c2", name: "Budapest Tech Nyrt.", colorKey: "GREEN", contactPerson: "Nagy Anna", email: "anna@budapesttech.test", phone: "+36 20 987 6543", taxNumber: "87654321-2-42", relationshipMode: "PORTAL_CENTRIC" },
   { id: "c3", name: "Corvinus Legal Zrt.", colorKey: "RED", contactPerson: "Szabó Péter", email: "szabo@corvinus.test", phone: null, taxNumber: "11223344-2-43", relationshipMode: "STANDARD" },
@@ -43,6 +43,7 @@ let MOCK_CLIENTS = [
   { id: "c12", name: "Lánchíd Consulting Kft.", colorKey: null, contactPerson: null, email: "consulting@lanchid.test", phone: "+36 30 777 6666", taxNumber: "66778899-2-49", relationshipMode: "STANDARD" },
 ];
 
+let MOCK_CLIENTS = structuredClone(BASE_CLIENTS);
 let server;
 
 function startServer() {
@@ -84,7 +85,8 @@ function stopServer() {
   server = undefined;
 }
 
-async function setupPage(browser, viewport) {
+async function setupPage(browser, viewport, role, counters) {
+  const authMe = { id: "qa-user", email: "qa-user@adminiculum.test", name: "Dr. Adminiculum Ügyvéd", role };
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   const hardErrors = [];
@@ -93,7 +95,7 @@ async function setupPage(browser, viewport) {
   await page.addInitScript(({ profile }) => {
     localStorage.setItem("auth_token", "qa-clients-token");
     sessionStorage.setItem("adminiculum_auth_profile", JSON.stringify(profile));
-  }, { profile: AUTH_ME });
+  }, { profile: authMe });
 
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
@@ -101,15 +103,19 @@ async function setupPage(browser, viewport) {
     const method = request.method();
 
     if (url.includes("/auth/me")) {
-      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(AUTH_ME) });
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(authMe) });
     }
 
+    // GET /clients is intentionally returned for every role here; the mock does
+    // not reproduce backend case-scoping. The repair under test is the mutation
+    // affordance, so read visibility is held constant across roles.
     if (/\/clients(\?|$)/.test(url.split("/api/v1")[1] || "") && method === "GET") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ data: MOCK_CLIENTS }) });
     }
 
     const patchMatch = url.match(/\/clients\/([^/?#]+)/);
     if (patchMatch && method === "PATCH") {
+      counters.patchAttempts += 1;
       const clientId = decodeURIComponent(patchMatch[1]);
       const payload = JSON.parse(request.postData() || "{}");
       const client = MOCK_CLIENTS.find((c) => c.id === clientId);
@@ -135,47 +141,54 @@ async function expectNoOverflow(page, label) {
   assert.equal(overflow, false, `${label} must not have horizontal overflow`);
 }
 
-async function run() {
-  fs.mkdirSync(SHOTS, { recursive: true });
-  console.log("Starting production server...");
-  await startServer();
-  console.log(`Server ready at ${BASE_URL}`);
+async function runScenario(browser, scenario) {
+  const { role, viewport, manager } = scenario;
+  const label = `${role}@${viewport.width}`;
+  MOCK_CLIENTS = structuredClone(BASE_CLIENTS);
+  const counters = { patchAttempts: 0 };
+  const { context, page, hardErrors } = await setupPage(browser, viewport, role, counters);
 
-  const browser = await chromium.launch({ headless: true });
-  let failures = 0;
+  try {
+    await page.goto(`${BASE_URL}/clients`, { waitUntil: "networkidle" });
+    await page.waitForSelector('[data-testid="client-tile-c1"]');
 
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
-    const label = `${viewport.width}x${viewport.height}`;
-    const { context, page, hardErrors } = await setupPage(browser, viewport);
-    try {
-      await page.goto(`${BASE_URL}/clients`, { waitUntil: "networkidle" });
-      await page.waitForSelector('[data-testid="client-tile-c1"]');
+    // Shared read behavior: tile grid default, all clients once, no overflow.
+    assert.equal(await tileCount(page), BASE_CLIENTS.length, `${label}: all clients render as tiles`);
+    assert.equal(await page.locator("table").count(), 0, `${label}: table is not the default view`);
+    await expectNoOverflow(page, label);
 
-      // 1. Tile grid is the default view and renders every client exactly once.
-      assert.equal(await tileCount(page), MOCK_CLIENTS.length, `${label}: all clients render as tiles`);
-      assert.equal(await page.locator("table").count(), 0, `${label}: table is not the default view`);
-      await expectNoOverflow(page, label);
-      await page.screenshot({ path: path.join(SHOTS, `clients-${label}-tiles.png`), fullPage: true });
+    // Color identity is always visible (canonical rail), independent of role.
+    const c1Class = (await page.locator('[data-testid="client-tile-c1"]').getAttribute("class")) || "";
+    assert.match(c1Class, /border-l-blue-600/, `${label}: client color identity rail renders`);
 
-      // 2. Search preserves behavior and renders a single matching tile.
-      const search = page.locator('input[type="search"]');
-      await search.fill("Acme");
-      await page.waitForTimeout(250);
-      assert.equal(await tileCount(page), 1, `${label}: search filters to exactly one tile`);
-      assert.equal(await page.locator('[data-testid="client-tile-c1"]').count(), 1, `${label}: searched client visible`);
-      await search.fill("");
-      await page.waitForTimeout(250);
+    // Search and view toggle remain functional for every role.
+    const search = page.locator('input[type="search"]');
+    await search.fill("Acme");
+    await page.waitForTimeout(200);
+    assert.equal(await tileCount(page), 1, `${label}: search filters to one tile`);
+    await search.fill("");
+    await page.waitForTimeout(200);
+    await page.getByRole("button", { name: "Lista" }).click();
+    await page.waitForTimeout(150);
+    assert.equal(await page.locator("table").count(), 1, `${label}: Lista shows the table`);
+    await page.getByRole("button", { name: "Csempék" }).click();
+    await page.waitForTimeout(150);
+    assert.equal(await tileCount(page), BASE_CLIENTS.length, `${label}: Csempék restores the tile grid`);
 
-      // 3. Table/list remains reachable as the secondary view.
-      await page.getByRole("button", { name: "Lista" }).click();
-      await page.waitForTimeout(150);
-      assert.equal(await page.locator("table").count(), 1, `${label}: Lista shows the table`);
-      assert.equal(await tileCount(page), 0, `${label}: tiles hidden in table view`);
-      await page.getByRole("button", { name: "Csempék" }).click();
-      await page.waitForTimeout(150);
-      assert.equal(await tileCount(page), MOCK_CLIENTS.length, `${label}: Csempék restores the tile grid`);
+    // Dosszié and + Új ügy remain reachable for every role.
+    assert.equal(
+      await page.locator('[data-testid="client-tile-c1"] a', { hasText: "Dosszié" }).first().getAttribute("href"),
+      "/clients/c1",
+      `${label}: Dosszié destination preserved`,
+    );
+    const newCaseHref = await page.locator('[data-testid="client-tile-c1"] a[aria-label*="Új ügy indítása"]').getAttribute("href");
+    assert.ok(newCaseHref && newCaseHref.includes("/cases?newCase=1&clientId=c1"), `${label}: + Új ügy preserves clientId`);
 
-      // 4. Direct tile color edit is reachable, accessible, server-driven.
+    const colorTriggers = page.locator('[aria-label*="Ügyfélszín módosítása"]');
+
+    if (manager) {
+      assert.equal(await colorTriggers.count(), BASE_CLIENTS.length, `${label}: every tile exposes the color control`);
+
       const neutralTrigger = page.locator('[data-testid="client-tile-c6"] button[aria-label*="Ügyfélszín módosítása"]');
       await neutralTrigger.click();
       const dialog = page.getByRole("dialog");
@@ -185,9 +198,8 @@ async function run() {
       await dialog.waitFor({ state: "detached" });
       await page.waitForTimeout(200);
       const c6Class = (await page.locator('[data-testid="client-tile-c6"]').getAttribute("class")) || "";
-      assert.match(c6Class, /border-l-rose-600/, `${label}: saved server color is reflected on the tile`);
+      assert.match(c6Class, /border-l-rose-600/, `${label}: saved server color is reflected`);
 
-      // 5. Clearing color returns the tile to neutral.
       const blueTrigger = page.locator('[data-testid="client-tile-c1"] button[aria-label*="Ügyfélszín módosítása"]');
       await blueTrigger.click();
       const clearDialog = page.getByRole("dialog");
@@ -196,44 +208,54 @@ async function run() {
       await clearDialog.getByRole("button", { name: "Mentés" }).click();
       await clearDialog.waitFor({ state: "detached" });
       await page.waitForTimeout(200);
-      const c1Class = (await page.locator('[data-testid="client-tile-c1"]').getAttribute("class")) || "";
-      assert.doesNotMatch(c1Class, /border-l-blue-600/, `${label}: cleared color removes the blue rail`);
-      assert.match(c1Class, /border-\[var\(--adm-border\)\]/, `${label}: cleared color resolves to the canonical neutral rail`);
+      const clearedClass = (await page.locator('[data-testid="client-tile-c1"]').getAttribute("class")) || "";
+      assert.doesNotMatch(clearedClass, /border-l-blue-600/, `${label}: cleared color removes the blue rail`);
+      assert.match(clearedClass, /border-\[var\(--adm-border\)\]/, `${label}: cleared color resolves neutral`);
+      assert.ok(counters.patchAttempts >= 2, `${label}: manager saves issued canonical PATCH requests`);
+    } else {
+      // No mutation affordance at all — not a disabled button, not a tooltip.
+      assert.equal(await colorTriggers.count(), 0, `${label}: no color-edit control is rendered`);
+      assert.equal(await page.locator('[role="dialog"]').count(), 0, `${label}: no color modal entry point`);
+      assert.equal(counters.patchAttempts, 0, `${label}: no color PATCH can be initiated`);
+    }
 
-      // 6. Dosszié and + Új ügy destinations are preserved.
-      const dossier = page.locator('[data-testid="client-tile-c1"] a', { hasText: "Dosszié" }).first();
-      const dossierHref = await dossier.getAttribute("href");
-      assert.equal(dossierHref, "/clients/c1", `${label}: Dosszié destination preserved`);
-      const newCaseHref = await page
-        .locator('[data-testid="client-tile-c1"] a[aria-label*="Új ügy indítása"]')
-        .getAttribute("href");
-      assert.ok(newCaseHref && newCaseHref.includes("/cases?newCase=1&clientId=c1"), `${label}: + Új ügy preserves clientId`);
+    assert.deepEqual(hardErrors, [], `${label}: no page errors`);
+    await page.screenshot({ path: path.join(SHOTS, `clients-${role}-${viewport.width}.png`), fullPage: true });
+    console.log(`PASS ${label}`);
+  } catch (error) {
+    console.error(`FAIL ${label}: ${error.message}`);
+    await page.screenshot({ path: path.join(SHOTS, `clients-${role}-${viewport.width}-failure.png`), fullPage: true }).catch(() => {});
+    throw error;
+  } finally {
+    await context.close();
+  }
+}
 
-      if (viewport.width <= 390) {
-        // Narrow: actions and color control stay reachable and named.
-        assert.equal(await dossier.isVisible(), true, "narrow: Dosszié visible");
-        assert.equal(
-          await page.locator('[data-testid="client-tile-c1"] a[aria-label*="Új ügy indítása"]').isVisible(),
-          true,
-          "narrow: + Új ügy visible",
-        );
-        assert.match(
-          (await blueTrigger.getAttribute("aria-label")) || "",
-          /Ügyfélszín módosítása: Acme Corp Kft\./,
-          "narrow: color control names the client",
-        );
-      }
+async function run() {
+  fs.mkdirSync(SHOTS, { recursive: true });
+  console.log("Starting production server...");
+  await startServer();
+  console.log(`Server ready at ${BASE_URL}`);
 
-      assert.deepEqual(hardErrors, [], `${label}: no page errors`);
+  const browser = await chromium.launch({ headless: true });
+  const desktop = { width: 1440, height: 900 };
+  const narrow = { width: 390, height: 844 };
+  const scenarios = [
+    { role: "ADMIN", viewport: desktop, manager: true },
+    { role: "PARTNER", viewport: desktop, manager: true },
+    { role: "LAWYER", viewport: desktop, manager: false },
+    { role: "TRAINEE", viewport: desktop, manager: false },
+    { role: "LEGAL_ASSISTANT", viewport: desktop, manager: false },
+    { role: "ADMIN", viewport: narrow, manager: true },
+    { role: "LAWYER", viewport: narrow, manager: false },
+  ];
 
-      await page.screenshot({ path: path.join(SHOTS, `clients-${label}-final.png`), fullPage: true });
-      console.log(`PASS ${label}`);
-    } catch (error) {
+  let failures = 0;
+  for (const scenario of scenarios) {
+    try {
+      await runScenario(browser, scenario);
+    } catch {
       failures += 1;
-      console.error(`FAIL ${label}: ${error.message}`);
-      await page.screenshot({ path: path.join(SHOTS, `clients-${label}-failure.png`), fullPage: true }).catch(() => {});
-    } finally {
-      await context.close();
     }
   }
 

@@ -6,8 +6,19 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminPanel } from "@/components/adminiculum/ui";
 import { Button, IconButton, PageHeader, Modal, EmptyState, Alert, DataTable, DataTableHead, DataTableHeaderCell, DataTableBody, DataTableRow, DataTableCell, Badge, QuietLink } from "@/components/ui";
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
-import { createClient, getClients, updateClient, type Client, type CreateClientData, type UpdateClientData } from "@/lib/api";
+import { createClient, getClients, getCurrentUser, updateClient, type Client, type CreateClientData, type UpdateClientData } from "@/lib/api";
 import { getClientColorDefinition, type ClientColorKey } from "@/lib/clientColors";
+
+/**
+ * Mirrors the backend client identity manage gate (`CLIENT_IDENTITY_MANAGER_ROLES`,
+ * an ADMIN / PARTNER allowlist): only these roles may mutate client identity
+ * data. Role is uppercased to match the backend comparison. Fails closed for
+ * unknown or missing roles.
+ */
+function isClientIdentityManager(role?: string | null): boolean {
+  const normalized = String(role || "").toUpperCase();
+  return normalized === "ADMIN" || normalized === "PARTNER";
+}
 
 function houseStyleFillStatus(profile: Client["houseStyleProfile"]): "none" | "partial" | "filled" {
   if (!profile) return "none";
@@ -64,6 +75,7 @@ function ClientsPageContent() {
   const [selectedColorKey, setSelectedColorKey] = useState<ClientColorKey | null>(null);
   const [isSavingColor, setIsSavingColor] = useState(false);
   const [colorSaveError, setColorSaveError] = useState<string | null>(null);
+  const [canManageClientIdentity, setCanManageClientIdentity] = useState(false);
 
   const loadClients = useCallback(async () => {
     setIsLoading(true);
@@ -82,6 +94,25 @@ function ClientsPageContent() {
   useEffect(() => {
     void loadClients();
   }, [loadClients]);
+
+  /**
+   * Direct client-identity color editing is a manager-only capability. Resolve
+   * the canonical role once; if it cannot be resolved, fail closed and omit the
+   * mutation control rather than advertising a capability the user lacks.
+   */
+  useEffect(() => {
+    let active = true;
+    void getCurrentUser()
+      .then((user) => {
+        if (active) setCanManageClientIdentity(isClientIdentityManager(user.role));
+      })
+      .catch(() => {
+        if (active) setCanManageClientIdentity(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filteredClients = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("hu-HU");
@@ -142,6 +173,7 @@ function ClientsPageContent() {
   };
 
   const handleOpenColorModal = (client: Client) => {
+    if (!canManageClientIdentity) return;
     setColorModalClient(client);
     setSelectedColorKey(client.colorKey || null);
     setColorSaveError(null);
@@ -154,7 +186,7 @@ function ClientsPageContent() {
   };
 
   const handleSaveColor = async () => {
-    if (!colorModalClient) return;
+    if (!colorModalClient || !canManageClientIdentity) return;
     setIsSavingColor(true);
     setColorSaveError(null);
     try {
@@ -201,19 +233,21 @@ function ClientsPageContent() {
                 </Badge>
               </div>
             </div>
-            <IconButton
-              size="sm"
-              variant="neutral"
-              aria-label={`Ügyfélszín módosítása: ${client.name} (jelenleg: ${color.label})`}
-              title={`Ügyfélszín: ${color.label}`}
-              onClick={() => handleOpenColorModal(client)}
-              className="shrink-0"
-            >
-              <span
-                aria-hidden="true"
-                className={`h-3.5 w-3.5 rounded-full border border-black/10 ${color.key ? color.accentClass : "bg-white"}`}
-              />
-            </IconButton>
+            {canManageClientIdentity ? (
+              <IconButton
+                size="sm"
+                variant="neutral"
+                aria-label={`Ügyfélszín módosítása: ${client.name} (jelenleg: ${color.label})`}
+                title={`Ügyfélszín: ${color.label}`}
+                onClick={() => handleOpenColorModal(client)}
+                className="shrink-0"
+              >
+                <span
+                  aria-hidden="true"
+                  className={`h-3.5 w-3.5 rounded-full border border-black/10 ${color.key ? color.accentClass : "bg-white"}`}
+                />
+              </IconButton>
+            ) : null}
           </div>
 
           <dl className="space-y-1 text-xs text-[var(--adm-text-muted)]">
