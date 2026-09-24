@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
 import {
   addReviewPoint,
@@ -209,7 +210,7 @@ export function DocumentReviewWorkflowPanel({
                     <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[var(--adm-text-muted)]">
                       {point.annotationId ? <a href={`#annotation-${point.annotationId}`}>Annotáció link</a> : null}
                       {point.comparisonSegmentId ? <a href={`#comparison-segment-${point.comparisonSegmentId}`}>Összehasonlítási szegmens</a> : null}
-                      {point.linkedTaskId ? <span>Feladat: {point.linkedTaskId.slice(0, 8)}…</span> : null}
+                      {point.linkedTaskId ? <Link href={`/tasks?taskId=${encodeURIComponent(point.linkedTaskId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt feladat megnyitása</Link> : null}
                     </div>
                     {!closedPointStatuses.has(point.status) ? <AdminButton className="mt-2" size="xs" variant="neutral" disabled={busy} onClick={() => run(() => updateReviewPoint(review.id, point.id, { status: "RESOLVED", expectedRevision: point.revision }))}>Pont lezárása</AdminButton> : null}
                   </div>

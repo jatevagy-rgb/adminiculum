@@ -11,34 +11,35 @@ test("single shell exposes exactly four primary work modes", () => {
   const source = page();
   const primary = tabs();
 
-  assert.match(primary, /Áttekintés/);
-  assert.match(primary, /Változások/);
-  assert.match(primary, /Megjegyzések/);
-  assert.match(primary, /Jóváhagyás/);
+  assert.match(primary, /DOKUMENTUM/);
+  assert.match(primary, /VÁLTOZÁSOK/);
+  assert.match(primary, /VÉLEMÉNYEZÉS/);
+  assert.match(primary, /VERZIÓK/);
   assert.doesNotMatch(primary, /Elemzés|Ügyfél|Leadás/);
   assert.doesNotMatch(source, /data-testid="primary-document-work-modes"/);
   assert.equal((source.match(/<DocumentWorkspaceTabs/g) || []).length, 1);
-  assert.match(source, /useState<'overview' \| 'changes' \| 'comments' \| 'approval'>\('overview'\)/);
+  assert.match(source, /useState<Record<string, boolean>>\(\{ document: true \}\)/);
 });
 
-test("primary mode navigation is controlled and does not use route or hash links", () => {
+test("primary mode navigation is URL-driven and does not use route or hash links", () => {
   const source = tabs();
-  assert.match(source, /active: "overview" \| "changes" \| "comments" \| "approval"/);
-  assert.match(source, /onChange: \(mode: "overview" \| "changes" \| "comments" \| "approval"\)/);
-  assert.match(source, /onClick=\{\(\) => onChange\(key\)\}/);
+  assert.match(source, /active: WorkspaceMode/);
+  assert.match(source, /onNavigate: \(mode: WorkspaceMode\)/);
+  assert.match(source, /onClick=\{\(\) => onNavigate\(key\)\}/);
   assert.doesNotMatch(source, /next\/link|href=|#[a-z-]+/);
-  assert.match(page(), /<DocumentWorkspaceTabs active=\{contextualTab\} onChange=\{setContextualTab\}/);
+  assert.match(page(), /onNavigate=\{navigateToMode\}/);
+  assert.match(page(), /syncWorkspaceModeToUrl\(mode, "push"\)/);
 });
 
-test("comments owns annotation workflow while approval stays review-only", () => {
+test("comments owns annotation workflow while review stays review-only", () => {
   const source = page();
-  const comments = source.slice(source.indexOf('data-testid="contextual-comments-panel"'));
-  const approval = source.slice(source.indexOf('data-testid="contextual-approval-panel"'), source.indexOf('data-testid="contextual-changes-panel"'));
+  const comments = source.slice(source.indexOf('data-testid="document-mode-comments"'));
+  const review = source.slice(source.indexOf('data-testid="review-mode-panel"'), source.indexOf('data-testid="changes-mode-panel"'));
   assert.match(comments, /comments-annotation-composer/);
   assert.match(comments, /comments-annotation-list/);
   assert.match(comments, /comments-comment-thread/);
   assert.match(comments, /handleCreateAnnotation|handleResolveAnnotation|handleDeleteAnnotation/);
-  assert.doesNotMatch(approval, /handleCreateAnnotation|handleDeleteAnnotation|annotationDraft/);
+  assert.doesNotMatch(review, /handleCreateAnnotation|handleDeleteAnnotation|annotationDraft/);
 });
 
 test("review projection fields feed overview without replacing canonical next action", () => {
@@ -83,10 +84,10 @@ test("center reader remains a sibling of the right shell and left ledger", () =>
   assert.match(source, /data-testid="canonical-left-ledger"/);
   assert.match(source, /data-testid="canonical-center-reading"/);
   assert.match(source, /data-testid="canonical-right-shell"/);
-  assert.match(source, /contextualTab === 'overview'/);
-  assert.match(source, /contextualTab === 'changes'/);
-  assert.match(source, /contextualTab === 'comments'/);
-  assert.match(source, /contextualTab === 'approval'/);
+  assert.match(source, /activeMode === 'document'/);
+  assert.match(source, /activeMode === 'changes'/);
+  assert.match(source, /activeMode === 'review'/);
+  assert.match(source, /activeMode === 'versions'/);
 });
 
 test("approval uses the canonical document review workflow and secondary lifecycle tools", () => {
@@ -98,7 +99,7 @@ test("approval uses the canonical document review workflow and secondary lifecyc
   assert.match(shell, /data-testid="approval-ai-tools"/);
   assert.match(shell, /data-testid="approval-publication-tools"/);
   assert.match(shell, /data-testid="approval-handoff-tools"/);
-  assert.doesNotMatch(shell, /setContextualTab\('(elemzes|ugyfel|leadas)'\)/);
+  assert.doesNotMatch(shell, /syncWorkspaceModeToUrl\('(elemzes|ugyfel|leadas)'/);
 });
 
 test("document and version navigation plus metadata compare remain secondary", () => {
@@ -114,9 +115,9 @@ test("document and version navigation plus metadata compare remain secondary", (
 
 test("tabs component names only the four primary modes", () => {
   const source = tabs();
-  for (const label of ["Áttekintés", "Változások", "Megjegyzések", "Jóváhagyás"]) {
+  for (const label of ["DOKUMENTUM", "VÁLTOZÁSOK", "VÉLEMÉNYEZÉS", "VERZIÓK"]) {
     assert.match(source, new RegExp(label));
   }
-  assert.doesNotMatch(source, /Felülvizsgálat|Verziók|Elemzés|Ügyfél|Leadás/);
-  assert.doesNotMatch(source, /Link|href=|document-(overview|changes|comments|approval)/);
+  assert.doesNotMatch(source, /Felülvizsgálat|Elemzés|Ügyfél|Leadás/);
+  assert.doesNotMatch(source, /Link|href=|contextual-(overview|changes|comments|approval)/);
 });

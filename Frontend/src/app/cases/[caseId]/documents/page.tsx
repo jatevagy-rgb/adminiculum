@@ -88,8 +88,9 @@ import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePane
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
-import { DocumentWorkspaceTabs } from "@/components/documents/workContext/DocumentWorkspaceTabs";
+import { DocumentWorkspaceTabs, type WorkspaceMode } from "@/components/documents/workContext/DocumentWorkspaceTabs";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
+import { CanonicalChangesWorkspace } from "@/components/documents/comparison/CanonicalChangesWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
 import {
   addReviewPoint,
@@ -157,6 +158,36 @@ const QUICK_ANNOTATION_ACTIONS: Array<{ type: DocumentAnnotationType; label: str
   { type: 'DECISION', label: 'Döntés', testId: 'DECISION' },
   { type: 'TASK_NOTE', label: 'Feladatjelölés', testId: 'TASK_NOTE' },
 ];
+
+// Dominant next-action model (absorbed PR #365 concept, URL-mode routing).
+// Backend `reviewProjection.nextAction.code` stays authoritative. The header's
+// single dominant action only routes/focuses the canonical workbench surface;
+// it never performs the review/approval/comparison transition itself.
+const NEXT_ACTION_TARGET_MODE: Record<string, WorkspaceMode> = {
+  RUN_COMPARISON: 'changes',
+  REVIEW_CHANGE_SEGMENTS: 'changes',
+  START_REVIEW: 'review',
+  SUBMIT_FOR_REVIEW: 'review',
+  RESOLVE_BLOCKING_POINTS: 'review',
+  RESOLVE_REVIEW_POINTS: 'review',
+  REVIEW_ON_OTHER_VERSION: 'review',
+  APPROVE_REVIEW: 'review',
+  READY_FOR_CLIENT: 'review',
+  UPLOAD_VERSION: 'versions',
+};
+
+// Codes that are pure status: they render as informative text, never as a
+// dominant forward action button.
+const NEXT_ACTION_STATUS_ONLY_CODES = new Set([
+  'SECURITY_THREAT',
+  'AWAITING_SECURITY_SCAN',
+  'COMPARISON_PROCESSING',
+  'COMPARISON_FAILED',
+  'COMPARISON_UNSUPPORTED',
+  'CHANGES_REQUESTED',
+  'REVIEW_CLOSED',
+  'NO_ACTION_REQUIRED',
+]);
 
 // Normalize title for fallback grouping (same logic as compare page)
 const normalizeTitle = (value: string): string => {
@@ -502,8 +533,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     pageIndex: number;
   } | null>(null);
   const [visualMode, setVisualMode] = useState<Extract<DocumentAnnotationAnchorType, 'PAGE_RECTANGLE' | 'PAGE_ELLIPSE' | 'PAGE_POINT'> | null>(null);
-  const [contextualTab, setContextualTab] = useState<'overview' | 'changes' | 'comments' | 'approval'>('overview');
-  const [visitedContextualTabs, setVisitedContextualTabs] = useState<Record<string, boolean>>({ overview: true });
+  const [visitedModes, setVisitedModes] = useState<Record<string, boolean>>({ document: true });
   const [segmentChangeRequest, setSegmentChangeRequest] = useState<SegmentDto | null>(null);
   const [segmentChangeReason, setSegmentChangeReason] = useState("");
   const [segmentRequestedChange, setSegmentRequestedChange] = useState("");
@@ -511,10 +541,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [publicationPrefill, setPublicationPrefill] = useState<ClientPublicationPrefillDraft | null>(null);
   const [reviewProjection, setReviewProjection] = useState<DocumentReviewProjection | null>(null);
   const reviewProjectionRequestRef = useRef(0);
-
-  useEffect(() => {
-    setVisitedContextualTabs((prev) => (prev[contextualTab] ? prev : { ...prev, [contextualTab]: true }));
-  }, [contextualTab]);
+  // Request-generation guards. Only the latest in-flight version/notes request may
+  // commit state, so a slow response for a previous selection can never overwrite
+  // the current one. Mirrors the reviewProjectionRequestRef pattern.
+  const versionsRequestRef = useRef(0);
+  const notesRequestRef = useRef(0);
 
   const [annotationDraft, setAnnotationDraft] = useState({
     annotationType: 'INTERNAL_NOTE' as DocumentAnnotationType,
@@ -528,6 +559,19 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const pathname = usePathname();
   const requestedDocumentId = searchParams?.get("documentId") ?? null;
   const requestedVersionId = searchParams?.get("versionId") ?? null;
+  const requestedMode = searchParams?.get("mode") ?? null;
+  // Canonical four-mode key. `mode` absent => document. Only known keys bind;
+  // anything else falls back to the default document mode.
+  const activeMode: WorkspaceMode =
+    requestedMode === "changes" || requestedMode === "review" || requestedMode === "versions"
+      ? requestedMode
+      : "document";
+
+  // Keep-alive: once a mode has been visited, its surface stays mounted (hidden)
+  // so unsaved composer/editor state survives mode navigation.
+  useEffect(() => {
+    setVisitedModes((prev) => (prev[activeMode] ? prev : { ...prev, [activeMode]: true }));
+  }, [activeMode]);
   // The requested document identity is authoritative and must survive the first
   // client render, before the router has hydrated search params. Without the live
   // location fallback the workspace lost the deep link and default-selected another
@@ -580,6 +624,26 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const syncDocumentIdToUrl = useCallback((documentId: string | null, history: "push" | "replace") => {
     syncWorkspaceIdentityToUrl({ documentId, versionId: null }, history);
   }, [syncWorkspaceIdentityToUrl]);
+
+  // Mode navigation only rewrites the `mode` key; documentId + versionId are
+  // preserved verbatim by the shared URLSearchParams.
+  const syncWorkspaceModeToUrl = useCallback((mode: WorkspaceMode, history: "push" | "replace") => {
+    const params = new URLSearchParams(searchParams?.toString());
+    if (mode === "document") {
+      params.delete("mode");
+    } else {
+      params.set("mode", mode);
+    }
+    const query = params.toString();
+    const nextUrl = query ? `${pathname}?${query}` : pathname;
+    const currentUrl = searchParams?.toString() ? `${pathname}?${searchParams.toString()}` : pathname;
+    if (nextUrl === currentUrl) return;
+    router[history](nextUrl);
+  }, [pathname, router, searchParams]);
+
+  const navigateToMode = useCallback((mode: WorkspaceMode) => {
+    syncWorkspaceModeToUrl(mode, "push");
+  }, [syncWorkspaceModeToUrl]);
 
   const selectLedgerItem = useCallback((
     item: SelectedLedgerItem,
@@ -834,20 +898,26 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   }, [refreshReviewProjection, selectedUploadedDocument?.id]);
 
   const refreshSelectedDocumentVersions = useCallback(async (documentId: string) => {
+    const requestId = versionsRequestRef.current + 1;
+    versionsRequestRef.current = requestId;
     setIsLoadingVersions(true);
     try {
       const response = await getDocumentVersions(documentId);
+      if (versionsRequestRef.current !== requestId) return;
       setVersions(response.versions);
       setVersionsLoadedForDocumentId(documentId);
       const current = response.versions.find((version) => version.isCurrent) || response.versions[0] || null;
       setSelectedVersionId((existing) => response.versions.some((version) => version.id === existing) ? existing : current?.id || null);
     } catch (err) {
+      if (versionsRequestRef.current !== requestId) return;
       console.error('Document versions load failed:', err);
       setVersions([]);
       setVersionsLoadedForDocumentId(null);
       setSelectedVersionId(null);
     } finally {
-      setIsLoadingVersions(false);
+      if (versionsRequestRef.current === requestId) {
+        setIsLoadingVersions(false);
+      }
     }
   }, []);
 
@@ -855,6 +925,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (selectedUploadedDocument?.id && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY') {
       void refreshSelectedDocumentVersions(selectedUploadedDocument.id);
     } else {
+      // Invalidate any in-flight version request before clearing state, so a late
+      // response for the previous document cannot commit into this selection.
+      versionsRequestRef.current += 1;
+      setIsLoadingVersions(false);
       setVersions([]);
       setSelectedVersionId(null);
       // No version surface for this selection (generated contract, working copy,
@@ -1218,16 +1292,22 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   // Load document notes when a contract is selected
   const loadDocumentNotes = useCallback(async (docId: string) => {
+    const requestId = notesRequestRef.current + 1;
+    notesRequestRef.current = requestId;
     setIsLoadingNotes(true);
     setNoteError(null);
     try {
       const response = await getCommunications({ documentId: docId, type: 'NOTE' });
+      if (notesRequestRef.current !== requestId) return;
       setDocumentNotes(response.communications);
     } catch {
+      if (notesRequestRef.current !== requestId) return;
       setNoteError('A jegyzetek betöltése sikertelen.');
       setDocumentNotes([]);
     } finally {
-      setIsLoadingNotes(false);
+      if (notesRequestRef.current === requestId) {
+        setIsLoadingNotes(false);
+      }
     }
   }, []);
 
@@ -1259,6 +1339,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (selectedGeneratedContract?.id && !selectedUploadedDocument) {
       loadDocumentNotes(selectedGeneratedContract.id);
     } else {
+      // Leaving notes mode: invalidate any in-flight request before clearing, so a
+      // late response for a previous generated document cannot repopulate notes.
+      notesRequestRef.current += 1;
+      setIsLoadingNotes(false);
       setDocumentNotes([]);
     }
   }, [selectedGeneratedContract?.id, selectedUploadedDocument, loadDocumentNotes]);
@@ -1755,6 +1839,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
         ? "Publikálva"
         : "Nincs publikálva";
 
+  // Dominant header next action. Backend projection is authoritative; the header
+  // only routes to the owning surface (or shows status-only text).
+  const nextActionCode = reviewProjection?.nextAction?.code ?? null;
+  const nextActionLabel = reviewProjection?.nextAction?.label ?? null;
+  const nextActionTargetMode: WorkspaceMode | null =
+    nextActionCode && NEXT_ACTION_TARGET_MODE[nextActionCode]
+      ? NEXT_ACTION_TARGET_MODE[nextActionCode]
+      : null;
+  const nextActionIsStatusOnly = nextActionCode ? NEXT_ACTION_STATUS_ONLY_CODES.has(nextActionCode) : false;
+
   useEffect(() => {
     // Annotations are version-scoped, so a selection never survives a version
     // switch. Clearing it first prevents the comments effect from re-firing with
@@ -1972,7 +2066,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   };
 
   useEffect(() => {
-    setVisitedContextualTabs({ [contextualTab]: true });
+    setVisitedModes({ [activeMode]: true });
     resetAnnotationDraft();
     setPublicationPrefill(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1986,7 +2080,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       title,
       explanation,
     });
-    setContextualTab('approval');
+    syncWorkspaceModeToUrl('review', 'push');
   };
 
   const handleCreateAnnotation = async () => {
@@ -2113,7 +2207,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       setSegmentChangeRequest(null);
       setActionResult({ type: 'success', message: 'A változás megbeszélendőként és review pontként rögzítve.' });
       await refreshReviewProjection(selectedUploadedDocument.id);
-      setContextualTab('approval');
+      syncWorkspaceModeToUrl('review', 'push');
     } catch {
       setActionResult({ type: 'error', message: 'A módosítási kérés nem sikerült.' });
     } finally {
@@ -2251,6 +2345,16 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
+                      {nextActionTargetMode && !nextActionIsStatusOnly ? (
+                        <AdminButton
+                          variant="primary"
+                          data-testid="document-next-action"
+                          onClick={() => navigateToMode(nextActionTargetMode)}
+                          disabled={isReviewLoading}
+                        >
+                          {nextActionLabel}
+                        </AdminButton>
+                      ) : null}
                       <AdminButton
                         variant={activeDocument ? "neutral" : "primary"}
                         onClick={() => fileInputRef.current?.click()}
@@ -2277,7 +2381,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       ) : null}
                       {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
                         <AdminButton
-                          variant="gold"
+                          variant="neutral"
                           onClick={() => versionFileInputRef.current?.click()}
                           disabled={isUploadingVersion || isLoadingVersions}
                         >
@@ -2304,9 +2408,15 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       </button>
                     </div>
                   </div>
-                  <div className="border-t border-[var(--adm-border)] px-4 pt-1">
-                    <DocumentWorkspaceTabs active={contextualTab} onChange={setContextualTab} />
-                  </div>
+                    <div className="border-t border-[var(--adm-border)] px-4 pt-1">
+                      <DocumentWorkspaceTabs
+                        active={activeMode}
+                        onNavigate={navigateToMode}
+                        changeCount={reviewProjection?.comparison?.totalSegments ?? null}
+                        reviewAttentionCount={reviewProjection?.review?.blockingPointCount ?? null}
+                        versionCount={versions.length || null}
+                      />
+                    </div>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-4 py-1.5 text-[11px] text-[#3D4842]">
                     <span><b>{totalLedgerDocuments}</b> irat</span>
                     {reviewProjection?.nextAction?.label ? <span><b>Következő teendő:</b> {reviewProjection.nextAction.label}</span> : null}
@@ -2356,10 +2466,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </div>
                 ) : null}
 
-                {/* 2. CANONICAL 3-COLUMN WORKSPACE: LEFT (LEDGER) | CENTER (READING) | RIGHT (CONTEXTUAL SHELL) */}
-                <div className={`grid min-w-0 grid-cols-1 gap-4 ${readingFocus ? "lg:grid-cols-[minmax(0,1fr)]" : leftRailCollapsed ? "lg:grid-cols-[minmax(0,1fr)_290px] xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[230px_minmax(0,1fr)_290px] xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
+                {/* 2. MODE-DRIVEN WORKSPACE: DOKUMENTUM keeps the 3-column shell; the
+                    other three modes collapse the auxiliary rails and give the mode
+                    surface the full width. */}
+                <div className={`grid min-w-0 grid-cols-1 gap-4 ${activeMode !== "document" ? "" : readingFocus ? "lg:grid-cols-[minmax(0,1fr)]" : leftRailCollapsed ? "lg:grid-cols-[minmax(0,1fr)_290px] xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[230px_minmax(0,1fr)_290px] xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
                   {/* CANONICAL LEFT REGION: Document Ledger */}
-                  <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " lg:hidden" : ""}${leftRailCollapsed ? " lg:hidden" : ""}${leftRailOpen ? "" : " max-lg:hidden"}`}>
+                  <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${activeMode !== "document" ? " hidden" : ""}${readingFocus ? " lg:hidden" : ""}${leftRailCollapsed ? " lg:hidden" : ""}${leftRailOpen ? "" : " max-lg:hidden"}`}>
                     <div className="order-2 border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-3 py-2">
                       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Előkészítés</p>
                       {selectedUploadedDocument ? (
@@ -2506,7 +2618,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </aside>
 
                   {/* CANONICAL CENTER REGION: Read-Only Document Reading Surface */}
-                  <main data-testid="canonical-center-reading" className="adm-board-panel min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col">
+                  <main data-testid="canonical-center-reading" className={`adm-board-panel min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${activeMode !== "document" ? " hidden" : ""}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">
@@ -2663,7 +2775,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   {/* CANONICAL RIGHT REGION: Contextual Work-Panel Shell */}
                   <aside data-testid="canonical-right-shell" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${readingFocus ? " lg:hidden" : ""}`}>
                     <div className="flex-1 max-h-[720px] overflow-y-auto p-4">
-                      <div className={contextualTab === 'overview' ? 'space-y-4' : 'hidden'} data-testid="contextual-overview-panel">
+                      <div className={activeMode === 'document' ? 'space-y-4' : 'hidden'} data-testid="document-mode-overview">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Dokumentum áttekintése</p>
                           <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">{activeTitle || "Nincs kiválasztott dokumentum"}</h4>
@@ -2692,7 +2804,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         )}
                       </div>
 
-                      <div className={contextualTab === 'approval' ? 'space-y-4' : 'hidden'} data-testid="contextual-approval-panel">
+                      <div className={activeMode === 'review' ? 'space-y-4' : 'hidden'} data-testid="review-mode-panel">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
                           <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
@@ -2742,38 +2854,39 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
                       </div>
 
-                      {visitedContextualTabs['changes'] ? (
-                        <div className={contextualTab === 'changes' ? 'space-y-4' : 'hidden'} data-testid="contextual-changes-panel">
+                      {visitedModes['changes'] ? (
+                        <div className={activeMode === 'changes' ? 'space-y-4' : 'hidden'} data-testid="changes-mode-panel">
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Gyors jogi review</p>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-brand-green)]">Változások</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Változások</h4>
-                            <p className="mt-1 text-xs text-[#3D4842]">A dokumentum marad a központi olvasó; itt a kiválasztott immutable verziópár review-térképe látható.</p>
+                            <p className="mt-1 text-xs text-[#3D4842]">Az előző → aktuális verziópár kanonikus változásjegyzéke.</p>
                           </div>
-                          {selectedUploadedDocument && versions.length >= 2 ? (
-                            <section data-testid="cmp-workspace-section">
-                              <ComparisonWorkspace
-                              documentId={selectedUploadedDocument.id}
-                              documentTitle={activeTitle || selectedUploadedDocument.fileName || "Dokumentum"}
-                              versions={versions.map((v) => ({ id: v.id, versionNumber: v.versionNumber, isCurrent: v.isCurrent, supported: getFileType(v.originalFileName) === "TXT" }))}
-                              currentVersionNumber={versions.find((v) => v.isCurrent)?.versionNumber ?? null}
-                              onDownload={() => { if (selectedVersion) void handleDownloadVersion(selectedVersion); }}
-                              canManage={caseRecord?.status !== "ARCHIVED"}
-                              onPrepareAiComparison={(baseVersionId, targetVersionId) => {
-                                setAiVersionPair([baseVersionId, targetVersionId]);
-                                setAiPreparationOpen(true);
-                              }}
-                              onRequestSegmentChanges={handleSegmentRequestChanges}
-                              onChanged={() => selectedUploadedDocument ? refreshReviewProjection(selectedUploadedDocument.id) : undefined}
+                          {selectedUploadedDocument ? (
+                            <section data-testid="canonical-changes-section">
+                              <CanonicalChangesWorkspace
+                                documentId={selectedUploadedDocument.id}
+                                documentTitle={activeTitle || selectedUploadedDocument.fileName || "Dokumentum"}
+                                comparisonId={reviewProjection?.comparison?.comparisonId ?? null}
+                                comparisonStatus={reviewProjection?.comparison?.status ?? null}
+                                baseVersionId={reviewProjection?.comparison?.baseVersionId ?? reviewProjection?.previousVersion?.id ?? null}
+                                targetVersionId={reviewProjection?.comparison?.targetVersionId ?? reviewProjection?.currentVersion?.id ?? null}
+                                baseVersionNumber={reviewProjection?.previousVersion?.version ?? null}
+                                targetVersionNumber={reviewProjection?.currentVersion?.version ?? null}
+                                totalSegments={reviewProjection?.comparison?.totalSegments ?? 0}
+                                segmentStates={reviewProjection?.comparison?.segmentStates ?? { unreviewed: 0, accepted: 0, rejected: 0, needsDiscussion: 0, notRelevant: 0 }}
+                                onChanged={() => selectedUploadedDocument ? refreshReviewProjection(selectedUploadedDocument.id) : undefined}
+                                onRequestSegmentChanges={handleSegmentRequestChanges}
+                                canManage={caseRecord?.status !== "ARCHIVED"}
                               />
                             </section>
                           ) : (
-                            <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Legalább két immutable verzió szükséges a változástérképhez.</p>
+                            <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Válassz feltöltött dokumentumot a változások megtekintéséhez.</p>
                           )}
                         </div>
                       ) : null}
 
-                      {visitedContextualTabs['comments'] ? (
-                        <div className={contextualTab === 'comments' ? 'space-y-4' : 'hidden'} data-testid="contextual-comments-panel">
+                      {visitedModes['document'] ? (
+                        <div className={activeMode === 'document' ? 'space-y-4' : 'hidden'} data-testid="document-mode-comments">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Verzióhoz kötött megjegyzések</p>
                             <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Megjegyzések</h4>
@@ -2912,8 +3025,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
                       ) : null}
 
-                      {visitedContextualTabs['approval'] ? (
-                        <details id="approval-ai-tools" data-testid="approval-ai-tools" className={`${contextualTab === 'approval' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
+                      {visitedModes['review'] ? (
+                        <details id="approval-ai-tools" data-testid="approval-ai-tools" className={`${activeMode === 'review' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
                           <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">AI előkészítés és jogi elemzés</summary>
                           <div className="mt-3 space-y-4">
                           <div>
@@ -2947,8 +3060,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </details>
                       ) : null}
 
-                      {visitedContextualTabs['approval'] ? (
-                        <details id="approval-publication-tools" data-testid="approval-publication-tools" className={`${contextualTab === 'approval' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
+                      {visitedModes['review'] ? (
+                        <details id="approval-publication-tools" data-testid="approval-publication-tools" className={`${activeMode === 'review' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
                           <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Ügyfélátadás / közzététel</summary>
                           <div className="mt-3 space-y-4">
                           <div>
@@ -2985,8 +3098,8 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </details>
                       ) : null}
 
-                      {visitedContextualTabs['approval'] ? (
-                        <details id="approval-handoff-tools" data-testid="approval-handoff-tools" className={`${contextualTab === 'approval' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
+                      {visitedModes['review'] ? (
+                        <details id="approval-handoff-tools" data-testid="approval-handoff-tools" className={`${activeMode === 'review' ? '' : 'hidden'} rounded-[10px] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-3`}>
                           <summary className="cursor-pointer text-sm font-semibold text-[var(--adm-text)]">Leadás / ügyvédi átadás</summary>
                           <div className="mt-3 space-y-4">
                           <div>
@@ -3013,6 +3126,50 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           )}
                           </div>
                         </details>
+                      ) : null}
+
+                      {visitedModes['versions'] ? (
+                        <div className={activeMode === 'versions' ? 'space-y-4' : 'hidden'} data-testid="versions-mode-panel">
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-brand-green)]">Verziók</p>
+                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Verziók</h4>
+                            <p className="mt-1 text-xs text-[#3D4842]">A dokumentum változtathatatlan verzióinak időrendi áttekintése.</p>
+                          </div>
+                          {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
+                            <section data-testid="versions-ledger" className="space-y-2">
+                              {isLoadingVersions ? (
+                                <p className="text-xs text-[var(--adm-text-muted)]">Verziótörténet betöltése...</p>
+                              ) : versions.length === 0 ? (
+                                <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Ehhez a dokumentumhoz még nincs verziórekord.</p>
+                              ) : (
+                                <div className="divide-y divide-[var(--adm-border)] rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white">
+                                  {versions.map((version) => {
+                                    const isSelected = selectedVersion?.id === version.id;
+                                    return (
+                                      <div key={version.id} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="min-w-0">
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <span className="text-sm font-semibold text-[var(--adm-text)]">v{version.versionNumber}</span>
+                                            {version.isCurrent ? <AdminBadge tone="green">Aktuális</AdminBadge> : null}
+                                            <AdminBadge tone={version.securityScanStatus === "CLEAN" ? "green" : "gold"}>{scanStatusLabel(version.securityScanStatus)}</AdminBadge>
+                                          </div>
+                                          <p className="mt-0.5 truncate text-[11px] text-[#3D4842]">{version.originalFileName}</p>
+                                          <p className="mt-0.5 text-[10px] text-[var(--adm-text-muted)]">{formatShortDate(version.uploadedAt)} · {version.uploadedBy.name} · {getFileType(version.originalFileName)}</p>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          <AdminButton variant="neutral" size="xs" onClick={() => { selectVersion(version); syncWorkspaceModeToUrl('document', 'push'); }} disabled={isSelected}>{isSelected ? "Megnyitva" : "Megnyitás"}</AdminButton>
+                                          <AdminButton variant="neutral" size="xs" onClick={() => handleDownloadVersion(version)} disabled={isDownloading === version.id || version.securityScanStatus !== 'CLEAN'}>{isDownloading === version.id ? "Letöltés..." : "Letöltés"}</AdminButton>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </section>
+                          ) : (
+                            <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">A verziótörténet feltöltött dokumentumokhoz érhető el.</p>
+                          )}
+                        </div>
                       ) : null}
                     </div>
                   </aside>
@@ -3113,7 +3270,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                               </div>
                               <AdminButton
                                 variant="primary"
-                                onClick={() => setContextualTab('approval')}
+                                onClick={() => syncWorkspaceModeToUrl('review', 'push')}
                                 disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                               >
                                 Megnyitás az AI / elemzés eszköznél
@@ -3178,7 +3335,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   </div>
                                   <AdminButton
                                     variant="primary"
-                                    onClick={() => setContextualTab('approval')}
+                                    onClick={() => syncWorkspaceModeToUrl('review', 'push')}
                                     disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                                   >
                                     Megnyitás a Jóváhagyás felületén
@@ -3221,7 +3378,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                     </div>
                                     <AdminButton
                                       variant="neutral"
-                                      onClick={() => setContextualTab('approval')}
+                                      onClick={() => syncWorkspaceModeToUrl('review', 'push')}
                                       disabled={!selectedUploadedDocument || !canonicalActiveVersion}
                                     >
                                       Ugrás a Jóváhagyás felületre
@@ -3500,6 +3657,28 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             </details>
                           </div>
                         ) : null}
+
+                        {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
+                          <details data-testid="advanced-comparison" className="mt-4 rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-white p-4">
+                            <summary className="cursor-pointer text-xs font-semibold text-[var(--adm-text)]">Haladó összehasonlítás (tetszőleges verziópár)</summary>
+                            <div className="mt-3">
+                              <ComparisonWorkspace
+                                documentId={selectedUploadedDocument.id}
+                                documentTitle={activeTitle || selectedUploadedDocument.fileName || "Dokumentum"}
+                                versions={versions.map((v) => ({ id: v.id, versionNumber: v.versionNumber, isCurrent: v.isCurrent, supported: getFileType(v.originalFileName) === "TXT" }))}
+                                currentVersionNumber={versions.find((v) => v.isCurrent)?.versionNumber ?? null}
+                                onDownload={() => { if (selectedVersion) void handleDownloadVersion(selectedVersion); }}
+                                canManage={caseRecord?.status !== "ARCHIVED"}
+                                onPrepareAiComparison={(baseVersionId, targetVersionId) => {
+                                  setAiVersionPair([baseVersionId, targetVersionId]);
+                                  setAiPreparationOpen(true);
+                                }}
+                                onRequestSegmentChanges={handleSegmentRequestChanges}
+                                onChanged={() => selectedUploadedDocument ? refreshReviewProjection(selectedUploadedDocument.id) : undefined}
+                              />
+                            </div>
+                          </details>
+                        ) : null}
                       </div>
                     ) : null}
                   </>
@@ -3629,7 +3808,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
                         <AdminButton
                           variant="primary"
-                          onClick={() => setContextualTab('approval')}
+                          onClick={() => syncWorkspaceModeToUrl('review', 'push')}
                           disabled={!caseRecord}
                         >
                           Megnyitás a Jóváhagyás felületén

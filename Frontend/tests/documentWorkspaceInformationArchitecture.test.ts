@@ -31,7 +31,7 @@ test("one header: a single object header owns orientation, the count and the pri
   );
 
   // The primary mode controller lives inside the one header, once.
-  assert.match(top, /<DocumentWorkspaceTabs active=\{contextualTab\} onChange=\{setContextualTab\}/);
+  assert.match(top, /onNavigate=\{navigateToMode\}/);
   assert.equal((source.match(/<DocumentWorkspaceTabs/g) || []).length, 1, "Only one primary mode row may render");
 
   // No competing marketing hero or duplicated workspace-focus strip.
@@ -114,7 +114,7 @@ test("right work panel exposes one coherent mode header, not repeated shell head
   assert.ok(shell, "canonical-right-shell must exist");
   // The shell-level duplicated heading block is gone; each mode owns its own heading.
   assert.doesNotMatch(shell, /Kontextus panel/, "The duplicated shell header must not return");
-  for (const mode of ["overview", "changes", "comments", "approval"]) {
-    assert.match(shell, new RegExp(`contextualTab === '${mode}'`));
+  for (const mode of ["document", "changes", "review", "versions"]) {
+    assert.match(shell, new RegExp(`activeMode === '${mode}'`));
   }
 });

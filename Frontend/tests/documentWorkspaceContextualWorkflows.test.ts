@@ -24,7 +24,7 @@ test("Requirement 1: AI and legal analysis remain secondary approval tools", () 
   assert.match(shell, /<LegalAnalysisIntakePanel/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-legal-analysis['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
-  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
+  assert.match(shell, /activeMode === 'review' \? '' : 'hidden'/);
 });
 
 test("Requirement 2: Publication remains a secondary approval tool", () => {
@@ -38,7 +38,7 @@ test("Requirement 2: Publication remains a secondary approval tool", () => {
   assert.match(shell, /viewMode="document-only"/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-publication['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
-  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
+  assert.match(shell, /activeMode === 'review' \? '' : 'hidden'/);
 });
 
 test("Requirement 3: Handoff remains a secondary approval tool", () => {
@@ -52,7 +52,7 @@ test("Requirement 3: Handoff remains a secondary approval tool", () => {
   assert.match(shell, /compact/);
   assert.doesNotMatch(shell, /document\.getElementById\(['"]document-handoff['"]\)/);
   assert.doesNotMatch(shell, /scrollIntoView/);
-  assert.match(shell, /contextualTab === 'approval' \? '' : 'hidden'/);
+  assert.match(shell, /activeMode === 'review' \? '' : 'hidden'/);
 });
 
 test("Requirement 4: Four primary modes switch contextual working content in right shell", () => {
@@ -62,17 +62,17 @@ test("Requirement 4: Four primary modes switch contextual working content in rig
   const shell = shellMatch[0];
 
   // All 4 tabs present with active state switches
-  for (const mode of ["overview", "changes", "comments", "approval"]) {
-    assert.match(shell, new RegExp(`contextualTab === '${mode}'`));
+  for (const mode of ["document", "changes", "review", "versions"]) {
+    assert.match(shell, new RegExp(`activeMode === '${mode}'`));
   }
-  assert.doesNotMatch(shell, /onClick=\{\(\) => setContextualTab\('(elemzes|ugyfel|leadas)'\)\}/);
+  assert.doesNotMatch(shell, /onClick=\{\(\) => syncWorkspaceModeToUrl\('(elemzes|ugyfel|leadas)'/);
 
-  // Comments owns annotation controls; approval remains review-only.
-  const commentsPanel = shell.slice(shell.indexOf('data-testid="contextual-comments-panel"'));
-  const approvalPanel = shell.slice(shell.indexOf('data-testid="contextual-approval-panel"'), shell.indexOf('data-testid="contextual-changes-panel"'));
+  // Comments owns annotation controls; review remains review-only.
+  const commentsPanel = shell.slice(shell.indexOf('data-testid="document-mode-comments"'));
+  const reviewPanel = shell.slice(shell.indexOf('data-testid="review-mode-panel"'), shell.indexOf('data-testid="changes-mode-panel"'));
   assert.match(commentsPanel, /openAnnotationCount|handleCreateAnnotation/);
   assert.match(commentsPanel, /handleResolveAnnotation/);
-  assert.doesNotMatch(approvalPanel, /handleCreateAnnotation|handleDeleteAnnotation|annotationDraft/);
+  assert.doesNotMatch(reviewPanel, /handleCreateAnnotation|handleDeleteAnnotation|annotationDraft/);
 
   // Elemzés mounts LegalAnalysisIntakePanel
   assert.match(shell, /LegalAnalysisIntakePanel/);
@@ -98,7 +98,7 @@ test("Requirement 5: No duplicate legal-analysis editor is mounted simultaneousl
 
   // Lower section #document-legal-analysis is a summary/pointer card with tab switcher
   assert.match(source, /id="document-legal-analysis"/);
-  assert.match(source, /setContextualTab\('approval'\)/);
+  assert.match(source, /syncWorkspaceModeToUrl\('review', 'push'\)/);
 });
 
 test("Requirement 6: No duplicate publication writer is mounted simultaneously", () => {
@@ -157,11 +157,13 @@ test("Requirement 9: Preserved extended tools section remains reachable", () => 
   assert.match(source, /id="document-changes"/);
 });
 
-test("Requirement 10: Comparison workspace remains reachable as secondary tool", () => {
+test("Requirement 10: Canonical changes and advanced comparison remain reachable as secondary tools", () => {
   const source = documentPage();
-  assert.match(source, /data-testid="cmp-workspace-section"/);
+  assert.match(source, /data-testid="canonical-changes-section"/);
+  assert.match(source, /<CanonicalChangesWorkspace/);
+  assert.match(source, /data-testid="advanced-comparison"/);
   assert.match(source, /<ComparisonWorkspace/);
-  assert.match(source, /selectedUploadedDocument && versions\.length >= 2/);
+  assert.match(source, /selectedUploadedDocument && selectedUploadedDocument\.documentType !== 'MODIFIED_WORKING_COPY'/);
 });
 
 test("Requirement 11: Desktop Word remains primary editor and browser edit remains secondary/experimental", () => {
@@ -207,18 +209,18 @@ test("Requirement 16: Keep-alive visited tabs in canonical right shell preserve 
   assert.ok(shellMatch, "Right shell must exist");
   const shell = shellMatch[0];
 
-  // Visited tabs tracking initialized with the overview mode only
-  assert.match(source, /visitedContextualTabs,\s*setVisitedContextualTabs\]\s*=\s*useState<Record<string,\s*boolean>>\(\{\s*overview:\s*true\s*\}\)/);
-  // Visited tabs updated on tab switch
-  assert.match(source, /setVisitedContextualTabs\(\(prev\)\s*=>\s*\(prev\[contextualTab\]\s*\?\s*prev\s*:\s*\{\s*\.\.\.prev,\s*\[contextualTab\]:\s*true\s*\}\)\)/);
-  // Tab panels are kept mounted using 'hidden' class once visited
-  assert.match(shell, /className=\{contextualTab === 'overview' \? 'space-y-4' : 'hidden'\}/);
-  assert.match(shell, /visitedContextualTabs\['approval'\]/);
-  assert.match(shell, /className=\{contextualTab === 'approval' \? 'space-y-4' : 'hidden'\}/);
-  assert.doesNotMatch(shell, /visitedContextualTabs\['(elemzes|ugyfel|leadas)'\]/);
+  // Visited modes tracking initialized with the document mode only
+  assert.match(source, /visitedModes,\s*setVisitedModes\]\s*=\s*useState<Record<string,\s*boolean>>\(\{\s*document:\s*true\s*\}\)/);
+  // Visited modes updated on mode switch
+  assert.match(source, /setVisitedModes\(\(prev\)\s*=>\s*\(prev\[activeMode\]\s*\?\s*prev\s*:\s*\{\s*\.\.\.prev,\s*\[activeMode\]:\s*true\s*\}\)\)/);
+  // Mode panels are kept mounted using 'hidden' class once visited
+  assert.match(shell, /className=\{activeMode === 'document' \? 'space-y-4' : 'hidden'\}/);
+  assert.match(shell, /visitedModes\['review'\]/);
+  assert.match(shell, /className=\{activeMode === 'review' \? 'space-y-4' : 'hidden'\}/);
+  assert.doesNotMatch(shell, /visitedModes\['(elemzes|ugyfel|leadas)'\]/);
 
-  // Document switch resets visited tabs and clears annotation draft
-  assert.match(source, /setVisitedContextualTabs\(\{\s*\[contextualTab\]:\s*true\s*\}\)/);
+  // Document switch resets visited modes and clears annotation draft
+  assert.match(source, /setVisitedModes\(\{\s*\[activeMode\]:\s*true\s*\}\)/);
   assert.match(source, /resetAnnotationDraft\(\)/);
 });
 
@@ -239,10 +241,11 @@ test("Requirement 17: Text selection anchor supports both canonical reader and d
 
 test("Annotation rail keeps comments active and focuses supported text anchors", () => {
   const source = documentPage();
-  const commentsPanel = source.slice(source.indexOf('data-testid="contextual-comments-panel"'));
-  assert.ok(commentsPanel.includes('data-testid="contextual-comments-panel"'), "Comments panel must remain present");
+  const commentsPanel = source.slice(source.indexOf('data-testid="document-mode-comments"'));
+  assert.ok(commentsPanel.includes('data-testid="document-mode-comments"'), "Comments panel must remain present");
   assert.match(commentsPanel, /onClick=\{\(\) => focusAnnotation\(annotation\)\}/);
-  assert.doesNotMatch(commentsPanel, /setContextualTab\('review'\)/);
+  const focusFn = source.slice(source.indexOf("const focusAnnotation"), source.indexOf("};", source.indexOf("const focusAnnotation")));
+  assert.doesNotMatch(focusFn, /syncWorkspaceModeToUrl|navigateToMode/, "Focusing an annotation must not navigate away from document mode");
   assert.match(source, /const focusAnnotation = \(annotation: DocumentAnnotationItem\) =>/);
   assert.match(source, /setSelectedAnnotationId\(annotation\.id\)/);
   assert.match(source, /globalThis\.requestAnimationFrame\?\.\(\(\) =>/);
@@ -326,8 +329,8 @@ test("Requirement 19: Client explanation to publication preparation bridge (A, B
   assert.match(source, /annotation\.clientExplanationDraft\?\.trim\(\)\s*\|\|\s*''/);
   assert.match(source, /setPublicationPrefill\(\{\s*key:\s*`\$\{annotation\.id\}:\$\{Date\.now\(\)\}`,\s*title,\s*explanation,?\s*\}\)/);
 
-  // C. Action switches to contextualTab='ugyfel'
-  assert.match(source, /setContextualTab\('approval'\)/);
+  // C. Action switches to review mode
+  assert.match(source, /syncWorkspaceModeToUrl\('review', 'push'\)/);
 
   // F & G. No createDocumentPublicationDraft or transitionDocumentPublication call in preparation action
   const prepareFnMatch = source.match(/const handlePreparePublicationFromAnnotation\s*=\s*\([\s\S]*?\n  \};/);
