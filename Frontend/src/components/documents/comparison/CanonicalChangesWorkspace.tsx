@@ -13,6 +13,7 @@
  * review, optimistic-conflict handling and lifecycle states stay identical.
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
 import {
   createComparison, retryComparison,
@@ -269,7 +270,7 @@ function CanonicalSegmentDetail({
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <span className="rounded bg-[var(--adm-canvas-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--adm-text-secondary)]">{categoryLabel(segment.category)}</span>
         <span className="rounded bg-[var(--adm-canvas-subtle)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--adm-text-secondary)]">{reviewStateLabel(segment.reviewState)}</span>
-        {segment.linkedTaskId ? <span className="text-[10px] text-[var(--adm-text-secondary)]">Feladat: {segment.linkedTaskId.slice(0, 8)}…</span> : null}
+        {segment.linkedTaskId ? <Link href={`/tasks?taskId=${encodeURIComponent(segment.linkedTaskId)}`} className="text-[10px] font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt feladat megnyitása</Link> : null}
         {segment.linkedAnnotationId ? <span className="text-[10px] text-[var(--adm-text-secondary)]">Annotáció kapcsolva</span> : null}
       </div>
 

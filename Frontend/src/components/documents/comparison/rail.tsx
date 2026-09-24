@@ -7,6 +7,7 @@
  * reload/reapply choice. No AI classification, no client-publication action.
  */
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ChangeTypeBadge } from "./views";
 import {
@@ -73,7 +74,7 @@ export function ChangeReviewRail({
         <p className={`mt-0.5 text-[10px] ${tooLong ? "font-semibold text-[var(--adm-terracotta-700)]" : "text-[var(--adm-text-muted)]"}`}>{rationale.length}/{MAX_RATIONALE}</p>
       </div>
 
-      {segment.linkedTaskId ? <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Kapcsolt feladat: {segment.linkedTaskId}</p> : null}
+      {segment.linkedTaskId ? <p className="mt-1 text-[11px]"><Link href={`/tasks?taskId=${encodeURIComponent(segment.linkedTaskId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt feladat megnyitása</Link></p> : null}
 
       {conflict ? (
         <div role="alert" data-testid="cmp-conflict" className="mt-2 rounded-md border border-[var(--adm-terracotta-700)]/40 bg-[var(--adm-terracotta-100)]/40 px-2.5 py-2">

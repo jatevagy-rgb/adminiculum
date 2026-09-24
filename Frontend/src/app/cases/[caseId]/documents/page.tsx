@@ -541,6 +541,11 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   const [publicationPrefill, setPublicationPrefill] = useState<ClientPublicationPrefillDraft | null>(null);
   const [reviewProjection, setReviewProjection] = useState<DocumentReviewProjection | null>(null);
   const reviewProjectionRequestRef = useRef(0);
+  // Request-generation guards. Only the latest in-flight version/notes request may
+  // commit state, so a slow response for a previous selection can never overwrite
+  // the current one. Mirrors the reviewProjectionRequestRef pattern.
+  const versionsRequestRef = useRef(0);
+  const notesRequestRef = useRef(0);
 
   const [annotationDraft, setAnnotationDraft] = useState({
     annotationType: 'INTERNAL_NOTE' as DocumentAnnotationType,
@@ -893,20 +898,26 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
   }, [refreshReviewProjection, selectedUploadedDocument?.id]);
 
   const refreshSelectedDocumentVersions = useCallback(async (documentId: string) => {
+    const requestId = versionsRequestRef.current + 1;
+    versionsRequestRef.current = requestId;
     setIsLoadingVersions(true);
     try {
       const response = await getDocumentVersions(documentId);
+      if (versionsRequestRef.current !== requestId) return;
       setVersions(response.versions);
       setVersionsLoadedForDocumentId(documentId);
       const current = response.versions.find((version) => version.isCurrent) || response.versions[0] || null;
       setSelectedVersionId((existing) => response.versions.some((version) => version.id === existing) ? existing : current?.id || null);
     } catch (err) {
+      if (versionsRequestRef.current !== requestId) return;
       console.error('Document versions load failed:', err);
       setVersions([]);
       setVersionsLoadedForDocumentId(null);
       setSelectedVersionId(null);
     } finally {
-      setIsLoadingVersions(false);
+      if (versionsRequestRef.current === requestId) {
+        setIsLoadingVersions(false);
+      }
     }
   }, []);
 
@@ -914,6 +925,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (selectedUploadedDocument?.id && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY') {
       void refreshSelectedDocumentVersions(selectedUploadedDocument.id);
     } else {
+      // Invalidate any in-flight version request before clearing state, so a late
+      // response for the previous document cannot commit into this selection.
+      versionsRequestRef.current += 1;
+      setIsLoadingVersions(false);
       setVersions([]);
       setSelectedVersionId(null);
       // No version surface for this selection (generated contract, working copy,
@@ -1277,16 +1292,22 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   // Load document notes when a contract is selected
   const loadDocumentNotes = useCallback(async (docId: string) => {
+    const requestId = notesRequestRef.current + 1;
+    notesRequestRef.current = requestId;
     setIsLoadingNotes(true);
     setNoteError(null);
     try {
       const response = await getCommunications({ documentId: docId, type: 'NOTE' });
+      if (notesRequestRef.current !== requestId) return;
       setDocumentNotes(response.communications);
     } catch {
+      if (notesRequestRef.current !== requestId) return;
       setNoteError('A jegyzetek betöltése sikertelen.');
       setDocumentNotes([]);
     } finally {
-      setIsLoadingNotes(false);
+      if (notesRequestRef.current === requestId) {
+        setIsLoadingNotes(false);
+      }
     }
   }, []);
 
@@ -1318,6 +1339,10 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     if (selectedGeneratedContract?.id && !selectedUploadedDocument) {
       loadDocumentNotes(selectedGeneratedContract.id);
     } else {
+      // Leaving notes mode: invalidate any in-flight request before clearing, so a
+      // late response for a previous generated document cannot repopulate notes.
+      notesRequestRef.current += 1;
+      setIsLoadingNotes(false);
       setDocumentNotes([]);
     }
   }, [selectedGeneratedContract?.id, selectedUploadedDocument, loadDocumentNotes]);
