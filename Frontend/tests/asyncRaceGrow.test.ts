@@ -22,6 +22,18 @@ function makeGrowHarness() {
     '@/components/AuthenticatedApp': { AuthenticatedApp: 'div' },
     '@/components/clients/GrowJourney': { GrowJourney: 'div' },
     '@/components/clients/diagnostic-workbench/GrowDiagnosticWorkbench': { GrowDiagnosticWorkbench: 'div' },
+    '@/components/clients/GrowWorkbench': {
+      GrowWorkbench: 'div',
+      GROW_TABS: [
+        { id: 'attekintes', label: 'Áttekintés' },
+        { id: 'diagnosztika', label: 'Diagnosztika' },
+        { id: 'bizonyitekok', label: 'Bizonyítékok' },
+        { id: 'dontesek', label: 'Döntések' },
+        { id: 'kezdemenyezesek', label: 'Kezdeményezések' },
+        { id: 'eredmenyek', label: 'Eredmények' },
+        { id: 'adatforrasok', label: 'Adatforrások' },
+      ],
+    },
     '@/components/clients/ClientWorkspaceTabs': { ClientWorkspaceTabs: 'div' },
     '@/components/adminiculum/OperationalPrimitives': { SafePanelError: 'div' },
     '@/lib/api': {
@@ -71,7 +83,7 @@ test('CF-004 grow: late client A cannot overwrite route B', async () => {
   await settle();
   tree = ctx.h.render();
   assert.equal(visibleClientName(tree), 'B Ügyfél', 'route B identity committed');
-  assert.ok(textOf(tree).includes('Munkafolyamat'), 'Grow content renders for organization mode');
+  assert.ok(textOf(tree).includes('Áttekintés'), 'Grow content renders for organization mode');
 
   // 4. A resolves LATE and must be discarded.
   ctx.clientA.resolve({ id: 'A', name: 'A Ügyfél' });
