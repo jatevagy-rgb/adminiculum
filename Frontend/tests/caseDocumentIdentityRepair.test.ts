@@ -229,11 +229,12 @@ describe('403 is a terminal authorization denial (defense in depth)', () => {
     for (const source of [documentsPageSource, caseDetailSource]) {
       const gateIndex = source.indexOf('isCaseLookupAuthorizationDenial(error)');
       const fallbackIndex = source.indexOf('findCaseByReference(');
-      const gateValueIndex = source.indexOf('? null', gateIndex);
       assert.ok(gateIndex >= 0, 'the terminal-403 gate must be present');
       assert.ok(fallbackIndex > gateIndex, 'the alias scan must sit after the 403 check');
-      assert.ok(
-        gateValueIndex > gateIndex && gateValueIndex < fallbackIndex,
+      const gateRegion = source.slice(gateIndex, fallbackIndex);
+      assert.match(
+        gateRegion,
+        /\? null|record = null/,
         'a 403 must resolve to null before the alias scan is considered',
       );
     }
@@ -314,7 +315,7 @@ describe('workspace wiring is fail-closed', () => {
   });
 
   it('CaseDetail resolves the canonical id first and fails closed on unknown references', () => {
-    assert.match(caseDetail, /record = await getCaseById\(resolvedParams\.caseId\)/);
+    assert.match(caseDetail, /record = await getCaseById\(requestedCaseId\)/);
     assert.match(caseDetail, /await findCaseByReference\(/);
     assert.doesNotMatch(
       caseDetail,

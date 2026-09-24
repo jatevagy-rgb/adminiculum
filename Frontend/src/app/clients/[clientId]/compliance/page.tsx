@@ -19,6 +19,8 @@ import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
 import { getClient, type Client } from "@/lib/api";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
+import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { useRouteGeneration } from "@/lib/routeGeneration";
 
 const outcomeKeys: ComplianceApplicabilityStatus[] = [
   "APPLIES",
@@ -172,8 +174,11 @@ function WorkspaceAreaRow({ area }: { area: ComplianceWorkspaceArea }) {
 export default function ClientCompliancePage() {
   const params = useParams();
   const clientId = String(params?.clientId || "");
+  const route = useRouteGeneration(clientId);
   const [client, setClient] = useState<Client | null>(null);
+  const [loadedClientId, setLoadedClientId] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [modeError, setModeError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
@@ -187,19 +192,43 @@ export default function ClientCompliancePage() {
 
   useEffect(() => {
     if (!clientId) return;
-    void Promise.all([getClient(clientId), listAdminWorkspaces(clientId).catch(() => ({ items: [] }))]).then(([clientResult, workspaces]) => {
+    const generation = route.generation;
+    // Never let the previous client's identity/mode survive into the new route.
+    setError(false);
+    setModeError(false);
+    setOrganizationMode(false);
+    void (async () => {
+      let clientResult: Client;
+      try {
+        clientResult = await getClient(clientId);
+      } catch {
+        if (route.isActive(generation)) setError(true);
+        return;
+      }
+      if (!route.isActive(generation)) return;
       setClient(clientResult);
-      setOrganizationMode(
-        workspaces.items.some(
-          (item) =>
-            item.status !== "ARCHIVED" &&
-            (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY")
-        )
-      );
-    }).catch(() => setError(true));
-  }, [clientId]);
+      setLoadedClientId(clientId);
+
+      // An organization-mode lookup failure is not a business state: surface it
+      // truthfully instead of rendering the "not organization mode" gate.
+      try {
+        const workspaces = await listAdminWorkspaces(clientId);
+        if (!route.isActive(generation)) return;
+        setOrganizationMode(
+          workspaces.items.some(
+            (item) =>
+              item.status !== "ARCHIVED" &&
+              (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY")
+          )
+        );
+      } catch {
+        if (route.isActive(generation)) setModeError(true);
+      }
+    })();
+  }, [clientId, route]);
 
   const loadCompliance = useCallback(async () => {
+    const generation = route.generation;
     setComplianceLoading(true);
     setComplianceError(null);
     setControlsState({ status: "loading" });
@@ -208,6 +237,7 @@ export default function ClientCompliancePage() {
         complianceOverviewApi.getOverview(clientId),
         complianceOverviewApi.getControls(clientId),
       ]);
+      if (!route.isActive(generation)) return;
       if (overviewResult.status === "fulfilled") {
         setComplianceFindings(overviewResult.value.findings);
       } else {
@@ -219,17 +249,24 @@ export default function ClientCompliancePage() {
         setControlsState({ status: "error", message: "Az intézkedések és bizonyítékok jelenleg nem tölthetők be." });
       }
     } finally {
-      setComplianceLoading(false);
+      if (route.isActive(generation)) setComplianceLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, route]);
 
   const loadWorkspace = useCallback(async () => {
+    const generation = route.generation;
     setWorkspaceLoading(true);
     setWorkspaceError(null);
-    try { setWorkspace(await complianceWorkspaceApi.getWorkspace(clientId)); }
-    catch { setWorkspaceError("A compliance munkaterület adatai jelenleg nem tölthetők be."); }
-    finally { setWorkspaceLoading(false); }
-  }, [clientId]);
+    try {
+      const workspaceResult = await complianceWorkspaceApi.getWorkspace(clientId);
+      if (!route.isActive(generation)) return;
+      setWorkspace(workspaceResult);
+    } catch {
+      if (route.isActive(generation)) setWorkspaceError("A compliance munkaterület adatai jelenleg nem tölthetők be.");
+    } finally {
+      if (route.isActive(generation)) setWorkspaceLoading(false);
+    }
+  }, [clientId, route]);
 
   useEffect(() => { void loadCompliance(); }, [loadCompliance]);
   useEffect(() => { void loadWorkspace(); }, [loadWorkspace]);
@@ -277,9 +314,11 @@ export default function ClientCompliancePage() {
       <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
         <div className="adm-board-container space-y-5">
           {error ? <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800" role="alert">Az ügyfél nem található vagy nincs hozzáférése.</div> : null}
-          {client ? (
+          {client && loadedClientId === clientId ? (
             <>
-              {organizationMode ? (
+              {modeError ? (
+                <SafePanelError detail="A szervezeti ügyfélmód ellenőrzése jelenleg nem elérhető. Ez nem jelenti azt, hogy az ügyfél nem szervezeti módú." />
+              ) : organizationMode ? (
                 <>
                   {/* Client-level shell first, then the module hero, matching Company OS / Grow. */}
                   <ClientWorkspaceTabs clientId={client.id} active="compliance" organizationMode={organizationMode} />

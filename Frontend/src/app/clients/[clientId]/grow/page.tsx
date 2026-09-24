@@ -9,24 +9,46 @@ import { GrowDiagnosticWorkbench } from "@/components/clients/diagnostic-workben
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
 import { getClient, type Client } from "@/lib/api";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
+import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { useRouteGeneration } from "@/lib/routeGeneration";
 
 function GrowPageContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const view = searchParams.get("view");
   const clientId = String(params?.clientId || "");
+  const route = useRouteGeneration(clientId);
   const [client, setClient] = useState<Client | null>(null);
+  const [loadedClientId, setLoadedClientId] = useState<string | null>(null);
   const [error, setError] = useState(false);
+  const [modeError, setModeError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
 
   useEffect(() => {
     if (!clientId) return;
-    void Promise.all([
-      getClient(clientId),
-      listAdminWorkspaces(clientId).catch(() => ({ items: [] })),
-    ])
-      .then(([clientResult, workspaces]) => {
-        setClient(clientResult);
+    const generation = route.generation;
+    // Reset route-scoped state so a previous client can never render under the
+    // new URL while the new identity resolves.
+    setError(false);
+    setModeError(false);
+    setOrganizationMode(false);
+    void (async () => {
+      let clientResult: Client;
+      try {
+        clientResult = await getClient(clientId);
+      } catch {
+        if (route.isActive(generation)) setError(true);
+        return;
+      }
+      if (!route.isActive(generation)) return;
+      setClient(clientResult);
+      setLoadedClientId(clientId);
+
+      // The organization-mode lookup is a distinct, independently failing
+      // module: a failure must never masquerade as a legitimate business gate.
+      try {
+        const workspaces = await listAdminWorkspaces(clientId);
+        if (!route.isActive(generation)) return;
         setOrganizationMode(
           workspaces.items.some(
             (item) =>
@@ -34,9 +56,11 @@ function GrowPageContent() {
               (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY")
           )
         );
-      })
-      .catch(() => setError(true));
-  }, [clientId]);
+      } catch {
+        if (route.isActive(generation)) setModeError(true);
+      }
+    })();
+  }, [clientId, route]);
 
   return (
     <AuthenticatedApp section="clients">
@@ -50,9 +74,11 @@ function GrowPageContent() {
               Az ügyfél nem található vagy nincs hozzáférése.
             </div>
           ) : null}
-          {client ? (
+          {client && loadedClientId === clientId ? (
             <>
-              {organizationMode ? (
+              {modeError ? (
+                <SafePanelError detail="A szervezeti ügyfélmód ellenőrzése jelenleg nem elérhető. Ez nem jelenti azt, hogy az ügyfél nem szervezeti módú." />
+              ) : organizationMode ? (
                 <>
                   <ClientWorkspaceTabs
                     clientId={client.id}

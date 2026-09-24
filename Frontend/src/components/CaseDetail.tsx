@@ -13,6 +13,8 @@ import { CaseWorkspaceOverview } from "@/components/cases/CaseWorkspaceOverview"
 import { CaseMatterDossierPanel } from "@/components/litigation/CaseMatterDossierPanel";
 import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadinessPanel";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
+import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { useRouteGeneration } from "@/lib/routeGeneration";
 
 type CaseDocument = {
   id: string;
@@ -228,6 +230,12 @@ const formatMinutes = (minutes?: number | null): string => {
 export function CaseDetail({ params }: CaseDetailProps) {
   const resolvedParams = use(params);
   const router = useRouter();
+  const route = useRouteGeneration(resolvedParams.caseId);
+  // Case identity is only authoritative for the route it was resolved for.
+  const identityRouteRef = useRef<string | null>(null);
+  const identityRequestRef = useRef<string | null>(null);
+  const [isResolvingCaseIdentity, setIsResolvingCaseIdentity] = useState(true);
+  const [caseDataLoadError, setCaseDataLoadError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<CaseDocument[]>([]);
   const [showAllDocs, setShowAllDocs] = useState(false);
   const [highlightedTimelineId, setHighlightedTimelineId] = useState<string | null>(null);
@@ -298,8 +306,10 @@ export function CaseDetail({ params }: CaseDetailProps) {
   // Assignment: load assigned lawyer and available users
   const loadAssignment = useCallback(async () => {
     if (!caseRecord) return;
+    const generation = route.generation;
     try {
       const caseData = await getCases(1, 200);
+      if (!route.isActive(generation)) return;
       const currentCase = caseData.data.find(c => c.id === caseRecord.id);
       if (currentCase?.assignedLawyer) {
         setAssignedLawyer(currentCase.assignedLawyer);
@@ -307,7 +317,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
     } catch (err) {
       console.error('Failed to load assignment:', err);
     }
-  }, [caseRecord]);
+  }, [caseRecord, route]);
 
   useEffect(() => {
     if (caseRecord?.id) {
@@ -317,16 +327,18 @@ export function CaseDetail({ params }: CaseDetailProps) {
 
   // Load available users for assignment dropdown
   const loadAvailableUsers = useCallback(async () => {
+    const generation = route.generation;
     setIsLoadingUsers(true);
     try {
       const users = await getUsers();
+      if (!route.isActive(generation)) return;
       setAvailableUsers(users);
     } catch (err) {
       console.error('Failed to load users:', err);
     } finally {
-      setIsLoadingUsers(false);
+      if (route.isActive(generation)) setIsLoadingUsers(false);
     }
-  }, []);
+  }, [route]);
 
   const handleAssignLawyer = async (userId: string) => {
     if (!caseRecord?.id) return;
@@ -348,16 +360,18 @@ export function CaseDetail({ params }: CaseDetailProps) {
   // Load collaborators for this case
   const loadCollaborators = useCallback(async () => {
     if (!caseRecord) return;
+    const generation = route.generation;
     setIsLoadingCollaborators(true);
     try {
       const data = await getCaseCollaborators(caseRecord.id);
+      if (!route.isActive(generation)) return;
       setCollaborators(data);
     } catch (err) {
       console.error('Failed to load collaborators:', err);
     } finally {
-      setIsLoadingCollaborators(false);
+      if (route.isActive(generation)) setIsLoadingCollaborators(false);
     }
-  }, [caseRecord]);
+  }, [caseRecord, route]);
 
   useEffect(() => {
     if (caseRecord?.id) {
@@ -527,75 +541,123 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const workplanTasks = tasks.filter((task) => String(task.description || '').includes('Munkaterv / review-útvonal'));
 
   const loadBackendData = useCallback(async () => {
-    try {
-      // Use caseRecord.id (CUID) for fetching related data if available.
-      // effectiveCaseId is the resolved CUID - use it for ALL API calls to avoid
-      // caseId='1' (caseNumber) being passed to endpoints expecting CUIDs.
-      const effectiveCaseId = caseRecord?.id || resolvedParams.caseId;
+    const generation = route.generation;
+    const requestedCaseId = resolvedParams.caseId;
+    const identityIsForRoute = Boolean(caseRecord) && identityRouteRef.current === requestedCaseId;
 
-      // Skip data-fetching API calls until we have a resolved CUID.
-      // If caseRecord is null and resolvedParams.caseId is a caseNumber (not a CUID),
-      // those calls would 404. The caseList lookup below populates caseRecord, and
-      // the useEffect will re-trigger once caseRecord changes.
-      if (!caseRecord) {
-        // Resolve the canonical case identity directly by id first, so case
-        // controls do not depend on the case appearing in an arbitrary
-        // pagination window of GET /cases. The legacy case-number alias is
-        // resolved by an EXACT reference scan across pages — never a positional
-        // or "first case" fallback. If nothing matches the requested reference,
-        // fail closed and never display a different case.
-        let record: CaseListItem | null = null;
-        try {
-          record = await getCaseById(resolvedParams.caseId);
-        } catch (error) {
-          // An explicit 403 is a known authorization denial, not identity-format
-          // ambiguity: terminate here and fail closed. Only a non-403 failure
-          // (404 on a legacy caseNumber, transport/5xx) may fall back to the
-          // paginated exact-reference alias scan.
-          record = isCaseLookupAuthorizationDenial(error)
-            ? null
-            : await findCaseByReference(
-                resolvedParams.caseId,
-                (page, limit) => getCases(page, limit),
-              ).catch(() => null);
-        }
-        if (record) {
-          setCaseRecord({
-            id: record.id,
-            caseNumber: record.caseNumber,
-            title: record.title ?? null,
-            clientName: record.clientName ?? null,
-            matterType: record.matterType ?? null,
-            status: record.status,
-            clientRole: (record as any).clientRole ?? null,
-            deadline: record.deadline ?? null,
-          });
-        }
-        return;
+    if (!identityIsForRoute) {
+      // Never let a previous route's identity or data be authoritative for the
+      // new route: drop it before resolving the new route's canonical identity.
+      if (caseRecord || identityRouteRef.current !== requestedCaseId) {
+        setCaseRecord(null);
+        setGeneratedContracts([]);
+        setTimelineEvents([]);
+        setCommunications([]);
+        setDocuments([]);
+        setWorkflowSummary(null);
+        setWorkItems(null);
+        setCaseActivity(null);
+        setCaseAgenda(null);
+        setCaseResponsibility(null);
+        setWorkflowSummaryError(null);
+        setWorkItemsError(null);
+        setCaseDataLoadError(null);
+        setAssignedLawyer(null);
+        setCollaborators([]);
+        setTasks([]);
+        setWorkflowGraph(null);
+        setWorkflowHistory([]);
       }
 
-      setIsLoadingWorkflowSummary(true);
-      setWorkflowSummaryError(null);
-      setWorkItemsError(null);
+      // A resolution for this route is already in flight: never duplicate it.
+      if (identityRequestRef.current === requestedCaseId) return;
+      identityRequestRef.current = requestedCaseId;
+      identityRouteRef.current = null;
+      setIsResolvingCaseIdentity(true);
+
+      // Resolve the canonical case identity directly by id first, so case
+      // controls do not depend on the case appearing in an arbitrary
+      // pagination window of GET /cases. The legacy case-number alias is
+      // resolved by an EXACT reference scan across pages — never a positional
+      // or "first case" fallback. If nothing matches the requested reference,
+      // fail closed and never display a different case.
+      let record: CaseListItem | null = null;
+      try {
+        record = await getCaseById(requestedCaseId);
+      } catch (error) {
+        // An explicit 403 is a known authorization denial, not identity-format
+        // ambiguity: terminate here and fail closed. Only a non-403 failure
+        // (404 on a legacy caseNumber, transport/5xx) may fall back to the
+        // paginated exact-reference alias scan.
+        if (isCaseLookupAuthorizationDenial(error)) {
+          record = null;
+        } else {
+          try {
+            record = await findCaseByReference(
+              requestedCaseId,
+              (page, limit) => getCases(page, limit),
+            );
+          } catch {
+            record = null;
+          }
+        }
+      }
+
+      if (!route.isActive(generation)) return;
+      setIsResolvingCaseIdentity(false);
+      if (record) {
+        identityRouteRef.current = requestedCaseId;
+        setCaseRecord({
+          id: record.id,
+          caseNumber: record.caseNumber,
+          title: record.title ?? null,
+          clientName: record.clientName ?? null,
+          matterType: record.matterType ?? null,
+          status: record.status,
+          clientRole: (record as any).clientRole ?? null,
+          deadline: record.deadline ?? null,
+        });
+      } else {
+        identityRequestRef.current = null;
+      }
+      return;
+    }
+
+    // Use caseRecord.id (CUID) for fetching related data. At this point the
+    // record is proven to belong to the active route, so it is authoritative.
+    const effectiveCaseId = caseRecord ? caseRecord.id : requestedCaseId;
+
+    setIsLoadingWorkflowSummary(true);
+    setWorkflowSummaryError(null);
+    setWorkItemsError(null);
+    setCaseDataLoadError(null);
+    const failedModules: string[] = [];
+    try {
       const [contracts, timeline, backendDocuments, communicationsResponse, workflowSummaryResponse, workItemsResponse, caseActivityResponse, caseAgendaResponse, caseResponsibilityResponse] = await Promise.all([
-        getCaseContracts(effectiveCaseId).catch(() => []),
-        getCaseTimeline(effectiveCaseId).catch(() => []),
-        getCaseDocuments(effectiveCaseId).catch(() => []),
-        getCommunications({ caseId: effectiveCaseId, limit: 50 }).catch(() => ({ communications: [], pagination: { total: 0, limit: 50, offset: 0 } })),
+        getCaseContracts(effectiveCaseId).catch(() => { failedModules.push('szerződések'); return []; }),
+        getCaseTimeline(effectiveCaseId).catch(() => { failedModules.push('ügytörténet'); return []; }),
+        getCaseDocuments(effectiveCaseId).catch(() => { failedModules.push('dokumentumok'); return []; }),
+        getCommunications({ caseId: effectiveCaseId, limit: 50 }).catch(() => {
+          failedModules.push('kommunikáció');
+          return { communications: [], pagination: { total: 0, limit: 50, offset: 0 } };
+        }),
         getCaseWorkflowSummary(effectiveCaseId).catch((error) => {
           console.error('Failed to load workflow summary:', error);
-          setWorkflowSummaryError('A workflow összefoglaló most nem érhető el.');
+          failedModules.push('workflow összefoglaló');
+          if (route.isActive(generation)) setWorkflowSummaryError('A workflow összefoglaló most nem érhető el.');
           return null;
         }),
         getCaseWorkItems(effectiveCaseId).catch((error) => {
           console.error('Failed to load case work items:', error);
-          setWorkItemsError('Az ügy munkalistája most nem érhető el.');
+          failedModules.push('munkalista');
+          if (route.isActive(generation)) setWorkItemsError('Az ügy munkalistája most nem érhető el.');
           return null;
         }),
-        getCaseActivity(effectiveCaseId).catch(() => null),
-        getWorkflowAgenda({ scope: 'CASE', caseId: effectiveCaseId, status: 'OPEN', limit: 20 }).catch(() => null),
-        getCaseResponsibility(effectiveCaseId).catch(() => null),
+        getCaseActivity(effectiveCaseId).catch(() => { failedModules.push('aktivitás'); return null; }),
+        getWorkflowAgenda({ scope: 'CASE', caseId: effectiveCaseId, status: 'OPEN', limit: 20 }).catch(() => { failedModules.push('határidő-agenda'); return null; }),
+        getCaseResponsibility(effectiveCaseId).catch(() => { failedModules.push('felelősségek'); return null; }),
       ]);
+      if (!route.isActive(generation)) return;
       setGeneratedContracts(contracts);
       setTimelineEvents(timeline);
       setCommunications(communicationsResponse.communications || []);
@@ -605,19 +667,27 @@ export function CaseDetail({ params }: CaseDetailProps) {
       setCaseAgenda(caseAgendaResponse);
       setCaseResponsibility(caseResponsibilityResponse);
       setDocuments(backendDocuments.map(mapDocumentItemToCaseDocument));
+      setCaseDataLoadError(
+        failedModules.length
+          ? `Az ügy egyes adatmoduljai nem töltődtek be: ${failedModules.join(', ')}.`
+          : null,
+      );
     } catch (err) {
+      if (!route.isActive(generation)) return;
       console.error('Failed to load backend data:', err);
       setWorkflowSummaryError('Az ügyadatok betöltése közben hiba történt.');
     } finally {
-      setIsLoadingWorkflowSummary(false);
+      if (route.isActive(generation)) setIsLoadingWorkflowSummary(false);
     }
-  }, [resolvedParams.caseId, caseRecord]);
+  }, [resolvedParams.caseId, caseRecord, route]);
 
   const refreshCaseDocuments = useCallback(async () => {
     if (!caseRecord?.id) return;
+    const generation = route.generation;
     const docs = await getCaseDocuments(caseRecord.id);
+    if (!route.isActive(generation)) return;
     setDocuments(docs.map(mapDocumentItemToCaseDocument));
-  }, [caseRecord?.id]);
+  }, [caseRecord?.id, route]);
 
   const toEpoch = (value?: string | null): number => {
     if (!value) return 0;
@@ -1046,16 +1116,18 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const loadTasks = useCallback(async () => {
     // Wait for caseRecord to be resolved before making API calls with CUID
     if (!caseRecord) return;
+    const generation = route.generation;
     setIsLoadingTasks(true);
     try {
       const fetchedTasks = await getCaseTasks(caseRecord.id);
+      if (!route.isActive(generation)) return;
       setTasks(fetchedTasks);
     } catch (err) {
       console.error('Failed to load tasks:', err);
     } finally {
-      setIsLoadingTasks(false);
+      if (route.isActive(generation)) setIsLoadingTasks(false);
     }
-  }, [caseRecord]);
+  }, [caseRecord, route]);
 
   useEffect(() => {
     if (caseRecord?.id) {
@@ -1067,16 +1139,18 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const loadWorkflow = useCallback(async () => {
     // Wait for caseRecord to be resolved before making API calls with CUID
     if (!caseRecord) return;
+    const generation = route.generation;
     setIsLoadingWorkflow(true);
     try {
       const graph = await getWorkflowGraph(caseRecord.id);
+      if (!route.isActive(generation)) return;
       setWorkflowGraph(graph);
     } catch (err) {
       console.error('Failed to load workflow graph:', err);
     } finally {
-      setIsLoadingWorkflow(false);
+      if (route.isActive(generation)) setIsLoadingWorkflow(false);
     }
-  }, [caseRecord]);
+  }, [caseRecord, route]);
 
   useEffect(() => {
     if (caseRecord?.id) {
@@ -1087,16 +1161,18 @@ export function CaseDetail({ params }: CaseDetailProps) {
   // Workflow history: includes transition comments/reasons
   const loadWorkflowHistory = useCallback(async () => {
     if (!caseRecord) return;
+    const generation = route.generation;
     setIsLoadingWorkflowHistory(true);
     try {
       const history = await getCaseWorkflowHistory(caseRecord.id);
+      if (!route.isActive(generation)) return;
       setWorkflowHistory(history);
     } catch (err) {
       console.error('Failed to load workflow history:', err);
     } finally {
-      setIsLoadingWorkflowHistory(false);
+      if (route.isActive(generation)) setIsLoadingWorkflowHistory(false);
     }
-  }, [caseRecord]);
+  }, [caseRecord, route]);
 
   useEffect(() => {
     if (caseRecord?.id) {
@@ -1389,6 +1465,14 @@ export function CaseDetail({ params }: CaseDetailProps) {
     : workflowSummary?.nextDeadline?.urgency === 'TODAY'
       ? 'border-[#f9c74f] bg-[var(--adm-sand-100)] text-[var(--adm-ochre-500)]'
       : 'border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]';
+
+  if (!caseRecord && isResolvingCaseIdentity) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <p className="text-sm text-[var(--adm-text-muted)]">Ügy betöltése…</p>
+      </div>
+    );
+  }
 
   if (!caseRecord && timelineEvents.length === 0 && generatedContracts.length === 0 && documents.length === 0) {
     return (
@@ -2265,6 +2349,11 @@ export function CaseDetail({ params }: CaseDetailProps) {
           responsibleName={assignedLawyer?.name}
           deadline={caseRecord?.deadline}
         />
+        {caseDataLoadError ? (
+          <div role="alert" data-testid="case-data-partial-error">
+            <SafePanelError detail={caseDataLoadError} onRetry={() => void loadBackendData()} />
+          </div>
+        ) : null}
         <div className="space-y-6 px-4 py-5 lg:px-6">
         <CaseWorkspaceOverview caseId={canonicalCaseId} />
         <section aria-label="Ügyfélportál kérések" className="rounded-xl border border-[var(--adm-border)] bg-white p-4 shadow-[0_10px_28px_rgba(0,42,35,0.035)]">

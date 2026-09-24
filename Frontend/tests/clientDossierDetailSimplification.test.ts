@@ -99,7 +99,7 @@ test("organization-only tool stays organization-gated; individual empty corporat
 });
 
 test("client scoping and working data fetches are unchanged", () => {
-  assert.match(source, /getCases\(1, 100, undefined, clientId\)/);
+  assert.match(source, /getCases\(page, CLIENT_CASE_PAGE_SIZE, undefined, clientId\)/);
   assert.match(source, /listAdminWorkspaces\(clientId\)/);
   assert.match(source, /getCaseDocuments\(item\.id\)/);
   assert.match(source, /getClientCommunicationSummary\(clientId, 15\)/);

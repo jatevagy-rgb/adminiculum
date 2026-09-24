@@ -63,8 +63,8 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.ok(!pageSrc.includes("caseTotalCount"), "caseTotalCount must be gone from the dossier page");
     assert.ok(!pageSrc.includes("isCasesComplete"), "isCasesComplete must be gone from the dossier page");
     assert.ok(!pageSrc.includes("Aktív ügy"), "the Aktív ügy KPI cell must be gone");
-    // The working client-scoped case fetch itself is preserved.
-    assert.match(pageSrc, /getCases\(1, 100, undefined, clientId\)/);
+    // The working client-scoped case fetch itself is preserved (now bounded-paged).
+    assert.match(pageSrc, /getCases\(page, CLIENT_CASE_PAGE_SIZE, undefined, clientId\)/);
   });
 
   it("6. ClientControlCenter retains its own completeness-aware active-case rendering (component source preserved)", () => {
@@ -92,7 +92,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     );
     assert.match(
       pageSrc,
-      /portalWorkspaces\.items\.some\(\s*\(item\)\s*=>\s*item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\),?\s*\)/,
+      /portalWorkspaces\.some\(\s*\(item\)\s*=>\s*item\.status !== "ARCHIVED" &&\s*\(item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"\),?\s*\)/,
       "pageSrc must derive hasOrganizationCapability using items.some with status !== ARCHIVED and ORGANIZATION || CASE_RELAY",
     );
     assert.match(
