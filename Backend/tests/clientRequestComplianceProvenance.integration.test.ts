@@ -61,7 +61,7 @@ d('customer request Compliance provenance (PostgreSQL)', () => {
     await db.clientPortalWorkspaceMembership.deleteMany({ where: { id: membershipId } });
     await db.clientPortalWorkspace.deleteMany({ where: { id: workspaceId } });
     await db.clientPortalIdentity.deleteMany({ where: { id: identityId } });
-    await db.clientControl.deleteMany({ where: { clientId: { in: [clientId, otherClientId] } });
+    await db.clientControl.deleteMany({ where: { clientId: { in: [clientId, otherClientId] } } });
     await db.controlDefinition.deleteMany({ where: { key: { startsWith: `PROV_CTRL_${suffix}` } } });
     await db.assessmentFinding.deleteMany({ where: { clientId: { in: [clientId, otherClientId] } } });
     await db.requirementApplicability.deleteMany({ where: { clientId } });
