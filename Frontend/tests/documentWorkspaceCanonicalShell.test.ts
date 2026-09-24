@@ -75,7 +75,7 @@ test("Canonical center region provides read-only extracted text preview with Wor
   const center = centerMatch[0];
 
   assert.match(center, /Kanonikus olvasófelület/);
-  assert.match(center, /Read-only előnézet · Word a szerkesztő/);
+  assert.match(center, /Csak olvasható előnézet · Word a szerkesztő/);
   assert.match(center, /data-testid="version-preview-document-text"/);
   assert.match(center, /hasVersionScopedText\s*&&\s*selectedVersionBelongsToActiveDocument/);
   assert.match(center, /versionTextPlan === 'DOCUMENT_TEXT'/);

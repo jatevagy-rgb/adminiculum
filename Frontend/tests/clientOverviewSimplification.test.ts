@@ -24,5 +24,5 @@ test("client overview tiles stay identity-first and dossier-linked", () => {
 test("editing and house style remain reachable from the canonical dossier", () => {
   const dossier = fs.readFileSync(path.join(process.cwd(), "src/app/clients/[clientId]/page.tsx"), "utf8");
   assert.match(dossier, /Ügyfél szerkesztése/);
-  assert.match(dossier, /House Style|House style/);
+  assert.match(dossier, /Dokumentumstílus/);
 });

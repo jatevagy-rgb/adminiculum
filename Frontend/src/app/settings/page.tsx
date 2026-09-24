@@ -52,7 +52,7 @@ function SettingsPageContent() {
           <nav className="mt-4 space-y-2 text-xs">
             {[
               ["#appearance", "Megjelenés"],
-              ["#house-style", "House style"],
+              ["#house-style", "Dokumentumstílus"],
               ["#security", "Adatkezelés"],
             ].map(([href, label]) => (
               <a key={href} href={href} className={`block rounded border ${p.borderLight} ${p.bgSection} px-3 py-2 ${p.text} hover:border-[var(--adm-ochre-500)]`}>
@@ -149,9 +149,9 @@ function SettingsPageContent() {
           </section>
 
           <section id="house-style" className={`${p.bgCard} border ${p.border} rounded-[var(--adm-radius-lg)] p-5 scroll-mt-6`}>
-            <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Ügyfélprofil / house style alapértelmezések</h2>
+            <h2 className={`text-lg font-semibold ${p.textDark} mb-2`}>Ügyfélprofil / dokumentumstílus alapértelmezések</h2>
             <p className={`text-xs ${p.textMuted} mb-4`}>
-              Az ügyfél-specifikus house style profilok az Ügyfelek oldalon kezelhetők. Ezek adják majd a külső promptok dokumentumstílus-, fejléc-, kétnyelvűségi és formázási kontextusát.
+              Az ügyfél-specifikus dokumentumstílus-profilok az Ügyfelek oldalon kezelhetők. Ezek adják majd a külső promptok dokumentumstílus-, fejléc-, kétnyelvűségi és formázási kontextusát.
             </p>
             <Link href="/clients" className="inline-block px-3 py-2 text-xs border border-[var(--adm-ochre-500)] text-[#8B6B3A] bg-[var(--adm-surface)] hover:bg-[#f5ecd8]">
               Ügyfelek megnyitása

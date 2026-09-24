@@ -157,7 +157,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
     assert.match(pageSrc, /További eszközök/);
     assert.ok(!pageSrc.includes("Gyors műveletek"), "the removed Gyors műveletek card must not return");
     assert.match(controlCenterSrc, /Ügyfélportál/);
-    assert.match(pageSrc, /House style/);
+    assert.match(pageSrc, /Dokumentumstílus/);
     assert.match(pageSrc, /ClientHouseStylePanel/);
     assert.match(pageSrc, /ClientCompanyFoundation/);
     assert.match(pageSrc, /ClientContractLibrary/);
@@ -292,7 +292,7 @@ describe("Client Control Center Semantic Truthfulness & Information Architecture
 
   it("22. Gyors műveletek contains actions only, without duplicate Új ügy or Ügyfél kommunikációk", () => {
     const qmStart = pageSrc.indexOf("Gyors műveletek");
-    const qmEnd = pageSrc.indexOf("House style");
+    const qmEnd = pageSrc.indexOf("Dokumentumstílus");
     assert.ok(qmStart === -1, "Duplicate Gyors műveletek section is removed from dossier");
     const qmContent = qmStart === -1 ? "" : pageSrc.slice(qmStart, qmEnd === -1 ? undefined : qmEnd);
 
