@@ -5,8 +5,9 @@ import path from "node:path";
 
 /**
  * The lightweight "Gyors működési jelzés / Hol érdemes javítani?" customer signal
- * is an OVERVIEW capability. It must render exactly once, on the Áttekintés tab,
- * and must NOT be duplicated inside the formal "Felmérések / diagnózisok" journey.
+ * is an INPUT CHANNEL. In the canonical customer Grow IA it belongs to the
+ * "Teendők" tab — together with the formal assessments — and must NOT dominate
+ * the "Áttekintés" tab.
  *
  * This is a presentation/IA boundary: the signal and the formal assessments are
  * different capabilities and neither may be removed.
@@ -35,52 +36,58 @@ function tabBlock(src: string, tab: string, nextTab?: string): string {
   return src.slice(start, end);
 }
 
-const overview = () => tabBlock(read(VIEW), "attekintes", "felmeresek");
-const assessments = () => tabBlock(read(VIEW), "felmeresek", "folyamatok");
+const overview = () => tabBlock(read(VIEW), "attekintes", "teendok");
+const teendok = () => tabBlock(read(VIEW), "teendok", "fejlesztesi-iranyok");
 
-describe("Grow quick operational signal renders exactly once, on Overview", () => {
-  it("1-3. Overview renders exactly one quick-signal section, title and question", () => {
-    const block = overview();
-    assert.equal(count(block, FEELTARAS), 1, "Overview must render exactly one grow-feltaras-section");
-    assert.equal(count(block, QUICK_TITLE), 1, "Overview must render the quick-signal title exactly once");
-    assert.equal(count(block, QUICK_QUESTION), 1, "Overview must render the quick-signal question exactly once");
-    assert.equal(count(block, NOT_FORMAL), 1, "Overview must state this is not a formal assessment");
+describe("Grow survey/input channel lives in Teendők and never leads Áttekintés", () => {
+  it("1-3. Teendők renders exactly one quick-signal section, title and question", () => {
+    const block = teendok();
+    assert.equal(count(block, FEELTARAS), 1, "Teendők must render exactly one grow-feltaras-section");
+    assert.equal(count(block, QUICK_TITLE), 1, "Teendők must render the quick-signal title exactly once");
+    assert.equal(count(block, QUICK_QUESTION), 1, "Teendők must render the quick-signal question exactly once");
+    assert.equal(count(block, NOT_FORMAL), 1, "Teendők must state this is not a formal assessment");
   });
 
-  it("4. Overview keeps the category checkboxes", () => {
+  it("Overview must not lead with the survey/assessment input channel", () => {
     const block = overview();
+    assert.equal(count(block, FEELTARAS), 0, "Overview must not render grow-feltaras-section");
+    assert.equal(count(block, QUICK_TITLE), 0);
+    assert.equal(count(block, QUICK_QUESTION), 0);
+  });
+
+  it("4. Teendők keeps the category checkboxes", () => {
+    const block = teendok();
     assert.match(block, /SURVEY_CATEGORY_LABELS_HU/);
     assert.match(block, /type="checkbox"/);
     assert.match(block, /setSelectedCategories/);
   });
 
-  it("5. Overview keeps the optional process selector when processes exist", () => {
-    const block = overview();
+  it("5. Teendők keeps the optional process selector when processes exist", () => {
+    const block = teendok();
     assert.match(block, /processes\.length > 0/);
     assert.match(block, /id="survey-process"/);
     assert.match(block, /value=\{selectedProcessId\}/);
     assert.match(block, /setSelectedProcessId/);
   });
 
-  it("6. Overview keeps the free-text input", () => {
-    const block = overview();
+  it("6. Teendők keeps the free-text input", () => {
+    const block = teendok();
     assert.match(block, /id="survey-freetext"/);
     assert.match(block, /value=\{freeText\}/);
     assert.match(block, /setFreeText/);
   });
 
-  it("7. Overview keeps the submit wiring", () => {
-    const block = overview();
+  it("7. Teendők keeps the submit wiring", () => {
+    const block = teendok();
     assert.match(block, /onSubmit=\{handleSurveySubmit\}/);
     assert.match(block, /Visszajelzés beküldése/);
-    // The survey API call stays in the component handler, shared by the Overview form.
     assert.match(read(VIEW), /submitPortalGrowSurvey/);
     assert.match(read(VIEW), /const handleSurveySubmit = async/);
   });
 
-  it("8-9. Overview keeps the submitted feedback history and the not-a-formal-assessment note", () => {
-    const block = overview();
-    assert.ok(block.includes(SURVEY_HISTORY), "survey history heading must remain on Overview");
+  it("8-9. Teendők keeps the submitted feedback history and the not-a-formal-assessment note", () => {
+    const block = teendok();
+    assert.ok(block.includes(SURVEY_HISTORY), "survey history heading must remain in Teendők");
     assert.match(block, /\{surveys\.length > 0 \?/);
     assert.ok(block.includes(NOT_FORMAL), "the informal-signal distinction must remain");
   });
@@ -91,7 +98,6 @@ describe("Grow quick operational signal renders exactly once, on Overview", () =
     assert.equal(count(src, QUICK_TITLE), 1);
     assert.equal(count(src, QUICK_QUESTION), 1);
     assert.equal(count(src, SURVEY_HISTORY), 1);
-    // The removed duplicate also carried duplicate DOM ids.
     assert.equal(count(src, 'id="survey-process-felmeres"'), 0);
     assert.equal(count(src, 'id="survey-freetext-felmeres"'), 0);
     assert.equal(count(src, 'id="survey-process"'), 1);
@@ -99,24 +105,11 @@ describe("Grow quick operational signal renders exactly once, on Overview", () =
   });
 });
 
-describe("Formal assessments tab no longer duplicates the quick signal", () => {
-  it("14-15. Felmérések renders no quick-signal form at all", () => {
-    const block = assessments();
-    assert.equal(count(block, FEELTARAS), 0, "Felmérések must not render a grow-feltaras-section");
-    assert.equal(count(block, QUICK_TITLE), 0, "Felmérések must not render the quick-signal title");
-    assert.equal(count(block, QUICK_QUESTION), 0, "Felmérések must not render the quick-signal question");
-    assert.equal(count(block, NOT_FORMAL), 0);
-    assert.equal(count(block, SURVEY_HISTORY), 0);
-    assert.equal(count(block, "SURVEY_CATEGORY_LABELS_HU"), 0);
-    // No survey submission or free-text form is left behind either.
-    assert.equal(count(block, "submitPortalGrowSurvey"), 0);
-    assert.equal(count(block, 'id="survey-freetext"'), 0);
-  });
-
-  it("10-13. Felmérések keeps the full formal assessment journey", () => {
-    const block = assessments();
+describe("Teendők keeps the full formal assessment journey", () => {
+  it("10-15. Teendők renders the assessment catalogue, runner and result states", () => {
+    const block = teendok();
     assert.match(block, /data-testid="grow-assessments-section"/);
-    assert.match(block, /Cégfelmérések \/ diagnózisok/);
+    assert.match(block, /Felmérési csomagok/);
     assert.match(block, /data-testid="grow-assessment-catalogue"/);
     assert.match(block, /data-testid="grow-assessment-runner"/);
     assert.match(block, /data-testid="grow-assessment-result"/);
@@ -132,14 +125,14 @@ describe("Formal assessments tab no longer duplicates the quick signal", () => {
 describe("Other Grow tabs and URL state remain intact", () => {
   const src = () => read(VIEW);
 
-  it("17. Folyamatok preserved", () => {
-    const block = tabBlock(src(), "folyamatok", "lehetosegek");
+  it("17. Működés preserved", () => {
+    const block = tabBlock(src(), "mukodes");
     assert.match(block, /Feltérképezett üzleti folyamatok/);
     assert.match(block, /grow-process-flow-/);
   });
 
-  it("18. Lehetőségek preserved (published-only projection)", () => {
-    const block = tabBlock(src(), "lehetosegek", "kezdemenyezesek");
+  it("18. Fejlesztési irányok preserved (published-only projection)", () => {
+    const block = tabBlock(src(), "fejlesztesi-iranyok", "kezdemenyezesek");
     assert.match(block, /data-testid="grow-opportunities-section"/);
     assert.match(block, /data-testid="grow-opportunity-item"/);
     assert.match(block, /data-testid="grow-opportunity-detail"/);
@@ -152,7 +145,7 @@ describe("Other Grow tabs and URL state remain intact", () => {
   });
 
   it("20. Eredmények preserved", () => {
-    const block = tabBlock(src(), "eredmenyek");
+    const block = tabBlock(src(), "eredmenyek", "mukodes");
     assert.match(block, /measuredOutcomes/);
     assert.match(block, /estimatedOutcomes/);
   });

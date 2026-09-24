@@ -23,7 +23,7 @@ test('catalogue: customer Grow view renders the assessment catalogue section', (
   const src = read(VIEW);
   assert.match(src, /data-testid="grow-assessments-section"/);
   assert.match(src, /data-testid="grow-assessment-catalogue"/);
-  assert.match(src, /Cégfelmérések \/ diagnózisok/);
+  assert.match(src, /Felmérési csomagok/);
   assert.match(src, /listPortalGrowAssessments/);
 });
 
