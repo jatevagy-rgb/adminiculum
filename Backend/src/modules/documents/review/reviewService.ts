@@ -197,7 +197,30 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
     const openPoints = await tx.reviewPoint.count({ where: { ...activeRoundFilter, status: { in: UNRESOLVED_POINT_STATUSES as any } } });
     const openBlockingPoints = await tx.reviewPoint.count({ where: { ...activeRoundFilter, severity: 'BLOCKING', status: { in: UNRESOLVED_POINT_STATUSES as any } } });
     const latest = await latestVersion(tx, review.documentId);
-    const currentVersion = await tx.documentVersion.findUniqueOrThrow({ where: { id: review.currentRound!.reviewVersionId }, select: { id: true, version: true } });
+    const currentVersion = await tx.documentVersion.findUniqueOrThrow({ where: { id: review.currentRound!.reviewVersionId }, select: { id: true, version: true, previousVersionId: true } });
+    // Unresolved change segments in the exact comparison relevant to the version
+    // under review (previous -> reviewed version). This is a distinct dimension
+    // from review points: a structured comparison can hold UNREVIEWED /
+    // NEEDS_DISCUSSION / REJECTED segments with no corresponding blocking review
+    // point, and human comparison review must still be resolved before approval.
+    let unresolvedSegments = 0;
+    if (action === 'APPROVE') {
+      const previousVersion = currentVersion.previousVersionId
+        ? await tx.documentVersion.findUnique({ where: { id: currentVersion.previousVersionId }, select: { id: true } })
+        : await tx.documentVersion.findFirst({ where: { documentId: review.documentId, version: { lt: currentVersion.version } }, orderBy: { version: 'desc' }, select: { id: true } });
+      if (previousVersion) {
+        const comparison = await tx.documentComparison.findFirst({
+          where: { documentId: review.documentId, baseVersionId: previousVersion.id, targetVersionId: currentVersion.id },
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (comparison) {
+          unresolvedSegments = await tx.documentChangeSegment.count({
+            where: { comparisonId: comparison.id, reviewState: { in: ['UNREVIEWED', 'NEEDS_DISCUSSION', 'REJECTED'] } },
+          });
+        }
+      }
+    }
     const requestedResubmitVersion = action === 'RESUBMIT' && input.versionId
       ? await tx.documentVersion.findFirst({ where: { id: input.versionId, documentId: review.documentId }, select: { id: true, version: true } })
       : null;
@@ -208,6 +231,7 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
       reviewerHasAccess,
       openPoints,
       openBlockingPoints,
+      unresolvedSegments,
       hasRationale: Boolean(safeText(input.safeRationale)),
       reviewVersionId: currentVersion.id,
       reviewVersionNumber: currentVersion.version,
@@ -217,7 +241,7 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
       resubmitVersionId: resubmitVersion?.id,
       resubmitVersionNumber: resubmitVersion?.version,
     });
-    if (!verdict.allowed) throw new DocumentReviewWorkflowError(verdict.reason === 'BLOCKING_POINTS_OPEN' ? 409 : 400, verdict.reason || 'TRANSITION_BLOCKED', 'Review transition is not allowed.');
+    if (!verdict.allowed) throw new DocumentReviewWorkflowError(verdict.reason === 'BLOCKING_POINTS_OPEN' || verdict.reason === 'COMPARISON_SEGMENTS_UNRESOLVED' ? 409 : 400, verdict.reason || 'TRANSITION_BLOCKED', 'Review transition is not allowed.');
 
     let roundId = review.currentRoundId;
     let versionId = currentVersion.id;
