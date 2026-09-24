@@ -192,7 +192,9 @@ function ClientDetailContent() {
         casesFailure === "failed"
           ? "A kapcsolt ügyek listája jelenleg nem elérhető."
           : casesFailure === "partial"
-            ? "A kapcsolt ügyek listája csak részlegesen töltődött be."
+            ? total > relatedCases.length
+              ? `A kapcsolt ügyek listája csak részlegesen töltődött be. Az első ${relatedCases.length} ügy látható a(z) ${total} közül.`
+              : "A kapcsolt ügyek listája csak részlegesen töltődött be."
             : null,
       );
       setDocuments(mergedDocuments.slice(0, 12));

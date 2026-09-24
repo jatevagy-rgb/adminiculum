@@ -120,6 +120,23 @@ export function createRaceHarness(
         });
       }
     },
+    // The commit-gated route guard advances its generation in a layout effect,
+    // which React runs before passive effects. The harness queues both kinds in
+    // declaration order, so a hook declared before the loader still runs first.
+    useLayoutEffect(fn: any, deps: any[]) {
+      const i = cursor++;
+      if (!slots[i] || !equal(slots[i].deps, deps)) {
+        try {
+          slots[i]?.cleanup?.();
+        } catch {
+          /* production cleanup errors are not part of the race under test */
+        }
+        slots[i] = { deps };
+        effects.push(() => {
+          slots[i].cleanup = fn();
+        });
+      }
+    },
     // React 19 `use(params)`: tests pass an already-resolved param object.
     use(value: any) {
       return value;
@@ -230,6 +247,13 @@ export function createRaceHarness(
     },
     pendingEffects() {
       return effects.length;
+    },
+    // Model an ABANDONED render: React rendered the component speculatively and
+    // discarded it, so the effects it queued never run. Clears the pending effect
+    // queue without executing it.
+    discardPendingEffects() {
+      const dropped = effects.splice(0);
+      return dropped.length;
     },
     slots() {
       return slots;
