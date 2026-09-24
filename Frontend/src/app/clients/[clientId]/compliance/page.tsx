@@ -17,8 +17,9 @@ import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceCo
 import { ComplianceDocumentsSection } from "@/components/clients/compliance/ComplianceDocumentsSection";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
-import { getClient, type Client } from "@/lib/api";
+import { getClient, getCases, type Client, type CaseListItem } from "@/lib/api";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
+import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
 
 const outcomeKeys: ComplianceApplicabilityStatus[] = [
   "APPLIES",
@@ -169,12 +170,24 @@ function WorkspaceAreaRow({ area }: { area: ComplianceWorkspaceArea }) {
   );
 }
 
+type ComplianceView = "status" | "requirements" | "documents" | "controls" | "findings";
+
+const complianceViewLabels: Record<ComplianceView, string> = {
+  status: "Állapotkép",
+  requirements: "Követelmények",
+  documents: "Dokumentumok",
+  controls: "Bizonyítékok és kontrollok",
+  findings: "Megállapítások és intézkedések",
+};
+
 export default function ClientCompliancePage() {
   const params = useParams();
   const clientId = String(params?.clientId || "");
   const [client, setClient] = useState<Client | null>(null);
   const [error, setError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
+  const [view, setView] = useState<ComplianceView>("status");
+  const [clientCases, setClientCases] = useState<CaseListItem[]>([]);
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
   const [complianceLoading, setComplianceLoading] = useState(true);
@@ -187,8 +200,13 @@ export default function ClientCompliancePage() {
 
   useEffect(() => {
     if (!clientId) return;
-    void Promise.all([getClient(clientId), listAdminWorkspaces(clientId).catch(() => ({ items: [] }))]).then(([clientResult, workspaces]) => {
+    void Promise.all([
+      getClient(clientId),
+      listAdminWorkspaces(clientId).catch(() => ({ items: [] })),
+      getCases(1, 100, undefined, clientId).catch(() => ({ data: [] as CaseListItem[], pagination: { page: 1, limit: 100, total: 0 } })),
+    ]).then(([clientResult, workspaces, casesPage]) => {
       setClient(clientResult);
+      setClientCases(casesPage.data ?? []);
       setOrganizationMode(
         workspaces.items.some(
           (item) =>
@@ -272,6 +290,16 @@ export default function ClientCompliancePage() {
     return [...seen.entries()].map(([key, title]) => ({ key, title }));
   }, [workspace]);
 
+  const attentionFindings = useMemo(
+    () => complianceFindings.filter((finding) => finding.applicabilityStatus !== "DOES_NOT_APPLY"),
+    [complianceFindings],
+  );
+
+  const tabClass = (active: boolean) =>
+    `rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] ${
+      active ? "bg-[var(--adm-green-800)] text-white" : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
+    }`;
+
   return (
     <AuthenticatedApp section="clients">
       <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
@@ -305,123 +333,166 @@ export default function ClientCompliancePage() {
                         >
                           Vállalati működés →
                         </Link>
+                        <ClientRequestComposer cases={clientCases} clients={client ? [client] : []} />
                       </div>
                     </div>
                   </header>
 
-                  {/* 1. Állapotkép */}
-                  <Section title="Állapotkép">
-                    {workspaceLoading ? <p className="text-sm text-[var(--adm-text-muted)]">Értékelési állapot betöltése…</p> : null}
-                    {!workspaceLoading && workspaceError ? (
-                      <div role="alert" className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                        {workspaceError}
-                        <button type="button" onClick={() => { void loadWorkspace(); }} className="ml-3 rounded border border-[var(--adm-border)] bg-white px-3 py-1 text-xs text-[var(--adm-text)]">Újrapróbálás</button>
-                      </div>
-                    ) : null}
-                    {!workspaceLoading && !workspaceError && workspace ? (
-                      <>
-                        {workspace.summary.enrollment === "NOT_ENROLLED" ? (
-                          <p className="mb-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">
-                            Az ügyfél jelenleg nincs bekapcsolva a megfelelőségi értékelésbe.
-                          </p>
+                  {/* Professional state-first workspace: peer tabs, not one endless scroll. */}
+                  <div className="flex flex-wrap items-center gap-1 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-1" role="tablist" aria-label="Megfelelési nézetek">
+                    {(Object.keys(complianceViewLabels) as ComplianceView[]).map((key) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="tab"
+                        aria-selected={view === key}
+                        className={tabClass(view === key)}
+                        onClick={() => setView(key)}
+                      >
+                        {complianceViewLabels[key]}
+                      </button>
+                    ))}
+                  </div>
+
+                  {view === "status" ? (
+                    <>
+                      <Section title="Állapotkép">
+                        {workspaceLoading ? <p className="text-sm text-[var(--adm-text-muted)]">Értékelési állapot betöltése…</p> : null}
+                        {!workspaceLoading && workspaceError ? (
+                          <div role="alert" className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                            {workspaceError}
+                            <button type="button" onClick={() => { void loadWorkspace(); }} className="ml-3 rounded border border-[var(--adm-border)] bg-white px-3 py-1 text-xs text-[var(--adm-text)]">Újrapróbálás</button>
+                          </div>
                         ) : null}
-                        {workspace.summary.enrollment === "ENROLLED" ? (
-                          <div className="mb-3">
-                            <button
-                              type="button"
-                              disabled={reconciling}
-                              onClick={() => { void handleReconcile(); }}
-                              className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-2 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-60"
-                            >
-                              {reconciling
-                                ? "Értékelés folyamatban…"
-                                : workspace.summary.evaluatedCount === 0
-                                  ? "Első megfelelőségi értékelés indítása"
-                                  : "Értékelés frissítése"}
-                            </button>
-                            {reconcileError ? (
-                              <span role="alert" className="ml-3 text-xs text-red-800">{reconcileError}</span>
+                        {!workspaceLoading && !workspaceError && workspace ? (
+                          <>
+                            {workspace.summary.enrollment === "NOT_ENROLLED" ? (
+                              <p className="mb-3 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-sm text-[var(--adm-text-muted)]">
+                                Az ügyfél jelenleg nincs bekapcsolva a megfelelőségi értékelésbe.
+                              </p>
                             ) : null}
-                          </div>
-                        ) : null}
-                        {workspace.summary.evaluatedCount === 0 ? (
-                          <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-                            <p className="text-sm text-[var(--adm-text)]">Ehhez az ügyfélhez még nem készült megfelelőségi értékelés.</p>
-                            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A vállalati profilban rögzített adatok alapján a rendszer automatikusan értékeli a releváns követelményeket.</p>
-                          </div>
-                        ) : (
-                          <div className="flex flex-wrap gap-2">
-                            <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
-                              Értékelt terület: <b>{workspace.summary.evaluatedCount}</b>
-                            </span>
-                            {outcomeKeys.map((key) => {
-                              const count = Number(workspace.summary[summaryCountKey[key]] || 0);
-                              if (!count) return null;
-                              return (
-                                <span key={key} className={`rounded border px-3 py-2 text-xs ${complianceOutcomeClass[key]}`}>
-                                  {complianceOutcomeLabels[key]}: <b>{count}</b>
+                            {workspace.summary.enrollment === "ENROLLED" ? (
+                              <div className="mb-3">
+                                <button
+                                  type="button"
+                                  disabled={reconciling}
+                                  onClick={() => { void handleReconcile(); }}
+                                  className="rounded border border-[var(--adm-green-800)] bg-white px-3 py-2 text-xs font-medium text-[var(--adm-green-800)] disabled:opacity-60"
+                                >
+                                  {reconciling
+                                    ? "Értékelés folyamatban…"
+                                    : workspace.summary.evaluatedCount === 0
+                                      ? "Első megfelelőségi értékelés indítása"
+                                      : "Értékelés frissítése"}
+                                </button>
+                                {reconcileError ? (
+                                  <span role="alert" className="ml-3 text-xs text-red-800">{reconcileError}</span>
+                                ) : null}
+                              </div>
+                            ) : null}
+                            {workspace.summary.evaluatedCount === 0 ? (
+                              <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+                                <p className="text-sm text-[var(--adm-text)]">Ehhez az ügyfélhez még nem készült megfelelőségi értékelés.</p>
+                                <p className="mt-1 text-xs text-[var(--adm-text-muted)]">A vállalati profilban rögzített adatok alapján a rendszer automatikusan értékeli a releváns követelményeket.</p>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-2">
+                                <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                                  Értékelt terület: <b>{workspace.summary.evaluatedCount}</b>
                                 </span>
-                              );
-                            })}
-                            <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
-                              Nyitott megállapítás: <b>{workspace.summary.openFindings}</b>
-                            </span>
-                            <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
-                              Javaslat alatt: <b>{workspace.summary.openProposals}</b>
-                            </span>
-                          </div>
-                        )}
-                        {workspace.evaluatedAt ? (
-                          <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Utolsó értékelés: {formatDate(workspace.evaluatedAt)}</p>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </Section>
-
-                  {/* 2. Megfelelőségi területek */}
-                  {!workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
-                    <Section title="Megfelelőségi területek">
-                      <ul className="space-y-2">
-                        {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} />)}
-                      </ul>
-                    </Section>
-                  ) : null}
-
-                  {/* Compliance dokumentumok */}
-                  <Section title="Compliance dokumentumok">
-                    <ComplianceDocumentsSection clientId={client.id} requirements={requirementOptions} />
-                  </Section>
-
-                  {/* 3. Tisztázandó / hiányzó információ */}
-                  {!workspaceLoading && !workspaceError && missingInformation.length ? (
-                    <Section title="Tisztázandó / hiányzó információ">
-                      <ul className="space-y-2">
-                        {missingInformation.map((item) => (
-                          <li key={item.factKey} className="rounded border border-[#DCCCA6] bg-[#FFF9E9] p-3 text-sm text-[#735D16]">
-                            {item.genericOnly
-                              ? `${item.label}: a követelmény értékeléséhez további adat szükséges.`
-                              : `${item.label || "További vállalati adat"}: az értékeléshez hiányzik.`}
-                            {!item.genericOnly && item.profileAnswerable ? (
-                              <span className="ml-1 text-xs">A vállalati profil meglévő kérdés-felületén adható meg.</span>
+                                {outcomeKeys.map((key) => {
+                                  const count = Number(workspace.summary[summaryCountKey[key]] || 0);
+                                  if (!count) return null;
+                                  return (
+                                    <span key={key} className={`rounded border px-3 py-2 text-xs ${complianceOutcomeClass[key]}`}>
+                                      {complianceOutcomeLabels[key]}: <b>{count}</b>
+                                    </span>
+                                  );
+                                })}
+                                <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                                  Nyitott megállapítás: <b>{workspace.summary.openFindings}</b>
+                                </span>
+                                <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                                  Javaslat alatt: <b>{workspace.summary.openProposals}</b>
+                                </span>
+                              </div>
+                            )}
+                            {workspace.evaluatedAt ? (
+                              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Utolsó értékelés: {formatDate(workspace.evaluatedAt)}</p>
                             ) : null}
-                          </li>
-                        ))}
-                      </ul>
+                          </>
+                        ) : null}
+                      </Section>
+
+                      {!workspaceLoading && !workspaceError && missingInformation.length ? (
+                        <Section title="Tisztázandó / hiányzó információ">
+                          <ul className="space-y-2">
+                            {missingInformation.map((item) => (
+                              <li key={item.factKey} className="rounded border border-[#DCCCA6] bg-[#FFF9E9] p-3 text-sm text-[#735D16]">
+                                {item.genericOnly
+                                  ? `${item.label}: a követelmény értékeléséhez további adat szükséges.`
+                                  : `${item.label || "További vállalati adat"}: az értékeléshez hiányzik.`}
+                                {!item.genericOnly && item.profileAnswerable ? (
+                                  <span className="ml-1 text-xs">A vállalati profil meglévő kérdés-felületén adható meg.</span>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </Section>
+                      ) : null}
+
+                      <Section title="Megállapítások">
+                        <ComplianceOverviewPanel
+                          title="Megállapítások"
+                          findings={attentionFindings}
+                          loading={complianceLoading}
+                          error={complianceError}
+                          onRetry={() => { void loadCompliance(); }}
+                        />
+                      </Section>
+                    </>
+                  ) : null}
+
+                  {view === "requirements" ? (
+                    !workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
+                      <Section title="Megfelelőségi területek">
+                        <ul className="space-y-2">
+                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} />)}
+                        </ul>
+                      </Section>
+                    ) : (
+                      <Section title="Megfelelőségi területek">
+                        {workspaceLoading ? <p className="text-sm text-[var(--adm-text-muted)]">Megfelelőségi területek betöltése…</p> : null}
+                        {!workspaceLoading && workspaceError ? <p role="alert" className="text-sm text-red-800">{workspaceError}</p> : null}
+                        {!workspaceLoading && !workspaceError && (!workspace || !workspace.areas.length) ? (
+                          <p className="text-sm text-[var(--adm-text-muted)]">Még nincs rögzített megfelelőségi terület.</p>
+                        ) : null}
+                      </Section>
+                    )
+                  ) : null}
+
+                  {view === "documents" ? (
+                    <Section title="Compliance dokumentumok">
+                      <ComplianceDocumentsSection clientId={client.id} requirements={requirementOptions} />
                     </Section>
                   ) : null}
 
-                  {/* 4. Megállapítások */}
-                  <ComplianceOverviewPanel
-                    title="Megállapítások"
-                    findings={complianceFindings}
-                    loading={complianceLoading}
-                    error={complianceError}
-                    onRetry={() => { void loadCompliance(); }}
-                  />
-                  <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} clientId={clientId} onChanged={() => { void loadCompliance(); }} />
+                  {view === "controls" ? (
+                    <ComplianceControlsSection state={controlsState} onRetry={() => { void loadCompliance(); }} clientId={clientId} onChanged={() => { void loadCompliance(); }} />
+                  ) : null}
 
-                  {/* 5. Javasolt műveletek */}
-                  <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />
+                  {view === "findings" ? (
+                    <>
+                      <ComplianceOverviewPanel
+                        title="Megállapítások"
+                        findings={complianceFindings}
+                        loading={complianceLoading}
+                        error={complianceError}
+                        onRetry={() => { void loadCompliance(); }}
+                      />
+                      <ComplianceProposalPanel clientId={client.id} findings={complianceFindings} />
+                    </>
+                  ) : null}
                 </>
               ) : (
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Ez a compliance felület csak szervezeti ügyfélmódban érhető el.</div>
