@@ -308,7 +308,11 @@ function GrowOverviewTab({
   const pendingReview = opportunities.filter((o) => o.status === "PENDING_REVIEW");
   const needsMoreDataDiagnoses = diagnoses.filter((d) => d.status === "NEEDS_MORE_DATA").length;
   const openDiagnoses = diagnoses.filter((d) => d.status === "OPEN" || d.status === "CONFIRMED").length;
-  const activeInitiatives = initiatives.filter((i) => ["PLANNED", "ACTIVE", "ON_HOLD"].includes(i.status));
+  // Summary-strip metric follows the audit query: active = status=ACTIVE only.
+  const activeInitiativesCount = initiatives.filter((i) => i.status === "ACTIVE").length;
+  // The execution table below lists in-flight work (planned/active/on-hold) with
+  // its explicit status, so the strip and the table do not conflate semantics.
+  const inFlightInitiatives = initiatives.filter((i) => ["PLANNED", "ACTIVE", "ON_HOLD"].includes(i.status));
   const nextMilestone = [...milestones]
     .filter((m) => m.status === "PLANNED" && (m.targetDate || m.milestoneDate))
     .sort((a, b) => (a.targetDate ?? a.milestoneDate ?? "").localeCompare(b.targetDate ?? b.milestoneDate ?? ""))[0];
@@ -319,7 +323,7 @@ function GrowOverviewTab({
     { label: "Nyitott diagnózis", value: String(openDiagnoses), tone: "neutral" },
     { label: "Több adatot igénylő", value: String(needsMoreDataDiagnoses), tone: needsMoreDataDiagnoses > 0 ? "amber" : "neutral" },
     { label: "Emberi döntésre vár", value: String(pendingReview.length), tone: pendingReview.length > 0 ? "amber" : "neutral" },
-    { label: "Aktív kezdeményezés", value: String(activeInitiatives.length), tone: "green" },
+    { label: "Aktív kezdeményezés", value: String(activeInitiativesCount), tone: "green" },
     {
       label: "Következő mérföldkő",
       value: nextMilestone ? formatDate(nextMilestone.targetDate ?? nextMilestone.milestoneDate) : "—",
@@ -382,9 +386,15 @@ function GrowOverviewTab({
         />
       ) : null}
 
-      <GrowDiagnosticWorklist diagnoses={diagnoses} recommendations={recommendations} clientId={clientId} />
+      <GrowDiagnosticWorklist
+        diagnoses={diagnoses}
+        recommendations={recommendations}
+        opportunities={opportunities}
+        initiatives={initiatives}
+        clientId={clientId}
+      />
       <GrowDecisionQueue clientId={clientId} pending={pendingReview} recommendations={recommendations} />
-      <GrowActiveInitiatives initiatives={activeInitiatives} milestones={milestones} />
+      <GrowActiveInitiatives initiatives={inFlightInitiatives} milestones={milestones} />
       <GrowRecentResults outcomes={outcomes} />
     </div>
   );
@@ -395,10 +405,14 @@ function GrowOverviewTab({
 function GrowDiagnosticWorklist({
   diagnoses,
   recommendations,
+  opportunities,
+  initiatives,
   clientId,
 }: {
   diagnoses: Array<{ id: string; title: string; summary: string | null; status: string; problemDomain: { id: string; key: string; name: string } | null; businessProcess: { id: string; name: string } | null; evidence: Array<{ id: string; title: string; verificationStatus: string; strength: string }> }>;
   recommendations: Array<{ id: string; title: string; direction: string; status: string; sufficiency: string; diagnosisId: string | null; domain: { key: string; name: string } | null; businessProcess: { id: string; name: string } | null }>;
+  opportunities: GrowOpportunityItem[];
+  initiatives: DevelopmentInitiative[];
   clientId: string;
 }) {
   if (diagnoses.length === 0) {
@@ -422,7 +436,7 @@ function GrowDiagnosticWorklist({
     <AdminPanel data-testid="grow-diagnostic-worklist">
       <AdminSectionHeader
         title="Diagnosztikai munkaasztal"
-        subtitle="Diagnózis, kapcsolt folyamat, bizonyíték-állapot és emberi döntés egy munkalistában."
+        subtitle="Diagnózis, kapcsolt folyamat, bizonyíték-állapot, emberi döntés és javasolt irány egy munkalistában."
       />
       <div className="overflow-x-auto">
         <table className="w-full text-left text-[12px]">
@@ -430,32 +444,59 @@ function GrowDiagnosticWorklist({
             <tr className="border-b border-[var(--adm-border)] text-[10px] uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">
               <th className="px-4 py-2 font-semibold">Diagnózis</th>
               <th className="px-4 py-2 font-semibold">Folyamat</th>
-              <th className="px-4 py-2 font-semibold">Státusz</th>
               <th className="px-4 py-2 font-semibold">Bizonyíték</th>
-              <th className="px-4 py-2 font-semibold">Javaslat</th>
+              <th className="px-4 py-2 font-semibold">Javasolt irány</th>
+              <th className="px-4 py-2 font-semibold">Emberi döntés</th>
+              <th className="px-4 py-2 font-semibold">Kezdeményezés</th>
               <th className="px-4 py-2 font-semibold">Következő lépés</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--adm-border)]">
             {diagnoses.map((d) => {
               const rec = recommendations.find((r) => r.diagnosisId === d.id);
+              // An accepted recommendation's initiative is linked through the
+              // canonical opportunity.developmentInitiativeId chain.
+              const recOpportunity = opportunities.find((o) => o.id === rec?.id);
+              const linkedInitiativeId = recOpportunity?.opportunity?.developmentInitiativeId ?? null;
+              const linkedInitiative = linkedInitiativeId
+                ? initiatives.find((i) => i.id === linkedInitiativeId) ?? null
+                : null;
               const status = diagnosisStatusPill(d.status);
               return (
                 <tr key={d.id} className="align-top">
                   <td className="px-4 py-3">
                     <p className="font-semibold text-[var(--adm-text)]">{d.title}</p>
-                    {d.problemDomain ? <p className="text-[11px] text-[var(--adm-text-muted)]">{d.problemDomain.name}</p> : null}
+                    <div className="mt-1">
+                      <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                    </div>
+                    {d.problemDomain ? <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{d.problemDomain.name}</p> : null}
                   </td>
                   <td className="px-4 py-3 text-[var(--adm-text-muted)]">{d.businessProcess?.name ?? "—"}</td>
                   <td className="px-4 py-3">
-                    <AdminStatusPill tone={status.tone}>{status.label}</AdminStatusPill>
+                    {rec ? (
+                      <AdminStatusPill tone={sufficiencyTone[rec.sufficiency as SufficiencyDecision]}>
+                        {sufficiencyLabelHu(rec.sufficiency as SufficiencyDecision)}
+                      </AdminStatusPill>
+                    ) : (
+                      <span className="text-[var(--adm-text-muted)]">—</span>
+                    )}
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{d.evidence.length} bizonyíték</p>
                   </td>
-                  <td className="px-4 py-3 text-[var(--adm-text-muted)]">{d.evidence.length} tétel</td>
-                  <td className="px-4 py-3 text-[var(--adm-text)]">{rec ? rec.title : "—"}</td>
+                  <td className="px-4 py-3 text-[var(--adm-text)]">{rec ? rec.direction || rec.title : "—"}</td>
+                  <td className="px-4 py-3">
+                    {rec ? (
+                      <AdminStatusPill tone={rec.status === "PENDING_REVIEW" ? "amber" : rec.status === "ACCEPTED" ? "green" : "burgundy"}>
+                        {reviewDecisionLabelHu(rec.status)}
+                      </AdminStatusPill>
+                    ) : (
+                      <span className="text-[var(--adm-text-muted)]">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-[var(--adm-text)]">{linkedInitiative ? linkedInitiative.title : "—"}</td>
                   <td className="px-4 py-3">
                     {d.status === "NEEDS_MORE_DATA" ? (
                       <span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">Több adat szükséges</span>
-                    ) : rec ? (
+                    ) : rec?.status === "PENDING_REVIEW" ? (
                       <Link href={`/clients/${clientId}/grow?tab=dontesek`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
                         Döntés megnyitása →
                       </Link>
@@ -506,6 +547,12 @@ function GrowDecisionQueue({
                     {domainTitleHu(o.domainKey)}
                     {o.businessProcess ? ` · ${o.businessProcess.name}` : ""}
                     {rec?.direction ? ` · ${rec.direction}` : ""}
+                  </p>
+                  {o.problemStatement ? (
+                    <p className="mt-1 text-[11px] text-[var(--adm-text-muted)] line-clamp-2">{o.problemStatement}</p>
+                  ) : null}
+                  <p className="mt-1 text-[11px] text-[var(--adm-text-soft)]">
+                    Bizonyíték: {evidenceStrengthLabelHu(o.evidenceStrength)}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
