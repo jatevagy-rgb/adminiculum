@@ -26,9 +26,9 @@ test('A1: Jogi hírek is rendered directly (not inside the További jelzések di
   assert.match(src, /recentDocuments\.length > 0 \? \(/);
 });
 
-test('A2: client list card uses a strong colorKey accent rail, not only a pale border', () => {
+test('A2: client list tile uses a strong colorKey accent rail, not only a pale border', () => {
   const src = read('Frontend/src/app/clients/page.tsx');
-  const line = src.split('\n').find((l) => l.includes('AdminPanel key={client.id}')) ?? '';
+  const line = src.split('\n').find((l) => l.includes('border-2 border-l-4')) ?? '';
   assert.match(line, /border-l-4/);
   assert.match(line, /color\.accentBorderClass/);
   // Test-constrained literals must remain.
