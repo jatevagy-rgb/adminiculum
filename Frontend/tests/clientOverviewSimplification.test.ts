@@ -5,14 +5,19 @@ import test from "node:test";
 
 const source = fs.readFileSync(path.join(process.cwd(), "src/app/clients/page.tsx"), "utf8");
 
-test("client overview cards stay identity-first and dossier-linked", () => {
+test("client overview tiles stay identity-first and dossier-linked", () => {
   assert.match(source, /<h2[\s\S]*client\.name/);
   assert.match(source, /href=\{`\/clients\/\$\{client\.id\}`\}/);
   assert.match(source, /getClientColorDefinition\(client\.colorKey\)/);
   assert.match(source, /\$\{color\.borderClass\}/);
-  for (const hidden of ["taxNumber", "companyRegistrationNumber", "authorizedRepresentative", "contactPerson", "House style", "Szerkesztés"]) {
-    const card = source.slice(source.indexOf("const renderClientCard"), source.indexOf("return (", source.indexOf("const renderClientCard")));
-    assert.doesNotMatch(card, new RegExp(hidden));
+  const tileStart = source.indexOf("const renderClientTile");
+  const tile = source.slice(tileStart, source.indexOf("\n  return (", tileStart));
+  for (const hidden of ["companyRegistrationNumber", "authorizedRepresentative", "House style", "Szerkesztés"]) {
+    assert.doesNotMatch(tile, new RegExp(hidden));
+  }
+  // The target tile intentionally surfaces the operational identity fields.
+  for (const shown of ["contactPerson", "email", "phone", "taxNumber"]) {
+    assert.match(tile, new RegExp(shown));
   }
 });
 
