@@ -77,6 +77,7 @@ type AuthenticatedAppProps = {
     | "communications"
     | "reviews"
     | "clients"
+    | "compliance"
     | "documents-compare"
     | "litigation-workspace"
     | "time-entries"

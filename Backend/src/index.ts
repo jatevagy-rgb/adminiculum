@@ -302,6 +302,10 @@ app.use('/api/v1/compliance', complianceDocumentRoutes);
 import controlEvidenceRoutes from './modules/compliance/controlEvidenceRoutes';
 app.use('/api/v1', controlEvidenceRoutes);
 
+// C4D: office-wide Compliance Center (internal, read-only, derived).
+import complianceCenterRoutes from './modules/compliance/complianceCenterRoutes';
+app.use('/api/v1/compliance', complianceCenterRoutes);
+
 // CDI-1: derived INTERNAL-ONLY clause x anchor intelligence for INTERNAL_ANALYSIS
 // compliance masters. Never mounted on a client-portal path.
 import complianceDocIntelligenceRoutes from './modules/compliance-doc-intelligence/routes';

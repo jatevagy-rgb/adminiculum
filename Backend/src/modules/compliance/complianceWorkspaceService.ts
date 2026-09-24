@@ -43,6 +43,7 @@ export interface ComplianceWorkspaceArea {
   applicabilityId: string;
   requirementKey: string | null;
   /** Canonical RequirementVersion identity that was evaluated. */
+  requirementVersionId: string;
   requirementVersionKey: string | null;
   /** Canonical ApplicabilityRuleVersion identity that produced the outcome. */
   ruleVersionKey: string | null;
@@ -276,6 +277,7 @@ export async function getComplianceWorkspace(
     return {
       applicabilityId: row.id,
       requirementKey: row.requirementVersion?.requirement.key ?? null,
+      requirementVersionId: row.requirementVersionId,
       requirementVersionKey: row.requirementVersion?.versionKey ?? null,
       ruleVersionKey: row.ruleVersion?.ruleVersionKey ?? null,
       title: row.requirementVersion?.title ?? 'Ismeretlen követelmény',

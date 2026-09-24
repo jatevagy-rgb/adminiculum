@@ -77,4 +77,126 @@ export const complianceIntelligenceApi = {
       `/compliance-intelligence/clients/${encodeURIComponent(clientId)}/documents/${encodeURIComponent(documentId)}/clause-anchors`,
     );
   },
+  /** C4C exact-version legal-source impact projection (INTERNAL only). */
+  legalSourceImpact(legalSourceVersionId: string) {
+    return fetchApi<LegalSourceImpactProjection>(
+      `/compliance-intelligence/legal-source-impact?legalSourceVersionId=${encodeURIComponent(legalSourceVersionId)}`,
+      { cache: 'no-store' },
+    );
+  },
+  /** C4B read-only monitoring manifest (legal-source demand only, no identity). */
+  monitoringManifest() {
+    return fetchApi<ComplianceMonitoringManifest>(`/compliance-intelligence/monitoring-manifest`, { cache: 'no-store' });
+  },
 };
+
+export interface ComplianceMonitoringManifest {
+  schemaVersion: number;
+  generatedAt: string;
+  sources: Array<{ identifierFamily: string; sourceIdentifier: string; locators: string[]; referenceCount: number }>;
+  unresolvedSummary: { count: number; reasons: Record<string, number> };
+}
+
+export type LegalSourceImpactKind =
+  | 'DOCUMENT_REFERENCE_IMPACT'
+  | 'APPLICABILITY_IMPACT'
+  | 'CONTROL_IMPACT';
+
+export interface LegalSourceImpactProjection {
+  schemaVersion: number;
+  generatedAt: string;
+  subjectType: 'LEGAL_SOURCE_VERSION' | 'CANONICAL_REFERENCE';
+  subject: {
+    legalSourceVersionId: string;
+    legalSourceId: string;
+    sourceKey: string;
+    canonicalCitation: string | null;
+    title: string | null;
+  } | null;
+  canonicalReference: string | null;
+  documentReferenceImpact: {
+    kind: 'DOCUMENT_REFERENCE_IMPACT';
+    references: Array<{
+      clientId: string;
+      clientName: string;
+      documentId: string;
+      documentName: string;
+      documentVersionId: string;
+      version: number;
+      isCurrent: boolean;
+      clauseRef: string;
+      clauseTitle: string | null;
+      anchorType: string;
+      relationType: string;
+      canonicalReference: string | null;
+    }>;
+    totals: { references: number; documents: number; documentVersions: number; clients: number };
+  };
+  requirementImpact: {
+    kind: 'REQUIREMENT_IMPACT';
+    derivable: boolean;
+    citations: Array<{
+      citationId: string;
+      requirementVersionId: string;
+      requirementId: string;
+      requirementKey: string;
+      requirementStatus: string;
+      versionKey: string;
+      versionTitle: string;
+      versionStatus: string;
+      supportRole: string;
+      citationLocator: string | null;
+    }>;
+    requirements: Array<{ requirementId: string; requirementKey: string; domainCode: string; status: string }>;
+    totals: { citations: number; requirementVersions: number; requirements: number };
+  };
+  controlImpact: {
+    kind: 'CONTROL_IMPACT';
+    derivable: boolean;
+    controlDefinitions: Array<{
+      controlDefinitionId: string;
+      controlKey: string;
+      title: string;
+      type: string;
+      status: string;
+      viaRequirementVersionIds: string[];
+    }>;
+    clientControls: Array<{
+      clientControlId: string;
+      clientId: string;
+      controlDefinitionId: string;
+      implementationStatus: string;
+      lastReviewedAt: string | null;
+      nextReviewAt: string | null;
+    }>;
+    totals: { controlDefinitions: number; clientControls: number; clients: number };
+  };
+  applicabilityImpact: {
+    kind: 'APPLICABILITY_IMPACT';
+    derivable: boolean;
+    applicabilities: Array<{
+      applicabilityId: string;
+      clientId: string;
+      requirementVersionId: string;
+      outcome: string;
+      scopeType: string;
+      evaluationAt: string;
+    }>;
+    totals: { applicabilities: number; clients: number };
+  };
+  clients: Array<{
+    clientId: string;
+    clientName: string | null;
+    impactKinds: LegalSourceImpactKind[];
+    documentReferenceCount: number;
+    applicabilityCount: number;
+    clientControlCount: number;
+  }>;
+  review: {
+    reviewRequired: boolean;
+    requirementCitationPresent: boolean;
+    basis: LegalSourceImpactKind[];
+    automaticActionsCreated: 0;
+    note: string;
+  };
+}

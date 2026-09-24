@@ -7,15 +7,15 @@ const root = process.cwd();
 const read = (relativePath: string) => readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('primary navigation contextual access', () => {
-  it('keeps exactly the six-item workforce primary navigation', () => {
+  it('keeps exactly the seven-item workforce primary navigation', () => {
     const sidebar = read('src/components/Sidebar.tsx');
     assert.match(
       sidebar,
-      /items: \["dashboard", "cases", "clients", "tasks", "communications", "settings"\]/,
+      /items: \["dashboard", "cases", "clients", "compliance", "tasks", "communications", "settings"\]/,
     );
     assert.doesNotMatch(sidebar, /items:.*documents-compare/);
     assert.doesNotMatch(sidebar, /items:.*calendar/);
-    for (const label of ['Műszerfal', 'Ügyek', 'Ügyfelek', 'Feladatok', 'Kommunikáció', 'Beállítások']) {
+    for (const label of ['Műszerfal', 'Ügyek', 'Ügyfelek', 'Megfelelőség', 'Feladatok', 'Kommunikáció', 'Beállítások']) {
       assert.match(sidebar, new RegExp(label));
     }
   });

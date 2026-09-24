@@ -8,6 +8,7 @@ import {
   workforceInteractionApi,
   type ClientFieldType,
   type ClientRequestType,
+  type ComplianceRequestContext,
   type CreateClientRequestDraftInput,
 } from "@/lib/clientInteractionApi";
 
@@ -15,6 +16,13 @@ type ComposerProps = {
   cases?: CaseListItem[];
   clients?: Client[];
   initialCaseId?: string;
+  /** C4D — inherited Compliance origin; the lawyer never retypes the source. */
+  complianceContext?: ComplianceRequestContext | null;
+  complianceContextLabel?: string | null;
+  defaultType?: ClientRequestType;
+  /** Optional trigger label + variant for contextual secondary actions. */
+  triggerLabel?: string;
+  triggerVariant?: "gold" | "neutral" | "muted";
   onChanged?: () => Promise<void> | void;
 };
 
@@ -58,6 +66,7 @@ export function buildClientRequestDraftPayload(input: {
   dueAt: string;
   fields: DraftField[];
   documentSpec: Record<string, unknown>;
+  complianceContext?: ComplianceRequestContext | null;
 }): CreateClientRequestDraftInput {
   return {
     clientId: input.clientId,
@@ -67,17 +76,20 @@ export function buildClientRequestDraftPayload(input: {
     clientSafeInstructions: `${input.instructions.trim()}${input.why.trim() ? `\n\nMiért szükséges: ${input.why.trim()}` : ""}`,
     required: input.required,
     dueAt: input.dueAt || null,
+    complianceContext: input.complianceContext && (input.complianceContext.requirementVersionId || input.complianceContext.clientControlId || input.complianceContext.findingId)
+      ? input.complianceContext
+      : undefined,
     fields: input.type === "DATA_FORM" ? input.fields.map((field, index) => ({ ...field, order: index, options: field.options?.filter(Boolean) })) : undefined,
     documentSpec: input.type === "DOCUMENT_UPLOAD" || input.type === "MISSING_DOCUMENT_REQUEST" ? input.documentSpec : undefined,
   };
 }
 
-export function ClientRequestComposer({ cases: suppliedCases, clients = [], initialCaseId, onChanged }: ComposerProps) {
+export function ClientRequestComposer({ cases: suppliedCases, clients = [], initialCaseId, complianceContext, complianceContextLabel, defaultType = "DOCUMENT_UPLOAD", triggerLabel = "Új ügyfélkérés", triggerVariant = "gold", onChanged }: ComposerProps) {
   const [cases, setCases] = useState<CaseListItem[]>(suppliedCases || []);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [type, setType] = useState<ClientRequestType>("DOCUMENT_UPLOAD");
+  const [type, setType] = useState<ClientRequestType>(defaultType);
   const [caseId, setCaseId] = useState(initialCaseId || "");
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -121,7 +133,7 @@ export function ClientRequestComposer({ cases: suppliedCases, clients = [], init
     if (fieldError) { setFeedback(fieldError); return; }
     setBusy(true); setFeedback(null);
     try {
-      const payload = buildClientRequestDraftPayload({ clientId: selectedClientId, caseId, type, title, instructions, why, required, dueAt, fields, documentSpec });
+      const payload = buildClientRequestDraftPayload({ clientId: selectedClientId, caseId, type, title, instructions, why, required, dueAt, fields, documentSpec, complianceContext });
       const draft = await workforceInteractionApi.createRequestDraft(payload);
       if (publish) await workforceInteractionApi.publishRequest(draft.id, draft.revision);
       setFeedback(publish ? "Kérés közzétéve." : "Tervezet mentve. Az ügyfél nem látja.");
@@ -134,7 +146,7 @@ export function ClientRequestComposer({ cases: suppliedCases, clients = [], init
 
   return (
     <div data-testid="client-request-composer">
-      <AdminButton data-testid="new-client-request" variant="gold" onClick={() => setOpen(true)}>Új ügyfélkérés</AdminButton>
+      <AdminButton data-testid="new-client-request" variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</AdminButton>
       {open ? (
         <div role="dialog" aria-modal="true" aria-labelledby="client-request-title" className="fixed inset-0 z-50 overflow-y-auto bg-black/30 p-4">
           <div className="mx-auto mt-8 grid max-w-3xl gap-4 rounded-2xl border border-[var(--adm-border)] bg-white p-5 shadow-xl">
@@ -142,6 +154,12 @@ export function ClientRequestComposer({ cases: suppliedCases, clients = [], init
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-1 text-xs font-semibold">Ügy (case) *<select value={caseId} disabled={Boolean(initialCaseId)} onChange={(event) => setCaseId(event.target.value)} className="rounded-lg border p-2 text-sm"><option value="">— Válasszon ügyet —</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.caseNumber} · {item.title}</option>)}</select></label>
               <label className="grid gap-1 text-xs font-semibold">Ügyfél<select value={selectedCase?.clientId || ""} disabled className="rounded-lg border bg-stone-50 p-2 text-sm"><option value="">{selectedCase?.clientName || "A case alapján"}</option></select></label>
+              {complianceContextLabel ? (
+                <div className="grid gap-1 text-xs font-semibold sm:col-span-2">
+                  <span>Megfelelőségi kontextus</span>
+                  <span className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2 text-sm text-[var(--adm-text)]">{complianceContextLabel}</span>
+                </div>
+              ) : null}
               <label className="grid gap-1 text-xs font-semibold">Kérés típusa<select value={type} onChange={(event) => setType(event.target.value as ClientRequestType)} className="rounded-lg border p-2 text-sm">{requestTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label className="grid gap-1 text-xs font-semibold">Ügyfélbiztos cím <input value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)} className="rounded-lg border p-2 text-sm" /></label>
               <label className="grid gap-1 text-xs font-semibold sm:col-span-2">Ügyfélnek szóló útmutató<textarea value={instructions} maxLength={4000} onChange={(event) => setInstructions(event.target.value)} className="min-h-20 rounded-lg border p-2 text-sm" /></label>

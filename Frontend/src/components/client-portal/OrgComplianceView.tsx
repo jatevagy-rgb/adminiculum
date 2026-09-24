@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import React, { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import * as React from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   getPortalCompliance,
+  getPortalComplianceRequests,
   answerPortalCompanyProfileQuestion,
   getPortalCompanyProfileDiscovery,
   portalDownloadUrl,
@@ -12,14 +14,20 @@ import {
   type PortalComplianceMissingInfo,
   type PortalComplianceDocument,
   type PortalComplianceControlSummary,
+  type PortalComplianceRequest,
+  type PortalComplianceRequestState,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
 import { companyProfileCompletion } from "@/lib/companyProfileCompletion";
+import { OperationalPageHeader, CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { AdminSectionHeader, AdminPanel, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { formatDate } from "./MatterWorkspace";
 
-const card = "min-w-0 rounded-3xl border border-[#eadfbf] bg-white p-5 shadow-sm sm:p-6";
+// Canonical Adminiculum operational styling. No route-local palette, no
+// oversized marketing cards — thin borders, compact radius, semantic tokens.
+const card = "min-w-0 rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4 sm:p-5";
 const inputClass =
-  "w-full rounded-xl border border-stone-300 px-3 py-2 text-sm text-stone-900 shadow-sm focus:border-[#b95e4b] focus:outline-none focus:ring-2 focus:ring-[#b95e4b]/25 disabled:bg-stone-50 disabled:text-stone-500";
+  "w-full rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-2 text-sm text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none focus:ring-2 focus:ring-[var(--adm-green-800)]/20 disabled:bg-[var(--adm-surface)] disabled:text-[var(--adm-text-muted)]";
 
 type ComplianceBucket = "CUSTOMER_ACTION" | "IN_PROGRESS" | "LAWYER_REVIEW" | "NO_ACTION";
 
@@ -30,11 +38,13 @@ const bucketLabels: Record<ComplianceBucket, string> = {
   NO_ACTION: "Nincs jelenlegi teendő",
 };
 
-const bucketBadge: Record<ComplianceBucket, string> = {
-  CUSTOMER_ACTION: "bg-[#fbeae6] text-[#8a4536] border-[#e3b7ab]",
-  IN_PROGRESS: "bg-[#f7f1e2] text-[#7a5f18] border-[#d7c48a]",
-  LAWYER_REVIEW: "bg-[#f3ead2] text-[#6f5514] border-[#d7c48a]",
-  NO_ACTION: "bg-emerald-100 text-emerald-900 border-emerald-300",
+// Canonical semantic tones for the shared status primitive. The route keeps the
+// business classification but no longer owns bespoke status colours.
+const bucketTone: Record<ComplianceBucket, "amber" | "gold" | "green"> = {
+  CUSTOMER_ACTION: "amber",
+  IN_PROGRESS: "gold",
+  LAWYER_REVIEW: "gold",
+  NO_ACTION: "green",
 };
 
 /**
@@ -71,15 +81,8 @@ export function hasPortalAnswerableMissingInformation(topic: PortalComplianceTop
 
 /**
  * Assigns each topic to exactly one bucket so the summary tiles never
- * double-count.
- *
- * The immediate next actor decides the PRIMARY customer-facing bucket. When the
- * customer has executable portal input outstanding, that is CUSTOMER_ACTION even
- * if the backend raw state also says LAWYER_REVIEW_REQUIRED — the customer is
- * simply the next actor. The raw backend state is never erased: it stays
- * available through `topicStateLabel`/`secondaryStateNote` as secondary truthful
- * context, and only becomes the primary bucket once no customer input is
- * outstanding. Review-recommended and in-progress keep their canonical meaning.
+ * double-count. The immediate next actor decides the PRIMARY customer-facing
+ * bucket; the raw backend state is preserved as secondary truthful context.
  */
 export function classifyTopic(topic: PortalComplianceTopic): ComplianceBucket {
   if (hasPortalAnswerableMissingInformation(topic)) return "CUSTOMER_ACTION";
@@ -92,11 +95,7 @@ export function classifyTopic(topic: PortalComplianceTopic): ComplianceBucket {
   return "CUSTOMER_ACTION";
 }
 
-/**
- * Primary badge text for a topic: the bucket label, refined when the customer
- * specifically owes portal-answerable data. It is always derived from the same
- * bucket the summary tiles count, so badge and tile can never contradict.
- */
+/** Primary badge text for a topic: the bucket label, refined when the customer owes portal-answerable data. */
 export function primaryBadgeLabel(topic: PortalComplianceTopic, bucket: ComplianceBucket): string {
   if (bucket === "CUSTOMER_ACTION" && hasPortalAnswerableMissingInformation(topic)) {
     return "Adatra várunk Öntől";
@@ -104,11 +103,7 @@ export function primaryBadgeLabel(topic: PortalComplianceTopic, bucket: Complian
   return bucketLabels[bucket];
 }
 
-/**
- * Secondary, non-contradictory context for the case where the backend raw state
- * is lawyer review but the immediate next actor is the customer. The raw state
- * is preserved as subordinate text, never as the primary badge.
- */
+/** Secondary, non-contradictory context when the backend state is lawyer review but the customer is the next actor. */
 export function secondaryStateNote(topic: PortalComplianceTopic, bucket: ComplianceBucket): string | null {
   if (bucket === "CUSTOMER_ACTION" && topic.state === "LAWYER_REVIEW_REQUIRED") {
     return "Emellett ügyvédi vizsgálat is folyamatban van.";
@@ -116,12 +111,7 @@ export function secondaryStateNote(topic: PortalComplianceTopic, bucket: Complia
   return null;
 }
 
-/**
- * The next step shown to the customer. When the raw state is lawyer review but
- * the customer still owes executable data, the lawyer-oriented backend
- * `nextAction` must not be presented as the customer's next step; the immediate
- * step is supplying the data. Every other case keeps the canonical backend text.
- */
+/** The next step shown to the customer. */
 export function nextActionFor(topic: PortalComplianceTopic, bucket: ComplianceBucket): string | null {
   if (bucket === "CUSTOMER_ACTION" && topic.state === "LAWYER_REVIEW_REQUIRED" && hasPortalAnswerableMissingInformation(topic)) {
     return "Kérjük, adja meg az alábbi hiányzó adatokat a portálon.";
@@ -138,14 +128,8 @@ export function summarizeTopics(topics: PortalComplianceTopic[]): Record<Complia
 
 /**
  * Three truthful overview numbers derived only from the shared primary buckets.
- * The three categories are mutually exclusive and partition every topic, so the
- * overview can never double-count or contradict an individual topic card:
- *
- * - customerAction: the customer is the immediate next actor.
- * - atOffice: the office is processing/reviewing; no immediate customer action.
- * - noAction: nothing is open on either side.
- *
- * No score, ratio or percentage is derived here.
+ * The categories are mutually exclusive and partition every topic; no score,
+ * ratio or percentage is derived here.
  */
 export function summaryGroups(topics: PortalComplianceTopic[]): {
   customerAction: number;
@@ -160,13 +144,7 @@ export function summaryGroups(topics: PortalComplianceTopic[]): {
   };
 }
 
-/**
- * CUSTOMER next-action dimension only. "Öntől szükséges" always means the
- * customer is the immediate next actor; it never describes office processing.
- * The two dimensions are intentionally kept visually separate so a topic can be
- * "Öntől szükséges" and simultaneously under office review without either label
- * reading as a contradiction.
- */
+/** CUSTOMER next-action dimension only. Never describes office processing. */
 export function customerActionNote(topic: PortalComplianceTopic): string {
   const answerable = topic.missingInformation.filter(
     (info) => info.portalAnswerable === true && typeof info.questionKey === "string" && info.questionKey.trim().length > 0,
@@ -176,12 +154,7 @@ export function customerActionNote(topic: PortalComplianceTopic): string {
   return "Öntől jelenleg nincs várt adatmegadási teendő.";
 }
 
-/**
- * OFFICE processing dimension, derived only from the safe client-facing topic
- * state. It is deliberately labeled "Irodai feldolgozás" and never as the topic
- * "state", so it can sit next to the customer dimension without implying that
- * the two are the same value.
- */
+/** OFFICE processing dimension, derived only from the safe client-facing topic state. */
 export function officeProcessingNote(topic: PortalComplianceTopic): string {
   switch (topic.state) {
     case "LAWYER_REVIEW_REQUIRED":
@@ -215,11 +188,7 @@ export function filterTopics(
   });
 }
 
-/**
- * Control/checkpoint progress from the already-returned client-safe
- * controlsSummary projection (matched by the topic's safe portal label).
- * Returns null when no authoritative projection exists for the topic.
- */
+/** Control/checkpoint progress from the already-returned client-safe controlsSummary projection. */
 export function controlProgressFor(
   topic: PortalComplianceTopic,
   controlsSummary: PortalComplianceControlSummary[] | undefined,
@@ -234,12 +203,7 @@ export function controlProgressFor(
   return { done, total: entry.controls.length, nextReviewAt };
 }
 
-/**
- * The raw client-safe control rows for a topic, matched by the same safe portal
- * label used by `controlProgressFor`. When no authoritative projection exists
- * the caller receives an empty list and must show a truthful empty state — no
- * control/evidence row is ever invented.
- */
+/** The raw client-safe control rows for a topic, matched by the same safe portal label. */
 export function controlsFor(
   topic: PortalComplianceTopic,
   controlsSummary: PortalComplianceControlSummary[] | undefined,
@@ -257,12 +221,7 @@ export type PortalAnswerPayload = {
   stringValue?: string;
 };
 
-/**
- * Builds the canonical typed answer payload for a portal-answerable missing
- * item, exactly as the company-profile answer endpoint expects it. Returns null
- * for an unusable input so the caller performs no request. Kept as a pure,
- * testable function so the answering contract is proven without a DOM harness.
- */
+/** Builds the canonical typed answer payload for a portal-answerable missing item. */
 export function buildAnswerPayload(info: PortalComplianceMissingInfo, answerInput: string): PortalAnswerPayload | null {
   if (!info.questionKey) return null;
   const trimmed = answerInput.trim();
@@ -286,13 +245,7 @@ export function buildAnswerPayload(info: PortalComplianceMissingInfo, answerInpu
   return { status: "ANSWERED", stringValue: trimmed };
 }
 
-/**
- * After a successful inline company-profile answer BOTH the compliance read
- * model and the canonical company-profile discovery (completion) must refresh,
- * so the hero's X/Y count never goes stale. Extracted so the orchestration is
- * testable without a DOM harness, and deliberately narrow: it does not touch
- * any global loading/unmount state.
- */
+/** After a successful inline profile answer both the compliance map and the profile completion refresh. */
 export async function refreshAfterProfileAnswer(deps: {
   refreshCompliance: () => Promise<void>;
   refreshProfileCompletion: () => Promise<void>;
@@ -316,6 +269,78 @@ export function topicStateLabel(topic: PortalComplianceTopic): string {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Company-level requested documents / open questions (safe projection)
+// ---------------------------------------------------------------------------
+
+const requestStateLabels: Record<PortalComplianceRequestState, string> = {
+  AWAITING_CUSTOMER: "Válaszra vár Öntől",
+  OFFICE_PROCESSING: "Irodai feldolgozás alatt",
+  CLOSED: "Lezárt",
+};
+
+const requestStateTone: Record<PortalComplianceRequestState, "amber" | "gold" | "green"> = {
+  AWAITING_CUSTOMER: "amber",
+  OFFICE_PROCESSING: "gold",
+  CLOSED: "green",
+};
+
+/** Customer-facing label for a projected request state. Never a raw internal enum. */
+export function requestStateLabel(state: PortalComplianceRequestState): string {
+  return requestStateLabels[state] ?? "Irodai feldolgozás alatt";
+}
+
+/** Groups the company projection into the three truthful customer states. */
+export function groupComplianceRequests(items: PortalComplianceRequest[]): {
+  awaiting: PortalComplianceRequest[];
+  office: PortalComplianceRequest[];
+  closed: PortalComplianceRequest[];
+} {
+  return {
+    awaiting: items.filter((item) => item.state === "AWAITING_CUSTOMER"),
+    office: items.filter((item) => item.state === "OFFICE_PROCESSING"),
+    closed: items.filter((item) => item.state === "CLOSED"),
+  };
+}
+
+/**
+ * Canonical customer request detail route. Mirrors the shared helper used by
+ * the matter task surface without importing it (avoids a module cycle).
+ */
+function requestDetailHref(caseId: string | null, requestId: string): string {
+  if (!caseId) return "/portal/ugyek";
+  return `/portal/matters/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(requestId)}`;
+}
+
+type ComplianceSection = "ATTEKINTES" | "TEENDOK" | "DOKUMENTUMOK" | "KERDESEK" | "ALLAPOTOK";
+
+const sectionNav: Array<{ id: ComplianceSection; label: string }> = [
+  { id: "ATTEKINTES", label: "Áttekintés" },
+  { id: "TEENDOK", label: "Teendők" },
+  { id: "DOKUMENTUMOK", label: "Dokumentumok" },
+  { id: "KERDESEK", label: "Kérdések és kérések" },
+  { id: "ALLAPOTOK", label: "Állapotok" },
+];
+
+type WorklistItem = {
+  key: string;
+  kind: "PROFILE_INFORMATION" | "DOCUMENT_REQUEST" | "INFORMATION_REQUEST" | "QUESTION" | "CORRECTION_REQUEST";
+  title: string;
+  context: string | null;
+  stateLabel: string;
+  tone: "amber" | "gold" | "green";
+  dueAt: string | null;
+  href: string;
+  ctaLabel: string;
+};
+
+function requestWorkKind(item: PortalComplianceRequest): WorklistItem["kind"] {
+  if (item.category === "DOCUMENT") return "DOCUMENT_REQUEST";
+  if (item.type === "CORRECTION_REQUEST") return "CORRECTION_REQUEST";
+  if (item.type === "INFORMATION_REQUEST" || item.type === "DATA_FORM") return "INFORMATION_REQUEST";
+  return "QUESTION";
+}
+
 type IconKind = "shield" | "megaphone" | "lock" | "helmet" | "bank" | "doc";
 
 function iconKind(topicId: string): IconKind {
@@ -329,7 +354,7 @@ function iconKind(topicId: string): IconKind {
 }
 
 function TopicGlyph({ kind }: { kind: IconKind }) {
-  const cls = "h-5 w-5";
+  const cls = "h-4 w-4";
   const common = { className: cls, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.7, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (kind) {
     case "shield":
@@ -347,33 +372,29 @@ function TopicGlyph({ kind }: { kind: IconKind }) {
   }
 }
 
-/**
- * Published customer documents only. The DTO already guarantees these are
- * explicitly published CLIENT_POLICY publications, so this component renders
- * whatever the safe projection returned and invents nothing when it is empty.
- */
+/** Published customer documents only. Renders nothing when the safe projection is empty. */
 export function TopicDocuments({ documents }: { documents: PortalComplianceDocument[] }) {
   if (documents.length === 0) return null;
   return (
     <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Közzétett dokumentumok</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Közzétett dokumentumok</p>
       <ul className="mt-2 space-y-2">
         {documents.map((doc) => (
-          <li key={doc.publicationId} className="rounded-xl border border-stone-200 bg-white p-3 text-sm">
+          <li key={doc.publicationId} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3 text-sm">
             <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#eadfbf] bg-[#fffdf8] text-[#8a4536]">
+              <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-green-800)]">
                 <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round"><path d="M7 3h7l5 5v13H7z" /><path d="M14 3v5h5" /></svg>
               </span>
               <div className="min-w-0">
-                <p className="font-medium text-stone-800">{doc.title}</p>
-                <p className="mt-0.5 text-xs text-stone-500">
+                <p className="font-medium text-[var(--adm-text)]">{doc.title}</p>
+                <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">
                   {doc.versionLabel}
                   {doc.publishedAt ? ` · Közzétéve: ${formatDate(doc.publishedAt)}` : ""}
                 </p>
                 {doc.downloadAvailable ? (
                   <a
                     href={portalDownloadUrl(doc.publicationId)}
-                    className="mt-2 inline-block rounded-full border border-[#b95e4b] px-3 py-1 text-xs font-semibold text-[#b95e4b] hover:bg-[#fbeae6]"
+                    className="mt-2 inline-block rounded-[var(--adm-radius-sm)] border border-[var(--adm-terracotta-700)] px-3 py-1 text-xs font-semibold text-[var(--adm-terracotta-700)] hover:bg-[var(--adm-terracotta-100)]"
                   >
                     Letöltés
                   </a>
@@ -387,35 +408,40 @@ export function TopicDocuments({ documents }: { documents: PortalComplianceDocum
   );
 }
 
-function StatusCard({
-  label,
-  count,
-  hint,
-  tone,
-}: {
-  label: string;
-  count: number;
-  hint: string;
-  tone: "action" | "progress" | "clear";
-}) {
-  const tones = {
-    action: "border-[#e3b7ab] bg-[#fbeae6]/60",
-    progress: "border-[#d7c48a] bg-[#f7f1e2]/70",
-    clear: "border-emerald-300 bg-emerald-50/70",
-  } as const;
+function StatusCard({ label, count, hint }: { label: string; count: number; hint: string }) {
   return (
-    <div className={`min-w-0 rounded-2xl border p-4 ${tones[tone]}`}>
-      <span className="block text-3xl font-semibold text-stone-900">{count}</span>
-      <span className="mt-1 block text-sm font-semibold text-[#1f3a2e]">{label}</span>
-      <span className="mt-1 block text-xs text-stone-600">{hint}</span>
-    </div>
+    <AdminPanel className="p-4">
+      <span className="block text-[26px] font-semibold text-[var(--adm-text)]">{count}</span>
+      <span className="mt-1 block text-[12px] font-semibold text-[var(--adm-green-900)]">{label}</span>
+      <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">{hint}</span>
+    </AdminPanel>
+  );
+}
+
+function WorklistRow({ item }: { item: WorklistItem }) {
+  return (
+    <li className="border-t border-[var(--adm-border)] px-4 py-3 first:border-t-0">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</p>
+          {item.context ? <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">Adatforrás: {item.context}</p> : null}
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <AdminStatusPill tone={item.tone}>{item.stateLabel}</AdminStatusPill>
+            {item.dueAt ? <span className="text-[11px] text-[var(--adm-text-muted)]">Határidő: {formatDate(item.dueAt)}</span> : null}
+          </div>
+        </div>
+        <Link href={item.href} className="shrink-0 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">
+          {item.ctaLabel}
+        </Link>
+      </div>
+    </li>
   );
 }
 
 /**
- * Grouped missing-information list built from the client-safe DTO. Portal
- * answerable items keep the canonical typed answer mechanism; everything else
- * is explicitly routed to office coordination instead of offering a fake CTA.
+ * Groups the customer-answerable missing facts for a topic. Portal-answerable
+ * items keep the canonical typed answer mechanism; everything else is routed to
+ * office coordination instead of offering a fake CTA.
  */
 function TopicMissingInformation({
   topic,
@@ -446,21 +472,17 @@ function TopicMissingInformation({
   const officeOnly = topic.missingInformation.filter((info) => !answerable.includes(info));
 
   const renderItem = (info: PortalComplianceMissingInfo, idx: number) => (
-    <li key={`${info.questionKey ?? info.label}-${idx}`} className="rounded-xl border border-stone-200 bg-white p-3 text-sm">
+    <li key={`${info.questionKey ?? info.label}-${idx}`} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium text-stone-800">{info.label}</span>
+        <span className="font-medium text-[var(--adm-text)]">{info.label}</span>
         {info.portalAnswerable && info.questionKey ? (
           activeQuestionKey === info.questionKey ? null : (
-            <button
-              type="button"
-              onClick={() => onStart(info.questionKey!)}
-              className="rounded-lg bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f]"
-            >
+            <AdminButton size="xs" variant="primary" onClick={() => onStart(info.questionKey!)}>
               Adat megadása →
-            </button>
+            </AdminButton>
           )
         ) : (
-          <span className="text-xs text-stone-500">Irodai egyeztetés szükséges</span>
+          <span className="text-xs text-[var(--adm-text-muted)]">Irodai egyeztetés szükséges</span>
         )}
       </div>
 
@@ -488,27 +510,17 @@ function TopicMissingInformation({
               disabled={saving}
             />
           )}
-          {actionError ? <p className="text-xs text-rose-600">{actionError}</p> : null}
+          {actionError ? <p className="text-xs text-[var(--adm-terracotta-700)]">{actionError}</p> : null}
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => onSave(info)}
-              disabled={saving || !answerInput.trim()}
-              className="rounded-lg bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f] disabled:opacity-50"
-            >
+            <AdminButton size="xs" variant="primary" onClick={() => onSave(info)} disabled={saving || !answerInput.trim()}>
               {saving ? "Mentés…" : "Mentés"}
-            </button>
-            <button
-              type="button"
-              onClick={() => onMarkUnknown(info.questionKey!)}
-              disabled={saving}
-              className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-semibold text-stone-700 hover:bg-stone-50"
-            >
+            </AdminButton>
+            <AdminButton size="xs" variant="neutral" onClick={() => onMarkUnknown(info.questionKey!)} disabled={saving}>
               Nem ismertként jelölés
-            </button>
-            <button type="button" onClick={onCancel} className="text-xs text-stone-500 hover:underline">
+            </AdminButton>
+            <AdminButton size="xs" variant="ghost" onClick={onCancel}>
               Mégse
-            </button>
+            </AdminButton>
           </div>
         </div>
       ) : null}
@@ -516,24 +528,20 @@ function TopicMissingInformation({
   );
 
   if (topic.missingInformation.length === 0) {
-    return (
-      <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
-        Jelenleg nincs Öntől várt hiányzó adat ehhez a területhez.
-      </div>
-    );
+    return <CompactState title="Jelenleg nincs Öntől várt hiányzó adat ehhez a területhez." />;
   }
 
   return (
     <div className="space-y-4">
       {answerable.length > 0 ? (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Ön által megadható adatok</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Ön által megadható adatok</p>
           <ul className="mt-2 space-y-2">{answerable.map(renderItem)}</ul>
         </div>
       ) : null}
       {officeOnly.length > 0 ? (
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">Irodai egyeztetést igénylő adatok</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Irodai egyeztetést igénylő adatok</p>
           <ul className="mt-2 space-y-2">{officeOnly.map(renderItem)}</ul>
         </div>
       ) : null}
@@ -541,11 +549,7 @@ function TopicMissingInformation({
   );
 }
 
-/**
- * Compact control/checkpoint rows derived exclusively from controlsSummary.
- * Implementation status is translated to a safe customer label and the evidence
- * line reports the already-computed accepted/stale counts without overclaiming.
- */
+/** Compact control/checkpoint rows derived exclusively from controlsSummary. */
 function TopicControls({
   topic,
   controlsSummary,
@@ -555,23 +559,19 @@ function TopicControls({
 }) {
   const controls = controlsFor(topic, controlsSummary);
   if (controls.length === 0) {
-    return (
-      <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
-        Ehhez a területhez még nem érhető el intézkedési összegzés.
-      </div>
-    );
+    return <CompactState title="Ehhez a területhez még nem érhető el intézkedési összegzés." />;
   }
   return (
     <ul className="space-y-2">
       {controls.map((control, idx) => (
-        <li key={`${control.title}-${idx}`} className="rounded-xl border border-stone-200 bg-white p-3">
+        <li key={`${control.title}-${idx}`} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm font-medium text-stone-800">{control.title}</span>
-            <span className="rounded-full border border-[#eadfbf] bg-[#fffdf8] px-2.5 py-0.5 text-xs font-semibold text-[#8a4536]">
+            <span className="text-sm font-medium text-[var(--adm-text)]">{control.title}</span>
+            <AdminStatusPill tone="neutral" dot={false}>
               {controlStatusLabel(control.implementationStatus)}
-            </span>
+            </AdminStatusPill>
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-stone-600">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--adm-text-muted)]">
             <span>Érvényes, elfogadott bizonyíték: <b>{control.evidence.acceptedCurrent}</b></span>
             {control.evidence.stale > 0 ? <span>Lejárt bizonyíték: <b>{control.evidence.stale}</b></span> : null}
             {control.evidence.missing ? <span>Nincs érvényes bizonyíték</span> : null}
@@ -584,44 +584,32 @@ function TopicControls({
   );
 }
 
-/**
- * Truthful, non-technical description of how the map is produced. It explicitly
- * avoids any AI or certainty claim.
- */
+/** Truthful, non-technical description of how the map is produced. */
 function HowMapIsBuilt() {
+  const steps: Array<{ title: string; body: string }> = [
+    { title: "1. Rögzített tények", body: "A vállalat profiljában megadott strukturált adatok (pl. létszám, tevékenységek, rendszerek)." },
+    { title: "2. Dokumentumok", body: "Érvényes belső szabályzatok, szerződések, adatkezelési tájékoztatók és jegyzőkönyvek megléte." },
+    { title: "3. Ügyvédi vizsgálat", body: "A jogi szakértők által elvégzett átvilágítási megállapítások és jóváhagyott lépések." },
+  ];
   return (
-    <section className="rounded-3xl border border-[#eadfbf] bg-[#fffdf8] p-6 text-stone-800">
-      <h3 className="font-serif text-xl font-semibold text-[#1f3a2e]">Hogyan készül a compliance térkép?</h3>
-      <p className="mt-2 text-sm leading-6 text-stone-700">
-        Az Adminiculum a jogi és megfelelési állapotot kizárólag ellenőrizhető tényekre alapozza:
-      </p>
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <div className="rounded-2xl bg-white p-4 shadow-xs">
-          <p className="font-semibold text-stone-950 text-sm">1. Rögzített tények</p>
-          <p className="mt-1 text-xs text-stone-600">A vállalat profiljában megadott strukturált adatok (pl. létszám, tevékenységek, rendszerek).</p>
-        </div>
-        <div className="rounded-2xl bg-white p-4 shadow-xs">
-          <p className="font-semibold text-stone-950 text-sm">2. Dokumentumok</p>
-          <p className="mt-1 text-xs text-stone-600">Érvényes belső szabályzatok, szerződések, adatkezelési tájékoztatók és jegyzőkönyvek megléte.</p>
-        </div>
-        <div className="rounded-2xl bg-white p-4 shadow-xs">
-          <p className="font-semibold text-stone-950 text-sm">3. Ügyvédi vizsgálat</p>
-          <p className="mt-1 text-xs text-stone-600">A jogi szakértők által elvégzett átvilágítási megállapítások és jóváhagyott lépések.</p>
-        </div>
+    <AdminPanel className="overflow-hidden">
+      <AdminSectionHeader
+        title="Hogyan készül a compliance térkép?"
+        subtitle="Az Adminiculum a jogi és megfelelési állapotot kizárólag ellenőrizhető tényekre alapozza."
+      />
+      <div className="grid gap-3 p-4 sm:grid-cols-3">
+        {steps.map((step) => (
+          <div key={step.title} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+            <p className="text-[12px] font-semibold text-[var(--adm-text)]">{step.title}</p>
+            <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">{step.body}</p>
+          </div>
+        ))}
       </div>
-      <p className="mt-4 text-xs text-stone-500">
-        A jelölések nem jelentenek felelősségkizáró abszolút garanciát vagy 100%-os minősítést. Kérdése van a
-        megállapításokkal kapcsolatban? Forduljon bizalommal az eljáró ügyvédhez a portál üzenetküldő felületén.
-      </p>
-    </section>
+    </AdminPanel>
   );
 }
 
-/**
- * Focused topic-detail surface built from the SAME client-safe topic DTO. Every
- * section reuses existing safe fields only; the interactive missing-information
- * section is injected so the answering contract stays owned by the parent view.
- */
+/** Focused topic-detail surface built from the SAME client-safe topic DTO. */
 export function TopicDetailView({
   topic,
   bucket,
@@ -640,79 +628,71 @@ export function TopicDetailView({
   const nextAction = nextActionFor(topic, bucket);
   const progress = controlProgressFor(topic, controlsSummary);
   return (
-    <div className="space-y-6" data-testid="org-compliance-topic-detail">
-      {/* HEADER */}
-      <section className="min-w-0 rounded-3xl border border-[#eadfbf] bg-[#fffdf8] p-6 shadow-sm sm:p-8">
-        <button type="button" onClick={onBack} className="text-sm font-semibold text-[#8a4536] hover:underline">
-          ← Vissza az áttekintéshez
-        </button>
-        <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9b7b25]">Megfelelési terület</p>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-          <div className="min-w-0 max-w-2xl">
-            <h1 className="font-serif text-3xl font-semibold text-[#1f3a2e] sm:text-4xl">{topic.topicLabel}</h1>
-            <p className="mt-3 text-sm leading-6 text-stone-600">{topic.shortExplanation}</p>
-          </div>
-          <div className="flex flex-col items-start gap-2">
-            <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${bucketBadge[bucket]}`}>
-              {primaryBadgeLabel(topic, bucket)}
-            </span>
-            <span className="text-xs font-semibold text-stone-700">{customerActionNote(topic)}</span>
-            <span className="text-xs text-stone-500">{officeProcessingNote(topic)}</span>
+    <div className="space-y-4" data-testid="org-compliance-topic-detail">
+      <AdminPanel className="overflow-hidden">
+        <div className="border-b border-[var(--adm-border)] p-4 sm:p-5">
+          <AdminButton size="xs" variant="ghost" onClick={onBack}>
+            ← Vissza az áttekintéshez
+          </AdminButton>
+          <p className="mt-3 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Megfelelési terület</p>
+          <div className="mt-1 flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 max-w-2xl">
+              <h1 className="font-serif text-[26px] font-medium leading-tight text-[var(--adm-text)]">{topic.topicLabel}</h1>
+              <p className="mt-2 text-[12px] leading-5 text-[var(--adm-text-muted)]">{topic.shortExplanation}</p>
+            </div>
+            <div className="flex flex-col items-start gap-1.5">
+              <AdminStatusPill tone={bucketTone[bucket]}>{primaryBadgeLabel(topic, bucket)}</AdminStatusPill>
+              <span className="text-[11px] font-semibold text-[var(--adm-text)]">{customerActionNote(topic)}</span>
+              <span className="text-[11px] text-[var(--adm-text-muted)]">{officeProcessingNote(topic)}</span>
+            </div>
           </div>
         </div>
-      </section>
+      </AdminPanel>
 
-      {/* WHY */}
-      <section className={card}>
-        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Miért érinti a céget?</h2>
-        <p className="mt-2 text-sm leading-6 text-stone-700">{topic.shortExplanation}</p>
-      </section>
+      <AdminPanel>
+        <AdminSectionHeader title="Miért érinti a céget?" />
+        <p className="p-4 text-[12px] leading-5 text-[var(--adm-text)]">{topic.shortExplanation}</p>
+      </AdminPanel>
 
-      {/* NEXT STEP */}
-      <section className={card}>
-        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Következő lépés</h2>
-        {nextAction ? (
-          <div className="mt-3 rounded-xl bg-[#fff8f6] p-3 text-sm text-[#8a4536]">{nextAction}</div>
-        ) : (
-          <p className="mt-2 text-sm text-stone-600">Jelenleg nincs Ön felé mutató következő lépés ezen a területen.</p>
-        )}
-      </section>
+      <AdminPanel>
+        <AdminSectionHeader title="Következő lépés" />
+        <div className="p-4">
+          {nextAction ? (
+            <p className="text-[12px] text-[var(--adm-terracotta-700)]">{nextAction}</p>
+          ) : (
+            <p className="text-[12px] text-[var(--adm-text-muted)]">Jelenleg nincs Ön felé mutató következő lépés ezen a területen.</p>
+          )}
+        </div>
+      </AdminPanel>
 
-      {/* MISSING INFORMATION */}
-      <section className={card} data-testid="org-compliance-missing-information">
-        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Hiányzó információk</h2>
-        <p className="mt-1 text-xs text-stone-500">A portálon megválaszolható adatokat itt tudja rögzíteni. A többi adathoz irodai egyeztetés szükséges.</p>
-        <div className="mt-3">{missingInformationSection}</div>
-      </section>
+      <AdminPanel data-testid="org-compliance-missing-information">
+        <AdminSectionHeader title="Hiányzó információk" subtitle="A portálon megválaszolható adatokat itt tudja rögzíteni. A többi adathoz irodai egyeztetés szükséges." />
+        <div className="p-4">{missingInformationSection}</div>
+      </AdminPanel>
 
-      {/* DOCUMENTS */}
-      <section className={card} data-testid="org-compliance-documents">
-        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Dokumentumok</h2>
-        <div className="mt-3">
+      <AdminPanel data-testid="org-compliance-documents">
+        <AdminSectionHeader title="Dokumentumok" />
+        <div className="p-4">
           {topic.documents.length > 0 ? (
             <TopicDocuments documents={topic.documents} />
           ) : (
-            <div className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
-              Ehhez a területhez még nem tettek közzé ügyfélnek szánt dokumentumot.
-            </div>
+            <CompactState title="Ehhez a területhez még nem tettek közzé ügyfélnek szánt dokumentumot." />
           )}
         </div>
-      </section>
+      </AdminPanel>
 
-      {/* CONTROLS */}
-      <section className={card} data-testid="org-compliance-controls">
-        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Intézkedések és ellenőrzési pontok</h2>
-        <p className="mt-1 text-xs text-stone-500">Az iroda által rögzített intézkedések és felülvizsgálati pontok összegzése.</p>
-        <div className="mt-3">
+      <AdminPanel data-testid="org-compliance-controls">
+        <AdminSectionHeader title="Intézkedések és ellenőrzési pontok" subtitle="Az iroda által rögzített intézkedések és felülvizsgálati pontok összegzése." />
+        <div className="p-4">
           <TopicControls topic={topic} controlsSummary={controlsSummary} />
+          {progress ? (
+            <p className="mt-3 text-[11px] text-[var(--adm-text-muted)]">
+              Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
+              {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
+            </p>
+          ) : null}
         </div>
-        {progress ? (
-          <p className="mt-3 text-xs text-stone-500">
-            Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
-            {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
-          </p>
-        ) : null}
-      </section>
+      </AdminPanel>
 
       {showHowMap ? <HowMapIsBuilt /> : null}
     </div>
@@ -722,11 +702,7 @@ export function TopicDetailView({
 /** Customer-safe URL query parameter that selects a topic detail. */
 export const COMPLIANCE_TOPIC_QUERY_PARAM = "topic";
 
-/**
- * Reads the selected customer-safe topic id from a location search string.
- * Returns null for a missing, empty or malformed value so an invalid or
- * nonexistent id safely falls back to the overview.
- */
+/** Reads the selected customer-safe topic id from a location search string. */
 export function readTopicParam(search: string): string | null {
   try {
     const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
@@ -737,11 +713,7 @@ export function readTopicParam(search: string): string | null {
   }
 }
 
-/**
- * Returns a location search string with the topic parameter set or removed,
- * preserving any other query parameters. The topic id is already customer-safe
- * (the DTO's opaque `topicId`), so it is safe to keep in the URL.
- */
+/** Returns a location search string with the topic parameter set or removed. */
 export function withTopicParam(search: string, topicId: string | null): string {
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   if (topicId && topicId.trim()) params.set(COMPLIANCE_TOPIC_QUERY_PARAM, topicId);
@@ -750,11 +722,116 @@ export function withTopicParam(search: string, topicId: string | null): string {
   return next ? `?${next}` : "";
 }
 
+function PublishedDocumentsPanel({ topics }: { topics: PortalComplianceTopic[] }) {
+  const documents = topics.flatMap((topic) => topic.documents);
+  return (
+    <AdminPanel>
+      <AdminSectionHeader
+        title="Már megadott / elérhető"
+        subtitle="Az iroda által közzétett, Önnek szánt dokumentumok."
+        action={<AdminStatusPill tone="neutral" dot={false}>{documents.length} dokumentum</AdminStatusPill>}
+      />
+      <div className="p-4">
+        {documents.length > 0 ? (
+          <ul className="space-y-2">
+            {documents.map((doc) => (
+              <li key={doc.publicationId} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3">
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-[var(--adm-text)]">{doc.title}</p>
+                  <p className="text-[11px] text-[var(--adm-text-muted)]">
+                    {doc.versionLabel}
+                    {doc.publishedAt ? ` · Közzétéve: ${formatDate(doc.publishedAt)}` : ""}
+                  </p>
+                </div>
+                {doc.downloadAvailable ? (
+                  <a href={portalDownloadUrl(doc.publicationId)} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">
+                    Letöltés
+                  </a>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <CompactState title="Jelenleg nincs közzétett, Önnek szánt dokumentum." />
+        )}
+      </div>
+    </AdminPanel>
+  );
+}
+
+function RequestedDocumentsPanel({ requests }: { requests: PortalComplianceRequest[] }) {
+  const items = requests.filter((item) => item.category === "DOCUMENT");
+  return (
+    <AdminPanel>
+      <AdminSectionHeader
+        title="Bekért dokumentumok"
+        subtitle="Kizárólag az iroda által benyújtásra kért dokumentumok jelennek meg itt."
+        action={<AdminStatusPill tone="neutral" dot={false}>{items.length} bekérés</AdminStatusPill>}
+      />
+      <div className="p-4">
+        {items.length > 0 ? (
+          <ul className="space-y-2">
+            {items.map((item) => (
+              <li key={item.id} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</p>
+                    {item.contextLabel ? <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">Adatforrás: {item.contextLabel}</p> : null}
+                    {item.instructions ? <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.instructions}</p> : null}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <AdminStatusPill tone={requestStateTone[item.state]}>{requestStateLabel(item.state)}</AdminStatusPill>
+                      {item.dueAt ? <span className="text-[11px] text-[var(--adm-text-muted)]">Határidő: {formatDate(item.dueAt)}</span> : null}
+                    </div>
+                  </div>
+                  <Link href={requestDetailHref(item.caseId, item.id)} className="shrink-0 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">
+                    {item.canUpload ? "Feltöltés" : "Megnyitás"}
+                  </Link>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <CompactState title="Jelenleg nincs Öntől bekért dokumentum." />
+        )}
+      </div>
+    </AdminPanel>
+  );
+}
+
+function RequestGroup({ title, items }: { title: string; items: PortalComplianceRequest[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">{title}</p>
+      <ul className="mt-2 space-y-2">
+        {items.map((item) => (
+          <li key={item.id} className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</p>
+                {item.contextLabel ? <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">Adatforrás: {item.contextLabel}</p> : null}
+                {item.instructions ? <p className="mt-1 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.instructions}</p> : null}
+                {item.dueAt ? <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Határidő: {formatDate(item.dueAt)}</p> : null}
+              </div>
+              <Link href={requestDetailHref(item.caseId, item.id)} className="shrink-0 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">
+                Megnyitás
+              </Link>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function OrgComplianceView() {
   const [data, setData] = useState<PortalComplianceReadModel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [profileCompletion, setProfileCompletion] = useState<{ answered: number; total: number } | null>(null);
+
+  const [requests, setRequests] = useState<PortalComplianceRequest[] | null>(null);
+  const [requestsError, setRequestsError] = useState<string | null>(null);
 
   // Inline answering state for portal-answerable missing info
   const [activeQuestionKey, setActiveQuestionKey] = useState<string | null>(null);
@@ -766,6 +843,7 @@ export function OrgComplianceView() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ComplianceBucket | "ALL">("ALL");
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [section, setSection] = useState<ComplianceSection>("ATTEKINTES");
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -788,18 +866,28 @@ export function OrgComplianceView() {
       const progress = companyProfileCompletion(discovery.questions, discovery.screens);
       setProfileCompletion({ answered: progress.answered, total: progress.total });
     } catch {
-      // Non-fatal: the profile card falls back to a plain link.
       setProfileCompletion(null);
+    }
+  }, []);
+
+  const loadRequests = useCallback(async () => {
+    try {
+      const res = await getPortalComplianceRequests();
+      setRequests(res.items);
+      setRequestsError(null);
+    } catch (e) {
+      setRequests(null);
+      setRequestsError(clientSafeError(e));
     }
   }, []);
 
   useEffect(() => {
     void load();
     void loadProfile();
-  }, [load, loadProfile]);
+    void loadRequests();
+  }, [load, loadProfile, loadRequests]);
 
-  // URL-backed, customer-safe topic selection: deep-linkable and refresh-safe.
-  // `popstate` keeps browser back/forward in sync with the selected topic.
+  // URL-backed, refresh-safe topic selection. `popstate` keeps back/forward in sync.
   useEffect(() => {
     if (typeof window === "undefined") return;
     setSelectedTopicId(readTopicParam(window.location.search));
@@ -820,8 +908,44 @@ export function OrgComplianceView() {
 
   const visibleTopics = useMemo(() => filterTopics(topics, search, statusFilter), [topics, search, statusFilter]);
 
-  // A stale or unknown ?topic= value safely falls back to the overview and is
-  // removed from the URL without adding a history entry.
+  const requestGroups = useMemo(() => groupComplianceRequests(requests ?? []), [requests]);
+
+  const worklist = useMemo<WorklistItem[]>(() => {
+    const items: WorklistItem[] = [];
+    for (const request of requestGroups.awaiting) {
+      items.push({
+        key: `request-${request.id}`,
+        kind: requestWorkKind(request),
+        title: request.title,
+        context: request.contextLabel,
+        stateLabel: requestStateLabel(request.state),
+        tone: requestStateTone[request.state],
+        dueAt: request.dueAt,
+        href: requestDetailHref(request.caseId, request.id),
+        ctaLabel: request.canUpload ? "Feltöltés" : "Megnyitás",
+      });
+    }
+    for (const topic of topics) {
+      const answerable = topic.missingInformation.filter(
+        (info) => info.portalAnswerable === true && typeof info.questionKey === "string" && info.questionKey.trim().length > 0,
+      );
+      if (answerable.length === 0) continue;
+      items.push({
+        key: `profile-${topic.topicId}`,
+        kind: "PROFILE_INFORMATION",
+        title: `${topic.topicLabel}: ${answerable.length} adat megadása`,
+        context: topic.topicLabel,
+        stateLabel: "Adatra várunk Öntől",
+        tone: "amber",
+        dueAt: null,
+        href: withTopicParam("", topic.topicId),
+        ctaLabel: "Adat megadása →",
+      });
+    }
+    return items;
+  }, [requestGroups, topics]);
+
+  // A stale or unknown ?topic= value safely falls back to the overview.
   useEffect(() => {
     if (!data || !selectedTopicId) return;
     if (topics.some((topic) => topic.topicId === selectedTopicId)) return;
@@ -901,10 +1025,8 @@ export function OrgComplianceView() {
   if (selectedTopic) {
     const bucket = bucketFor.get(selectedTopic.topicId) ?? classifyTopic(selectedTopic);
     return (
-      <div className="space-y-6" data-testid="org-compliance-view">
-        {actionSuccess ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{actionSuccess}</div>
-        ) : null}
+      <div className="space-y-4" data-testid="org-compliance-view">
+        {actionSuccess ? <CompactState title={actionSuccess} /> : null}
         <TopicDetailView
           topic={selectedTopic}
           bucket={bucket}
@@ -937,83 +1059,154 @@ export function OrgComplianceView() {
     );
   }
 
+  const profileHint =
+    profileCompletion && profileCompletion.total > 0
+      ? `${profileCompletion.answered} / ${profileCompletion.total} adat megadva`
+      : "A megfelelési térkép a vállalati profil adataira épül.";
+
   return (
-    <div className="space-y-6" data-testid="org-compliance-view">
-      {/* HERO */}
-      <section className="min-w-0 rounded-3xl border border-[#eadfbf] bg-[#fffdf8] p-6 shadow-sm sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div className="min-w-0 max-w-2xl">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9b7b25]">Megfelelés és szabályozás</p>
-            <h1 className="mt-2 font-serif text-3xl font-semibold text-[#1f3a2e] sm:text-4xl">Compliance térkép</h1>
-            <p className="mt-3 text-sm leading-6 text-stone-600">
-              Ez a térkép a vállalkozás érintett megfelelési területeit, a nyitott teendőket, az ügyvédi vizsgálat
-              állapotát és az iroda által közzétett dokumentumokat mutatja. Az állapot kizárólag rögzített tények,
-              dokumentumok és ügyvédi elemzés alapján kerül kimutatásra — nem tartalmaz szintetikus pontszámot.
-            </p>
-          </div>
-          <div className="w-full max-w-xs rounded-2xl border border-[#eadfbf] bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-500">Vállalati profil</p>
-            {profileCompletion && profileCompletion.total > 0 ? (
-              <p className="mt-1 text-sm text-stone-800">
-                <span className="text-lg font-semibold text-stone-900">{profileCompletion.answered}</span>
-                {" / "}
-                {profileCompletion.total} adat megadva
-              </p>
+    <div className="space-y-4" data-testid="org-compliance-view">
+      <OperationalPageHeader
+        title="Megfelelés"
+        subtitle="A vállalkozás érintett megfelelési területei, az Öntől várt lépések, a bekérések és az iroda állapotai egy helyen."
+        secondaryActions={
+          <Link href="/portal/vallalat" className="rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-white px-3 py-1.5 text-[12px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]">
+            Vállalati profil
+          </Link>
+        }
+      />
+
+      <div className="flex flex-wrap gap-2" data-testid="compliance-section-nav">
+        {sectionNav.map((entry) => (
+          <AdminButton
+            key={entry.id}
+            size="xs"
+            variant={section === entry.id ? "primary" : "neutral"}
+            aria-pressed={section === entry.id}
+            onClick={() => setSection(entry.id)}
+          >
+            {entry.label}
+          </AdminButton>
+        ))}
+      </div>
+
+      {actionSuccess ? <CompactState title={actionSuccess} /> : null}
+
+      {section === "ATTEKINTES" ? (
+        <div className="space-y-4">
+          <AdminPanel>
+            <AdminSectionHeader title="Áttekintés" subtitle="Valós darabszámok. Nincs pontszám és nincs százalékos minősítés." />
+            <div className="grid gap-3 p-4 sm:grid-cols-3">
+              <StatusCard
+                label="Öntől szükséges"
+                count={groups.customerAction + requestGroups.awaiting.length}
+                hint="Az Ön a következő szereplő: adatmegadás, dokumentumbekérés vagy válasz szükséges."
+              />
+              <StatusCard
+                label="Irodánál van"
+                count={groups.atOffice + requestGroups.office.length}
+                hint="Az iroda dolgozik rajta; most nincs azonnali ügyféllépés."
+              />
+              <StatusCard
+                label="Jelenleg nincs ügyfélteendő"
+                count={groups.noAction + requestGroups.closed.length}
+                hint="Ezen a területen jelenleg nincs nyitott ügyféllépés."
+              />
+            </div>
+            <div className="space-y-1 border-t border-[var(--adm-border)] px-4 py-3 text-[11px] text-[var(--adm-text-muted)]">
+              <p>Vállalati profil · {profileHint}</p>
+              <p>A megjelenített megfelelési állapotok nem jelentenek felelősségkizáró abszolút garanciát vagy 100%-os minősítést.</p>
+            </div>
+          </AdminPanel>
+
+          <AdminPanel>
+            <AdminSectionHeader title="Mit kell most tennem?" subtitle="Az Ön következő lépései." />
+            {worklist.length > 0 ? (
+              <ul>{worklist.slice(0, 4).map((item) => <WorklistRow key={item.key} item={item} />)}</ul>
             ) : (
-              <p className="mt-1 text-sm text-stone-600">A megfelelési térkép a vállalati profil adataira épül.</p>
+              <div className="p-4">
+                <CompactState title="Jelenleg nincs Öntől várt teendő." detail="Ha az iroda új kérést tesz közzé, az itt jelenik meg." />
+              </div>
             )}
-            <Link href="/portal/vallalat" className="mt-3 inline-block text-sm font-semibold text-[#8a4536] hover:underline">
-              Vállalati profil megnyitása →
-            </Link>
-          </div>
+            {worklist.length > 4 ? (
+              <div className="border-t border-[var(--adm-border)] px-4 py-2">
+                <AdminButton size="xs" variant="ghost" onClick={() => setSection("TEENDOK")}>
+                  Összes teendő ({worklist.length}) →
+                </AdminButton>
+              </div>
+            ) : null}
+          </AdminPanel>
+
+          <AdminPanel>
+            <AdminSectionHeader title="Mi van az irodánál?" subtitle="Az iroda által feldolgozás alatt tartott kérések." />
+            <div className="p-4">
+              {requestGroups.office.length > 0 ? (
+                <RequestGroup title="Irodai feldolgozás alatt" items={requestGroups.office} />
+              ) : (
+                <CompactState title="Jelenleg nincs irodai feldolgozás alatt lévő kérése." />
+              )}
+            </div>
+          </AdminPanel>
         </div>
+      ) : null}
 
-        {actionSuccess ? (
-          <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{actionSuccess}</div>
-        ) : null}
-      </section>
+      {section === "TEENDOK" ? (
+        <AdminPanel>
+          <AdminSectionHeader title="Teendők" subtitle="Egységes ügyfél-teendőlista: adatmegadás, dokumentumbekérés és kérdés." />
+          {worklist.length > 0 ? (
+            <ul>{worklist.map((item) => <WorklistRow key={item.key} item={item} />)}</ul>
+          ) : (
+            <div className="p-4">
+              <CompactState title="Jelenleg nincs Öntől várt teendő." detail="Ha az iroda új kérést tesz közzé, az itt jelenik meg." />
+            </div>
+          )}
+        </AdminPanel>
+      ) : null}
 
-      {/* STATUS SUMMARY */}
-      <section className={card} data-testid="org-compliance-status-summary">
-        <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Áttekintés</h2>
-        <p className="mt-1 text-xs text-stone-500">
-          Az összesítő három, egymást kizáró kategóriát mutat, és kizárólag az Ön következő lépését jelzi. Nem
-          tartalmaz pontszámot vagy százalékos minősítést.
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <StatusCard
-            label="Öntől szükséges"
-            count={groups.customerAction}
-            tone="action"
-            hint="Az Ön a következő szereplő: adatmegadás vagy áttekintés szükséges."
-          />
-          <StatusCard
-            label="Irodánál van"
-            count={groups.atOffice}
-            tone="progress"
-            hint="Az iroda dolgozik rajta (feldolgozás vagy ügyvédi vizsgálat); most nincs azonnali ügyféllépés."
-          />
-          <StatusCard
-            label="Jelenleg nincs ügyfélteendő"
-            count={groups.noAction}
-            tone="clear"
-            hint="Ezen a területen jelenleg egyik oldalon sincs nyitott lépés."
-          />
+      {section === "DOKUMENTUMOK" ? (
+        <div className="space-y-4">
+          {requestsError ? (
+            <div role="alert">
+              <SafePanelError detail="A bekért dokumentumok betöltése nem sikerült." onRetry={() => void loadRequests()} />
+            </div>
+          ) : (
+            <RequestedDocumentsPanel requests={requests ?? []} />
+          )}
+          <PublishedDocumentsPanel topics={topics} />
         </div>
-        <p className="mt-3 text-xs text-stone-500">
-          Az irodai feldolgozás állapotát az egyes területek külön, „Irodai feldolgozás” jelöléssel mutatják — ez nem
-          ugyanaz a dimenzió, mint az Ön következő lépése.
-        </p>
-      </section>
+      ) : null}
 
-      {/* TOPIC LIST */}
-      <section className={card}>
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="font-serif text-xl font-semibold text-[#1f3a2e]">Megfelelési területek</h2>
-            <p className="mt-1 text-xs text-stone-500">{visibleTopics.length} megjelenített terület</p>
+      {section === "KERDESEK" ? (
+        <AdminPanel>
+          <AdminSectionHeader title="Kérdések és kérések" subtitle="Az iroda által közzétett, Önnek szánt megkeresések." />
+          <div className="space-y-4 p-4">
+            {requestsError ? (
+              <div role="alert">
+                <SafePanelError detail="A kérdések és kérések betöltése nem sikerült." onRetry={() => void loadRequests()} />
+              </div>
+            ) : requestGroups.awaiting.filter((item) => item.category === "QUESTION").length === 0 &&
+              requestGroups.office.filter((item) => item.category === "QUESTION").length === 0 &&
+              requestGroups.closed.filter((item) => item.category === "QUESTION").length === 0 ? (
+              <CompactState title="Jelenleg nincs Önnek szóló kérdés vagy kérés." />
+            ) : (
+              <>
+                <RequestGroup title="Válaszra vár Öntől" items={requestGroups.awaiting.filter((item) => item.category === "QUESTION")} />
+                <RequestGroup title="Irodai feldolgozás alatt" items={requestGroups.office.filter((item) => item.category === "QUESTION")} />
+                <RequestGroup title="Lezárt" items={requestGroups.closed.filter((item) => item.category === "QUESTION")} />
+              </>
+            )}
           </div>
-          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+        </AdminPanel>
+      ) : null}
+
+      {section === "ALLAPOTOK" ? (
+        <AdminPanel>
+          <AdminSectionHeader
+            title="Állapotok"
+            subtitle="Az Ön következő lépése és az irodai feldolgozás külön dimenzióban jelenik meg."
+            action={<AdminStatusPill tone="neutral" dot={false}>{visibleTopics.length} megjelenített terület</AdminStatusPill>}
+          />
+          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--adm-border)] px-4 py-3">
             <input
               type="search"
               className={`${inputClass} sm:w-64`}
@@ -1028,91 +1221,63 @@ export function OrgComplianceView() {
               ))}
             </select>
           </div>
-        </div>
 
-        {topics.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
-            Ehhez a vállalkozáshoz még nem készült megfelelési értékelés.
-          </div>
-        ) : visibleTopics.length === 0 ? (
-          <div className="mt-4 rounded-2xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-500">
-            Nincs a keresésnek vagy a szűrőnek megfelelő terület.
-          </div>
-        ) : (
-          <div className="mt-5 space-y-4">
-            {visibleTopics.map((topic) => {
-              const bucket = bucketFor.get(topic.topicId) ?? "CUSTOMER_ACTION";
-              const progress = controlProgressFor(topic, data?.controlsSummary);
-              const nextAction = nextActionFor(topic, bucket);
-              const answerableCount = topic.missingInformation.filter((info) => info.portalAnswerable && info.questionKey).length;
-              const officeCount = topic.missingInformation.length - answerableCount;
-              return (
-                <article key={topic.topicId} className="rounded-2xl border border-[#eadfbf] bg-white p-4 shadow-xs sm:p-5">
-                  <div className="grid gap-4 lg:grid-cols-12">
-                    {/* LEFT — what this area is */}
-                    <div className="lg:col-span-5">
-                      <div className="flex items-start gap-3">
-                        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#eadfbf] bg-[#fffdf8] text-[#8a4536]">
-                          <TopicGlyph kind={iconKind(topic.topicId)} />
-                        </span>
-                        <div className="min-w-0">
-                          <h3 className="text-lg font-semibold text-[#1f3a2e]">{topic.topicLabel}</h3>
-                          <p className="mt-1 text-sm text-stone-700">{topic.shortExplanation}</p>
+          {topics.length === 0 ? (
+            <div className="p-4">
+              <CompactState title="Ehhez a vállalkozáshoz még nem készült megfelelési értékelés." />
+            </div>
+          ) : visibleTopics.length === 0 ? (
+            <div className="p-4">
+              <CompactState title="Nincs a keresésnek vagy a szűrőnek megfelelő terület." />
+            </div>
+          ) : (
+            <ul>
+              {visibleTopics.map((topic) => {
+                const bucket = bucketFor.get(topic.topicId) ?? "CUSTOMER_ACTION";
+                const progress = controlProgressFor(topic, data?.controlsSummary);
+                const nextAction = nextActionFor(topic, bucket);
+                return (
+                  <li key={topic.topicId} className="border-t border-[var(--adm-border)] px-4 py-3 first:border-t-0">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 max-w-2xl">
+                        <div className="flex items-center gap-2">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-green-800)]">
+                            <TopicGlyph kind={iconKind(topic.topicId)} />
+                          </span>
+                          <h3 className="text-[14px] font-semibold text-[var(--adm-text)]">{topic.topicLabel}</h3>
                         </div>
+                        <p className="mt-1 text-[12px] text-[var(--adm-text-muted)]">{topic.shortExplanation}</p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <AdminStatusPill tone={bucketTone[bucket]}>{primaryBadgeLabel(topic, bucket)}</AdminStatusPill>
+                          <span className="text-[11px] font-semibold text-[var(--adm-text)]">{customerActionNote(topic)}</span>
+                          <span className="text-[11px] text-[var(--adm-text-muted)]">{officeProcessingNote(topic)}</span>
+                        </div>
+                        {nextAction ? <p className="mt-1.5 text-[11px] text-[var(--adm-terracotta-700)]">Következő lépés: {nextAction}</p> : null}
+                        {topic.documents.length > 0 ? (
+                          <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{`Közzétett ügyfél-dokumentum: ${topic.documents.length}`}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex flex-col items-start gap-2">
+                        {progress ? (
+                          <span className="text-[11px] text-[var(--adm-text-muted)]">
+                            Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
+                            {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
+                          </span>
+                        ) : null}
+                        <AdminButton size="xs" variant="neutral" onClick={() => openTopic(topic.topicId)}>
+                          Részletek megnyitása →
+                        </AdminButton>
                       </div>
                     </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </AdminPanel>
+      ) : null}
 
-                    {/* MIDDLE — primary state and the immediate customer step */}
-                    <div className="lg:col-span-4">
-                      <span className={`inline-block rounded-full border px-3 py-1 text-xs font-semibold ${bucketBadge[bucket]}`}>
-                        {primaryBadgeLabel(topic, bucket)}
-                      </span>
-
-                      {/* Two explicitly separate dimensions: customer next step vs office processing. */}
-                      <p className="mt-2 text-xs font-semibold text-stone-700">{customerActionNote(topic)}</p>
-                      <p className="mt-1 text-xs text-stone-500">{officeProcessingNote(topic)}</p>
-
-                      {nextAction ? (
-                        <div className="mt-3 rounded-xl bg-[#fff8f6] p-3 text-xs text-[#8a4536]">
-                          <strong>Következő lépés:</strong> {nextAction}
-                        </div>
-                      ) : null}
-
-                      {topic.missingInformation.length > 0 ? (
-                        <p className="mt-3 text-xs text-stone-600">
-                          {`Hiányzó adat: ${topic.missingInformation.length}${answerableCount > 0 ? ` · ebből Önnek megválaszolható: ${answerableCount}` : ""}${officeCount > 0 ? ` · irodai egyeztetéssel: ${officeCount}` : ""}`}
-                        </p>
-                      ) : null}
-                    </div>
-
-                    {/* RIGHT — authoritative control progress + published documents + detail */}
-                    <div className="lg:col-span-3">
-                      {progress ? (
-                        <div className="mb-3 rounded-xl bg-[#fffdf8] p-3 text-xs text-stone-700">
-                          Implementált kontrollok: <b>{progress.done} / {progress.total}</b>
-                          {progress.nextReviewAt ? ` · Következő felülvizsgálat: ${formatDate(progress.nextReviewAt)}` : ""}
-                        </div>
-                      ) : null}
-                      {topic.documents.length > 0 ? (
-                        <p className="text-xs text-stone-600">{`Közzétett ügyfél-dokumentum: ${topic.documents.length}`}</p>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() => openTopic(topic.topicId)}
-                        className="mt-3 inline-block rounded-full bg-[#b95e4b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#a54f3f]"
-                      >
-                        Részletek megnyitása →
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <HowMapIsBuilt />
+      {section === "ALLAPOTOK" ? <HowMapIsBuilt /> : null}
     </div>
   );
 }

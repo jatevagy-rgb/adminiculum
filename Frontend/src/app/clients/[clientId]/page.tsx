@@ -25,8 +25,16 @@ import { getClientColorDefinition } from "@/lib/clientColors";
 import { CompactNewCaseDialog } from "@/components/cases/CompactNewCaseDialog";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
+import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
+import { useRouteGeneration } from "@/lib/routeGeneration";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
+
+// Bounded dossier reads: every authorized related case stays reachable, but the
+// dossier never performs an unbounded enumeration or N+1 document explosion.
+const CLIENT_CASE_PAGE_SIZE = 100;
+const MAX_CLIENT_CASE_PAGES = 10;
+const MAX_CLIENT_DOCUMENT_CASES = 50;
 
 const formatDate = (value?: string) => {
   if (!value) return "—";
@@ -63,8 +71,10 @@ function ClientDetailContent() {
   const params = useParams();
   const router = useRouter();
   const clientId = (params?.clientId as string) || "";
+  const route = useRouteGeneration(clientId);
 
   const [client, setClient] = useState<Client | null>(null);
+  const [loadedClientId, setLoadedClientId] = useState<string | null>(null);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [documents, setDocuments] = useState<DossierDocument[]>([]);
   const [communications, setCommunications] = useState<ClientCommunicationSummaryItem[]>([]);
@@ -78,6 +88,10 @@ function ClientDetailContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [casesLoadError, setCasesLoadError] = useState<string | null>(null);
+  const [documentsError, setDocumentsError] = useState(false);
+  const [documentsLimited, setDocumentsLimited] = useState(false);
+  const [communicationsError, setCommunicationsError] = useState(false);
+  const [workspacesError, setWorkspacesError] = useState(false);
 
   const [showNewCaseModal, setShowNewCaseModal] = useState(false);
 
@@ -87,57 +101,117 @@ function ClientDetailContent() {
 
   const loadClientData = useCallback(async () => {
     if (!clientId) return;
+    const generation = route.generation;
     setIsLoading(true);
     setError(null);
     setHasOrganizationCapability(false);
+    setCasesLoadError(null);
+    setDocumentsError(false);
+    setDocumentsLimited(false);
+    setCommunicationsError(false);
+    setWorkspacesError(false);
 
     try {
-      const [clientData, directClientComms, portalWorkspaces] = await Promise.all([
-        getClient(clientId),
-        getClientCommunicationSummary(clientId, 15).catch(() => ({
-          communications: [],
-          client: { id: clientId, name: "" },
-        })),
-        listAdminWorkspaces(clientId).catch(() => ({ items: [] })),
-      ]);
+      // Client identity is required: a failure here is a full-page failure.
+      const clientData = await getClient(clientId);
 
-      const casesResponse = await getCases(1, 100, undefined, clientId).catch(() => null);
-      if (!casesResponse) {
-        setCasesLoadError("A kapcsolt ügyek listája jelenleg nem elérhető.");
-      } else {
-        setCasesLoadError(null);
+      // Independently failing modules: a failure is surfaced for that module
+      // and never converted into a legitimate-looking empty state.
+      let directCommunications: ClientCommunicationSummaryItem[] = [];
+      let communicationsFailed = false;
+      try {
+        const comms = await getClientCommunicationSummary(clientId, 15);
+        directCommunications = comms.communications || [];
+      } catch {
+        communicationsFailed = true;
       }
 
-      const relatedCases = casesResponse?.data || [];
+      let portalWorkspaces: AdminWorkspaceDTO[] = [];
+      let workspacesFailed = false;
+      try {
+        const workspaceResponse = await listAdminWorkspaces(clientId);
+        portalWorkspaces = workspaceResponse.items || [];
+      } catch {
+        workspacesFailed = true;
+      }
+
+      // Bounded pagination: every authorized related case stays reachable, but
+      // there is no arbitrary 100-case truncation and no unbounded enumeration.
+      const relatedCases: CaseListItem[] = [];
+      let total = 0;
+      let casesFailure: "none" | "failed" | "partial" = "none";
+      for (let page = 1; page <= MAX_CLIENT_CASE_PAGES; page += 1) {
+        let pageItems: CaseListItem[] = [];
+        try {
+          const response = await getCases(page, CLIENT_CASE_PAGE_SIZE, undefined, clientId);
+          pageItems = response.data || [];
+          total = response.pagination?.total ?? relatedCases.length + pageItems.length;
+        } catch {
+          casesFailure = page === 1 ? "failed" : "partial";
+          break;
+        }
+        relatedCases.push(...pageItems);
+        if (pageItems.length < CLIENT_CASE_PAGE_SIZE || relatedCases.length >= total) break;
+        if (page === MAX_CLIENT_CASE_PAGES) casesFailure = "partial";
+      }
+
+      // Document fan-out is bounded to avoid an N+1 explosion on large dossiers.
+      const documentCases = relatedCases.slice(0, MAX_CLIENT_DOCUMENT_CASES);
+      let documentsFailed = false;
+      const documentsByCase = await Promise.all(
+        documentCases.map(async (item) => {
+          try {
+            const docs = await getCaseDocuments(item.id);
+            return docs.map((doc) => ({ ...doc, caseId: item.id, caseNumber: item.caseNumber }));
+          } catch {
+            documentsFailed = true;
+            return [] as DossierDocument[];
+          }
+        }),
+      );
+
+      if (!route.isActive(generation)) return;
+
+      const mergedDocuments = documentsByCase
+        .flat()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
       setClient(clientData);
-      setPortalWorkspace(portalWorkspaces.items.find((item) => item.status !== "ARCHIVED") || portalWorkspaces.items[0] || null);
+      setPortalWorkspace(
+        portalWorkspaces.find((item) => item.status !== "ARCHIVED") || portalWorkspaces[0] || null,
+      );
       setHasOrganizationCapability(
-        portalWorkspaces.items.some(
+        portalWorkspaces.some(
           (item) =>
             item.status !== "ARCHIVED" &&
             (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY"),
         ),
       );
       setCases(relatedCases);
-
-      const documentsByCase = await Promise.all(
-        relatedCases.map(async (item) => {
-          const docs = await getCaseDocuments(item.id).catch(() => [] as DocumentItem[]);
-          return docs.map((doc) => ({ ...doc, caseId: item.id, caseNumber: item.caseNumber }));
-        }),
+      setCasesLoadError(
+        casesFailure === "failed"
+          ? "A kapcsolt ügyek listája jelenleg nem elérhető."
+          : casesFailure === "partial"
+            ? total > relatedCases.length
+              ? `A kapcsolt ügyek listája csak részlegesen töltődött be. Az első ${relatedCases.length} ügy látható a(z) ${total} közül.`
+              : "A kapcsolt ügyek listája csak részlegesen töltődött be."
+            : null,
       );
-
-      const mergedDocuments = documentsByCase.flat().sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setDocuments(mergedDocuments.slice(0, 12));
-
-      setCommunications(directClientComms.communications.slice(0, 12));
+      setDocumentsLimited(relatedCases.length > documentCases.length);
+      setDocumentsError(documentsFailed);
+      setCommunications(directCommunications.slice(0, 12));
+      setCommunicationsError(communicationsFailed);
+      setWorkspacesError(workspacesFailed);
+      setLoadedClientId(clientId);
     } catch (err) {
+      if (!route.isActive(generation)) return;
       console.error("Failed to load client dossier:", err);
       setError("Nem sikerült betölteni az ügyfél dossziét.");
     } finally {
-      setIsLoading(false);
+      if (route.isActive(generation)) setIsLoading(false);
     }
-  }, [clientId]);
+  }, [clientId, route]);
 
   useEffect(() => {
     loadClientData();
@@ -225,7 +299,7 @@ function ClientDetailContent() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || (loadedClientId !== clientId && !error)) {
     return <div className="flex-1 adm-board-page p-6"><div className="adm-board-empty text-xs text-[var(--adm-text-muted)]">Ügyfél dosszié betöltése...</div></div>;
   }
 
@@ -243,10 +317,17 @@ function ClientDetailContent() {
   const organizationMode = hasOrganizationCapability;
   const clientColorDef = getClientColorDefinition(client.colorKey);
 
-
   return (
     <div className="flex-1 min-h-0 overflow-y-auto adm-board-page">
       <main className="adm-board-container space-y-6">
+        {workspacesError ? (
+          <div role="alert">
+            <SafePanelError
+              detail="A szervezeti ügyfélmód adatai jelenleg nem érhetők el. Ez nem jelenti azt, hogy az ügyfél nem szervezeti módú."
+              onRetry={() => void loadClientData()}
+            />
+          </div>
+        ) : null}
         {/* Canonical client-level navigation first, matching every sibling module page. */}
         <ClientWorkspaceTabs clientId={clientId} active="overview" organizationMode={organizationMode} />
 
@@ -423,7 +504,16 @@ function ClientDetailContent() {
               </div>
               <span className="text-[10px] text-[var(--adm-text-muted)]">{documents.length} friss dokumentum</span>
             </div>
-            {documents.length === 0 ? (
+            {documentsLimited ? (
+              <p className="mb-2 text-[10px] text-[var(--adm-text-muted)]">
+                A dokumentumlista az első {MAX_CLIENT_DOCUMENT_CASES} kapcsolt ügy dokumentumai alapján készült.
+              </p>
+            ) : null}
+            {documentsError ? (
+              <div role="alert">
+                <SafePanelError detail="A kapcsolt dokumentumok betöltése nem sikerült." onRetry={() => void loadClientData()} />
+              </div>
+            ) : documents.length === 0 ? (
               <div className="adm-board-empty min-h-[130px] p-4 text-xs text-[var(--adm-text-soft)]">
                 <p>Nincs elérhető kapcsolt dokumentum.</p>
                 <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Dokumentum feltöltés vagy generálás után itt jelennek meg a kapcsolt fájlok.</p>
@@ -450,7 +540,11 @@ function ClientDetailContent() {
               </div>
               <span className="text-[10px] text-[var(--adm-text-muted)]">{communications.length} esemény</span>
             </div>
-            {communications.length === 0 ? (
+            {communicationsError ? (
+              <div role="alert">
+                <SafePanelError detail="A kommunikációs adatok jelenleg nem érhetők el." onRetry={() => void loadClientData()} />
+              </div>
+            ) : communications.length === 0 ? (
               <div className="adm-board-empty min-h-[130px] p-4 text-xs text-[var(--adm-text-soft)]">
                 <p>Nincs kapcsolt kommunikációs esemény.</p>
                 <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Az ügy- és ügyfélszintű kommunikációk itt egyesítve jelennek meg.</p>

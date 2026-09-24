@@ -19,6 +19,7 @@ type AppShellProps = {
     | "communications"
     | "reviews"
     | "clients"
+    | "compliance"
     | "documents-compare"
     | "litigation-workspace"
     | "time-entries"
@@ -67,6 +68,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
     communications: "Kommunikáció",
     reviews: "Review sor",
     clients: "Ügyfelek",
+    compliance: "Megfelelőség",
     "documents-compare": "Dokumentum összevetés",
     "litigation-workspace": "Peres stratégiai térkép",
     "time-entries": "Munkaórák",
