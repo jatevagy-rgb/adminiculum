@@ -71,7 +71,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function WorkspaceAreaRow({ area }: { area: ComplianceWorkspaceArea }) {
+function WorkspaceAreaRow({ area, cases, clients }: { area: ComplianceWorkspaceArea; cases: CaseListItem[]; clients: Client[] }) {
   const [open, setOpen] = useState(false);
   const outcome = area.outcome as ComplianceApplicabilityStatus;
   const citations = area.citations;
@@ -164,6 +164,26 @@ function WorkspaceAreaRow({ area }: { area: ComplianceWorkspaceArea }) {
           {area.activeFindingId ? (
             <p className="text-xs text-[var(--adm-text-muted)]">Ehhez a területhez aktív megállapítás tartozik — lásd lentebb.</p>
           ) : null}
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--adm-border)] pt-3">
+            <ClientRequestComposer
+              cases={cases}
+              clients={clients}
+              complianceContext={{ requirementVersionId: area.requirementVersionId }}
+              complianceContextLabel={area.title}
+              defaultType="QUESTION_RESPONSE"
+              triggerLabel="Kérdés az ügyfélnek"
+              triggerVariant="neutral"
+            />
+            <ClientRequestComposer
+              cases={cases}
+              clients={clients}
+              complianceContext={{ requirementVersionId: area.requirementVersionId }}
+              complianceContextLabel={area.title}
+              defaultType="MISSING_DOCUMENT_REQUEST"
+              triggerLabel="Dokumentum bekérése"
+              triggerVariant="neutral"
+            />
+          </div>
         </div>
       ) : null}
     </li>
@@ -333,7 +353,19 @@ export default function ClientCompliancePage() {
                         >
                           Vállalati működés →
                         </Link>
-                        <ClientRequestComposer cases={clientCases} clients={client ? [client] : []} />
+                        <button
+                          type="button"
+                          disabled={reconciling}
+                          onClick={() => { void handleReconcile(); }}
+                          className="inline-flex items-center rounded-xl border border-[var(--adm-green-800)] bg-[var(--adm-green-800)] px-3 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-[var(--adm-green-900)] disabled:opacity-60"
+                        >
+                          {reconciling
+                            ? "Értékelés folyamatban…"
+                            : workspace?.summary.enrollment === "ENROLLED"
+                              ? "Értékelés frissítése"
+                              : "Első megfelelőségi értékelés indítása"}
+                        </button>
+                        <ClientRequestComposer cases={clientCases} clients={client ? [client] : []} triggerVariant="neutral" />
                       </div>
                     </div>
                   </header>
@@ -457,7 +489,7 @@ export default function ClientCompliancePage() {
                     !workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
                       <Section title="Megfelelőségi területek">
                         <ul className="space-y-2">
-                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} />)}
+                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} cases={clientCases} clients={client ? [client] : []} />)}
                         </ul>
                       </Section>
                     ) : (

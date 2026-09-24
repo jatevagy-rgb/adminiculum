@@ -20,6 +20,9 @@ type ComposerProps = {
   complianceContext?: ComplianceRequestContext | null;
   complianceContextLabel?: string | null;
   defaultType?: ClientRequestType;
+  /** Optional trigger label + variant for contextual secondary actions. */
+  triggerLabel?: string;
+  triggerVariant?: "gold" | "neutral" | "muted";
   onChanged?: () => Promise<void> | void;
 };
 
@@ -81,7 +84,7 @@ export function buildClientRequestDraftPayload(input: {
   };
 }
 
-export function ClientRequestComposer({ cases: suppliedCases, clients = [], initialCaseId, complianceContext, complianceContextLabel, defaultType = "DOCUMENT_UPLOAD", onChanged }: ComposerProps) {
+export function ClientRequestComposer({ cases: suppliedCases, clients = [], initialCaseId, complianceContext, complianceContextLabel, defaultType = "DOCUMENT_UPLOAD", triggerLabel = "Új ügyfélkérés", triggerVariant = "gold", onChanged }: ComposerProps) {
   const [cases, setCases] = useState<CaseListItem[]>(suppliedCases || []);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -143,7 +146,7 @@ export function ClientRequestComposer({ cases: suppliedCases, clients = [], init
 
   return (
     <div data-testid="client-request-composer">
-      <AdminButton data-testid="new-client-request" variant="gold" onClick={() => setOpen(true)}>Új ügyfélkérés</AdminButton>
+      <AdminButton data-testid="new-client-request" variant={triggerVariant} onClick={() => setOpen(true)}>{triggerLabel}</AdminButton>
       {open ? (
         <div role="dialog" aria-modal="true" aria-labelledby="client-request-title" className="fixed inset-0 z-50 overflow-y-auto bg-black/30 p-4">
           <div className="mx-auto mt-8 grid max-w-3xl gap-4 rounded-2xl border border-[var(--adm-border)] bg-white p-5 shadow-xl">
