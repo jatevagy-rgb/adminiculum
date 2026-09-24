@@ -68,13 +68,83 @@ function toClientSafeRequest(row: any) {
     documentSpec: row.documentSpec ?? null,
     publishedAt: row.publishedAt,
     fields: (row.fields || []).map((f: any) => ({ id: f.id, label: f.clientSafeLabel, helpText: f.helpTextSafe, type: f.type, required: f.required, maxLength: f.maxLength, options: f.options ?? null, order: f.displayOrder })),
+    // Customer-safe context label only — never internal ids, engine state, or
+    // requirement/control/finding keys.
+    contextLabel: complianceContextSafeLabel(row),
   };
   assertClientSafe(dto);
   return dto;
 }
 
 function toInternalRequest(row: any) {
-  return { ...row };
+  return {
+    ...row,
+    complianceContext: toInternalComplianceContext(row),
+    contextLabel: complianceContextSafeLabel(row),
+  };
+}
+
+/**
+ * C4D provenance. Normalize + validate an optional single-origin Compliance
+ * context. Returns the persisted reference columns (or nulls). Fails closed on
+ * cross-client mismatch and on ambiguous multi-origin input.
+ */
+async function normalizeComplianceContext(
+  actor: InternalActor,
+  clientId: string,
+  input: any,
+  prisma: Prisma,
+): Promise<{ requirementVersionId: string | null; clientControlId: string | null; findingId: string | null; contextLabel: string | null }> {
+  const context = (input && typeof input === 'object' ? input.complianceContext : null) || null;
+  if (!context || typeof context !== 'object') {
+    return { requirementVersionId: null, clientControlId: null, findingId: null, contextLabel: null };
+  }
+  const requirementVersionId = context.requirementVersionId ? String(context.requirementVersionId) : null;
+  const clientControlId = context.clientControlId ? String(context.clientControlId) : null;
+  const findingId = context.findingId ? String(context.findingId) : null;
+  const refs = [requirementVersionId, clientControlId, findingId].filter((value): value is string => Boolean(value));
+  if (refs.length === 0) {
+    return { requirementVersionId: null, clientControlId: null, findingId: null, contextLabel: null };
+  }
+  if (refs.length > 1) {
+    throw new InteractionError(400, 'COMPLIANCE_CONTEXT_AMBIGUOUS', 'A request may originate from at most one Compliance context.');
+  }
+  let label: string | null = null;
+  if (requirementVersionId) {
+    const version = await prisma.requirementVersion.findUnique({ where: { id: requirementVersionId }, select: { id: true, title: true, requirementId: true } });
+    if (!version) throw new InteractionError(404, 'COMPLIANCE_CONTEXT_NOT_FOUND', 'Compliance requirement version not found.');
+    // A requirement version is not client-scoped; verify the client is actually
+    // enrolled against it through an applicability snapshot.
+    const applicability = await prisma.requirementApplicability.findFirst({ where: { clientId, requirementVersionId }, select: { id: true } });
+    if (!applicability) throw new InteractionError(403, 'COMPLIANCE_CONTEXT_FORBIDDEN', 'Requirement version is not applicable to this client.');
+    label = version.title;
+  } else if (clientControlId) {
+    const control = await prisma.clientControl.findFirst({ where: { id: clientControlId, clientId }, select: { id: true, controlDefinition: { select: { title: true } } } });
+    if (!control) throw new InteractionError(403, 'COMPLIANCE_CONTEXT_FORBIDDEN', 'Control does not belong to this client.');
+    label = control.controlDefinition.title;
+  } else if (findingId) {
+    const finding = await prisma.assessmentFinding.findFirst({ where: { id: findingId, clientId }, select: { id: true, title: true } });
+    if (!finding) throw new InteractionError(403, 'COMPLIANCE_CONTEXT_FORBIDDEN', 'Finding does not belong to this client.');
+    label = finding.title;
+  }
+  return { requirementVersionId, clientControlId, findingId, contextLabel: label };
+}
+
+function toInternalComplianceContext(row: any) {
+  if (!row.requirementVersionId && !row.clientControlId && !row.findingId) return null;
+  return {
+    requirementVersionId: row.requirementVersionId ?? null,
+    clientControlId: row.clientControlId ?? null,
+    findingId: row.findingId ?? null,
+  };
+}
+
+/** Customer-safe, derived provenance label — no internal identifier is exposed. */
+function complianceContextSafeLabel(row: any): string | null {
+  if (row.finding && row.finding.title) return row.finding.title;
+  if (row.clientControl?.controlDefinition?.title) return row.clientControl.controlDefinition.title;
+  if (row.requirementVersion?.title) return row.requirementVersion.title;
+  return null;
 }
 
 function requireCaseRequest(row: { caseId: string | null }): string {
@@ -143,6 +213,7 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
   const clientSafeTitle = safeText(input.clientSafeTitle, 'clientSafeTitle', 200, true)!;
   const clientSafeInstructions = safeText(input.clientSafeInstructions, 'clientSafeInstructions', 4000);
   const fields = normalizeFields(input.fields);
+  const provenance = await normalizeComplianceContext(actor, clientId, input, prisma);
   const created = await prisma.clientRequest.create({
     data: {
       clientId, caseId, createdById: actor.userId,
@@ -154,6 +225,9 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
       required: input.required !== false,
       documentSpec: normalizeDocumentSpec(input.documentSpec) as any,
       audienceSnapshot: {},
+      requirementVersionId: provenance.requirementVersionId,
+      clientControlId: provenance.clientControlId,
+      findingId: provenance.findingId,
       fields: fields.length ? {
           create: fields.map((f: any, i: number) => ({
           clientSafeLabel: f.label,
@@ -167,7 +241,7 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
         })),
       } : undefined,
     },
-    include: { fields: true },
+    include: { fields: true, requirementVersion: { select: { title: true } }, clientControl: { select: { controlDefinition: { select: { title: true } } } }, finding: { select: { title: true } } },
   });
   return toInternalRequest(created);
 }
@@ -245,7 +319,12 @@ export async function listRequestsInternal(actor: InternalActor, filter: { caseI
   const limit = Math.min(Math.max(1, filter.limit ?? 50), 200);
   const offset = Math.max(0, filter.offset ?? 0);
   const [items, total] = await Promise.all([
-    prisma.clientRequest.findMany({ where, orderBy: { createdAt: 'desc' }, skip: offset, take: limit, include: { fields: true } }),
+    prisma.clientRequest.findMany({ where, orderBy: { createdAt: 'desc' }, skip: offset, take: limit, include: {
+      fields: true,
+      requirementVersion: { select: { title: true } },
+      clientControl: { select: { controlDefinition: { select: { title: true } } } },
+      finding: { select: { title: true } },
+    } }),
     prisma.clientRequest.count({ where }),
   ]);
   return { items: items.map(toInternalRequest), total, limit, offset };
@@ -257,7 +336,13 @@ const CUSTOMER_VISIBLE = ['PUBLISHED', 'PARTIALLY_SUBMITTED', 'SUBMITTED', 'UNDE
 export async function listCustomerRequests(ctx: CustomerContext, prisma: Prisma = defaultPrisma) {
   const items = await prisma.clientRequest.findMany({
     where: { caseId: ctx.caseId, clientId: ctx.clientId, status: { in: CUSTOMER_VISIBLE as any } },
-    orderBy: { publishedAt: 'desc' }, include: { fields: { orderBy: { displayOrder: 'asc' } } },
+    orderBy: { publishedAt: 'desc' },
+    include: {
+      fields: { orderBy: { displayOrder: 'asc' } },
+      requirementVersion: { select: { title: true } },
+      clientControl: { select: { controlDefinition: { select: { title: true } } } },
+      finding: { select: { title: true } },
+    },
   });
   return { items: items.map(toClientSafeRequest) };
 }
@@ -265,7 +350,12 @@ export async function listCustomerRequests(ctx: CustomerContext, prisma: Prisma 
 export async function getCustomerRequest(ctx: CustomerContext, requestId: string, prisma: Prisma = defaultPrisma) {
   const row = await prisma.clientRequest.findFirst({
     where: { id: requestId, caseId: ctx.caseId, clientId: ctx.clientId, status: { in: CUSTOMER_VISIBLE as any } },
-    include: { fields: { orderBy: { displayOrder: 'asc' } } },
+    include: {
+      fields: { orderBy: { displayOrder: 'asc' } },
+      requirementVersion: { select: { title: true } },
+      clientControl: { select: { controlDefinition: { select: { title: true } } } },
+      finding: { select: { title: true } },
+    },
   });
   if (!row) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Request is not available.');
   return toClientSafeRequest(row);

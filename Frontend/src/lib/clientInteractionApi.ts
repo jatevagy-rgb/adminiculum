@@ -44,6 +44,7 @@ export interface CustomerRequestDTO {
   status: string;
   documentSpec: unknown;
   publishedAt: string | null;
+  contextLabel?: string | null;
   fields: ClientRequestFieldDTO[];
 }
 
@@ -103,6 +104,15 @@ export interface InternalClientRequestDTO extends InternalInteractionRow {
   revision: number;
   fields?: ClientRequestFieldDTO[];
   documentSpec?: Record<string, unknown> | null;
+  complianceContext?: ComplianceRequestContext | null;
+  contextLabel?: string | null;
+}
+
+/** C4D — single-origin Compliance provenance carried on a customer request. */
+export interface ComplianceRequestContext {
+  requirementVersionId?: string | null;
+  clientControlId?: string | null;
+  findingId?: string | null;
 }
 
 export interface CreateClientRequestDraftInput {
@@ -114,6 +124,7 @@ export interface CreateClientRequestDraftInput {
   required?: boolean;
   dueAt?: string | null;
   documentSpec?: Record<string, unknown>;
+  complianceContext?: ComplianceRequestContext;
   fields?: Array<{
     label: string;
     helpText?: string;

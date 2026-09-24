@@ -4325,10 +4325,25 @@ model ClientRequest {
   fields      ClientRequestField[]
   submissions ClientSubmission[]
 
+  // C4D — Compliance provenance. A request MAY originate from exactly one
+  // Compliance context (requirement / control / finding) so the answer or upload
+  // returns to the exact source. All three are nullable: non-Compliance requests
+  // and legacy rows stay untouched. onDelete SetNull preserves customer-facing
+  // request history even if the source context is later retired.
+  requirementVersionId String?
+  requirementVersion   RequirementVersion? @relation("ClientRequestRequirement", fields: [requirementVersionId], references: [id], onDelete: SetNull)
+  clientControlId      String?
+  clientControl        ClientControl?      @relation("ClientRequestControl", fields: [clientControlId], references: [id], onDelete: SetNull)
+  findingId            String?
+  finding              AssessmentFinding?  @relation("ClientRequestFinding", fields: [findingId], references: [id], onDelete: SetNull)
+
   @@index([caseId, status])
   @@index([intakeRequestId, status])
   @@index([clientId, status])
   @@index([status, dueAt])
+  @@index([requirementVersionId])
+  @@index([clientControlId])
+  @@index([findingId])
   @@map("client_requests")
 }
 
@@ -4848,6 +4863,7 @@ model AssessmentFinding {
   createdAt                  DateTime                         @default(now())
   updatedAt                  DateTime                         @updatedAt
   complianceProposals        ComplianceProposal[]
+  clientRequests             ClientRequest[]             @relation("ClientRequestFinding")
 
   @@index([assessmentId])
   @@index([clientId, status])
@@ -5716,6 +5732,7 @@ model RequirementVersion {
   rules                  ApplicabilityRuleVersion[]
   applicabilitySnapshots RequirementApplicability[]
   controlMaps             RequirementControlMap[]
+  clientRequests          ClientRequest[]         @relation("ClientRequestRequirement")
 
   @@unique([requirementId, versionKey])
   @@unique([id, requirementId])
@@ -6074,7 +6091,8 @@ model ClientControl {
   createdAt            DateTime                         @default(now())
   updatedAt            DateTime                         @updatedAt
 
-  evidenceLinks EvidenceControlLink[]
+  evidenceLinks  EvidenceControlLink[]
+  clientRequests ClientRequest[]        @relation("ClientRequestControl")
 
   @@unique([clientId, controlDefinitionId])
   @@unique([id, clientId])
