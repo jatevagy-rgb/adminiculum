@@ -192,7 +192,11 @@ describeWithDatabase('Document review PostgreSQL workflow persistence', () => {
   });
 
   it('keeps decision history immutable and DTO-safe at the table level', async () => {
-    const review = await db.documentReview.findFirstOrThrow({ where: { documentId: ids.document } });
+    // Pin to the original review whose anchor version is v2. The segment-gate
+    // test above creates a second review for the same document anchored to v3,
+    // so an unordered lookup on documentId alone can resolve the wrong review
+    // and observe the wrong decision history.
+    const review = await db.documentReview.findFirstOrThrow({ where: { documentId: ids.document, documentVersionId: ids.v2 } });
     const decisions = await listDecisions(review.id, actor, { limit: 100 }, db);
     expect(decisions.items.map((d) => d.action)).toEqual(expect.arrayContaining(['CREATED', 'ASSIGNED', 'STARTED', 'POINT_ADDED', 'CHANGES_REQUESTED', 'RESUBMITTED', 'POINT_UPDATED', 'APPROVED', 'CLOSED']));
     expect(JSON.stringify(decisions.items)).not.toMatch(/storageReference|workspaceText|clientPortal|portalGrant|review-v\d-key/);
