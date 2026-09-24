@@ -884,6 +884,49 @@ export async function getPortalCompliance() {
     suppressErrorLogging: true,
   });
 }
+
+export type PortalComplianceRequestState = 'AWAITING_CUSTOMER' | 'OFFICE_PROCESSING' | 'CLOSED';
+export type PortalComplianceRequestCategory = 'DOCUMENT' | 'QUESTION';
+
+export type PortalComplianceRequest = {
+  id: string;
+  caseId: string | null;
+  type: string;
+  title: string;
+  instructions: string | null;
+  dueAt: string | null;
+  required: boolean;
+  status: string;
+  documentSpec: unknown;
+  publishedAt: string | null;
+  fields: unknown[];
+  contextLabel: string | null;
+  category: PortalComplianceRequestCategory;
+  state: PortalComplianceRequestState;
+  canRespond: boolean;
+  canUpload: boolean;
+};
+
+export type PortalComplianceRequests = {
+  items: PortalComplianceRequest[];
+  counts: {
+    awaitingCustomer: number;
+    officeProcessing: number;
+    closed: number;
+    requestedDocuments: number;
+    openQuestions: number;
+  };
+  generatedAt: string;
+};
+
+/** Company-level requested-documents / open-questions projection (grant scoped). */
+export async function getPortalComplianceRequests() {
+  return fetchApi<PortalComplianceRequests>('/client-portal/compliance/requests', {
+    authContext: 'customer',
+    suppressErrorStatuses: [401, 403, 404, 503],
+    suppressErrorLogging: true,
+  });
+}
 export type PortalCompanyProfileSection =
   | "COMPANY"
   | "OPERATIONS"

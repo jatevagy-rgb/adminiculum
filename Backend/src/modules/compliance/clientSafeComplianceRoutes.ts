@@ -17,6 +17,7 @@ import { InteractionError } from '../client-interaction/base';
 import { CLIENT_PUBLICATION_GATES } from '../client-publication/publicationService';
 import { getClientSafeComplianceReadModel } from './clientSafeComplianceService';
 import { getClientSafeGrowthNarrative } from './companyGrowthNarrative';
+import { getCompanyClientRequestProjection } from './companyRequestProjection';
 
 const router = Router();
 
@@ -84,6 +85,30 @@ router.get('/', async (req, res: Response) => {
  * clientId derived from workspace membership. Never returns internal ids,
  * severity, ruleAst, requirementVersionId, findingId or proposalId.
  */
+/**
+ * GET /api/v1/client-portal/compliance/requests
+ *
+ * Company-level customer request projection: requested documents and open
+ * questions/requests across every case the authenticated identity actually has
+ * an active grant for. A request for a case without an active grant can never
+ * appear even when the clientId matches. clientId is derived from the resolved
+ * workspace membership, never from browser input.
+ */
+router.get('/requests', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const workspace = await portalAuth(req, res);
+    if (!workspace) return;
+    if (workspace.mode !== 'ORGANIZATION') {
+      throw new InteractionError(403, 'CLIENT_ORGANIZATION_WORKSPACE_REQUIRED', 'Compliance requests are only available in an organizational workspace.');
+    }
+    const session = requireActiveClientPortalSession(req);
+    const result = await getCompanyClientRequestProjection(workspace.clientId, session.clientPortalIdentityId, workspace.id);
+    res.json(result);
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
 router.get('/grow', async (req: Request, res: Response): Promise<void> => {
   try {
     const workspace = await portalAuth(req, res);

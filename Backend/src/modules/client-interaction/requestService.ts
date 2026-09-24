@@ -55,7 +55,7 @@ function capabilityForType(type: string): ClientInteractionCapability {
   return 'DOCUMENT_REQUESTS';
 }
 
-function toClientSafeRequest(row: any) {
+export function toClientSafeRequest(row: any) {
   const dto = {
     id: row.id,
     caseId: row.caseId,
@@ -332,6 +332,9 @@ export async function listRequestsInternal(actor: InternalActor, filter: { caseI
 
 // ---- Customer side: published requests and the customer's completed history on the granted case.
 const CUSTOMER_VISIBLE = ['PUBLISHED', 'PARTIALLY_SUBMITTED', 'SUBMITTED', 'UNDER_INTERNAL_REVIEW', 'CORRECTION_REQUESTED', 'COMPLETED'];
+
+/** Exported for company-level projections that must reuse the same visibility gate. */
+export const customerVisibleRequestStatuses: string[] = CUSTOMER_VISIBLE;
 
 export async function listCustomerRequests(ctx: CustomerContext, prisma: Prisma = defaultPrisma) {
   const items = await prisma.clientRequest.findMany({
