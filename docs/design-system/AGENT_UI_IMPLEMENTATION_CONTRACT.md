@@ -48,9 +48,12 @@
     - All controls must be reachable via `Tab` and have visible focus indicators (`focus-visible:ring-2`).
     - Test desktop (`1440x900`) and narrow mobile (`390x844`) layouts. Targets must be minimum 40x40px.
 
-11. **Visual Regression Must Be Reviewed for Intentional Changes**
-    - Any changes to shared components require running the visual regression suite.
-    - Snapshot updates must be deliberate developer actions via `--update-snapshots`.
+11. **Visual Regression Baselines Are Candidate Baselines (User Review Pending)**
+    - Snapshot baselines in `Frontend/tests/visual-baselines/` represent **Candidate Canonical Baselines (User Review Pending)**.
+    - They do NOT constitute final business acceptance; final authority remains live user acceptance.
+    - Check mode (`npm run test:visual` / `node tests/visualRegression.mjs --check`) is strictly read-only and fails closed if any baseline is missing or modified.
+    - Baseline updates must be deliberate developer actions via `npm run test:visual:update` (`--update-snapshots`).
+    - Human reviewer contact sheets can be generated at any time via `node tests/visualRegression.mjs --contact-sheets` (`adminiculum-ui-baselines-desktop-contact-sheet.png` and `adminiculum-ui-baselines-narrow-contact-sheet.png`).
 
 12. **Final Authority = Live User Acceptance**
     - No PR merge or production deploy without explicit live user acceptance testing.
@@ -61,10 +64,10 @@
 
 | Tool / Target | Location / Command | Purpose |
 |---|---|---|
-| **Coded UI Showroom** | `Frontend/src/app/dev/showroom/page.tsx`<br>`GET /dev/showroom?view=all` | Interactive component gallery showing real production primitives and workspace patterns. |
+| **Coded UI Showroom** | `Frontend/src/app/dev/showroom/page.tsx`<br>`GET /dev/showroom?view=all` | Interactive component gallery. Server Component gated fail-closed in production (`404 notFound`) unless explicitly enabled via `ADMINICULUM_ENABLE_UI_SHOWROOM=true`. |
 | **Canonical Tokens** | `Frontend/src/components/ui/tokens.ts`<br>`Frontend/src/app/globals.css` | Formal token definitions, WCAG contrast verification, and `ClientColorKey` specs. |
 | **UI Anti-Drift Guard** | `npm run guard:ui-drift`<br>`npm run guard:ui-drift:update` | CI scanner blocking new arbitrary hex colors, duplicate buttons, or excessive marketing radii. |
-| **Visual Regression** | `npm run test:visual`<br>`npm run test:visual:update` | Playwright snapshot suite across Desktop (`1440x900`) and Mobile (`390x844`). |
+| **Visual Regression Gate** | `npm run test:visual`<br>`npm run test:visual:update`<br>`node tests/visualRegression.mjs --contact-sheets` | Playwright snapshot suite across Desktop (`1440x900`) and Mobile (`390x844`). Uses decoded pixel diffing (`sharp` + `pixelmatch`) against Candidate Baselines. |
 | **A11y Smoke Tests** | `npm test` | Automated accessibility test suite verifying focus, ARIA, and contrast. |
 
 ---
