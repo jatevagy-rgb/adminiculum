@@ -101,10 +101,10 @@ test("Contextual work-panel shell exposes truthful four-group structure and neut
   assert.ok(shellMatch, "Right shell must be found");
   const shell = shellMatch[0];
 
-  for (const mode of ["overview", "changes", "comments", "approval"]) {
-    assert.match(shell, new RegExp(`contextualTab === '${mode}'`));
+  for (const mode of ["document", "changes", "review", "versions"]) {
+    assert.match(shell, new RegExp(`activeMode === '${mode}'`));
   }
-  assert.match(source, /<DocumentWorkspaceTabs active=\{contextualTab\} onChange=\{setContextualTab\}/);
+  assert.match(source, /onNavigate=\{navigateToMode\}/);
   assert.doesNotMatch(shell, /data-testid="contextual-tab-(analysis|client|handoff)"/);
   assert.match(source, /id="document-review"/);
   assert.match(source, /id="document-legal-analysis"/);
@@ -148,7 +148,7 @@ test("Preserved extended tools section keeps all existing workspaces and actions
   assert.match(source, /id="document-changes"/);
 
   // Workspaces and dialogs
-  assert.match(source, /data-testid="cmp-workspace-section"/);
+  assert.match(source, /data-testid="advanced-comparison"/);
   assert.match(source, /ComparisonWorkspace/);
   assert.match(source, /LegalAnalysisIntakePanel/);
   assert.match(source, /ClientPublicationPanel/);

@@ -11,12 +11,12 @@ const tabs = () => read("src/components/documents/workContext/DocumentWorkspaceT
 
 test("Document Workspace exposes the four primary case-document modes", () => {
   const source = tabs();
-  for (const label of ["Áttekintés", "Változások", "Megjegyzések", "Jóváhagyás"]) {
+  for (const label of ["DOKUMENTUM", "VÁLTOZÁSOK", "VÉLEMÉNYEZÉS", "VERZIÓK"]) {
     assert.match(source, new RegExp(label));
   }
-  assert.match(source, /onChange/);
+  assert.match(source, /onNavigate/);
   assert.match(source, /aria-pressed/);
-  assert.doesNotMatch(source, /href=|Link|document-(overview|changes|comments|approval)/);
+  assert.doesNotMatch(source, /href=|Link|document-mode-(document|changes|review|versions)/);
   assert.doesNotMatch(source, /Elemzés|Ügyfél|Leadás/);
 });
 

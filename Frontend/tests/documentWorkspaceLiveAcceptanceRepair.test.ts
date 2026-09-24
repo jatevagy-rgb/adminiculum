@@ -39,11 +39,11 @@ test("DW02 opens the document navigator and enables the desktop three-column she
 
 test("DW04 keeps four tabs while removing generic hero and Overview mode duplicates", () => {
   const top = source.match(/<section data-testid="canonical-top-region"[\s\S]*?<\/section>/)?.[0] ?? "";
-  const overview = source.match(/data-testid="contextual-overview-panel"[\s\S]*?<\/div>\s*<div className=\{contextualTab === 'approval'/)?.[0] ?? "";
+  const overview = source.match(/data-testid="document-mode-overview"[\s\S]*?<\/div>\s*<div className=\{activeMode === 'review'/)?.[0] ?? "";
   assert.doesNotMatch(top, /<AdminButton[^>]*>Változások<\/AdminButton>/);
   assert.doesNotMatch(top, /<AdminButton[^>]*>AI előkészítés<\/AdminButton>/);
   assert.doesNotMatch(overview, /Változások megnyitása|Megjegyzések megnyitása|Jóváhagyás megnyitása/);
-  for (const label of ["Áttekintés", "Változások", "Megjegyzések", "Jóváhagyás"]) {
+  for (const label of ["DOKUMENTUM", "VÁLTOZÁSOK", "VÉLEMÉNYEZÉS", "VERZIÓK"]) {
     assert.match(readFileSync(path.resolve(process.cwd(), "src/components/documents/workContext/DocumentWorkspaceTabs.tsx"), "utf8"), new RegExp(label));
   }
   assert.match(source, /setAiVersionPair\(\[baseVersionId, targetVersionId\]\)/);

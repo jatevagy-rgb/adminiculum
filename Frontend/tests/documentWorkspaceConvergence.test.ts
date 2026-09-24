@@ -14,7 +14,8 @@ test("Document workspace convergence keeps one reader and one comparison workspa
   assert.match(source, /data-testid="canonical-center-reading"/);
   assert.match(source, /data-testid="canonical-right-shell"/);
   assert.equal((source.match(/<ComparisonWorkspace/g) || []).length, 1);
-  assert.match(source, /<DocumentWorkspaceTabs active=\{contextualTab\} onChange=\{setContextualTab\}/);
+  assert.equal((source.match(/<CanonicalChangesWorkspace/g) || []).length, 1);
+  assert.match(source, /onNavigate=\{navigateToMode\}/);
   assert.doesNotMatch(source, /data-testid="primary-document-work-modes"/);
 });
 
