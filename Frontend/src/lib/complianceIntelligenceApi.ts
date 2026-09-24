@@ -84,7 +84,18 @@ export const complianceIntelligenceApi = {
       { cache: 'no-store' },
     );
   },
+  /** C4B read-only monitoring manifest (legal-source demand only, no identity). */
+  monitoringManifest() {
+    return fetchApi<ComplianceMonitoringManifest>(`/compliance-intelligence/monitoring-manifest`, { cache: 'no-store' });
+  },
 };
+
+export interface ComplianceMonitoringManifest {
+  schemaVersion: number;
+  generatedAt: string;
+  sources: Array<{ identifierFamily: string; sourceIdentifier: string; locators: string[]; referenceCount: number }>;
+  unresolvedSummary: { count: number; reasons: Record<string, number> };
+}
 
 export type LegalSourceImpactKind =
   | 'DOCUMENT_REFERENCE_IMPACT'

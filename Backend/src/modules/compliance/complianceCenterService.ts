@@ -67,6 +67,27 @@ export interface OfficeReviewWorkItem {
   dueAt: string | null;
 }
 
+export interface OfficeDocumentFamilyMember {
+  clientId: string;
+  clientName: string;
+  documentId: string;
+  documentVersionId: string;
+  version: number;
+  isCurrent: boolean;
+}
+
+export interface OfficeDocumentFamily {
+  name: string;
+  members: OfficeDocumentFamilyMember[];
+  legalSources: Array<{
+    legalSourceId: string;
+    legalSourceVersionId: string;
+    sourceKey: string;
+    canonicalCitation: string | null;
+    reviewRequired: boolean;
+  }>;
+}
+
 export interface ComplianceCenterOverview {
   schemaVersion: number;
   generatedAt: string;
@@ -277,6 +298,101 @@ export async function getComplianceCenterOverview(
     legalSources,
     reviewWork,
   };
+}
+
+/**
+ * C4D — office-wide document-family view, derived from CANONICAL document
+ * metadata only. A family is a group of INTERNAL_ANALYSIS compliance documents
+ * sharing the same canonical `Document.name` (e.g. "Home office szabályzat"),
+ * across authorized clients. No new document taxonomy is invented: if two
+ * documents have different names, they are different families; the "family" is
+ * simply the canonical name, nothing more.
+ *
+ * Legal-source bindings come from the exact clause anchors of each member's
+ * current document version. Review-required is the persisted registry review
+ * state — never an automatic non-compliance conclusion.
+ */
+export async function getComplianceDocumentFamilies(
+  actor: InternalActor,
+  prisma: PrismaClient = defaultPrisma,
+): Promise<{ documentFamilies: OfficeDocumentFamily[] }> {
+  const clientScope = await resolveOfficeClientScope(actor, prisma as Prisma);
+
+  const anchors = await prisma.complianceDocumentClauseAnchor.findMany({
+    where: {
+      documentVersion: {
+        document: {
+          complianceDocuments: { some: { audience: 'INTERNAL_ANALYSIS' } },
+          ...clientModelWhere(clientScope),
+        },
+      },
+    },
+    select: {
+      documentVersion: {
+        select: {
+          id: true,
+          version: true,
+          isCurrent: true,
+          document: { select: { id: true, name: true, clientId: true, client: { select: { name: true } } } },
+        },
+      },
+      legalSourceVersion: {
+        select: {
+          id: true,
+          legalSourceId: true,
+          status: true,
+          reviewStatus: true,
+          legalSource: { select: { sourceKey: true, canonicalCitation: true } },
+        },
+      },
+    },
+  });
+
+  const byName = new Map<string, {
+    members: Map<string, OfficeDocumentFamilyMember>;
+    legalSources: Map<string, OfficeDocumentFamily['legalSources'][number]>;
+  }>();
+
+  for (const anchor of anchors) {
+    const version = anchor.documentVersion;
+    const name = version.document.name;
+    const family = byName.get(name) ?? { members: new Map(), legalSources: new Map() };
+    const memberKey = `${version.document.clientId}:${version.id}`;
+    if (!family.members.has(memberKey)) {
+      family.members.set(memberKey, {
+        clientId: version.document.clientId,
+        clientName: version.document.client.name,
+        documentId: version.document.id,
+        documentVersionId: version.id,
+        version: version.version,
+        isCurrent: version.isCurrent,
+      });
+    }
+    if (anchor.legalSourceVersion) {
+      const source = anchor.legalSourceVersion;
+      const sourceKey = source.legalSourceId;
+      if (!family.legalSources.has(sourceKey)) {
+        family.legalSources.set(sourceKey, {
+          legalSourceId: source.legalSourceId,
+          legalSourceVersionId: source.id,
+          sourceKey: source.legalSource.sourceKey,
+          canonicalCitation: source.legalSource.canonicalCitation ?? null,
+          reviewRequired: String(source.reviewStatus) !== 'APPROVED' || String(source.status) === 'LEGAL_REVIEW_REQUIRED',
+        });
+      }
+    }
+    byName.set(name, family);
+  }
+
+  const documentFamilies: OfficeDocumentFamily[] = [...byName.entries()]
+    .map(([name, family]) => ({
+      name,
+      members: [...family.members.values()].sort((a, b) => a.clientName.localeCompare(b.clientName)),
+      legalSources: [...family.legalSources.values()].sort((a, b) => a.sourceKey.localeCompare(b.sourceKey)),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return { documentFamilies };
 }
 
 

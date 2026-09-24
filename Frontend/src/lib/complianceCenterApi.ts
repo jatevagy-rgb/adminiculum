@@ -58,8 +58,39 @@ export interface ComplianceCenterOverview {
   reviewWork: OfficeReviewWorkItem[];
 }
 
+export interface OfficeDocumentFamilyMember {
+  clientId: string;
+  clientName: string;
+  documentId: string;
+  documentVersionId: string;
+  version: number;
+  isCurrent: boolean;
+}
+
+export interface OfficeDocumentFamily {
+  name: string;
+  members: OfficeDocumentFamilyMember[];
+  legalSources: Array<{
+    legalSourceId: string;
+    legalSourceVersionId: string;
+    sourceKey: string;
+    canonicalCitation: string | null;
+    reviewRequired: boolean;
+  }>;
+}
+
+export interface ComplianceMonitoringManifest {
+  schemaVersion: number;
+  generatedAt: string;
+  sources: Array<{ identifierFamily: string; sourceIdentifier: string; locators: string[]; referenceCount: number }>;
+  unresolvedSummary: { count: number; reasons: Record<string, number> };
+}
+
 export const complianceCenterApi = {
   getOverview() {
     return fetchApi<ComplianceCenterOverview>(`/compliance/office/overview`, { cache: 'no-store' });
+  },
+  getDocumentFamilies() {
+    return fetchApi<{ documentFamilies: OfficeDocumentFamily[] }>(`/compliance/office/document-families`, { cache: 'no-store' });
   },
 };

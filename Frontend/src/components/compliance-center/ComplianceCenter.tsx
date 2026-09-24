@@ -5,8 +5,10 @@ import Link from "next/link";
 import {
   complianceCenterApi,
   type ComplianceCenterOverview,
+  type OfficeDocumentFamily,
   type OfficeLegalSourceReviewSignal,
 } from "@/lib/complianceCenterApi";
+import { complianceIntelligenceApi, type ComplianceMonitoringManifest } from "@/lib/complianceIntelligenceApi";
 import {
   DataTable,
   DataTableBody,
@@ -19,7 +21,7 @@ import { AdminBadge, AdminButton, AdminPanel, AdminStatusPill } from "@/componen
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { LegalSourceImpactPanel } from "./LegalSourceImpactPanel";
 
-type View = "overview" | "legal-sources" | "review-work";
+type View = "overview" | "legal-sources" | "documents" | "review-work";
 
 const workKindLabels: Record<string, string> = {
   FINDING: "Megállapítás",
@@ -124,6 +126,10 @@ export function ComplianceCenter() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
+  const [families, setFamilies] = useState<OfficeDocumentFamily[]>([]);
+  const [familiesLoading, setFamiliesLoading] = useState(false);
+  const [manifest, setManifest] = useState<ComplianceMonitoringManifest | null>(null);
+  const [impactKey, setImpactKey] = useState(0);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -135,9 +141,27 @@ export function ComplianceCenter() {
       .finally(() => setLoading(false));
   }, []);
 
+  const loadFamilies = useCallback(() => {
+    setFamiliesLoading(true);
+    complianceCenterApi
+      .getDocumentFamilies()
+      .then((result) => setFamilies(result.documentFamilies))
+      .catch(() => setFamilies([]))
+      .finally(() => setFamiliesLoading(false));
+  }, []);
+
+  const loadManifest = useCallback(() => {
+    complianceIntelligenceApi
+      .monitoringManifest()
+      .then(setManifest)
+      .catch(() => setManifest(null));
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadFamilies();
+    loadManifest();
+  }, [load, loadFamilies, loadManifest]);
 
   const selectedSource = useMemo(
     () => overview?.legalSources.find((source) => source.legalSourceVersionId === selectedSourceId) ?? null,
@@ -146,6 +170,8 @@ export function ComplianceCenter() {
 
   const reviewWork = overview?.reviewWork ?? [];
   const reviewRequiredSources = overview?.legalSources.filter((source) => source.reviewRequired) ?? [];
+  const monitoredFamilies = families.filter((family) => family.legalSources.length > 0);
+  const monitoredSourceCount = manifest?.sources.length ?? 0;
 
   const tabClass = (active: boolean) =>
     `rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] ${
@@ -166,6 +192,9 @@ export function ComplianceCenter() {
           </button>
           <button type="button" role="tab" aria-selected={view === "legal-sources"} className={tabClass(view === "legal-sources")} onClick={() => setView("legal-sources")}>
             Jogforrás-változások
+          </button>
+          <button type="button" role="tab" aria-selected={view === "documents"} className={tabClass(view === "documents")} onClick={() => setView("documents")}>
+            Dokumentumok
           </button>
           <button type="button" role="tab" aria-selected={view === "review-work"} className={tabClass(view === "review-work")} onClick={() => setView("review-work")}>
             Felülvizsgálati munka
@@ -230,20 +259,111 @@ export function ComplianceCenter() {
                 />
               </div>
             </section>
+
+            {/* AUTOMATIKUS FIGYELÉS vs EMBERI FELÜLVIZSGÁLAT — truthful boundary. */}
+            <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Automatikus figyelés</h2>
+                <AdminBadge tone="neutral">{monitoredSourceCount} figyelt jogforrás</AdminBadge>
+              </div>
+              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">
+                A rendszer a már rögzített jogforrás-kötéseket és a pontos dokumentumverzió-hivatkozásokat tartja nyilván. Nem fut folyamatos külső jogforrás-figyelő, ezért az itt megjelenő állapot a legutóbb rögzített kötéseken alapul — friss külső jogváltozás önmagától nem érkezik be.
+              </p>
+              {manifest && manifest.sources.length > 0 ? (
+                <ul className="mt-3 space-y-1">
+                  {manifest.sources.map((source) => (
+                    <li key={`${source.identifierFamily}-${source.sourceIdentifier}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--adm-border)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                      <span>
+                        <b>{source.sourceIdentifier}</b>
+                        <span className="text-[var(--adm-text-muted)]"> · {source.identifierFamily}</span>
+                        {source.locators.length ? <span className="text-[var(--adm-text-muted)]"> · {source.locators.join(", ")}</span> : null}
+                      </span>
+                      <span className="text-[var(--adm-text-muted)]">{source.referenceCount} hivatkozás</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített jogforrás-kötés.</p>
+              )}
+            </section>
+
             {selectedSource ? (
               <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Hatásvizsgálat</h2>
-                  <AdminStatusPill tone={selectedSource.reviewRequired ? "amber" : "green"}>
-                    {selectedSource.reviewRequired ? "Felülvizsgálat szükséges" : "Aktuális"}
-                  </AdminStatusPill>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Hatásvizsgálat</h2>
+                    <p className="mt-1 text-xs text-[var(--adm-text-muted)]">
+                      A hatásvizsgálat a már rögzített jogforrás-verzióra fut, a jelenlegi kötések és dokumentumverziók alapján. Nem tölt le és nem hoz létre új jogforrás-verziót.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <AdminStatusPill tone={selectedSource.reviewRequired ? "amber" : "green"}>
+                      {selectedSource.reviewRequired ? "Felülvizsgálat szükséges" : "Aktuális"}
+                    </AdminStatusPill>
+                    <AdminButton size="sm" variant="neutral" onClick={() => setImpactKey((key) => key + 1)}>
+                      Hatásvizsgálat futtatása
+                    </AdminButton>
+                  </div>
                 </div>
                 <div className="mt-4">
-                  <LegalSourceImpactPanel legalSourceVersionId={selectedSource.legalSourceVersionId} />
+                  <LegalSourceImpactPanel key={impactKey} legalSourceVersionId={selectedSource.legalSourceVersionId} />
                 </div>
               </section>
             ) : null}
           </div>
+        ) : view === "documents" ? (
+          <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
+            <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Dokumentumok ügyfeleken át</h2>
+            <p className="mt-2 text-xs text-[var(--adm-text-muted)]">
+              Az azonos nevű belső elemzési dokumentumok közös jogforrás-kötés szerint csoportosítva. A család a dokumentum valódi neve alapján jön létre — nincs mesterséges dokumentum-taxonómia.
+            </p>
+            {familiesLoading ? (
+              <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése…</p>
+            ) : monitoredFamilies.length === 0 ? (
+              <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs jogforrás-kötéssel rendelkező dokumentum.</p>
+            ) : (
+              <div className="mt-3 space-y-4">
+                {monitoredFamilies.map((family) => (
+                  <div key={family.name} className="rounded border border-[var(--adm-border)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-[var(--adm-text)]">{family.name}</h3>
+                      <span className="text-xs text-[var(--adm-text-muted)]">
+                        {family.members.length} ügyfél · {family.legalSources.length} jogforrás
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Érintett ügyfelek és verziók</p>
+                        <ul className="mt-1 space-y-1">
+                          {family.members.map((member) => (
+                            <li key={member.documentVersionId} className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--adm-text)]">
+                              <Link href={`/clients/${encodeURIComponent(member.clientId)}/compliance`} className="hover:underline">
+                                {member.clientName}
+                              </Link>
+                              <span className="text-[var(--adm-text-muted)]">
+                                v{member.version}{member.isCurrent ? " · aktuális" : ""}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Kapcsolt jogforrások</p>
+                        <ul className="mt-1 space-y-1">
+                          {family.legalSources.map((source) => (
+                            <li key={source.legalSourceVersionId} className="flex flex-wrap items-center gap-2 text-xs text-[var(--adm-text)]">
+                              <span>{source.canonicalCitation || source.sourceKey}</span>
+                              {source.reviewRequired ? <AdminBadge tone="amber" dot>Felülvizsgálat szükséges</AdminBadge> : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         ) : (
           <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
             <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Felülvizsgálati munka</h2>

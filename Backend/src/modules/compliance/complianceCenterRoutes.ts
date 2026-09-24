@@ -17,7 +17,7 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { InteractionError, requireInternal } from '../client-interaction/base';
-import { getComplianceCenterOverview } from './complianceCenterService';
+import { getComplianceCenterOverview, getComplianceDocumentFamilies } from './complianceCenterService';
 
 const router = Router();
 
@@ -37,6 +37,19 @@ router.get('/office/overview', async (req: Request, res: Response): Promise<void
       return;
     }
     res.status(500).json({ status: 500, code: 'COMPLIANCE_CENTER_OVERVIEW_ERROR', message: 'Compliance Center overview request failed.' });
+  }
+});
+
+router.get('/office/document-families', async (req: Request, res: Response): Promise<void> => {
+  try {
+    requireInternal(actor(req));
+    res.json(await getComplianceDocumentFamilies(actor(req)));
+  } catch (error) {
+    if (error instanceof InteractionError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    res.status(500).json({ status: 500, code: 'COMPLIANCE_CENTER_DOCUMENT_FAMILIES_ERROR', message: 'Compliance Center document families request failed.' });
   }
 });
 
