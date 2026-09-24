@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminBadge } from "@/components/adminiculum/ui";
+
 export type WorkspaceMode = "document" | "changes" | "review" | "versions";
 
 type DocumentWorkspaceTabsProps = {
@@ -40,14 +42,10 @@ export function DocumentWorkspaceTabs({ active, onNavigate, changeCount, reviewA
           >
             {label}
             {count != null && count > 0 ? (
-              <span className="ml-1.5 rounded-full bg-[var(--adm-canvas-subtle)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--adm-text-secondary)]">
-                {count}
-              </span>
+              <AdminBadge tone="neutral" className="ml-1.5">{count}</AdminBadge>
             ) : null}
             {attention != null && attention > 0 ? (
-              <span className="ml-1.5 rounded-full bg-[var(--adm-brand-terracotta)] px-1.5 py-0.5 text-[10px] font-bold text-white">
-                {attention}
-              </span>
+              <AdminBadge tone="burgundy" className="ml-1.5">{attention}</AdminBadge>
             ) : null}
           </button>
         );

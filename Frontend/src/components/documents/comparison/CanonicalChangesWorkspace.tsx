@@ -13,7 +13,7 @@
  * review, optimistic-conflict handling and lifecycle states stay identical.
  */
 import { useCallback, useEffect, useState } from "react";
-import { AdminButton } from "@/components/adminiculum/ui";
+import { AdminBadge, AdminButton } from "@/components/adminiculum/ui";
 import {
   createComparison, retryComparison,
   type SegmentDto, type SegmentFilters, type SegmentCategory, type ReviewState,
@@ -186,9 +186,9 @@ export function CanonicalChangesWorkspace({
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {segmentStates.rejected > 0 ? <span className="rounded-full border border-[var(--adm-brand-terracotta-soft)] bg-[var(--adm-brand-terracotta-soft)] px-2 py-0.5 text-[10px] font-bold text-[var(--adm-brand-terracotta)]">{segmentStates.rejected} elutasítva</span> : null}
-            {segmentStates.needsDiscussion > 0 ? <span className="rounded-full border border-[var(--adm-semantic-warning)]/40 bg-[var(--adm-canvas-subtle)] px-2 py-0.5 text-[10px] font-bold text-[var(--adm-semantic-warning)]">{segmentStates.needsDiscussion} megbeszélendő</span> : null}
-            {segmentStates.unreviewed > 0 ? <span className="rounded-full border border-[var(--adm-border)] bg-[var(--adm-canvas-subtle)] px-2 py-0.5 text-[10px] font-bold text-[var(--adm-text-secondary)]">{segmentStates.unreviewed} átnézetlen</span> : null}
+            {segmentStates.rejected > 0 ? <AdminBadge tone="burgundy">{segmentStates.rejected} elutasítva</AdminBadge> : null}
+            {segmentStates.needsDiscussion > 0 ? <AdminBadge tone="amber">{segmentStates.needsDiscussion} megbeszélendő</AdminBadge> : null}
+            {segmentStates.unreviewed > 0 ? <AdminBadge tone="neutral">{segmentStates.unreviewed} átnézetlen</AdminBadge> : null}
           </div>
         </div>
       </div>
