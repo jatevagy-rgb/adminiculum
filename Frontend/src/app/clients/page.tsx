@@ -4,10 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { AdminPanel } from "@/components/adminiculum/ui";
-import { Button, PageHeader, Modal, EmptyState, Alert, DataTable, DataTableHead, DataTableHeaderCell, DataTableBody, DataTableRow, DataTableCell, Badge, QuietLink } from "@/components/ui";
+import { Button, IconButton, PageHeader, Modal, EmptyState, Alert, DataTable, DataTableHead, DataTableHeaderCell, DataTableBody, DataTableRow, DataTableCell, Badge, QuietLink } from "@/components/ui";
 import { ClientColorSelector } from "@/components/clients/ClientColorSelector";
 import { createClient, getClients, updateClient, type Client, type CreateClientData, type UpdateClientData } from "@/lib/api";
-import { getClientColorDefinition } from "@/lib/clientColors";
+import { getClientColorDefinition, type ClientColorKey } from "@/lib/clientColors";
 
 function houseStyleFillStatus(profile: Client["houseStyleProfile"]): "none" | "partial" | "filled" {
   if (!profile) return "none";
@@ -55,11 +55,15 @@ function ClientsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [showModal, setShowModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [formData, setFormData] = useState<CreateClientData>(emptyClientForm());
   const [isSaving, setIsSaving] = useState(false);
+  const [colorModalClient, setColorModalClient] = useState<Client | null>(null);
+  const [selectedColorKey, setSelectedColorKey] = useState<ClientColorKey | null>(null);
+  const [isSavingColor, setIsSavingColor] = useState(false);
+  const [colorSaveError, setColorSaveError] = useState<string | null>(null);
 
   const loadClients = useCallback(async () => {
     setIsLoading(true);
@@ -137,22 +141,131 @@ function ClientsPageContent() {
     }
   };
 
-  const renderClientCard = (client: Client) => {
+  const handleOpenColorModal = (client: Client) => {
+    setColorModalClient(client);
+    setSelectedColorKey(client.colorKey || null);
+    setColorSaveError(null);
+  };
+
+  const handleCloseColorModal = () => {
+    if (isSavingColor) return;
+    setColorModalClient(null);
+    setColorSaveError(null);
+  };
+
+  const handleSaveColor = async () => {
+    if (!colorModalClient) return;
+    setIsSavingColor(true);
+    setColorSaveError(null);
+    try {
+      const updated = await updateClient(colorModalClient.id, { colorKey: selectedColorKey });
+      setClients((prev) =>
+        prev.map((current) =>
+          current.id === colorModalClient.id
+            ? { ...current, colorKey: updated.colorKey !== undefined ? updated.colorKey : selectedColorKey }
+            : current,
+        ),
+      );
+      setColorModalClient(null);
+    } catch (err: unknown) {
+      console.error("Failed to update client color:", err);
+      setColorSaveError("Nem sikerült elmenteni az ügyfélszín-jelölést. Próbáld újra.");
+    } finally {
+      setIsSavingColor(false);
+    }
+  };
+
+  const renderClientTile = (client: Client) => {
     const color = getClientColorDefinition(client.colorKey);
 
     return (
-      <AdminPanel key={client.id} className={`relative min-w-0 border-2 border-l-4 p-4 sm:p-5 ${color.borderClass} ${color.key ? color.accentBorderClass : ""}`}>
-        <div className="flex flex-col gap-4">
-          <div className="min-w-0 flex-1">
-            <h2 className="break-words font-serif text-2xl font-medium leading-snug text-[#1F2937] [overflow-wrap:anywhere]">{client.name}</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#6B7280]">
-              <span>{client.relationshipMode === "PORTAL_CENTRIC" ? "Portál ügyfél" : "Ügyfél"}</span>
+      <AdminPanel
+        key={client.id}
+        data-testid={`client-tile-${client.id}`}
+        className={`relative flex min-w-0 flex-col overflow-hidden border-2 border-l-4 transition-shadow hover:shadow-md ${color.borderClass} ${color.key ? color.accentBorderClass : ""}`}
+      >
+        <div className="flex flex-1 flex-col gap-3 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <h2 className="[overflow-wrap:anywhere] break-words font-serif text-lg font-semibold leading-snug text-[var(--adm-text)]">
+                <Link
+                  href={`/clients/${client.id}`}
+                  className="rounded-[4px] transition-colors hover:text-[var(--adm-green-800)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-800)]"
+                >
+                  {client.name}
+                </Link>
+              </h2>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <Badge shape="pill" tone={client.relationshipMode === "PORTAL_CENTRIC" ? "teal" : "neutral"} dot>
+                  {client.relationshipMode === "PORTAL_CENTRIC" ? "Portál ügyfél" : "Ügyfél"}
+                </Badge>
+              </div>
             </div>
+            <IconButton
+              size="sm"
+              variant="neutral"
+              aria-label={`Ügyfélszín módosítása: ${client.name} (jelenleg: ${color.label})`}
+              title={`Ügyfélszín: ${color.label}`}
+              onClick={() => handleOpenColorModal(client)}
+              className="shrink-0"
+            >
+              <span
+                aria-hidden="true"
+                className={`h-3.5 w-3.5 rounded-full border border-black/10 ${color.key ? color.accentClass : "bg-white"}`}
+              />
+            </IconButton>
           </div>
-          <div className="flex flex-wrap items-center gap-2 border-t border-[#E5E7E6] pt-3">
-            <Link href={`/clients/${client.id}`} className="inline-flex min-h-11 items-center justify-center rounded-[6px] border border-[#0F3D32] bg-[#0F3D32] px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#062B22] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F3D32]">Ügyfél dosszié</Link>
-            <Link href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`} className="inline-flex min-h-11 items-center justify-center rounded-[6px] border border-[#E5E7E6] bg-white px-3 py-2 text-[13px] font-semibold text-[#1F2937] transition-colors hover:bg-[#F8FAF9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0F3D32]">+ Új ügy</Link>
-          </div>
+
+          <dl className="space-y-1 text-xs text-[var(--adm-text-muted)]">
+            {client.contactPerson ? (
+              <div className="flex items-center gap-1.5">
+                <dt className="shrink-0">Kapcsolattartó:</dt>
+                <dd className="min-w-0 truncate font-medium text-[var(--adm-text)]">{client.contactPerson}</dd>
+              </div>
+            ) : null}
+            {client.email ? (
+              <div className="flex items-center gap-1.5">
+                <dt className="sr-only">Email</dt>
+                <dd className="min-w-0 truncate">
+                  <a
+                    href={`mailto:${client.email}`}
+                    className="rounded-[3px] text-[var(--adm-green-800)] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-800)]"
+                  >
+                    {client.email}
+                  </a>
+                </dd>
+              </div>
+            ) : null}
+            {client.phone ? (
+              <div className="flex items-center gap-1.5">
+                <dt className="sr-only">Telefon</dt>
+                <dd className="truncate">{client.phone}</dd>
+              </div>
+            ) : null}
+            {client.taxNumber ? (
+              <div className="flex items-center gap-1.5">
+                <dt className="shrink-0">Adószám:</dt>
+                <dd className="truncate">{client.taxNumber}</dd>
+              </div>
+            ) : null}
+          </dl>
+        </div>
+
+        <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[var(--adm-border)] p-3">
+          <Link
+            href={`/clients/${client.id}`}
+            className="inline-flex min-h-9 items-center justify-center rounded-[6px] border border-[var(--adm-border)] bg-[var(--adm-surface-raised)] px-3 text-xs font-semibold text-[var(--adm-text)] transition-colors hover:bg-[var(--adm-surface)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-800)]"
+          >
+            Dosszié
+          </Link>
+          <QuietLink
+            href={`/cases?newCase=1&clientId=${encodeURIComponent(client.id)}`}
+            size="sm"
+            className="min-h-9 px-2"
+            aria-label={`Új ügy indítása: ${client.name}`}
+          >
+            + Új ügy
+          </QuietLink>
         </div>
       </AdminPanel>
     );
@@ -193,22 +306,22 @@ function ClientsPageContent() {
             </div>
             <div className="flex items-center gap-3 self-end sm:self-auto">
               <span className="text-xs text-[#6B7280]">{filteredClients.length} találat</span>
-              <div className="inline-flex rounded-lg border border-[#E5E7E6] bg-[#F8FAF9] p-0.5 text-xs font-medium" role="group" aria-label="Nézet kiválasztása">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("table")}
-                  className={`rounded-md px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D32] ${viewMode === "table" ? "bg-white font-semibold text-[#0F3D32] shadow-sm" : "text-[#6B7280] hover:text-[#1F2937]"}`}
-                  aria-pressed={viewMode === "table"}
-                >
-                  Lista
-                </button>
+              <div className="inline-flex rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-0.5 text-xs font-medium" role="group" aria-label="Nézet kiválasztása">
                 <button
                   type="button"
                   onClick={() => setViewMode("cards")}
-                  className={`rounded-md px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#0F3D32] ${viewMode === "cards" ? "bg-white font-semibold text-[#0F3D32] shadow-sm" : "text-[#6B7280] hover:text-[#1F2937]"}`}
+                  className={`rounded-md px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-800)] ${viewMode === "cards" ? "bg-[var(--adm-surface-raised)] font-semibold text-[var(--adm-green-800)] shadow-sm" : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"}`}
                   aria-pressed={viewMode === "cards"}
                 >
-                  Kártyák
+                  Csempék
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("table")}
+                  className={`rounded-md px-3 py-1.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--adm-green-800)] ${viewMode === "table" ? "bg-[var(--adm-surface-raised)] font-semibold text-[var(--adm-green-800)] shadow-sm" : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"}`}
+                  aria-pressed={viewMode === "table"}
+                >
+                  Lista
                 </button>
               </div>
             </div>
@@ -321,7 +434,7 @@ function ClientsPageContent() {
                   </DataTableBody>
                 </DataTable>
               ) : (
-                <div className="grid gap-3 xl:grid-cols-2">{filteredClients.map(renderClientCard)}</div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{filteredClients.map(renderClientTile)}</div>
               )}
             </section>
           ) : (
@@ -399,6 +512,39 @@ function ClientsPageContent() {
             disabled={isSaving}
           />
         </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(colorModalClient)}
+        onClose={handleCloseColorModal}
+        title="Ügyfélszín módosítása"
+        description={colorModalClient ? `${colorModalClient.name} vizuális azonosító színének beállítása.` : undefined}
+        maxWidth="lg"
+        footer={
+          <div className="flex w-full items-center justify-between gap-3">
+            <div>
+              {colorSaveError ? (
+                <p role="alert" className="text-xs font-medium text-[var(--adm-terracotta-700)]">
+                  {colorSaveError}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={handleCloseColorModal} disabled={isSavingColor}>
+                Mégse
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void handleSaveColor()}
+                disabled={isSavingColor || !colorModalClient}
+              >
+                {isSavingColor ? "Mentés..." : "Mentés"}
+              </Button>
+            </div>
+          </div>
+        }
+      >
+        <ClientColorSelector value={selectedColorKey} onChange={setSelectedColorKey} disabled={isSavingColor} />
       </Modal>
     </div>
   );

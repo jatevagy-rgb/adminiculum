@@ -52,14 +52,14 @@ test('desktop table keeps its five columns and fixed minimum width', () => {
   }
 });
 
-test('list/search/toggle/card behaviors are untouched', () => {
-  assert.match(source, /const \[viewMode, setViewMode\] = useState<"table" \| "cards">\("table"\);/);
+test('list/search/toggle/tile behaviors are untouched by the narrow table repair', () => {
+  assert.match(source, /const \[viewMode, setViewMode\] = useState<"cards" \| "table">\("cards"\);/);
   assert.match(source, /type="search"/);
   assert.match(source, /placeholder="Név, email, kapcsolattartó vagy adószám"/);
   assert.match(source, /role="group" aria-label="Nézet kiválasztása"/);
   assert.match(source, /aria-pressed=\{viewMode === "table"\}/);
   assert.match(source, /aria-pressed=\{viewMode === "cards"\}/);
-  assert.match(source, /<div className="grid gap-3 xl:grid-cols-2">\{filteredClients\.map\(renderClientCard\)\}<\/div>/);
+  assert.match(source, /<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">\{filteredClients\.map\(renderClientTile\)\}<\/div>/);
   assert.match(source, />\s*\+ Új ügyfél\s*<\/Button>/);
   assert.match(source, /href=\{`\/clients\/\$\{client\.id\}`\}/);
 });
