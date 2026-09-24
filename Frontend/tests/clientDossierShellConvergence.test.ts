@@ -115,7 +115,7 @@ test('WORKING_LINKS: operational destinations remain intact', () => {
 
 test('INDIVIDUAL_MODE: organization-only surfaces stay capability-gated', () => {
   const src = dossier();
-  assert.match(src, /portalWorkspaces\.items\.some\(/);
+  assert.match(src, /portalWorkspaces\.some\(/);
   assert.match(src, /item\.mode === "ORGANIZATION" \|\| item\.mode === "CASE_RELAY"/);
   assert.match(src, /const organizationMode = hasOrganizationCapability;/);
   assert.match(src, /organizationMode \|\| client\.taxNumber/);
@@ -147,7 +147,7 @@ test('HASH_DEEPLINK_SCROLL: the opened detail area scrolls to the requested lega
 test('LOADING_AND_DATA: client loading, editing, color and fetches are unchanged', () => {
   const src = dossier();
   assert.match(src, /getClient\(clientId\)/);
-  assert.match(src, /getCases\(1, 100, undefined, clientId\)/);
+  assert.match(src, /getCases\(page, CLIENT_CASE_PAGE_SIZE, undefined, clientId\)/);
   assert.match(src, /listAdminWorkspaces\(clientId\)/);
   assert.match(src, /getCaseDocuments\(item\.id\)/);
   assert.match(src, /getClientCommunicationSummary\(clientId, 15\)/);

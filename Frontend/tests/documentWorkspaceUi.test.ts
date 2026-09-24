@@ -126,7 +126,7 @@ test("Version/document switch synchronously clears both text channels (F)", () =
 
 test("Client context only enters a real client-scoped case document workspace", () => {
   const source = clientPage();
-  assert.match(source, /getCases\(1, 100, undefined, clientId\)/);
+  assert.match(source, /getCases\(page, CLIENT_CASE_PAGE_SIZE, undefined, clientId\)/);
   assert.match(source, /\/cases\/\$\{cases\.find\(\(item\) => item\.status !== "CLOSED"\)\?\.id\}\/documents/);
   assert.match(source, /\/cases\?clientId=\$\{encodeURIComponent\(clientId\)\}/);
   assert.doesNotMatch(source, /Demo Kft|hard-coded.*case|caseId:\s*["'][0-9a-f-]{8}/i);

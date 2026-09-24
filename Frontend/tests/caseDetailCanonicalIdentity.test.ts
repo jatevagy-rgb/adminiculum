@@ -18,10 +18,10 @@ describe('case detail canonical identity resolution', () => {
     assert.match(caseDetail, /getCaseById/, 'CaseDetail must import and use getCaseById');
     assert.match(
       caseDetail,
-      /record = await getCaseById\(resolvedParams\.caseId\)/,
+      /record = await getCaseById\(requestedCaseId\)/,
       'CaseDetail must resolve the route identity via the canonical GET /cases/:caseId lookup',
     );
-    const directIndex = caseDetail.indexOf('record = await getCaseById(resolvedParams.caseId)');
+    const directIndex = caseDetail.indexOf('record = await getCaseById(requestedCaseId)');
     const fallbackIndex = caseDetail.indexOf('await findCaseByReference(');
     assert.ok(directIndex >= 0 && fallbackIndex >= 0 && directIndex < fallbackIndex,
       'the canonical id lookup must run before the legacy-reference fallback');
