@@ -8,6 +8,7 @@ export const navItems = [
   { id: "communications", label: "Kommunikáció", icon: "bell" },
   { id: "time-entries", label: "Munkaórák", icon: "clock" },
   { id: "clients", label: "Ügyfelek", icon: "file" },
+  { id: "compliance", label: "Megfelelőség", icon: "shield" },
   { id: "calendar", label: "Határidők", icon: "calendar" },
   { id: "client-portal-admin", label: "Ügyfélportál", icon: "file" },
   { id: "settings", label: "Beállítások", icon: "settings" },

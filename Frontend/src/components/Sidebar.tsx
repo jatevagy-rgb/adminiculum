@@ -71,6 +71,13 @@ const iconFor = (name: string | undefined) => {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.05.7a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.082 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
         </svg>
       );
+    case 'shield':
+      return (
+        <svg className="h-5 w-5" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3l7 3v5c0 4.4-3 8-7 10-4-2-7-5.6-7-10V6l7-3z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.5 12l1.8 1.8L15 10" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -87,6 +94,7 @@ const routeMap: Record<string, string> = {
   "time-entries": "/time-entries",
   "timesheet-presets": "/timesheet-presets",
   clients: "/clients",
+  compliance: "/compliance",
   calendar: "/deadlines",
   "client-portal-admin": "/client-portal-admin",
   settings: "/settings",
@@ -96,7 +104,7 @@ const navGroups: Array<{ id: string; label: string; items: string[] }> = [
   {
     id: "primary",
     label: "Fő navigáció",
-    items: ["dashboard", "cases", "clients", "tasks", "communications", "settings"],
+    items: ["dashboard", "cases", "clients", "compliance", "tasks", "communications", "settings"],
   },
 ];
 
@@ -114,6 +122,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   const isTimesheetPresetsActive = activeItem === "timesheet-presets";
   const isCalendarActive = activeItem === "calendar";
   const isClientsActive = activeItem === "clients";
+  const isComplianceActive = activeItem === "compliance";
   const isSettingsActive = activeItem === "settings";
   const navById = new Map(navItems.map((item) => [item.id, item]));
   const navLabelMap: Record<string, string> = {
@@ -124,6 +133,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     cases: "Ügyek",
     "clause-library": "Záradék könyvtár",
     clients: "Ügyfelek",
+    compliance: "Megfelelőség",
     "documents-compare": "Verzió-összevetés",
     "time-entries": "Munkaórák",
     calendar: "Határidők",
@@ -216,6 +226,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                 || nav.id === "timesheet-presets" && isTimesheetPresetsActive
                 || nav.id === "calendar" && isCalendarActive
                 || nav.id === "clients" && isClientsActive
+                || nav.id === "compliance" && isComplianceActive
                 || nav.id === "settings" && isSettingsActive;
 
               return (
