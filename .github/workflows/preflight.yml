@@ -319,6 +319,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: UI Anti-Drift Guard
+        run: npm run guard:ui-drift
+
       - name: Build (generates Next .next/types)
         run: npm run build
 

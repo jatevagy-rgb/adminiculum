@@ -10,6 +10,10 @@
     "verify:prod-env": "node scripts/assert-production-bundle-env.js",
     "start": "next start -p 3000",
     "lint": "next lint",
+    "guard:ui-drift": "node scripts/ui-anti-drift-guard.mjs --check",
+    "guard:ui-drift:update": "node scripts/ui-anti-drift-guard.mjs --update-baseline",
+    "test:visual": "node tests/visualRegression.mjs --check",
+    "test:visual:update": "node tests/visualRegression.mjs --update-snapshots",
     "qa:workforce": "npm run build && node tests/workforceBrowserQA.mjs",
     "test": "node --import tsx tests/run.mjs"
   },
