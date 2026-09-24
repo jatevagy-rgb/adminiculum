@@ -169,7 +169,7 @@ test("Requirement 10: Canonical changes and advanced comparison remain reachable
 test("Requirement 11: Desktop Word remains primary editor and browser edit remains secondary/experimental", () => {
   const source = documentPage();
   assert.match(source, /Microsoft Word \(asztali\)/);
-  assert.match(source, /Read-only előnézet · Word a szerkesztő/);
+  assert.match(source, /Csak olvasható előnézet · Word a szerkesztő/);
   assert.match(source, /A megváltoztathatatlan verzió tartalma letöltéssel és Microsoft Wordben érhető el/);
 });
 

@@ -985,7 +985,7 @@ export function Dashboard() {
               <div className="mt-3 space-y-1.5">
                 {clientLinkedComms.length === 0 ? (
                   <p className="rounded-[var(--adm-radius-sm)] border border-dashed border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5 text-[10.5px] leading-4 text-[var(--adm-text-muted)]">
-                    Nincs ügyfélhez sorolt kommunikáció a jelenlegi nézetben. Itt csak valós ügyfélkapcsolattal érkező read-only tételek jelennek meg.
+                    Nincs ügyfélhez sorolt kommunikáció a jelenlegi nézetben. Itt csak valós ügyfélkapcsolattal érkező csak olvasható tételek jelennek meg.
                   </p>
                 ) : (
                   clientLinkedComms.map((sig) => (
