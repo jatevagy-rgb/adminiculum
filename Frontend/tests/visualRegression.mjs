@@ -99,7 +99,7 @@ function startDevServer() {
           NODE_ENV: hasBuild ? "production" : (process.env.NODE_ENV ?? "development"),
           ADMINICULUM_ENABLE_UI_SHOWROOM: "true",
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: "ignore",
         shell: true,
       }
     );
@@ -129,8 +129,12 @@ function stopDevServer() {
   try {
     if (process.platform === "win32" && serverProcess.pid) {
       spawnSync("taskkill", ["/F", "/T", "/PID", String(serverProcess.pid)], { stdio: "ignore" });
-    } else {
-      serverProcess.kill("SIGKILL");
+    } else if (serverProcess.pid) {
+      try {
+        process.kill(-serverProcess.pid, "SIGKILL");
+      } catch {
+        serverProcess.kill("SIGKILL");
+      }
     }
   } catch {}
   serverProcess = undefined;
@@ -505,6 +509,7 @@ export async function run() {
     for (const vp of VIEWPORTS) {
       await generateContactSheet(vp.id);
     }
+    process.exit(0);
   } else {
     // Phase 9: Write machine-readable failure summary and Linux candidate contact sheets
     if (allResults.length > 0) {
@@ -543,6 +548,7 @@ export async function run() {
       process.exit(1);
     } else {
       console.log("\nVisual regression check PASSED. All views match candidate baselines!");
+      process.exit(0);
     }
   }
 }
