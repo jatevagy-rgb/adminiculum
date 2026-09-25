@@ -80,7 +80,7 @@ describeWithDatabase('DocumentModificationProposal PostgreSQL concurrency invari
     await prisma.documentModificationProposalEvent.deleteMany({});
     await prisma.documentModificationProposal.deleteMany({ where: { documentId: ids.document } });
     await prisma.notification.deleteMany({ where: { userId: { in: [ids.reader, ids.lawyer] } } });
-    await prisma.timelineEvent.deleteMany({ where: { documentId: ids.document } });
+    await prisma.timelineEvent.deleteMany({ where: { caseId: ids.case } });
     await prisma.documentVersion.deleteMany({ where: { documentId: ids.document } });
     await prisma.document.deleteMany({ where: { id: ids.document } });
     await prisma.case.deleteMany({ where: { id: ids.case } });
@@ -92,7 +92,7 @@ describeWithDatabase('DocumentModificationProposal PostgreSQL concurrency invari
   async function resetCycle() {
     await prisma.documentModificationProposalEvent.deleteMany({});
     await prisma.documentModificationProposal.deleteMany({ where: { documentId: ids.document } });
-    await prisma.timelineEvent.deleteMany({ where: { documentId: ids.document } });
+    await prisma.timelineEvent.deleteMany({ where: { caseId: ids.case } });
     await prisma.notification.deleteMany({ where: { userId: { in: [ids.reader, ids.lawyer] } } });
     await prisma.documentVersion.update({
       where: { id: ids.version },

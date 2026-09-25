@@ -270,7 +270,11 @@ describe('acceptModificationProposal', () => {
     expect(accepted.status).toBe('ACCEPTED');
     expect(state.events.map((e) => e.eventType)).toEqual(['PROPOSAL_CREATED', 'PROPOSAL_ACCEPTED']);
     expect(state.timeline).toHaveLength(1);
-    expect(state.timeline[0]).toMatchObject({ eventType: 'CUSTOM', type: 'DOCUMENT_READY_FOR_CORRECTION' });
+    expect(state.timeline[0]).toMatchObject({
+      eventType: 'CUSTOM',
+      type: 'DOCUMENT_READY_FOR_CORRECTION',
+      documentId: DOC,
+    });
     expect(state.timeline[0].metadata.responsibleId).toBe(OWNER);
     expect(state.notifications).toHaveLength(1);
     expect(state.notifications[0]).toMatchObject({ userId: OWNER, type: 'SYSTEM', title: 'Dokumentum kész a javításra' });

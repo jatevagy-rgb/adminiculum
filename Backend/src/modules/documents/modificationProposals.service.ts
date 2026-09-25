@@ -259,6 +259,7 @@ async function emitCorrectionReadyHandoff(
   await tx.timelineEvent.create({
     data: {
       caseId: document.caseId,
+      documentId: document.id,
       userId: actorId,
       eventType: 'CUSTOM',
       type: 'DOCUMENT_READY_FOR_CORRECTION',
