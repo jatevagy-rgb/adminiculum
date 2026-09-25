@@ -2315,17 +2315,21 @@ export type LegalAnalysisSourceType = 'PASTED_AI_OUTPUT' | 'MANUAL';
 
 export type LegalAnalysisSourceDocumentType = 'DOCUMENT' | 'CONTRACT_GENERATION' | 'ANONYMOUS_DOCUMENT';
 
-export interface LegalAnalysisRecord {
+/**
+ * Safe Summary DTO returned by the legal-analyses LIST endpoint
+ * (`GET /documents/:documentId/legal-analyses`).
+ *
+ * It carries the persisted detection booleans but never the analysis text or
+ * PII, so it must not be modelled as a full LegalAnalysisRecord.
+ */
+export interface LegalAnalysisSummaryRecord {
   id: string;
   caseId: string;
   documentId: string | null;
   documentSourceType: LegalAnalysisSourceDocumentType;
   title: string;
-  analysisText: string;
   status: LegalAnalysisStatus;
   sourceType: LegalAnalysisSourceType;
-  aiToolName: string | null;
-  anonymizedInputSnapshot: string | null;
   riskMatrixDetected: boolean;
   missingDataDetected: boolean;
   suggestedChangesDetected: boolean;
@@ -2335,6 +2339,17 @@ export interface LegalAnalysisRecord {
   reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Full working/sensitive record returned by legal-analysis detail, create and
+ * update endpoints. Adds the content and PII fields that the list endpoint does
+ * not expose.
+ */
+export interface LegalAnalysisRecord extends LegalAnalysisSummaryRecord {
+  analysisText: string;
+  aiToolName: string | null;
+  anonymizedInputSnapshot: string | null;
 }
 
 export interface CreateLegalAnalysisPayload {
@@ -2359,12 +2374,12 @@ export interface UpdateLegalAnalysisPayload {
 export async function listDocumentLegalAnalyses(
   documentId: string,
   params?: { caseId?: string; documentSourceType?: LegalAnalysisSourceDocumentType },
-): Promise<LegalAnalysisRecord[]> {
+): Promise<LegalAnalysisSummaryRecord[]> {
   const query = new URLSearchParams();
   if (params?.caseId) query.set('caseId', params.caseId);
   if (params?.documentSourceType) query.set('documentSourceType', params.documentSourceType);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return fetchApi<LegalAnalysisRecord[]>(`/documents/${encodeURIComponent(documentId)}/legal-analyses${suffix}`, {
+  return fetchApi<LegalAnalysisSummaryRecord[]>(`/documents/${encodeURIComponent(documentId)}/legal-analyses${suffix}`, {
     suppressErrorStatuses: [404],
   });
 }

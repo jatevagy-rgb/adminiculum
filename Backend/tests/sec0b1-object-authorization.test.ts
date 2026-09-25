@@ -262,6 +262,16 @@ const mockLegalAnalysisB = {
   updatedAt: new Date('2026-08-02'),
 };
 
+// Exact key set of the Sensitive LegalAnalysis DTO (Summary + analysisText + PII).
+// Used as the route-shaping canary now that the detection booleans are a
+// legitimate part of the safe Summary DTO rather than a raw-record marker.
+const LEGAL_ANALYSIS_SENSITIVE_DTO_KEYS = [
+  'aiToolName', 'analysisText', 'anonymizedInputSnapshot', 'caseId', 'createdAt', 'createdById',
+  'documentId', 'documentSourceType', 'id', 'lawyerDecisionPointsDetected', 'missingDataDetected',
+  'reviewedAt', 'reviewedById', 'riskMatrixDetected', 'sourceType', 'status',
+  'suggestedChangesDetected', 'title', 'updatedAt',
+].sort();
+
 function setupCaseMock(caseRecord: typeof mockCaseRecordA) {
   (prisma.case.findUnique as jest.Mock).mockImplementation(async ({ where }: any) => {
     if (where.id === CLIENT_A_CASE_ID) return mockCaseRecordA;
@@ -530,7 +540,15 @@ describe('SEC-0B1: DTO leak assertions', () => {
       return null;
     });
     setupCaseMock(mockCaseRecordA);
-    (mockLegalAnalysesService.listLegalAnalyses as jest.Mock).mockResolvedValueOnce([mockLegalAnalysisA]);
+    (mockLegalAnalysesService.listLegalAnalyses as jest.Mock).mockResolvedValueOnce([
+      {
+        ...mockLegalAnalysisA,
+        riskMatrixDetected: true,
+        missingDataDetected: true,
+        suggestedChangesDetected: false,
+        lawyerDecisionPointsDetected: true,
+      },
+    ]);
 
     const response = await requestJson(
       createApp(), 'GET',
@@ -547,6 +565,46 @@ describe('SEC-0B1: DTO leak assertions', () => {
     expect(analysis.analysisText).toBeUndefined();
     expect(analysis.aiToolName).toBeUndefined();
     expect(analysis.anonymizedInputSnapshot).toBeUndefined();
+  });
+
+  it('legal analysis list Summary DTO exposes the four persisted detection booleans truthfully', async () => {
+    (prisma.document.findUnique as jest.Mock).mockImplementation(async ({ where }: any) => {
+      if (where.id === 'doc-client-a-001') return { id: 'doc-client-a-001', caseId: CLIENT_A_CASE_ID };
+      return null;
+    });
+    setupCaseMock(mockCaseRecordA);
+    (mockLegalAnalysesService.listLegalAnalyses as jest.Mock).mockResolvedValueOnce([
+      {
+        ...mockLegalAnalysisA,
+        riskMatrixDetected: true,
+        missingDataDetected: false,
+        suggestedChangesDetected: true,
+        lawyerDecisionPointsDetected: false,
+      },
+    ]);
+
+    const response = await requestJson(
+      createApp(), 'GET',
+      `/api/v1/documents/doc-client-a-001/legal-analyses`,
+      true,
+      { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }
+    );
+
+    expect(response.status).toBe(200);
+    const analysis = (response.body as any[])[0];
+    expect(analysis.riskMatrixDetected).toBe(true);
+    expect(analysis.missingDataDetected).toBe(false);
+    expect(analysis.suggestedChangesDetected).toBe(true);
+    expect(analysis.lawyerDecisionPointsDetected).toBe(false);
+    // Safe summary metadata intact.
+    expect(analysis.status).toBe('DRAFT');
+    expect(typeof analysis.createdAt).toBe('string');
+    expect(typeof analysis.updatedAt).toBe('string');
+    // Privacy boundary still holds on the list endpoint.
+    const serialized = JSON.stringify(response.body);
+    expect(serialized).not.toContain('Analysis text for A');
+    expect(serialized).not.toContain('GPT-4');
+    expect(serialized).not.toContain('Sensitive snapshot A');
   });
 });
 
@@ -805,7 +863,8 @@ describe('SEC-0B1: P0/P1 route regression guard', () => {
       { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }, { caseId: CLIENT_A_CASE_ID, analysisText: 'Safe analysis' });
 
     expect(response.status).toBe(201);
-    expect((response.body as any).riskMatrixDetected).toBeUndefined();
+    expect(Object.keys(response.body as any).sort()).toEqual(LEGAL_ANALYSIS_SENSITIVE_DTO_KEYS);
+    expect((response.body as any).riskMatrixDetected).toBe(false);
     expect((response.body as any).anonymizedInputSnapshot).toBe('Sensitive snapshot A');
   });
 
@@ -818,7 +877,8 @@ describe('SEC-0B1: P0/P1 route regression guard', () => {
       { 'x-test-user-id': LAWYER_USER_ID, 'x-test-role': 'LAWYER' }, { analysisText: 'Updated analysis' });
 
     expect(response.status).toBe(200);
-    expect((response.body as any).riskMatrixDetected).toBeUndefined();
+    expect(Object.keys(response.body as any).sort()).toEqual(LEGAL_ANALYSIS_SENSITIVE_DTO_KEYS);
+    expect((response.body as any).riskMatrixDetected).toBe(false);
     expect((response.body as any).anonymizedInputSnapshot).toBe('Sensitive snapshot A');
   });
 });
