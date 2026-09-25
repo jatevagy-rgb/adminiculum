@@ -26,7 +26,7 @@ import {
   type CaseContractListItem,
   type CaseWorkspace,
   type DocumentWorkCard,
-  type LegalAnalysisRecord,
+  type LegalAnalysisSummaryRecord,
 } from "@/lib/api";
 import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { ConfirmationDialog } from "@/components/ui";
@@ -101,10 +101,12 @@ export function DocumentPreparationDashboard({
     resolveDefaultPreparationDocumentId(documents, activeDocuments),
   );
   const [card, setCard] = useState<DocumentWorkCard | null>(null);
-  const [analyses, setAnalyses] = useState<LegalAnalysisRecord[]>([]);
+  const [analyses, setAnalyses] = useState<LegalAnalysisSummaryRecord[]>([]);
   const [anonymous, setAnonymous] = useState<AnonymousDocumentItem[]>([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [analysesError, setAnalysesError] = useState(false);
+  const [anonymousError, setAnonymousError] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "ok" | "fail">("idle");
   const [downloading, setDownloading] = useState(false);
   const [anonymizeOpen, setAnonymizeOpen] = useState(false);
@@ -134,20 +136,36 @@ export function DocumentPreparationDashboard({
       requestRef.current = requestId;
       setDataLoading(true);
       setDataError(null);
+      setAnalysesError(false);
+      setAnonymousError(false);
       setCard(null);
       try {
-        const [nextCard, nextAnalyses, nextAnonymous] = await Promise.all([
-          getDocumentWorkContext(documentId).catch(() => null),
-          listDocumentLegalAnalyses(documentId, { caseId, documentSourceType: "DOCUMENT" }).catch(
-            () => [] as LegalAnalysisRecord[],
-          ),
-          getAnonymousDocumentsBySource(documentId).catch(() => [] as AnonymousDocumentItem[]),
+        // Settled results keep request failure distinct from a successful empty
+        // response: 403/500/network must never read as "nothing here".
+        const [cardResult, analysesResult, anonymousResult] = await Promise.allSettled([
+          getDocumentWorkContext(documentId),
+          listDocumentLegalAnalyses(documentId, { caseId, documentSourceType: "DOCUMENT" }),
+          getAnonymousDocumentsBySource(documentId),
         ]);
         if (requestRef.current !== requestId) return;
-        setCard(nextCard);
-        setAnalyses(nextAnalyses);
-        setAnonymous(nextAnonymous);
-        if (!nextCard) setDataError("A dokumentum munkakontextusa nem tölthető be.");
+        if (cardResult.status === "fulfilled") {
+          setCard(cardResult.value);
+        } else {
+          setCard(null);
+          setDataError("A dokumentum munkakontextusa nem tölthető be.");
+        }
+        if (analysesResult.status === "fulfilled") {
+          setAnalyses(analysesResult.value);
+        } else {
+          setAnalyses([]);
+          setAnalysesError(true);
+        }
+        if (anonymousResult.status === "fulfilled") {
+          setAnonymous(anonymousResult.value);
+        } else {
+          setAnonymous([]);
+          setAnonymousError(true);
+        }
       } finally {
         if (requestRef.current === requestId) setDataLoading(false);
       }
@@ -163,6 +181,8 @@ export function DocumentPreparationDashboard({
       setAnonymous([]);
       setDataLoading(false);
       setDataError(null);
+      setAnalysesError(false);
+      setAnonymousError(false);
       return;
     }
     setCopyState("idle");
@@ -439,7 +459,7 @@ export function DocumentPreparationDashboard({
               <dd className="font-semibold text-[var(--adm-text-primary)]">{currentVersion != null ? `v${currentVersion}` : "Nincs adat"}</dd>
             </div>
             <div data-testid="preparation-open-points">
-              <dt className="text-[11px] text-[var(--adm-text-secondary)]">Nyitott megjegyzések</dt>
+              <dt className="text-[11px] text-[var(--adm-text-secondary)]">Nyitott felülvizsgálati pontok</dt>
               <dd className="font-semibold text-[var(--adm-text-primary)]">{openPointCount != null ? openPointCount : "Nincs adat"}</dd>
             </div>
             <div data-testid="preparation-last-event" className="col-span-2">
@@ -460,7 +480,26 @@ export function DocumentPreparationDashboard({
           className="rounded-lg border border-[var(--adm-border-canonical)] border-l-4 border-l-[var(--adm-palette-teal)] bg-[var(--adm-canvas-white)] p-4"
         >
           <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--adm-palette-teal)]">Kockázati mátrix</p>
-          {matrix.hasMatrix ? (
+          {analysesError ? (
+            <>
+              <p data-testid="preparation-risk-unavailable" className="mt-2 text-[13px] text-[var(--adm-text-secondary)]">
+                A kockázati elemzés állapota most nem tölthető be.
+              </p>
+              <div className="mt-3">
+                <AdminButton
+                  data-testid="preparation-risk-retry"
+                  variant="neutral"
+                  size="xs"
+                  disabled={dataLoading}
+                  onClick={() => {
+                    if (selectedDocumentId) void loadDocument(selectedDocumentId);
+                  }}
+                >
+                  Újrapróbálás
+                </AdminButton>
+              </div>
+            </>
+          ) : matrix.hasMatrix ? (
             <>
               <p data-testid="preparation-risk-recorded" className="mt-2 text-[13.5px] font-semibold text-[var(--adm-text-primary)]">
                 Kockázati elemzés rögzítve
@@ -497,7 +536,26 @@ export function DocumentPreparationDashboard({
           className="rounded-lg border border-[var(--adm-border-canonical)] border-l-4 border-l-[var(--adm-brand-terracotta)] bg-[var(--adm-canvas-white)] p-4"
         >
           <p className="text-[12px] font-bold uppercase tracking-[0.08em] text-[var(--adm-brand-terracotta)]">Anonimizált változat</p>
-          {latestAnonymous ? (
+          {anonymousError ? (
+            <>
+              <p data-testid="preparation-anonymized-unavailable" className="mt-2 text-[13px] text-[var(--adm-text-secondary)]">
+                Az anonimizált változat állapota most nem tölthető be.
+              </p>
+              <div className="mt-3">
+                <AdminButton
+                  data-testid="preparation-anonymized-retry"
+                  variant="neutral"
+                  size="xs"
+                  disabled={dataLoading}
+                  onClick={() => {
+                    if (selectedDocumentId) void loadDocument(selectedDocumentId);
+                  }}
+                >
+                  Újrapróbálás
+                </AdminButton>
+              </div>
+            </>
+          ) : latestAnonymous ? (
             <>
               <p data-testid="preparation-anonymized-ready" className="mt-2 text-[13.5px] font-semibold text-[var(--adm-text-primary)]">
                 Kész

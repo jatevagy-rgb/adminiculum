@@ -7,6 +7,11 @@ import type { LegalAnalysisResult } from './service';
 /**
  * Summary DTO — safe metadata, no analysis text, no PII.
  * Returned in list endpoints and to any authenticated user with case read access.
+ *
+ * The four persisted detection booleans are non-content, non-PII state and are
+ * required by the Case Workspace preparation surface to report risk-matrix
+ * presence truthfully. They are intentionally part of the safe Summary shape;
+ * analysisText, aiToolName and anonymizedInputSnapshot stay out of it.
  */
 export interface LegalAnalysisSummary {
   id: string;
@@ -16,6 +21,10 @@ export interface LegalAnalysisSummary {
   title: string;
   status: string;
   sourceType: string;
+  riskMatrixDetected: boolean;
+  missingDataDetected: boolean;
+  suggestedChangesDetected: boolean;
+  lawyerDecisionPointsDetected: boolean;
   createdById: string | null;
   reviewedById: string | null;
   reviewedAt: Date | null;
@@ -53,6 +62,10 @@ export function toSummary(record: LegalAnalysisResult): LegalAnalysisSummary {
     title: record.title,
     status: record.status,
     sourceType: record.sourceType,
+    riskMatrixDetected: record.riskMatrixDetected,
+    missingDataDetected: record.missingDataDetected,
+    suggestedChangesDetected: record.suggestedChangesDetected,
+    lawyerDecisionPointsDetected: record.lawyerDecisionPointsDetected,
     createdById: record.createdById,
     reviewedById: record.reviewedById,
     reviewedAt: record.reviewedAt,

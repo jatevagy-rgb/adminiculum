@@ -289,3 +289,120 @@ describe("Document preparation — placement and preservation", () => {
     assert.doesNotMatch(source, /\brounded-(?:2xl|3xl)\b/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Data-contract / truthfulness repair (PR #376 follow-up)
+// ---------------------------------------------------------------------------
+
+const apiSource = () => read("src/lib/api.ts");
+
+const summaryInterface = (source: string): string => {
+  const start = source.indexOf("export interface LegalAnalysisSummaryRecord {");
+  assert.ok(start > -1, "LegalAnalysisSummaryRecord must exist");
+  const end = source.indexOf("}", start);
+  return source.slice(start, end);
+};
+
+describe("Document preparation — data contract & truthfulness repair", () => {
+  it("frontend list contract reflects the safe Summary DTO, not a full record", () => {
+    const source = apiSource();
+    assert.match(source, /export interface LegalAnalysisSummaryRecord \{/);
+    assert.match(source, /export interface LegalAnalysisRecord extends LegalAnalysisSummaryRecord \{/);
+    assert.match(
+      source,
+      /export async function listDocumentLegalAnalyses\([\s\S]*?Promise<LegalAnalysisSummaryRecord\[\]>/,
+    );
+    // The Summary contract must not claim content/PII fields.
+    const summary = summaryInterface(source);
+    assert.doesNotMatch(summary, /analysisText/);
+    assert.doesNotMatch(summary, /aiToolName/);
+    assert.doesNotMatch(summary, /anonymizedInputSnapshot/);
+    // The detail endpoint keeps the full record type.
+    assert.match(source, /export async function getLegalAnalysis\(id: string\): Promise<LegalAnalysisRecord>/);
+  });
+
+  it("summary contract carries the four persisted detection booleans", () => {
+    const summary = summaryInterface(apiSource());
+    for (const flag of [
+      "riskMatrixDetected",
+      "missingDataDetected",
+      "suggestedChangesDetected",
+      "lawyerDecisionPointsDetected",
+    ]) {
+      assert.ok(summary.includes(flag), `${flag} must be on the summary contract`);
+    }
+  });
+
+  it("dashboard consumes the summary contract and derives risk state from it", () => {
+    const source = dashboard();
+    assert.match(source, /type LegalAnalysisSummaryRecord/);
+    assert.doesNotMatch(source, /type LegalAnalysisRecord\b/);
+    assert.match(source, /const \[analyses, setAnalyses\] = useState<LegalAnalysisSummaryRecord\[\]>\(\[\]\)/);
+    assert.match(source, /summarizeRiskMatrix\(analyses\)/);
+  });
+
+  it("1/2. persisted riskMatrixDetected true/false render the truthful states", () => {
+    assert.match(dashboard(), /Kockázati elemzés rögzítve/);
+    assert.match(dashboard(), /Még nincs kockázati mátrix\./);
+    assert.equal(
+      summarizeRiskMatrix([{ riskMatrixDetected: true, updatedAt: "2026-01-01T00:00:00.000Z" }]).hasMatrix,
+      true,
+    );
+    assert.equal(summarizeRiskMatrix([{ riskMatrixDetected: false }]).hasMatrix, false);
+  });
+
+  it("3. legal-analysis request failure is an unavailable state, never the empty state", () => {
+    const source = dashboard();
+    assert.match(source, /analysesError \? \(/);
+    assert.match(source, /preparation-risk-unavailable/);
+    assert.match(source, /A kockázati elemzés állapota most nem tölthető be\./);
+    assert.match(source, /preparation-risk-retry/);
+    // The error branch is evaluated before the empty/recorded branches.
+    const errorIndex = source.indexOf("preparation-risk-unavailable");
+    const emptyIndex = source.indexOf("preparation-risk-empty");
+    assert.ok(errorIndex > -1 && emptyIndex > -1 && errorIndex < emptyIndex);
+  });
+
+  it("4. anonymous-doc request failure is an unavailable state, never the empty state", () => {
+    const source = dashboard();
+    assert.match(source, /anonymousError \? \(/);
+    assert.match(source, /preparation-anonymized-unavailable/);
+    assert.match(source, /Az anonimizált változat állapota most nem tölthető be\./);
+    assert.match(source, /preparation-anonymized-retry/);
+    const errorIndex = source.indexOf("preparation-anonymized-unavailable");
+    const emptyIndex = source.indexOf("preparation-anonymized-empty");
+    assert.ok(errorIndex > -1 && emptyIndex > -1 && errorIndex < emptyIndex);
+  });
+
+  it("5. a successful empty anonymous response stays the truthful empty state", () => {
+    assert.match(dashboard(), /Nincs anonimizált változat\./);
+  });
+
+  it("request failures are no longer masked into empty arrays", () => {
+    const source = dashboard();
+    assert.doesNotMatch(source, /listDocumentLegalAnalyses\(documentId, \{[^}]*\}\)\.catch\(/);
+    assert.doesNotMatch(source, /getAnonymousDocumentsBySource\(documentId\)\.catch\(/);
+    // Separate settled results feed separate truthful states.
+    assert.match(source, /Promise\.allSettled\(/);
+    assert.match(source, /analysesResult\.status === "fulfilled"/);
+    assert.match(source, /anonymousResult\.status === "fulfilled"/);
+  });
+
+  it("6. the open-points label names the review-point count, not comments", () => {
+    const source = dashboard();
+    assert.match(source, /Nyitott felülvizsgálati pontok/);
+    assert.doesNotMatch(source, /Nyitott megjegyzések/);
+  });
+
+  it("7. all four preparation tiles remain", () => {
+    const source = dashboard();
+    for (const tile of [
+      "preparation-tile-feladat",
+      "preparation-tile-helyzetallas",
+      "preparation-tile-kockazat",
+      "preparation-tile-anonim",
+    ]) {
+      assert.ok(source.includes(tile), `${tile} must remain`);
+    }
+  });
+});
