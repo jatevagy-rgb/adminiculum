@@ -2192,6 +2192,200 @@ export async function createDocumentAnnotationComment(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Document Workspace Phase 2 — modification proposals + review rail contracts.
+// API types and client functions ONLY: no reader UI is defined here.
+// ---------------------------------------------------------------------------
+
+export type DocumentModificationProposalStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
+export interface DocumentModificationProposalDto {
+  id: string;
+  documentId: string;
+  documentVersionId: string;
+  selectedText: string;
+  normalizedSelectedText: string | null;
+  startOffset: number;
+  endOffset: number;
+  textPrefix: string | null;
+  textSuffix: string | null;
+  contentFingerprint: string | null;
+  proposedText: string;
+  rationale: string | null;
+  status: DocumentModificationProposalStatus;
+  decisionReason: string | null;
+  decidedBy: DocumentAnnotationUser | null;
+  decidedAt: string | null;
+  createdBy: DocumentAnnotationUser | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+}
+
+export interface CreateDocumentModificationProposalPayload {
+  selectedText: string;
+  startOffset: number;
+  endOffset: number;
+  textPrefix?: string;
+  textSuffix?: string;
+  contentFingerprint?: string;
+  proposedText: string;
+  rationale?: string;
+  idempotencyKey?: string;
+}
+
+export interface CreateDocumentReviewCommentPayload {
+  selectedText: string;
+  startOffset: number;
+  endOffset: number;
+  textPrefix?: string;
+  textSuffix?: string;
+  contentFingerprint?: string;
+  body: string;
+}
+
+export interface DocumentReviewRailComment {
+  id: string;
+  reviewComment: string | null;
+  selectedText: string | null;
+  startOffset: number | null;
+  endOffset: number | null;
+  textPrefix: string | null;
+  textSuffix: string | null;
+  contentFingerprint: string | null;
+  createdBy: { id: string; name: string | null } | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  replyCount: number;
+}
+
+export interface DocumentReviewRailProposal {
+  id: string;
+  selectedText: string;
+  proposedText: string;
+  rationale: string | null;
+  status: DocumentModificationProposalStatus;
+  decisionReason: string | null;
+  decidedBy: { id: string; name: string | null } | null;
+  decidedAt: string | null;
+  createdBy: { id: string; name: string | null } | null;
+  createdAt: string;
+  startOffset: number;
+  endOffset: number;
+  contentFingerprint: string | null;
+}
+
+export interface DocumentReviewRailDto {
+  documentId: string;
+  documentVersionId: string;
+  versionNumber: number;
+  counts: {
+    commentCount: number;
+    modificationProposalCount: number;
+    pendingProposalCount: number;
+    acceptedProposalCount: number;
+    rejectedProposalCount: number;
+    proposalDecisionComplete: boolean;
+  };
+  /** Alias of counts.proposalDecisionComplete. NOT formal review approval. */
+  readyForCorrection: boolean;
+  comments: DocumentReviewRailComment[];
+  proposals: DocumentReviewRailProposal[];
+}
+
+function documentProposalPath(documentId: string, versionId: string, suffix = ''): string {
+  return `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/proposals${suffix}`;
+}
+
+function documentReviewCommentPath(documentId: string, versionId: string, suffix = ''): string {
+  return `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/review-comments${suffix}`;
+}
+
+function documentReviewRailPath(documentId: string, versionId: string): string {
+  return `/documents/${encodeURIComponent(documentId)}/versions/${encodeURIComponent(versionId)}/review-rail`;
+}
+
+export async function createDocumentModificationProposal(
+  documentId: string,
+  versionId: string,
+  payload: CreateDocumentModificationProposalPayload
+): Promise<DocumentModificationProposalDto> {
+  return fetchApi<DocumentModificationProposalDto>(documentProposalPath(documentId, versionId), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function acceptDocumentModificationProposal(
+  documentId: string,
+  versionId: string,
+  proposalId: string
+): Promise<DocumentModificationProposalDto> {
+  return fetchApi<DocumentModificationProposalDto>(
+    documentProposalPath(documentId, versionId, `/${encodeURIComponent(proposalId)}/accept`),
+    { method: 'POST', body: JSON.stringify({}) }
+  );
+}
+
+export async function rejectDocumentModificationProposal(
+  documentId: string,
+  versionId: string,
+  proposalId: string,
+  reason: string
+): Promise<DocumentModificationProposalDto> {
+  return fetchApi<DocumentModificationProposalDto>(
+    documentProposalPath(documentId, versionId, `/${encodeURIComponent(proposalId)}/reject`),
+    { method: 'POST', body: JSON.stringify({ reason }) }
+  );
+}
+
+export async function withdrawDocumentModificationProposal(
+  documentId: string,
+  versionId: string,
+  proposalId: string
+): Promise<DocumentModificationProposalDto> {
+  return fetchApi<DocumentModificationProposalDto>(
+    documentProposalPath(documentId, versionId, `/${encodeURIComponent(proposalId)}`),
+    { method: 'DELETE' }
+  );
+}
+
+export async function createDocumentReviewComment(
+  documentId: string,
+  versionId: string,
+  payload: CreateDocumentReviewCommentPayload
+): Promise<DocumentAnnotationItem> {
+  return fetchApi<DocumentAnnotationItem>(documentReviewCommentPath(documentId, versionId), {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createDocumentReviewCommentReply(
+  documentId: string,
+  versionId: string,
+  annotationId: string,
+  body: string
+): Promise<DocumentAnnotationComment> {
+  return fetchApi<DocumentAnnotationComment>(
+    documentReviewCommentPath(documentId, versionId, `/${encodeURIComponent(annotationId)}/replies`),
+    { method: 'POST', body: JSON.stringify({ body }) }
+  );
+}
+
+export async function getDocumentReviewRail(
+  documentId: string,
+  versionId: string,
+  params?: { limit?: number }
+): Promise<DocumentReviewRailDto> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  const query = searchParams.toString();
+  return fetchApi<DocumentReviewRailDto>(
+    `${documentReviewRailPath(documentId, versionId)}${query ? `?${query}` : ''}`
+  );
+}
+
 export async function submitDocumentForReview(documentId: string): Promise<{ success: boolean; message?: string }> {
   return fetchApi<{ success: boolean; message?: string }>(`/documents/${documentId}/submit-review`, {
     method: 'POST',
