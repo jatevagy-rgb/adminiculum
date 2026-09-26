@@ -18,6 +18,7 @@ const read = (file: string) => readFileSync(path.resolve(process.cwd(), file), "
 const card = () => read("src/components/documents/DocumentWorkCard.tsx");
 const api = () => read("src/lib/api.ts");
 const overview = () => read("src/components/cases/CaseWorkspaceOverview.tsx");
+const prep = () => read("src/components/documents/DocumentPreparationDashboard.tsx");
 
 describe("Case Workspace document card — delete affordance", () => {
   it("1. exposes a restrained delete action on the card", () => {
@@ -138,5 +139,21 @@ describe("Case Workspace document card — preserved behavior", () => {
     assert.match(source, /testid="doc-card-reviewer"/);
     assert.match(source, /testid="doc-card-due"/);
     assert.match(source, /testid="doc-card-next-step"/);
+  });
+});
+
+describe("Document preparation dashboard — delete behavior unchanged", () => {
+  it("7. keeps its existing canonical delete flow intact", () => {
+    const source = prep();
+    assert.match(source, /import \{[^}]*deleteDocument[^}]*\} from "@\/lib\/api"/);
+    assert.match(source, /import \{ ConfirmationDialog \} from "@\/components\/ui"/);
+    assert.match(source, /await deleteDocument\(deletedId\)/);
+    assert.match(source, /documentDeleteErrorMessage\(error instanceof ApiError \? error\.status : undefined\)/);
+    assert.match(source, /data-testid="preparation-delete-error"/);
+    // The dashboard flow is untouched by the Case Workspace repair.
+    const block = source.slice(source.indexOf("const confirmDelete"), source.indexOf("if (documents.length === 0)"));
+    assert.match(block, /resolveDefaultPreparationDocumentId\(remaining, activeDocuments\)/);
+    assert.match(block, /onRefresh\?\.\(\)/);
+    assert.doesNotMatch(block, /window\.confirm/);
   });
 });
