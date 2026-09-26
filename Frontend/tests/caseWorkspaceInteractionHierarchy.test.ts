@@ -6,7 +6,7 @@ import test from "node:test";
 const read = (file: string) => readFileSync(path.resolve(process.cwd(), file), "utf8");
 const overview = () => read("src/components/cases/CaseWorkspaceOverview.tsx");
 
-test("Case workspace keeps the primary cockpit order and compact quick actions", () => {
+test("Case workspace keeps the primary cockpit order and one converged action surface", () => {
   const source = overview();
   const hero = source.indexOf('data-testid="matter-hero"');
   const kpis = source.indexOf('data-testid="kpi-row"');
@@ -15,12 +15,31 @@ test("Case workspace keeps the primary cockpit order and compact quick actions",
   const primaryWork = source.indexOf('title="Aktív munka"');
   assert.ok(hero < kpis && kpis < insights && insights < quickActions && quickActions < primaryWork);
 
-  assert.match(source, /setModal\(\{ type: "task-create" \}\).*\+ Feladat/);
-  assert.match(source, /setModal\(\{ type: "deadline-create" \}\).*\+ Határidő/);
-  assert.match(source, /setModal\(\{ type: "doc-upload" \}\).*\+ Dokumentum/);
-  assert.match(source, /setModal\(\{ type: "case-comment" \}\).*Megjegyzés/);
+  // ONE primary action surface, labelled Műveletek. The legacy "Gyors műveletek"
+  // presentation and the hero action cluster are converged into it.
+  assert.match(source, /aria-label="Műveletek"/);
+  assert.match(source, />Műveletek</);
+  assert.doesNotMatch(source, /Gyors műveletek/);
+
+  assert.match(source, /setModal\(\{ type: "task-create" \}\).*Új feladat/);
+  assert.match(source, /setModal\(\{ type: "doc-upload" \}\).*Dokumentum feltöltése/);
+  assert.match(source, /setModal\(\{ type: "case-comment" \}\).*Megjegyzés hozzáadása/);
   assert.match(source, /setAiPromptOpen\(true\).*AI előkészítés/);
   assert.match(source, /setTimeDialogOpen\(true\).*Munkaidő rögzítése/);
+
+  // The standalone "+ Határidő" primary trigger is demoted: case deadlines come
+  // from task due dates / case semantics, so the toolbar must not offer it.
+  assert.doesNotMatch(source, /\+ Határidő/);
+});
+
+test("The action surface is separated from section navigation and destinations", () => {
+  const source = overview();
+  // Section navigation is a restrained in-page anchor list, not a second action bar.
+  const sectionNav = source.indexOf('data-testid="case-workspace-section-nav"');
+  const actions = source.indexOf('data-testid="case-workspace-quick-actions"');
+  assert.ok(actions > -1 && sectionNav > actions, "section navigation sits after the action surface");
+  const navSlice = source.slice(sectionNav, source.indexOf("</nav>", sectionNav));
+  assert.doesNotMatch(navSlice, /setModal|setAiPromptOpen|setTimeDialogOpen/);
 });
 
 test("Secondary capabilities remain composed in an expandable, hash-safe detail area", () => {
