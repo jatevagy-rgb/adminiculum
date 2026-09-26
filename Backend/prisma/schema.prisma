@@ -120,6 +120,10 @@ model User {
   recordedOutcomeMeasurements       OutcomeMeasurement[]
   ownedClientControls               ClientControl[]              @relation("ClientControlOwner")
   reviewedEvidenceRecords           EvidenceRecord[]             @relation("EvidenceRecordReviewer")
+  createdDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalCreatedBy")
+  decidedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDecidedBy")
+  deletedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDeletedBy")
+  documentModificationProposalEvents   DocumentModificationProposalEvent[] @relation("DocumentModificationProposalEventActor")
 
   @@map("users")
 }
@@ -1275,6 +1279,7 @@ model Document {
   timelineEvents          TimelineEvent[]
   taskSubmissionDocuments TaskSubmissionDocument[]
   complianceDocuments     ComplianceDocument[]
+  modificationProposals   DocumentModificationProposal[]
 
   // ---- Document work context (DOCUMENT-WORK-CONTEXT-1) --------------------
   // A filename is not a work instruction. These columns carry the operational
@@ -1397,6 +1402,12 @@ model DocumentVersion {
   uploadedById String
   uploadedBy   User   @relation(fields: [uploadedById], references: [id])
 
+  /// DOCUMENT-WORKSPACE-PHASE-2: marks that the CURRENT proposal-decision
+  /// completion cycle for this immutable version has already emitted its
+  /// correction-ready handoff. It is NOT permanent lifetime completion: a later
+  /// genuinely new PENDING proposal reopens the cycle by resetting this to null.
+  correctionNotifiedAt DateTime?
+
   createdAt DateTime @default(now())
 
   // Relations
@@ -1423,6 +1434,7 @@ model DocumentVersion {
   personDocumentLinks     OrganizationPersonDocumentLink[]
   evidenceRecords         EvidenceRecord[]
   complianceClauseAnchors ComplianceDocumentClauseAnchor[]
+  modificationProposals   DocumentModificationProposal[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1608,6 +1620,100 @@ enum DocumentAnnotationEventType {
   REOPENED
   COMMENT_ADDED
   SOFT_DELETED
+}
+
+// ============================================================================
+// DOCUMENT MODIFICATION PROPOSALS (DOCUMENT-WORKSPACE-PHASE-2)
+// ============================================================================
+//
+// A modification proposal is a first-class, version-scoped, TEXT_RANGE-only
+// operator object: a lawyer/journal reader proposes replacing an exact anchored
+// span of an immutable DocumentVersion with new text. It is deliberately
+// SEPARATE from:
+//   - DocumentAnnotation REVIEW_COMMENT   (conversational, no decision)
+//   - DocumentAnnotation MODIFICATION_REASON (legacy free-text reason)
+//   - DocumentComparison / DocumentChangeSegment (diff engine)
+//   - ReviewPoint / DocumentReview (formal review workflow)
+//
+// Accepting a proposal does NOT modify Word, does NOT approve a DocumentReview
+// and does NOT touch comparison segment decisions.
+
+enum DocumentModificationProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum DocumentModificationProposalEventType {
+  PROPOSAL_CREATED
+  PROPOSAL_ACCEPTED
+  PROPOSAL_REJECTED
+  PROPOSAL_SOFT_DELETED
+}
+
+model DocumentModificationProposal {
+  id String @id @default(uuid())
+
+  documentId        String
+  documentVersionId String
+
+  selectedText           String
+  normalizedSelectedText String?
+
+  startOffset Int
+  endOffset   Int
+
+  textPrefix         String?
+  textSuffix         String?
+  contentFingerprint String?
+
+  proposedText String
+  rationale    String?
+
+  status DocumentModificationProposalStatus @default(PENDING)
+
+  decisionReason String?
+  decidedById    String?
+  decidedAt      DateTime?
+
+  createdById String
+
+  deletedById String?
+  deletedAt   DateTime?
+
+  idempotencyKey String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  document        Document                            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion                     @relation(fields: [documentId, documentVersionId], references: [documentId, id], onDelete: Restrict)
+  createdBy       User                                @relation("DocumentModificationProposalCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  decidedBy       User?                               @relation("DocumentModificationProposalDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  deletedBy       User?                               @relation("DocumentModificationProposalDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  events          DocumentModificationProposalEvent[]
+
+  @@unique([documentVersionId, idempotencyKey])
+  @@index([documentId, documentVersionId, status])
+  @@index([documentVersionId, status])
+  @@index([decidedById])
+  @@index([deletedAt])
+  @@map("document_modification_proposals")
+}
+
+model DocumentModificationProposalEvent {
+  id         String                                @id @default(uuid())
+  proposalId String
+  eventType  DocumentModificationProposalEventType
+  actorId    String
+  createdAt  DateTime                              @default(now())
+
+  proposal DocumentModificationProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  actor    User                         @relation("DocumentModificationProposalEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId, createdAt])
+  @@index([actorId, createdAt])
+  @@map("document_modification_proposal_events")
 }
 
 model DocumentReview {

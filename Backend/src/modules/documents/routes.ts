@@ -9,6 +9,9 @@ import documentsService from './services';
 import { DocumentDeleteError, DocumentStorageUploadError, DocumentPersistenceError } from './services';
 import { extractText } from './textExtractor';
 import annotationRoutes from './annotations.routes';
+import modificationProposalRoutes from './modificationProposals.routes';
+import reviewCommentRoutes from './reviewComments.routes';
+import reviewRailRoutes from './reviewRail.routes';
 import {
   getDocumentWorkContext,
   updateDocumentWorkContext,
@@ -44,6 +47,9 @@ const router = Router();
 router.use(authenticate, requireWorkforceUser);
 router.use('/:documentId/review-suggestions', reviewSuggestionsRoutes);
 router.use('/:documentId/versions/:versionId/annotations', annotationRoutes);
+router.use('/:documentId/versions/:versionId/proposals', modificationProposalRoutes);
+router.use('/:documentId/versions/:versionId/review-comments', reviewCommentRoutes);
+router.use('/:documentId/versions/:versionId/review-rail', reviewRailRoutes);
 
 // ============================================================================
 // Document work context (DOCUMENT-WORK-CONTEXT-1)
