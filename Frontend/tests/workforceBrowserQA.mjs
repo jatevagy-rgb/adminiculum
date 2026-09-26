@@ -415,11 +415,17 @@ async function assertCaseWorkspaceIa(browser) {
   }
   if (actionText.includes("+ Határidő")) throw new Error("standalone + Határidő trigger is still on the primary action surface");
 
-  // Kontextus is a truthful seam to the existing case-context panel.
+  // Kontextus opens the dedicated V1 context surface (canonical case data only).
   const contextHref = await qa.page.locator('nav[aria-label="Ügy munkaterület"] a', { hasText: "Kontextus" }).getAttribute("href");
-  if (!contextHref || !contextHref.endsWith("#ck-starting-context")) {
-    throw new Error("Kontextus tab is not a truthful seam to existing context data");
+  if (!contextHref || !contextHref.endsWith(`/cases/${WORKFORCE_FIXTURE.case.id}/context`)) {
+    throw new Error("Kontextus tab does not open the dedicated case-context surface");
   }
+  await qa.page.locator('nav[aria-label="Ügy munkaterület"] a', { hasText: "Kontextus" }).click();
+  await qa.page.waitForURL(`**/cases/${WORKFORCE_FIXTURE.case.id}/context`);
+  if (!await qa.page.locator('[data-testid="case-context-view"]').count()) {
+    throw new Error("Kontextus surface did not render");
+  }
+  await gotoCase();
 
   // Communication is demoted to a restrained secondary route and stays reachable.
   const secondary = qa.page.locator('[data-testid="case-workspace-secondary-nav"] a');

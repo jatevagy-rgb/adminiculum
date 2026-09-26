@@ -107,6 +107,7 @@ test('every audited route-owning source exposes exactly one page-level H1', () =
     'src/app/time-entries/page.tsx',
     'src/app/notifications/page.tsx',
     'src/app/settings/workflows/page.tsx',
+    'src/app/cases/[caseId]/context/page.tsx',
     'src/app/cases/[caseId]/client-portal/page.tsx',
     'src/app/cases/[caseId]/communications/CommunicationsPageContent.tsx',
     'src/app/cases/[caseId]/documents/page.tsx',
