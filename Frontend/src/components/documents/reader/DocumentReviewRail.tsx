@@ -80,7 +80,9 @@ function CommentCard({
   const toggleReplies = () => {
     const next = !expanded;
     setExpanded(next);
-    if (next) onLoadReplies();
+    // A zero-reply comment needs no GET before showing the first-reply composer;
+    // existing replies still load lazily.
+    if (next && comment.replyCount > 0) onLoadReplies();
   };
 
   return (
@@ -103,16 +105,16 @@ function CommentCard({
           {comment.createdBy?.name || "Ismeretlen"} · {formatDateTime(comment.createdAt)}
         </span>
       </button>
-      {comment.replyCount > 0 ? (
-        <button
-          type="button"
-          data-testid="reader-rail-comment-replies-toggle"
-          onClick={toggleReplies}
-          className="mt-2 text-xs font-semibold text-[var(--adm-brand-green)]"
-        >
-          {readerCopy.repliesShow} ({comment.replyCount})
-        </button>
-      ) : null}
+      <button
+        type="button"
+        data-testid="reader-rail-comment-replies-toggle"
+        data-reply-count={comment.replyCount}
+        aria-expanded={expanded}
+        onClick={toggleReplies}
+        className="mt-2 text-xs font-semibold text-[var(--adm-brand-green)]"
+      >
+        {comment.replyCount > 0 ? `${readerCopy.repliesShow} (${comment.replyCount})` : readerCopy.replyAction}
+      </button>
       {expanded ? (
         <div data-testid="reader-rail-comment-replies" className="mt-2 space-y-1.5 border-t border-[var(--adm-border-canonical)] pt-2">
           {(replies ?? []).map((reply) => (

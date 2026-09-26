@@ -26,6 +26,7 @@ import {
   type HighlightRange,
 } from "@/lib/documents/readerDomRange";
 import { DocumentReviewRail, type RailFilter } from "./DocumentReviewRail";
+import { DocumentReaderRailDrawer } from "./DocumentReaderRailDrawer";
 import { DocumentSelectionToolbar } from "./DocumentSelectionToolbar";
 import { ReviewCommentComposer } from "./ReviewCommentComposer";
 import { ModificationProposalComposer } from "./ModificationProposalComposer";
@@ -90,6 +91,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
 
   const readerRootRef = useRef<HTMLDivElement | null>(null);
   const highlightRef = useRef<HTMLElement | null>(null);
+  const railToggleRef = useRef<HTMLButtonElement | null>(null);
 
   const { rail, loading: railLoading, error: railError, reload: reloadRail } = useDocumentReviewRail(documentId, documentVersionId);
   const [railFilter, setRailFilter] = useState<RailFilter>('all');
@@ -148,13 +150,25 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
   const captureSelection = useCallback(() => {
     if (!canAnchor || !versionText) return;
     const selection = typeof window !== 'undefined' ? window.getSelection() : null;
+
+    // Collapsed / empty selection: silently clear without a noisy error.
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      setAnchor(null);
+      setToolbarPos(null);
+      return;
+    }
+
     const next = computeExactSelectionAnchor(readerRootRef.current, selection, versionText);
     if (!next) {
-      // Keep any existing anchor; only clear when the selection collapsed.
-      if (!selection || selection.isCollapsed) {
-        setAnchor(null);
-        setToolbarPos(null);
-      }
+      // A non-collapsed selection that cannot be mapped to the exact version text
+      // must NEVER reuse the previous anchor: the toolbar could otherwise submit
+      // a comment/proposal against the wrong (earlier) range.
+      setAnchor(null);
+      setToolbarPos(null);
+      setCommentComposerOpen(false);
+      setProposalComposerOpen(false);
+      setComposerError(null);
+      setAnchorError(readerCopy.anchorUnavailable);
       return;
     }
     setAnchor(next);
@@ -493,6 +507,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
           {hasVersion ? (
           <button
             type="button"
+            ref={railToggleRef}
             data-testid="document-reader-rail-toggle"
             aria-expanded={railDrawerOpen}
             onClick={() => setRailDrawerOpen((value) => !value)}
@@ -611,30 +626,13 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
       </div>
 
       {/* Narrow-viewport rail drawer */}
-      {railDrawerOpen ? (
-        <div className="fixed inset-0 z-50 flex lg:hidden" role="presentation">
-          <div className="flex-1 bg-black/40" aria-hidden="true" onClick={() => setRailDrawerOpen(false)} />
-          <div
-            data-testid="document-reader-rail-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-label={readerCopy.railTitle}
-            className="flex h-full w-[min(92vw,380px)] flex-col bg-[var(--adm-canvas-white)] shadow-2xl"
-          >
-            <div className="flex justify-end px-3 pt-2">
-              <button
-                type="button"
-                data-testid="document-reader-rail-drawer-close"
-                onClick={() => setRailDrawerOpen(false)}
-                className="rounded-[6px] px-2 py-1 text-xs font-semibold text-[var(--adm-text-secondary)]"
-              >
-                {readerCopy.railCloseLabel}
-              </button>
-            </div>
-            <div className="min-h-0 flex-1">{railNode}</div>
-          </div>
-        </div>
-      ) : null}
+      <DocumentReaderRailDrawer
+        open={railDrawerOpen}
+        onClose={() => setRailDrawerOpen(false)}
+        returnFocusRef={railToggleRef}
+      >
+        {railNode}
+      </DocumentReaderRailDrawer>
 
       {anchor && toolbarPos ? (
         <DocumentSelectionToolbar
@@ -650,6 +648,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         selectedText={anchor?.selectedText ?? ''}
         busy={composerBusy}
         error={composerError}
+        targetKey={anchor ? `${anchor.startOffset}:${anchor.endOffset}` : undefined}
         onCancel={() => { setCommentComposerOpen(false); setComposerError(null); }}
         onSubmit={(body) => { void submitComment(body); }}
       />
@@ -658,6 +657,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         selectedText={anchor?.selectedText ?? ''}
         busy={composerBusy}
         error={composerError}
+        targetKey={anchor ? `${anchor.startOffset}:${anchor.endOffset}` : undefined}
         onCancel={() => { setProposalComposerOpen(false); setComposerError(null); }}
         onSubmit={(payload) => { void submitProposal(payload); }}
       />
@@ -667,6 +667,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         error={decisionError}
         originalText={rejectTarget?.selectedText ?? ''}
         proposedText={rejectTarget?.proposedText ?? ''}
+        targetKey={rejectTarget?.id}
         onCancel={() => { setRejectTarget(null); setDecisionError(null); }}
         onConfirm={(reason) => { void confirmReject(reason); }}
       />

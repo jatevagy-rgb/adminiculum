@@ -49,10 +49,11 @@ export const readerCopy = {
   withdraw: 'Javaslat visszavonása',
 
   displayOnlyNotice: 'Ehhez az előnézethez nem hozható létre verziópontos észrevétel.',
-  anchorUnavailable: 'A kijelölés nem képezhető le pontosan erre a verziószövegre. Próbáld újra.',
+  anchorUnavailable: 'A kijelölés pontos helye nem határozható meg. Jelöld ki újra a szöveget.',
   historicalVersion: 'Korábbi verzió',
 
   repliesShow: 'Válaszok',
+  replyAction: 'Válasz',
   replyPlaceholder: 'Válasz…',
   replySubmit: 'Válasz küldése',
 

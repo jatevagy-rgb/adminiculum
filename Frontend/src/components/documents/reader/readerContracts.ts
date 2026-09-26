@@ -21,6 +21,28 @@ export function canDecideProposal(role: string | null | undefined): boolean {
   return PROPOSAL_DECISION_ROLES.has(String(role || "").toUpperCase());
 }
 
+/**
+ * Resolves the "Megnyitás Wordben" destination with truthful version identity.
+ *
+ * - A HISTORICAL version must NEVER fall back to the document-level/current
+ *   SharePoint URL: that would open a different document than the version being
+ *   reviewed. If it has no own URL, there is no handoff (returns null).
+ * - A CURRENT version may use its own URL, or the canonical current-document
+ *   URL when the version carries no own link.
+ * - No version selected -> no handoff.
+ */
+export function resolveWordHandoffUrl(input: {
+  hasVersion: boolean;
+  versionSpWebUrl: string | null | undefined;
+  versionIsCurrent: boolean;
+  documentSpWebUrl: string | null | undefined;
+}): string | null {
+  if (!input.hasVersion) return null;
+  const versionUrl = input.versionSpWebUrl || null;
+  if (!input.versionIsCurrent) return versionUrl;
+  return versionUrl || input.documentSpWebUrl || null;
+}
+
 export type MergedRailEntry =
   | { kind: "comment"; createdAt: string; comment: DocumentReviewRailComment }
   | { kind: "proposal"; createdAt: string; proposal: DocumentReviewRailProposal };

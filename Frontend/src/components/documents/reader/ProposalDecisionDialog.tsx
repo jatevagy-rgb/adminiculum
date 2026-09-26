@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { readerCopy } from "./readerCopy";
 
@@ -10,6 +10,8 @@ export interface ProposalDecisionDialogProps {
   error: string | null;
   originalText: string;
   proposedText: string;
+  /** Identity of the proposal being rejected; changing it starts a fresh reason. */
+  targetKey?: string;
   onCancel: () => void;
   onConfirm: (reason: string) => void;
 }
@@ -21,12 +23,18 @@ export function ProposalDecisionDialog({
   error,
   originalText,
   proposedText,
+  targetKey,
   onCancel,
   onConfirm,
 }: ProposalDecisionDialogProps) {
   const [reason, setReason] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const trimmed = reason.trim();
+
+  // Never carry a reason across close/reopen or onto a different proposal.
+  useEffect(() => {
+    setReason("");
+  }, [open, targetKey]);
 
   return (
     <Modal

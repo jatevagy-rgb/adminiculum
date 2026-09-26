@@ -90,6 +90,7 @@ import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
 import { DocumentWorkspaceTabs, type WorkspaceMode } from "@/components/documents/workContext/DocumentWorkspaceTabs";
 import { DocumentReaderWorkspace } from "@/components/documents/reader/DocumentReaderWorkspace";
+import { resolveWordHandoffUrl } from "@/components/documents/reader/readerContracts";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { CanonicalChangesWorkspace } from "@/components/documents/comparison/CanonicalChangesWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
@@ -2502,7 +2503,12 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         ? () => versionFileInputRef.current?.click()
                         : null
                     }
-                    wordHandoffUrl={canonicalActiveVersion?.spWebUrl || selectedUploadedDocument?.spWebUrl || null}
+                    wordHandoffUrl={resolveWordHandoffUrl({
+                      hasVersion: Boolean(canonicalActiveVersion),
+                      versionSpWebUrl: canonicalActiveVersion?.spWebUrl,
+                      versionIsCurrent: Boolean(canonicalActiveVersion?.isCurrent),
+                      documentSpWebUrl: selectedUploadedDocument?.spWebUrl,
+                    })}
                     onOpenAdvanced={navigateToMode}
                   />
                 ) : null}

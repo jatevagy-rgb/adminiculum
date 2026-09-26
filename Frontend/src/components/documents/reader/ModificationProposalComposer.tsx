@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { readerCopy } from "./readerCopy";
 
@@ -9,6 +9,8 @@ export interface ModificationProposalComposerProps {
   selectedText: string;
   busy: boolean;
   error: string | null;
+  /** Identity of the anchored target; changing it starts a fresh proposal. */
+  targetKey?: string;
   onCancel: () => void;
   onSubmit: (payload: { proposedText: string; rationale: string }) => void;
 }
@@ -23,12 +25,19 @@ export function ModificationProposalComposer({
   selectedText,
   busy,
   error,
+  targetKey,
   onCancel,
   onSubmit,
 }: ModificationProposalComposerProps) {
   const [proposedText, setProposedText] = useState("");
   const [rationale, setRationale] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Never retain a previous operation's text across close/reopen or target change.
+  useEffect(() => {
+    setProposedText("");
+    setRationale("");
+  }, [open, targetKey]);
 
   const normalizedOriginal = selectedText.replace(/\s+/g, " ").trim();
   const normalizedProposed = proposedText.replace(/\s+/g, " ").trim();

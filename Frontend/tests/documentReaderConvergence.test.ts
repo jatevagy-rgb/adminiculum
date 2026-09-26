@@ -180,10 +180,12 @@ test("a rail item focuses its exact startOffset/endOffset range", () => {
 
 test("narrow viewport exposes the rail as a bounded drawer", () => {
   const source = workspace();
+  const drawerSource = read("src/components/documents/reader/DocumentReaderRailDrawer.tsx");
   assert.match(source, /document-reader-rail-toggle/);
   assert.match(source, /lg:hidden/);
-  assert.match(source, /document-reader-rail-drawer/);
-  assert.match(source, /w-\[min\(92vw,380px\)\]/, "the drawer must be width-bounded to avoid horizontal overflow");
+  assert.match(source, /<DocumentReaderRailDrawer/);
+  assert.match(drawerSource, /document-reader-rail-drawer/);
+  assert.match(drawerSource, /w-\[min\(92vw,380px\)\]/, "the drawer must be width-bounded to avoid horizontal overflow");
   assert.match(source, /min-w-0/, "the reader columns must allow shrinking");
 });
 

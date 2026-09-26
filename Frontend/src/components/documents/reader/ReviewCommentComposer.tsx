@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { readerCopy } from "./readerCopy";
 
@@ -9,6 +9,8 @@ export interface ReviewCommentComposerProps {
   selectedText: string;
   busy: boolean;
   error: string | null;
+  /** Identity of the anchored target; changing it starts a fresh comment. */
+  targetKey?: string;
   onCancel: () => void;
   onSubmit: (body: string) => void;
 }
@@ -19,11 +21,18 @@ export function ReviewCommentComposer({
   selectedText,
   busy,
   error,
+  targetKey,
   onCancel,
   onSubmit,
 }: ReviewCommentComposerProps) {
   const [body, setBody] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Never retain a previous operation's text across close/reopen or target change.
+  // While the composer stays open (including after an API error) typing is preserved.
+  useEffect(() => {
+    setBody("");
+  }, [open, targetKey]);
 
   const trimmed = body.trim();
 
