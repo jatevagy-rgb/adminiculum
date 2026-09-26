@@ -32,6 +32,9 @@ import {
   OperationalPageHeader,
   SafePanelError,
 } from "@/components/adminiculum/OperationalPrimitives";
+import { OrgGrowOperatingCanvas } from "@/components/client-portal/OrgGrowOperatingCanvas";
+import { OrgGrowContextInspector } from "@/components/client-portal/OrgGrowContextInspector";
+import { projectGrowOperatingProcess } from "@/lib/growOperatingProjection";
 
 /**
  * Canonical customer Grow information architecture.
@@ -160,6 +163,12 @@ export function OrgGrowView() {
   // Selected initiative for detail view (?tab=kezdemenyezesek&initiative=<id>)
   const [selectedInitiativeId, setSelectedInitiativeId] = useState<string | null>(null);
 
+  // Operating canvas selection (?tab=mukodes&processId=<id>), ephemeral step
+  // selection, and the map/list presentation toggle.
+  const [selectedOperatingProcessId, setSelectedOperatingProcessId] = useState<string | null>(null);
+  const [selectedOperatingStepId, setSelectedOperatingStepId] = useState<string | null>(null);
+  const [growViewMode, setGrowViewMode] = useState<"map" | "list">("map");
+
   // Survey / operational-signal state
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedProcessId, setSelectedProcessId] = useState<string>("");
@@ -250,6 +259,7 @@ export function OrgGrowView() {
       const rawTab = p.get("tab");
       const opp = p.get("opportunity");
       const initiative = p.get("initiative");
+      const processId = p.get("processId");
       const tab = resolveGrowTab(rawTab);
 
       if (tab) {
@@ -269,6 +279,11 @@ export function OrgGrowView() {
         setSelectedPublicationId(null);
         setSelectedInitiativeId(null);
       }
+
+      // Process selection is scoped to the Működés tab; a stale processId on any
+      // other tab is ignored. Step selection is ephemeral and never URL-backed.
+      setSelectedOperatingProcessId(tab === "mukodes" && processId ? processId : null);
+      setSelectedOperatingStepId(null);
 
       // Normalize a legacy ?tab=<old-id> bookmark to its canonical id without
       // adding a history entry, so Back/Forward/reload stay truthful.
@@ -292,6 +307,10 @@ export function OrgGrowView() {
     if (tab !== "kezdemenyezesek") {
       setSelectedInitiativeId(null);
     }
+    if (tab !== "mukodes") {
+      setSelectedOperatingProcessId(null);
+      setSelectedOperatingStepId(null);
+    }
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("tab", tab);
@@ -300,6 +319,9 @@ export function OrgGrowView() {
       }
       if (tab !== "kezdemenyezesek") {
         url.searchParams.delete("initiative");
+      }
+      if (tab !== "mukodes") {
+        url.searchParams.delete("processId");
       }
       window.history.pushState({}, "", url.toString());
     }
@@ -345,6 +367,32 @@ export function OrgGrowView() {
     }
   }, []);
 
+  const handleSelectOperatingProcess = useCallback((processId: string) => {
+    setSelectedOperatingProcessId(processId);
+    setSelectedOperatingStepId(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "mukodes");
+      url.searchParams.set("processId", processId);
+      window.history.pushState({}, "", url.toString());
+    }
+  }, []);
+
+  const handleClearOperatingSelection = useCallback(() => {
+    setSelectedOperatingProcessId(null);
+    setSelectedOperatingStepId(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "mukodes");
+      url.searchParams.delete("processId");
+      window.history.pushState({}, "", url.toString());
+    }
+  }, []);
+
+  const handleSelectOperatingStep = useCallback((stepId: string) => {
+    setSelectedOperatingStepId(stepId);
+  }, []);
+
   const handleSurveySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedCategories.length === 0) {
@@ -375,6 +423,16 @@ export function OrgGrowView() {
   };
 
   const processes: PortalGrowProcess[] = useMemo(() => data?.processes || [], [data?.processes]);
+
+  // Interactive operating canvas: resolve the URL-backed process selection
+  // against the customer-safe DTO (invalid ids fall back to null, never crash),
+  // then project it into a pure presentation view model.
+  const activeOperatingProcess = selectedOperatingProcessId
+    ? processes.find((p) => p.id === selectedOperatingProcessId) ?? null
+    : null;
+  const activeOperatingProcessView = activeOperatingProcess
+    ? projectGrowOperatingProcess(activeOperatingProcess)
+    : null;
 
   const startAssessment = useCallback((packKey: string, processId?: string | null) => {
     setActiveTab("teendok");
@@ -1939,6 +1997,60 @@ export function OrgGrowView() {
             }
           />
 
+          {/* Map / list view toggle */}
+          <div
+            className="flex flex-wrap items-center justify-end gap-1.5 border-b border-[var(--adm-border)] px-4 py-2"
+            role="tablist"
+            aria-label="Megjelenítés"
+          >
+            <AdminButton
+              role="tab"
+              aria-selected={growViewMode === "map"}
+              variant={growViewMode === "map" ? "primary" : "neutral"}
+              size="xs"
+              data-testid="grow-view-toggle-map"
+              onClick={() => setGrowViewMode("map")}
+            >
+              Térkép
+            </AdminButton>
+            <AdminButton
+              role="tab"
+              aria-selected={growViewMode === "list"}
+              variant={growViewMode === "list" ? "primary" : "neutral"}
+              size="xs"
+              data-testid="grow-view-toggle-list"
+              onClick={() => setGrowViewMode("list")}
+            >
+              Lista
+            </AdminButton>
+          </div>
+
+          {growViewMode === "map" ? (
+            processes.length > 0 ? (
+              <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+                <OrgGrowOperatingCanvas
+                  processes={processes}
+                  selectedProcessId={selectedOperatingProcessId}
+                  onSelectProcess={handleSelectOperatingProcess}
+                  selectedStepId={selectedOperatingStepId}
+                  onSelectStep={handleSelectOperatingStep}
+                />
+                <OrgGrowContextInspector
+                  process={activeOperatingProcessView}
+                  selectedStepId={selectedOperatingStepId}
+                  onSelectStep={handleSelectOperatingStep}
+                  onClose={handleClearOperatingSelection}
+                />
+              </div>
+            ) : (
+              <div className="p-4">
+                <CompactState
+                  title="Nincsenek feltérképezett folyamatok"
+                  detail="Ehhez a szervezethez még nincsenek üzleti folyamatok rögzítve."
+                />
+              </div>
+            )
+          ) : (
           <div className="mt-5 grid gap-4">
             {processes.length > 0 ? (
               processes.map((proc) => (
@@ -2013,6 +2125,7 @@ export function OrgGrowView() {
               />
             )}
           </div>
+          )}
 
           {/* Assessment / survey history is secondary operating context only. */}
           {packs.length > 0 || surveys.length > 0 ? (
