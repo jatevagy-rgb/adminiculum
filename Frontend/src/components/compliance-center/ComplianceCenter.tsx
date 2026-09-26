@@ -20,6 +20,7 @@ import {
 import { AdminBadge, AdminButton, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { LegalSourceImpactPanel } from "./LegalSourceImpactPanel";
+import { TrackedLegislationPanel } from "./TrackedLegislationPanel";
 
 type View = "overview" | "legal-sources" | "documents" | "review-work";
 
@@ -171,7 +172,6 @@ export function ComplianceCenter() {
   const reviewWork = overview?.reviewWork ?? [];
   const reviewRequiredSources = overview?.legalSources.filter((source) => source.reviewRequired) ?? [];
   const monitoredFamilies = families.filter((family) => family.legalSources.length > 0);
-  const monitoredSourceCount = manifest?.sources.length ?? 0;
 
   const tabClass = (active: boolean) =>
     `rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] ${
@@ -261,31 +261,7 @@ export function ComplianceCenter() {
             </section>
 
             {/* AUTOMATIKUS FIGYELÉS vs EMBERI FELÜLVIZSGÁLAT — truthful boundary. */}
-            <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Automatikus figyelés</h2>
-                <AdminBadge tone="neutral">{monitoredSourceCount} figyelt jogforrás</AdminBadge>
-              </div>
-              <p className="mt-2 text-xs text-[var(--adm-text-muted)]">
-                A rendszer a már rögzített jogforrás-kötéseket és a pontos dokumentumverzió-hivatkozásokat tartja nyilván. Nem fut folyamatos külső jogforrás-figyelő, ezért az itt megjelenő állapot a legutóbb rögzített kötéseken alapul — friss külső jogváltozás önmagától nem érkezik be.
-              </p>
-              {manifest && manifest.sources.length > 0 ? (
-                <ul className="mt-3 space-y-1">
-                  {manifest.sources.map((source) => (
-                    <li key={`${source.identifierFamily}-${source.sourceIdentifier}`} className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--adm-border)] px-3 py-2 text-xs text-[var(--adm-text)]">
-                      <span>
-                        <b>{source.sourceIdentifier}</b>
-                        <span className="text-[var(--adm-text-muted)]"> · {source.identifierFamily}</span>
-                        {source.locators.length ? <span className="text-[var(--adm-text-muted)]"> · {source.locators.join(", ")}</span> : null}
-                      </span>
-                      <span className="text-[var(--adm-text-muted)]">{source.referenceCount} hivatkozás</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-3 text-sm text-[var(--adm-text-muted)]">Nincs rögzített jogforrás-kötés.</p>
-              )}
-            </section>
+            <TrackedLegislationPanel manifest={manifest} />
 
             {selectedSource ? (
               <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
