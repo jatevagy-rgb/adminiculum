@@ -17,6 +17,11 @@ export const readerCopy = {
   commentAdd: 'Hozzáadás',
   cancel: 'Mégse',
 
+  /** Quiet in-composer switch between the two anchored authoring operations. */
+  switchToProposal: 'Módosítási javaslat',
+  switchToComment: 'Megjegyzés',
+  switchHint: 'Ugyanarra a kijelölésre váltás',
+
   proposalComposerTitle: 'Módosítási javaslat',
   proposalOriginalLabel: 'EREDETI',
   proposalSuggestedLabel: 'JAVASOLT SZÖVEG',
