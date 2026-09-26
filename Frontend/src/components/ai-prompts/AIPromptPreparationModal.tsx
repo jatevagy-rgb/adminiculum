@@ -43,8 +43,34 @@ function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
 
+type TemplateBlockPreview = { label: string; preview: string };
+
+function previewText(value: unknown): string {
+  return typeof value === "string" ? value.replace(/\s+/g, " ").trim() : "";
+}
+
+function clampPreview(text: string, max = 280): string {
+  return text.length > max ? `${text.slice(0, max).trimEnd()}…` : text;
+}
+
+function previewBlocks(blocks: unknown): TemplateBlockPreview[] {
+  if (!Array.isArray(blocks)) return [];
+  return blocks
+    .map((block) => {
+      const record = (block ?? {}) as Record<string, unknown>;
+      return { label: previewText(record.label), preview: clampPreview(previewText(record.content)) };
+    })
+    .filter((block) => block.label || block.preview);
+}
+
+function checklistItems(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => previewText(item)).filter(Boolean);
+}
+
 export function AIPromptPreparationModal({ caseId, documentId, documentVersionId, documentVersionIds, initialTemplateId, onClose }: Props) {
   const [templates, setTemplates] = useState<AiPromptTemplate[]>([]);
+  const [templatesState, setTemplatesState] = useState<"loading" | "ready" | "error">("loading");
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [drafts, setDrafts] = useState<AiPromptDraft[]>([]);
   const [templateId, setTemplateId] = useState("");
@@ -68,24 +94,63 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
   }
 
   useEffect(() => {
-    void Promise.all([listAiPromptTemplates(), getCaseDocuments(caseId), listAiPromptDraftsForCase(caseId)])
-      .then(([templateResult, caseDocuments, draftResult]) => {
+    let active = true;
+    setTemplatesState("loading");
+
+    listAiPromptTemplates()
+      .then((templateResult) => {
+        if (!active) return;
         setTemplates(templateResult.items);
-        setDocuments(caseDocuments);
-        setDrafts(draftResult.items);
         const preselect =
           initialTemplateId && templateResult.items.some((template) => template.id === initialTemplateId)
             ? initialTemplateId
             : templateResult.items[0]?.id || "";
         setTemplateId(preselect);
+        setTemplatesState("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setTemplates([]);
+        setTemplateId("");
+        setTemplatesState("error");
+      });
+
+    void Promise.all([getCaseDocuments(caseId), listAiPromptDraftsForCase(caseId)])
+      .then(([caseDocuments, draftResult]) => {
+        if (!active) return;
+        setDocuments(caseDocuments);
+        setDrafts(draftResult.items);
         if (!documentId && caseDocuments.length === 1) setSelectedDocumentIds([caseDocuments[0].id]);
       })
-      .catch(() => setError("Az AI-előkészítő adatok nem tölthetők be."));
+      .catch(() => {
+        if (active) setError("Az AI-előkészítő adatok nem tölthetők be.");
+      });
+
+    return () => {
+      active = false;
+    };
   }, [caseId, documentId, initialTemplateId]);
 
   const selectedDocuments = useMemo(
     () => documents.filter((document) => selectedDocumentIds.includes(document.id)),
     [documents, selectedDocumentIds],
+  );
+
+  const selectedTemplate = useMemo(
+    () => templates.find((template) => template.id === templateId) ?? null,
+    [templates, templateId],
+  );
+  const selectedTemplateBlocks = useMemo(
+    () => previewBlocks(selectedTemplate?.blocks),
+    [selectedTemplate],
+  );
+  const selectedTemplateOutput = useMemo(
+    () => clampPreview(previewText(selectedTemplate?.outputInstructions), 420),
+    [selectedTemplate],
+  );
+  const selectedTemplateChecklist = useMemo(
+    () => checklistItems(selectedTemplate?.verificationChecklist),
+    [selectedTemplate],
   );
 
   async function run(action: () => Promise<AiPromptDraft>) {
@@ -172,10 +237,18 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
           <div className="space-y-4">
             <label className="block text-xs font-semibold text-[var(--adm-text)]">
               Jogi munkaprompt
-              <select value={templateId} onChange={(event) => setTemplateId(event.target.value)} className="mt-1 w-full rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-sm">
-                <option value="">Válassz promptot</option>
-                {templates.map((template) => <option key={template.id} value={template.id}>{template.title} · v{template.version}</option>)}
-              </select>
+              {templatesState === "loading" ? (
+                <p data-testid="ai-template-loading" className="mt-1 rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-xs font-normal text-[var(--adm-text-muted)]">Jogi munkapromptok betöltése…</p>
+              ) : templatesState === "error" ? (
+                <p data-testid="ai-template-error" role="alert" className="mt-1 rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-xs font-normal text-[var(--adm-terracotta-700)]">A jogi munkapromptok betöltése nem sikerült.</p>
+              ) : templates.length === 0 ? (
+                <p data-testid="ai-template-empty" className="mt-1 rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-xs font-normal text-[var(--adm-text-muted)]">Nincs elérhető jogi munkaprompt.</p>
+              ) : (
+                <select value={templateId} onChange={(event) => setTemplateId(event.target.value)} className="mt-1 w-full rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-sm">
+                  <option value="">Válassz promptot</option>
+                  {templates.map((template) => <option key={template.id} value={template.id}>{template.title} · v{template.version}</option>)}
+                </select>
+              )}
             </label>
 
             <fieldset>
@@ -196,7 +269,7 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
             </fieldset>
 
             <label className="block text-xs font-semibold text-[var(--adm-text)]">
-              Ügyvédi instrukció
+              Ügyvédi instrukció az AI-nak
               <textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} rows={4} className="mt-1 w-full rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-sm" placeholder="Mit kell az AI-nak előkészítenie?" />
             </label>
 
@@ -238,6 +311,46 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
               <p className="text-sm text-[var(--adm-text)]">Eredeti dokumentum: nem módosul</p>
               <p className="text-sm text-[var(--adm-text)]">Külső AI-hívás: nincs</p>
             </div>
+
+            {selectedTemplate ? (
+              <div data-testid="ai-template-preview" className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
+                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Kiválasztott munkaprompt</h3>
+                <p className="mt-1 text-sm font-semibold text-[var(--adm-text)]">{selectedTemplate.title} · v{selectedTemplate.version}</p>
+                {selectedTemplate.description ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">{selectedTemplate.description}</p> : null}
+
+                {selectedTemplateBlocks.length > 0 ? (
+                  <div className="mt-3">
+                    <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text)]">Mire használjuk</h4>
+                    <ul className="mt-1 space-y-1">
+                      {selectedTemplateBlocks.map((block, index) => (
+                        <li key={index} className="text-xs leading-5 text-[var(--adm-text-muted)]">
+                          {block.label ? <span className="font-medium text-[var(--adm-text)]">{block.label}: </span> : null}
+                          {block.preview}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {selectedTemplateOutput ? (
+                  <div className="mt-3">
+                    <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text)]">Várt eredmény</h4>
+                    <p className="mt-1 text-xs leading-5 text-[var(--adm-text-muted)]">{selectedTemplateOutput}</p>
+                  </div>
+                ) : null}
+
+                {selectedTemplateChecklist.length > 0 ? (
+                  <div className="mt-3">
+                    <h4 className="text-[11px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text)]">Ellenőrzési szempontok</h4>
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                      {selectedTemplateChecklist.map((item, index) => (
+                        <li key={index} className="text-xs leading-5 text-[var(--adm-text-muted)]">{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
 
             {draft ? (
               <>
