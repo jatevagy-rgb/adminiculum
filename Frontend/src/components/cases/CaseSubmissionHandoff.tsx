@@ -165,9 +165,7 @@ export function CaseSubmissionHandoff({
               <p className="text-[11px] leading-5 text-[var(--adm-text-muted)]">
                 Rögzíthet munkaidőt, vagy kihagyhatja. A kihagyás a meglévő „Nincs rögzítendő munkaidő” megerősítést rögzíti.
               </p>
-              {error ? (
-                <p role="alert" className="rounded border border-[#e3c5c0] bg-[#fff8f6] px-3 py-2 text-[11px] text-[var(--adm-terracotta-700)]">{error}</p>
-              ) : null}
+              {error ? <CompactState tone="error" title={error} /> : null}
               <div className="flex flex-wrap justify-end gap-2 pt-1">
                 <AdminButton variant="neutral" onClick={onClose} disabled={skipping}>Mégse</AdminButton>
                 <AdminButton variant="neutral" onClick={() => void skipTime()} disabled={skipping} data-testid="case-submission-skip-time">
@@ -185,9 +183,7 @@ export function CaseSubmissionHandoff({
               <p className="text-[12px] leading-5 text-[var(--adm-text-muted)]">
                 A Leadás a feladat meglévő munkaterében folytatódik.
               </p>
-              {error ? (
-                <p role="alert" className="rounded border border-[#e3c5c0] bg-[#fff8f6] px-3 py-2 text-[11px] text-[var(--adm-terracotta-700)]">{error}</p>
-              ) : null}
+              {error ? <CompactState tone="error" title={error} /> : null}
               <div className="flex flex-wrap justify-end gap-2 pt-1">
                 <AdminButton variant="neutral" onClick={onClose}>Mégse</AdminButton>
                 <AdminButton variant="primary" onClick={onContinue} data-testid="case-submission-continue">Leadás folytatása</AdminButton>
