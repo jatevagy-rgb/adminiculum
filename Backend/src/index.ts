@@ -369,6 +369,7 @@ app.use('/api/v1/sharepoint', sharepointRoutes);
 
 import { prisma } from './prisma/prisma.service';
 import { provisionComplianceModuleRules } from './modules/compliance/complianceModuleProvisioning';
+import { provisionCanonicalAiPromptTemplates } from './modules/ai-prompts/provisioning';
 
 // Idempotent, additive baseline compliance provisioning. Runs on every boot so a
 // normal deploy surfaces the three representative verticals (GDPR /
@@ -383,6 +384,25 @@ provisionComplianceModuleRules(prisma)
   .catch((error: unknown) => {
     console.error(
       `[Startup] compliance module provisioning failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+
+// Idempotent, additive canonical AI prompt catalogue provisioning. The runtime
+// `AiPromptTemplateVersion` table is the canonical source consumed by
+// GET /ai-prompts/templates; without provisioned rows the Case Workspace AI
+// preparation prompt selector renders empty. Runs on every boot; re-running
+// creates no duplicates and never overwrites runtime-authored templates.
+// Failures are logged and self-heal on the next boot rather than taking the API
+// down.
+provisionCanonicalAiPromptTemplates(prisma)
+  .then((result) => {
+    console.log(
+      `[Startup] AI prompt catalogue provisioning total=${result.total} created=${result.created} skipped=${result.skipped}`,
+    );
+  })
+  .catch((error: unknown) => {
+    console.error(
+      `[Startup] AI prompt catalogue provisioning failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   });
 
