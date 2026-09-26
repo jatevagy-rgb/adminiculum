@@ -24,9 +24,11 @@ import {
   outcomeBasisLabelHu,
   reviewDecisionLabelHu,
   sufficiencyLabelHu,
+  type BusinessProcessDTO,
   type GrowEvidenceItem,
   type GrowOpportunityItem,
   type OutcomeMeasurementDTO,
+  type ProcessObservationSnapshotDTO,
   type SufficiencyDecision,
 } from "@/lib/growApi";
 import {
@@ -78,6 +80,13 @@ function formatDate(value: string | null | undefined): string {
   return new Date(value).toLocaleDateString("hu-HU");
 }
 
+/** Real observation timestamp of a measured snapshot — never synthesized. */
+function formatObservedAt(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("hu-HU");
+}
+
 function diagnosisStatusPill(status: string): { label: string; tone: "green" | "amber" | "burgundy" | "neutral" } {
   return DIAGNOSIS_STATUS_LABELS[status] ?? { label: status || "—", tone: "neutral" };
 }
@@ -100,9 +109,11 @@ export function GrowWorkbench({
   const [opportunities, setOpportunities] = useState<GrowOpportunityItem[]>([]);
   const [evidence, setEvidence] = useState<GrowEvidenceItem[]>([]);
   const [outcomes, setOutcomes] = useState<OutcomeMeasurementDTO[]>([]);
+  const [processes, setProcesses] = useState<BusinessProcessDTO[]>([]);
   const [initiatives, setInitiatives] = useState<DevelopmentInitiative[]>([]);
   const [milestones, setMilestones] = useState<CompanyMilestone[]>([]);
   const [canRunResearch, setCanRunResearch] = useState(false);
+  const [canRecordOutcome, setCanRecordOutcome] = useState(false);
   const [profileState, setProfileState] = useState<{
     status: string | null;
     summary: string | null;
@@ -141,10 +152,11 @@ export function GrowWorkbench({
     setLoading(true);
     setError(null);
     try {
-      const [oppRes, evRes, outRes, initRes, milestoneRes, profileRes] = await Promise.all([
+      const [oppRes, evRes, outRes, processRes, initRes, milestoneRes, profileRes] = await Promise.all([
         growApi.listOpportunities(clientId).catch(() => ({ items: [] as GrowOpportunityItem[] })),
         growApi.listEvidence(clientId).catch(() => ({ items: [] as GrowEvidenceItem[] })),
         growApi.listOutcomes(clientId).catch(() => ({ items: [] as OutcomeMeasurementDTO[] })),
+        growApi.listProcesses(clientId).catch(() => [] as BusinessProcessDTO[]),
         clientCompanyApi.listInitiatives(clientId).catch(() => ({ items: [] as DevelopmentInitiative[] })),
         clientCompanyApi.listMilestones(clientId).catch(() => ({ items: [] as CompanyMilestone[] })),
         clientCompanyApi.getProfile(clientId).catch(() => null),
@@ -152,6 +164,7 @@ export function GrowWorkbench({
       setOpportunities(oppRes.items);
       setEvidence(evRes.items);
       setOutcomes(outRes.items);
+      setProcesses(processRes);
       setInitiatives(initRes.items);
       setMilestones(milestoneRes.items);
       setProfileState(
@@ -200,10 +213,17 @@ export function GrowWorkbench({
     let cancelled = false;
     void getCurrentUser()
       .then((user) => {
-        if (!cancelled) setCanRunResearch(["ADMIN", "PARTNER", "LAWYER"].includes(String(user?.role || "")));
+        if (cancelled) return;
+        const role = String(user?.role || "");
+        setCanRunResearch(["ADMIN", "PARTNER", "LAWYER"].includes(role));
+        // Outcome recording mirrors the backend requireManager gate (ADMIN/PARTNER).
+        setCanRecordOutcome(["ADMIN", "PARTNER"].includes(role));
       })
       .catch(() => {
-        if (!cancelled) setCanRunResearch(false);
+        if (!cancelled) {
+          setCanRunResearch(false);
+          setCanRecordOutcome(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -265,7 +285,15 @@ export function GrowWorkbench({
         />
       ) : null}
 
-      {activeTab === "eredmenyek" ? <GrowOutcomesTab outcomes={outcomes} /> : null}
+      {activeTab === "eredmenyek" ? (
+        <GrowOutcomesTab
+          clientId={clientId}
+          outcomes={outcomes}
+          processes={processes}
+          canRecordOutcome={canRecordOutcome}
+          onRecorded={() => void load()}
+        />
+      ) : null}
 
       {activeTab === "adatforrasok" ? (
         <GrowDataSourcesTab clientId={clientId} sources={sources} onSubmitted={() => void load()} />
@@ -988,7 +1016,20 @@ function GrowInitiativesTab({
 
 /* ------------------------------- Eredmények -------------------------------- */
 
-function GrowOutcomesTab({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) {
+function GrowOutcomesTab({
+  clientId,
+  outcomes,
+  processes,
+  canRecordOutcome,
+  onRecorded,
+}: {
+  clientId: string;
+  outcomes: OutcomeMeasurementDTO[];
+  processes: BusinessProcessDTO[];
+  canRecordOutcome: boolean;
+  onRecorded: () => void;
+}) {
+  const [showRecord, setShowRecord] = useState(false);
   const measured = outcomes.filter((o) => o.basis === "MEASURED");
   const calculated = outcomes.filter((o) => o.basis === "CALCULATED");
   const estimated = outcomes.filter((o) => o.basis === "ESTIMATED");
@@ -999,7 +1040,28 @@ function GrowOutcomesTab({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) {
       <OperationalPageHeader
         title="Eredmények"
         subtitle="Az alap (mért / számított / becsült / feltételezett) minden sorban egyértelműen el van különítve."
+        primaryAction={
+          canRecordOutcome ? (
+            <AdminButton
+              size="sm"
+              variant="primary"
+              onClick={() => setShowRecord((open) => !open)}
+              data-testid="grow-record-outcome-open"
+            >
+              Eredmény rögzítése
+            </AdminButton>
+          ) : undefined
+        }
       />
+
+      {canRecordOutcome && showRecord ? (
+        <GrowRecordOutcomeForm
+          clientId={clientId}
+          processes={processes}
+          onRecorded={onRecorded}
+          onClose={() => setShowRecord(false)}
+        />
+      ) : null}
 
       <OutcomeGroup title="Mért eredmény" detail="Előtte/utána mérésből származó, mért adat." outcomes={measured} tone="green" />
       <OutcomeGroup title="Számított eredmény" detail="Meghatározott képlettel számított adat." outcomes={calculated} tone="blue" />
@@ -1008,6 +1070,266 @@ function GrowOutcomesTab({ outcomes }: { outcomes: OutcomeMeasurementDTO[] }) {
         <OutcomeGroup title="Feltételezett eredmény" detail="Feltételezésen alapul — nem tekinthető megvalósult hatásnak." outcomes={assumed} tone="burgundy" />
       ) : null}
     </div>
+  );
+}
+
+/* --------------------------- Eredmény rögzítése ---------------------------- */
+
+/**
+ * Records an outcome against an EXISTING ImprovementOpportunity using the two
+ * real measured ProcessObservationSnapshots of one process. The server derives
+ * every metric, the ROI basis and the provenance — this form sends only
+ * canonical ids and an optional note, never a fabricated value.
+ */
+function GrowRecordOutcomeForm({
+  clientId,
+  processes,
+  onRecorded,
+  onClose,
+}: {
+  clientId: string;
+  processes: BusinessProcessDTO[];
+  onRecorded: () => void;
+  onClose: () => void;
+}) {
+  const [options, setOptions] = useState<GrowOpportunityItem[]>([]);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
+  const [opportunityId, setOpportunityId] = useState("");
+  const [processId, setProcessId] = useState("");
+  const [snapshots, setSnapshots] = useState<ProcessObservationSnapshotDTO[]>([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
+  const [beforeSnapshotId, setBeforeSnapshotId] = useState("");
+  const [afterSnapshotId, setAfterSnapshotId] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  // An outcome may only attach to an accepted opportunity (the human decision
+  // already created the canonical ImprovementOpportunity).
+  useEffect(() => {
+    let cancelled = false;
+    setOptionsLoading(true);
+    setOptionsError(null);
+    growApi
+      .listOpportunities(clientId, "ACCEPTED")
+      .then((res) => {
+        if (!cancelled) setOptions(res.items.filter((o) => Boolean(o.opportunity)));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setOptions([]);
+          setOptionsError("A rögzíthető fejlesztési lehetőségek nem tölthetők be.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId]);
+
+  const selectedOpportunity = options.find((o) => o.id === opportunityId) ?? null;
+
+  useEffect(() => {
+    const suggested = selectedOpportunity?.businessProcess?.id ?? "";
+    if (suggested) setProcessId(suggested);
+  }, [selectedOpportunity]);
+
+  // Snapshot options always come from the canonical observation history.
+  useEffect(() => {
+    if (!processId) {
+      setSnapshots([]);
+      setSnapshotsError(null);
+      return;
+    }
+    let cancelled = false;
+    setSnapshotsLoading(true);
+    setSnapshotsError(null);
+    setBeforeSnapshotId("");
+    setAfterSnapshotId("");
+    growApi
+      .listProcessObservationHistory(clientId, processId)
+      .then((res) => {
+        if (!cancelled) setSnapshots(res.items);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSnapshots([]);
+          setSnapshotsError("A folyamat mérési pillanatképei nem tölthetők be.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSnapshotsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId, processId]);
+
+  const beforeSnapshot = snapshots.find((s) => s.id === beforeSnapshotId) ?? null;
+  // The after snapshot must not precede the baseline; ordering only, no metrics.
+  const afterOptions = beforeSnapshot
+    ? snapshots.filter((s) => s.id !== beforeSnapshot.id && s.observedAt >= beforeSnapshot.observedAt)
+    : snapshots.filter((s) => s.id !== beforeSnapshotId);
+
+  const canSubmit = Boolean(selectedOpportunity?.opportunity?.id) && Boolean(processId) && Boolean(beforeSnapshotId);
+
+  const submit = async () => {
+    if (!selectedOpportunity?.opportunity?.id || !processId || !beforeSnapshotId) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await growApi.recordOutcome(clientId, selectedOpportunity.opportunity.id, {
+        businessProcessId: processId,
+        beforeSnapshotId,
+        afterSnapshotId: afterSnapshotId || undefined,
+        note: note.trim() || undefined,
+      });
+      setMessage("Eredmény rögzítve.");
+      onRecorded();
+    } catch {
+      // A server rejection must never read as success.
+      setError("Az eredmény rögzítése nem sikerült.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <AdminPanel data-testid="grow-record-outcome-form">
+      <AdminSectionHeader
+        title="Eredmény rögzítése"
+        subtitle="Kizárólag elfogadott fejlesztési lehetőséghez, valós mérési pillanatképekből. A rendszer a mérésekből számol — az űrlap nem számol ROI-t."
+      />
+
+      {optionsLoading ? (
+        <p className="px-4 py-3 text-[12px] text-[var(--adm-text-muted)]">A lehetőségek betöltése…</p>
+      ) : optionsError ? (
+        <p className="px-4 py-3 text-[12px] text-[var(--adm-terracotta-700)]" role="alert">{optionsError}</p>
+      ) : options.length === 0 ? (
+        <CompactState
+          title="Nincs rögzíthető fejlesztési lehetőség."
+          detail="Eredmény csak korábban elfogadott javaslathoz (fejlesztési lehetőséghez) rögzíthető. Előbb a Döntések fülön fogadjon el egy javaslatot."
+        />
+      ) : (
+        <div className="space-y-3 px-4 py-3">
+          <label className="block">
+            <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Fejlesztési lehetőség</span>
+            <select
+              value={opportunityId}
+              onChange={(e) => setOpportunityId(e.target.value)}
+              className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"
+              data-testid="grow-record-outcome-opportunity"
+            >
+              <option value="">Válasszon lehetőséget…</option>
+              {options.map((o) => (
+                <option key={o.id} value={o.id}>{o.title}</option>
+              ))}
+            </select>
+          </label>
+
+          {selectedOpportunity ? (
+            <>
+              <label className="block">
+                <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Folyamat</span>
+                <select
+                  value={processId}
+                  onChange={(e) => setProcessId(e.target.value)}
+                  className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"
+                  data-testid="grow-record-outcome-process"
+                >
+                  <option value="">Válasszon folyamatot…</option>
+                  {processes.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </label>
+
+              {snapshotsLoading ? (
+                <p className="text-[12px] text-[var(--adm-text-muted)]">A mérési pillanatképek betöltése…</p>
+              ) : snapshotsError ? (
+                <p className="text-[12px] text-[var(--adm-terracotta-700)]" role="alert">{snapshotsError}</p>
+              ) : processId && snapshots.length === 0 ? (
+                <p className="text-[12px] text-[var(--adm-text-muted)]">
+                  Ehhez a folyamathoz még nincs mért pillanatkép. Előbb rögzítsen folyamat-megfigyelést a folyamat adatlapján.
+                </p>
+              ) : (
+                <>
+                  <label className="block">
+                    <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Kiinduló (előtte) mérés</span>
+                    <select
+                      value={beforeSnapshotId}
+                      onChange={(e) => { setBeforeSnapshotId(e.target.value); setAfterSnapshotId(""); }}
+                      className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"
+                      data-testid="grow-record-outcome-before"
+                    >
+                      <option value="">Válasszon kiinduló mérést…</option>
+                      {snapshots.map((s) => (
+                        <option key={s.id} value={s.id}>{formatObservedAt(s.observedAt)}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block">
+                    <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Utána mérés (opcionális)</span>
+                    <select
+                      value={afterSnapshotId}
+                      onChange={(e) => setAfterSnapshotId(e.target.value)}
+                      disabled={!beforeSnapshot}
+                      className="adm-board-field mt-1 w-full px-3 py-2 text-[12px] disabled:opacity-60"
+                      data-testid="grow-record-outcome-after"
+                    >
+                      <option value="">Nincs utána mérés</option>
+                      {afterOptions.map((s) => (
+                        <option key={s.id} value={s.id}>{formatObservedAt(s.observedAt)}</option>
+                      ))}
+                    </select>
+                    <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
+                      Utána mérés nélkül az eredmény nem mért, hanem becsült alapon rögzül — ezt a lista egyértelműen jelzi.
+                    </span>
+                  </label>
+                </>
+              )}
+
+              <label className="block">
+                <span className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Megjegyzés (opcionális)</span>
+                <textarea
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={2000}
+                  rows={2}
+                  className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]"
+                  data-testid="grow-record-outcome-note"
+                />
+              </label>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <AdminButton
+                  size="sm"
+                  variant="primary"
+                  disabled={busy || !canSubmit}
+                  onClick={() => void submit()}
+                  data-testid="grow-record-outcome-submit"
+                >
+                  {busy ? "Rögzítés…" : "Eredmény rögzítése"}
+                </AdminButton>
+                <AdminButton size="sm" variant="neutral" disabled={busy} onClick={onClose}>
+                  Mégse
+                </AdminButton>
+              </div>
+
+              {message ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]" role="status">{message}</p> : null}
+              {error ? <p className="text-[11px] text-[var(--adm-terracotta-700)]" role="alert">{error}</p> : null}
+            </>
+          ) : null}
+        </div>
+      )}
+    </AdminPanel>
   );
 }
 
