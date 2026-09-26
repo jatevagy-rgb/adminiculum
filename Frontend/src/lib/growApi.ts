@@ -336,6 +336,15 @@ export const growApi = {
       { method: "POST", body: JSON.stringify({}) },
     );
   },
+  /**
+   * Canonical observation-snapshot history for a process (T2B). Read-only: the
+   * returned snapshots are the same records the outcome service consumes by id.
+   */
+  listProcessObservationHistory(clientId: string, processId: string) {
+    return fetchApi<{ items: ProcessObservationSnapshotDTO[] }>(
+      url(clientId, `/processes/${encodeURIComponent(processId)}/observations`),
+    );
+  },
   listOpportunityPublications(clientId: string, opportunityId: string) {
     return fetchApi<{ items: OpportunityPublicationDTO[] }>(
       url(clientId, `/grow/opportunities/${encodeURIComponent(opportunityId)}/publications`),
