@@ -89,6 +89,7 @@ import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill 
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
 import { DocumentWorkspaceTabs, type WorkspaceMode } from "@/components/documents/workContext/DocumentWorkspaceTabs";
+import { DocumentReaderWorkspace } from "@/components/documents/reader/DocumentReaderWorkspace";
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { CanonicalChangesWorkspace } from "@/components/documents/comparison/CanonicalChangesWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
@@ -2276,7 +2277,9 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
               <div className="space-y-6">
-                {/* 1. CANONICAL TOP REGION */}
+                {/* 1. CANONICAL TOP REGION — advanced modes only. The default document
+                    reader owns its own restrained header (READER-UI-CONVERGENCE). */}
+                {activeMode !== "document" ? (
                 <section data-testid="canonical-top-region" className="adm-board-panel overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm">
                   <div className="flex flex-col gap-3 p-4 pb-3 xl:flex-row xl:items-center xl:justify-between">
                     <div className="min-w-0 flex-1">
@@ -2422,6 +2425,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     {reviewProjection?.nextAction?.label ? <span><b>Következő teendő:</b> {reviewProjection.nextAction.label}</span> : null}
                   </div>
                 </section>
+                ) : null}
 
                 {aiPreparationOpen && selectedUploadedDocument ? (
                   <AIPromptPreparationModal
@@ -2466,10 +2470,43 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   </div>
                 ) : null}
 
-                {/* 2. MODE-DRIVEN WORKSPACE: DOKUMENTUM keeps the 3-column shell; the
-                    other three modes collapse the auxiliary rails and give the mode
-                    surface the full width. */}
-                <div className={`grid min-w-0 grid-cols-1 gap-4 ${activeMode !== "document" ? "" : readingFocus ? "lg:grid-cols-[minmax(0,1fr)]" : leftRailCollapsed ? "lg:grid-cols-[minmax(0,1fr)_290px] xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[230px_minmax(0,1fr)_290px] xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
+                {/* 2. MODE-DRIVEN WORKSPACE: the default document mode renders the converged
+                    reader (dominant document + right rail, no left ledger, no dominant tab
+                    row). The three advanced modes keep the preserved legacy surfaces. */}
+                {activeMode === "document" ? (
+                  <DocumentReaderWorkspace
+                    caseId={canonicalCaseId}
+                    caseLabel={displayCaseId}
+                    clientLabel={displayClient || null}
+                    documentId={activeDocument?.id ?? null}
+                    documentVersionId={canonicalActiveVersion?.id ?? null}
+                    documentTitle={activeTitle || "Nincs még workspace dokumentum"}
+                    fileTypeLabel={canonicalShellFileType}
+                    versionNumber={canonicalActiveVersion?.versionNumber ?? null}
+                    isHistoricalVersion={Boolean(canonicalActiveVersion && !canonicalActiveVersion.isCurrent)}
+                    plan={versionTextPlan}
+                    versionText={versionText}
+                    documentTextPreview={documentTextPreview}
+                    isLoadingText={isLoadingVersionText || isLoadingDocumentText}
+                    textUnavailableReason={versionTextUnavailableReason || documentTextUnavailableReason}
+                    onBackToCase={() => router.push(`/cases/${encodeURIComponent(canonicalCaseId)}`)}
+                    onDownload={
+                      selectedUploadedDocument
+                        ? () => void handleDownloadUploadedDocument(selectedUploadedDocument)
+                        : selectedGeneratedContract
+                          ? () => void handleDownload(selectedGeneratedContract)
+                          : null
+                    }
+                    onNewVersion={
+                      selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY'
+                        ? () => versionFileInputRef.current?.click()
+                        : null
+                    }
+                    wordHandoffUrl={canonicalActiveVersion?.spWebUrl || selectedUploadedDocument?.spWebUrl || null}
+                    onOpenAdvanced={navigateToMode}
+                  />
+                ) : null}
+                <div className={`grid min-w-0 grid-cols-1 gap-4${activeMode === "document" ? " hidden" : ""} ${activeMode !== "document" ? "" : readingFocus ? "lg:grid-cols-[minmax(0,1fr)]" : leftRailCollapsed ? "lg:grid-cols-[minmax(0,1fr)_290px] xl:grid-cols-[minmax(0,1fr)_320px]" : "lg:grid-cols-[230px_minmax(0,1fr)_290px] xl:grid-cols-[280px_minmax(0,1fr)_320px] 2xl:grid-cols-[300px_minmax(0,1fr)_340px]"}`}>
                   {/* CANONICAL LEFT REGION: Document Ledger */}
                   <aside data-testid="canonical-left-ledger" className={`min-w-0 overflow-hidden rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white shadow-sm flex flex-col${activeMode !== "document" ? " hidden" : ""}${readingFocus ? " lg:hidden" : ""}${leftRailCollapsed ? " lg:hidden" : ""}${leftRailOpen ? "" : " max-lg:hidden"}`}>
                     <div className="order-2 border-t border-[var(--adm-border)] bg-[var(--adm-sand-100)] px-3 py-2">
