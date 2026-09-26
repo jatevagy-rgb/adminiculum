@@ -7,6 +7,11 @@
  * values. Anything the DTO does not expose (e.g. responsible persons, active /
  * waiting minutes) stays absent — it is never converted to zero.
  *
+ * System count and system-switch semantics are intentionally NOT derived here:
+ * the customer DTO exposes only a display name (systemName), not the canonical
+ * system identity or a customer-safe count, so names are never treated as an
+ * identity and never aggregated into a count or a switch signal.
+ *
  * Canonical ordering is the same deterministic rule the rest of Grow uses:
  * position asc, then id asc.
  */
@@ -23,8 +28,6 @@ export type GrowOperatingStepView = {
   isApproval: boolean;
   systemName: string | null;
   systemCategory: string | null;
-  /** True when this step names a different system than the previous step. */
-  systemSwitch: boolean;
 };
 
 export type GrowOperatingProcessView = {
@@ -37,7 +40,6 @@ export type GrowOperatingProcessView = {
   steps: GrowOperatingStepView[];
   stepCount: number;
   approvalCount: number;
-  distinctSystemCount: number;
 };
 
 /** Deterministic step ordering: position asc, then id asc. Never mutates input. */
@@ -52,19 +54,11 @@ export function sortGrowStepsDeterministically(
 export function projectGrowOperatingProcess(process: PortalGrowProcess): GrowOperatingProcessView {
   const ordered = sortGrowStepsDeterministically(process.steps);
   const steps: GrowOperatingStepView[] = [];
-  const systemNames = new Set<string>();
-  let previousSystemName: string | null = null;
 
   for (let i = 0; i < ordered.length; i += 1) {
     const step = ordered[i];
     const systemName = step.systemName ?? null;
     const isApproval = step.isApproval === true || String(step.stepType).toUpperCase() === "APPROVAL";
-    // A system switch only counts when BOTH adjacent steps name a system and the
-    // names differ. A missing system on either side is not presented as a switch.
-    const systemSwitch =
-      i > 0 && systemName !== null && previousSystemName !== null && systemName !== previousSystemName;
-
-    if (systemName !== null) systemNames.add(systemName);
 
     steps.push({
       id: step.id,
@@ -76,10 +70,7 @@ export function projectGrowOperatingProcess(process: PortalGrowProcess): GrowOpe
       isApproval,
       systemName,
       systemCategory: step.systemCategory ?? null,
-      systemSwitch,
     });
-
-    previousSystemName = systemName;
   }
 
   const approvalCount = steps.reduce((sum, step) => sum + (step.isApproval ? 1 : 0), 0);
@@ -94,6 +85,5 @@ export function projectGrowOperatingProcess(process: PortalGrowProcess): GrowOpe
     steps,
     stepCount: steps.length,
     approvalCount,
-    distinctSystemCount: systemNames.size,
   };
 }

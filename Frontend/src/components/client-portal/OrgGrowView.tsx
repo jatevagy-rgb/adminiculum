@@ -2000,12 +2000,10 @@ export function OrgGrowView() {
           {/* Map / list view toggle */}
           <div
             className="flex flex-wrap items-center justify-end gap-1.5 border-b border-[var(--adm-border)] px-4 py-2"
-            role="tablist"
             aria-label="Megjelenítés"
           >
             <AdminButton
-              role="tab"
-              aria-selected={growViewMode === "map"}
+              aria-pressed={growViewMode === "map"}
               variant={growViewMode === "map" ? "primary" : "neutral"}
               size="xs"
               data-testid="grow-view-toggle-map"
@@ -2014,8 +2012,7 @@ export function OrgGrowView() {
               Térkép
             </AdminButton>
             <AdminButton
-              role="tab"
-              aria-selected={growViewMode === "list"}
+              aria-pressed={growViewMode === "list"}
               variant={growViewMode === "list" ? "primary" : "neutral"}
               size="xs"
               data-testid="grow-view-toggle-list"

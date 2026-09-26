@@ -12,10 +12,10 @@ const SOFT = "text-[var(--adm-text-soft)]";
  * Read-only interactive operating canvas for the customer Grow surface.
  *
  * The customer explores how the company operates rather than reading a report:
- * a process selector (radio-like chips), a linear, deterministic step flow, and
- * selectable step nodes that drive the contextual inspector. No drag/pan/zoom
- * semantics — the canvas is a semantic HTML ordered list, fully keyboard
- * reachable, with a mobile-friendly vertical fallback.
+ * a process selector (selectable button chips), a linear, deterministic step
+ * flow, and selectable step nodes that drive the contextual inspector. No
+ * drag/pan/zoom semantics — the canvas is a semantic HTML ordered list, fully
+ * keyboard reachable, with a mobile-friendly vertical fallback.
  */
 export function OrgGrowOperatingCanvas({
   processes,
@@ -45,17 +45,16 @@ export function OrgGrowOperatingCanvas({
         ) : null}
       </div>
 
-      {/* Process selector — radio-like, keyboard reachable, non-color selection. */}
+      {/* Process selector — a labelled group of selectable buttons. */}
       {processes.length > 0 ? (
-        <div className="mt-3 flex flex-wrap gap-2" role="radiogroup" aria-label="Folyamat választása">
+        <div className="mt-3 flex flex-wrap gap-2" aria-label="Folyamat választása">
           {views.map((view) => {
             const selected = view.id === selectedProcessId;
             return (
               <button
                 key={view.id}
                 type="button"
-                role="radio"
-                aria-checked={selected}
+                aria-pressed={selected}
                 data-testid={`grow-operating-process-${view.id}`}
                 onClick={() => onSelectProcess(view.id)}
                 className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] focus-visible:ring-offset-2 ${
@@ -150,10 +149,9 @@ function StepNode({
         </p>
       ) : null}
 
-      {(step.isApproval || step.systemSwitch) ? (
+      {step.isApproval ? (
         <div className="flex flex-wrap gap-1.5">
-          {step.isApproval ? <AdminBadge tone="amber">Jóváhagyási kapu</AdminBadge> : null}
-          {step.systemSwitch ? <AdminBadge tone="blue">Rendszerváltás</AdminBadge> : null}
+          <AdminBadge tone="amber">Jóváhagyási kapu</AdminBadge>
         </div>
       ) : null}
     </button>

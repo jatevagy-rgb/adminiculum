@@ -60,7 +60,7 @@ export function OrgGrowContextInspector({
             {process.name}
           </h3>
           <p className={`mt-1 text-[11px] ${MUTED}`}>
-            {process.stepCount} lépés · {process.distinctSystemCount} rendszer
+            {process.stepCount} lépés
             {process.approvalCount > 0 ? ` · ${process.approvalCount} jóváhagyás` : ""}
           </p>
         </div>
@@ -106,9 +106,6 @@ export function OrgGrowContextInspector({
               </span>
               {selectedStep.systemCategory ? ` (${selectedStep.systemCategory})` : ""}
             </p>
-            {selectedStep.systemSwitch ? (
-              <p className={`mt-1 text-[11px] ${MUTED}`}>Az előző lépéshez képest más rendszert használ.</p>
-            ) : null}
           </div>
         ) : (
           <p className={`mt-2 text-[12px] ${MUTED}`}>
@@ -158,9 +155,8 @@ export function OrgGrowContextInspector({
       <div className="border-t border-[var(--adm-border)] px-4 py-3">
         <p className={`text-[10.5px] font-bold uppercase tracking-[0.14em] ${SOFT}`}>Mi alapján?</p>
         <p className={`mt-1.5 text-[11px] leading-5 ${MUTED}`}>
-          A lépések sorrendje a folyamat rögzített sorrendjét követi. A jóváhagyási pontok és a kapcsolódó
-          rendszerek a folyamat rögzített definíciójából származnak; a rendszerváltások a szomszédos lépések
-          eltérő rendszeréből következnek.
+          A lépések sorrendje a folyamat rögzített sorrendjét követi. A jóváhagyási pontok a rögzített
+          lépésdefinícióból, a megjelenített rendszernevek a lépésekhez rögzített rendszeradatból származnak.
         </p>
       </div>
     </aside>

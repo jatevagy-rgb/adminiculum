@@ -97,7 +97,9 @@ test('projection does not invent missing values and never converts absent data t
   assert.equal('totalEstimatedWaitingMinutes' in view, false);
   // Missing system stays missing (null), not turned into an empty string or zero.
   assert.equal(view.steps[0].systemName, null);
-  assert.equal(view.distinctSystemCount, 0);
+  // System count / switch are NOT derived from display names.
+  assert.equal('distinctSystemCount' in view, false);
+  assert.equal('systemSwitch' in view.steps[0], false);
   // A process with no approval gates reports zero approvals truthfully.
   assert.equal(view.approvalCount, 0);
 });
@@ -120,23 +122,25 @@ test('projection derives approval from the flag or the APPROVAL step type', () =
   assert.equal(view.steps[2].isApproval, false);
 });
 
-test('projection counts a system switch only when both adjacent steps name a system', () => {
+test('projection does NOT manufacture a system count or system switch from display names', () => {
   const view = projectGrowOperatingProcess(
     process({
       id: 'p',
       name: 'P',
       steps: [
-        step({ id: 's1', position: 1, name: 'A', systemName: 'ERP' }),
+        step({ id: 's1', position: 1, name: 'A', systemName: 'SAP' }),
         step({ id: 's2', position: 2, name: 'B', systemName: 'CRM' }),
-        step({ id: 's3', position: 3, name: 'C', systemName: 'CRM' }),
-        step({ id: 's4', position: 4, name: 'D', systemName: null }),
       ],
     }),
   );
-  assert.equal(view.steps[1].systemSwitch, true); // ERP -> CRM
-  assert.equal(view.steps[2].systemSwitch, false); // CRM -> CRM
-  assert.equal(view.steps[3].systemSwitch, false); // CRM -> null is not presented as a switch
-  assert.equal(view.distinctSystemCount, 2);
+  // No system-switch flag and no system count are present in the view model.
+  assert.equal('distinctSystemCount' in view, false);
+  for (const s of view.steps) {
+    assert.equal('systemSwitch' in s, false);
+  }
+  // Individual recorded system labels are still preserved.
+  assert.equal(view.steps[0].systemName, 'SAP');
+  assert.equal(view.steps[1].systemName, 'CRM');
 });
 
 // ---------------------------------------------------------------------------
@@ -214,20 +218,47 @@ test('the canvas never renders invented time metrics', () => {
   }
 });
 
+test('SYSTEM_COUNT_FROM_NAMES and SYSTEM_SWITCH_FROM_NAMES are NOT present', () => {
+  for (const file of [CANVAS, INSPECTOR, PROJECTION]) {
+    const src = read(file);
+    assert.doesNotMatch(src, /distinctSystemCount/, `${file} must not derive a system count from names`);
+    assert.doesNotMatch(src, /systemSwitch/, `${file} must not derive a system switch from names`);
+    assert.doesNotMatch(src, /Rendszerváltás/, `${file} must not render a system-switch label`);
+  }
+});
+
+test('individual recorded system labels are still displayed', () => {
+  const canvas = read(CANVAS);
+  const inspector = read(INSPECTOR);
+  assert.match(canvas, /Rendszer:/);
+  assert.match(canvas, /step\.systemName/);
+  assert.match(inspector, /selectedStep\.systemName/);
+});
+
 // ---------------------------------------------------------------------------
 // Accessibility contract
 // ---------------------------------------------------------------------------
 
 test('canvas exposes semantic selectable controls with a non-color indicator', () => {
   const canvas = read(CANVAS);
-  assert.match(canvas, /role="radiogroup"/);
-  assert.match(canvas, /role="radio"/);
-  assert.match(canvas, /aria-checked=\{selected\}/);
+  // Process selector and step nodes are pressed-state buttons, not ARIA radios.
   assert.match(canvas, /aria-pressed=\{selected\}/);
+  assert.doesNotMatch(canvas, /role="radiogroup"/);
+  assert.doesNotMatch(canvas, /role="radio"/);
+  assert.doesNotMatch(canvas, /aria-checked/);
   assert.match(canvas, /Kiválasztva/);
   assert.match(canvas, /data-testid="grow-operating-canvas"/);
   assert.match(canvas, /data-testid={`grow-operating-process-\$\{view\.id\}`}/);
   assert.match(canvas, /data-testid={`grow-operating-step-\$\{step\.id\}`}/);
+});
+
+test('map/list toggle is a pressed-state button control, not ARIA tabs', () => {
+  const src = read(VIEW);
+  assert.match(src, /data-testid="grow-view-toggle-map"/);
+  assert.match(src, /data-testid="grow-view-toggle-list"/);
+  assert.match(src, /aria-pressed=\{growViewMode === "map"\}/);
+  assert.match(src, /aria-pressed=\{growViewMode === "list"\}/);
+  assert.doesNotMatch(src, /aria-selected=\{growViewMode/);
 });
 
 test('map/list parity: every process remains reachable from the list alternative', () => {
