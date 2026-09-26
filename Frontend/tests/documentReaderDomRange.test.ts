@@ -95,19 +95,34 @@ test("proposal decision authority is lawyer-level only", () => {
   }
 });
 
-test("rail merge is chronological across comments and proposals", () => {
+test("rail merge is anchor-first, not chronological across comments and proposals", () => {
   const merged = mergeRailEntries(
     [
-      { id: "c2", createdAt: "2026-01-02T00:00:00.000Z" } as any,
-      { id: "c1", createdAt: "2026-01-01T00:00:00.000Z" } as any,
+      { id: "c1", createdAt: "2026-01-25T00:00:00.000Z", startOffset: 120, endOffset: 130 } as any,
+      { id: "c2", createdAt: "2026-01-01T00:00:00.000Z", startOffset: 10, endOffset: 20 } as any,
     ],
     [
-      { id: "p1", createdAt: "2026-01-03T00:00:00.000Z" } as any,
-      { id: "p0", createdAt: "2025-12-31T00:00:00.000Z" } as any,
+      { id: "p1", createdAt: "2025-12-31T00:00:00.000Z", startOffset: 60, endOffset: 70 } as any,
+      { id: "p2", createdAt: "2026-01-15T00:00:00.000Z", startOffset: 200, endOffset: 210 } as any,
     ],
   );
   assert.deepEqual(
     merged.map((entry) => (entry.kind === "comment" ? entry.comment.id : entry.proposal.id)),
-    ["p0", "c1", "c2", "p1"],
+    ["c2", "p1", "c1", "p2"],
+    "items are ordered by document anchor (startOffset), not by createdAt",
+  );
+});
+
+test("identical anchors are broken by createdAt, then deterministically", () => {
+  const merged = mergeRailEntries(
+    [
+      { id: "c-late", createdAt: "2026-02-02T00:00:00.000Z", startOffset: 50, endOffset: 60 } as any,
+      { id: "c-early", createdAt: "2026-01-01T00:00:00.000Z", startOffset: 50, endOffset: 60 } as any,
+    ],
+    [],
+  );
+  assert.deepEqual(
+    merged.map((entry) => (entry.kind === "comment" ? entry.comment.id : entry.proposal.id)),
+    ["c-early", "c-late"],
   );
 });
