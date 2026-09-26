@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { clientWorkspaceApi, type CompanyDataRoom } from "@/lib/clientWorkspaceApi";
+import { growApi } from "@/lib/growApi";
 import { companyFactTypeLabel, factVerificationLabel } from "@/lib/clientCompanyApi";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
 import { ClientCompanyOperationsLegacy } from "@/components/clients/ClientCompanyOperationsLegacy";
@@ -377,6 +378,65 @@ function CountCard({
   return content;
 }
 
+/**
+ * Restrained per-process capture action for the existing canonical snapshot
+ * endpoint. The server stays authoritative for the snapshot structure, metric
+ * computation, measured values and timestamps — the frontend only sends the
+ * already-known client and process ids and re-reads the data room afterwards.
+ */
+function ProcessSnapshotCapture({
+  clientId,
+  processId,
+  onCaptured,
+}: {
+  clientId: string;
+  processId: string;
+  onCaptured: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+
+  const capture = async () => {
+    setBusy(true);
+    setMessage(null);
+    setCaptureError(null);
+    try {
+      await growApi.captureProcessObservation(clientId, processId);
+      setMessage("Mérés rögzítve.");
+      onCaptured();
+    } catch {
+      setCaptureError("A mérés rögzítése nem sikerült.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => void capture()}
+        disabled={busy}
+        data-testid={`capture-process-snapshot-${processId}`}
+        className="rounded-xl border border-[var(--adm-green-800)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#014337] shadow-xs transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[#014337]"
+      >
+        {busy ? "Rögzítés…" : "Mérés rögzítése"}
+      </button>
+      {message ? (
+        <span className="text-xs font-semibold text-emerald-800" role="status">
+          {message}
+        </span>
+      ) : null}
+      {captureError ? (
+        <span className="text-xs font-medium text-red-700" role="alert">
+          {captureError}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function ClientCompanyWorkspace({
   clientId,
   clientName,
@@ -405,6 +465,17 @@ export function ClientCompanyWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Soft re-read after a capture so the latest measured snapshot refreshes
+  // without flashing the full loading state and without dropping the capture
+  // confirmation message rendered by the process card.
+  const refreshDataRoom = useCallback(async () => {
+    try {
+      setRoom(await clientWorkspaceApi.getDataRoom(clientId));
+    } catch {
+      // Keep the already-rendered data on a transient re-read failure.
+    }
+  }, [clientId]);
 
   // Synchronize URL query parameter (?section=) with active section & support browser back/forward.
   // Cross-domain sections that now live in canonical modules redirect (replace) instead of rendering.
@@ -1096,6 +1167,17 @@ export function ClientCompanyWorkspace({
                     ) : (
                       <p className="mt-3 text-xs text-stone-500">Ehhez a folyamathoz nincs mért pillanatkép.</p>
                     )}
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
+                      <ProcessSnapshotCapture
+                        clientId={clientId}
+                        processId={process.id}
+                        onCaptured={() => void refreshDataRoom()}
+                      />
+                      <p className="text-[11px] text-stone-500">
+                        A mérés a rögzített folyamatlépésekből determinisztikusan számított pillanatképet rögzít.
+                      </p>
+                    </div>
                   </article>
                 ))}
                 {!room.processes.length ? (
