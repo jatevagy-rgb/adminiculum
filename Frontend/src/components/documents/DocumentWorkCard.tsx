@@ -10,14 +10,17 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import {
+  ApiError, deleteDocument,
   getDocumentWorkContext, updateDocumentWorkContext,
   linkDocumentToTask, unlinkDocumentFromTask,
   DOCUMENT_WORK_STATUS_ORDER,
   type DocumentWorkCard as WorkCard, type CaseWorkspace,
 } from "@/lib/api";
 import { AdminButton } from "@/components/adminiculum/ui";
+import { ConfirmationDialog } from "@/components/ui";
 import { ACCENT } from "@/components/cases/CaseCockpitPanels";
 import { workStatusAccent, workStatusLabel, formatDocDate } from "@/lib/documents/workContext";
+import { documentDeleteErrorMessage } from "@/lib/documents/documentPreparation";
 
 // One mapping source for the whole app: the card, the workspace header and the
 // editor all resolve status colour/label and dates through @/lib/documents/workContext.
@@ -55,6 +58,9 @@ export function DocumentWorkCard({
   const [editing, setEditing] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [linking, setLinking] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -69,6 +75,23 @@ export function DocumentWorkCard({
     setCard(next);
     onChanged?.();
   }, [onChanged]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!card || deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteDocument(card.id);
+      setDeleteOpen(false);
+      // The host refresh drops the deleted card from the Case Workspace list.
+      onChanged?.();
+    } catch (error) {
+      // 403/409/404/502 all become readable, provider-free messages.
+      setDeleteError(documentDeleteErrorMessage(error instanceof ApiError ? error.status : undefined));
+    } finally {
+      setDeleting(false);
+    }
+  }, [card, deleting, onChanged]);
 
   if (loading) {
     return <div data-testid="doc-card-loading" className="px-3 py-3 text-[12px] text-[var(--adm-text-muted)]">Munkakontextus betöltése…</div>;
@@ -164,10 +187,10 @@ export function DocumentWorkCard({
         {/* Primary actions */}
         <div className="mt-2.5 flex flex-wrap gap-2">
           {onOpen ? <AdminButton variant="primary" size="xs" onClick={onOpen}>Megnyitás</AdminButton> : null}
-          <AdminButton variant="neutral" size="xs" onClick={() => setLinking((v) => !v)}>Feladat</AdminButton>
+          <AdminButton variant="neutral" size="xs" onClick={() => setLinking((v) => !v)}>Feladathoz kapcsolás</AdminButton>
           {onReview ? <AdminButton variant="neutral" size="xs" onClick={onReview}>Review</AdminButton> : null}
           {onNewVersion ? <AdminButton variant="neutral" size="xs" onClick={onNewVersion}>Új verzió</AdminButton> : null}
-          <AdminButton variant="neutral" size="xs" onClick={() => setEditing(true)}>Munkakontextus</AdminButton>
+          <AdminButton variant="neutral" size="xs" onClick={() => setEditing(true)}>Munkautasítás</AdminButton>
         </div>
 
         {/* Link an existing case task */}
@@ -201,15 +224,27 @@ export function DocumentWorkCard({
           </div>
         ) : null}
 
-        {/* Technical values stay secondary and collapsed. */}
-        <button
-          type="button"
-          data-testid="doc-card-technical-toggle"
-          onClick={() => setShowTechnical((v) => !v)}
-          className="mt-2 text-[10.5px] font-semibold text-[var(--adm-text-muted)] hover:underline"
-        >
-          {showTechnical ? "Technikai részletek elrejtése" : "Technikai részletek"}
-        </button>
+        {/* Secondary row: technical values stay collapsed; delete is a quiet
+            destructive action so it never competes with the primary actions. */}
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <button
+            type="button"
+            data-testid="doc-card-technical-toggle"
+            onClick={() => setShowTechnical((v) => !v)}
+            className="text-[10.5px] font-semibold text-[var(--adm-text-muted)] hover:underline"
+          >
+            {showTechnical ? "Technikai részletek elrejtése" : "Technikai részletek"}
+          </button>
+          <button
+            type="button"
+            data-testid="doc-card-delete"
+            disabled={deleting}
+            onClick={() => { setDeleteError(null); setDeleteOpen(true); }}
+            className="text-[10.5px] font-semibold text-[var(--adm-terracotta-700)] hover:underline disabled:opacity-50"
+          >
+            Törlés
+          </button>
+        </div>
         {showTechnical ? (
           <dl data-testid="doc-card-technical" className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
             <Field label="Eredeti fájlnév" value={card.fileName || "—"} small />
@@ -228,6 +263,35 @@ export function DocumentWorkCard({
           onSaved={(next) => { afterChange(next); setEditing(false); }}
         />
       ) : null}
+
+      <ConfirmationDialog
+        open={deleteOpen}
+        title="Dokumentum törlése"
+        description="Ez a művelet nem vonható vissza."
+        confirmLabel="Végleges törlés"
+        busy={deleting}
+        busyLabel="Törlés…"
+        variant="danger"
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => {
+          if (!deleting) {
+            setDeleteOpen(false);
+            setDeleteError(null);
+          }
+        }}
+      >
+        <p className="text-[12.5px] font-semibold text-[var(--adm-text-primary)]">
+          {card.title || card.fileName || "Névtelen dokumentum"}
+        </p>
+        <p className="mt-1 text-[11.5px] text-[var(--adm-text-secondary)]">
+          A rendszer ellenőrzi, hogy nincs-e kapcsolódó feladat, anonimizált változat, jogi elemzés vagy nyitott review-javaslat.
+        </p>
+        {deleteError ? (
+          <p role="alert" data-testid="doc-card-delete-error" className="mt-2 text-[11.5px] font-semibold text-[var(--adm-terracotta-700)]">
+            {deleteError}
+          </p>
+        ) : null}
+      </ConfirmationDialog>
     </article>
   );
 }
