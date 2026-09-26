@@ -157,6 +157,25 @@ export interface BusinessProcessDTO {
   }>;
 }
 
+/** Canonical process observation snapshot (T2B) returned by the server. */
+export interface ProcessObservationSnapshotDTO {
+  id: string;
+  clientId: string;
+  businessProcessId: string;
+  metricVersion: string;
+  observedAt: string;
+  inputDigest: string;
+  snapshotDigest: string;
+  metrics: Array<{ code: string; value: number | boolean | null; unit: string; metricVersion: string }>;
+  provenance: {
+    source: string;
+    calculatedBy: string;
+    stepCount: number;
+    inputFieldInventory: string[];
+  } | null;
+  createdAt: string;
+}
+
 /** Canonical snapshot/observation references recorded on a diagnosis. */
 export interface DiagnosisSourceRefs {
   snapshotIds?: string[];
@@ -310,6 +329,12 @@ export const growApi = {
   },
   getProcessObservationLatest(clientId: string, processId: string) {
     return fetchApi<{ id: string; observedAt: string; metrics: Record<string, number> }>(url(clientId, `/processes/${encodeURIComponent(processId)}/observations/latest`));
+  },
+  captureProcessObservation(clientId: string, processId: string) {
+    return fetchApi<ProcessObservationSnapshotDTO>(
+      url(clientId, `/processes/${encodeURIComponent(processId)}/observations`),
+      { method: "POST", body: JSON.stringify({}) },
+    );
   },
   listOpportunityPublications(clientId: string, opportunityId: string) {
     return fetchApi<{ items: OpportunityPublicationDTO[] }>(
