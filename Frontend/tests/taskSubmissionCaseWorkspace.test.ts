@@ -11,7 +11,8 @@ describe('Case Workspace task submission convergence', () => {
     assert.match(workspace, /listTaskLifecycleItems/);
     assert.match(workspace, /onWorkflowChanged=\{refresh\}/);
     assert.match(workspace, /Review megnyitása/);
-    assert.match(workspace, /Leadás megnyitása/);
+    assert.match(workspace, /CaseSubmissionHandoff/);
+    assert.match(workspace, /data-testid="task-submission-leadas"/);
   });
 
   it('does not retain direct submission approval shortcuts', () => {

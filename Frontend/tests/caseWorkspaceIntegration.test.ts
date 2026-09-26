@@ -12,7 +12,8 @@ describe("W2C Case Workspace integration", () => {
     assert.match(overview, /listTaskLifecycleItems/);
     assert.match(overview, /onWorkflowChanged=\{refresh\}/);
     assert.match(overview, /Review megnyitása/);
-    assert.match(overview, /Leadás megnyitása/);
+    assert.match(overview, /CaseSubmissionHandoff/);
+    assert.match(overview, /data-testid="task-submission-leadas"/);
     assert.doesNotMatch(overview, /validateTaskTransition|Task\.status\s*=|submitTask\(|completeTask\(/);
   });
 
