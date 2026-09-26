@@ -419,7 +419,7 @@ function ProcessSnapshotCapture({
         onClick={() => void capture()}
         disabled={busy}
         data-testid={`capture-process-snapshot-${processId}`}
-        className="rounded-xl border border-[#014337] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#014337] shadow-xs transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[#014337]"
+        className="rounded-xl border border-[var(--adm-green-800)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#014337] shadow-xs transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[#014337]"
       >
         {busy ? "Rögzítés…" : "Mérés rögzítése"}
       </button>
