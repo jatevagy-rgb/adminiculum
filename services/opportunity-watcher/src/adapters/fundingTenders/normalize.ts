@@ -16,6 +16,19 @@
  * all three belong to the FUNDING opportunity family for this adapter. Type 0
  * (the portal's separate tenders builder) and any unknown value fail closed.
  * The raw source type is preserved in bounded fundingTenders metadata.
+ *
+ * REVISION IDENTITY vs SOURCE ORDER SIGNAL (live-proven 2026-09-27):
+ * - `sourceRevisionIdentifier` stays the checksum (esST_checksum) on search
+ *   records and the newest lastChangeDate on static topicDetails records.
+ *   It answers "is this the same source revision?" and is never orderable.
+ * - `sourceSpecificMetadata.fundingTenders.sourceLastChangeAt` is the separate
+ *   authoritative source-order evidence: the source-provided last-change
+ *   timestamp from the portal's `latestInfos[].lastChangeDate` update history
+ *   (newest first). It answers "can we prove this source state is newer/older?"
+ *   It is null when the source record carries no trustworthy timestamp — the
+ *   live SEDIA search index currently stores `latestInfos` as the JSON string
+ *   "[]", so search records emit null and downstream consumers fail closed.
+ *   observedAt is never used and never fabricated.
  */
 
 import type { OpportunityVariantInput, NormalizationOutcome } from '../../normalize/variant.ts';
@@ -60,6 +73,40 @@ function toFiniteNumber(value: unknown): number | null {
 }
 
 /**
+ * Newest-first `lastChangeDate` from the portal's `latestInfos` update history.
+ * Accepts the official `{approvalDate, lastChangeDate, content}` entry shape
+ * (topicDetails contract). Non-object entries (including the JSON-string "[]"
+ * the live SEDIA search index stores) and empty values yield null — the order
+ * signal is never invented.
+ */
+function latestInfosLastChange(value: unknown): string | null {
+  if (!Array.isArray(value)) return null;
+  for (const entry of value) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue;
+    const lastChange = firstScalar((entry as Record<string, unknown>)['lastChangeDate']);
+    if (lastChange !== null && lastChange.trim().length > 0) return lastChange.trim();
+  }
+  return null;
+}
+
+/**
+ * Order-signal normalization: directly source-derived, ISO-normalized, and
+ * null when absent or untrusted. Malformed / unparseable timestamps become
+ * null (never passed through verbatim) so downstream ordering logic fails
+ * closed. Date-only values must be calendar-valid. Never falls back to
+ * observedAt.
+ */
+function normalizeSourceOrderSignal(raw: string | null): string | null {
+  if (raw === null) return null;
+  const normalized = normalizeSourceTimestamp(raw);
+  if (normalized.value === null) return null;
+  if (normalized.precision === 'unknown') return null;
+  const probe = normalized.precision === 'date' ? `${normalized.value}T00:00:00Z` : normalized.value;
+  if (Number.isNaN(Date.parse(probe))) return null;
+  return normalized.value;
+}
+
+/**
  * Epoch millis are absolute instants and convert losslessly to UTC. A value at
  * exactly 00:00 UTC is reduced to date-only semantics (the portal stores
  * date-only deadlines as UTC midnight). Other values pass through the shared
@@ -96,6 +143,7 @@ interface UnifiedRecord {
   eligibilityText: string | null;
   revisionSignal: string | null;
   revisionSource: 'esST_checksum' | 'lastChangeDate' | null;
+  sourceLastChangeRaw: string | null;
   datasource: string | null;
   reference: string | null;
   ccm2Id: number | null;
@@ -165,6 +213,7 @@ function unifyTopicDetails(topic: Record<string, unknown>): UnifiedRecord {
     eligibilityText: firstScalar(topic['conditions']),
     revisionSignal: deriveRevisionSignal({}, latestInfos.map((entry) => ({ lastChangeDate: entry['lastChangeDate'] }))),
     revisionSource: 'lastChangeDate',
+    sourceLastChangeRaw: latestInfosLastChange(topic['latestInfos']),
     datasource: null,
     reference: null,
     ccm2Id: toFiniteNumber(topic['ccm2Id']),
@@ -196,6 +245,7 @@ function unifySearchEntry(entry: Record<string, unknown>, metadata: Record<strin
     eligibilityText: firstScalar(metadata['conditions']),
     revisionSignal: deriveRevisionSignal(metadata),
     revisionSource: firstScalar(metadata['esST_checksum']) !== null ? 'esST_checksum' : null,
+    sourceLastChangeRaw: latestInfosLastChange(metadata['latestInfos']),
     datasource: firstScalar(metadata['DATASOURCE']),
     reference: firstScalar(entry['reference']),
     ccm2Id: toFiniteNumber(metadata['ccm2Id']),
@@ -291,6 +341,7 @@ export function normalizeFundingTendersRecord(raw: unknown, reference: FundingTe
         callCcm2Id: unified.callCcm2Id,
         statusLabel: statusMapping.label,
         revisionSource: unified.revisionSource,
+        sourceLastChangeAt: normalizeSourceOrderSignal(unified.sourceLastChangeRaw),
       },
     },
   };
