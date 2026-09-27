@@ -18,6 +18,7 @@ const CATEGORY_DOT: Record<PortalCalendarCategory, string> = {
   ACTION_REQUEST: "bg-[#b8860b]",
   CUSTOMER_REQUEST: "bg-[#6f5514]",
   CONTRACT_DATE: "bg-[#3f6552]",
+  CONTRACT_OCCURRENCE: "bg-[#2f5d6e]",
   COMPANY_MILESTONE: "bg-[#7a5f18]",
   GROW_TARGET: "bg-[#5b6ea8]",
   COMPLIANCE_REVIEW: "bg-[#8a6f9e]",

@@ -124,6 +124,7 @@ model User {
   decidedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDecidedBy")
   deletedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDeletedBy")
   documentModificationProposalEvents   DocumentModificationProposalEvent[] @relation("DocumentModificationProposalEventActor")
+  publishedObligationOccurrences      ClientObligationOccurrence[]             @relation("ObligationOccurrencePublishedBy")
 
   @@map("users")
 }
@@ -5249,12 +5250,20 @@ model ClientObligationOccurrence {
   relatedTask               Task?                  @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
   sourceReference           String?
   internalNote              String?
+
+  /// Explicit customer-publication gate. NULL = NOT customer-visible (fail
+  /// closed). Only a deliberate publish action sets publishedAt; #399 candidate
+  /// confirmation never publishes, and revocation clears both fields.
+  publishedAt               DateTime?
+  publishedById             String?
+  publishedBy               User?                  @relation("ObligationOccurrencePublishedBy", fields: [publishedById], references: [id], onDelete: SetNull)
   revision                  Int                    @default(0)
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
 
   @@unique([obligationId, occurrenceKey])
   @@index([clientId, dueDate])
+  @@index([clientId, publishedAt])
   @@index([contractId, status])
   @@index([obligationId, status])
   @@index([evidenceDocumentVersionId])

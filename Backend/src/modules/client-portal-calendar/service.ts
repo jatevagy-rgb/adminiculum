@@ -11,6 +11,7 @@
  *   - published ClientActionRequest.dueAt                  (ACTION_REQUEST)
  *   - customer-visible ClientRequest.dueAt                 (CUSTOMER_REQUEST)
  *   - keyDate of an EXPLICITLY published ContractRecord     (CONTRACT_DATE, ORGANIZATION)
+ *   - explicitly published obligation occurrences           (CONTRACT_OCCURRENCE, ORGANIZATION)
  *   - ACHIEVED company milestones of a published overview   (COMPANY_MILESTONE, ORGANIZATION)
  *   - DevelopmentInitiative.targetAt via the customer-safe Grow projection
  *                                                           (GROW_TARGET, ORGANIZATION, INFO)
@@ -26,6 +27,7 @@ import { assertClientSafe, InteractionError, resolveActiveCustomerGrant } from '
 import { listCustomerRequests } from '../client-interaction/requestService';
 import { listPortalActionRequests, listPortalMatters } from '../client-publication/publicationService';
 import { getOrganizationalContracts } from '../client-workspace/orgContractsService';
+import { listPublishedOccurrencesForCustomer } from '../client-contracts/service';
 import { canViewOrganizationSummary } from '../client-workspace/leadershipSummaryService';
 import { getOrganizationalGrow } from '../client-workspace/orgGrowService';
 import { projectCompanyOverviewForCustomer } from '../client-company/projector';
@@ -42,6 +44,7 @@ import {
   CustomerRequestSourceRow,
   GrowInitiativeSourceRow,
   OrgContractSourceRow,
+  OccurrenceSourceRow,
   PortalActionRequestSourceRow,
   PortalMatterSourceRow,
   mapActionRequestSources,
@@ -51,6 +54,7 @@ import {
   mapGrowInitiativeSource,
   mapMatterSources,
   mapOrgContractSource,
+  mapPublishedOccurrenceSource,
 } from './mappers';
 
 type Prisma = typeof defaultPrisma;
@@ -73,6 +77,7 @@ export interface CustomerCalendarReaders {
   grantedCaseIds(): Promise<string[]>;
   listCaseRequests(caseId: string): Promise<CustomerRequestSourceRow[]>;
   listContracts(): Promise<OrgContractSourceRow[]>;
+  listPublishedOccurrences(): Promise<OccurrenceSourceRow[]>;
   listCompanyMilestones(): Promise<CompanyMilestoneSourceRow[]>;
   listGrowInitiatives(): Promise<GrowInitiativeSourceRow[]>;
   listComplianceReviews(): Promise<ComplianceReviewSourceRow[]>;
@@ -135,6 +140,16 @@ async function canonicalReaders(identityId: string, workspaceId: string, prisma:
       try {
         const result = await getOrganizationalContracts(identityId, workspaceId, prisma);
         return result.items as unknown as OrgContractSourceRow[];
+      } catch {
+        return [];
+      }
+    },
+    async listPublishedOccurrences() {
+      if (!isOrganization) return [];
+      try {
+        // Canonical customer-safe reader: ONLY explicitly published occurrences
+        // of THIS workspace's client, allowlisted fields only.
+        return (await listPublishedOccurrencesForCustomer(workspace.clientId, prisma)) as OccurrenceSourceRow[];
       } catch {
         return [];
       }
@@ -212,11 +227,12 @@ export async function getCustomerCalendar(
 
   const readers = options.readers ?? await canonicalReaders(identityId, workspaceId, prisma);
 
-  const [matters, actionRequests, caseIds, contracts, milestones, growInitiatives, complianceReviews] = await Promise.all([
+  const [matters, actionRequests, caseIds, contracts, occurrences, milestones, growInitiatives, complianceReviews] = await Promise.all([
     readers.listMatters(),
     readers.listActionRequests(),
     readers.grantedCaseIds(),
     readers.listContracts(),
+    readers.listPublishedOccurrences(),
     readers.listCompanyMilestones(),
     readers.listGrowInitiatives(),
     readers.listComplianceReviews(),
@@ -231,6 +247,7 @@ export async function getCustomerCalendar(
   for (const matter of matters) sources.push(...mapMatterSources(matter));
   for (const action of actionRequests) sources.push(...mapActionRequestSources(action));
   for (const contract of contracts) sources.push(...mapOrgContractSource(contract));
+  for (const occurrence of occurrences) sources.push(...mapPublishedOccurrenceSource(occurrence));
   for (const milestone of milestones) sources.push(...mapCompanyMilestoneSource(milestone));
   for (const initiative of growInitiatives) sources.push(...mapGrowInitiativeSource(initiative));
   for (const review of complianceReviews) sources.push(...mapComplianceReviewSource(review));
