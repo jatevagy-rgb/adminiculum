@@ -10,6 +10,12 @@
  * normalization reuse; null/unknown preservation; no eligibility
  * interpretation; no company logic; bounded namespaced source metadata.
  * Unknown status codes stay UNKNOWN and the raw code is preserved.
+ *
+ * Type semantics (official calls-for-proposals contract, live-proven
+ * 2026-09-27): the funding discovery query selects source types 1, 2 and 8 —
+ * all three belong to the FUNDING opportunity family for this adapter. Type 0
+ * (the portal's separate tenders builder) and any unknown value fail closed.
+ * The raw source type is preserved in bounded fundingTenders metadata.
  */
 
 import type { OpportunityVariantInput, NormalizationOutcome } from '../../normalize/variant.ts';
@@ -17,6 +23,9 @@ import type { FundingTendersReferenceData } from '../../reference/fundingTenders
 import { mapSourceStatus } from '../../reference/fundingTendersReference.ts';
 import { normalizeSourceTimestamp } from '../../normalize/time.ts';
 import { deriveSourceIdentifier, deriveRevisionSignal, deriveSourceUrl } from './identity.ts';
+
+/** Official calls-for-proposals (funding) source types. */
+export const FUNDING_SOURCE_TYPES = [1, 2, 8] as const;
 
 const EPOCH_MILLIS = /^\d{13}$/;
 
@@ -226,9 +235,10 @@ export function normalizeFundingTendersRecord(raw: unknown, reference: FundingTe
   if (unified.title === null || unified.title.trim().length === 0) {
     return { ok: false, rejection: { reason: 'TITLE_MISSING', detail: `Record ${unified.identifier} has no title.` } };
   }
-  const kind = unified.type === 1 ? 'FUNDING' : unified.type === 2 ? 'PROCUREMENT' : null;
+  const supportedType = unified.type !== null && (FUNDING_SOURCE_TYPES as readonly number[]).includes(unified.type);
+  const kind = supportedType ? 'FUNDING' : null;
   if (kind === null) {
-    return { ok: false, rejection: { reason: 'TYPE_UNSUPPORTED', detail: `Record ${unified.identifier} has no supported type (found ${String(unified.type)}).` } };
+    return { ok: false, rejection: { reason: 'TYPE_UNSUPPORTED', detail: `Record ${unified.identifier} has no supported funding type (found ${String(unified.type)}).` } };
   }
 
   const primaryStatus = unified.rawStatusIds[0] ?? null;
@@ -276,6 +286,7 @@ export function normalizeFundingTendersRecord(raw: unknown, reference: FundingTe
         frameworkProgrammeCode: unified.frameworkProgrammeCode,
         programmeDivisionCode: unified.programmeDivisionCode,
         rawStatusCodes: [...new Set(unified.rawStatusIds)],
+        sourceType: unified.type,
         ccm2Id: unified.ccm2Id,
         callCcm2Id: unified.callCcm2Id,
         statusLabel: statusMapping.label,
