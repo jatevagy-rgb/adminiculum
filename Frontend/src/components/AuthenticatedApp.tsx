@@ -95,9 +95,15 @@ type AuthenticatedAppProps = {
    * a slim Adminiculum navigation. Default behaviour is unchanged elsewhere.
    */
   workspaceChrome?: "default" | "focused";
+  /**
+   * Passed through to AppShell. "flush" lets an opted-in route own its
+   * operational frame (surface + max width + gutter); the default keeps the
+   * historical shell padding for every existing route.
+   */
+  contentPadding?: "shell" | "flush";
 };
 
-export function AuthenticatedApp({ section = "dashboard", children, fullViewport = false, workspaceChrome = "default" }: AuthenticatedAppProps) {
+export function AuthenticatedApp({ section = "dashboard", children, fullViewport = false, workspaceChrome = "default", contentPadding = "shell" }: AuthenticatedAppProps) {
   const { instance, accounts, inProgress } = useMsal();
   const searchParams = useSearchParams();
   const account = pickAccountByTenant(accounts, resolvedWorkforceTenantId);
@@ -439,5 +445,5 @@ export function AuthenticatedApp({ section = "dashboard", children, fullViewport
     );
   }
 
-  return <AppShell onSignOut={signOut} userProfile={profile} section={section} fullViewport={fullViewport} workspaceChrome={workspaceChrome}>{children}</AppShell>;
+  return <AppShell onSignOut={signOut} userProfile={profile} section={section} fullViewport={fullViewport} workspaceChrome={workspaceChrome} contentPadding={contentPadding}>{children}</AppShell>;
 }

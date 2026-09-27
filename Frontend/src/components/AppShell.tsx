@@ -51,9 +51,16 @@ type AppShellProps = {
    * Default behaviour is unchanged everywhere else.
    */
   workspaceChrome?: "default" | "focused";
+  /**
+   * Shell content padding. "shell" (default) keeps the historical p-4/lg:p-5
+   * padding on the scroll surface. "flush" removes it so an opted-in route can
+   * own its operational frame (surface + 1440px width + 24px gutter) end to
+   * end. Default behaviour is unchanged for every existing route.
+   */
+  contentPadding?: "shell" | "flush";
 };
 
-export function AppShell({ onSignOut, userProfile, section = "dashboard", children, fullViewport = false, workspaceChrome = "default" }: AppShellProps) {
+export function AppShell({ onSignOut, userProfile, section = "dashboard", children, fullViewport = false, workspaceChrome = "default", contentPadding = "shell" }: AppShellProps) {
   const [uiPack] = useUiPack();
   const isSignalOps = uiPack === "signal_tiles_console";
   const isFocused = workspaceChrome === "focused";
@@ -96,9 +103,10 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   // the page/body cannot become the document scroll surface. Normal mode keeps
   // the historical page-scrolling behavior for every other route.
   const rootHeightClass = fullViewport ? "h-dvh min-h-0 overflow-hidden" : "min-h-screen";
+  const shellContentPadding = contentPadding === "flush" ? "p-0" : "p-4 lg:p-5";
   const mainScrollClass = fullViewport
     ? "flex-1 min-h-0 overflow-hidden app-shell-main p-0"
-    : `flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : section === "dashboard" ? "adm-shell-bg p-0" : "adm-shell-bg p-4 lg:p-5"}`;
+    : `flex-1 overflow-y-auto app-shell-main ${isSignalOps ? "bg-[#0B1220] p-6" : section === "dashboard" ? "adm-shell-bg p-0" : `adm-shell-bg ${shellContentPadding}`}`;
 
   return (
     <div
