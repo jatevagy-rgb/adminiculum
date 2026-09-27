@@ -35,6 +35,7 @@ import {
   type ManualSensitiveTerm,
   type SensitiveCategory,
 } from '../anonymization';
+import { parseApprovedCandidateIds } from './validation';
 
 export type CaseContextOrigin = 'PASTED' | 'COMMUNICATION';
 
@@ -372,6 +373,8 @@ export async function anonymizeContextSource(
   },
   prismaClient: PrismaLike = defaultPrisma,
 ): Promise<AnonymizeResponseDTO> {
+  const approvedCandidateIds = parseApprovedCandidateIds(input.approvedCandidateIds);
+
   const record = await loadSourceInCase(prismaClient, input.caseId, input.id);
 
   const sourceHash = computeSourceHash(record.rawText);
@@ -384,10 +387,6 @@ export async function anonymizeContextSource(
   if (typeof input.optionsDigest !== 'string' || input.optionsDigest !== optionsDigest) {
     fail(409, 'OPTIONS_DIGEST_MISMATCH', 'Detection options no longer match. Review is stale.');
   }
-
-  const approvedCandidateIds = Array.isArray(input.approvedCandidateIds)
-    ? input.approvedCandidateIds.filter((id): id is string => typeof id === 'string')
-    : [];
 
   const { candidates, warnings } = detectCandidates(record.rawText, { manualTerms });
 

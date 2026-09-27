@@ -136,3 +136,113 @@ describe('route authorization wiring', () => {
     expect(service.listContextSources).not.toHaveBeenCalled();
   });
 });
+
+describe('request-shape validation (fail closed)', () => {
+  const DETECT = '/cases/case-1/context-sources/src-1/detect';
+  const ANONYMIZE = '/cases/case-1/context-sources/src-1/anonymize';
+
+  it('detect accepts a valid canonical manual-term category and reaches the service', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: [{ term: 'Kovács Péter', category: 'PERSON' }] });
+    expect(res.status).toBe(200);
+    expect(service.detectContextSource).toHaveBeenCalled();
+  });
+
+  it('detect rejects an unsupported manual-term category before reaching the service', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: [{ term: 'Kovács Péter', category: 'NOT_A_CATEGORY' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_SENSITIVE_CATEGORY');
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('detect rejects manualTerms supplied as an object', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: { term: 'x', category: 'PERSON' } });
+    expect(res.status).toBe(400);
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('detect rejects manualTerms supplied as a string', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: 'x' });
+    expect(res.status).toBe(400);
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('detect rejects manualTerms supplied as null', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: null });
+    expect(res.status).toBe(400);
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('detect rejects a single malformed entry inside an otherwise valid array', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, {
+      manualTerms: [{ term: 'Kovács Péter', category: 'PERSON' }, { term: 'X', category: 123 }],
+    });
+    expect(res.status).toBe(400);
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('detect rejects a blank term', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: [{ term: '   ', category: 'PERSON' }] });
+    expect(res.status).toBe(400);
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('detect rejects too many manual terms rather than truncating', async () => {
+    const terms = Array.from({ length: 101 }, (_, i) => ({ term: `term${i}`, category: 'PERSON' }));
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: terms });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('MANUAL_TERMS_TOO_MANY');
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('detect rejects an oversized individual term rather than truncating', async () => {
+    const res = await request(createApp(), 'POST', DETECT, {}, { manualTerms: [{ term: 'a'.repeat(501), category: 'PERSON' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('MANUAL_TERM_TOO_LONG');
+    expect(service.detectContextSource).not.toHaveBeenCalled();
+  });
+
+  it('anonymize rejects a non-array approvedCandidateIds before reaching the service', async () => {
+    const res = await request(createApp(), 'POST', ANONYMIZE, {}, { sourceHash: 'h', optionsDigest: 'd', approvedCandidateIds: 'cand-1' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_APPROVED_CANDIDATE_IDS');
+    expect(service.anonymizeContextSource).not.toHaveBeenCalled();
+  });
+
+  it('anonymize rejects a missing approvedCandidateIds', async () => {
+    const res = await request(createApp(), 'POST', ANONYMIZE, {}, { sourceHash: 'h', optionsDigest: 'd' });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_APPROVED_CANDIDATE_IDS');
+    expect(service.anonymizeContextSource).not.toHaveBeenCalled();
+  });
+
+  it('anonymize rejects a null approvedCandidateIds', async () => {
+    const res = await request(createApp(), 'POST', ANONYMIZE, {}, { sourceHash: 'h', optionsDigest: 'd', approvedCandidateIds: null });
+    expect(res.status).toBe(400);
+    expect(service.anonymizeContextSource).not.toHaveBeenCalled();
+  });
+
+  it('anonymize rejects approvedCandidateIds containing a non-string', async () => {
+    const res = await request(createApp(), 'POST', ANONYMIZE, {}, { sourceHash: 'h', optionsDigest: 'd', approvedCandidateIds: ['cand-1', 123] });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('INVALID_APPROVED_CANDIDATE_IDS');
+    expect(service.anonymizeContextSource).not.toHaveBeenCalled();
+  });
+
+  it('anonymize rejects approvedCandidateIds containing a blank string', async () => {
+    const res = await request(createApp(), 'POST', ANONYMIZE, {}, { sourceHash: 'h', optionsDigest: 'd', approvedCandidateIds: ['cand-1', '   '] });
+    expect(res.status).toBe(400);
+    expect(service.anonymizeContextSource).not.toHaveBeenCalled();
+  });
+
+  it('anonymize accepts an explicitly empty approvedCandidateIds and reaches the service', async () => {
+    const res = await request(createApp(), 'POST', ANONYMIZE, {}, { sourceHash: 'h', optionsDigest: 'd', approvedCandidateIds: [] });
+    expect(res.status).toBe(200);
+    expect(service.anonymizeContextSource).toHaveBeenCalled();
+  });
+
+  it('anonymize accepts a string-only approvedCandidateIds array and reaches the service', async () => {
+    const res = await request(createApp(), 'POST', ANONYMIZE, {}, { sourceHash: 'h', optionsDigest: 'd', approvedCandidateIds: ['cand-1'] });
+    expect(res.status).toBe(200);
+    expect(service.anonymizeContextSource).toHaveBeenCalled();
+  });
+});

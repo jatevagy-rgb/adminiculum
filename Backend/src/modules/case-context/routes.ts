@@ -12,7 +12,6 @@ import { Router, type Request, type Response } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseManageAccess, requireCaseReadAccess } from '../cases/authorization';
-import type { ManualSensitiveTerm, SensitiveCategory } from '../anonymization';
 import {
   anonymizeContextSource,
   createCommunicationContextSource,
@@ -20,6 +19,7 @@ import {
   detectContextSource,
   listContextSources,
 } from './service';
+import { parseApprovedCandidateIds, parseManualTerms } from './validation';
 
 const router = Router();
 
@@ -40,21 +40,6 @@ function handle(res: Response, error: unknown): void {
     code: typed.code || 'CASE_CONTEXT_ERROR',
     message: status >= 500 ? 'Internal server error' : typed.message || typed.code || 'Case context operation failed',
   });
-}
-
-function parseManualTerms(value: unknown): ManualSensitiveTerm[] {
-  if (!Array.isArray(value)) return [];
-  const out: ManualSensitiveTerm[] = [];
-  for (const item of value) {
-    if (item && typeof item === 'object') {
-      const term = (item as { term?: unknown }).term;
-      const category = (item as { category?: unknown }).category;
-      if (typeof term === 'string' && typeof category === 'string') {
-        out.push({ term, category: category as SensitiveCategory });
-      }
-    }
-  }
-  return out;
 }
 
 // POST /cases/:caseId/context-sources — create a PASTED context source.
@@ -116,7 +101,7 @@ router.post('/cases/:caseId/context-sources/:id/anonymize', requireCaseManageAcc
       sourceHash: req.body?.sourceHash,
       optionsDigest: req.body?.optionsDigest,
       manualTerms: parseManualTerms(req.body?.manualTerms),
-      approvedCandidateIds: req.body?.approvedCandidateIds,
+      approvedCandidateIds: parseApprovedCandidateIds(req.body?.approvedCandidateIds),
     });
     res.json(result);
   } catch (error) {

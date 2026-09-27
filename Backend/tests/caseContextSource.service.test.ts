@@ -294,6 +294,49 @@ describe('anonymize', () => {
   });
 });
 
+describe('anonymize input validation (fail closed)', () => {
+  const rawText = 'Kovács Péter és Nagy Anna.';
+
+  function baseInput(approvedCandidateIds: unknown) {
+    return {
+      caseId: 'case-1',
+      id: 'src-1',
+      sourceHash: 'stale-source-hash',
+      optionsDigest: 'stale-options-digest',
+      manualTerms: [],
+      approvedCandidateIds,
+    };
+  }
+
+  it.each([
+    ['missing', undefined],
+    ['null', null],
+    ['non-array string', 'cand-1'],
+    ['array with a non-string', ['cand-1', 123]],
+    ['array with a blank string', ['cand-1', '   ']],
+  ])('rejects %s approvedCandidateIds with 400 and never reads or writes the store', async (_label, value) => {
+    caseContextSource.findUnique.mockResolvedValue(record({ rawText }));
+
+    await expect(anonymizeContextSource(baseInput(value))).rejects.toMatchObject({
+      status: 400,
+      code: 'INVALID_APPROVED_CANDIDATE_IDS',
+    });
+    expect(caseContextSource.findUnique).not.toHaveBeenCalled();
+    expect(caseContextSource.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows an explicitly empty approvedCandidateIds (validation precedes sourceHash check)', async () => {
+    caseContextSource.findUnique.mockResolvedValue(record({ rawText }));
+
+    await expect(anonymizeContextSource(baseInput([]))).rejects.toMatchObject({
+      code: 'SOURCE_HASH_MISMATCH',
+    });
+    // Validation passed (no 400); the stale-hash business guard fired instead.
+    expect(caseContextSource.findUnique).toHaveBeenCalled();
+    expect(caseContextSource.updateMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('forbidden metadata', () => {
   it('never persists the reversible mapping or candidate originalText', async () => {
     const secret1 = 'TitkosÜgyfélKft';
