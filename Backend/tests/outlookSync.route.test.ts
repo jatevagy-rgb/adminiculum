@@ -276,4 +276,27 @@ describe('GET /communications (list DTO triage + bounded shape)', () => {
     expect(byId('c-link').direction).toBe('INBOUND');
     expect(byId('c-link').providerConversationId).toBe('conv-1');
   });
+
+  it('keeps unlinked inbound mail pending while outbound mail is not assignment-needed', async () => {
+    (prisma as any).$queryRaw.mockResolvedValue([
+      { id: 'c-out', type: 'EMAIL', subject: 'Sent reply', senderName: 'Me', senderEmail: 'sender@x', recipientName: null, recipientEmail: 'client@x', content: null, summary: null, caseId: null, clientId: null, documentId: null, createdById: 'u', createdAt: new Date('2026-01-04T00:00:00Z'), updatedAt: new Date('2026-01-04T00:00:00Z'), providerConversationId: 'conv-3', direction: 'OUTBOUND', receivedAt: null, sentAt: new Date('2026-01-04T00:00:00Z'), source: 'MAILBOX', syncStatus: 'IMPORTED', metadata: {} },
+      { id: 'c-in', type: 'EMAIL', subject: 'Client reply', senderName: 'Client', senderEmail: 'client@x', recipientName: 'Me', recipientEmail: 'sender@x', content: null, summary: null, caseId: null, clientId: null, documentId: null, createdById: 'u', createdAt: new Date('2026-01-05T00:00:00Z'), updatedAt: new Date('2026-01-05T00:00:00Z'), providerConversationId: 'conv-3', direction: 'INBOUND', receivedAt: new Date('2026-01-05T00:00:00Z'), sentAt: null, source: 'MAILBOX', syncStatus: 'IMPORTED', metadata: {} },
+      { id: 'c-out-ign', type: 'EMAIL', subject: 'Ignored outbound', senderName: 'Me', senderEmail: 'sender@x', recipientName: null, recipientEmail: 'client@x', content: null, summary: null, caseId: null, clientId: null, documentId: null, createdById: 'u', createdAt: new Date('2026-01-06T00:00:00Z'), updatedAt: new Date('2026-01-06T00:00:00Z'), providerConversationId: null, direction: 'OUTBOUND', receivedAt: null, sentAt: new Date('2026-01-06T00:00:00Z'), source: 'MAILBOX', syncStatus: 'IMPORTED', metadata: { triage: 'IGNORED' } },
+    ]);
+    (prisma as any).communicationAttachment.findMany.mockResolvedValue([]);
+    (prisma as any).task.findMany.mockResolvedValue([]);
+    (prisma as any).client.findMany.mockResolvedValue([]);
+    (prisma as any).communication.count.mockResolvedValue(3);
+
+    const res = await requestJson(createApp(), 'GET', '/communications?limit=10', {});
+    expect(res.status).toBe(200);
+    const byId = (id: string) => res.body.communications.find((c: any) => c.id === id);
+    // Outbound mail without a case link is not awaiting assignment; nothing is
+    // persisted by this projection.
+    expect(byId('c-out').triage).toBe('NO_ACTION');
+    // Unlinked inbound mail must remain pending.
+    expect(byId('c-in').triage).toBe('NEEDS_ASSIGNMENT');
+    // An explicit triage state still wins over the outbound projection.
+    expect(byId('c-out-ign').triage).toBe('IGNORED');
+  });
 });

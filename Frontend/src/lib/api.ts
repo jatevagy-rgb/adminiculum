@@ -4043,7 +4043,7 @@ export interface CommunicationItem {
   effectiveMessageAt: string;
   source: 'MANUAL' | 'OUTLOOK' | 'MAILBOX' | null;
   syncStatus: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
-  triage: 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR';
+  triage: 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR' | 'NO_ACTION';
   case?: { id: string; caseNumber: string; title: string } | null;
   client?: { id: string; name: string; email: string } | null;
   createdBy?: { id: string; name: string; email: string };
