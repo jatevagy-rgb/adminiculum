@@ -1,12 +1,15 @@
 /**
- * Dry-run report: deterministic machine-readable JSON + human summary.
+ * Run report: deterministic machine-readable JSON + human summary.
  *
- * The report explicitly proves:
- *   ADMINICULUM_BACKEND_WRITES = 0
- * and contains NO credentials, NO customer identity, NO case/document data.
+ * The report explicitly proves ADMINICULUM_BACKEND_WRITES for the run:
+ * dry-run reports 0; DELIVER mode reports backend-confirmed ACCEPTED
+ * observations (duplicates wrote nothing). It contains NO credentials, NO
+ * tokens, NO customer identity, NO case/document data.
  */
 import type {
   CelexRunResult,
+  DeliveryMode,
+  DeliveryReport,
   DryRunReport,
   ManifestCounts,
   ObservationEvent,
@@ -25,6 +28,11 @@ export interface BuildReportInput {
   celexResults: CelexRunResult[];
   observations: ObservationEvent[];
   sanitizedErrors: SanitizedError[];
+  /** Optional W2 fields; absent means a W1 dry run. */
+  dryRun?: boolean;
+  deliveryMode?: DeliveryMode;
+  delivery?: DeliveryReport | null;
+  adminiculumBackendWrites?: number;
 }
 
 export function buildReport(input: BuildReportInput): DryRunReport {
@@ -59,8 +67,10 @@ export function buildReport(input: BuildReportInput): DryRunReport {
     runId: input.runId,
     startedAt: input.startedAt,
     completedAt: input.completedAt,
-    dryRun: true,
-    adminiculumBackendWrites: 0,
+    dryRun: input.dryRun ?? true,
+    deliveryMode: input.deliveryMode ?? 'DRY_RUN',
+    delivery: input.delivery ?? null,
+    adminiculumBackendWrites: input.adminiculumBackendWrites ?? 0,
     overallStatus: input.overallStatus,
     manifest: input.manifestCounts,
     queriedCelexCount: celexResults.length,
@@ -88,9 +98,32 @@ export function buildReport(input: BuildReportInput): DryRunReport {
   };
 }
 
+function renderDeliveryLines(report: DryRunReport): string[] {
+  const delivery = report.delivery;
+  if (delivery === null) return [];
+  const lines: string[] = [];
+  lines.push(
+    `delivery: endpoint=${delivery.endpoint} candidates=${delivery.candidateCount} ` +
+      `attempted=${delivery.attemptedCount} delivered=${delivery.deliveredCount} ` +
+      `accepted=${delivery.acceptedCount} duplicate=${delivery.duplicateCount} ` +
+      `rejected=${delivery.rejectedCount} error=${delivery.errorCount} ` +
+      `pending=${delivery.pendingCount}`,
+  );
+  for (const batch of delivery.batches) {
+    lines.push(
+      `  batch ${batch.batchIndex}: observations=${batch.observationCount} ` +
+        `http=${batch.httpStatus ?? '-'}` +
+        (batch.errorCode === null ? '' : ` ${batch.errorCode}: ${batch.errorMessage ?? ''}`),
+    );
+  }
+  return lines;
+}
+
 export function renderHumanSummary(report: DryRunReport): string {
   const lines: string[] = [];
-  lines.push('ADMINICULUM LEGAL WATCHER — W1 DRY RUN');
+  lines.push(
+    `ADMINICULUM LEGAL WATCHER — ${report.dryRun ? 'W1 DRY RUN' : 'W2 DELIVERY RUN'}`,
+  );
   lines.push(`runId=${report.runId}`);
   lines.push(`status=${report.overallStatus}`);
   lines.push(
@@ -130,7 +163,12 @@ export function renderHumanSummary(report: DryRunReport): string {
       lines.push(`  ERROR ${err.sourceIdentifier} [${err.phase}] ${err.code}: ${err.message}`);
     }
   }
-  lines.push('ADMINICULUM_BACKEND_WRITES=0');
-  lines.push('DRY RUN — no Adminiculum backend writes were performed.');
+  lines.push(...renderDeliveryLines(report));
+  lines.push(`ADMINICULUM_BACKEND_WRITES=${report.adminiculumBackendWrites}`);
+  lines.push(
+    report.dryRun
+      ? 'DRY RUN — no Adminiculum backend writes were performed.'
+      : 'DELIVERY MODE — failed deliveries stay pending and retry on later runs.',
+  );
   return lines.join('\n');
 }

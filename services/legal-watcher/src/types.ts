@@ -10,6 +10,83 @@ export const REPORT_SCHEMA_VERSION = 1;
 export const STATE_SCHEMA_VERSION = 1;
 export const SOURCE_NAME = 'EURLEX_CELLAR' as const;
 
+/** Locked W2 delivery contract constants. */
+export const W2_SCHEMA_VERSION = 1;
+export const W2_SOURCE = 'EUR_LEX' as const;
+export const W2_IDENTIFIER_FAMILY = 'CELEX' as const;
+export const W2_ENDPOINT_PATH =
+  '/api/v1/compliance-intelligence/legal-source-observations';
+export const DELIVERY_STATE_SCHEMA_VERSION = 1;
+
+export type DeliveryMode = 'DRY_RUN' | 'DELIVER';
+
+export interface W2Evidence {
+  sourceUri: string;
+  /** SHA-256 hex of the captured observation (W1 payloadHash). */
+  sha256: string;
+  capturedAt: string;
+  queryProvenance: string;
+}
+
+/**
+ * Exact W2 observation payload. Structurally limited to legal-source data:
+ * it cannot represent client, case, document or user identity.
+ */
+export interface W2Observation {
+  idempotencyKey: string;
+  kind: EventKind;
+  source: typeof W2_SOURCE;
+  identifierFamily: typeof W2_IDENTIFIER_FAMILY;
+  sourceIdentifier: string;
+  relatedIdentifier: string;
+  effectiveFrom?: string;
+  evidence: W2Evidence;
+  warnings: string[];
+}
+
+export interface W2Envelope {
+  schemaVersion: typeof W2_SCHEMA_VERSION;
+  observations: W2Observation[];
+}
+
+export type W2ResultStatus = 'ACCEPTED' | 'DUPLICATE' | 'REJECTED';
+
+export interface W2ResultEntry {
+  idempotencyKey: string | null;
+  status: W2ResultStatus;
+  reason: string | null;
+  warnings: string[];
+}
+
+export interface W2BatchResponse {
+  schemaVersion: typeof W2_SCHEMA_VERSION;
+  results: W2ResultEntry[];
+}
+
+/** Successful delivery statuses (DUPLICATE is success-equivalent). */
+export interface DeliveryRecord {
+  deliveredAt: string;
+  backendStatus: 'ACCEPTED' | 'DUPLICATE';
+}
+
+export interface DeliveryPendingRecord {
+  firstAttemptAt: string;
+  lastAttemptAt: string;
+  attempts: number;
+  lastStatus: string;
+  lastReason: string | null;
+}
+
+/**
+ * Delivery bookkeeping, stored SEPARATELY from the W1 source-seen baseline.
+ * Answers "has this exact event been delivered?" — never "have we seen it?".
+ */
+export interface DeliveryState {
+  schemaVersion: typeof DELIVERY_STATE_SCHEMA_VERSION;
+  delivered: Record<string, DeliveryRecord>;
+  pending: Record<string, DeliveryPendingRecord>;
+}
+
 export type EventKind = 'AMENDMENT_PUBLISHED' | 'CONSOLIDATED_VERSION_AVAILABLE';
 
 export type CelexRunStatus =
@@ -110,14 +187,50 @@ export interface CelexRunSummary {
   missingFromSourceKeys: string[];
 }
 
+export type DeliveryObservationStatus = 'ACCEPTED' | 'DUPLICATE' | 'REJECTED' | 'ERROR';
+
+export interface DeliveryObservationSummary {
+  idempotencyKey: string;
+  sourceIdentifier: string;
+  kind: EventKind;
+  status: DeliveryObservationStatus;
+  reason: string | null;
+  warnings: string[];
+}
+
+export interface DeliveryBatchSummary {
+  batchIndex: number;
+  observationCount: number;
+  httpStatus: number | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+
+export interface DeliveryReport {
+  endpoint: string;
+  candidateCount: number;
+  attemptedCount: number;
+  alreadyDeliveredCount: number;
+  deliveredCount: number;
+  acceptedCount: number;
+  duplicateCount: number;
+  rejectedCount: number;
+  errorCount: number;
+  pendingCount: number;
+  batches: DeliveryBatchSummary[];
+  results: DeliveryObservationSummary[];
+}
+
 export interface DryRunReport {
   reportVersion: number;
   manifestSchemaVersion: number;
   runId: string;
   startedAt: string;
   completedAt: string;
-  dryRun: true;
-  adminiculumBackendWrites: 0;
+  dryRun: boolean;
+  deliveryMode: DeliveryMode;
+  delivery: DeliveryReport | null;
+  adminiculumBackendWrites: number;
   overallStatus: OverallStatus;
   manifest: ManifestCounts;
   queriedCelexCount: number;
