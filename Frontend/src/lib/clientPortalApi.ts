@@ -93,7 +93,8 @@ export type PortalWorkspaceDocument = {
   description?: string | null;
   status?: string | null;
   publishedAt?: string | null;
-  kind: 'SHARED_DOCUMENT' | 'DOCUMENT_REQUEST' | 'CORRECTION_REQUEST' | 'SUBMISSION' | 'CORRECTION_SUBMISSION';
+  dueAt?: string | null;
+  kind: 'SHARED_DOCUMENT' | 'DOCUMENT_REQUEST' | 'CORRECTION_REQUEST' | 'INFORMATION_REQUEST' | 'DATA_FORM' | 'QUESTION_RESPONSE' | 'SUBMISSION' | 'CORRECTION_SUBMISSION';
   actionUrl: string;
   /** Derived customer-facing classification; the raw uploadSource enum is never exposed. */
   clientUploaded: boolean;
