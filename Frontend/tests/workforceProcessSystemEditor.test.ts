@@ -131,3 +131,63 @@ describe('Workforce process/system editor — workspace integration', () => {
     assert.doesNotMatch(portal, /BusinessSystemPanel|BusinessProcessPanel|BusinessProcessStepsPanel|clientCompanyApi\.(create|update|add|reorder)/);
   });
 });
+
+describe('Workforce process editor — frequency semantics', () => {
+  const src = () => read(PROCESS_PANEL);
+
+  it('offers ANNUAL as the Éves option', () => {
+    assert.match(src(), /\["ANNUAL", "Éves"\]/);
+  });
+
+  it('does not offer YEARLY (would fall through to 4 runs/month)', () => {
+    assert.doesNotMatch(src(), /"YEARLY"/);
+  });
+
+  it('does not offer AD_HOC for new process creation', () => {
+    assert.doesNotMatch(src(), /"AD_HOC"/);
+  });
+
+  it('preserves an existing unknown frequency value on edit', () => {
+    assert.match(src(), /hasUnknownFrequency/);
+    assert.match(src(), /Meglévő érték: \{process\.frequency\}/);
+  });
+});
+
+describe('Workforce process/system editor — optional field clearing', () => {
+  it('clears process description by sending null (not omitting the key)', () => {
+    const src = read(PROCESS_PANEL);
+    assert.match(src, /description: description\.trim\(\) \|\| null/);
+  });
+
+  it('clears system purpose by sending null (not omitting the key)', () => {
+    const src = read(SYSTEM_PANEL);
+    assert.match(src, /purpose: purpose\.trim\(\) \|\| null/);
+  });
+
+  it('retains form state on failed save (no field reset in the save path)', () => {
+    assert.doesNotMatch(read(PROCESS_PANEL), /setDescription\(""\)/);
+    assert.doesNotMatch(read(SYSTEM_PANEL), /setPurpose\(""\)/);
+  });
+});
+
+describe('Workforce process/system editor — canonical Modal shell', () => {
+  it('BusinessSystemPanel uses the canonical Modal', () => {
+    const src = read(SYSTEM_PANEL);
+    assert.match(src, /import \{ Modal \} from "@\/components\/ui\/Modal";/);
+    assert.match(src, /initialFocusRef=\{nameRef\}/);
+    assert.doesNotMatch(src, /role="dialog"/);
+  });
+
+  it('BusinessProcessPanel uses the canonical Modal', () => {
+    const src = read(PROCESS_PANEL);
+    assert.match(src, /import \{ Modal \} from "@\/components\/ui\/Modal";/);
+    assert.match(src, /initialFocusRef=\{nameRef\}/);
+    assert.doesNotMatch(src, /role="dialog"/);
+  });
+
+  it('BusinessProcessStepsPanel uses the canonical Modal', () => {
+    const src = read(STEPS_PANEL);
+    assert.match(src, /import \{ Modal \} from "@\/components\/ui\/Modal";/);
+    assert.doesNotMatch(src, /role="dialog"/);
+  });
+});

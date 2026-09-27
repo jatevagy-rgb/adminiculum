@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { clientCompanyApi, type CompanyBusinessProcess } from "@/lib/clientCompanyApi";
+import { Modal } from "@/components/ui/Modal";
 import type { CompanyPersonOption } from "./BusinessSystemPanel";
 
 export type ProcessEditValue = {
@@ -27,8 +28,7 @@ const FREQUENCY_OPTIONS: Array<[string, string]> = [
   ["WEEKLY", "Heti"],
   ["MONTHLY", "Havi"],
   ["QUARTERLY", "Negyedéves"],
-  ["YEARLY", "Éves"],
-  ["AD_HOC", "Eseti"],
+  ["ANNUAL", "Éves"],
 ];
 
 function processErrorMessage(error: unknown): string {
@@ -68,6 +68,10 @@ export function BusinessProcessPanel({
   const [ownerPersonId, setOwnerPersonId] = useState(process?.ownerPersonId ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement | null>(null);
+
+  const supportedFrequencies = FREQUENCY_OPTIONS.map(([value]) => value);
+  const hasUnknownFrequency = isEdit && process !== null && !supportedFrequencies.includes(process.frequency);
 
   const save = async () => {
     const trimmedName = name.trim();
@@ -80,7 +84,7 @@ export function BusinessProcessPanel({
     const payload = {
       name: trimmedName,
       category: category.trim() || undefined,
-      description: description.trim() || undefined,
+      description: description.trim() || null,
       criticality,
       frequency,
       ownerPersonId: ownerPersonId || null,
@@ -102,128 +106,14 @@ export function BusinessProcessPanel({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="business-process-panel-title"
-      data-testid="business-process-panel"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
-      }}
-    >
-      <div className="w-full max-w-md rounded-xl border border-[var(--adm-border)] bg-white p-5 text-left shadow-xl">
-        <h3 id="business-process-panel-title" className="adm-heading text-lg">
-          {isEdit ? "Folyamat szerkesztése" : "Folyamat rögzítése"}
-        </h3>
-
-        <div className="mt-4 space-y-3">
-          <div className="grid gap-1">
-            <label htmlFor="process-name" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Név <span className="text-red-700">*</span>
-            </label>
-            <input
-              id="process-name"
-              autoFocus
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="adm-modal-field px-3 py-2 text-sm"
-              data-testid="process-name-input"
-            />
-          </div>
-
-          <div className="grid gap-1">
-            <label htmlFor="process-category" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Kategória
-            </label>
-            <input
-              id="process-category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              placeholder="pl. Procurement"
-              className="adm-modal-field px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="grid gap-1">
-            <label htmlFor="process-description" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Leírás
-            </label>
-            <textarea
-              id="process-description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              rows={2}
-              className="adm-modal-field px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="grid gap-1">
-              <label htmlFor="process-criticality" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-                Kritikusság
-              </label>
-              <select
-                id="process-criticality"
-                value={criticality}
-                onChange={(event) => setCriticality(event.target.value)}
-                className="adm-modal-field px-3 py-2 text-sm"
-              >
-                {CRITICALITY_OPTIONS.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="grid gap-1">
-              <label htmlFor="process-frequency" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-                Gyakoriság
-              </label>
-              <select
-                id="process-frequency"
-                value={frequency}
-                onChange={(event) => setFrequency(event.target.value)}
-                className="adm-modal-field px-3 py-2 text-sm"
-              >
-                {FREQUENCY_OPTIONS.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid gap-1">
-            <label htmlFor="process-owner" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Folyamatgazda
-            </label>
-            <select
-              id="process-owner"
-              value={ownerPersonId}
-              onChange={(event) => setOwnerPersonId(event.target.value)}
-              className="adm-modal-field px-3 py-2 text-sm"
-            >
-              <option value="">Nincs kijelölve</option>
-              {people.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {error ? (
-          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
+    <Modal
+      open
+      onClose={onClose}
+      title={isEdit ? "Folyamat szerkesztése" : "Folyamat rögzítése"}
+      maxWidth="md"
+      initialFocusRef={nameRef}
+      footer={
+        <>
           <button type="button" onClick={onClose} className="adm-link-button px-4 py-2 text-xs">
             Mégse
           </button>
@@ -236,8 +126,117 @@ export function BusinessProcessPanel({
           >
             {busy ? "Mentés…" : isEdit ? "Mentés" : "Létrehozás és lépések"}
           </button>
+        </>
+      }
+    >
+      <div data-testid="business-process-panel" className="space-y-3">
+        <div className="grid gap-1">
+          <label htmlFor="process-name" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Név <span className="text-red-700">*</span>
+          </label>
+          <input
+            id="process-name"
+            ref={nameRef}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className="adm-modal-field px-3 py-2 text-sm"
+            data-testid="process-name-input"
+          />
         </div>
+
+        <div className="grid gap-1">
+          <label htmlFor="process-category" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Kategória
+          </label>
+          <input
+            id="process-category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            placeholder="pl. Procurement"
+            className="adm-modal-field px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <label htmlFor="process-description" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Leírás
+          </label>
+          <textarea
+            id="process-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            rows={2}
+            className="adm-modal-field px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-1">
+            <label htmlFor="process-criticality" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+              Kritikusság
+            </label>
+            <select
+              id="process-criticality"
+              value={criticality}
+              onChange={(event) => setCriticality(event.target.value)}
+              className="adm-modal-field px-3 py-2 text-sm"
+            >
+              {CRITICALITY_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid gap-1">
+            <label htmlFor="process-frequency" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+              Gyakoriság
+            </label>
+            <select
+              id="process-frequency"
+              value={frequency}
+              onChange={(event) => setFrequency(event.target.value)}
+              className="adm-modal-field px-3 py-2 text-sm"
+            >
+              {hasUnknownFrequency && process ? (
+                <option value={process.frequency}>Meglévő érték: {process.frequency}</option>
+              ) : null}
+              {FREQUENCY_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid gap-1">
+          <label htmlFor="process-owner" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Folyamatgazda
+          </label>
+          <select
+            id="process-owner"
+            value={ownerPersonId}
+            onChange={(event) => setOwnerPersonId(event.target.value)}
+            className="adm-modal-field px-3 py-2 text-sm"
+          >
+            <option value="">Nincs kijelölve</option>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {error ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   );
 }

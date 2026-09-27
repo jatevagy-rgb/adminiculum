@@ -147,14 +147,14 @@ export type BusinessSystemWriteInput = {
   name: string;
   category?: string;
   vendor?: string;
-  purpose?: string;
+  purpose?: string | null;
   ownerPersonId?: string | null;
 };
 
 export type BusinessProcessWriteInput = {
   name: string;
   category?: string;
-  description?: string;
+  description?: string | null;
   criticality?: string;
   frequency?: string;
   ownerPersonId?: string | null;

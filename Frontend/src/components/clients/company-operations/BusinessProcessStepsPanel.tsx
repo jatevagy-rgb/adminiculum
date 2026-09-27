@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { clientCompanyApi, type CompanyBusinessProcessStep } from "@/lib/clientCompanyApi";
 import { stepTypeLabel } from "@/lib/processMapProjection";
+import { Modal } from "@/components/ui/Modal";
 import type { CompanyPersonOption } from "./BusinessSystemPanel";
 
 const STEP_TYPE_OPTIONS: Array<[string, string]> = [
@@ -178,44 +179,32 @@ export function BusinessProcessStepsPanel({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="business-process-steps-title"
-      data-testid="business-process-steps-panel"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
-      }}
+    <Modal
+      open
+      onClose={onClose}
+      title={processName}
+      description="Folyamat lépései sorrendben"
+      maxWidth="lg"
     >
-      <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-xl border border-[var(--adm-border)] bg-white p-5 text-left shadow-xl">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <h3 id="business-process-steps-title" className="adm-heading text-lg">
-              {processName}
-            </h3>
-            <p className="mt-0.5 text-xs text-[var(--adm-text-muted)]">Folyamat lépései sorrendben</p>
-          </div>
-          <button type="button" onClick={onClose} className="adm-link-button px-3 py-1.5 text-xs">
-            Bezárás
-          </button>
-        </div>
-
+      <div data-testid="business-process-steps-panel">
         {!formOpen && steps.length === 0 ? (
-          <p className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm text-[var(--adm-text-muted)]">
+          <p className="rounded-lg border border-stone-200 bg-stone-50 p-3 text-sm text-[var(--adm-text-muted)]">
             Még nincs lépés.
           </p>
         ) : null}
 
         {!formOpen && steps.length > 0 ? (
-          <ol className="mt-4 space-y-2" aria-label="Folyamat lépései sorrendben">
+          <ol className="space-y-2" aria-label="Folyamat lépései sorrendben">
             {steps.map((step, index) => (
               <li
                 key={step.id}
                 className="flex items-start gap-3 rounded-lg border border-[var(--adm-border)] bg-white px-3 py-2"
               >
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--adm-border)] text-[10px] font-bold text-[var(--adm-text-muted)]">
-                  {index + 1}
+                <span
+                  aria-hidden="true"
+                  className="w-6 shrink-0 pt-0.5 text-right text-sm font-semibold tabular-nums text-[var(--adm-text-muted)]"
+                >
+                  {index + 1}.
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -264,7 +253,7 @@ export function BusinessProcessStepsPanel({
         ) : null}
 
         {formOpen ? (
-          <div className="mt-4 rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
+          <div className="mt-4 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
             <h4 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--adm-green-800)]">
               {editingStep ? "Lépés szerkesztése" : "Új lépés"}
             </h4>
@@ -434,6 +423,6 @@ export function BusinessProcessStepsPanel({
           </p>
         ) : null}
       </div>
-    </div>
+    </Modal>
   );
 }

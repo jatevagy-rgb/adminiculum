@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { clientCompanyApi } from "@/lib/clientCompanyApi";
+import { Modal } from "@/components/ui/Modal";
 
 export type CompanyPersonOption = {
   id: string;
@@ -55,6 +56,7 @@ export function BusinessSystemPanel({
   const [ownerPersonId, setOwnerPersonId] = useState(system?.ownerPersonId ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement | null>(null);
 
   const save = async () => {
     const trimmedName = name.trim();
@@ -67,7 +69,7 @@ export function BusinessSystemPanel({
     const payload = {
       name: trimmedName,
       category: category.trim() || undefined,
-      purpose: purpose.trim() || undefined,
+      purpose: purpose.trim() || null,
       ownerPersonId: ownerPersonId || null,
     };
     try {
@@ -85,90 +87,14 @@ export function BusinessSystemPanel({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="business-system-panel-title"
-      data-testid="business-system-panel"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onClose();
-      }}
-    >
-      <div className="w-full max-w-md rounded-xl border border-[var(--adm-border)] bg-white p-5 text-left shadow-xl">
-        <h3 id="business-system-panel-title" className="adm-heading text-lg">
-          {isEdit ? "Rendszer szerkesztése" : "Rendszer rögzítése"}
-        </h3>
-
-        <div className="mt-4 space-y-3">
-          <div className="grid gap-1">
-            <label htmlFor="system-name" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Név <span className="text-red-700">*</span>
-            </label>
-            <input
-              id="system-name"
-              autoFocus
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="adm-modal-field px-3 py-2 text-sm"
-              data-testid="system-name-input"
-            />
-          </div>
-
-          <div className="grid gap-1">
-            <label htmlFor="system-category" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Kategória
-            </label>
-            <input
-              id="system-category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              placeholder="pl. SOFTWARE"
-              className="adm-modal-field px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="grid gap-1">
-            <label htmlFor="system-purpose" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Cél / mire használják
-            </label>
-            <textarea
-              id="system-purpose"
-              value={purpose}
-              onChange={(event) => setPurpose(event.target.value)}
-              rows={2}
-              className="adm-modal-field px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="grid gap-1">
-            <label htmlFor="system-owner" className="text-xs font-semibold text-[var(--adm-text-muted)]">
-              Felelős személy
-            </label>
-            <select
-              id="system-owner"
-              value={ownerPersonId}
-              onChange={(event) => setOwnerPersonId(event.target.value)}
-              className="adm-modal-field px-3 py-2 text-sm"
-            >
-              <option value="">Nincs kijelölve</option>
-              {people.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {error ? (
-          <p className="mt-3 rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
-            {error}
-          </p>
-        ) : null}
-
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
+    <Modal
+      open
+      onClose={onClose}
+      title={isEdit ? "Rendszer szerkesztése" : "Rendszer rögzítése"}
+      maxWidth="md"
+      initialFocusRef={nameRef}
+      footer={
+        <>
           <button type="button" onClick={onClose} className="adm-link-button px-4 py-2 text-xs">
             Mégse
           </button>
@@ -181,8 +107,76 @@ export function BusinessSystemPanel({
           >
             {busy ? "Mentés…" : "Mentés"}
           </button>
+        </>
+      }
+    >
+      <div data-testid="business-system-panel" className="space-y-3">
+        <div className="grid gap-1">
+          <label htmlFor="system-name" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Név <span className="text-red-700">*</span>
+          </label>
+          <input
+            id="system-name"
+            ref={nameRef}
+            required
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            className="adm-modal-field px-3 py-2 text-sm"
+            data-testid="system-name-input"
+          />
         </div>
+
+        <div className="grid gap-1">
+          <label htmlFor="system-category" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Kategória
+          </label>
+          <input
+            id="system-category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+            placeholder="pl. SOFTWARE"
+            className="adm-modal-field px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <label htmlFor="system-purpose" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Cél / mire használják
+          </label>
+          <textarea
+            id="system-purpose"
+            value={purpose}
+            onChange={(event) => setPurpose(event.target.value)}
+            rows={2}
+            className="adm-modal-field px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="grid gap-1">
+          <label htmlFor="system-owner" className="text-xs font-semibold text-[var(--adm-text-muted)]">
+            Felelős személy
+          </label>
+          <select
+            id="system-owner"
+            value={ownerPersonId}
+            onChange={(event) => setOwnerPersonId(event.target.value)}
+            className="adm-modal-field px-3 py-2 text-sm"
+          >
+            <option value="">Nincs kijelölve</option>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {error ? (
+          <p className="rounded-lg border border-red-200 bg-red-50 p-2 text-sm text-red-800" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   );
 }
