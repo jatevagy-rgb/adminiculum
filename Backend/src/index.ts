@@ -306,6 +306,14 @@ app.use('/api/v1', controlEvidenceRoutes);
 import complianceCenterRoutes from './modules/compliance/complianceCenterRoutes';
 app.use('/api/v1/compliance', complianceCenterRoutes);
 
+// W2: machine-only legal-source observation ingestion. Guarded exclusively by
+// the dedicated watcher machine auth (no human JWT / local JWT / client portal).
+// Mounted BEFORE the CDI router: that router applies the human `authenticate`
+// middleware to every path it receives, so the machine path must be handled
+// first. Non-matching paths fall through to the CDI router unchanged.
+import legalSourceObservationRoutes from './modules/compliance/legalSourceObservationRoutes';
+app.use('/api/v1/compliance-intelligence', legalSourceObservationRoutes);
+
 // CDI-1: derived INTERNAL-ONLY clause x anchor intelligence for INTERNAL_ANALYSIS
 // compliance masters. Never mounted on a client-portal path.
 import complianceDocIntelligenceRoutes from './modules/compliance-doc-intelligence/routes';
