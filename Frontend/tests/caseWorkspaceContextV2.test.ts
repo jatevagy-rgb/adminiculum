@@ -144,7 +144,7 @@ describe("Case Workspace — Kontextus V2 additive contract", () => {
       main.indexOf("const handleApply"),
     );
     assert.match(staleBranch, /setReview\(null\)/, "review is cleared on stale conflict");
-    assert.match(staleBranch, /setApplyError\(STALE_REVIEW_MESSAGE\)/, "stale branch surfaces the controlled message");
+    assert.match(staleBranch, /setApplyError\(\{ sourceId, message: STALE_REVIEW_MESSAGE \}\)/, "stale branch surfaces the controlled message");
     assert.doesNotMatch(staleBranch, /while \(|for \(|retry|setTimeout/, "no automatic retry loop");
     const api = v2Api();
     assert.match(api, /SOURCE_HASH_MISMATCH/);
@@ -278,5 +278,17 @@ describe("Case Workspace — Kontextus V2 additive contract", () => {
     assert.match(main, /elem cserélve/, "applied count is shown when safe");
     assert.match(main, /anonymizationSnapshot\?\.appliedCount/);
     assert.doesNotMatch(main, /categoryCounts|anonymizationSnapshot\?\.sourceHash/, "category-count internals stay hidden");
+  });
+
+  it("23. detect/apply errors are tagged with the canonical source and render only for that source", () => {
+    const main = v2Main();
+    assert.match(main, /type SourceError = \{[\s\S]*?sourceId: string;[\s\S]*?message: string;[\s\S]*?\}/, "SourceError carries the canonical source id");
+    assert.match(main, /useState<SourceError \| null>\(null\)/, "detect/apply errors use the tagged state");
+    assert.match(main, /detectError\.sourceId === source\.id/, "detect error renders only under its own source");
+    assert.match(main, /applyError\.sourceId === source\.id/, "apply error renders only under its own source");
+    assert.match(main, /setDetectError\(\{ sourceId: source\.id, message: detectErrorMessage\(error\) \}\)/, "detect failure tags the failing source");
+    assert.match(main, /const sourceId = review\.sourceId;/, "apply captures the reviewed source id before the request");
+    const applyCatch = main.slice(main.indexOf("const sourceId = review.sourceId;"), main.indexOf("const handleApply"));
+    assert.doesNotMatch(applyCatch, /setApplyError\("[^"]/, "apply failures always carry the canonical source id");
   });
 });

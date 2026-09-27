@@ -67,7 +67,12 @@ const server = {
   createPastedError: null as null | { status: number; payload: any },
   createCommError: null as null | { status: number; payload: any },
   workspaceError: false,
+  /** When true, the anonymize request stays pending until the test settles it. */
+  deferAnonymize: false,
 };
+
+let pendingAnonymizeRespond: (() => void) | null = null;
+let deferredAnonymizeError: { status: number; payload: any } | null = null;
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -161,6 +166,17 @@ function handleFetch(input: any, init: any): Promise<Response> {
 
   const anonymizeMatch = rest.match(/^context-sources\/([^/]+)\/anonymize$/);
   if (anonymizeMatch && method === "POST") {
+    if (server.deferAnonymize) {
+      return new Promise<Response>((resolve) => {
+        pendingAnonymizeRespond = () => {
+          resolve(
+            deferredAnonymizeError
+              ? json(deferredAnonymizeError.status, deferredAnonymizeError.payload)
+              : json(500, { status: 500, code: "INTERNAL", message: "deferred anonymize" }),
+          );
+        };
+      });
+    }
     if (server.anonymizeError) {
       return Promise.resolve(json(server.anonymizeError.status, server.anonymizeError.payload));
     }
@@ -246,6 +262,9 @@ async function freshRender(options: { workspaceError?: boolean } = {}) {
   server.createPastedError = null;
   server.createCommError = null;
   server.workspaceError = options.workspaceError ?? false;
+  server.deferAnonymize = false;
+  pendingAnonymizeRespond = null;
+  deferredAnonymizeError = null;
   if (root) root.unmount();
   container.innerHTML = "";
   root = createRoot(container);
@@ -279,6 +298,17 @@ async function openManualTerms() {
     click("ccv2-manual-terms-toggle");
     await flush();
   }
+}
+
+/** Settle a deferred anonymize request with the given failure response. */
+async function settlePendingAnonymize(error: { status: number; payload: any }) {
+  deferredAnonymizeError = error;
+  await React.act(async () => {
+    pendingAnonymizeRespond?.();
+    pendingAnonymizeRespond = null;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
 }
 
 before(async () => {
@@ -668,4 +698,81 @@ test("20. zero approved result keeps raw source immutable and lists the applied 
 
   assert.equal(q("ccv2-source-anonymized-src-1").textContent, RAW, "the zero-approval result equals the raw text");
   assert.match(q("ccv2-source-applied-count-src-1").textContent, /0 elem cserélve/, "the applied count is zero and honest");
+});
+
+test("21. a detect error is attributed only to its own source", async () => {
+  await freshRender();
+  await createPasted(RAW);
+  await createPasted(RAW_TWO);
+
+  click("ccv2-source-src-1");
+  await flush();
+  server.detectError = { status: 500, payload: { status: 500, code: "INTERNAL", message: "detect boom" } };
+  click("ccv2-source-detect-src-1");
+  await flush();
+  assert.ok(q("ccv2-detect-error"), "source A shows its own detect error");
+
+  click("ccv2-source-src-2");
+  await flush();
+  assert.equal(q("ccv2-detect-error"), null, "source B never shows source A's detect error");
+
+  click("ccv2-source-src-1");
+  await flush();
+  assert.ok(q("ccv2-detect-error"), "returning to source A keeps the truthful attribution");
+  assert.match(q("ccv2-detect-error").textContent, /Az ellenőrzés most nem sikerült/, "the error copy belongs to A's failure");
+});
+
+test("22. an apply error is attributed only to its own source", async () => {
+  await freshRender();
+  await createPasted(RAW);
+  await createPasted(RAW_TWO);
+
+  click("ccv2-source-src-1");
+  await flush();
+  click("ccv2-source-detect-src-1");
+  await flush();
+  click("ccv2-candidate-checkbox-cand-1");
+  await flush();
+  server.anonymizeError = { status: 500, payload: { status: 500, code: "INTERNAL", message: "apply boom" } };
+  click("ccv2-anonymize-apply");
+  await flush();
+  assert.ok(q("ccv2-stale-error"), "source A shows its own apply error");
+
+  click("ccv2-source-src-2");
+  await flush();
+  assert.equal(q("ccv2-stale-error"), null, "source B never shows source A's apply error");
+
+  click("ccv2-source-src-1");
+  await flush();
+  assert.ok(q("ccv2-stale-error"), "returning to source A keeps the truthful attribution");
+});
+
+test("23. an async apply failure is attributed to the reviewed source, not the selected one", async () => {
+  await freshRender();
+  await createPasted(RAW);
+  await createPasted(RAW_TWO);
+
+  click("ccv2-source-src-1");
+  await flush();
+  click("ccv2-source-detect-src-1");
+  await flush();
+  click("ccv2-candidate-checkbox-cand-1");
+  await flush();
+
+  server.deferAnonymize = true;
+  click("ccv2-anonymize-apply");
+  await flush();
+
+  click("ccv2-source-src-2");
+  await flush();
+  assert.ok(q("ccv2-source-detail-src-2"), "the user switched to source B while A's apply is in flight");
+
+  await settlePendingAnonymize({ status: 500, payload: { status: 500, code: "INTERNAL", message: "deferred apply boom" } });
+  await flush();
+  assert.equal(q("ccv2-stale-error"), null, "the late failure for A is never rendered beneath B");
+
+  click("ccv2-source-src-1");
+  await flush();
+  assert.ok(q("ccv2-stale-error"), "source A shows its own late apply error when selected");
+  assert.match(q("ccv2-stale-error").textContent, /Az anonimizálás most nem sikerült/, "the error copy belongs to A's failure");
 });

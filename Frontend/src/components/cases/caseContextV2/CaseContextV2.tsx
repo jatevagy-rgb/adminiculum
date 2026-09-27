@@ -43,6 +43,15 @@ type SourceMode = "PASTE" | "COMMUNICATION";
 
 type ResultView = "ANONYMIZED" | "RAW";
 
+/**
+ * Errors are tagged with the canonical source they belong to so a failure for
+ * one source is never rendered beneath another selected source.
+ */
+type SourceError = {
+  sourceId: string;
+  message: string;
+};
+
 type ReviewState = {
   sourceId: string;
   sourceHash: string;
@@ -126,9 +135,9 @@ export function CaseContextV2({ caseId }: { caseId: string }) {
 
   const [review, setReview] = useState<ReviewState | null>(null);
   const [detectingSourceId, setDetectingSourceId] = useState<string | null>(null);
-  const [detectError, setDetectError] = useState<string | null>(null);
+  const [detectError, setDetectError] = useState<SourceError | null>(null);
   const [applying, setApplying] = useState(false);
-  const [applyError, setApplyError] = useState<string | null>(null);
+  const [applyError, setApplyError] = useState<SourceError | null>(null);
   const [zeroApprovalOpen, setZeroApprovalOpen] = useState(false);
 
   const loadSources = useCallback(async () => {
@@ -246,7 +255,7 @@ export function CaseContextV2({ caseId }: { caseId: string }) {
         termsAtDetect: manualTerms.map((term) => ({ ...term })),
       });
     } catch (error) {
-      setDetectError(detectErrorMessage(error));
+      setDetectError({ sourceId: source.id, message: detectErrorMessage(error) });
     } finally {
       setDetectingSourceId(null);
     }
@@ -278,10 +287,14 @@ export function CaseContextV2({ caseId }: { caseId: string }) {
 
   const runApply = async () => {
     if (!review) return;
+    // Capture the canonical reviewed source id before the request so an async
+    // failure is attributed to the source that was actually being applied,
+    // never to whatever source happens to be selected when the request fails.
+    const sourceId = review.sourceId;
     setApplying(true);
     setApplyError(null);
     try {
-      await anonymizeCaseContextSource(caseId, review.sourceId, {
+      await anonymizeCaseContextSource(caseId, sourceId, {
         sourceHash: review.sourceHash,
         optionsDigest: review.optionsDigest,
         manualTerms: review.termsAtDetect,
@@ -293,18 +306,18 @@ export function CaseContextV2({ caseId }: { caseId: string }) {
     } catch (error) {
       if (error instanceof ApiError && error.code === "CONTEXT_SOURCE_ALREADY_ANONYMIZED") {
         setReview(null);
-        setApplyError("Ehhez a forráshoz már készült anonimizált változat.");
+        setApplyError({ sourceId, message: "Ehhez a forráshoz már készült anonimizált változat." });
         await loadSources();
       } else if (error instanceof ApiError && STALE_REVIEW_CODES.has(String(error.code ?? ""))) {
         setReview(null);
-        setApplyError(STALE_REVIEW_MESSAGE);
+        setApplyError({ sourceId, message: STALE_REVIEW_MESSAGE });
       } else if (error instanceof ApiError && error.status === 403) {
-        setApplyError("Ehhez a forráshoz most nincs hozzáférésed.");
+        setApplyError({ sourceId, message: "Ehhez a forráshoz most nincs hozzáférésed." });
       } else if (error instanceof ApiError && error.status === 404) {
         setReview(null);
-        setApplyError("A forrás már nem érhető el. Frissítsd a listát.");
+        setApplyError({ sourceId, message: "A forrás már nem érhető el. Frissítsd a listát." });
       } else {
-        setApplyError("Az anonimizálás most nem sikerült. Próbáld újra.");
+        setApplyError({ sourceId, message: "Az anonimizálás most nem sikerült. Próbáld újra." });
       }
     } finally {
       setApplying(false);
@@ -440,15 +453,15 @@ export function CaseContextV2({ caseId }: { caseId: string }) {
           </div>
         ) : null}
 
-        {detectError && isReviewed === false ? (
+        {detectError && detectError.sourceId === source.id ? (
           <p role="alert" data-testid="ccv2-detect-error" className={errorBoxClass}>
-            {detectError}
+            {detectError.message}
           </p>
         ) : null}
 
-        {applyError ? (
+        {applyError && applyError.sourceId === source.id ? (
           <p role="alert" data-testid="ccv2-stale-error" className={errorBoxClass}>
-            {applyError}
+            {applyError.message}
           </p>
         ) : null}
 
