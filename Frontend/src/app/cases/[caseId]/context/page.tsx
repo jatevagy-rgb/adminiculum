@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { CaseContextView } from "@/components/cases/CaseContextView";
+import { CaseContextV2 } from "@/components/cases/caseContextV2/CaseContextV2";
 import { getCaseById, getCases, type CaseListItem } from "@/lib/api";
 
 type CaseContextPageProps = {
@@ -11,12 +12,14 @@ type CaseContextPageProps = {
 };
 
 /**
- * Case Workspace — Kontextus V1 route.
+ * Case Workspace — Kontextus route.
  *
- * A dedicated, read-only case-context surface. It reuses the canonical case
- * workspace projection (starting context, description, linked communications)
- * and the shared case nav (which owns the page H1). It introduces no new
- * persistence and does not replace the Communications Workspace.
+ * The V1 read-only case-context surface (CaseContextView: starting context,
+ * description, linked communications) renders first. The additive V2
+ * "További kontextus" surface (CaseContextV2: paste/communication sources,
+ * ephemeral manual terms, detect/review/anonymize) renders below it on the
+ * same route. The Communications Workspace remains the canonical place for
+ * communication work.
  */
 function CaseContextContent({ params }: CaseContextPageProps) {
   const resolvedParams = use(params);
@@ -59,6 +62,7 @@ function CaseContextContent({ params }: CaseContextPageProps) {
       />
       <div className="mx-auto w-full max-w-[1400px] px-4 py-5 lg:px-5">
         <CaseContextView caseId={canonicalCaseId} />
+        <CaseContextV2 caseId={canonicalCaseId} />
       </div>
     </main>
   );
