@@ -259,3 +259,107 @@ export async function executeFundingTendersSearch(options: SearchRequestOptions 
   }
   throw lastError ?? new FundingTendersRequestError('RETRIES_EXHAUSTED', 'Search request failed after all retry attempts.');
 }
+
+// ---------------------------------------------------------------------------
+// Official static topicDetails enrichment fetch (GWO-1G).
+//
+// GET https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/<identifier>.json
+// Enrichment only: obtains the official topic update history used for the
+// source order signal. No cookies, no auth, no customer data. One transient
+// retry maximum; 30 s timeout; bounded response size.
+// ---------------------------------------------------------------------------
+
+export const TOPIC_DETAILS_URL_PREFIX =
+  'https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/';
+
+export const DETAIL_TIMEOUT_MS = 30_000;
+export const DETAIL_MAX_RETRIES = 1;
+export const DETAIL_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+
+export interface TopicDetailsFetchOptions {
+  timeoutMs?: number;
+  maxRetries?: number;
+  /** Overridable for deterministic tests; defaults to the official prefix. */
+  urlPrefix?: string;
+  /** Test-only fetch injection; defaults to global fetch. */
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * One bounded official topicDetails GET. Returns the parsed raw JSON object
+ * (expected shape { TopicDetails: { ... } }); identity validation happens in
+ * the enrichment layer, never here. Fails with deterministic error codes.
+ */
+export async function fetchOfficialTopicDetails(
+  identifier: string,
+  options: TopicDetailsFetchOptions = {},
+): Promise<Record<string, unknown>> {
+  const trimmed = typeof identifier === 'string' ? identifier.trim() : '';
+  if (trimmed.length === 0) {
+    throw new FundingTendersRequestError('INVALID_ARGUMENT', 'topicDetails identifier must be a non-empty string.');
+  }
+  const timeoutMs = options.timeoutMs ?? DETAIL_TIMEOUT_MS;
+  const maxRetries = options.maxRetries ?? DETAIL_MAX_RETRIES;
+  const prefix = options.urlPrefix ?? TOPIC_DETAILS_URL_PREFIX;
+  const doFetch = options.fetchImpl ?? fetch;
+  const url = `${prefix}${encodeURIComponent(trimmed.toLowerCase())}.json`;
+
+  let lastError: FundingTendersRequestError | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    if (attempt > 0) {
+      await sleep(500);
+    }
+    try {
+      const response = await doFetch(url, {
+        method: 'GET',
+        headers: {
+          accept: 'application/json',
+          'user-agent': 'adminiculum-opportunity-watcher/0.1 (bounded manual dry-run; internal)',
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const declaredLength = Number(response.headers.get('content-length') ?? '0');
+      if (declaredLength > DETAIL_MAX_RESPONSE_BYTES) {
+        throw new FundingTendersRequestError('SIZE_EXCEEDED', 'topicDetails response exceeds the bounded size limit.');
+      }
+      const text = await response.text();
+      if (text.length > DETAIL_MAX_RESPONSE_BYTES) {
+        throw new FundingTendersRequestError('SIZE_EXCEEDED', 'topicDetails response exceeds the bounded size limit.');
+      }
+      if (!response.ok) {
+        const err = new FundingTendersRequestError('HTTP_ERROR', `topicDetails request failed with HTTP ${response.status}.`, response.status);
+        lastError = err;
+        if (RETRYABLE_HTTP.has(response.status)) {
+          continue;
+        }
+        throw err;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new FundingTendersRequestError('MALFORMED_RESPONSE', 'topicDetails response is not valid JSON.');
+      }
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new FundingTendersRequestError('MALFORMED_RESPONSE', 'topicDetails response is not a JSON object.');
+      }
+      return parsed as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof FundingTendersRequestError) {
+        if (error.code === 'HTTP_ERROR' && error.status !== null && RETRYABLE_HTTP.has(error.status)) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
+      const name = error instanceof Error ? error.name : 'Unknown';
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        lastError = new FundingTendersRequestError('TIMEOUT', `topicDetails request timed out after ${timeoutMs} ms.`);
+        continue;
+      }
+      lastError = new FundingTendersRequestError('NETWORK_ERROR', 'topicDetails request failed: network error.');
+      continue;
+    }
+  }
+  throw lastError ?? new FundingTendersRequestError('RETRIES_EXHAUSTED', 'topicDetails request failed after all retry attempts.');
+}

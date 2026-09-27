@@ -17,6 +17,7 @@ import { loadFundingTendersReference } from '../../reference/fundingTendersRefer
 import type { SearchResponseEnvelope, SearchRequestOptions } from './request.ts';
 import { executeFundingTendersSearch, FundingTendersRequestError } from './request.ts';
 import { normalizeFundingTendersRecord } from './normalize.ts';
+import { enrichVariantsWithOrderSignal, MAX_ENRICHED_TOPICS_PER_RUN } from './enrichment.ts';
 
 export interface AdapterFetchSuccess {
   ok: true;
@@ -45,6 +46,10 @@ export interface AdapterResult {
   fetchedCount: number;
   normalizedCount: number;
   rejectedCount: number;
+  /** Search-derived records that passed topicDetails order-signal enrichment. */
+  enrichedCount: number;
+  /** Records rejected because topicDetails order evidence was UNAVAILABLE. */
+  enrichmentRejectedCount: number;
   variants: OpportunityVariantInput[];
   rejections: { reason: string; detail: string | null }[];
 }
@@ -57,6 +62,10 @@ export interface AdapterOptions {
   now?: Date;
   /** Known previous success timestamp (ISO). */
   lastSuccessAt?: string | null;
+  /** Test injection for the official topicDetails enrichment fetch. */
+  detailsFetch?: (identifier: string) => Promise<unknown>;
+  /** Bounded enrichment concurrency (clamped by the enrichment layer). */
+  detailConcurrency?: number;
 }
 
 export function fetchFundingTenders(options: AdapterOptions = {}): Promise<AdapterFetchOutcome> {
@@ -121,29 +130,74 @@ export async function runFundingTendersAdapter(options: AdapterOptions = {}): Pr
       fetchedCount: 0,
       normalizedCount: 0,
       rejectedCount: 0,
+      enrichedCount: 0,
+      enrichmentRejectedCount: 0,
       variants: [],
       rejections: [],
     };
   }
 
   const { variants, rejections } = normalizeFundingTendersEnvelope(fetchOutcome.envelope, reference);
+
+  // Bounded fan-out: never silently enrich the first 10 of a larger emitted
+  // result set. Over-limit runs fail explicitly before any topicDetails call.
+  if (variants.length > MAX_ENRICHED_TOPICS_PER_RUN) {
+    const health = evaluateSourceHealth({
+      attempted: true,
+      success: false,
+      lastSuccessAt: options.lastSuccessAt ?? null,
+      now: options.now ?? new Date(),
+    });
+    const detail = `${variants.length} discovered topics exceed the ${MAX_ENRICHED_TOPICS_PER_RUN}-per-run enrichment bound; the run failed before any topicDetails fan-out.`;
+    return {
+      source: 'EU_FUNDING_TENDERS',
+      health: health.health,
+      healthReason: `ENRICHMENT_FANOUT_LIMIT_EXCEEDED: ${detail}`,
+      requestedAt: fetchOutcome.requestedAt,
+      completedAt: fetchOutcome.completedAt,
+      lastSuccessAt: options.lastSuccessAt ?? null,
+      fetchedCount: fetchOutcome.envelope.results.length,
+      normalizedCount: 0,
+      rejectedCount: rejections.length + 1,
+      enrichedCount: 0,
+      enrichmentRejectedCount: 0,
+      variants: [],
+      rejections: [...rejections, { reason: 'ENRICHMENT_FANOUT_LIMIT_EXCEEDED', detail }],
+    };
+  }
+
+  const enrichment = await enrichVariantsWithOrderSignal(variants, {
+    concurrency: options.detailConcurrency,
+    fetchDetails: options.detailsFetch,
+  });
+  const combinedRejections = [...rejections, ...enrichment.rejections];
+
+  // Truthfulness: search success with every enrichment unavailable is NOT a
+  // successful source run. Zero candidates (all rejected at normalization, or
+  // an empty page) is a truthful search-only success — there is nothing to
+  // enrich and nothing is emitted as an enriched variant.
+  const success = !(variants.length > 0 && enrichment.enriched.length === 0);
   const health = evaluateSourceHealth({
     attempted: true,
-    success: true,
+    success,
     lastSuccessAt: options.lastSuccessAt ?? null,
     now: options.now ?? new Date(),
   });
   return {
     source: 'EU_FUNDING_TENDERS',
     health: health.health,
-    healthReason: health.reason,
+    healthReason: success
+      ? health.reason
+      : `ORDER_SIGNAL_ENRICHMENT_UNAVAILABLE: all ${variants.length} discovered topic(s) failed topicDetails enrichment; no variants emitted.`,
     requestedAt: fetchOutcome.requestedAt,
     completedAt: fetchOutcome.completedAt,
     lastSuccessAt: options.lastSuccessAt ?? null,
     fetchedCount: fetchOutcome.envelope.results.length,
-    normalizedCount: variants.length,
-    rejectedCount: rejections.length,
-    variants,
-    rejections,
+    normalizedCount: enrichment.enriched.length,
+    rejectedCount: combinedRejections.length,
+    enrichedCount: enrichment.enriched.length,
+    enrichmentRejectedCount: enrichment.rejections.length,
+    variants: enrichment.enriched,
+    rejections: combinedRejections,
   };
 }

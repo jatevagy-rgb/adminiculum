@@ -40,6 +40,40 @@ import { deriveSourceIdentifier, deriveRevisionSignal, deriveSourceUrl } from '.
 /** Official calls-for-proposals (funding) source types. */
 export const FUNDING_SOURCE_TYPES = [1, 2, 8] as const;
 
+/**
+ * Explicit order-signal status (GWO-1G). Search-derived variants only receive
+ * a status from the topicDetails enrichment step; static topicDetails records
+ * receive it directly from their own source history.
+ */
+export const SOURCE_ORDER_SIGNAL_STATUSES = ['AUTHORITATIVE_TIMESTAMP', 'AUTHORITATIVE_NO_HISTORY'] as const;
+export type SourceOrderSignalStatus = (typeof SOURCE_ORDER_SIGNAL_STATUSES)[number];
+
+/**
+ * Order evidence extracted from an official topicDetails record. Null when the
+ * raw value is not a TopicDetails object shape (malformed / wrong shape).
+ * `sourceOrderSignalStatus` is null only for that malformed case; a valid
+ * TopicDetails record always yields TIMESTAMP or NO_HISTORY (never UNAVAILABLE —
+ * an unavailable fetch is handled by the enrichment layer, not here).
+ */
+export interface TopicDetailsOrderEvidence {
+  identifier: string | null;
+  sourceLastChangeAt: string | null;
+  sourceOrderSignalStatus: SourceOrderSignalStatus;
+}
+
+export function deriveTopicDetailsOrderEvidence(raw: unknown): TopicDetailsOrderEvidence | null {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const topicDetails = (raw as Record<string, unknown>)['TopicDetails'];
+  if (topicDetails === null || typeof topicDetails !== 'object' || Array.isArray(topicDetails)) return null;
+  const row = topicDetails as Record<string, unknown>;
+  const sourceLastChangeAt = normalizeSourceOrderSignal(latestInfosLastChange(row['latestInfos']));
+  return {
+    identifier: firstScalar(row['identifier']),
+    sourceLastChangeAt,
+    sourceOrderSignalStatus: sourceLastChangeAt !== null ? 'AUTHORITATIVE_TIMESTAMP' : 'AUTHORITATIVE_NO_HISTORY',
+  };
+}
+
 const EPOCH_MILLIS = /^\d{13}$/;
 
 function firstScalar(value: unknown): string | null {
@@ -125,6 +159,7 @@ function normalizeSourceDate(raw: string | null): string | null {
 }
 
 interface UnifiedRecord {
+  recordShape: 'topicDetails' | 'searchEntry';
   identifier: string | null;
   title: string | null;
   type: number | null;
@@ -195,6 +230,7 @@ function unifyTopicDetails(topic: Record<string, unknown>): UnifiedRecord {
   const identifier = firstScalar(topic['identifier']);
   const latestInfos = Array.isArray(topic['latestInfos']) ? topic['latestInfos'] as Record<string, unknown>[] : [];
   return {
+    recordShape: 'topicDetails',
     identifier: identifier !== null && identifier.trim().length > 0 ? identifier.trim() : null,
     title: firstScalar(topic['title']),
     type: toFiniteNumber(topic['type']),
@@ -227,6 +263,7 @@ function unifySearchEntry(entry: Record<string, unknown>, metadata: Record<strin
   const identifier = deriveSourceIdentifier(metadata);
   const frameworkLabel = firstScalar(metadata['frameworkProgramme']);
   return {
+    recordShape: 'searchEntry',
     identifier,
     title: firstScalar(metadata['title']),
     type: toFiniteNumber(metadata['type']),
@@ -298,6 +335,13 @@ export function normalizeFundingTendersRecord(raw: unknown, reference: FundingTe
   const publicationAt = normalizeSourceDate(unified.publicationRaw);
   const openingAt = normalizeSourceDate(unified.openingRaw);
   const sourceUrl = unified.url ?? deriveSourceUrl(unified.identifier);
+  const sourceLastChangeAt = normalizeSourceOrderSignal(unified.sourceLastChangeRaw);
+  // Static topicDetails records carry their order evidence directly; search
+  // records receive it (or an explicit rejection) from topicDetails enrichment.
+  const sourceOrderSignalStatus: SourceOrderSignalStatus | null =
+    unified.recordShape === 'topicDetails'
+      ? (sourceLastChangeAt !== null ? 'AUTHORITATIVE_TIMESTAMP' : 'AUTHORITATIVE_NO_HISTORY')
+      : null;
 
   const variant: OpportunityVariantInput = {
     source: 'EU_FUNDING_TENDERS',
@@ -341,7 +385,8 @@ export function normalizeFundingTendersRecord(raw: unknown, reference: FundingTe
         callCcm2Id: unified.callCcm2Id,
         statusLabel: statusMapping.label,
         revisionSource: unified.revisionSource,
-        sourceLastChangeAt: normalizeSourceOrderSignal(unified.sourceLastChangeRaw),
+        sourceLastChangeAt,
+        sourceOrderSignalStatus,
       },
     },
   };
