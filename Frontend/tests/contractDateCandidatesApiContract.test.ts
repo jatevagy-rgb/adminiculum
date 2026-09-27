@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 
 let server: http.Server;
-let api: typeof import("../src/lib/api.contractDateCandidatesApi");
+let api: typeof import("../src/lib/contractDateCandidatesApi");
 const captured: Array<{ url?: string; method?: string; body: unknown }> = [];
 
 const CANDIDATE = {

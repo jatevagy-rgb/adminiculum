@@ -174,7 +174,7 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
       <div>
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Szerződéses dátumok</p>
         <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Szerződéses dátumok</h4>
-        <p className="mt-1 text-xs text-[#3D4842]">A kinyert dátumok javaslatok — csak jogász megerősítése után válnak kanonikus szerződéses adattá.</p>
+        <p className="mt-1 text-xs text-[var(--adm-text-primary)]">A kinyert dátumok javaslatok — csak jogász megerősítése után válnak kanonikus szerződéses adattá.</p>
       </div>
 
       <div className="flex items-center justify-between gap-2">
@@ -192,12 +192,12 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
         )}
       </div>
       {extractMessage ? (
-        <p data-testid="contract-date-extract-message" className="rounded border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-2 text-xs text-[#3D4842]">
+        <p data-testid="contract-date-extract-message" className="rounded border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-2 text-xs text-[var(--adm-text-primary)]">
           {extractMessage}
         </p>
       ) : null}
       {actionError ? (
-        <p data-testid="contract-date-error" className="rounded border border-[#C98A8A] bg-[#FBEDEC] p-2 text-xs text-[#7A2E2E]">
+        <p data-testid="contract-date-error" className="rounded border border-[var(--adm-semantic-danger-border)] bg-[var(--adm-semantic-danger-soft)] p-2 text-xs text-[var(--adm-semantic-danger)]">
           {actionError}
         </p>
       ) : null}
@@ -209,7 +209,7 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
         ) : (
           <ul data-testid="contract-date-confirmed-list" className="space-y-2">
             {canonicalDatedContracts.map((contract) => (
-              <li key={contract.id} className="rounded border border-[rgba(22,32,26,0.08)] bg-white p-2 text-xs text-[#3D4842]">
+              <li key={contract.id} className="rounded border border-[rgba(22,32,26,0.08)] bg-white p-2 text-xs text-[var(--adm-text-primary)]">
                 <p className="font-semibold text-[var(--adm-text)]">{contract.title}</p>
                 {contract.effectiveDate ? <p><b>{DATE_TYPE_FIELD_LABELS.EFFECTIVE}:</b> {formatDate(contract.effectiveDate)}</p> : null}
                 {contract.expiryDate ? <p><b>{DATE_TYPE_FIELD_LABELS.EXPIRY}:</b> {formatDate(contract.expiryDate)}</p> : null}
@@ -220,7 +220,7 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
         )}
       </div>
 
-      <div className="space-y-1.5 rounded-[10px] border border-[#E7DECB] bg-[var(--adm-sand-100)] p-3">
+      <div className="space-y-1.5 rounded-[10px] border border-[var(--adm-sand-300)] bg-[var(--adm-sand-100)] p-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-green-800)]">Jóváhagyásra váró dátumjelöltek</p>
           {pendingCandidates.length > 0 ? <AdminBadge tone="gold">{pendingCandidates.length}</AdminBadge> : null}
@@ -241,13 +241,13 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
                 <li
                   key={candidate.id}
                   data-testid="contract-date-pending-item"
-                  className="rounded border border-[rgba(22,32,26,0.10)] bg-white p-2.5 text-xs text-[#3D4842]"
+                  className="rounded border border-[rgba(22,32,26,0.10)] bg-white p-2.5 text-xs text-[var(--adm-text-primary)]"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[11px] font-bold text-[var(--adm-green-800)]">{contractDateTypeLabel(candidate.dateType)}</p>
                     <p className="font-semibold text-[var(--adm-text)]">{formatCandidateDate(candidate.proposedDate)}</p>
                   </div>
-                  <p className="mt-1 line-clamp-2 italic text-[#3D4842]">“{candidate.sourceExcerpt}”</p>
+                  <p className="mt-1 line-clamp-2 italic text-[var(--adm-text-primary)]">“{candidate.sourceExcerpt}”</p>
                   <div className="mt-2 space-y-1.5">
                     <select
                       aria-label="Cél szerződés"
@@ -321,7 +321,7 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Elbírált jelöltek</p>
           <ul data-testid="contract-date-decided-list" className="space-y-1.5">
             {decidedCandidates.map((candidate) => (
-              <li key={candidate.id} className="flex items-center justify-between gap-2 text-xs text-[#3D4842]">
+              <li key={candidate.id} className="flex items-center justify-between gap-2 text-xs text-[var(--adm-text-primary)]">
                 <span className="truncate">{contractDateTypeLabel(candidate.dateType)} · {formatCandidateDate(candidate.proposedDate)}</span>
                 <AdminBadge tone={statusTone(candidate.status)}>{candidateStatusLabel(candidate.status)}</AdminBadge>
               </li>
