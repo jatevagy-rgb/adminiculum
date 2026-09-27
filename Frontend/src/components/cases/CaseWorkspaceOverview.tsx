@@ -254,7 +254,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           {/* Primary actions — secondary links must not compete with these. */}
           <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <AdminButton variant="primary" size="sm" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
-            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "case-comment" })}>Kommunikáció hozzáadása</AdminButton>
+            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés hozzáadása</AdminButton>
             <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
           </div>
         </div>
@@ -289,10 +289,17 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         <AdminButton variant="neutral" size="xs" onClick={() => setTimeDialogOpen(true)}>Munkaidő rögzítése</AdminButton>
       </section>
 
+      {/* ---- 2b. Primary internal notes ------------------------------------ */}
+      <CaseWorkspaceNotesSection
+        comments={ws.comments}
+        onCreateNote={() => setModal({ type: "case-comment" })}
+      />
+
       <nav aria-label="Ügy munkatér szakaszai" data-testid="case-workspace-section-nav" className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] font-semibold text-[var(--adm-green-800)]">
         <a href="#ck-tasks" className="hover:underline">Aktív munka</a>
         <a href="#ck-deadlines" className="hover:underline">Határidők</a>
         <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
+        <a href="#ck-notes-primary" className="hover:underline">Megjegyzések</a>
         <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
         <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>
       </nav>
@@ -509,6 +516,48 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       ) : null}
 
     </div>
+  );
+}
+
+export interface CaseWorkspaceNotesSectionProps {
+  comments: CaseWorkspace["comments"];
+  onCreateNote?: () => void;
+}
+
+/**
+ * Primary case-note surface (CASE-NOTE-VISIBILITY-1).
+ *
+ * The canonical case comments already return on the workspace projection; this
+ * section renders them on the primary Overview so a freshly created note is
+ * visible without opening the collapsed "Ügy részletei" area. It shows only
+ * what the projection carries: body, author, created time and the existing
+ * open/resolved state. It deliberately offers no reply control — the canonical
+ * Comment model has no parent/thread relationship.
+ */
+export function CaseWorkspaceNotesSection({ comments, onCreateNote }: CaseWorkspaceNotesSectionProps) {
+  return (
+    <CockpitSection id="ck-notes-primary" title="Megjegyzések" accent="green" count={comments.length}
+      action={<AdminButton variant="neutral" size="xs" onClick={onCreateNote}>+ Megjegyzés</AdminButton>}>
+      {comments.length === 0 ? (
+        <ActionableEmpty message="Ehhez az ügyhöz még nincs megjegyzés." actionLabel="Első megjegyzés írása" onAction={onCreateNote} />
+      ) : (
+        <ul data-testid="case-notes-primary" className="divide-y divide-[rgba(22,32,26,0.06)]">
+          {comments.slice(0, 5).map((n) => (
+            <li key={n.id} data-testid="case-note" className="px-3 py-2">
+              <p className="whitespace-pre-line text-[12.5px] leading-5 text-[var(--adm-text)]">{n.content}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
+                <span data-testid="case-note-author" className="font-semibold text-[var(--adm-text)]">{n.author?.name || "Rendszer"}</span>
+                <span aria-hidden="true">·</span>
+                <span data-testid="case-note-created">{fmtDateTime(n.createdAt)}</span>
+                {n.status === "RESOLVED" ? (
+                  <span data-testid="case-note-resolved" className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.neutral.soft} ${ACCENT.neutral.text}`}>Megoldva</span>
+                ) : null}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </CockpitSection>
   );
 }
 
