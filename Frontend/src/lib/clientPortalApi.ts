@@ -526,10 +526,18 @@ export type PortalOrgContract = {
   title: string;
   statusLabel: string;
   lifecycle: "active" | "upcoming" | "terminating";
+  /** Canonical status-derived flag: true only for an ACTIVE contract. */
+  isActive: boolean;
   relatedMatterTitle: string | null;
   nextStep: string | null;
   customerActionRequired: boolean;
   keyDate: string | null;
+  effectiveDate: string | null;
+  expiryDate: string | null;
+  nextCriticalDate: string | null;
+  signatureDate: string | null;
+  /** True only when the canonical expiryDate falls in the portal's current month. */
+  expiresThisMonth: boolean;
   publishedDoc: PortalOrgContractPublishedDoc | null;
 };
 

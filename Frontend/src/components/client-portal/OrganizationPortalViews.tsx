@@ -540,6 +540,28 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
   );
 }
 
+/** Canonical lifecycle date rows for a published contract. Null dates are omitted. */
+export type ContractDateRow = { key: "signature" | "effective" | "expiry" | "critical"; label: string; value: string };
+
+export function contractDateRows(contract: Pick<PortalOrgContract, "signatureDate" | "effectiveDate" | "expiryDate" | "nextCriticalDate">): ContractDateRow[] {
+  const rows: ContractDateRow[] = [];
+  if (contract.signatureDate) rows.push({ key: "signature", label: "Aláírás dátuma", value: contract.signatureDate });
+  if (contract.effectiveDate) rows.push({ key: "effective", label: "Hatálybalépés", value: contract.effectiveDate });
+  if (contract.expiryDate) rows.push({ key: "expiry", label: "Lejárat", value: contract.expiryDate });
+  if (contract.nextCriticalDate) rows.push({ key: "critical", label: "Következő kritikus dátum", value: contract.nextCriticalDate });
+  return rows;
+}
+
+/** Active contracts, derived only from the canonical status-backed `isActive` flag. */
+export function selectActiveContracts<T extends { isActive: boolean }>(contracts: readonly T[]): T[] {
+  return contracts.filter((contract) => contract.isActive);
+}
+
+/** Contracts whose canonical expiryDate falls in the current portal month. */
+export function selectExpiringThisMonthContracts<T extends { expiresThisMonth: boolean; expiryDate: string | null }>(contracts: readonly T[]): T[] {
+  return contracts.filter((contract) => contract.expiresThisMonth && Boolean(contract.expiryDate));
+}
+
 function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }) {
   if (!contracts.length) {
     return (
@@ -548,34 +570,68 @@ function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }
       </Section>
     );
   }
+  const active = selectActiveContracts(contracts);
+  const expiringThisMonth = selectExpiringThisMonthContracts(contracts);
   return (
     <div className="space-y-5">
       <section className={card}>
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Szerződések</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Közzétett szerződéses dokumentumok</h1>
         <p className="mt-2 text-sm text-stone-600">Csak azok a szerződéses dokumentumok láthatók, amelyeket az iroda közzétett az Ön számára.</p>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2" data-testid="org-contract-summary">
+          <div className="rounded-2xl bg-[var(--adm-ivory-100)] p-4">
+            <dt className="text-sm font-semibold text-stone-800">Aktív szerződések</dt>
+            <dd className="mt-1 text-2xl font-semibold text-stone-950">{active.length}</dd>
+          </div>
+          <div className="rounded-2xl bg-[var(--adm-ivory-100)] p-4">
+            <dt className="text-sm font-semibold text-stone-800">Ebben a hónapban lejáró szerződések</dt>
+            <dd className="mt-1 text-2xl font-semibold text-stone-950">{expiringThisMonth.length}</dd>
+          </div>
+        </dl>
+        {expiringThisMonth.length ? (
+          <div className="mt-4" data-testid="org-contract-expiring">
+            <p className="text-sm font-semibold text-stone-800">Ebben a hónapban lejáró szerződések</p>
+            <ul className="mt-2 grid gap-2 text-sm text-stone-700">
+              {expiringThisMonth.map((contract) => (
+                <li key={contract.reference} className="break-words">
+                  <b className="text-stone-950">{contract.title}</b>
+                  <span className="block text-stone-600">Lejárat: {formatDate(contract.expiryDate)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
       <Section title="Közzétett szerződések">
-        {contracts.map((contract) => (
-          <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
-                {contract.relatedMatterTitle ? <p className="mt-1 text-sm text-stone-600">Kapcsolódó ügy: {contract.relatedMatterTitle}</p> : null}
+        {contracts.map((contract) => {
+          const dateRows = contractDateRows(contract);
+          return (
+            <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
+                  {contract.relatedMatterTitle ? <p className="mt-1 text-sm text-stone-600">Kapcsolódó ügy: {contract.relatedMatterTitle}</p> : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs font-semibold text-[#6f5514]">{contract.statusLabel}</span>
+                  {contract.expiresThisMonth && contract.expiryDate ? <span className="text-xs font-semibold text-[var(--adm-terracotta-700)]">Ebben a hónapban lejár</span> : null}
+                </div>
               </div>
-              <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs font-semibold text-[#6f5514]">{contract.statusLabel}</span>
-            </div>
-            <dl className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
-              <div><dt className="font-semibold text-stone-800">Kulcsdátum</dt><dd>{formatDate(contract.keyDate)}</dd></div>
-              <div><dt className="font-semibold text-stone-800">Közzétett dokumentum</dt><dd>{contract.publishedDoc ? `${contract.publishedDoc.title || contract.title} · ${contract.publishedDoc.versionLabel}` : "Nincs letölthető dokumentum"}</dd></div>
-            </dl>
-            {contract.publishedDoc?.downloadAvailable ? (
-              <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
-                Dokumentum megnyitása
-              </Link>
-            ) : null}
-          </article>
-        ))}
+              <dl className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
+                {dateRows.map((row) => (
+                  <div key={row.key}><dt className="font-semibold text-stone-800">{row.label}</dt><dd>{formatDate(row.value)}</dd></div>
+                ))}
+                {!dateRows.length ? <div><dt className="font-semibold text-stone-800">Kulcsdátum</dt><dd>{formatDate(contract.keyDate)}</dd></div> : null}
+                <div><dt className="font-semibold text-stone-800">Közzétett dokumentum</dt><dd>{contract.publishedDoc ? `${contract.publishedDoc.title || contract.title} · ${contract.publishedDoc.versionLabel}` : "Nincs letölthető dokumentum"}</dd></div>
+              </dl>
+              {contract.publishedDoc?.downloadAvailable ? (
+                <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
+                  Dokumentum megnyitása
+                </Link>
+              ) : null}
+            </article>
+          );
+        })}
       </Section>
     </div>
   );
