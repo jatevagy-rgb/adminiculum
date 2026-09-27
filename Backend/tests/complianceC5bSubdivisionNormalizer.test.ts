@@ -282,12 +282,14 @@ describe('C5B-1 HU_LEGACY_SLASH_V1', () => {
     expectInvalid(parseHuLegacySlashLocator('5/2/bb'), 'UNSUPPORTED_IDENTIFIER');
   });
 
-  it('validates an alpont against its parent point', () => {
-    expect(huLegacy('5/2/a/aa').canonicalPath).toBe('sec_5/par_2/pnt_a/spt_aa');
-    expect(huLegacy('5/2/a/ab').canonicalPath).toBe('sec_5/par_2/pnt_a/spt_ab');
-    expect(huLegacy('5/2/1/a').canonicalPath).toBe('sec_5/par_2/pnt_1/spt_a');
-    expectInvalid(parseHuLegacySlashLocator('5/2/a/ba'), 'UNSUPPORTED_IDENTIFIER');
-    expectInvalid(parseHuLegacySlashLocator('5/2/1/aa'), 'UNSUPPORTED_IDENTIFIER');
+  it('stops at the point level: subpoints are structured-mode only', () => {
+    expect(huLegacy('5/2/b').canonicalPath).toBe('sec_5/par_2/pnt_b');
+    expectInvalid(parseHuLegacySlashLocator('5/2/b/ba'), 'UNSUPPORTED_INPUT_FORMAT');
+    expectInvalid(parseHuLegacySlashLocator('5/2/a/aa'), 'UNSUPPORTED_INPUT_FORMAT');
+    expectInvalid(parseHuLegacySlashLocator('5/2/1/a'), 'UNSUPPORTED_INPUT_FORMAT');
+    // Inserted section consumes the second token, so `aa` sits at the point
+    // position: invalid identifier, still fail-closed.
+    expectInvalid(parseHuLegacySlashLocator('15/A/1/aa'), 'UNSUPPORTED_IDENTIFIER');
   });
 
   it('rejects a point value at the paragraph position as a missing paragraph', () => {
@@ -414,6 +416,24 @@ describe('C5B-1 canonical serialization', () => {
         { code: 'spt', value: 'ab' },
       ]),
     ).toBe('sec_5/par_2/pnt_a/spt_ab');
+  });
+
+  it('uses the canonical spt subpoint code and never emits subpnt', () => {
+    const letterParent = huStructured({ section: '5', paragraph: '2', point: 'a', subpoint: 'aa' });
+    const numericParent = huStructured({ section: '5', paragraph: '2', point: '1', subpoint: 'a' });
+    expect(letterParent.canonicalPath).toBe('sec_5/par_2/pnt_a/spt_aa');
+    expect(numericParent.canonicalPath).toBe('sec_5/par_2/pnt_1/spt_a');
+    expect(numericParent.segments).toEqual([
+      { code: 'sec', value: '5' },
+      { code: 'par', value: '2' },
+      { code: 'pnt', value: '1' },
+      { code: 'spt', value: 'a' },
+    ]);
+    for (const output of [letterParent.canonicalPath, numericParent.canonicalPath]) {
+      expect(output).not.toContain('/subpnt_');
+      expect(output).not.toContain('subpnt');
+    }
+    expect(readFileSync(MODULE_FILE, 'utf8')).not.toMatch(/subpnt/);
   });
 });
 

@@ -12,8 +12,10 @@
  *     vocabulary, identifier policy and structural ranks all stay C5A data,
  *   - exactly two explicit, opt-in Hungarian input modes:
  *       HU_STRUCTURED_COMPONENTS_V1 — { section, paragraph?, point?, subpoint? }
- *       HU_LEGACY_SLASH_V1         — the approved narrow raw shapes only
- *       (`5`, `5/1`, `5/10`, `5/2/b`, `15/A`, `15/A/1`, `6:114`, `6:114/1`),
+ *       HU_LEGACY_SLASH_V1         — the approved narrow raw shapes only,
+ *       stopping at the point level (`5`, `5/1`, `5/10`, `5/2/b`, `15/A`,
+ *       `15/A/1`, `6:114`, `6:114/1`); a fourth level fails closed and
+ *       subpoints are represented only through the structured mode,
  *   - pure hierarchy comparison helpers (EXACT / ANCESTOR / DESCENDANT /
  *     NO_MATCH) with no scoring and no legal conclusion.
  *
@@ -491,9 +493,12 @@ export function normalizeHuStructuredComponents(input: HuStructuredComponents | 
  *
  * A slash after the numeric section base followed by exactly one uppercase Latin
  * letter belongs to the SECTION identity (`15/A`); it is never parsed as
- * `sec_15` plus a child `A`. Typed semicolon locators (`sec=15/B;par=4`) remain
- * opaque and unsupported. THIS PARSER IS OPT-IN ONLY and must never be applied
- * automatically to persisted locator values.
+ * `sec_15` plus a child `A`. Legacy v1 STOPS AT THE POINT LEVEL: a fourth-level
+ * token (`5/2/b/ba`) fails closed with UNSUPPORTED_INPUT_FORMAT, and Subpoints
+ * are represented only through HU_STRUCTURED_COMPONENTS_V1 (`spt`). Typed
+ * semicolon locators (`sec=15/B;par=4`) remain opaque and unsupported. THIS
+ * PARSER IS OPT-IN ONLY and must never be applied automatically to persisted
+ * locator values.
  */
 export function parseHuLegacySlashLocator(value: string | null | undefined): SubdivisionNormalizationResult {
   if (typeof value !== 'string') return invalid('MALFORMED_INPUT');
@@ -510,24 +515,23 @@ export function parseHuLegacySlashLocator(value: string | null | undefined): Sub
     secondToken !== undefined && SINGLE_UPPER_LETTER.test(secondToken) && DECIMAL.test(firstToken);
   const sectionValue = hasInsertedSection ? `${firstToken}/${secondToken}` : firstToken;
   const childTokens = rawTokens.slice(hasInsertedSection ? 2 : 1);
-  if (childTokens.length > HU_SUBDIVISION_CODES.length - 1) return invalid('UNSUPPORTED_INPUT_FORMAT');
+  // Legacy v1 stops at the point level: section, section/paragraph,
+  // section/paragraph/point. A fourth level (e.g. `5/2/b/ba`) fails closed.
+  if (childTokens.length > 2) return invalid('UNSUPPORTED_INPUT_FORMAT');
 
   const sectionError = sectionValueError(sectionValue);
   if (sectionError) return invalid(sectionError);
 
   const values: (string | null)[] = [sectionValue, null, null, null];
-  const childLevels: readonly HuSubdivisionCode[] = ['par', 'pnt', 'spt'];
+  const childLevels: readonly HuSubdivisionCode[] = ['par', 'pnt'];
   for (let index = 0; index < childTokens.length; index += 1) {
     const level = childLevels[index];
     const token = childTokens[index];
-    if (level === 'par') {
-      // A single lowercase letter here is a valid point identifier: the
-      // paragraph parent is missing, so this is a hierarchy problem, not an
-      // unsupported point value.
-      if (SINGLE_LOWER_LETTER.test(token)) return invalid('INVALID_HIERARCHY');
-    }
-    const parentValue = level === 'spt' ? values[2] : null;
-    const errorCode = huValueError(level, token, parentValue);
+    // A single lowercase letter here is a valid point identifier: the
+    // paragraph parent is missing, so this is a hierarchy problem, not an
+    // unsupported point value.
+    if (level === 'par' && SINGLE_LOWER_LETTER.test(token)) return invalid('INVALID_HIERARCHY');
+    const errorCode = huValueError(level, token, null);
     if (errorCode) return invalid(errorCode);
     values[index + 1] = token;
   }
