@@ -29,7 +29,7 @@ export interface WatcherConfig {
   deliveryMode?: DeliveryMode;
   /** Backend base URL for W2 delivery; required in DELIVER mode. */
   backendEndpoint?: string | null;
-  /** Observations per W2 request (1..200). */
+  /** Observations per W2 request (1..100, the W2 ingestion batch maximum). */
   deliveryBatchSize?: number;
   /** App-only token configuration; required in DELIVER mode. */
   tokenConfig?: AppOnlyTokenConfig | null;
@@ -169,7 +169,7 @@ export function resolveConfig(args: CliArgs): WatcherConfig {
     concurrency: envInt('LEGAL_WATCHER_CONCURRENCY', 2, 1, 8),
     deliveryMode,
     backendEndpoint,
-    deliveryBatchSize: envInt('LEGAL_WATCHER_DELIVERY_BATCH_SIZE', 50, 1, 200),
+    deliveryBatchSize: envInt('LEGAL_WATCHER_DELIVERY_BATCH_SIZE', 50, 1, 100),
     tokenConfig,
   };
 }
