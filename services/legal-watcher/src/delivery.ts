@@ -47,6 +47,7 @@ import {
   type W2Envelope,
   type W2Observation,
   type W2ResultEntry,
+  type WatcherState,
 } from './types';
 
 /**
@@ -111,24 +112,43 @@ export function buildW2Envelope(observations: W2Observation[]): W2Envelope {
  * Delivery candidates for a run:
  *  - events that are NEW since the durable source baseline (W1 detected a
  *    legal event), plus
- *  - previously attempted events still pending delivery that are observed
- *    again (retry), never events already delivered.
+ *  - previously attempted events still pending delivery, whether they are
+ *    observed again in the current response OR only retained in the durable
+ *    W1 source baseline (a pending delivery is never stranded by a later
+ *    CELLAR response that drops the event), never events already delivered.
+ * The already-authoritative W1 source baseline supplies the payload for
+ * baseline-only recovery: no event payload is duplicated into delivery.json,
+ * delivery-state schema is unchanged, and the baseline is never mutated.
+ * A pending baseline event may be recovered even while the current
+ * observation for its CELEX is SOURCE_ERROR, because this retries
+ * already-captured durable evidence and never claims a new observation.
+ * Candidate identity stays the deterministic W1 eventKey.
  * FIRST_SEEN_BASELINE history is never delivered: historical relationships
  * are not newly detected legal events, and W1 semantics are preserved.
  */
 export function selectDeliveryCandidates(
   results: CelexRunResult[],
   state: DeliveryState,
+  sourceState: WatcherState,
 ): ObservationEvent[] {
   const candidates = new Map<string, ObservationEvent>();
   for (const result of results) {
-    if (result.status === 'SOURCE_ERROR') continue;
-    const newKeys = new Set(result.newEvents.map((event) => event.eventKey));
-    for (const event of result.observedEvents) {
-      if (state.delivered[event.eventKey] !== undefined) continue;
-      if (newKeys.has(event.eventKey) || state.pending[event.eventKey] !== undefined) {
-        candidates.set(event.eventKey, event);
+    if (result.status !== 'SOURCE_ERROR') {
+      const newKeys = new Set(result.newEvents.map((event) => event.eventKey));
+      for (const event of result.observedEvents) {
+        if (state.delivered[event.eventKey] !== undefined) continue;
+        if (newKeys.has(event.eventKey) || state.pending[event.eventKey] !== undefined) {
+          candidates.set(event.eventKey, event);
+        }
       }
+    }
+    const entry = sourceState.entries[result.sourceIdentifier];
+    if (entry === undefined) continue;
+    for (const [eventKey, event] of Object.entries(entry.events)) {
+      if (state.delivered[eventKey] !== undefined) continue;
+      if (state.pending[eventKey] === undefined) continue;
+      if (candidates.has(eventKey)) continue;
+      candidates.set(eventKey, event);
     }
   }
   return Array.from(candidates.values()).sort((a, b) =>

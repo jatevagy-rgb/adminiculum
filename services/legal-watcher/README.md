@@ -103,7 +103,7 @@ startup, before any observation):
   client-credentials token (no `az login`, no human/workforce token, no token
   storage or logging)
 - optional: `LEGAL_WATCHER_AZURE_AUTHORITY_HOST`,
-  `LEGAL_WATCHER_DELIVERY_BATCH_SIZE` (1..200, default 50)
+  `LEGAL_WATCHER_DELIVERY_BATCH_SIZE` (1..100, default 50)
 
 Wire contract per run (only when there is something to deliver):
 

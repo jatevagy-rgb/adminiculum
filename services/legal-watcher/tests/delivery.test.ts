@@ -26,11 +26,13 @@ import type { DeliveryPostFn } from '../src/delivery';
 import { createJsonLogger, type Logger } from '../src/logging';
 import { TokenProviderError, type AccessTokenProvider } from '../src/tokenProvider';
 import {
+  STATE_SCHEMA_VERSION,
   W2_ENDPOINT_PATH,
   W2_SCHEMA_VERSION,
   type CelexRunResult,
   type DeliveryState,
   type ObservationEvent,
+  type WatcherState,
 } from '../src/types';
 import type { EurlexAdapter } from '../src/adapters/eurlex';
 import type { HttpStreamResponse } from '../src/http';
@@ -72,6 +74,29 @@ function writeManifest(manifestPath: string): void {
     }),
     'utf8',
   );
+}
+
+function watcherState(eventsByCelex: Record<string, ObservationEvent[]>): WatcherState {
+  const entries: WatcherState['entries'] = {};
+  for (const [celex, events] of Object.entries(eventsByCelex)) {
+    entries[celex] = {
+      firstSeenAt: '2026-09-27T00:00:00.000Z',
+      events: Object.fromEntries(events.map((event) => [event.eventKey, event])),
+      lastSuccessfulRunId: 'test-run-0',
+      lastSuccessfulAt: '2026-09-27T00:00:00.000Z',
+    };
+  }
+  return { schemaVersion: STATE_SCHEMA_VERSION, entries };
+}
+
+function pendingRecord() {
+  return {
+    firstAttemptAt: '2026-09-27T00:00:00.000Z',
+    lastAttemptAt: '2026-09-27T00:00:00.000Z',
+    attempts: 1,
+    lastStatus: 'REJECTED',
+    lastReason: 'nope',
+  };
 }
 
 class FakeAdapter implements EurlexAdapter {
@@ -287,21 +312,16 @@ describe('W2 payload mapping', () => {
       missingFromSourceKeys: [],
       error: null,
     };
-    expect(selectDeliveryCandidates([result], state).map((e) => e.eventKey)).toEqual([
+    const sourceState = watcherState({
+      '32016R0679': [baseline, delivered, fresh, pendingRetry],
+    });
+    expect(selectDeliveryCandidates([result], state, sourceState).map((e) => e.eventKey)).toEqual([
       fresh.eventKey,
     ]);
 
     const retryState: DeliveryState = {
       ...state,
-      pending: {
-        [pendingRetry.eventKey]: {
-          firstAttemptAt: 'x',
-          lastAttemptAt: 'x',
-          attempts: 1,
-          lastStatus: 'REJECTED',
-          lastReason: 'nope',
-        },
-      },
+      pending: { [pendingRetry.eventKey]: pendingRecord() },
     };
     const unchangedResult: CelexRunResult = {
       ...result,
@@ -309,9 +329,67 @@ describe('W2 payload mapping', () => {
       observedEvents: [delivered, pendingRetry],
       newEvents: [],
     };
-    expect(selectDeliveryCandidates([unchangedResult], retryState).map((e) => e.eventKey)).toEqual([
-      pendingRetry.eventKey,
-    ]);
+    expect(
+      selectDeliveryCandidates([unchangedResult], retryState, sourceState).map((e) => e.eventKey),
+    ).toEqual([pendingRetry.eventKey]);
+  });
+
+  test('pending delivery is recovered from the durable source baseline when the event disappears from CELLAR', () => {
+    const historical = AMEND_A();
+    const pendingEvent = AMEND_B();
+    const delivered = CONSOLIDATION();
+    const retryState: DeliveryState = {
+      schemaVersion: 1,
+      delivered: { [delivered.eventKey]: { deliveredAt: 'x', backendStatus: 'ACCEPTED' } },
+      pending: { [pendingEvent.eventKey]: pendingRecord() },
+    };
+    const sourceState = watcherState({ '32016R0679': [historical, pendingEvent, delivered] });
+    const result: CelexRunResult = {
+      sourceIdentifier: '32016R0679',
+      status: 'UNCHANGED',
+      observedEvents: [],
+      baselineEvents: [],
+      newEvents: [],
+      metadataChangedKeys: [],
+      missingFromSourceKeys: [historical.eventKey, pendingEvent.eventKey, delivered.eventKey],
+      error: null,
+    };
+    const candidates = selectDeliveryCandidates([result], retryState, sourceState);
+    // Only the pending event is recovered; the historical baseline event is not
+    // selected and the delivered event is never retried.
+    expect(candidates.map((e) => e.eventKey)).toEqual([pendingEvent.eventKey]);
+    // Recovery reuses the authoritative baseline payload verbatim and never
+    // reclassifies the source event as NEW.
+    expect(candidates[0]).toEqual(pendingEvent);
+    expect(result.newEvents).toEqual([]);
+  });
+
+  test('pending baseline event is retried while the current observation is SOURCE_ERROR', () => {
+    const recovered = AMEND_B();
+    const retryState: DeliveryState = {
+      schemaVersion: 1,
+      delivered: {},
+      pending: { [recovered.eventKey]: pendingRecord() },
+    };
+    const result: CelexRunResult = {
+      sourceIdentifier: '32016R0679',
+      status: 'SOURCE_ERROR',
+      observedEvents: [],
+      baselineEvents: [],
+      newEvents: [],
+      metadataChangedKeys: [],
+      missingFromSourceKeys: [],
+      error: {
+        sourceIdentifier: '32016R0679',
+        phase: 'HTTP',
+        code: 'NETWORK_ERROR',
+        message: 'source down',
+      },
+    };
+    const sourceState = watcherState({ '32016R0679': [AMEND_A(), recovered] });
+    expect(
+      selectDeliveryCandidates([result], retryState, sourceState).map((e) => e.eventKey),
+    ).toEqual([recovered.eventKey]);
   });
 });
 
@@ -815,6 +893,194 @@ describe('explicit delivery mode', () => {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  test('failed delivery is retried from the durable W1 baseline after the event disappears from CELLAR', async () => {
+    const { dir, manifestPath, stateDir } = setup('baseline-recovery');
+    try {
+      writeManifest(manifestPath);
+      const k1 = AMEND_A();
+      const recovered = AMEND_B();
+
+      // Run 1: establish the durable source baseline without the event.
+      const establish = await runWatcher(
+        watcherConfig(manifestPath, stateDir),
+        runDeps(new FakeAdapter(() => [k1]), stateDir),
+      );
+      expect(establish.report.firstSeenBaselineCount).toBe(1);
+
+      // Run 2: the event is NEW; delivery fails and stays pending while the
+      // source-seen baseline still advances (state separation preserved).
+      const { post: failingPost } = scriptedPost([jsonResponse('unavailable', 503)]);
+      const failedRun = await runWatcher(
+        watcherConfig(manifestPath, stateDir, {
+          deliveryMode: 'DELIVER',
+          backendEndpoint: 'https://backend.example.test',
+          httpRetries: 0,
+        }),
+        runDeps(new FakeAdapter(() => [k1, recovered]), stateDir, {
+          post: failingPost,
+          tokenProvider: fakeTokenProvider().provider,
+        }),
+      );
+      expect(failedRun.report.newAmendmentCount).toBe(1);
+      expect(failedRun.report.delivery!.candidateCount).toBe(1);
+      expect(failedRun.report.delivery!.errorCount).toBe(1);
+      expect(createFileDeliveryStateStore(stateDir).load().pending[recovered.eventKey]).toBeDefined();
+      const sourceStateAfterFail = createFileStateStore(stateDir).load();
+      expect(sourceStateAfterFail.entries['32016R0679'].events[recovered.eventKey]).toBeDefined();
+
+      // Run 3: CELLAR no longer returns the event. W1 reports it as
+      // missing-from-source and NOT NEW; delivery still recovers it from the
+      // durable baseline and marks it delivered.
+      const { provider, calls: tokenCalls } = fakeTokenProvider();
+      const { post, calls } = scriptedPost([
+        w2Response([{ key: recovered.eventKey, status: 'ACCEPTED' }]),
+      ]);
+      const recoveryRun = await runWatcher(
+        watcherConfig(manifestPath, stateDir, {
+          deliveryMode: 'DELIVER',
+          backendEndpoint: 'https://backend.example.test',
+        }),
+        runDeps(new FakeAdapter(() => [k1]), stateDir, { post, tokenProvider: provider }),
+      );
+      expect(recoveryRun.report.newAmendmentCount).toBe(0);
+      expect(recoveryRun.report.celexResults[0].status).toBe('UNCHANGED');
+      expect(recoveryRun.report.celexResults[0].missingFromSourceKeys).toContain(
+        recovered.eventKey,
+      );
+      expect(tokenCalls.count).toBe(1);
+      expect(calls).toHaveLength(1);
+      const envelope = JSON.parse(calls[0].body);
+      expect(envelope.observations).toHaveLength(1);
+      expect(envelope.observations[0].idempotencyKey).toBe(recovered.eventKey);
+      expect(envelope.observations[0].evidence).toEqual({
+        sourceUri: recovered.sourceUri,
+        sha256: recovered.payloadHash,
+        capturedAt: recovered.capturedAt,
+        queryProvenance: recovered.queryProvenance,
+      });
+      expect(recoveryRun.report.delivery!.candidateCount).toBe(1);
+      expect(recoveryRun.report.delivery!.attemptedCount).toBe(1);
+      expect(recoveryRun.report.delivery!.acceptedCount).toBe(1);
+
+      const afterRecovery = createFileDeliveryStateStore(stateDir).load();
+      expect(afterRecovery.schemaVersion).toBe(1);
+      expect(afterRecovery.delivered[recovered.eventKey]).toEqual({
+        deliveredAt: '2026-09-27T12:00:00.000Z',
+        backendStatus: 'ACCEPTED',
+      });
+      expect(afterRecovery.pending[recovered.eventKey]).toBeUndefined();
+      // delivery.json remains bookkeeping-only: no event payload is duplicated.
+      const deliveryText = fs.readFileSync(path.join(stateDir, 'delivery.json'), 'utf8');
+      expect(deliveryText).not.toContain(recovered.sourceUri);
+      expect(deliveryText).not.toContain(recovered.payloadHash);
+      expect(deliveryText).not.toContain(recovered.queryProvenance);
+      // W1 baseline semantics are preserved: the event is retained unchanged
+      // and still not NEW.
+      const sourceAfterRecovery = createFileStateStore(stateDir).load();
+      expect(sourceAfterRecovery.entries['32016R0679'].events[recovered.eventKey]).toEqual(
+        recovered,
+      );
+
+      // Run 4: with the event delivered, the baseline no longer produces a
+      // candidate and no POST/token request happens.
+      const { provider: settledProvider, calls: settledTokenCalls } = fakeTokenProvider();
+      const { post: settledPost, calls: settledCalls } = scriptedPost([]);
+      const settled = await runWatcher(
+        watcherConfig(manifestPath, stateDir, {
+          deliveryMode: 'DELIVER',
+          backendEndpoint: 'https://backend.example.test',
+        }),
+        runDeps(new FakeAdapter(() => [k1]), stateDir, {
+          post: settledPost,
+          tokenProvider: settledProvider,
+        }),
+      );
+      expect(settled.report.delivery!.candidateCount).toBe(0);
+      expect(settledTokenCalls.count).toBe(0);
+      expect(settledCalls).toHaveLength(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('pending baseline event is retried while the current observation is SOURCE_ERROR', async () => {
+    const { dir, manifestPath, stateDir } = setup('baseline-source-error');
+    try {
+      writeManifest(manifestPath);
+      const k1 = AMEND_A();
+      const pendingEvent = AMEND_B();
+
+      await runWatcher(
+        watcherConfig(manifestPath, stateDir),
+        runDeps(new FakeAdapter(() => [k1]), stateDir),
+      );
+      const { post: failingPost } = scriptedPost([jsonResponse('unavailable', 503)]);
+      await runWatcher(
+        watcherConfig(manifestPath, stateDir, {
+          deliveryMode: 'DELIVER',
+          backendEndpoint: 'https://backend.example.test',
+          httpRetries: 0,
+        }),
+        runDeps(new FakeAdapter(() => [k1, pendingEvent]), stateDir, {
+          post: failingPost,
+          tokenProvider: fakeTokenProvider().provider,
+        }),
+      );
+      expect(
+        createFileDeliveryStateStore(stateDir).load().pending[pendingEvent.eventKey],
+      ).toBeDefined();
+      const sourceBefore = fs.readFileSync(path.join(stateDir, 'state.json'), 'utf8');
+
+      // The current CELLAR observation fails, but the pending event is still
+      // retried from the durable baseline and delivered.
+      const { provider, calls: tokenCalls } = fakeTokenProvider();
+      const { post, calls } = scriptedPost([
+        w2Response([{ key: pendingEvent.eventKey, status: 'ACCEPTED' }]),
+      ]);
+      const retryRun = await runWatcher(
+        watcherConfig(manifestPath, stateDir, {
+          deliveryMode: 'DELIVER',
+          backendEndpoint: 'https://backend.example.test',
+        }),
+        runDeps(new FakeAdapter(() => new Error('source down')), stateDir, {
+          post,
+          tokenProvider: provider,
+        }),
+      );
+      expect(tokenCalls.count).toBe(1);
+      expect(retryRun.report.sourceErrorCount).toBe(1);
+      expect(calls).toHaveLength(1);
+      const envelope = JSON.parse(calls[0].body);
+      expect(envelope.observations.map((o: { idempotencyKey: string }) => o.idempotencyKey)).toEqual(
+        [pendingEvent.eventKey],
+      );
+      const afterRetry = createFileDeliveryStateStore(stateDir).load();
+      expect(afterRetry.delivered[pendingEvent.eventKey]).toBeDefined();
+      expect(afterRetry.pending[pendingEvent.eventKey]).toBeUndefined();
+      // A failed source observation never advances the baseline.
+      expect(fs.readFileSync(path.join(stateDir, 'state.json'), 'utf8')).toBe(sourceBefore);
+
+      // Once delivered, the baseline never offers the event again.
+      const { provider: settledProvider, calls: settledTokenCalls } = fakeTokenProvider();
+      const { post: settledPost, calls: settledCalls } = scriptedPost([]);
+      const settled = await runWatcher(
+        watcherConfig(manifestPath, stateDir, {
+          deliveryMode: 'DELIVER',
+          backendEndpoint: 'https://backend.example.test',
+        }),
+        runDeps(new FakeAdapter(() => new Error('source down')), stateDir, {
+          post: settledPost,
+          tokenProvider: settledProvider,
+        }),
+      );
+      expect(settled.report.delivery!.candidateCount).toBe(0);
+      expect(settledTokenCalls.count).toBe(0);
+      expect(settledCalls).toHaveLength(0);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('delivery configuration', () => {
@@ -888,6 +1154,17 @@ describe('delivery configuration', () => {
         clientSecret: 'client-secret',
         scope: 'api://backend/.default',
       });
+    });
+  });
+
+  test('batch size limit matches the W2 ingestion contract: 100 accepted, 101 rejected', () => {
+    withCleanEnv(() => {
+      process.env.LEGAL_WATCHER_DELIVERY_BATCH_SIZE = '100';
+      expect(resolveConfig(parseArgs(['--manifest', 'm.json'])).deliveryBatchSize).toBe(100);
+      process.env.LEGAL_WATCHER_DELIVERY_BATCH_SIZE = '101';
+      expect(() => resolveConfig(parseArgs(['--manifest', 'm.json']))).toThrow(ConfigError);
+      process.env.LEGAL_WATCHER_DELIVERY_BATCH_SIZE = '0';
+      expect(() => resolveConfig(parseArgs(['--manifest', 'm.json']))).toThrow(ConfigError);
     });
   });
 });

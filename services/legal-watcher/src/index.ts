@@ -245,7 +245,7 @@ export async function runWatcher(
     tokenProvider !== null &&
     deliveryState !== null
   ) {
-    const candidates = selectDeliveryCandidates(celexResults, deliveryState);
+    const candidates = selectDeliveryCandidates(celexResults, deliveryState, state);
     logger.info('LW_DELIVERY_PLAN', 'delivery candidates selected', {
       runId,
       candidates: candidates.length,
