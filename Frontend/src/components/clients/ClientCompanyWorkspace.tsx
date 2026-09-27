@@ -8,6 +8,9 @@ import { companyFactTypeLabel, factVerificationLabel } from "@/lib/clientCompany
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
 import { ClientCompanyOperationsLegacy } from "@/components/clients/ClientCompanyOperationsLegacy";
 import { DemoContentBanner } from "@/components/client-portal/PortalPresentationPrimitives";
+import { BusinessSystemPanel, type SystemEditValue } from "@/components/clients/company-operations/BusinessSystemPanel";
+import { BusinessProcessPanel, type ProcessEditValue } from "@/components/clients/company-operations/BusinessProcessPanel";
+import { BusinessProcessStepsPanel } from "@/components/clients/company-operations/BusinessProcessStepsPanel";
 
 export type WorkspaceSection =
   | "overview"
@@ -389,6 +392,11 @@ export function ClientCompanyWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("overview");
   const router = useRouter();
+  const [systemPanelValue, setSystemPanelValue] = useState<SystemEditValue | null>(null);
+  const [systemPanelOpen, setSystemPanelOpen] = useState(false);
+  const [processPanelValue, setProcessPanelValue] = useState<ProcessEditValue | null>(null);
+  const [processPanelOpen, setProcessPanelOpen] = useState(false);
+  const [stepsTarget, setStepsTarget] = useState<{ id: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -405,6 +413,17 @@ export function ClientCompanyWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Soft re-read of the authoritative read model after a mutation succeeds, so
+  // newly created/edited processes, steps and systems appear without a full
+  // loading flash and without dropping user-entered form state.
+  const refreshWorkspace = useCallback(async () => {
+    try {
+      setRoom(await clientWorkspaceApi.getDataRoom(clientId));
+    } catch {
+      // Keep already-rendered data on a transient re-read failure.
+    }
+  }, [clientId]);
 
   // Synchronize URL query parameter (?section=) with active section & support browser back/forward.
   // Cross-domain sections that now live in canonical modules redirect (replace) instead of rendering.
@@ -995,6 +1014,22 @@ export function ClientCompanyWorkspace({
 
           {activeSection === "processes" ? (
             <Panel id="processes" title="Folyamatok">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-stone-500">
+                  Rögzített folyamatok: <strong className="text-stone-800">{room.processes.length}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProcessPanelValue(null);
+                    setProcessPanelOpen(true);
+                  }}
+                  data-testid="add-process"
+                  className="adm-link-button px-3 py-1.5 text-xs font-semibold"
+                >
+                  + Folyamat rögzítése
+                </button>
+              </div>
               <div className="space-y-4">
                 {room.processes.map((process) => (
                   <article
@@ -1010,9 +1045,38 @@ export function ClientCompanyWorkspace({
                           <span className="font-medium text-stone-700">{humanStatus(process.status)}</span>
                         </p>
                       </div>
-                      <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-stone-600">
-                        Becsült értékek
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStepsTarget({ id: process.id, name: process.name })}
+                          data-testid={`manage-steps-${process.id}`}
+                          className="adm-link-button px-2.5 py-1 text-xs"
+                        >
+                          Lépések
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProcessPanelValue({
+                              id: process.id,
+                              name: process.name,
+                              category: process.category,
+                              description: process.description,
+                              criticality: process.criticality,
+                              frequency: process.frequency,
+                              ownerPersonId: process.owner?.id ?? null,
+                            });
+                            setProcessPanelOpen(true);
+                          }}
+                          data-testid={`edit-process-${process.id}`}
+                          className="adm-link-button px-2.5 py-1 text-xs"
+                        >
+                          Szerkesztés
+                        </button>
+                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-stone-600">
+                          Becsült értékek
+                        </span>
+                      </div>
                     </div>
 
                     {process.description ? (
@@ -1107,6 +1171,22 @@ export function ClientCompanyWorkspace({
 
           {activeSection === "systems" ? (
             <Panel id="systems" title="Rendszerek">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-stone-500">
+                  Nyilvántartott rendszerek: <strong className="text-stone-800">{room.systems.length}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemPanelValue(null);
+                    setSystemPanelOpen(true);
+                  }}
+                  data-testid="add-system"
+                  className="adm-link-button px-3 py-1.5 text-xs font-semibold"
+                >
+                  + Rendszer rögzítése
+                </button>
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {room.systems.map((system) => (
                   <article
@@ -1115,9 +1195,28 @@ export function ClientCompanyWorkspace({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="font-semibold text-stone-900">{system.name}</h3>
-                      <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[10px] font-semibold text-stone-600 uppercase">
-                        {humanStatus(system.status)}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[10px] font-semibold text-stone-600 uppercase">
+                          {humanStatus(system.status)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSystemPanelValue({
+                              id: system.id,
+                              name: system.name,
+                              category: system.category,
+                              purpose: system.purpose,
+                              ownerPersonId: system.owner?.id ?? null,
+                            });
+                            setSystemPanelOpen(true);
+                          }}
+                          data-testid={`edit-system-${system.id}`}
+                          className="adm-link-button px-2.5 py-1 text-xs"
+                        >
+                          Szerkesztés
+                        </button>
+                      </div>
                     </div>
                     <p className="mt-1 text-xs text-stone-500">Kategória: {system.category}</p>
                     {system.vendor || system.purpose ? (
@@ -1366,6 +1465,46 @@ export function ClientCompanyWorkspace({
             <ClientCompanyOperationsLegacy clientId={clientId} clientName={clientName} />
           </div>
         </section>
+      ) : null}
+
+      {systemPanelOpen ? (
+        <BusinessSystemPanel
+          clientId={clientId}
+          system={systemPanelValue}
+          people={room?.organization.people ?? []}
+          onSaved={() => {
+            setSystemPanelOpen(false);
+            void refreshWorkspace();
+          }}
+          onClose={() => setSystemPanelOpen(false)}
+        />
+      ) : null}
+
+      {processPanelOpen ? (
+        <BusinessProcessPanel
+          clientId={clientId}
+          process={processPanelValue}
+          people={room?.organization.people ?? []}
+          onSaved={(created) => {
+            setProcessPanelOpen(false);
+            if (created) {
+              setStepsTarget({ id: created.id, name: created.name });
+            }
+            void refreshWorkspace();
+          }}
+          onClose={() => setProcessPanelOpen(false)}
+        />
+      ) : null}
+
+      {stepsTarget ? (
+        <BusinessProcessStepsPanel
+          processId={stepsTarget.id}
+          processName={stepsTarget.name}
+          systems={room?.systems ?? []}
+          people={room?.organization.people ?? []}
+          onSaved={() => void refreshWorkspace()}
+          onClose={() => setStepsTarget(null)}
+        />
       ) : null}
     </div>
   );
