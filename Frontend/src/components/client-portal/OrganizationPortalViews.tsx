@@ -315,6 +315,7 @@ function OrganizationMatterDetail({
       matter={matter}
       showDocuments={detail.capabilities.showDocuments}
       showMessages={detail.capabilities.showMessages}
+      publishedProgressPercentage={detail.progressPercentage}
       requestsSection={
         <CustomerInteractionCard caseId={matter.caseId} matterPublicationId={detail.matterPublicationId} scope="requests" />
       }

@@ -2245,6 +2245,95 @@ select {
   background: var(--adm-warm-500);
 }
 
+/* Published progress strip (customer portal matter detail).
+   Fill is driven by the canonical published progressPercentage; steps come
+   from the published milestone snapshot only. */
+.cp-progress-meter {
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--adm-border);
+  background: var(--adm-ivory-100);
+  overflow: hidden;
+}
+
+.cp-progress-meter-fill {
+  display: block;
+  height: 100%;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--adm-green-800);
+  transition: width 300ms ease;
+}
+
+.cp-progress-strip {
+  align-items: flex-start;
+}
+
+.cp-progress-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  padding-top: 26px;
+  text-align: center;
+}
+
+.cp-progress-dot {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid var(--adm-border-strong);
+  background: var(--adm-surface-raised);
+}
+
+.cp-progress-step[data-state="COMPLETED"] .cp-progress-dot {
+  border-color: var(--adm-green-800);
+  background: var(--adm-green-800);
+}
+
+.cp-progress-step[data-state="IN_PROGRESS"] .cp-progress-dot {
+  border-color: var(--adm-warm-500);
+  background: var(--adm-warm-500);
+  box-shadow: 0 0 0 4px rgba(253, 158, 2, 0.18);
+}
+
+.cp-progress-connector {
+  position: absolute;
+  top: 11px;
+  left: calc(-50% + 8px);
+  right: calc(50% + 8px);
+  height: 2px;
+  background: var(--adm-border-strong);
+}
+
+.cp-progress-step[data-prev-state="COMPLETED"] .cp-progress-connector {
+  background: var(--adm-green-800);
+}
+
+.cp-progress-title {
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--adm-text);
+  overflow-wrap: anywhere;
+}
+
+.cp-progress-state {
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--adm-text-muted);
+}
+
+.cp-progress-step[data-state="IN_PROGRESS"] .cp-progress-state {
+  color: #8a5a06;
+}
+
 /* Update thread */
 .cp-update-thread {
   position: relative;

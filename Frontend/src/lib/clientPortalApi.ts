@@ -156,6 +156,8 @@ export type PortalOrganizationCase = {
 export type PortalOrganizationCaseDetail = PortalOrganizationCase & {
   requesterDisplayName: string | null;
   currentStatusText: string;
+  /** Canonical published progress, stored on the published matter revision. */
+  progressPercentage: number | null;
   safeMilestones: Array<{ reference?: string; title?: string; description?: string | null; state?: string; displayOrder?: number; completedAt?: string | null }>;
   capabilities: {
     showTimeline: boolean;
