@@ -9,6 +9,7 @@ import {
   LEGAL_SOURCE_OBSERVATION_REVIEW_STATUSES,
   buildLegalSourceObservationListQuery,
 } from '../src/lib/complianceCenterApi';
+import { hasMoreObservationPages } from '../src/components/compliance-center/LegalSourceObservationReviewPanel';
 
 /**
  * W3C-A — Compliance Center review UI for legal-source observations.
@@ -193,4 +194,57 @@ test('ComplianceCenter mounts the queue above the registry and preserves existin
   assert.ok(centerSource.includes('Nem fut folyamatos külső jogforrás-figyelő'));
   assert.ok(centerSource.includes('<LegalSourceImpactPanel'), 'the existing impact panel must remain mounted');
   assert.ok(centerSource.includes('Jogforrás-nyilvántartás'));
+});
+
+test('load-more is gated by the accumulated rendered population, not the raw offset', () => {
+  assert.ok(
+    panelSource.includes('const hasMore = hasMoreObservationPages(items.length, total);'),
+    'hasMore must derive from the accumulated items length',
+  );
+  assert.ok(
+    !panelSource.includes('offset + items.length'),
+    'hasMore must not re-count already loaded pages',
+  );
+  assert.ok(panelSource.includes('{hasMore ? ('), 'the load-more control must be gated by hasMore');
+  assert.ok(panelSource.includes('Továbbiak betöltése'));
+});
+
+test('total=60: after two 25-row pages the load-more stays available until the final 10 rows load', () => {
+  const pageSizes = [25, 25, 10];
+  let loaded = 0;
+
+  loaded += pageSizes[0];
+  assert.equal(loaded, 25);
+  assert.equal(hasMoreObservationPages(loaded, 60), true, 'page 1 of 3 must offer load-more');
+
+  loaded += pageSizes[1];
+  assert.equal(loaded, 50);
+  assert.equal(
+    hasMoreObservationPages(loaded, 60),
+    true,
+    'after page 2 the final 10 records must remain reachable',
+  );
+
+  loaded += pageSizes[2];
+  assert.equal(loaded, 60);
+  assert.equal(
+    hasMoreObservationPages(loaded, 60),
+    false,
+    'after page 3 the load-more button must disappear',
+  );
+});
+
+test('total=50: an exact multiple of the page size hides the load-more after two pages', () => {
+  let loaded = 0;
+
+  loaded += 25;
+  assert.equal(hasMoreObservationPages(loaded, 50), true, 'page 1 of 2 must offer load-more');
+
+  loaded += 25;
+  assert.equal(loaded, 50);
+  assert.equal(
+    hasMoreObservationPages(loaded, 50),
+    false,
+    'no further records exist, so no further button is shown',
+  );
 });

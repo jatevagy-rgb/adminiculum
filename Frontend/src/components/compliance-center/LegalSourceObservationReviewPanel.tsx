@@ -26,6 +26,10 @@ type BadgeTone = "green" | "gold" | "amber" | "blue" | "sage" | "violet" | "burg
 
 const PAGE_SIZE = 25;
 
+export function hasMoreObservationPages(loadedCount: number, total: number): boolean {
+  return loadedCount < total;
+}
+
 const reviewStatusLabels: Record<LegalSourceObservationReviewStatus, string> = {
   NEW: "Új",
   IN_REVIEW: "Felülvizsgálat alatt",
@@ -249,7 +253,7 @@ export function LegalSourceObservationReviewPanel() {
   const canStartReview = detail?.reviewStatus === "NEW";
   const canDecide = detail?.reviewStatus === "IN_REVIEW";
   const terminalCopy = detail ? terminalStatusCopy[detail.reviewStatus] : undefined;
-  const hasMore = offset + items.length < total;
+  const hasMore = hasMoreObservationPages(items.length, total);
 
   return (
     <div className="space-y-5">
