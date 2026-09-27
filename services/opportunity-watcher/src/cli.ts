@@ -130,6 +130,8 @@ export async function runCli(options: CliOptions): Promise<{ report: DryRunRepor
       fetchedCount,
       normalizedCount: variants.length,
       rejectedCount: rejections.length,
+      enrichedCount: 0,
+      enrichmentRejectedCount: 0,
       variants,
       rejections,
     };
