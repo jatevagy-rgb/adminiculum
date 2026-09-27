@@ -326,6 +326,9 @@ app.use('/api/v1', legalAnalysesRoutes);
 import aiPromptRoutes from './modules/ai-prompts/routes';
 app.use('/api/v1/ai-prompts', aiPromptRoutes);
 
+import caseContextRoutes from './modules/case-context/routes';
+app.use('/api/v1', caseContextRoutes);
+
 import documentsRoutes from './modules/documents/routes';
 app.use('/api/v1/documents', documentsRoutes);
 

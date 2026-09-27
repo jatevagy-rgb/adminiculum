@@ -124,6 +124,7 @@ model User {
   decidedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDecidedBy")
   deletedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDeletedBy")
   documentModificationProposalEvents   DocumentModificationProposalEvent[] @relation("DocumentModificationProposalEventActor")
+  caseContextSources                  CaseContextSource[]               @relation("CaseContextSourceCreatedBy")
   createdContractDateCandidates        ContractDateCandidate[]             @relation("ContractDateCandidateCreatedBy")
   decidedContractDateCandidates        ContractDateCandidate[]             @relation("ContractDateCandidateDecidedBy")
 
@@ -849,6 +850,7 @@ model Case {
   contractRecords           ContractRecord[]
   workPackage               CaseWorkPackage?
   caseTimeEntries           TimeEntry[]                @relation("CaseTimeEntries")
+  caseContextSources        CaseContextSource[]
 
   @@map("cases")
 }
@@ -3718,6 +3720,7 @@ model Communication {
   // Relations - optional back relations
   attachments  CommunicationAttachment[]
   relatedTasks Task[]                    @relation("CommunicationTasks")
+  caseContextSources CaseContextSource[]
 
   @@unique([mailboxConnectionId, mailboxProviderMessageId], map: "communications_mailbox_message_unique")
   @@index([caseId, createdAt])
@@ -6716,4 +6719,59 @@ model TaskCollaborator {
   @@unique([taskId, userId])
   @@index([userId])
   @@map("task_collaborators")
+}
+
+// ============================================================================
+// CASE CONTEXT SOURCES (CASE-CONTEXT-V2-BACKEND)
+//
+// Workforce-internal, additive only. A CaseContextSource persists raw pasted
+// case context (or a server-side snapshot of a Communication body) immutably,
+// plus — after an approved anonymize apply — a derived `anonymizedText` and a
+// safe, non-reversible `anonymizationSnapshot`. The reversible
+// original→placeholder mapping is NEVER persisted: it exists only in the
+// in-memory anonymization result and is discarded after each request.
+//
+// `rawText` is immutable by construction — the API/service exposes no update
+// path. A corrected source means creating a new CaseContextSource. Durable state
+// is derived, not stored: RAW == anonymizedText IS NULL, ANONYMIZED == NOT NULL.
+//
+// Never exposed to the Client Portal.
+// ============================================================================
+
+enum CaseContextOrigin {
+  PASTED
+  COMMUNICATION
+}
+
+model CaseContextSource {
+  id          String            @id @default(uuid())
+  caseId      String
+  case        Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User              @relation("CaseContextSourceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  origin CaseContextOrigin
+
+  // Provenance for COMMUNICATION-origin sources. Nullable SetNull so deleting a
+  // Communication never deletes the snapshotted legal context source.
+  sourceCommunicationId String?
+  sourceCommunication   Communication? @relation(fields: [sourceCommunicationId], references: [id], onDelete: SetNull)
+
+  // Immutable raw source text. No PATCH/PUT exists; corrections create a new row.
+  rawText String
+
+  // Derived, persisted only after an approved one-shot anonymize apply.
+  anonymizedText String?
+
+  // Safe, non-reversible metadata only (algorithmRevision, sourceHash,
+  // resultHash, appliedCount, categoryCounts, warnings, mappingLocation). Never
+  // the reversible mapping, never candidate originalText, never manual terms.
+  anonymizationSnapshot Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([caseId, createdAt])
+  @@index([sourceCommunicationId])
+  @@map("case_context_sources")
 }
