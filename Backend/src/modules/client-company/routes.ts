@@ -20,6 +20,11 @@ import {
 } from '../company-growth/observation/processObservationService';
 import { submitSurveyIntake, listSurveyIntakes } from '../company-observatory/intake';
 import { ObservatoryIngestionService } from '../company-observatory/ingestion/service';
+import {
+  importExternalOpportunityBatch,
+  listExternalOpportunities,
+  getExternalOpportunity,
+} from '../company-observatory/ingestion/opportunityImport';
 import { getDiagnosticWorkbench } from '../company-growth/diagnostic/workbenchService';
 import {
   createOpportunityPublicationDraft,
@@ -234,6 +239,42 @@ clientCompanyRouter.get('/clients/:clientId/observatory/sources', async (req, re
 clientCompanyRouter.get('/clients/:clientId/observatory/runs/:runId/observations', async (req, res) => {
   try {
     res.json({ items: await observatory.listObservationsForRun(actor(req), { clientId: String(req.params.clientId), runId: String(req.params.runId) }) });
+  } catch (e) { fail(res, e); }
+});
+
+// ---------------------------------------------------------------------------
+// GWO-3A — company-scoped external opportunities (internal, discovery only).
+// Import is workforce-authorized manual/internal ingestion; reads use the
+// canonical internal company read access. No customer/portal route exists.
+// ---------------------------------------------------------------------------
+
+function optionalNumber(value: unknown): number | undefined {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+clientCompanyRouter.post('/clients/:clientId/grow/external-opportunities/imports', async (req, res) => {
+  try {
+    const result = await importExternalOpportunityBatch(actor(req), String(req.params.clientId), req.body ?? {});
+    res.status(201).json(result);
+  } catch (e) { fail(res, e); }
+});
+
+clientCompanyRouter.get('/clients/:clientId/grow/external-opportunities', async (req, res) => {
+  try {
+    res.json(await listExternalOpportunities(actor(req), String(req.params.clientId), {
+      status: typeof req.query.status === 'string' && req.query.status.length > 0 ? req.query.status : undefined,
+      sourceType: typeof req.query.sourceType === 'string' && req.query.sourceType.length > 0 ? req.query.sourceType : undefined,
+      limit: optionalNumber(req.query.limit),
+      offset: optionalNumber(req.query.offset),
+    }));
+  } catch (e) { fail(res, e); }
+});
+
+clientCompanyRouter.get('/clients/:clientId/grow/external-opportunities/:opportunityId', async (req, res) => {
+  try {
+    res.json(await getExternalOpportunity(actor(req), String(req.params.clientId), String(req.params.opportunityId)));
   } catch (e) { fail(res, e); }
 });
 

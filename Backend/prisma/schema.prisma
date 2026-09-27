@@ -218,6 +218,8 @@ model Client {
   discoveryRuns             DiscoveryRun[]
   observations              Observation[]
 
+  externalOpportunities     ExternalOpportunity[]
+
   processObservationSnapshots ProcessObservationSnapshot[]
 
   researchEvidence         ResearchEvidence[]
@@ -6095,6 +6097,8 @@ model ExternalSourceConnection {
   runs         DiscoveryRun[]
   observations Observation[]
 
+  externalOpportunities ExternalOpportunity[]
+
   @@unique([id, clientId])
   @@index([clientId, status])
   @@map("external_source_connections")
@@ -6135,11 +6139,53 @@ model Observation {
   createdAt       DateTime                 @default(now())
   evidenceRecords EvidenceRecord[]
 
+  currentForExternalOpportunities ExternalOpportunity[] @relation("ExternalOpportunityCurrentObservation")
+
   @@unique([id, clientId])
   @@unique([clientId, connectionId, idempotencyKey])
   @@index([clientId, observationType])
   @@index([clientId, connectionId, discoveryRunId])
   @@map("observations")
+}
+
+/// GWO-3A — company-scoped current projection of an external opportunity.
+/// One row per (client, sourceType, businessKey, scopeKey). Identity never
+/// includes title/language/revision/observedAt. Immutable history stays in
+/// Observation; `currentObservationId` points at the current immutable row.
+/// No evaluation, criterion, saved/watch, handoff or notification fields.
+model ExternalOpportunity {
+  id                     String                   @id @default(uuid())
+  clientId               String
+  client                 Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceType             String
+  connectionId           String
+  connection             ExternalSourceConnection @relation(fields: [connectionId, clientId], references: [id, clientId], onDelete: Restrict)
+  businessKey            String
+  scopeKey               String
+  kind                   String
+  title                  String
+  sourceUrl              String
+  status                 String
+  publicationAt          DateTime?
+  openingAt              DateTime?
+  deadlineAt             DateTime?
+  sourceMetadata         Json                     @default("{}")
+  lastRevisionIdentifier String?
+  lastContentHash        String                   @db.VarChar(64)
+  schemaVersion          Int
+  currentObservationId   String
+  currentObservation     Observation              @relation("ExternalOpportunityCurrentObservation", fields: [currentObservationId, clientId], references: [id, clientId], onDelete: Restrict)
+  lastSeenAt             DateTime
+  revision               Int                      @default(1)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  @@unique([id, clientId])
+  @@unique([clientId, sourceType, businessKey, scopeKey])
+  @@index([clientId, status])
+  @@index([clientId, sourceType])
+  @@index([clientId, deadlineAt])
+  @@map("external_opportunities")
 }
 
 enum ControlDefinitionType {
