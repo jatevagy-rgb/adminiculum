@@ -40,7 +40,7 @@ import {
 import { extractCelexDemand, loadManifestFile, ManifestError } from './manifest';
 import { createJsonLogger, truncate, type Logger } from './logging';
 import { buildReport, renderHumanSummary } from './report';
-import { createClientCredentialsTokenProvider, type AccessTokenProvider } from './tokenProvider';
+import { createTokenProviderFromConfig, type AccessTokenProvider } from './tokenProvider';
 import {
   STATE_SCHEMA_VERSION,
   type CelexRunResult,
@@ -87,9 +87,14 @@ export const HELP_TEXT = [
   '  LEGAL_WATCHER_HTTP_BACKOFF_MS, LEGAL_WATCHER_HTTP_BACKOFF_FACTOR,',
   '  LEGAL_WATCHER_RESPONSE_MAX_BYTES, LEGAL_WATCHER_CONCURRENCY,',
   '  LEGAL_WATCHER_DELIVERY_MODE (DRY_RUN|DELIVER), LEGAL_WATCHER_DELIVERY_BATCH_SIZE,',
-  '  LEGAL_WATCHER_BACKEND_ENDPOINT (DELIVER only), LEGAL_WATCHER_AZURE_TENANT_ID,',
-  '  LEGAL_WATCHER_AZURE_CLIENT_ID, LEGAL_WATCHER_AZURE_CLIENT_SECRET,',
-  '  LEGAL_WATCHER_AZURE_SCOPE, LEGAL_WATCHER_AZURE_AUTHORITY_HOST (DELIVER only)',
+  '  LEGAL_WATCHER_BACKEND_ENDPOINT (DELIVER only),',
+  '  LEGAL_WATCHER_AZURE_AUTH_MODE (CLIENT_SECRET|MANAGED_IDENTITY; default CLIENT_SECRET),',
+  '  CLIENT_SECRET mode (default): LEGAL_WATCHER_AZURE_TENANT_ID, LEGAL_WATCHER_AZURE_CLIENT_ID,',
+  '  LEGAL_WATCHER_AZURE_CLIENT_SECRET, LEGAL_WATCHER_AZURE_SCOPE,',
+  '  LEGAL_WATCHER_AZURE_AUTHORITY_HOST (DELIVER only),',
+  '  MANAGED_IDENTITY mode: LEGAL_WATCHER_AZURE_SCOPE (api://<backend-app-id>/.default) or',
+  '  LEGAL_WATCHER_AZURE_RESOURCE (api://<backend-app-id>), plus the runtime-provided',
+  '  IDENTITY_ENDPOINT and IDENTITY_HEADER (DELIVER only; no secret required)',
   '',
   'DEFAULT IS DRY RUN: zero Adminiculum backend writes, no token request. First',
   'successful observation of a CELEX establishes a FIRST_SEEN_BASELINE (historical',
@@ -384,7 +389,7 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
         throw new ConfigError('DELIVER mode requires app-only token configuration');
       }
       deps.deliveryStore = createFileDeliveryStateStore(config.stateDir);
-      deps.tokenProvider = createClientCredentialsTokenProvider(config.tokenConfig);
+      deps.tokenProvider = createTokenProviderFromConfig(config.tokenConfig);
       deps.deliveryPost = nodeFetchWithHeaders;
     }
     const { report, exitCode } = await runWatcher(config, deps);

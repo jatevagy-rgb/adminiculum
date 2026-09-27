@@ -8,7 +8,13 @@
  * configuration fails before any observation or network work. All HTTP knobs
  * are bounded.
  */
-import type { AppOnlyTokenConfig } from './tokenProvider';
+import {
+  deriveManagedIdentityResourceFromScope,
+  isValidManagedIdentityResource,
+  type AppOnlyTokenConfig,
+  type ManagedIdentityTokenConfig,
+  type WatcherTokenConfig,
+} from './tokenProvider';
 import type { DeliveryMode } from './types';
 
 export const DEFAULT_EURLEX_ENDPOINT = 'https://publications.europa.eu/webapi/rdf/sparql';
@@ -32,8 +38,14 @@ export interface WatcherConfig {
   /** Observations per W2 request (1..100, the W2 ingestion batch maximum). */
   deliveryBatchSize?: number;
   /** App-only token configuration; required in DELIVER mode. */
-  tokenConfig?: AppOnlyTokenConfig | null;
+  tokenConfig?: WatcherTokenConfig | null;
 }
+
+/**
+ * Explicit app-only auth mode. Unset/empty preserves the historical
+ * CLIENT_SECRET behavior; MANAGED_IDENTITY is opt-in and never falls back.
+ */
+export type AzureAuthMode = 'CLIENT_SECRET' | 'MANAGED_IDENTITY';
 
 export interface CliArgs {
   manifestPath?: string;
@@ -97,6 +109,15 @@ export function parseDeliveryMode(raw: string): DeliveryMode {
   );
 }
 
+export function parseAzureAuthMode(raw: string): AzureAuthMode {
+  const normalized = raw.trim().toUpperCase();
+  if (normalized === '' || normalized === 'CLIENT_SECRET') return 'CLIENT_SECRET';
+  if (normalized === 'MANAGED_IDENTITY') return 'MANAGED_IDENTITY';
+  throw new ConfigError(
+    `invalid LEGAL_WATCHER_AZURE_AUTH_MODE: ${raw} (expected CLIENT_SECRET or MANAGED_IDENTITY)`,
+  );
+}
+
 function resolveBackendEndpoint(): string | null {
   const raw = (process.env.LEGAL_WATCHER_BACKEND_ENDPOINT ?? '').trim();
   if (raw === '') return null;
@@ -109,7 +130,7 @@ function resolveBackendEndpoint(): string | null {
   return normalized;
 }
 
-function resolveTokenConfig(): AppOnlyTokenConfig {
+function resolveClientSecretTokenConfig(): AppOnlyTokenConfig {
   const tenantId = (process.env.LEGAL_WATCHER_AZURE_TENANT_ID ?? '').trim();
   const clientId = (process.env.LEGAL_WATCHER_AZURE_CLIENT_ID ?? '').trim();
   const clientSecret = process.env.LEGAL_WATCHER_AZURE_CLIENT_SECRET ?? '';
@@ -130,6 +151,52 @@ function resolveTokenConfig(): AppOnlyTokenConfig {
   };
 }
 
+/**
+ * MANAGED_IDENTITY mode: no secret, no tenant, no user-assigned client-id
+ * selector. The Adminiculum API resource is derived from a terminal
+ * `/.default` scope or given explicitly; Graph/ARM and non-api resources are
+ * rejected. The runtime identity endpoint/header must already be injected
+ * (Container Apps Job); otherwise configuration fails before any delivery.
+ */
+function resolveManagedIdentityTokenConfig(): ManagedIdentityTokenConfig {
+  const explicitResource = (process.env.LEGAL_WATCHER_AZURE_RESOURCE ?? '').trim();
+  const scope = (process.env.LEGAL_WATCHER_AZURE_SCOPE ?? '').trim();
+  let resource: string;
+  if (explicitResource !== '') {
+    if (!isValidManagedIdentityResource(explicitResource)) {
+      throw new ConfigError(
+        'invalid LEGAL_WATCHER_AZURE_RESOURCE for MANAGED_IDENTITY mode: expected ' +
+          'api://<backend-app-id> (Graph, ARM and non-api resources are rejected)',
+      );
+    }
+    if (scope !== '' && deriveManagedIdentityResourceFromScope(scope) !== explicitResource) {
+      throw new ConfigError(
+        'LEGAL_WATCHER_AZURE_RESOURCE conflicts with LEGAL_WATCHER_AZURE_SCOPE',
+      );
+    }
+    resource = explicitResource;
+  } else {
+    const derived = deriveManagedIdentityResourceFromScope(scope);
+    if (derived === null) {
+      throw new ConfigError(
+        'MANAGED_IDENTITY mode requires LEGAL_WATCHER_AZURE_SCOPE ' +
+          '(api://<backend-app-id>/.default) or LEGAL_WATCHER_AZURE_RESOURCE ' +
+          '(api://<backend-app-id>)',
+      );
+    }
+    resource = derived;
+  }
+  const identityEndpoint = (process.env.IDENTITY_ENDPOINT ?? '').trim();
+  const identityHeader = (process.env.IDENTITY_HEADER ?? '').trim();
+  if (identityEndpoint === '' || identityHeader === '') {
+    throw new ConfigError(
+      'MANAGED_IDENTITY mode requires the runtime IDENTITY_ENDPOINT and IDENTITY_HEADER ' +
+        'environment variables (system-assigned managed identity on Azure Container Apps)',
+    );
+  }
+  return { mode: 'MANAGED_IDENTITY', resource, identityEndpoint, identityHeader };
+}
+
 export function resolveConfig(args: CliArgs): WatcherConfig {
   const manifestPath =
     args.manifestPath ?? process.env.LEGAL_WATCHER_MANIFEST ?? '';
@@ -142,12 +209,16 @@ export function resolveConfig(args: CliArgs): WatcherConfig {
     ? 'DELIVER'
     : parseDeliveryMode(process.env.LEGAL_WATCHER_DELIVERY_MODE ?? 'DRY_RUN');
   const backendEndpoint = resolveBackendEndpoint();
-  let tokenConfig: AppOnlyTokenConfig | null = null;
+  let tokenConfig: WatcherTokenConfig | null = null;
   if (deliveryMode === 'DELIVER') {
     if (backendEndpoint === null) {
       throw new ConfigError('DELIVER mode requires LEGAL_WATCHER_BACKEND_ENDPOINT');
     }
-    tokenConfig = resolveTokenConfig();
+    const authMode = parseAzureAuthMode(process.env.LEGAL_WATCHER_AZURE_AUTH_MODE ?? '');
+    tokenConfig =
+      authMode === 'MANAGED_IDENTITY'
+        ? resolveManagedIdentityTokenConfig()
+        : resolveClientSecretTokenConfig();
   }
   return {
     manifestPath,
