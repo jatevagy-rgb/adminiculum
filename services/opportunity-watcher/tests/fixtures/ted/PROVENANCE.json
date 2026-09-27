@@ -1,0 +1,28 @@
+{
+  "note": "Fixtures for deterministic GWO-2 TED adapter tests. Bounded, provenance-backed. Synthetic fixtures are explicitly marked and never presented as live data.",
+  "fixtures": {
+    "notices-live-sample.json": {
+      "origin": "LIVE_CAPTURE_TRIMMED",
+      "sourceName": "TED Search API (published notices)",
+      "sourceUrl": "https://api.ted.europa.eu/v3/notices/search",
+      "requestBody": "JSON: { query: \"publication-date >= 20250901\", fields: [18 explicit fields], page: 1, limit: 10, paginationMode: \"PAGE_NUMBER\" }",
+      "capturedAt": "2026-09-27T19:15:00Z",
+      "httpStatus": 200,
+      "rawCaptureSha256": "f954d47675aa83c50dc69842ffc2618e0d9ae129ee216dc537cbb048a8093a44",
+      "trimming": "3 of 10 notices kept (single-lot with change fields; multi-lot with per-lot values; can-modif). notices[].notice-title and notices[].buyer-name trimmed to hun/eng/deu; notices[].links trimmed to xml + html.ENG/html.HUN. All identity/lot/value/deadline/CPV/NUTS/SME/BT-821/BT-758 fields preserved verbatim.",
+      "notices": {
+        "566524-2025": "single-lot (LOT-7460), change-reason-code update-add + BT-758 notice change reference",
+        "566527-2025": "multi-lot (4 lots) with per-lot estimated values and per-lot CPV",
+        "566529-2025": "can-modif award modification, place-of-performance-country-lot"
+      }
+    },
+    "notices-synthetic-edge.json": {
+      "origin": "SYNTHETIC",
+      "note": "Edge cases built on the verified live shape: (1) missing procedure-identifier; (2) procedure-level notice without identifier-lot; (3) mixed valid/empty lot identifiers; (4) German-only title/buyer without links; (5) notice-version bump without change fields. Not fetched from TED."
+    },
+    "notice-en-only-synthetic.json": {
+      "origin": "SYNTHETIC",
+      "note": "EN-only translation representation of the same notice identity (T17): same procedure/lot must not become a second business opportunity."
+    }
+  }
+}
