@@ -31,6 +31,8 @@ export type NormalizedOutlookMessage = {
   valid: boolean;
   invalidReason?: string;
   externalMessageId: string | null;
+  /** RFC Internet Message-ID only when the provider actually supplied one. */
+  internetMessageId: string | null;
   providerConversationId: string | null;
   mailboxAddress: string | null;
   direction: 'INBOUND' | 'OUTBOUND' | null;
@@ -46,6 +48,7 @@ export type NormalizedOutlookMessage = {
 
 type OutlookDryRunItem = {
   externalMessageId: string | null;
+  internetMessageId: string | null;
   providerConversationId: string | null;
   direction: 'INBOUND' | 'OUTBOUND' | null;
   wouldImport: boolean;
@@ -102,6 +105,9 @@ function readPayload(body: OutlookImportBody): { mailboxAddress: string; message
 export function normalizeOutlookMessage(raw: any, mailboxNorm: string, mailboxAddress: string): NormalizedOutlookMessage {
   const msg = (raw || {}) as Record<string, any>;
   const externalMessageId = typeof msg.externalMessageId === 'string' ? msg.externalMessageId.trim() : '';
+  // Strictly provider-supplied RFC Message-ID: never derived from externalMessageId,
+  // which may fall back to an arbitrary Graph provider id.
+  const internetMessageId = typeof msg.internetMessageId === 'string' ? msg.internetMessageId.trim() : '';
   const subject = typeof msg.subject === 'string' ? msg.subject.trim() : '';
   const sender = typeof msg.sender === 'string' ? msg.sender.trim() : '';
 
@@ -138,6 +144,7 @@ export function normalizeOutlookMessage(raw: any, mailboxNorm: string, mailboxAd
     valid,
     invalidReason,
     externalMessageId: externalMessageId || null,
+    internetMessageId: internetMessageId || null,
     providerConversationId: typeof msg.providerConversationId === 'string' ? msg.providerConversationId : null,
     mailboxAddress: mailboxAddress || null,
     direction,
@@ -184,6 +191,7 @@ export async function runOutlookImportDryRun(body: OutlookImportBody): Promise<R
 
     return {
       externalMessageId: n.externalMessageId,
+      internetMessageId: n.internetMessageId,
       providerConversationId: n.providerConversationId,
       direction: n.direction,
       wouldImport: false,
@@ -195,21 +203,36 @@ export async function runOutlookImportDryRun(body: OutlookImportBody): Promise<R
     };
   });
 
-  // Read-only duplicate detection by externalMessageId. NO writes.
+  // Read-only duplicate detection by externalMessageId OR RFC internetMessageId
+  // (cross-channel identity). NO writes.
   const candidateIds = Array.from(
     new Set(normalized.filter((n) => n.valid && n.externalMessageId).map((n) => n.externalMessageId as string)),
   );
+  const candidateRfcIds = Array.from(
+    new Set(normalized.filter((n) => n.valid && n.internetMessageId).map((n) => n.internetMessageId as string)),
+  );
 
   let existingIds = new Set<string>();
-  if (candidateIds.length > 0) {
+  let existingRfcIds = new Set<string>();
+  if (candidateIds.length > 0 || candidateRfcIds.length > 0) {
     try {
       const existing = await prisma.communication.findMany({
-        where: { externalMessageId: { in: candidateIds } } as any,
-        select: { externalMessageId: true } as any,
+        where: {
+          OR: [
+            ...(candidateIds.length > 0 ? [{ externalMessageId: { in: candidateIds } }] : []),
+            ...(candidateRfcIds.length > 0 ? [{ internetMessageId: { in: candidateRfcIds } }] : []),
+          ],
+        } as any,
+        select: { externalMessageId: true, internetMessageId: true } as any,
       });
       existingIds = new Set(
         (existing as unknown as Array<{ externalMessageId: string | null }>)
           .map((r) => r.externalMessageId)
+          .filter((v): v is string => typeof v === 'string'),
+      );
+      existingRfcIds = new Set(
+        (existing as unknown as Array<{ internetMessageId: string | null }>)
+          .map((r) => r.internetMessageId)
           .filter((v): v is string => typeof v === 'string'),
       );
     } catch (error) {
@@ -223,7 +246,8 @@ export async function runOutlookImportDryRun(body: OutlookImportBody): Promise<R
 
   for (const item of normalized) {
     if (!item.valid) continue;
-    const dup = item.externalMessageId ? existingIds.has(item.externalMessageId) : false;
+    const dup = (item.externalMessageId ? existingIds.has(item.externalMessageId) : false)
+      || (item.internetMessageId ? existingRfcIds.has(item.internetMessageId) : false);
     item.duplicate = dup;
     item.wouldImport = !dup;
   }
@@ -270,19 +294,30 @@ export async function importOutlookMessages(
   const mailboxNorm = normalizeEmailAddress(mailboxAddress);
   const normalized = messages.map((raw: any) => normalizeOutlookMessage(raw, mailboxNorm, mailboxAddress));
 
-  // Read-only dedupe: existing externalMessageId -> existing communication id.
+  // Read-only dedupe across both channels: existing externalMessageId OR RFC
+  // internetMessageId -> existing communication id.
   const candidateIds = Array.from(
     new Set(normalized.filter((n) => n.valid && n.externalMessageId).map((n) => n.externalMessageId as string)),
   );
+  const candidateRfcIds = Array.from(
+    new Set(normalized.filter((n) => n.valid && n.internetMessageId).map((n) => n.internetMessageId as string)),
+  );
   const existingById = new Map<string, string>();
-  if (candidateIds.length > 0) {
+  const existingByRfcId = new Map<string, string>();
+  if (candidateIds.length > 0 || candidateRfcIds.length > 0) {
     try {
       const existing = await prisma.communication.findMany({
-        where: { externalMessageId: { in: candidateIds } } as any,
-        select: { id: true, externalMessageId: true } as any,
+        where: {
+          OR: [
+            ...(candidateIds.length > 0 ? [{ externalMessageId: { in: candidateIds } }] : []),
+            ...(candidateRfcIds.length > 0 ? [{ internetMessageId: { in: candidateRfcIds } }] : []),
+          ],
+        } as any,
+        select: { id: true, externalMessageId: true, internetMessageId: true } as any,
       });
-      for (const row of existing as unknown as Array<{ id: string; externalMessageId: string | null }>) {
+      for (const row of existing as unknown as Array<{ id: string; externalMessageId: string | null; internetMessageId: string | null }>) {
         if (row.externalMessageId) existingById.set(row.externalMessageId, row.id);
+        if (row.internetMessageId) existingByRfcId.set(row.internetMessageId, row.id);
       }
     } catch (error) {
       throw new OutlookImportServiceError(
@@ -298,10 +333,15 @@ export async function importOutlookMessages(
   // repeat an item in one response; without this guard the second create would
   // abort the whole transaction on the unique externalMessageId constraint.
   const batchIds = new Set<string>();
+  const batchRfcIds = new Set<string>();
   const toImport = normalized.filter((n) => {
-    if (!n.valid || !n.externalMessageId || existingById.has(n.externalMessageId)) return false;
+    if (!n.valid || !n.externalMessageId) return false;
+    if (existingById.has(n.externalMessageId)) return false;
+    if (n.internetMessageId && existingByRfcId.has(n.internetMessageId)) return false;
     if (batchIds.has(n.externalMessageId)) return false;
+    if (n.internetMessageId && batchRfcIds.has(n.internetMessageId)) return false;
     batchIds.add(n.externalMessageId);
+    if (n.internetMessageId) batchRfcIds.add(n.internetMessageId);
     return true;
   });
 
@@ -316,6 +356,7 @@ export async function importOutlookMessages(
               source: 'OUTLOOK',
               syncStatus: 'IMPORTED',
               externalMessageId: n.externalMessageId,
+              internetMessageId: n.internetMessageId,
               providerConversationId: n.providerConversationId,
               mailboxAddress: n.mailboxAddress,
               direction: n.direction || undefined,
@@ -377,10 +418,23 @@ export async function importOutlookMessages(
       };
     }
     const ext = n.externalMessageId as string;
+    const duplicateRfcId = n.internetMessageId ? existingByRfcId.get(n.internetMessageId) : undefined;
     if (existingById.has(ext)) {
       return {
         externalMessageId: ext,
         communicationId: existingById.get(ext) as string,
+        imported: false,
+        duplicate: true,
+        valid: true,
+        direction: n.direction,
+      };
+    }
+    if (duplicateRfcId) {
+      // Cross-channel duplicate: the other channel persisted the same RFC
+      // Message-ID; report the canonical row instead of a new import.
+      return {
+        externalMessageId: ext,
+        communicationId: duplicateRfcId,
         imported: false,
         duplicate: true,
         valid: true,

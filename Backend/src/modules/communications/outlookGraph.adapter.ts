@@ -30,6 +30,8 @@ export type GraphMessageLike = {
 
 export type OutlookImportMessagePayload = {
   externalMessageId: string | null;
+  /** RFC Internet Message-ID when Graph supplied one; never a Graph provider id. */
+  internetMessageId: string | null;
   providerConversationId: string | null;
   subject: string | null;
   sender: string | null;
@@ -85,6 +87,7 @@ export function mapGraphMessageToOutlookImportMessage(
   const attachments = attachmentMetadata(graphMessage.attachments);
 
   return {
+    internetMessageId: stringOrNull(graphMessage.internetMessageId),
     externalMessageId: stringOrNull(graphMessage.internetMessageId) || stringOrNull(graphMessage.id),
     providerConversationId: stringOrNull(graphMessage.conversationId),
     subject: stringOrNull(graphMessage.subject),

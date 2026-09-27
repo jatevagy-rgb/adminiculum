@@ -55,7 +55,22 @@ function recipients(message: MailboxMessage) {
     ...(message.bcc ?? []).map((x) => ({ ...x, kind: 'BCC' })),
   ];
 }
-async function persistMessage(connection: Awaited<ReturnType<typeof ownedMailbox>>, message: MailboxMessage, createdById: string, context?: { caseId: string | null; clientId: string | null } | null) {
+async function persistMessage(connection: Awaited<ReturnType<typeof ownedMailbox>>, message: MailboxMessage, createdById: string, context?: { caseId: string | null; clientId: string | null } | null): Promise<{ id: string; providerConversationId: string | null }> {
+  // Cross-channel identity: the RFC Internet Message-ID. If the app-only channel
+  // already imported this physical message (its externalMessageId holds the RFC
+  // id), adopt that canonical row instead of creating a duplicate. Rows owned by
+  // per-user mailbox connections keep their per-connection copies (shared
+  // mailbox semantics), so only channel-agnostic rows (mailboxConnectionId null)
+  // are adopted.
+  if (message.internetMessageId) {
+    const canonical = await prisma.communication.findFirst({
+      where: { OR: [{ internetMessageId: message.internetMessageId }, { externalMessageId: message.internetMessageId }] },
+      select: { id: true, providerConversationId: true, mailboxConnectionId: true },
+    });
+    if (canonical && canonical.mailboxConnectionId === null) {
+      return { id: canonical.id, providerConversationId: canonical.providerConversationId };
+    }
+  }
   const html = message.bodyHtml ? sanitizeEmailHtml(message.bodyHtml) : null;
   const text = message.bodyText || toPlainText(html);
   const row = await prisma.communication.upsert({
