@@ -8,6 +8,11 @@ import { createRequire } from "node:module";
 // component can run the full journey:
 //   paste -> save -> detect -> explicit approval -> anonymize -> result.
 //
+// The Luna UI refinement keeps the same functional semantics: compact source
+// index + one selected detail, modal intake, contextual primary actions,
+// zero-approval confirmation, raw/anonymized toggle, communication load-error
+// distinction.
+//
 // Fail-closed: jsdom must resolve or the whole file fails. There is no skip.
 
 const require = createRequire(import.meta.url);
@@ -15,6 +20,7 @@ const { JSDOM } = require("jsdom") as { JSDOM: new (html?: string, options?: any
 
 const CASE_ID = "c-1";
 const RAW = "Kiss Péter és peter@example.com találkoztak.";
+const RAW_TWO = "Második forrás Nagy Anna nevével.";
 const CANDIDATES = [
   { id: "cand-1", type: "PERSON", start: 0, end: 10, originalText: "Kiss Péter", proposedReplacement: "[SZEMÉLY-1]", detector: "exact-term", confidence: "HIGH", note: "Manuális kifejezés" },
   { id: "cand-2", type: "EMAIL", start: 14, end: 30, originalText: "peter@example.com", proposedReplacement: "[EMAIL-1]", detector: "email", confidence: "HIGH" },
@@ -60,6 +66,7 @@ const server = {
   anonymizeError: null as null | { status: number; payload: any },
   createPastedError: null as null | { status: number; payload: any },
   createCommError: null as null | { status: number; payload: any },
+  workspaceError: false,
 };
 
 const json = (status: number, body: unknown) =>
@@ -94,6 +101,9 @@ function handleFetch(input: any, init: any): Promise<Response> {
   const [, , rest] = match;
 
   if (rest === "workspace" && method === "GET") {
+    if (server.workspaceError) {
+      return Promise.resolve(json(500, { status: 500, code: "INTERNAL", message: "workspace unavailable" }));
+    }
     return Promise.resolve(
       json(200, {
         communications: [
@@ -195,6 +205,7 @@ const flush = () =>
   });
 
 const q = (selector: string) => container.querySelector(`[data-testid="${selector}"]`);
+const qAll = (selectorPrefix: string) => container.querySelectorAll(`[data-testid^="${selectorPrefix}"]`);
 
 const click = (selector: string) => {
   const element = q(selector);
@@ -226,13 +237,15 @@ const selectValue = (selector: string, value: string) => {
 const countPosts = (urlSuffix: string) =>
   server.requests.filter((request) => request.method === "POST" && request.url.endsWith(urlSuffix)).length;
 
-async function freshRender() {
+async function freshRender(options: { workspaceError?: boolean } = {}) {
   server.sources = [];
   server.seq = 0;
+  server.requests = [];
   server.detectError = null;
   server.anonymizeError = null;
   server.createPastedError = null;
   server.createCommError = null;
+  server.workspaceError = options.workspaceError ?? false;
   if (root) root.unmount();
   container.innerHTML = "";
   root = createRoot(container);
@@ -242,12 +255,30 @@ async function freshRender() {
   await flush();
 }
 
-async function createAndDetect() {
-  typeText("ccv2-paste-textarea", RAW);
+const openPasteModal = async () => {
+  click("ccv2-source-mode-paste");
+  await flush();
+};
+
+async function createPasted(rawText: string) {
+  await openPasteModal();
+  typeText("ccv2-paste-textarea", rawText);
+  await flush();
   click("ccv2-create-source");
   await flush();
+}
+
+async function createAndDetect() {
+  await createPasted(RAW);
   click("ccv2-source-detect-src-1");
   await flush();
+}
+
+async function openManualTerms() {
+  if (!q("ccv2-manual-terms-body")) {
+    click("ccv2-manual-terms-toggle");
+    await flush();
+  }
 }
 
 before(async () => {
@@ -285,22 +316,41 @@ after(() => {
   }
 });
 
-test("2. pasted source create works and the raw source is shown", async () => {
+test("1. pasted source create works, the new source is selected and its raw text is shown", async () => {
   await freshRender();
-  typeText("ccv2-paste-textarea", RAW);
-  click("ccv2-create-source");
-  await flush();
+  await createPasted(RAW);
 
   const createRequest = server.requests.find((request) => request.method === "POST" && request.url.endsWith("/context-sources"));
   assert.ok(createRequest, "a create POST was sent");
   assert.deepEqual(createRequest.body, { rawText: RAW }, "create sends only rawText");
   assert.equal(q("ccv2-source-src-1") !== null, true, "the created source is listed");
+  assert.equal(q("ccv2-source-detail-src-1") !== null, true, "the created source is selected by its canonical id");
   assert.equal(q("ccv2-source-raw-src-1").textContent, RAW, "raw text is rendered verbatim");
+});
+
+test("2. compact source index: only the selected source renders full content", async () => {
+  await freshRender();
+  await createPasted(RAW);
+  await createPasted(RAW_TWO);
+
+  assert.equal(qAll("ccv2-source-src-").length, 2, "both sources appear as compact rows");
+  assert.equal(qAll("ccv2-source-detail-").length, 1, "exactly one detail pane is rendered");
+  assert.equal(qAll("ccv2-source-raw-").length, 1, "only the selected source renders its full raw text");
+  assert.equal(q("ccv2-source-detail-src-2") !== null, true, "the newest source is selected");
+  assert.equal(q("ccv2-sources-list").textContent.includes(RAW), false, "the compact list does not embed full raw text");
+  assert.equal(q("ccv2-source-raw-src-2").textContent, RAW_TWO, "the selected raw text is shown in the detail");
+
+  click("ccv2-source-src-1");
+  await flush();
+  assert.equal(q("ccv2-source-detail-src-1") !== null, true, "clicking a row switches the detail");
+  assert.equal(q("ccv2-source-raw-src-1").textContent, RAW, "the first source raw text is now shown");
 });
 
 test("3. whitespace-only paste is blocked truthfully and never reaches the server", async () => {
   await freshRender();
+  await openPasteModal();
   typeText("ccv2-paste-textarea", "   ");
+  await flush();
 
   assert.equal(q("ccv2-create-source").disabled, true, "whitespace-only text disables saving");
   const before = countPosts("/context-sources");
@@ -319,11 +369,11 @@ test("3. whitespace-only paste is blocked truthfully and never reaches the serve
 
 test("4. manual terms stay ephemeral and reach only the detect endpoint", async () => {
   await freshRender();
+  await createPasted(RAW);
+  await openManualTerms();
   click("ccv2-manual-term-add");
   await flush();
   typeText("ccv2-manual-term-input-0", "Kiss Péter");
-  typeText("ccv2-paste-textarea", RAW);
-  click("ccv2-create-source");
   await flush();
 
   const createRequest = server.requests.find((request) => request.method === "POST" && request.url.endsWith("/context-sources"));
@@ -350,9 +400,24 @@ test("5. detect renders candidates and approval starts explicitly empty", async 
   assert.equal(q("ccv2-candidate-checkbox-cand-1").checked, false, "candidate 1 starts unapproved");
   assert.equal(q("ccv2-candidate-checkbox-cand-2").checked, false, "candidate 2 starts unapproved");
   assert.match(q("ccv2-approved-count").textContent, /0 \/ 2/, "approval count is 0 of 2");
+  assert.equal(container.querySelectorAll('[role="tab"]').length, 0, "no incomplete tab semantics");
 });
 
-test("6. deselected candidates are not applied; raw stays unchanged", async () => {
+test("6. candidate row leads with originalText; detector internals stay hidden", async () => {
+  await freshRender();
+  await createAndDetect();
+
+  const row = q("ccv2-candidate-cand-1");
+  assert.ok(row, "candidate row is rendered");
+  assert.match(row.textContent, /Kiss Péter/, "originalText is the primary review identity");
+  assert.match(row.textContent, /Személy/, "category is shown as a quiet secondary detail");
+  assert.match(row.textContent, /Csere:/, "replacement is clearly labelled");
+  assert.match(row.textContent, /\[SZEMÉLY-1\]/, "the proposed replacement is visible");
+  assert.match(row.textContent, /…a szerződést|Kiss Péter/, "a bounded local excerpt is shown");
+  assert.equal(row.textContent.includes("exact-term"), false, "detector name is not shown in the ordinary row");
+});
+
+test("7. deselected candidates are not applied; raw stays unchanged; toggle switches views", async () => {
   await freshRender();
   await createAndDetect();
 
@@ -368,17 +433,25 @@ test("6. deselected candidates are not applied; raw stays unchanged", async () =
   assert.ok(anonymizeRequest, "anonymize was sent");
   assert.deepEqual(anonymizeRequest.body.approvedCandidateIds, ["cand-1"], "only the approved candidate id is sent");
 
-  const raw = q("ccv2-source-raw-src-1");
+  assert.equal(q("ccv2-source-anonymized-src-1") !== null, true, "anonymized view is the default after apply");
+  assert.equal(q("ccv2-source-raw-src-1"), null, "raw view is not rendered while anonymized is selected");
   const anonymized = q("ccv2-source-anonymized-src-1");
-  assert.ok(raw, "raw source block is present");
-  assert.ok(anonymized, "anonymized derivative block is present");
-  assert.equal(raw.textContent, RAW, "the raw source remains unchanged");
-  assert.notEqual(anonymized.textContent, raw.textContent, "raw and anonymized are separate texts");
+  assert.notEqual(anonymized.textContent, RAW, "raw and anonymized are separate texts");
   assert.match(anonymized.textContent, /\[SZEMÉLY-1\]/, "approved candidate was replaced");
   assert.match(anonymized.textContent, /peter@example\.com/, "deselected candidate was NOT applied");
+
+  click("ccv2-source-toggle-raw-src-1");
+  await flush();
+  assert.equal(q("ccv2-source-raw-src-1") !== null, true, "raw toggle reveals the raw source");
+  assert.equal(q("ccv2-source-raw-src-1").textContent, RAW, "the raw source remains unchanged");
+  assert.equal(q("ccv2-source-anonymized-src-1"), null, "only one result view renders at a time");
+
+  click("ccv2-source-toggle-anonymized-src-1");
+  await flush();
+  assert.equal(q("ccv2-source-anonymized-src-1") !== null, true, "toggle returns to the anonymized view");
 });
 
-test("7. sourceHash and optionsDigest are preserved exactly as returned by detect", async () => {
+test("8. sourceHash and optionsDigest are preserved exactly as returned by detect", async () => {
   await freshRender();
   await createAndDetect();
   click("ccv2-candidate-checkbox-cand-1");
@@ -392,7 +465,7 @@ test("7. sourceHash and optionsDigest are preserved exactly as returned by detec
   assert.equal(anonymizeRequest.body.optionsDigest, OPTIONS_DIGEST, "optionsDigest passes through verbatim");
 });
 
-test("8. stale conflict fails closed: controlled error, review cleared, no silent retry", async () => {
+test("9. stale conflict fails closed: controlled error, review cleared, no silent retry", async () => {
   await freshRender();
   await createAndDetect();
   click("ccv2-candidate-checkbox-cand-1");
@@ -408,11 +481,11 @@ test("8. stale conflict fails closed: controlled error, review cleared, no silen
 
   const staleError = q("ccv2-stale-error");
   assert.ok(staleError, "a controlled stale error is shown");
-  assert.match(staleError.textContent, /Futtasd újra a Detektálást/, "the message requires Detect again");
+  assert.match(staleError.textContent, /Futtasd újra az ellenőrzést/, "the message requires Detect again");
   assert.equal(q("ccv2-review"), null, "the stale review is discarded");
 });
 
-test("9. communication source uses the ID-only flow", async () => {
+test("10. communication source uses the ID-only flow", async () => {
   await freshRender();
   click("ccv2-source-mode-communication");
   await flush();
@@ -423,13 +496,15 @@ test("9. communication source uses the ID-only flow", async () => {
   const commRequest = server.requests.find((request) => request.method === "POST" && request.url.endsWith("/context-sources/from-communication"));
   assert.ok(commRequest, "the from-communication endpoint was called");
   assert.deepEqual(commRequest.body, { communicationId: "comm-1" }, "only the communicationId is sent — no copied body");
-  const source = q("ccv2-source-src-1");
-  assert.ok(source, "the imported source is listed");
+  assert.ok(q("ccv2-source-src-1"), "the imported source is listed");
+  assert.ok(q("ccv2-source-detail-src-1"), "the imported source is selected");
+  assert.match(q("ccv2-source-detail-src-1").textContent, /Egyeztetés/, "the same-case communication subject is resolved as the title");
 });
 
-test("10. editing manual terms after detect invalidates the review until re-detected", async () => {
+test("11. editing manual terms after detect invalidates the review until re-detected", async () => {
   await freshRender();
   await createAndDetect();
+  await openManualTerms();
   click("ccv2-manual-term-add");
   await flush();
   typeText("ccv2-manual-term-input-0", "Másik Név");
@@ -444,7 +519,7 @@ test("10. editing manual terms after detect invalidates the review until re-dete
   assert.equal(q("ccv2-anonymize-apply").disabled, false, "anonymize is available again after re-detect");
 });
 
-test("11. no external AI or non-internal endpoint is ever called", () => {
+test("12. no external AI or non-internal endpoint is ever called", () => {
   for (const request of server.requests) {
     const path = request.url.replace(/^https?:\/\/[^/]+/i, "");
     assert.match(path, /^\/api\/v1\/cases\/c-1\/(workspace|context-sources)/, `internal endpoint only: ${request.url}`);
@@ -453,7 +528,7 @@ test("11. no external AI or non-internal endpoint is ever called", () => {
   }
 });
 
-test("12. communication with no snapshot-able body shows a truthful error", async () => {
+test("13. communication with no snapshot-able body shows a truthful error", async () => {
   await freshRender();
   click("ccv2-source-mode-communication");
   await flush();
@@ -465,4 +540,132 @@ test("12. communication with no snapshot-able body shows a truthful error", asyn
   const error = q("ccv2-create-error");
   assert.ok(error, "the gap error is shown");
   assert.match(error.textContent, /nincs átvehető törzsszövege/, "the body gap is stated truthfully");
+});
+
+test("14. select-all and clear-selection are explicit actions only", async () => {
+  await freshRender();
+  await createAndDetect();
+
+  assert.equal(q("ccv2-candidate-checkbox-cand-1").checked, false, "detection never auto-selects");
+  assert.equal(q("ccv2-candidate-checkbox-cand-2").checked, false, "detection never auto-selects");
+
+  click("ccv2-select-all");
+  await flush();
+  assert.equal(q("ccv2-candidate-checkbox-cand-1").checked, true, "select-all approves candidate 1");
+  assert.equal(q("ccv2-candidate-checkbox-cand-2").checked, true, "select-all approves candidate 2");
+  assert.match(q("ccv2-approved-count").textContent, /2 \/ 2/, "select-all updates the count");
+
+  click("ccv2-clear-selection");
+  await flush();
+  assert.equal(q("ccv2-candidate-checkbox-cand-1").checked, false, "clear-selection unchecks candidate 1");
+  assert.equal(q("ccv2-candidate-checkbox-cand-2").checked, false, "clear-selection unchecks candidate 2");
+  assert.match(q("ccv2-approved-count").textContent, /0 \/ 2/, "clear-selection updates the count");
+});
+
+test("15. zero approval requires confirmation; cancel does not apply; confirm sends []", async () => {
+  await freshRender();
+  await createAndDetect();
+
+  const before = countPosts("/context-sources/src-1/anonymize");
+  click("ccv2-anonymize-apply");
+  await flush();
+
+  assert.ok(q("ccv2-zero-approval-body"), "zero approval opens the confirmation");
+  assert.match(q("ccv2-zero-approval-body").textContent, /megegyezik a nyers szöveggel/, "the consequence is stated honestly");
+  assert.equal(countPosts("/context-sources/src-1/anonymize"), before, "no apply POST before explicit confirmation");
+
+  click("ccv2-zero-approval-cancel");
+  await flush();
+  assert.equal(q("ccv2-zero-approval-body"), null, "cancel closes the confirmation");
+  assert.equal(countPosts("/context-sources/src-1/anonymize"), before, "cancel never applies");
+  assert.ok(q("ccv2-review"), "the review stays open after cancel");
+
+  click("ccv2-anonymize-apply");
+  await flush();
+  click("ccv2-zero-approval-confirm");
+  await flush();
+
+  const anonymizeRequest = server.requests.find((request) => request.method === "POST" && request.url.endsWith("/context-sources/src-1/anonymize"));
+  assert.ok(anonymizeRequest, "explicit confirmation applies");
+  assert.deepEqual(anonymizeRequest.body.approvedCandidateIds, [], "explicit zero approval preserves the [] payload");
+  assert.equal(q("ccv2-source-anonymized-src-1").textContent, RAW, "the resulting version equals the raw text");
+});
+
+test("16. already-anonymized source exposes no second Apply and keeps the anonymized default", async () => {
+  await freshRender();
+  await createAndDetect();
+  click("ccv2-candidate-checkbox-cand-1");
+  await flush();
+  click("ccv2-anonymize-apply");
+  await flush();
+
+  assert.ok(q("ccv2-source-detail-src-1"), "selection is preserved after the apply refresh");
+  assert.equal(q("ccv2-source-detect-src-1"), null, "no Detect action on an anonymized source");
+  assert.equal(q("ccv2-anonymize-apply"), null, "no Apply action on an anonymized source");
+  assert.equal(q("ccv2-source-anonymized-src-1") !== null, true, "anonymized view is the default");
+  assert.ok(q("ccv2-source-toggle-raw-src-1"), "raw source stays accessible through the toggle");
+});
+
+test("17. manual terms start collapsed while empty and keep terms accessible", async () => {
+  await freshRender();
+  await createPasted(RAW);
+
+  assert.equal(q("ccv2-manual-terms-body"), null, "manual terms are collapsed by default while empty");
+
+  await openManualTerms();
+  assert.ok(q("ccv2-manual-terms-empty"), "opening an empty editor states there are no terms yet");
+  click("ccv2-manual-term-add");
+  await flush();
+  assert.ok(q("ccv2-manual-terms-body"), "adding a term keeps the editor open");
+  typeText("ccv2-manual-term-input-0", "Kiss Péter");
+  await flush();
+
+  click("ccv2-manual-terms-toggle");
+  await flush();
+  assert.equal(q("ccv2-manual-terms-body"), null, "the editor collapses again");
+  click("ccv2-manual-terms-toggle");
+  await flush();
+  assert.equal(q("ccv2-manual-term-input-0").value, "Kiss Péter", "existing terms remain accessible after re-opening");
+});
+
+test("18. communication fetch failure shows an error state, not an empty state", async () => {
+  await freshRender({ workspaceError: true });
+  click("ccv2-source-mode-communication");
+  await flush();
+
+  assert.ok(q("ccv2-communications-error"), "the load error is surfaced");
+  assert.equal(q("ccv2-communications-empty"), null, "no empty-state lie after a fetch failure");
+  assert.match(q("ccv2-communications-error").textContent, /most nem tölthetők be/, "the failure is stated truthfully");
+  assert.ok(q("ccv2-communications-retry"), "a retry action is offered");
+
+  server.workspaceError = false;
+  click("ccv2-communications-retry");
+  await flush();
+  assert.equal(q("ccv2-communications-error"), null, "retry clears the error");
+  assert.ok(q("ccv2-communication-select"), "retry loads the communication select");
+});
+
+test("19. paste textarea and communication select carry explicit labels", async () => {
+  await freshRender();
+  await openPasteModal();
+  assert.ok(container.querySelector('label[for="ccv2-paste-textarea"]'), "paste textarea has an associated label");
+
+  click("ccv2-source-mode-paste");
+  await flush();
+  assert.equal(container.querySelector('label[for="ccv2-paste-textarea"]'), null, "closed modal removes its controls");
+  click("ccv2-source-mode-communication");
+  await flush();
+  assert.ok(container.querySelector('label[for="ccv2-communication-select"]'), "communication select has an associated label");
+});
+
+test("20. zero approved result keeps raw source immutable and lists the applied count honestly", async () => {
+  await freshRender();
+  await createAndDetect();
+  click("ccv2-anonymize-apply");
+  await flush();
+  click("ccv2-zero-approval-confirm");
+  await flush();
+
+  assert.equal(q("ccv2-source-anonymized-src-1").textContent, RAW, "the zero-approval result equals the raw text");
+  assert.match(q("ccv2-source-applied-count-src-1").textContent, /0 elem cserélve/, "the applied count is zero and honest");
 });
