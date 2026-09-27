@@ -20,6 +20,7 @@ import {
 import { AdminBadge, AdminButton, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, OperationalPageHeader, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { LegalSourceImpactPanel } from "./LegalSourceImpactPanel";
+import { LegalSourceObservationReviewPanel } from "./LegalSourceObservationReviewPanel";
 
 type View = "overview" | "legal-sources" | "documents" | "review-work";
 
@@ -244,6 +245,8 @@ export function ComplianceCenter() {
           </>
         ) : view === "legal-sources" ? (
           <div className="space-y-5">
+            <LegalSourceObservationReviewPanel />
+
             <section className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-white p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="text-[10px] uppercase tracking-[0.2em] text-[var(--adm-green-800)]">Jogforrás-nyilvántartás</h2>
