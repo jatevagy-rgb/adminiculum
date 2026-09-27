@@ -157,6 +157,14 @@ export async function importExternalOpportunityBatch(
     const scopeKey = deriveScopeKey(record);
     const idempotencyKey = deriveGwoIdempotencyKey(validated.sourceType, record);
     const observedAt = new Date(record.observedAt);
+    // Replay semantics: the watcher observation timestamp is volatile and is
+    // NOT part of the canonical source payload. It is passed to
+    // ingestObservation separately (observedAt) and excluded from the digest,
+    // so an observedAt-only replay keeps the same idempotency key AND the same
+    // inputDigest -> existing Observation returned -> REPLAYED. An actual
+    // canonical source/business mutation still changes the digest and remains
+    // protected by the existing IDEMPOTENCY_CONFLICT detection.
+    const { observedAt: _volatileWatcherObservedAt, ...canonicalRecord } = record;
     try {
       const observation = await observatory.ingestObservation(actor, {
         clientId,
@@ -164,7 +172,7 @@ export async function importExternalOpportunityBatch(
         discoveryRunId: run.id,
         idempotencyKey,
         sourceRecordId: `${businessKey}::${scopeKey}`,
-        rawPayload: { sourceType: validated.sourceType, schemaVersion: record.schemaVersion, record } as unknown as Prisma.InputJsonValue,
+        rawPayload: { sourceType: validated.sourceType, schemaVersion: record.schemaVersion, record: canonicalRecord } as unknown as Prisma.InputJsonValue,
         observedAt,
       });
 
@@ -212,25 +220,33 @@ export async function importExternalOpportunityBatch(
       }
 
       // New source revision/content. PROJECTION REGRESSION GUARD:
-      // arrival/observation order is NOT source revision order. Replacing the
-      // current projection requires a trustworthy authoritative ordering
-      // proof: the current and incoming records must both carry a source
-      // update timestamp (revisionSource 'lastChangeDate') and the incoming
-      // timestamp must be strictly newer. Checksum-based revisions, mixed or
-      // missing ordering signals, unparseable timestamps and equal-timestamp
-      // different-content arrivals are refused explicitly — the immutable
-      // Observation is still preserved as history.
+      // arrival/observation order is NOT source revision order; checksums are
+      // never lexically ordered. Replacing the current projection requires the
+      // authoritative transition rules:
+      //   A/E. NO_HISTORY -> NO_HISTORY (different content)      -> UNPROVEN
+      //   B.   NO_HISTORY -> TIMESTAMP(T)                        -> UPDATED
+      //   C.   TIMESTAMP(T1) -> TIMESTAMP(T2): T2>T1 -> UPDATED; T2<T1 -> STALE;
+      //        T2==T1 (different content)                       -> UNPROVEN
+      //   D.   TIMESTAMP -> NO_HISTORY (different content)       -> REGRESSION
+      //   F.   any UNPROVEN side (missing/malformed/unknown)     -> UNPROVEN
+      // Refused arrivals keep their immutable Observation as history.
       const incomingOrdering = classifyRevisionOrdering(record);
       const previousRecord = await loadCurrentRecord(db, clientId, existing.currentObservationId);
       const previousOrdering = previousRecord !== null ? classifyRevisionOrdering(previousRecord) : ({ kind: 'unproven' } as const);
       let updateAllowed = false;
       let guardCode = 'GWO_REVISION_ORDER_UNPROVEN';
-      if (incomingOrdering.kind === 'timestamp' && previousOrdering.kind === 'timestamp') {
+      if (incomingOrdering.kind === 'authoritative_timestamp' && previousOrdering.kind === 'authoritative_timestamp') {
         if (incomingOrdering.valueMs > previousOrdering.valueMs) {
           updateAllowed = true;
         } else if (incomingOrdering.valueMs < previousOrdering.valueMs) {
           guardCode = 'GWO_STALE_SOURCE_REVISION';
         }
+      } else if (incomingOrdering.kind === 'authoritative_timestamp' && previousOrdering.kind === 'authoritative_no_history') {
+        // First authoritative amendment of a previously history-less topic.
+        updateAllowed = true;
+      } else if (incomingOrdering.kind === 'authoritative_no_history' && previousOrdering.kind === 'authoritative_timestamp') {
+        // Order-evidence regression: never replace proven amendment history.
+        guardCode = 'GWO_SOURCE_ORDER_REGRESSION';
       }
       if (!updateAllowed) {
         counts.failed += 1;

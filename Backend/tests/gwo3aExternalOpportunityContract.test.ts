@@ -146,21 +146,50 @@ describe('GWO-3A boundary contract (static)', () => {
     expect(revisionFallback).toContain(HASH_A);
   });
 
-  test('revision ordering: only source update timestamps count, never checksums', () => {
+  test('revision ordering consumes the authoritative contract; checksums are never ordered', () => {
+    // GWO-1G primary contract: explicit order-signal status + timestamp.
     const timestampRecord = validRecord({
-      sourceRevisionIdentifier: '2026-09-25T10:00:00.000',
-      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'lastChangeDate' } },
+      sourceRevisionIdentifier: 'a'.repeat(64),
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'esST_checksum', sourceOrderSignalStatus: 'AUTHORITATIVE_TIMESTAMP', sourceLastChangeAt: '2026-09-25T10:00:00.000' } },
     });
     const ordering = classifyRevisionOrdering(timestampRecord);
-    expect(ordering.kind).toBe('timestamp');
-    if (ordering.kind === 'timestamp') {
+    expect(ordering.kind).toBe('authoritative_timestamp');
+    if (ordering.kind === 'authoritative_timestamp') {
       expect(ordering.valueMs).toBe(Date.parse('2026-09-25T10:00:00.000'));
     }
+    const noHistoryRecord = validRecord({
+      sourceRevisionIdentifier: 'b'.repeat(64),
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'esST_checksum', sourceOrderSignalStatus: 'AUTHORITATIVE_NO_HISTORY', sourceLastChangeAt: null } },
+    });
+    expect(classifyRevisionOrdering(noHistoryRecord).kind).toBe('authoritative_no_history');
+    // Malformed timestamp with an authoritative status degrades to UNPROVEN.
+    const malformedTimestamp = validRecord({
+      sourceRevisionIdentifier: 'c'.repeat(64),
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'esST_checksum', sourceOrderSignalStatus: 'AUTHORITATIVE_TIMESTAMP', sourceLastChangeAt: 'not-a-timestamp' } },
+    });
+    expect(classifyRevisionOrdering(malformedTimestamp).kind).toBe('unproven');
+    // Unknown status values fail closed.
+    const unknownStatus = validRecord({
+      sourceRevisionIdentifier: 'd'.repeat(64),
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'esST_checksum', sourceOrderSignalStatus: 'MAYBE_NEWER' } },
+    });
+    expect(classifyRevisionOrdering(unknownStatus).kind).toBe('unproven');
+    // Checksum-only revision identity has no ordering proof.
     const checksumRecord = validRecord({
       sourceRevisionIdentifier: 'a'.repeat(64),
       sourceSpecificMetadata: { fundingTenders: { revisionSource: 'esST_checksum' } },
     });
     expect(classifyRevisionOrdering(checksumRecord).kind).toBe('unproven');
+    // Legacy/static compatibility: revisionSource lastChangeDate + ISO revision.
+    const legacyStatic = validRecord({
+      sourceRevisionIdentifier: '2026-09-25T10:00:00.000',
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'lastChangeDate' } },
+    });
+    const legacyOrdering = classifyRevisionOrdering(legacyStatic);
+    expect(legacyOrdering.kind).toBe('authoritative_timestamp');
+    if (legacyOrdering.kind === 'authoritative_timestamp') {
+      expect(legacyOrdering.valueMs).toBe(Date.parse('2026-09-25T10:00:00.000'));
+    }
     const missingMetadata = validRecord({ sourceSpecificMetadata: {} });
     expect(classifyRevisionOrdering(missingMetadata).kind).toBe('unproven');
     const unparseable = validRecord({

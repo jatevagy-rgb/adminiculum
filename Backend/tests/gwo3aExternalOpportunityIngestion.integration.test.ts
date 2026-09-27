@@ -39,6 +39,13 @@ d('GWO-3A ingestion integration', () => {
   const topicA = `GWO3A-${suffix}-TOPIC-A`;
   const topicB = `GWO3A-${suffix}-TOPIC-B`;
   const topicC = `GWO3A-${suffix}-TOPIC-C`;
+  const topicD = `GWO3A-${suffix}-ORDER-D`;
+  const topicE = `GWO3A-${suffix}-ORDER-E`;
+
+  /** GWO-1G contract metadata for search-derived records. */
+  function orderMeta(status: 'AUTHORITATIVE_TIMESTAMP' | 'AUTHORITATIVE_NO_HISTORY', at: string | null): Record<string, unknown> {
+    return { fundingTenders: { rawStatusCodes: ['31094502'], sourceType: 1, revisionSource: 'esST_checksum', sourceOrderSignalStatus: status, sourceLastChangeAt: at } };
+  }
 
   function record(overrides: Partial<GwoOpportunityRecord> = {}): GwoOpportunityRecord {
     return {
@@ -241,6 +248,260 @@ d('GWO-3A ingestion integration', () => {
     expect(after.revision).toBe(before.revision + 1);
     expect(after.title).toBe('Authoritatively newer revision');
     expect(after.lastRevisionIdentifier).toBe('2026-09-28T10:00:00.000');
+  });
+
+  // -------------------------------------------------------------------------
+  // GWO-1G contract + replay semantics (R01–R16)
+  // -------------------------------------------------------------------------
+
+  it('R01 initial AUTHORITATIVE_NO_HISTORY record creates the projection', async () => {
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-A',
+        contentHash: HASH_A,
+        title: 'Order contract topic',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_NO_HISTORY', null),
+        observedAt: '2026-09-27T10:30:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.created).toBe(1);
+    const projection = await prisma.externalOpportunity.findUniqueOrThrow({
+      where: { clientId_sourceType_businessKey_scopeKey: { clientId: c1, sourceType: 'EU_FUNDING_TENDERS', businessKey: topicD, scopeKey: `GWO3A-${suffix}-CALL` } },
+    });
+    expect(projection.lastRevisionIdentifier).toBe('CK-A');
+    expect(projection.revision).toBe(1);
+  });
+
+  it('R02 exact same record replay -> REPLAYED', async () => {
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-A',
+        contentHash: HASH_A,
+        title: 'Order contract topic',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_NO_HISTORY', null),
+        observedAt: '2026-09-27T10:30:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.replayed).toBe(1);
+  });
+
+  it('R03 observedAt-only replay: same revision/content, later observedAt -> REPLAYED, no conflict, no revision change', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-A',
+        contentHash: HASH_A,
+        title: 'Order contract topic',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_NO_HISTORY', null),
+        observedAt: '2026-09-27T15:45:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.replayed).toBe(1);
+    expect(result.counts.failed).toBe(0);
+    expect(result.results[0]?.code).toBeNull();
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.revision).toBe(before.revision);
+    expect(after.currentObservationId).toBe(before.currentObservationId);
+  });
+
+  it('R04 same idempotency identity with actual canonical payload mutation -> IDEMPOTENCY_CONFLICT preserved', async () => {
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-A',
+        contentHash: HASH_A,
+        title: 'Mutated canonical payload under the same revision',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_NO_HISTORY', null),
+        observedAt: '2026-09-27T16:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.failed).toBe(1);
+    expect(result.results[0]?.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(result.status).toBe('PARTIAL');
+  });
+
+  it('R05 first authoritative amendment: NO_HISTORY checksum A -> TIMESTAMP checksum B -> UPDATED', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-B',
+        contentHash: HASH_B,
+        title: 'First amendment',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_TIMESTAMP', '2026-09-25T10:00:00.000'),
+        observedAt: '2026-09-27T17:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.updated).toBe(1);
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.id).toBe(before.id);
+    expect(after.revision).toBe(before.revision + 1);
+    const priorObservation = await prisma.observation.findUnique({ where: { id_clientId: { id: before.currentObservationId, clientId: c1 } } });
+    expect(priorObservation).not.toBeNull();
+  });
+
+  it('R06 newer authoritative timestamp T2 > T1 -> UPDATED', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-C',
+        contentHash: HASH_C,
+        title: 'Second amendment',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_TIMESTAMP', '2026-09-26T10:00:00.000'),
+        observedAt: '2026-09-27T18:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.updated).toBe(1);
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.revision).toBe(before.revision + 1);
+    expect(after.lastRevisionIdentifier).toBe('CK-C');
+  });
+
+  it('R07 older authoritative timestamp with LATER observedAt and lexically-lowest checksum -> GWO_STALE_SOURCE_REVISION', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const revCountBefore = await prisma.observation.count({ where: { clientId: c1, connectionId: before.connectionId } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-0-LOWEST', // lexically lowest: must not influence ordering
+        contentHash: HASH_A,
+        title: 'Stale amendment',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_TIMESTAMP', '2026-09-25T10:00:00.000'),
+        observedAt: '2026-09-27T19:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.failed).toBe(1);
+    expect(result.counts.updated).toBe(0);
+    expect(result.results[0]?.code).toBe('GWO_STALE_SOURCE_REVISION');
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.revision).toBe(before.revision);
+    expect(after.lastRevisionIdentifier).toBe(before.lastRevisionIdentifier);
+    expect(after.currentObservationId).toBe(before.currentObservationId);
+    const revCountAfter = await prisma.observation.count({ where: { clientId: c1, connectionId: before.connectionId } });
+    expect(revCountAfter).toBe(revCountBefore + 1); // immutable history preserved
+  });
+
+  it('R08 equal authoritative timestamp with different content -> GWO_REVISION_ORDER_UNPROVEN', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-E',
+        contentHash: HASH_A,
+        title: 'Equal-timestamp ambiguous change',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_TIMESTAMP', '2026-09-26T10:00:00.000'),
+        observedAt: '2026-09-27T20:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.results[0]?.code).toBe('GWO_REVISION_ORDER_UNPROVEN');
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.revision).toBe(before.revision);
+    expect(after.currentObservationId).toBe(before.currentObservationId);
+  });
+
+  it('R09 TIMESTAMP -> NO_HISTORY with different content -> GWO_SOURCE_ORDER_REGRESSION', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-F',
+        contentHash: HASH_A,
+        title: 'Order-evidence regression',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_NO_HISTORY', null),
+        observedAt: '2026-09-27T21:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.results[0]?.code).toBe('GWO_SOURCE_ORDER_REGRESSION');
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.revision).toBe(before.revision);
+    expect(after.lastRevisionIdentifier).toBe(before.lastRevisionIdentifier);
+  });
+
+  it('R10 NO_HISTORY -> different NO_HISTORY content -> GWO_REVISION_ORDER_UNPROVEN', async () => {
+    const create = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicE,
+        sourceRevisionIdentifier: 'CK-X',
+        contentHash: HASH_A,
+        title: 'No-history topic',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_NO_HISTORY', null),
+        observedAt: '2026-09-27T10:40:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(create.counts.created).toBe(1);
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicE,
+        sourceRevisionIdentifier: 'CK-Y',
+        contentHash: HASH_B,
+        title: 'Different no-history content',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_NO_HISTORY', null),
+        observedAt: '2026-09-27T21:10:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.results[0]?.code).toBe('GWO_REVISION_ORDER_UNPROVEN');
+    const projection = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicE } });
+    expect(projection.lastRevisionIdentifier).toBe('CK-X');
+    expect(projection.revision).toBe(1);
+  });
+
+  it('R14 malformed sourceLastChangeAt with AUTHORITATIVE_TIMESTAMP -> UNPROVEN refusal', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-G',
+        contentHash: HASH_A,
+        title: 'Malformed order evidence',
+        sourceSpecificMetadata: orderMeta('AUTHORITATIVE_TIMESTAMP', 'not-a-timestamp'),
+        observedAt: '2026-09-27T22:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.results[0]?.code).toBe('GWO_REVISION_ORDER_UNPROVEN');
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.revision).toBe(before.revision);
+  });
+
+  it('R15 unknown sourceOrderSignalStatus -> UNPROVEN refusal', async () => {
+    const before = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceIdentifier: topicD,
+        sourceRevisionIdentifier: 'CK-H',
+        contentHash: HASH_A,
+        title: 'Unknown order status',
+        sourceSpecificMetadata: { fundingTenders: { rawStatusCodes: ['31094502'], sourceType: 1, revisionSource: 'esST_checksum', sourceOrderSignalStatus: 'MAYBE_NEWER' } },
+        observedAt: '2026-09-27T22:10:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.results[0]?.code).toBe('GWO_REVISION_ORDER_UNPROVEN');
+    const after = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    expect(after.revision).toBe(before.revision);
+  });
+
+  it('R16 immutable Observation history preserved across the whole transition chain', async () => {
+    const projection = await prisma.externalOpportunity.findFirstOrThrow({ where: { clientId: c1, businessKey: topicD } });
+    const rows = await prisma.observation.count({ where: { clientId: c1, connectionId: projection.connectionId, sourceRecordId: `${topicD}::GWO3A-${suffix}-CALL` } });
+    expect(rows).toBeGreaterThanOrEqual(7);
+    expect(projection.lastRevisionIdentifier).toBe('CK-C');
+    expect(projection.revision).toBe(3);
   });
 
   it('T10 client/source binding isolation: same sourceIdentifier under another client is a separate projection', async () => {

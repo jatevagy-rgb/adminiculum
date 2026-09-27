@@ -277,16 +277,36 @@ export function deriveGwoIdempotencyKey(sourceType: string, record: GwoOpportuni
 }
 
 /**
- * Source revision ordering. Observation/arrival time is NOT source ordering.
- * The only signal the accepted schemaVersion 1 contract carries that can prove
- * authoritative freshness is a source update timestamp: records whose
- * `sourceSpecificMetadata.fundingTenders.revisionSource` is 'lastChangeDate'
- * carry that timestamp as `sourceRevisionIdentifier`. Checksum-based revisions
- * (esST_checksum) are identity/change signals — never lexically ordered.
+ * Source revision ordering states. Observation/arrival time is NEVER ordering;
+ * checksums are NEVER lexically compared; DB insertion order is never used.
+ *
+ * The accepted watcher contract carries:
+ * - revision identity (esST_checksum) — change/identity signal only;
+ * - `sourceSpecificMetadata.fundingTenders.sourceOrderSignalStatus`
+ *   (AUTHORITATIVE_TIMESTAMP | AUTHORITATIVE_NO_HISTORY) and, for the
+ *   timestamp state, `sourceLastChangeAt` from the official topicDetails
+ *   latestInfos[].lastChangeDate history;
+ * - legacy/static records (revisionSource 'lastChangeDate' with the ISO
+ *   timestamp as the revision identifier) remain compatible.
+ *
+ * Missing/malformed/mismatched/unknown evidence degrades to UNPROVEN.
  */
 export type GwoRevisionOrdering =
-  | { kind: 'timestamp'; valueMs: number }
+  | { kind: 'authoritative_no_history' }
+  | { kind: 'authoritative_timestamp'; valueMs: number }
   | { kind: 'unproven' };
+
+const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}(?:[T ].*)?$/;
+
+function parseIsoTimestampMs(raw: unknown): number | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  // Date.parse is lenient about legacy formats ("REV-1" parses!); require an
+  // ISO date prefix before trusting the parsed value.
+  if (!ISO_TIMESTAMP.test(trimmed)) return null;
+  const valueMs = Date.parse(trimmed);
+  return Number.isNaN(valueMs) ? null : valueMs;
+}
 
 export function classifyRevisionOrdering(record: GwoOpportunityRecord): GwoRevisionOrdering {
   const metadata = record.sourceSpecificMetadata;
@@ -297,23 +317,30 @@ export function classifyRevisionOrdering(record: GwoOpportunityRecord): GwoRevis
   if (namespace === null || typeof namespace !== 'object' || Array.isArray(namespace)) {
     return { kind: 'unproven' };
   }
-  const revisionSource = (namespace as Record<string, unknown>)['revisionSource'];
-  if (revisionSource !== 'lastChangeDate') {
+  const ns = namespace as Record<string, unknown>;
+
+  // Primary (GWO-1G) contract: explicit order-signal status.
+  const status = ns['sourceOrderSignalStatus'];
+  if (status === 'AUTHORITATIVE_TIMESTAMP') {
+    const valueMs = parseIsoTimestampMs(ns['sourceLastChangeAt']);
+    return valueMs === null ? { kind: 'unproven' } : { kind: 'authoritative_timestamp', valueMs };
+  }
+  if (status === 'AUTHORITATIVE_NO_HISTORY') {
+    const raw = ns['sourceLastChangeAt'];
+    if (raw !== null && raw !== undefined) return { kind: 'unproven' };
+    return { kind: 'authoritative_no_history' };
+  }
+  if (status !== undefined && status !== null) {
     return { kind: 'unproven' };
   }
-  const raw = record.sourceRevisionIdentifier;
-  if (typeof raw !== 'string' || raw.trim().length === 0) {
-    return { kind: 'unproven' };
+
+  // Legacy/static compatibility: revisionSource 'lastChangeDate' with the
+  // authoritative timestamp as the revision identifier itself. Records stored
+  // before the explicit status field existed still classify here.
+  if (ns['revisionSource'] === 'lastChangeDate') {
+    const valueMs = parseIsoTimestampMs(record.sourceRevisionIdentifier);
+    return valueMs === null ? { kind: 'unproven' } : { kind: 'authoritative_timestamp', valueMs };
   }
-  const trimmed = raw.trim();
-  // Date.parse is lenient about legacy formats ("REV-1" parses!); require an
-  // ISO date prefix before trusting the parsed value.
-  if (!/^\d{4}-\d{2}-\d{2}(?:[T ].*)?$/.test(trimmed)) {
-    return { kind: 'unproven' };
-  }
-  const valueMs = Date.parse(trimmed);
-  if (Number.isNaN(valueMs)) {
-    return { kind: 'unproven' };
-  }
-  return { kind: 'timestamp', valueMs };
+  return { kind: 'unproven' };
 }
+
