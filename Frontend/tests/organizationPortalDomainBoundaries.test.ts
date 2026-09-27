@@ -37,6 +37,8 @@ function doc(overrides: Partial<PortalWorkspaceDocument> & { id: string; kind: P
     status: null,
     publishedAt: null,
     actionUrl: `/portal/documents/${overrides.id}`,
+    clientUploaded: false,
+    isCompliancePolicy: false,
     ...overrides,
   };
 }

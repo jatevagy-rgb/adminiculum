@@ -993,6 +993,17 @@ function toPortalMatter(row: Row, revision: Row | null, counts: Row = {}): Row {
   return dto;
 }
 
+/**
+ * Customer-facing classification: only uploads the customer themselves made
+ * (CLIENT_UPLOAD) or made through the client portal (CLIENT_PORTAL) count as
+ * customer-uploaded. Lawyer imports, e-mail/SharePoint provenance, generated
+ * documents and any other source are NOT customer uploads. The raw enum is
+ * never exposed to the portal — only this derived boolean is.
+ */
+export function isCustomerUploadedSource(uploadSource: unknown): boolean {
+  return uploadSource === 'CLIENT_UPLOAD' || uploadSource === 'CLIENT_PORTAL';
+}
+
 function toPortalDocument(row: Row, matter?: Row | null): Row {
   const versionLabel = row.versionNumber ? `Közzétett változat ${row.versionNumber}` : 'Közzétett változat';
   const dto = {
@@ -1007,6 +1018,10 @@ function toPortalDocument(row: Row, matter?: Row | null): Row {
     downloadAvailable: row.status === 'PUBLISHED',
     mimeType: row.mimeType || 'application/octet-stream',
     size: row.size || null,
+    // Derived customer-facing classifications. No raw uploadSource enum and no
+    // ComplianceDocument audience ever leave this projection.
+    clientUploaded: isCustomerUploadedSource(row.uploadSource),
+    isCompliancePolicy: row.isCompliancePolicy === true,
   };
   assertNoForbiddenPortalFields(dto);
   return dto;
@@ -1148,7 +1163,13 @@ export async function listPortalDocuments(actor: Actor, matterPublicationId?: st
     : context.caseIds;
   if (!caseIds.length) return { items: [] };
   const rows = await many(db, `SELECT p.*, p.status::text, p.visibility::text, v.version AS "versionNumber", v."mimeType", v.size,
-      coalesce(array_agg(r."workspaceMembershipId") FILTER (WHERE r."workspaceMembershipId" IS NOT NULL), ARRAY[]::text[]) AS "recipientMembershipIds"
+      coalesce(array_agg(r."workspaceMembershipId") FILTER (WHERE r."workspaceMembershipId" IS NOT NULL), ARRAY[]::text[]) AS "recipientMembershipIds",
+      v."uploadSource"::text AS "uploadSource",
+      EXISTS (
+        SELECT 1 FROM compliance_documents cd
+        WHERE cd."documentId" = v."documentId"
+          AND cd.audience = 'CLIENT_POLICY'::"ComplianceDocumentAudience"
+      ) AS "isCompliancePolicy"
     FROM client_document_publications p
     JOIN document_versions v ON v.id=p."documentVersionId"
     LEFT JOIN client_document_publication_recipients r ON r."documentPublicationId"=p.id
@@ -1164,7 +1185,13 @@ export async function getPortalDocument(actor: Actor, publicationId: string, db:
   const context = await resolvePortalContext(actor, db);
   const matterMap = await portalMatterMap(db, context);
   const row = await one(db, `SELECT p.*, p.status::text, p.visibility::text, v.version AS "versionNumber", v."mimeType", v.size,
-      coalesce(array_agg(r."workspaceMembershipId") FILTER (WHERE r."workspaceMembershipId" IS NOT NULL), ARRAY[]::text[]) AS "recipientMembershipIds"
+      coalesce(array_agg(r."workspaceMembershipId") FILTER (WHERE r."workspaceMembershipId" IS NOT NULL), ARRAY[]::text[]) AS "recipientMembershipIds",
+      v."uploadSource"::text AS "uploadSource",
+      EXISTS (
+        SELECT 1 FROM compliance_documents cd
+        WHERE cd."documentId" = v."documentId"
+          AND cd.audience = 'CLIENT_POLICY'::"ComplianceDocumentAudience"
+      ) AS "isCompliancePolicy"
     FROM client_document_publications p
     JOIN document_versions v ON v.id=p."documentVersionId"
     LEFT JOIN client_document_publication_recipients r ON r."documentPublicationId"=p.id
