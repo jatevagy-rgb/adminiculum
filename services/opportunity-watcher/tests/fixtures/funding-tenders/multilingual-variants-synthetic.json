@@ -1,0 +1,90 @@
+{
+  "searchResults": [
+    {
+      "reference": "synthetic-hu-topic-1",
+      "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/hu-topic-example",
+      "language": "hu",
+      "summary": "Szintetikus magyar című pályázati téma (tesztfixture).",
+      "content": "Szintetikus magyar tartalom.",
+      "checksum": "AAAA000000000000000000000000000000000000000000000000000000000001",
+      "metadata": {
+        "identifier": [
+          "HU-TOPIC-EXAMPLE"
+        ],
+        "callIdentifier": [
+          "HU-CALL-EXAMPLE"
+        ],
+        "title": [
+          "Szintetikus magyar cím"
+        ],
+        "status": [
+          "31094502"
+        ],
+        "deadlineDate": [
+          "2026-12-31"
+        ],
+        "frameworkProgramme": [
+          "Synthetic Programme"
+        ],
+        "language": [
+          "hu"
+        ],
+        "esST_checksum": [
+          "AAAA000000000000000000000000000000000000000000000000000000000001"
+        ],
+        "updateDate": [
+          "2026-01-01T10:00:00.000"
+        ],
+        "DATASOURCE": [
+          "SEDIA-TOPICS-PROD"
+        ],
+        "type": [
+          "1"
+        ]
+      }
+    },
+    {
+      "reference": "synthetic-en-topic-1",
+      "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/opportunities/topic-details/hu-topic-example",
+      "language": "en",
+      "summary": "Synthetic English title of a grant topic (test fixture).",
+      "content": "Synthetic English content.",
+      "checksum": "AAAA000000000000000000000000000000000000000000000000000000000001",
+      "metadata": {
+        "identifier": [
+          "HU-TOPIC-EXAMPLE"
+        ],
+        "callIdentifier": [
+          "HU-CALL-EXAMPLE"
+        ],
+        "title": [
+          "Synthetic English title"
+        ],
+        "status": [
+          "31094502"
+        ],
+        "deadlineDate": [
+          "2026-12-31"
+        ],
+        "frameworkProgramme": [
+          "Synthetic Programme"
+        ],
+        "language": [
+          "en"
+        ],
+        "esST_checksum": [
+          "AAAA000000000000000000000000000000000000000000000000000000000001"
+        ],
+        "updateDate": [
+          "2026-01-01T10:00:00.000"
+        ],
+        "DATASOURCE": [
+          "SEDIA-TOPICS-PROD"
+        ],
+        "type": [
+          "1"
+        ]
+      }
+    }
+  ]
+}

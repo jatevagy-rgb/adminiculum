@@ -1,0 +1,33 @@
+{
+  "note": "Fixtures for deterministic GWO-1 tests. Every fixture is bounded and provenance-backed. Synthetic fixtures are explicitly marked and never presented as live data.",
+  "fixtures": {
+    "topic-agrip-multi-2021-im.json": {
+      "origin": "LIVE_CAPTURE_TRIMMED",
+      "sourceName": "EU Funding & Tenders Portal static topic details",
+      "sourceUrl": "https://ec.europa.eu/info/funding-tenders/opportunities/data/topicDetails/agrip-multi-2021-im.json?language=en",
+      "capturedAt": "2026-09-27T18:12:00Z",
+      "rawCaptureSha256": "12532c0a07cdb9d0d7e188c6fd538bc377d3d89ad6d7dc396e03e393a8669bc4",
+      "trimming": "Long HTML fields (description, conditions, supportInfo, sepTemplate) truncated to bounded excerpts; tags limited to 8; actions limited to status+first type+deadlines. All structural fields preserved verbatim.",
+      "multilingualNote": "The static topicDetails endpoint returns an identical canonical record for language=en|hu|de|fr (verified 2026-09-27); language is a search-side dimension, not part of this record."
+    },
+    "search-response-sample.json": {
+      "origin": "LIVE_CAPTURE_TRIMMED",
+      "sourceName": "EU Funding & Tenders Portal search API",
+      "sourceUrl": "https://api.tech.ec.europa.eu/search-api/prod/rest/search?apiKey=SEDIA",
+      "requestBody": "application/x-www-form-urlencoded: text=, pageSize=10, pageNumber=1",
+      "capturedAt": "2026-09-27T18:10:00Z",
+      "httpStatus": 200,
+      "rawCaptureSha256": "f64dc1a1941b5f7454ca2a460bfc02059a8a797f07feb84893b7884bf41f216a",
+      "trimming": "First 2 of 10 results kept; long summary/content truncated; bestBets, warnings, enrichedMetadata, children, highlightedFragments, citation omitted. Envelope fields preserved.",
+      "note": "The unfiltered search returns portal content of all types (observed: SEDIA-EVENTS-PROD entries). Topic-scoped query parameters were not re-verified because the live-request budget for this run is exhausted; normalize fails closed for records without a stable topic identifier."
+    },
+    "multilingual-variants-synthetic.json": {
+      "origin": "SYNTHETIC",
+      "note": "Synthetic HU + EN search-entry variants sharing one identifier. Constructed to exercise deterministic multilingual grouping; field names follow the verified search-result metadata shape. Not fetched from the portal."
+    },
+    "malformed-records-synthetic.json": {
+      "origin": "SYNTHETIC",
+      "note": "Synthetic malformed/identity-less records for fail-closed tests. Not fetched from the portal."
+    }
+  }
+}
