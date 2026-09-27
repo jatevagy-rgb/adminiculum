@@ -5643,7 +5643,8 @@ model LegalSource {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
-  versions LegalSourceVersion[]
+  versions     LegalSourceVersion[]
+  observations LegalSourceObservation[]
 
   @@index([jurisdictionCode, instrumentType])
   @@index([status])
@@ -5673,6 +5674,7 @@ model LegalSourceVersion {
   captures  LegalSourceCapture[]
   citations RequirementCitation[]
   clauseAnchors ComplianceDocumentClauseAnchor[]
+  observations LegalSourceObservation[]
 
   @@unique([legalSourceId, legalVersionKey])
   @@unique([id, legalSourceId])
@@ -5697,10 +5699,67 @@ model LegalSourceCapture {
   selectedForReviewAt  DateTime?
   createdAt            DateTime                          @default(now())
 
+  observations LegalSourceObservation[]
+
   @@unique([legalSourceVersionId, sourceSha256])
   @@index([sourceSha256])
   @@index([legalSourceVersionId, captureStatus])
   @@map("legal_source_captures")
+}
+
+/// W2 — machine-ingested watcher legal-source observation (NON-TENANT, INTERNAL).
+///
+/// Deliberately NOT the client-scoped Observation model: it carries no
+/// clientId/caseId/documentId and is written only by the dedicated machine
+/// endpoint using the narrow watcher auth. An observation is durable provenance
+/// for ONE source-side legal event: `sourceIdentifier` is the watched/base act,
+/// `relatedIdentifier` is the source-side object that caused the event (amending
+/// act or consolidated version CELEX).
+///
+/// V1 kinds:
+///  - AMENDMENT_PUBLISHED: observation only; no version, no capture.
+///  - CONSOLIDATED_VERSION_AVAILABLE: observation + optional CANDIDATE /
+///    UNREVIEWED LegalSourceVersion (legalVersionKey = relatedIdentifier) and an
+///    optional LegalSourceCapture keyed by (version, sourceSha256).
+///
+/// Idempotency: idempotencyKey is unique; payloadDigest is a SHA-256 over the
+/// canonicalized semantic payload. Same key + same digest replays with zero new
+/// writes; same key + different digest is rejected and never overwritten.
+enum LegalSourceObservationKind {
+  AMENDMENT_PUBLISHED
+  CONSOLIDATED_VERSION_AVAILABLE
+}
+
+model LegalSourceObservation {
+  id                   String                    @id @default(uuid())
+  schemaVersion        Int                       @default(1)
+  idempotencyKey       String                    @unique @db.VarChar(255)
+  payloadDigest        String                    @db.VarChar(64)
+  kind                 LegalSourceObservationKind
+  source               String
+  identifierFamily     String
+  sourceIdentifier     String
+  relatedIdentifier    String
+  legalSourceId        String
+  legalSource          LegalSource               @relation(fields: [legalSourceId], references: [id], onDelete: Restrict)
+  effectiveFrom        DateTime?
+  sourceUri            String
+  evidenceSha256       String                    @db.VarChar(64)
+  capturedAt           DateTime
+  queryProvenance      Json?
+  warnings             Json?
+  legalSourceVersionId String?
+  legalSourceVersion   LegalSourceVersion?       @relation(fields: [legalSourceVersionId], references: [id], onDelete: Restrict)
+  legalSourceCaptureId String?
+  legalSourceCapture   LegalSourceCapture?       @relation(fields: [legalSourceCaptureId], references: [id], onDelete: Restrict)
+  ingestedAt           DateTime                  @default(now())
+
+  @@index([legalSourceId, kind])
+  @@index([sourceIdentifier, kind])
+  @@index([legalSourceVersionId])
+  @@index([legalSourceCaptureId])
+  @@index([capturedAt])
+  @@map("legal_source_observations")
 }
 
 enum RequirementStatus {
