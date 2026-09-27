@@ -391,42 +391,61 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         </div>
       </nav>
 
-      {/* 1. AMI MOST ÖNTŐL KELL — ONE parent container. Jogi/megfelelési teendők
-          plus only the other actionable signals the DTO carries right now. Each
+      {/* 1. AMI MOST ÖNTŐL KELL — ONE parent container with truthful subsections.
+          "Teendő" holds only canonical ACTION_REQUIRED signals (published action
+          requests + canonical unread state); "Új információ" holds only FYI
+          signals (recently published documents) and never asks for action. Each
           row is gated on its own real data, never on a fabricated default. */}
       <Section
         kicker="Teendői"
         title="Ami most Öntől kell"
         empty={!hasAttentionEntries}
-        emptyText="Jelenleg nincs Önnek szóló teendő."
+        emptyText="Jelenleg nincs Önnek szóló teendő vagy új információ."
         note={actionScopeNote}
         actionLink={actionScopeNote ? "/portal/teendoim" : undefined}
         actionLabel={actionScopeNote ? "Összes teendő" : undefined}
       >
-        {actionNow.map((action) => (
-          <ActionRow key={action.id} action={action} />
-        ))}
-        {unreadMessageCount > 0 ? (
-          <Link
-            href="/portal/uzenetek"
-            data-testid="portal-attention-message"
-            className="cp-row block p-4 transition hover:border-[#b99b45]"
-          >
-            <p className="cp-kicker">Új üzenet</p>
-            <p className="cp-title mt-1 text-lg">{unreadMessageCount} olvasatlan üzenet</p>
-            <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Az iroda válasza megnyitásra vár.</p>
-          </Link>
+        {actionNow.length > 0 || unreadMessageCount > 0 ? (
+          <div data-testid="portal-action-subsection" className="rounded-2xl bg-stone-50 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">
+              Teendő · Öntől vár megoldás
+            </p>
+            <div className="mt-2 grid gap-3">
+              {actionNow.map((action) => (
+                <ActionRow key={action.id} action={action} />
+              ))}
+              {unreadMessageCount > 0 ? (
+                <Link
+                  href="/portal/uzenetek"
+                  data-testid="portal-attention-message"
+                  className="cp-row block p-4 transition hover:border-[#b99b45]"
+                >
+                  <p className="cp-kicker">Új üzenet</p>
+                  <p className="cp-title mt-1 text-lg">{unreadMessageCount} olvasatlan üzenet</p>
+                  <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Az iroda válasza megnyitásra vár.</p>
+                </Link>
+              ) : null}
+            </div>
+          </div>
         ) : null}
         {availableDocumentCount > 0 ? (
-          <Link
-            href="/portal/dokumentumok"
-            data-testid="portal-attention-document"
-            className="cp-row block p-4 transition hover:border-[#b99b45]"
+          <div
+            data-testid="portal-fyi-subsection"
+            className="rounded-2xl border border-dashed border-stone-300 bg-white p-4"
           >
-            <p className="cp-kicker">Nemrég közzétett dokumentum</p>
-            <p className="cp-title mt-1 text-lg">{availableDocumentCount} elérhető dokumentum</p>
-            <p className="mt-1 text-sm text-[var(--adm-text-muted)]">A legutóbb megosztott anyagok a Dokumentumok felületen.</p>
-          </Link>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-500">
+              Új információ · tájékoztatás, nem teendő
+            </p>
+            <Link
+              href="/portal/dokumentumok"
+              data-testid="portal-attention-document"
+              className="block p-4 transition hover:border-[#b99b45]"
+            >
+              <p className="cp-kicker">Nemrég közzétett dokumentum</p>
+              <p className="cp-title mt-1 text-lg">{availableDocumentCount} elérhető dokumentum</p>
+              <p className="mt-1 text-sm text-[var(--adm-text-muted)]">A legutóbb megosztott anyagok a Dokumentumok felületen érhetők el.</p>
+            </Link>
+          </div>
         ) : null}
       </Section>
 
