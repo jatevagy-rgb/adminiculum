@@ -5,7 +5,14 @@
  * authorize -> resolve/register the company source connection -> DiscoveryRun
  * -> per-record Observation ingestion (existing Observatory idempotency) ->
  * ExternalOpportunity current projection (create/update with an explicit
- * regression guard) -> COMPLETED or PARTIAL run.
+ * source-revision ordering guard) -> COMPLETED or PARTIAL run.
+ *
+ * ORDERING INVARIANT: arrival/observation order is NOT source revision order.
+ * A different revision/content may replace the current projection only when
+ * both records carry an authoritative source update timestamp and the incoming
+ * one is strictly newer; otherwise the change is refused explicitly (the
+ * immutable Observation is still preserved). observedAt is never used as
+ * source ordering.
  *
  * No matching, no criteria, no review, no Grow side effects. Observation rows
  * are immutable history; only the projection row changes. Observation
@@ -18,7 +25,7 @@ import { assertClientReadAccess, InteractionError } from '../../client-interacti
 import type { InternalActor } from '../../client-interaction/base';
 import { ObservatoryIngestionService } from './service';
 import type { GwoImportPayload, GwoOpportunityRecord } from './opportunityTypes';
-import { deriveBusinessKey, deriveGwoIdempotencyKey, deriveScopeKey, validateGwoImportPayload } from './opportunityTypes';
+import { classifyRevisionOrdering, deriveBusinessKey, deriveGwoIdempotencyKey, deriveScopeKey, validateGwoImportPayload } from './opportunityTypes';
 
 function parseOptionalDate(value: string | null): Date | null {
   if (value === null) return null;
@@ -89,6 +96,30 @@ async function resolveConnection(
     config: {},
   });
   return created.id;
+}
+
+/**
+ * The business record behind the current immutable Observation. The raw
+ * payload carries { sourceType, schemaVersion, record }; the record's own
+ * revision metadata is the source of truth for ordering comparisons.
+ */
+async function loadCurrentRecord(
+  db: PrismaClient,
+  clientId: string,
+  observationId: string,
+): Promise<GwoOpportunityRecord | null> {
+  const observation = await db.observation.findUnique({
+    where: { id_clientId: { id: observationId, clientId } },
+    select: { rawPayload: true },
+  });
+  if (!observation || observation.rawPayload === null || typeof observation.rawPayload !== 'object' || Array.isArray(observation.rawPayload)) {
+    return null;
+  }
+  const record = (observation.rawPayload as Record<string, unknown>)['record'];
+  if (record === null || typeof record !== 'object' || Array.isArray(record)) {
+    return null;
+  }
+  return record as GwoOpportunityRecord;
 }
 
 /**
@@ -180,14 +211,30 @@ export async function importExternalOpportunityBatch(
         continue;
       }
 
-      // New source revision/content. Regression guard: only strictly newer
-      // source observation timestamps may replace the current projection;
-      // older or ambiguous (equal-timestamp, different-content) arrivals are
-      // refused rather than silently overwriting.
-      const strictlyNewer = observedAt.getTime() > existing.lastSeenAt.getTime();
-      if (!strictlyNewer) {
+      // New source revision/content. PROJECTION REGRESSION GUARD:
+      // arrival/observation order is NOT source revision order. Replacing the
+      // current projection requires a trustworthy authoritative ordering
+      // proof: the current and incoming records must both carry a source
+      // update timestamp (revisionSource 'lastChangeDate') and the incoming
+      // timestamp must be strictly newer. Checksum-based revisions, mixed or
+      // missing ordering signals, unparseable timestamps and equal-timestamp
+      // different-content arrivals are refused explicitly — the immutable
+      // Observation is still preserved as history.
+      const incomingOrdering = classifyRevisionOrdering(record);
+      const previousRecord = await loadCurrentRecord(db, clientId, existing.currentObservationId);
+      const previousOrdering = previousRecord !== null ? classifyRevisionOrdering(previousRecord) : ({ kind: 'unproven' } as const);
+      let updateAllowed = false;
+      let guardCode = 'GWO_REVISION_ORDER_UNPROVEN';
+      if (incomingOrdering.kind === 'timestamp' && previousOrdering.kind === 'timestamp') {
+        if (incomingOrdering.valueMs > previousOrdering.valueMs) {
+          updateAllowed = true;
+        } else if (incomingOrdering.valueMs < previousOrdering.valueMs) {
+          guardCode = 'GWO_STALE_SOURCE_REVISION';
+        }
+      }
+      if (!updateAllowed) {
         counts.failed += 1;
-        results.push({ businessKey, scopeKey, outcome: 'FAILED', code: 'GWO_STALE_REVISION_REJECTED', opportunityId: existing.id });
+        results.push({ businessKey, scopeKey, outcome: 'FAILED', code: guardCode, opportunityId: existing.id });
         continue;
       }
       const updated = await db.externalOpportunity.update({

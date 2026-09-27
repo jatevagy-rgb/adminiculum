@@ -13,6 +13,7 @@ import {
   ACCEPTED_GWO_SOURCES,
   GWO_MAX_BATCH_RECORDS,
   GWO_IDEMPOTENCY_KEY_LIMIT,
+  classifyRevisionOrdering,
   deriveBusinessKey,
   deriveGwoIdempotencyKey,
   deriveScopeKey,
@@ -143,6 +144,30 @@ describe('GWO-3A boundary contract (static)', () => {
     expect(longKeyTwo).not.toBe(longKey);
     const revisionFallback = deriveGwoIdempotencyKey('EU_FUNDING_TENDERS', validRecord({ sourceRevisionIdentifier: null }));
     expect(revisionFallback).toContain(HASH_A);
+  });
+
+  test('revision ordering: only source update timestamps count, never checksums', () => {
+    const timestampRecord = validRecord({
+      sourceRevisionIdentifier: '2026-09-25T10:00:00.000',
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'lastChangeDate' } },
+    });
+    const ordering = classifyRevisionOrdering(timestampRecord);
+    expect(ordering.kind).toBe('timestamp');
+    if (ordering.kind === 'timestamp') {
+      expect(ordering.valueMs).toBe(Date.parse('2026-09-25T10:00:00.000'));
+    }
+    const checksumRecord = validRecord({
+      sourceRevisionIdentifier: 'a'.repeat(64),
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'esST_checksum' } },
+    });
+    expect(classifyRevisionOrdering(checksumRecord).kind).toBe('unproven');
+    const missingMetadata = validRecord({ sourceSpecificMetadata: {} });
+    expect(classifyRevisionOrdering(missingMetadata).kind).toBe('unproven');
+    const unparseable = validRecord({
+      sourceRevisionIdentifier: 'REV-1',
+      sourceSpecificMetadata: { fundingTenders: { revisionSource: 'lastChangeDate' } },
+    });
+    expect(classifyRevisionOrdering(unparseable).kind).toBe('unproven');
   });
 
   test('static guard: no Grow side effects, no watcher runtime import', () => {

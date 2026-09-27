@@ -275,3 +275,45 @@ export function deriveGwoIdempotencyKey(sourceType: string, record: GwoOpportuni
   const digest = createHash('sha256').update(full).digest('hex');
   return `gw:${sourceType}:sha256:${digest}`;
 }
+
+/**
+ * Source revision ordering. Observation/arrival time is NOT source ordering.
+ * The only signal the accepted schemaVersion 1 contract carries that can prove
+ * authoritative freshness is a source update timestamp: records whose
+ * `sourceSpecificMetadata.fundingTenders.revisionSource` is 'lastChangeDate'
+ * carry that timestamp as `sourceRevisionIdentifier`. Checksum-based revisions
+ * (esST_checksum) are identity/change signals — never lexically ordered.
+ */
+export type GwoRevisionOrdering =
+  | { kind: 'timestamp'; valueMs: number }
+  | { kind: 'unproven' };
+
+export function classifyRevisionOrdering(record: GwoOpportunityRecord): GwoRevisionOrdering {
+  const metadata = record.sourceSpecificMetadata;
+  if (metadata === null || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return { kind: 'unproven' };
+  }
+  const namespace = (metadata as Record<string, unknown>)['fundingTenders'];
+  if (namespace === null || typeof namespace !== 'object' || Array.isArray(namespace)) {
+    return { kind: 'unproven' };
+  }
+  const revisionSource = (namespace as Record<string, unknown>)['revisionSource'];
+  if (revisionSource !== 'lastChangeDate') {
+    return { kind: 'unproven' };
+  }
+  const raw = record.sourceRevisionIdentifier;
+  if (typeof raw !== 'string' || raw.trim().length === 0) {
+    return { kind: 'unproven' };
+  }
+  const trimmed = raw.trim();
+  // Date.parse is lenient about legacy formats ("REV-1" parses!); require an
+  // ISO date prefix before trusting the parsed value.
+  if (!/^\d{4}-\d{2}-\d{2}(?:[T ].*)?$/.test(trimmed)) {
+    return { kind: 'unproven' };
+  }
+  const valueMs = Date.parse(trimmed);
+  if (Number.isNaN(valueMs)) {
+    return { kind: 'unproven' };
+  }
+  return { kind: 'timestamp', valueMs };
+}

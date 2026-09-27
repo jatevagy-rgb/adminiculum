@@ -45,7 +45,7 @@ d('GWO-3A ingestion integration', () => {
       schemaVersion: 1,
       source: 'EU_FUNDING_TENDERS',
       sourceIdentifier: topicA,
-      sourceRevisionIdentifier: 'REV-1',
+      sourceRevisionIdentifier: '2026-09-20T10:00:00.000',
       kind: 'FUNDING',
       title: 'Synthetic GWO-3A topic',
       status: 'OPEN',
@@ -74,7 +74,7 @@ d('GWO-3A ingestion integration', () => {
       currency: 'EUR',
       cofinancingRate: null,
       eligibilityText: null,
-      sourceSpecificMetadata: { fundingTenders: { rawStatusCodes: ['31094502'], sourceType: 1 } },
+      sourceSpecificMetadata: { fundingTenders: { rawStatusCodes: ['31094502'], sourceType: 1, revisionSource: 'lastChangeDate' } },
       ...overrides,
     };
   }
@@ -157,11 +157,11 @@ d('GWO-3A ingestion integration', () => {
     expect(projection.lastContentHash).toBe(HASH_A);
   });
 
-  it('T5/T6/T7/T8 newer source revision -> new Observation, old preserved, same projection, revision +1', async () => {
+  it('T5/T6/T7/T8 newer authoritative source revision -> new Observation, old preserved, same projection, revision +1', async () => {
     const before = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
     const result = await importExternalOpportunityBatch(admin, c1, {
       sourceType: 'EU_FUNDING_TENDERS',
-      records: [record({ sourceRevisionIdentifier: 'REV-2', contentHash: HASH_B, title: 'Updated topic title', observedAt: '2026-09-27T12:00:00.000Z' })],
+      records: [record({ sourceRevisionIdentifier: '2026-09-25T10:00:00.000', contentHash: HASH_B, title: 'Updated topic title', observedAt: '2026-09-27T12:00:00.000Z' })],
     }, { db: prisma });
     expect(result.counts.updated).toBe(1);
     const after = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
@@ -175,19 +175,72 @@ d('GWO-3A ingestion integration', () => {
     expect(observations).toBe(2);
   });
 
-  it('T9 older replay cannot regress the newer projection', async () => {
+  it('T9 MUST-FAIL REGRESSION: older source revision with LATER observedAt cannot regress the projection', async () => {
     const before = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
     const result = await importExternalOpportunityBatch(admin, c1, {
       sourceType: 'EU_FUNDING_TENDERS',
-      records: [record({ sourceRevisionIdentifier: 'REV-3', contentHash: HASH_C, title: 'Stale older revision', observedAt: '2026-09-27T09:00:00.000Z' })],
+      records: [record({
+        sourceRevisionIdentifier: '2026-09-15T10:00:00.000',
+        contentHash: HASH_C,
+        title: 'Stale older source revision',
+        observedAt: '2026-09-27T20:00:00.000Z',
+      })],
     }, { db: prisma });
     expect(result.counts.failed).toBe(1);
-    expect(result.results[0]?.code).toBe('GWO_STALE_REVISION_REJECTED');
+    expect(result.counts.updated).toBe(0);
+    expect(result.results[0]?.code).toBe('GWO_STALE_SOURCE_REVISION');
+    expect(result.status).toBe('PARTIAL');
     const after = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
     expect(after.revision).toBe(before.revision);
     expect(after.title).toBe(before.title);
     expect(after.lastContentHash).toBe(before.lastContentHash);
     expect(after.currentObservationId).toBe(before.currentObservationId);
+    expect(after.lastRevisionIdentifier).toBe(before.lastRevisionIdentifier);
+    const staleObservation = await prisma.observation.findFirst({
+      where: { clientId: c1, connectionId: after.connectionId, sourceRecordId: `${topicA}::GWO3A-${suffix}-CALL` },
+      orderBy: { createdAt: 'desc' },
+    });
+    expect(staleObservation).not.toBeNull();
+  });
+
+  it('T9b checksum-based differing revision is refused as order-unproven', async () => {
+    const before = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceRevisionIdentifier: 'FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF',
+        contentHash: HASH_C,
+        title: 'Checksum-based change without ordering proof',
+        observedAt: '2026-09-27T21:00:00.000Z',
+        sourceSpecificMetadata: { fundingTenders: { rawStatusCodes: ['31094502'], sourceType: 1, revisionSource: 'esST_checksum' } },
+      })],
+    }, { db: prisma });
+    expect(result.counts.failed).toBe(1);
+    expect(result.counts.updated).toBe(0);
+    expect(result.results[0]?.code).toBe('GWO_REVISION_ORDER_UNPROVEN');
+    const after = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
+    expect(after.revision).toBe(before.revision);
+    expect(after.lastContentHash).toBe(before.lastContentHash);
+    expect(after.currentObservationId).toBe(before.currentObservationId);
+  });
+
+  it('T9c authoritative newer revision updates even when watcher observation timing is unusual', async () => {
+    const before = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
+    const result = await importExternalOpportunityBatch(admin, c1, {
+      sourceType: 'EU_FUNDING_TENDERS',
+      records: [record({
+        sourceRevisionIdentifier: '2026-09-28T10:00:00.000',
+        contentHash: HASH_C,
+        title: 'Authoritatively newer revision',
+        observedAt: '2026-09-27T01:00:00.000Z',
+      })],
+    }, { db: prisma });
+    expect(result.counts.updated).toBe(1);
+    const after = await prisma.externalOpportunity.findUniqueOrThrow({ where: { id_clientId: { id: opportunityId, clientId: c1 } } });
+    expect(after.id).toBe(before.id);
+    expect(after.revision).toBe(before.revision + 1);
+    expect(after.title).toBe('Authoritatively newer revision');
+    expect(after.lastRevisionIdentifier).toBe('2026-09-28T10:00:00.000');
   });
 
   it('T10 client/source binding isolation: same sourceIdentifier under another client is a separate projection', async () => {
