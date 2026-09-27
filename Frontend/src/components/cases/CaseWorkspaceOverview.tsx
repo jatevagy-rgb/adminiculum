@@ -234,7 +234,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
               <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Ellenőrző</dt><dd className="truncate font-semibold">{reviewer || "Nincs adat"}</dd></div>
               <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Határidő</dt><dd className="font-semibold">{fmtDate(c.deadline)}</dd></div>
               <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Ügyfél szerepe</dt><dd className="truncate font-semibold">{clientRoleLabel || "Nincs adat"}</dd></div>
-              {c.matterId ? <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Matter</dt><dd><Link href={`/matters/${encodeURIComponent(c.matterId)}`} className="font-semibold text-[var(--adm-green-800)] hover:underline">Megnyitás</Link></dd></div> : null}
+              {c.matterId ? <div><dt className="text-[9px] font-bold uppercase tracking-wide text-[var(--adm-text-muted)]">Matter</dt><dd className="truncate font-semibold" title={c.matterId}>{c.matterId}</dd></div> : null}
             </dl>
             <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-1.5">
               <span className="min-w-0">
