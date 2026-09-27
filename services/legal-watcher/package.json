@@ -1,0 +1,26 @@
+{
+  "name": "adminiculum-legal-watcher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated EUR-Lex (CELLAR) legal-source watcher. W1 dry-run: manifest snapshot -> CELEX -> official CELLAR SPARQL -> act-level amendment/consolidation observations -> local durable baseline -> deterministic diff -> dry-run report. Zero backend writes.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20 <21"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "watcher": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "jest --runInBand --forceExit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/jest": "29.5.12",
+    "@types/node": "20.14.10",
+    "jest": "29.7.0",
+    "ts-jest": "29.2.5",
+    "typescript": "5.5.4"
+  }
+}

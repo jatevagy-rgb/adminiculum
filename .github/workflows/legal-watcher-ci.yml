@@ -1,0 +1,46 @@
+name: Legal watcher service CI
+
+# Required CI for the isolated legal watcher service (W1 dry-run slice):
+#   - Node 20 toolchain, npm ci
+#   - typecheck + build
+#   - deterministic unit tests (mocked CELLAR — no live network dependency)
+#   - production Docker build
+# Live CELLAR availability is deliberately NOT a required PR check.
+
+on:
+  pull_request:
+    paths:
+      - 'services/legal-watcher/**'
+      - '.github/workflows/legal-watcher-ci.yml'
+  workflow_dispatch: {}
+
+jobs:
+  legal-watcher-tests:
+    name: Legal watcher typecheck + build + deterministic tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/legal-watcher
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Type-check
+        run: npm run typecheck
+      - name: Build
+        run: npm run build
+      - name: Deterministic tests (mocked CELLAR)
+        run: npm test
+
+  legal-watcher-docker-build:
+    name: Production Docker build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/legal-watcher
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build -t legal-watcher:ci .
