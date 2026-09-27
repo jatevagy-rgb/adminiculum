@@ -94,6 +94,7 @@ import { resolveWordHandoffUrl } from "@/components/documents/reader/readerContr
 import { ComparisonWorkspace } from "@/components/documents/comparison/ComparisonWorkspace";
 import { CanonicalChangesWorkspace } from "@/components/documents/comparison/CanonicalChangesWorkspace";
 import { DocumentReviewWorkflowPanel } from "@/components/documents/review/DocumentReviewWorkflowPanel";
+import { ContractDateCandidatesPanel } from "@/components/documents/contractDates/ContractDateCandidatesPanel";
 import {
   addReviewPoint,
   listDocumentReviews,
@@ -2845,6 +2846,14 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         ) : (
                           <p className="rounded border border-dashed border-[rgba(22,32,26,0.18)] p-3 text-xs text-[var(--adm-text-muted)]">Válassz dokumentumot az áttekintéshez.</p>
                         )}
+                        {selectedUploadedDocument ? (
+                          <ContractDateCandidatesPanel
+                            documentId={selectedUploadedDocument.id}
+                            documentVersionId={canonicalActiveVersion?.id ?? null}
+                            clientId={caseRecord?.clientId ?? null}
+                            canManage={caseRecord?.status !== "ARCHIVED"}
+                          />
+                        ) : null}
                       </div>
 
                       <div className={activeMode === 'review' ? 'space-y-4' : 'hidden'} data-testid="review-mode-panel">

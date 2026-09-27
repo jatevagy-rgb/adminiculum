@@ -124,6 +124,8 @@ model User {
   decidedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDecidedBy")
   deletedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDeletedBy")
   documentModificationProposalEvents   DocumentModificationProposalEvent[] @relation("DocumentModificationProposalEventActor")
+  createdContractDateCandidates        ContractDateCandidate[]             @relation("ContractDateCandidateCreatedBy")
+  decidedContractDateCandidates        ContractDateCandidate[]             @relation("ContractDateCandidateDecidedBy")
 
   @@map("users")
 }
@@ -1280,6 +1282,7 @@ model Document {
   taskSubmissionDocuments TaskSubmissionDocument[]
   complianceDocuments     ComplianceDocument[]
   modificationProposals   DocumentModificationProposal[]
+  dateCandidates          ContractDateCandidate[]
 
   // ---- Document work context (DOCUMENT-WORK-CONTEXT-1) --------------------
   // A filename is not a work instruction. These columns carry the operational
@@ -1435,6 +1438,7 @@ model DocumentVersion {
   evidenceRecords         EvidenceRecord[]
   complianceClauseAnchors ComplianceDocumentClauseAnchor[]
   modificationProposals   DocumentModificationProposal[]
+  dateCandidates          ContractDateCandidate[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1714,6 +1718,72 @@ model DocumentModificationProposalEvent {
   @@index([proposalId, createdAt])
   @@index([actorId, createdAt])
   @@map("document_modification_proposal_events")
+}
+
+enum ContractDateCandidateStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+/// Contract Date Extraction (internal): extraction output is a CANDIDATE and can
+/// NEVER write canonical contract dates directly. Every candidate is bound to ONE
+/// immutable DocumentVersion (exact source version), carries its supporting
+/// excerpt, and only an explicit lawyer Confirm writes through the canonical
+/// ContractRecord / ClientObligationOccurrence service. Rejected candidates stay
+/// terminal for their (version, type, date, excerpt) identity so a rejected value
+/// cannot reappear unless the source version or extraction output actually changes.
+model ContractDateCandidate {
+  id                String                      @id @default(uuid())
+  documentId        String
+  documentVersionId String
+
+  /// Validated STRING registry code (no Prisma enum): EFFECTIVE | EXPIRY |
+  /// NEXT_CRITICAL | PAYMENT_DUE | MILESTONE | NOTICE | OTHER.
+  dateType String
+
+  proposedDate DateTime
+
+  /// Supporting source excerpt copied from the exact version text.
+  sourceExcerpt      String
+  excerptStartOffset Int?
+  excerptEndOffset   Int?
+  /// Short normalized hash of sourceExcerpt used for dedupe and staleness.
+  excerptHash String?
+
+  /// RULE_BASED_EXTRACTION | MANUAL | AI_IMPORT — extraction provenance only;
+  /// no confidence score is fabricated.
+  provenance      String
+  aiPromptDraftId String?
+
+  status ContractDateCandidateStatus @default(PENDING)
+
+  /// Set only by a confirmed candidate; the canonical row written through the
+  /// existing contract/occurrence service.
+  targetContractId   String?
+  targetContract     ContractRecord?             @relation(fields: [targetContractId], references: [id], onDelete: SetNull)
+  targetOccurrenceId String?
+
+  decisionReason String?
+  decidedById    String?
+  decidedBy      User?                           @relation("ContractDateCandidateDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt      DateTime?
+
+  createdById String
+  createdBy   User        @relation("ContractDateCandidateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentId, documentVersionId], references: [documentId, id], onDelete: Restrict)
+
+  @@unique([documentVersionId, dateType, proposedDate, excerptHash])
+  @@index([documentId, status])
+  @@index([documentVersionId, status])
+  @@index([targetContractId])
+  @@index([decidedById])
+  @@map("contract_date_candidates")
 }
 
 model DocumentReview {
@@ -5145,6 +5215,7 @@ model ContractRecord {
   obligations                ClientObligation[]
   entitlements               ContractEntitlement[]
   obligationOccurrences      ClientObligationOccurrence[]
+  dateCandidates             ContractDateCandidate[]
   factSubjects               FactSubject[]                  @relation("FactSubjectContract")
   businessOwnerPersonId      String?
   businessOwnerPerson        OrganizationPerson?            @relation(fields: [businessOwnerPersonId], references: [id], onDelete: SetNull)
