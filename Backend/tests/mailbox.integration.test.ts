@@ -12,10 +12,12 @@ describeWithDatabase('universal mailbox PostgreSQL boundary', () => {
   const ownerId = crypto.randomUUID(), colleagueId = crypto.randomUUID(), otherId = crypto.randomUUID();
   const connectionA = crypto.randomUUID(), connectionB = crypto.randomUUID();
   let failSend = false;
+  const defaultMessages = [{ providerMessageId: 'shared-message', direction: 'INBOUND', from: { email: 'sender@example.invalid' }, to: [{ email: 'owner@example.invalid' }], cc: [], subject: 'Inbound', bodyText: 'body must not reach audit', bodyHtml: '<p>body</p>', attachments: [{ providerAttachmentId: 'a1', fileName: 'safe.pdf', contentType: 'application/pdf', sizeBytes: 12 }] }];
+  let providerMessages: any[] = defaultMessages;
   const adapter: MailboxProviderAdapter = {
     code: 'MICROSOFT_GRAPH', displayName: 'fake', requiresProviderConfiguration: false,
     buildAuthorizationUrl: () => '', exchangeAuthorizationCode: async () => ({ secret: { kind: 'OAUTH2', accessToken: 'access-token', refreshToken: 'refresh-token' } }),
-    listMessagesSinceCursor: async () => ({ messages: [{ providerMessageId: 'shared-message', direction: 'INBOUND', from: { email: 'sender@example.invalid' }, to: [{ email: 'owner@example.invalid' }], cc: [], subject: 'Inbound', bodyText: 'body must not reach audit', bodyHtml: '<p>body</p>', attachments: [{ providerAttachmentId: 'a1', fileName: 'safe.pdf', contentType: 'application/pdf', sizeBytes: 12 }] }], nextCursor: 'cursor-2' }),
+    listMessagesSinceCursor: async () => ({ messages: providerMessages, nextCursor: 'cursor-2' }),
     sendMessage: async () => { if (failSend) throw new Error('MAILBOX_PROVIDER_SEND_FAILED'); return { providerMessageId: 'sent-message', internetMessageId: '<sent@example.invalid>', providerConversationId: 'thread-1' }; },
     refreshAuthorization: async (secret) => secret, disconnect: async () => undefined,
   };
@@ -38,6 +40,41 @@ describeWithDatabase('universal mailbox PostgreSQL boundary', () => {
     expect(await db.communication.count({ where: { mailboxProviderMessageId: 'shared-message' } })).toBe(2);
     const row = await db.communication.findFirstOrThrow({ where: { mailboxConnectionId: connectionA } }); expect(row).toMatchObject({ type: 'EMAIL', direction: 'INBOUND', source: 'MAILBOX', caseId: null, clientId: null });
     expect(await db.communicationAttachment.findFirst({ where: { communicationId: row.id, providerAttachmentId: 'a1' } })).toMatchObject({ fileName: 'safe.pdf', sizeBytes: 12 });
+  });
+  it('propagates a unique safe conversation linkage to synced replies and fails closed otherwise', async () => {
+    const base = { direction: 'INBOUND', from: { email: 'sender@example.invalid' }, to: [{ email: 'owner@example.invalid' }], cc: [], subject: 'Thread', bodyText: 'thread body', bodyHtml: '<p>thread</p>', attachments: [] };
+    const rowByMessageId = (messageId: string) => db.communication.findFirstOrThrow({ where: { mailboxConnectionId: connectionA, mailboxProviderMessageId: messageId } });
+    try {
+      // Zero linked messages in the conversation: no auto-link.
+      providerMessages = [{ ...base, providerMessageId: 'thread-empty-1', providerConversationId: 'conv-empty-1' }];
+      await syncMailbox(connectionA, ownerId, store);
+      const empty = await rowByMessageId('thread-empty-1');
+      expect(empty).toMatchObject({ caseId: null, clientId: null });
+
+      // Exactly one linked case in the conversation: the next synced reply inherits it.
+      await db.communication.update({ where: { id: empty.id }, data: { caseId: 'case-thread-unique', clientId: 'client-thread-unique' } });
+      providerMessages = [{ ...base, providerMessageId: 'thread-inherit-1', providerConversationId: 'conv-empty-1' }];
+      await syncMailbox(connectionA, ownerId, store);
+      expect(await rowByMessageId('thread-inherit-1')).toMatchObject({ caseId: 'case-thread-unique', clientId: 'client-thread-unique' });
+
+      // Ambiguous (two distinct cases): fail closed, stays unlinked.
+      await db.communication.update({ where: { id: (await rowByMessageId('thread-inherit-1')).id }, data: { caseId: 'case-thread-other', clientId: 'client-thread-other' } });
+      providerMessages = [{ ...base, providerMessageId: 'thread-ambiguous-1', providerConversationId: 'conv-empty-1' }];
+      await syncMailbox(connectionA, ownerId, store);
+      expect(await rowByMessageId('thread-ambiguous-1')).toMatchObject({ caseId: null, clientId: null });
+
+      // Explicit linkage is preserved and becomes the single safe source for later replies.
+      providerMessages = [{ ...base, providerMessageId: 'thread-explicit-1', providerConversationId: 'conv-explicit-1' }];
+      await syncMailbox(connectionA, ownerId, store);
+      const explicit = await rowByMessageId('thread-explicit-1');
+      await db.communication.update({ where: { id: explicit.id }, data: { caseId: 'case-explicit', clientId: 'client-explicit' } });
+      providerMessages = [{ ...base, providerMessageId: 'thread-explicit-2', providerConversationId: 'conv-explicit-1' }];
+      await syncMailbox(connectionA, ownerId, store);
+      expect(await rowByMessageId('thread-explicit-1')).toMatchObject({ caseId: 'case-explicit', clientId: 'client-explicit' });
+      expect(await rowByMessageId('thread-explicit-2')).toMatchObject({ caseId: 'case-explicit', clientId: 'client-explicit' });
+    } finally {
+      providerMessages = defaultMessages;
+    }
   });
   it('persists outbound only after provider confirmation and rejects revoked connections', async () => {
     await expect(sendMailboxMessage({ id: connectionA, ownerUserId: ownerId, to: [{ email: 'to@example.invalid' }], subject: 'reply', bodyText: 'text' }, store)).resolves.toMatchObject({ direction: 'OUTBOUND' });
