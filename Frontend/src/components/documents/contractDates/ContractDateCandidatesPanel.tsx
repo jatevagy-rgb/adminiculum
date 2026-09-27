@@ -172,7 +172,7 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
   return (
     <section data-testid="contract-date-panel" className="space-y-3">
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Szerződéses dátumok</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Jogász megerősítés</p>
         <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Szerződéses dátumok</h4>
         <p className="mt-1 text-xs text-[var(--adm-text-primary)]">A kinyert dátumok javaslatok — csak jogász megerősítése után válnak kanonikus szerződéses adattá.</p>
       </div>
@@ -188,7 +188,7 @@ export function ContractDateCandidatesPanel({ documentId, documentVersionId, cli
           {isExtracting ? "Kinyerés..." : "Dátumok kinyerése ebből a verzióból"}
         </AdminButton>
         {documentVersionId ? null : (
-          <p className="text-[11px] text-[var(--adm-text-muted)]">Válassz verziót a kinyeréshez.</p>
+          <p className="text-[11px] text-[var(--adm-text-muted)]">A kinyerés a kiválasztott verzióhoz kötött.</p>
         )}
       </div>
       {extractMessage ? (
