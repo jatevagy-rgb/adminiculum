@@ -96,7 +96,7 @@ describe('Communication context deep-link convergence (Slice 1)', () => {
     assert.match(src, /if \(caseFilter !== "all"\) \{\s*commParams\.caseId = caseFilter;\s*\}/);
     assert.match(api(), /params\?\.caseId[\s\S]*?queryParams\.set\('caseId', params\.caseId\)/);
     // The load effect re-fires on scope changes so pagination total is scope-truthful.
-    assert.match(src, /\}, \[clientFilter, caseFilter, offset, pageSize\]\);/);
+    assert.match(src, /\}, \[clientFilter, caseFilter, offset, pageSize, reloadToken\]\);/);
   });
 
   it('forwards clientId and caseId together when both are supplied', () => {

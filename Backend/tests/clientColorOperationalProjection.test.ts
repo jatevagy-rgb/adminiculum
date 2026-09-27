@@ -2,6 +2,7 @@ import express, { Express, NextFunction, Request, Response } from 'express';
 import http from 'http';
 
 const prismaMock = {
+  $queryRaw: jest.fn(),
   communication: { findMany: jest.fn(), findUnique: jest.fn(), update: jest.fn(), count: jest.fn() },
   communicationAttachment: { findMany: jest.fn() },
   task: { findMany: jest.fn() },
@@ -92,7 +93,7 @@ describe('operational client color projections', () => {
   });
 
   it('projects assigned communication color in one batched client query and leaves unassigned neutral', async () => {
-    prismaMock.communication.findMany.mockResolvedValue([
+    prismaMock.$queryRaw.mockResolvedValue([
       communicationRow('comm-assigned', 'client-1'),
       communicationRow('comm-neutral', null),
     ]);
@@ -139,7 +140,7 @@ describe('operational client color projections', () => {
       return row;
     });
     prismaMock.timelineEvent.create.mockResolvedValue({ id: 'event-1' });
-    prismaMock.communication.findMany.mockImplementation(async () => [row]);
+    prismaMock.$queryRaw.mockImplementation(async () => [row]);
     prismaMock.communication.count.mockResolvedValue(1);
     prismaMock.client.findMany.mockImplementation(async ({ where }: { where: { id: { in: string[] } } }) =>
       where.id.in.map((id) => ({ id, colorKey: id === 'client-beta' ? 'BLUE' : 'RED' })),

@@ -19,6 +19,7 @@ jest.mock('../src/middleware/auth', () => ({
 
 jest.mock('../src/prisma/prisma.service', () => ({
   prisma: {
+    $queryRaw: jest.fn(),
     case: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
@@ -156,6 +157,7 @@ describe('database foundation route guards', () => {
     delete process.env.ENABLE_CLIENT_PORTAL;
 
     (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma as any).$queryRaw.mockResolvedValue([]);
     (prisma.communication.count as jest.Mock).mockResolvedValue(0);
     (prisma.communicationAttachment.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.task.findMany as jest.Mock).mockResolvedValue([]);
@@ -241,7 +243,7 @@ describe('database foundation route guards', () => {
   it('allows authenticated read-only communications list when persistence is disabled', async () => {
     const createdAt = new Date('2026-06-26T10:00:00.000Z');
     const updatedAt = new Date('2026-06-26T10:05:00.000Z');
-    (prisma.communication.findMany as jest.Mock).mockResolvedValue([
+    (prisma as any).$queryRaw.mockResolvedValue([
       {
         id: 'communication-1',
         type: 'EMAIL',
@@ -321,21 +323,10 @@ describe('database foundation route guards', () => {
     const response = await requestJson(createApp(), 'GET', '/communications?limit=500&offset=bad');
 
     expect(response.status).toBe(200);
-    expect(prisma.communication.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        take: 50,
-        skip: 0,
-        select: expect.objectContaining({
-          id: true,
-          type: true,
-          subject: true,
-          createdById: true,
-          createdAt: true,
-          updatedAt: true,
-        }),
-      })
-    );
-    expect((prisma.communication.findMany as jest.Mock).mock.calls[0][0]).not.toHaveProperty('include');
+    // The list read is one ordered scalar query (effective message time) — no
+    // relation includes and no secondary in-memory ordering.
+    expect((prisma as any).$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.communication.findMany).not.toHaveBeenCalled();
     expect(response.body).toMatchObject({
       communications: [],
       pagination: { total: 0, limit: 50, offset: 0 },

@@ -148,6 +148,7 @@ type CommunicationListRow = {
   providerConversationId?: string | null;
   direction?: 'INBOUND' | 'OUTBOUND' | null;
   receivedAt?: Date | null;
+  sentAt?: Date | null;
   source?: 'MANUAL' | 'OUTLOOK' | null;
   syncStatus?: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
   metadata?: unknown;
@@ -157,7 +158,7 @@ type CommunicationTriage = 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICAT
 
 type CommunicationListItem = Omit<
   CommunicationListRow,
-  'content' | 'createdAt' | 'updatedAt' | 'receivedAt' | 'providerConversationId' | 'direction' | 'source' | 'syncStatus' | 'metadata'
+  'content' | 'createdAt' | 'updatedAt' | 'receivedAt' | 'sentAt' | 'providerConversationId' | 'direction' | 'source' | 'syncStatus' | 'metadata'
 > & {
   contentPreview: string | null;
   clientColorKey: string | null;
@@ -168,6 +169,8 @@ type CommunicationListItem = Omit<
   providerConversationId: string | null;
   direction: 'INBOUND' | 'OUTBOUND' | null;
   receivedAt: string | null;
+  sentAt: string | null;
+  effectiveMessageAt: string;
   source: 'MANUAL' | 'OUTLOOK' | null;
   syncStatus: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
   triage: CommunicationTriage;
@@ -211,6 +214,25 @@ function toContentPreview(content?: string | null): string | null {
     : compact;
 }
 
+/**
+ * Canonical effective message time — direction-aware, server-derived, and the
+ * single ordering/display timestamp for the communications list.
+ *
+ * INBOUND  -> receivedAt, fallback sentAt, fallback createdAt
+ * OUTBOUND -> sentAt, fallback receivedAt, fallback createdAt
+ * other    -> receivedAt, fallback sentAt, fallback createdAt (manual/legacy)
+ *
+ * Persisted source fields are never modified and no time is ever invented:
+ * rows without provider timestamps keep their existing createdAt.
+ */
+function resolveEffectiveMessageAt(row: CommunicationListRow): Date {
+  const createdAt = new Date(row.createdAt);
+  const receivedAt = row.receivedAt ? new Date(row.receivedAt) : null;
+  const sentAt = row.sentAt ? new Date(row.sentAt) : null;
+  const candidates = row.direction === 'OUTBOUND' ? [sentAt, receivedAt, createdAt] : [receivedAt, sentAt, createdAt];
+  return candidates.find((candidate): candidate is Date => candidate !== null && !Number.isNaN(candidate.getTime())) ?? createdAt;
+}
+
 function mapCommunicationListItem(
   row: CommunicationListRow,
   attachmentCounts: Map<string, number>,
@@ -248,6 +270,8 @@ function mapCommunicationListItem(
     providerConversationId: (row as any).providerConversationId || null,
     direction: (row as any).direction || null,
     receivedAt: (row as any).receivedAt ? new Date((row as any).receivedAt).toISOString() : null,
+    sentAt: (row as any).sentAt ? new Date((row as any).sentAt).toISOString() : null,
+    effectiveMessageAt: resolveEffectiveMessageAt(row).toISOString(),
     source: (row as any).source || null,
     syncStatus: (row as any).syncStatus || null,
     triage,
@@ -307,6 +331,9 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     const { caseId, clientId, type, documentId } = req.query;
 
     const where: any = {};
+    // Mirrors the same filters as `where` for the effective-time ordered read.
+    // The permission scope and every explicit filter stay identical.
+    const rawFilters: Prisma.Sql[] = [];
 
     if (!req.user?.userId) {
       res.status(401).json({ status: 401, code: 'NOT_AUTHENTICATED', message: 'Authenticated workforce user is required.' });
@@ -327,19 +354,26 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
         { caseId: null, createdById: req.user.userId },
         ...(accessibleCases.length > 0 ? [{ caseId: { in: accessibleCases.map((row) => row.id) } }] : []),
       ];
+      rawFilters.push(accessibleCases.length > 0
+        ? Prisma.sql`(("caseId" IS NULL AND "createdById" = ${req.user.userId}) OR "caseId" IN (${Prisma.join(accessibleCases.map((row) => row.id))}))`
+        : Prisma.sql`("caseId" IS NULL AND "createdById" = ${req.user.userId})`);
     }
 
     if (caseId) {
       where.caseId = String(caseId);
+      rawFilters.push(Prisma.sql`"caseId" = ${String(caseId)}`);
     }
     if (clientId) {
       where.clientId = String(clientId);
+      rawFilters.push(Prisma.sql`"clientId" = ${String(clientId)}`);
     }
     if (type) {
       where.type = String(type);
+      rawFilters.push(Prisma.sql`type::text = ${String(type)}`);
     }
     if (documentId) {
       where.documentId = String(documentId);
+      rawFilters.push(Prisma.sql`"documentId" = ${String(documentId)}`);
     }
 
     const take = parseListLimit(req.query.limit);
@@ -347,37 +381,19 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 
     let rows: CommunicationListRow[] = [];
     try {
-      rows = await prisma.communication.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take,
-        skip,
-        select: {
-          id: true,
-          type: true,
-          subject: true,
-          senderName: true,
-          senderEmail: true,
-          recipientName: true,
-          recipientEmail: true,
-          content: true,
-          summary: true,
-          caseId: true,
-          clientId: true,
-          documentId: true,
-          createdById: true,
-          createdAt: true,
-          updatedAt: true,
-          providerConversationId: true,
-          direction: true,
-          receivedAt: true,
-          source: true,
-          syncStatus: true,
-          metadata: true,
-        },
-      }) as CommunicationListRow[];
+      // Ordered by canonical effective message time BEFORE take/skip so
+      // pagination is truthful: newest actual communication first, with a
+      // deterministic id tie-break for identical timestamps.
+      const rawRows = await prisma.$queryRaw<CommunicationListRow[]>(Prisma.sql`
+        SELECT id, type, subject, "senderName", "senderEmail", "recipientName", "recipientEmail", content, summary, "caseId", "clientId", "documentId", "createdById", "createdAt", "updatedAt", "providerConversationId", direction, "receivedAt", "sentAt", source, "syncStatus", metadata
+        FROM communications
+        ${rawFilters.length > 0 ? Prisma.sql`WHERE ${Prisma.join(rawFilters, ' AND ')}` : Prisma.empty}
+        ORDER BY COALESCE(CASE WHEN direction = 'OUTBOUND' THEN "sentAt" ELSE "receivedAt" END, "receivedAt", "sentAt", "createdAt") DESC, id DESC
+        LIMIT ${take}::int OFFSET ${skip}::int
+      `);
+      rows = Array.isArray(rawRows) ? rawRows : [];
     } catch (error) {
-      logPrismaRouteError('GET /communications scalar-list-query', error);
+      logPrismaRouteError('GET /communications effective-time-list-query', error);
       rows = [];
     }
 

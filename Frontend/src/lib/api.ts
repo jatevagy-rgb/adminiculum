@@ -4038,6 +4038,9 @@ export interface CommunicationItem {
   providerConversationId: string | null;
   direction: 'INBOUND' | 'OUTBOUND' | null;
   receivedAt: string | null;
+  sentAt: string | null;
+  /** Canonical direction-aware message time (server-derived); always present. */
+  effectiveMessageAt: string;
   source: 'MANUAL' | 'OUTLOOK' | 'MAILBOX' | null;
   syncStatus: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
   triage: 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR';
@@ -4053,7 +4056,6 @@ export interface CommunicationDetail extends CommunicationItem {
   mailboxConnectionId?: string | null;
   mailboxProviderMessageId?: string | null;
   bodyHtmlSanitized?: string | null;
-  sentAt?: string | null;
   attachments: CommunicationAttachment[];
   relatedTasks: TaskListItem[];
   timelineEvents: CommunicationTimelineEventItem[];

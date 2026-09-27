@@ -18,6 +18,7 @@ import {
   getOutlookStatus,
   runOutlookSync,
   getMailboxConnections,
+  syncMailbox,
   sendMailboxMessage,
   getCaseResponsibleCandidates,
   type CaseListItem,
@@ -73,6 +74,7 @@ export default function CommunicationWorkspace() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pageSize, setPageSize] = useState(20);
   const [offset, setOffset] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
   const [linkedTasks, setLinkedTasks] = useState<TaskListItem[]>([]);
   const [linkedTasksLoading, setLinkedTasksLoading] = useState(false);
 
@@ -208,7 +210,7 @@ export default function CommunicationWorkspace() {
     return () => {
       mounted = false;
     };
-  }, [clientFilter, caseFilter, offset, pageSize]);
+  }, [clientFilter, caseFilter, offset, pageSize, reloadToken]);
 
   // The URL is the scope of record: clientId/caseId deep links survive refresh,
   // while unrelated supported query state (view, communicationId, ...) is left
@@ -229,21 +231,54 @@ export default function CommunicationWorkspace() {
     return () => { mounted = false; };
   }, []);
 
+  // Canonical sync sources: the current user's connected mailbox connections
+  // (owner-scoped, the channel that actually imports live mail) and the app-only
+  // Outlook channel when configured. No new Graph implementation is introduced.
+  const connectedMailboxes = useMemo(
+    () => mailboxes.filter((mailbox) => mailbox.readCapability && (mailbox.status === "CONNECTED" || mailbox.status === "CONNECTED_READ_ONLY")),
+    [mailboxes],
+  );
+  const canSync = connectedMailboxes.length > 0 || Boolean(outlookStatus?.available);
+
   const syncOutlook = async () => {
-    if (!outlookStatus?.available || outlookSyncing) return;
+    if (!canSync || outlookSyncing) return;
     setOutlookSyncing(true);
     setOutlookMessage(null);
+    let succeeded = false;
+    let failed = false;
     try {
-      const result = await runOutlookSync();
-      if (!result.success) {
-        setOutlookMessage("Az Outlook szinkronizálása nem sikerült.");
-        return;
+      for (const mailbox of connectedMailboxes) {
+        try {
+          await syncMailbox(mailbox.id);
+          succeeded = true;
+        } catch {
+          failed = true;
+        }
       }
-      setOutlookMessage("Az Outlook szinkronizálása kész.");
-      const refreshed = await getOutlookStatus();
-      setOutlookStatus(refreshed);
+      if (outlookStatus?.available) {
+        try {
+          const result = await runOutlookSync();
+          if (result.success) succeeded = true; else failed = true;
+        } catch {
+          failed = true;
+        }
+      }
+      const [status, mailboxResult] = await Promise.all([
+        getOutlookStatus().catch(() => null),
+        getMailboxConnections().catch(() => null),
+      ]);
+      if (status) setOutlookStatus(status);
+      if (mailboxResult && Array.isArray(mailboxResult.mailboxes)) setMailboxes(mailboxResult.mailboxes);
+      if (succeeded) {
+        // Only a real sync success refreshes the list; a failed refresh never
+        // clears the currently visible communications.
+        setReloadToken((token) => token + 1);
+        setOutlookMessage(failed ? "A szinkronizálás részben sikerült." : "A szinkronizálás kész.");
+      } else if (failed) {
+        setOutlookMessage("A szinkronizálás nem sikerült.");
+      }
     } catch {
-      setOutlookMessage("Az Outlook szinkronizálása nem sikerült.");
+      setOutlookMessage("A szinkronizálás nem sikerült.");
     } finally {
       setOutlookSyncing(false);
     }
@@ -291,7 +326,7 @@ export default function CommunicationWorkspace() {
       if (relationFilter === "tasks" && item.sourceTaskCount <= 0) return false;
       if (relationFilter === "withoutTasks" && item.sourceTaskCount > 0) return false;
       if (dateFilter !== "all") {
-        const timestamp = new Date(item.createdAt).getTime();
+        const timestamp = new Date(item.effectiveMessageAt ?? item.createdAt).getTime();
         if (Number.isNaN(timestamp)) return false;
         const age = now - timestamp;
         if (dateFilter === "today" && age > 24 * 60 * 60 * 1000) return false;
@@ -501,8 +536,8 @@ export default function CommunicationWorkspace() {
             <p className="adm-kicker text-[var(--adm-blue-700)]">Kommunikáció</p>
             <h1 className="adm-heading mt-1 text-[28px] leading-tight">Kommunikációs munkatér</h1>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-[var(--adm-text-muted)]">
-              <span>{outlookStatus?.available ? "Outlook összekötve." : "Az Outlook nincs összekötve."}</span>
-              <button type="button" onClick={() => void syncOutlook()} disabled={!outlookStatus?.available || outlookSyncing} className="border border-[var(--adm-border)] bg-white px-2 py-1 font-semibold disabled:opacity-50">{outlookSyncing ? "Szinkronizálás…" : "Szinkronizálás most"}</button>
+              <span>{connectedMailboxes.length > 0 ? "E-mail-fiók összekötve." : outlookStatus?.available ? "Outlook összekötve." : "Az Outlook nincs összekötve."}</span>
+              <button type="button" onClick={() => void syncOutlook()} disabled={!canSync || outlookSyncing} className="border border-[var(--adm-border)] bg-white px-2 py-1 font-semibold disabled:opacity-50">{outlookSyncing ? "Szinkronizálás…" : "Szinkronizálás most"}</button>
               <Link href="/communications/mailboxes" className="adm-link-button px-2 py-1 font-semibold">Email-fiókok</Link>
               {outlookMessage ? <span role="status">{outlookMessage}</span> : null}
             </div>
@@ -575,7 +610,7 @@ export default function CommunicationWorkspace() {
                       <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-[var(--adm-blue-950)]">{item.subject || "Nincs tárgy"}</span><span className="mt-1 block truncate text-[10px] text-[var(--adm-text-muted)]">{item.summary || item.contentPreview || formatCommunicationType(item.type)}</span></span>
                       <span className="min-w-0 text-[10px] text-[var(--adm-text-muted)]"><span className="block truncate font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</span><span className="mt-1 block truncate">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</span></span>
                       <span className="flex flex-wrap items-start gap-1"><StatusChip>{sourceLabel(item)}</StatusChip><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{classifyAudience(item) === "external" ? "Külső" : "Belső"}</StatusChip>{item.triage === "NEEDS_ASSIGNMENT" ? <StatusChip>Feldolgozásra vár</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</span>
-                      <time className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{formatDate(item.createdAt)}</time>
+                      <time className="text-[10px] font-semibold text-[var(--adm-text-muted)]">{formatDate(item.effectiveMessageAt ?? item.createdAt)}</time>
                     </button>
                   );
                 })}
@@ -680,7 +715,7 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
         {item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}
         {detail?.content ? <section aria-label="Üzenet tartalma" className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="whitespace-pre-wrap text-[11px] leading-5 text-[var(--adm-text)]">{detail.content}</p>{detail.attachments?.length ? <p className="mt-3 border-t border-[var(--adm-border)] pt-2 text-[10px] font-semibold text-[var(--adm-text-muted)]">{detail.attachments.length} melléklet csatolva</p> : null}</section> : null}
         <div className="flex flex-wrap gap-1"><StatusChip>{sourceLabel(item)}</StatusChip><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{signal.audience === "external" ? "Külső" : "Belső"}</StatusChip><StatusChip>{formatCommunicationType(item.type)}</StatusChip>{item.attachmentCount > 0 ? <StatusChip>{item.attachmentCount} melléklet</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</div>
-        <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.createdAt)}</dd></dl>
+        <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.effectiveMessageAt ?? item.createdAt)}</dd></dl>
         {item.sourceTaskCount > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt feladat</p>{linkedTasksLoading ? <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Betöltés…</p> : linkedTasks.length ? <div className="mt-2 space-y-1">{linkedTasks.map((task) => <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block text-[11px] font-semibold text-[var(--adm-blue-700)] hover:underline">{task.title} · {task.status}</Link>)}</div> : <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A feladatkapcsolat részlete nem érhető el.</p>}</div> : null}
         <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
         {isMailboxMessage ? <section aria-label="E-mail műveletek" className="border-t border-[var(--adm-border)] pt-4"><h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">E-mail műveletek</h3>{canSend ? <div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => openComposer("reply")} className="adm-link-button px-3 py-2 text-[11px]">Válasz</button><button type="button" onClick={() => openComposer("replyAll")} className="adm-link-button px-3 py-2 text-[11px]">Válasz mindenkinek</button><button type="button" onClick={() => openComposer("forward")} className="adm-link-button px-3 py-2 text-[11px]">Továbbítás</button></div> : <p className="text-[11px] text-[var(--adm-text-muted)]">A küldés jelenleg nem érhető el ehhez a postafiókhoz.</p>}{composerFeedback ? <p role="status" className="mt-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{composerFeedback}</p> : null}</section> : null}
