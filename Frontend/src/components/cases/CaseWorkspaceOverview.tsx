@@ -13,6 +13,7 @@ import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
+import { getCaseComments, createCaseComment, type CaseCommentDto } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
@@ -79,6 +80,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [timeDialogInitialTaskId, setTimeDialogInitialTaskId] = useState<string | undefined>(undefined);
   const [timeDialogResumeTask, setTimeDialogResumeTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeRefreshKey, setTimeRefreshKey] = useState(0);
+  const [notesRefreshKey, setNotesRefreshKey] = useState(0);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
 
@@ -105,7 +107,10 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    try { await load({ background: true }); }
+    try {
+      await load({ background: true });
+      setNotesRefreshKey((value) => value + 1);
+    }
     finally { setRefreshing(false); }
   }, [load]);
 
@@ -321,7 +326,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
       {/* ---- 2b. Primary internal notes ------------------------------------ */}
       <CaseWorkspaceNotesSection
-        comments={ws.comments}
+        caseId={caseId}
+        refreshKey={notesRefreshKey}
         onCreateNote={() => setModal({ type: "case-comment" })}
       />
 
@@ -563,45 +569,200 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   );
 }
 
+const CASE_NOTE_THREAD_FETCH_LIMIT = 50;
+const CASE_NOTE_THREAD_VISIBLE_LIMIT = 5;
+
+export function groupCaseCommentThreads(comments: CaseCommentDto[]): {
+  topLevel: CaseCommentDto[];
+  repliesById: ReadonlyMap<string, CaseCommentDto[]>;
+} {
+  const repliesById = new Map<string, CaseCommentDto[]>();
+  const topLevel: CaseCommentDto[] = [];
+  for (const comment of comments) {
+    if (comment.parentId) {
+      const list = repliesById.get(comment.parentId) ?? [];
+      list.push(comment);
+      repliesById.set(comment.parentId, list);
+    } else {
+      topLevel.push(comment);
+    }
+  }
+  // Replies read oldest-first inside their thread; the API returns newest-first.
+  for (const list of repliesById.values()) {
+    list.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+  return { topLevel, repliesById };
+}
+
 export interface CaseWorkspaceNotesSectionProps {
-  comments: CaseWorkspace["comments"];
+  caseId: string;
+  refreshKey?: number;
   onCreateNote?: () => void;
 }
 
 /**
- * Primary case-note surface (CASE-NOTE-VISIBILITY-1).
+ * Primary case-note surface (CASE-NOTE-VISIBILITY-1 + CASE-NOTE-REPLIES-1).
  *
- * The canonical case comments already return on the workspace projection; this
- * section renders them on the primary Overview so a freshly created note is
- * visible without opening the collapsed "Ügy részletei" area. It shows only
- * what the projection carries: body, author, created time and the existing
- * open/resolved state. It deliberately offers no reply control — the canonical
- * Comment model has no parent/thread relationship.
+ * Renders case notes on the primary Overview so a freshly created note is
+ * visible without opening the collapsed "Ügy részletei" area. The canonical
+ * case-comments endpoint is the source of truth: body, author, created time,
+ * the existing open/resolved state and replies tied to their original note via
+ * the canonical Comment.parentId relation. Replies are created through the same
+ * case-comment endpoint (never faked through prefixes, activity records or
+ * document comments).
  */
-export function CaseWorkspaceNotesSection({ comments, onCreateNote }: CaseWorkspaceNotesSectionProps) {
+export function CaseWorkspaceNotesSection({ caseId, refreshKey = 0, onCreateNote }: CaseWorkspaceNotesSectionProps) {
+  const [comments, setComments] = useState<CaseCommentDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await getCaseComments(caseId, { limit: CASE_NOTE_THREAD_FETCH_LIMIT });
+      setComments(res.comments);
+    } catch {
+      setLoadError("A megjegyzések most nem tölthetők be.");
+    } finally {
+      setLoading(false);
+    }
+  }, [caseId]);
+
+  useEffect(() => { void load(); }, [load, refreshKey]);
+
+  const { topLevel, repliesById } = useMemo(() => groupCaseCommentThreads(comments), [comments]);
+  const visibleTopLevel = topLevel.slice(0, CASE_NOTE_THREAD_VISIBLE_LIMIT);
+
   return (
     <CockpitSection id="ck-notes-primary" title="Megjegyzések" accent="green" count={comments.length}
       action={<AdminButton variant="neutral" size="xs" onClick={onCreateNote}>+ Megjegyzés</AdminButton>}>
-      {comments.length === 0 ? (
+      {loading ? (
+        <p className="px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">Betöltés…</p>
+      ) : loadError ? (
+        <ActionableEmpty message={loadError} actionLabel="Újratöltés" onAction={() => void load()} />
+      ) : comments.length === 0 ? (
         <ActionableEmpty message="Ehhez az ügyhöz még nincs megjegyzés." actionLabel="Első megjegyzés írása" onAction={onCreateNote} />
+      ) : visibleTopLevel.length === 0 ? (
+        <p className="px-3 py-2 text-[11px] italic text-[var(--adm-text-muted)]">A látható időablakban csak korábbi megjegyzésekre érkezett válaszok vannak.</p>
       ) : (
-        <ul data-testid="case-notes-primary" className="divide-y divide-[rgba(22,32,26,0.06)]">
-          {comments.slice(0, 5).map((n) => (
-            <li key={n.id} data-testid="case-note" className="px-3 py-2">
-              <p className="whitespace-pre-line text-[12.5px] leading-5 text-[var(--adm-text)]">{n.content}</p>
-              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
-                <span data-testid="case-note-author" className="font-semibold text-[var(--adm-text)]">{n.author?.name || "Rendszer"}</span>
-                <span aria-hidden="true">·</span>
-                <span data-testid="case-note-created">{fmtDateTime(n.createdAt)}</span>
-                {n.status === "RESOLVED" ? (
-                  <span data-testid="case-note-resolved" className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.neutral.soft} ${ACCENT.neutral.text}`}>Megoldva</span>
-                ) : null}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <CaseNotesThreadList
+          caseId={caseId}
+          comments={visibleTopLevel}
+          repliesById={repliesById}
+          onReplyCreated={() => void load()}
+        />
       )}
     </CockpitSection>
+  );
+}
+
+export interface CaseNotesThreadListProps {
+  caseId: string;
+  comments: CaseCommentDto[];
+  repliesById: ReadonlyMap<string, CaseCommentDto[]>;
+  onReplyCreated?: () => void;
+}
+
+/** Presentational thread list: top-level notes with their replies nested. */
+export function CaseNotesThreadList({ caseId, comments, repliesById, onReplyCreated }: CaseNotesThreadListProps) {
+  if (comments.length === 0) return null;
+  return (
+    <ul data-testid="case-notes-primary" className="divide-y divide-[rgba(22,32,26,0.06)]">
+      {comments.map((note) => (
+        <CaseNoteThread
+          key={note.id}
+          caseId={caseId}
+          note={note}
+          replies={repliesById.get(note.id) ?? []}
+          onReplyCreated={onReplyCreated}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function CaseNoteThread({ caseId, note, replies, onReplyCreated }: {
+  caseId: string;
+  note: CaseCommentDto;
+  replies: CaseCommentDto[];
+  onReplyCreated?: () => void;
+}) {
+  const [replying, setReplying] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+
+  const submitReply = useCallback(async () => {
+    if (busy) return;
+    if (!replyContent.trim()) { setReplyError("A válasz nem lehet üres."); return; }
+    setBusy(true);
+    setReplyError(null);
+    try {
+      await createCaseComment(caseId, replyContent.trim(), note.id);
+      setReplyContent("");
+      setReplying(false);
+      onReplyCreated?.();
+    } catch (error) {
+      setReplyError(error instanceof Error ? error.message : "A válasz mentése nem sikerült.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, replyContent, caseId, note.id, onReplyCreated]);
+
+  return (
+    <li data-testid="case-note" className="px-3 py-2">
+      <p className="whitespace-pre-line text-[12.5px] leading-5 text-[var(--adm-text)]">{note.content}</p>
+      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
+        <span data-testid="case-note-author" className="font-semibold text-[var(--adm-text)]">{note.author?.displayName || "Rendszer"}</span>
+        <span aria-hidden="true">·</span>
+        <span data-testid="case-note-created">{fmtDateTime(note.createdAt)}</span>
+        {note.status === "RESOLVED" ? (
+          <span data-testid="case-note-resolved" className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.neutral.soft} ${ACCENT.neutral.text}`}>Megoldva</span>
+        ) : null}
+      </p>
+
+      {replies.length > 0 ? (
+        <div data-testid="case-note-replies" className="mt-1.5 space-y-1.5 border-l-2 border-[rgba(22,32,26,0.12)] pl-3">
+          {replies.map((reply) => (
+            <div key={reply.id} data-testid="case-note-reply" className="rounded-md bg-[var(--adm-ivory-100)] px-2 py-1.5">
+              <p className="whitespace-pre-line text-[12px] leading-5 text-[var(--adm-text)]">{reply.content}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--adm-text-muted)]">
+                <span data-testid="case-note-reply-author" className="font-semibold text-[var(--adm-text)]">{reply.author?.displayName || "Rendszer"}</span>
+                <span aria-hidden="true">·</span>
+                <span data-testid="case-note-reply-created">{fmtDateTime(reply.createdAt)}</span>
+                {reply.status === "RESOLVED" ? (
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.neutral.soft} ${ACCENT.neutral.text}`}>Megoldva</span>
+                ) : null}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {replying ? (
+        <div data-testid="case-note-reply-composer" className="mt-1.5 border-l-2 border-[rgba(22,32,26,0.12)] pl-3">
+          <textarea
+            className="mt-1 w-full resize-none rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-[12px] focus:border-[var(--adm-green-800)] focus:outline-none"
+            rows={2}
+            value={replyContent}
+            onChange={(e) => { setReplyContent(e.target.value); setReplyError(null); }}
+            disabled={busy}
+            placeholder="Válasz a megjegyzésre…"
+            autoFocus
+          />
+          {replyError ? <p role="alert" className="mt-1 text-[11px] font-semibold text-[var(--adm-terracotta-700)]">{replyError}</p> : null}
+          <div className="mt-1 flex justify-end gap-2">
+            <AdminButton variant="neutral" size="xs" onClick={() => { setReplying(false); setReplyContent(""); setReplyError(null); }} disabled={busy}>Mégse</AdminButton>
+            <AdminButton variant="primary" size="xs" onClick={() => void submitReply()} disabled={busy || !replyContent.trim()}>{busy ? "Mentés…" : "Válasz küldése"}</AdminButton>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1">
+          <AdminButton variant="neutral" size="xs" data-testid="case-note-reply-action" onClick={() => setReplying(true)}>Válasz</AdminButton>
+        </div>
+      )}
+    </li>
   );
 }
 
