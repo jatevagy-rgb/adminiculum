@@ -25,10 +25,12 @@ type Props = {
   documentVersionIds?: string[];
   /** Preselect this canonical template id when the modal opens. */
   initialTemplateId?: string;
+  /** Open an existing canonical draft (the review/result view) instead of a fresh preparation. */
+  initialDraftId?: string | null;
   onClose: () => void;
 };
 
-const STATUS_LABELS: Record<string, string> = {
+export const STATUS_LABELS: Record<string, string> = {
   PREPARED: "Előkészítve",
   AI_DRAFT: "AI-válasz importálva",
   JUNIOR_VERIFIED: "Ellenőrizve",
@@ -39,11 +41,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 const COPY_FAILURE_MESSAGE = "Nem sikerült a vágólapra másolni. Jelöld ki és másold kézzel.";
 
-function statusLabel(status: string): string {
+export function statusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status;
 }
 
-export function AIPromptPreparationModal({ caseId, documentId, documentVersionId, documentVersionIds, initialTemplateId, onClose }: Props) {
+export function AIPromptPreparationModal({ caseId, documentId, documentVersionId, documentVersionIds, initialTemplateId, initialDraftId, onClose }: Props) {
   const [templates, setTemplates] = useState<AiPromptTemplate[]>([]);
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [drafts, setDrafts] = useState<AiPromptDraft[]>([]);
@@ -82,6 +84,18 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
       })
       .catch(() => setError("Az AI-előkészítő adatok nem tölthetők be."));
   }, [caseId, documentId, initialTemplateId]);
+
+  useEffect(() => {
+    if (!initialDraftId) return;
+    let cancelled = false;
+    setBusy(true);
+    setError(null);
+    void getPromptDraft(initialDraftId)
+      .then((loaded) => { if (!cancelled) setDraft(loaded); })
+      .catch(() => { if (!cancelled) setError("A prompt-tervezet betöltése nem sikerült."); })
+      .finally(() => { if (!cancelled) setBusy(false); });
+    return () => { cancelled = true; };
+  }, [initialDraftId]);
 
   const selectedDocuments = useMemo(
     () => documents.filter((document) => selectedDocumentIds.includes(document.id)),

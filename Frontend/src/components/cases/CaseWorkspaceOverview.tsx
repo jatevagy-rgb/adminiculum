@@ -25,6 +25,7 @@ import { DocumentWorkCard } from "@/components/documents/DocumentWorkCard";
 import { DocumentPreparationDashboard } from "@/components/documents/DocumentPreparationDashboard";
 import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
+import { AIResultsTile } from "@/components/ai-prompts/AIResultsTile";
 import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
 import { CaseSubmissionHandoff } from "@/components/cases/CaseSubmissionHandoff";
 import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummary";
@@ -73,6 +74,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiPromptOpen, setAiPromptOpen] = useState(false);
+  const [aiPromptInitialDraftId, setAiPromptInitialDraftId] = useState<string | null>(null);
+  const [aiResultsRefreshKey, setAiResultsRefreshKey] = useState(0);
   const [lifecycleTasks, setLifecycleTasks] = useState<TaskLifecycleListItem[]>([]);
   const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
   const [handoffTask, setHandoffTask] = useState<TaskLifecycleListItem | null>(null);
@@ -110,6 +113,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     try {
       await load({ background: true });
       setNotesRefreshKey((value) => value + 1);
+      setAiResultsRefreshKey((value) => value + 1);
     }
     finally { setRefreshing(false); }
   }, [load]);
@@ -432,6 +436,14 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             )}
           </CockpitSection>
 
+          <AIResultsTile
+            caseId={caseId}
+            documents={ws.documents}
+            refreshKey={aiResultsRefreshKey}
+            onOpen={(draftId) => { setAiPromptInitialDraftId(draftId); setAiPromptOpen(true); }}
+            onOpenPreparation={() => { setAiPromptInitialDraftId(null); setAiPromptOpen(true); }}
+          />
+
           <CaseWorkspaceDocumentsSection
             documents={ws.documents}
             activeDocuments={cp.activeDocuments}
@@ -534,7 +546,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       {modal?.type === "doc-upload" ? <DocumentUploadModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
-      {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} onClose={() => setAiPromptOpen(false)} /> : null}
+      {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} initialDraftId={aiPromptInitialDraftId} onClose={() => { setAiPromptOpen(false); setAiPromptInitialDraftId(null); setAiResultsRefreshKey((value) => value + 1); }} /> : null}
       {handoffTask ? (() => {
         const item = handoffTask;
         return (
