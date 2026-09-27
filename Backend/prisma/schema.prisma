@@ -101,6 +101,8 @@ model User {
   automationSuppressions            UserAutomationSuppression[]
   verifiedCompanyFacts              ClientFact[]
   importedLegalSourceCaptures       LegalSourceCapture[]             @relation("LegalSourceCaptureImportedBy")
+  startedLegalSourceObservationReviews LegalSourceObservation[]       @relation("LegalSourceObservationReviewStartedBy")
+  decidedLegalSourceObservationReviews LegalSourceObservation[]       @relation("LegalSourceObservationDecidedBy")
   createdCompanyMilestones          CompanyMilestone[]
   createdAssessments                Assessment[]
   reviewedAssessmentItems           AssessmentItem[]
@@ -5730,6 +5732,17 @@ enum LegalSourceObservationKind {
   CONSOLIDATED_VERSION_AVAILABLE
 }
 
+/// W3A — human review lifecycle of a machine-ingested observation. Deliberately
+/// SEPARATE from LegalSourceReviewStatus (version review): deciding an
+/// observation never approves, activates or supersedes a LegalSourceVersion.
+enum LegalSourceObservationReviewStatus {
+  NEW
+  IN_REVIEW
+  NO_IMPACT
+  IMPACT_CONFIRMED
+  REJECTED
+}
+
 model LegalSourceObservation {
   id                   String                    @id @default(uuid())
   schemaVersion        Int                       @default(1)
@@ -5754,11 +5767,22 @@ model LegalSourceObservation {
   legalSourceCapture   LegalSourceCapture?       @relation(fields: [legalSourceCaptureId], references: [id], onDelete: Restrict)
   ingestedAt           DateTime                  @default(now())
 
+  // W3A review lifecycle: NEW by default for every W2 machine-ingested row.
+  reviewStatus      LegalSourceObservationReviewStatus @default(NEW)
+  reviewStartedAt   DateTime?
+  reviewStartedById String?
+  reviewStartedBy   User?                              @relation("LegalSourceObservationReviewStartedBy", fields: [reviewStartedById], references: [id], onDelete: SetNull)
+  decidedAt         DateTime?
+  decidedById       String?
+  decidedBy         User?                              @relation("LegalSourceObservationDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decisionNote      String?
+
   @@index([legalSourceId, kind])
   @@index([sourceIdentifier, kind])
   @@index([legalSourceVersionId])
   @@index([legalSourceCaptureId])
   @@index([capturedAt])
+  @@index([reviewStatus, ingestedAt])
   @@map("legal_source_observations")
 }
 

@@ -593,10 +593,10 @@ describe('W2 schema + migration static guard', () => {
     }
   });
 
-  it('ships exactly one additive migration that sorts after every existing one', () => {
+  it('ships its additive migration within the timestamped migration set', () => {
     const migrationsDir = join(__dirname, '..', 'prisma', 'migrations');
     const names = readdirSync(migrationsDir).filter((name) => /^\d{14}_/.test(name)).sort();
-    expect(names[names.length - 1]).toBe('20260927210000_add_legal_source_observations');
+    expect(names).toContain('20260927210000_add_legal_source_observations');
     const sql = readFileSync(join(migrationsDir, '20260927210000_add_legal_source_observations', 'migration.sql'), 'utf8');
     expect(sql).toContain('CREATE TABLE "legal_source_observations"');
     expect(sql).toContain('CREATE TYPE "LegalSourceObservationKind"');

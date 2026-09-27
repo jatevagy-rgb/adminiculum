@@ -309,6 +309,13 @@ app.use('/api/v1', controlEvidenceRoutes);
 import complianceCenterRoutes from './modules/compliance/complianceCenterRoutes';
 app.use('/api/v1/compliance', complianceCenterRoutes);
 
+// W3A: human/internal review lifecycle for machine-ingested legal-source
+// observations. Guarded by workforce authenticate + requireInternal — never by
+// the watcher machine token and never reachable by client identities. Mounted
+// under /api/v1/compliance, NOT the machine /api/v1/compliance-intelligence.
+import legalSourceObservationReviewRoutes from './modules/compliance/legalSourceObservationReviewRoutes';
+app.use('/api/v1/compliance', legalSourceObservationReviewRoutes);
+
 // W2: machine-only legal-source observation ingestion. Guarded exclusively by
 // the dedicated watcher machine auth (no human JWT / local JWT / client portal).
 // Mounted BEFORE the CDI router: that router applies the human `authenticate`
