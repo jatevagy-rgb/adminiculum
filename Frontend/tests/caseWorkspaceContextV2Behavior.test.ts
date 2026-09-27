@@ -86,7 +86,10 @@ function handleFetch(input: any, init: any): Promise<Response> {
   }
   server.requests.push({ url, method, body });
 
-  const match = url.match(/^\/api\/v1\/cases\/([^/]+)\/(.+)$/);
+  // The shared API client may prepend NEXT_PUBLIC_BACKEND_BASE_URL (CI sets
+  // http://localhost:3001). Route on the path only, never on the origin.
+  const path = url.replace(/^https?:\/\/[^/]+/i, "");
+  const match = path.match(/^\/api\/v1\/cases\/([^/]+)\/(.+)$/);
   if (!match) return Promise.resolve(json(404, { status: 404, code: "NOT_FOUND", message: `unhandled ${url}` }));
   const [, , rest] = match;
 
@@ -443,7 +446,9 @@ test("10. editing manual terms after detect invalidates the review until re-dete
 
 test("11. no external AI or non-internal endpoint is ever called", () => {
   for (const request of server.requests) {
-    assert.match(request.url, /^\/api\/v1\/cases\/c-1\/(workspace|context-sources)/, `internal endpoint only: ${request.url}`);
+    const path = request.url.replace(/^https?:\/\/[^/]+/i, "");
+    assert.match(path, /^\/api\/v1\/cases\/c-1\/(workspace|context-sources)/, `internal endpoint only: ${request.url}`);
+    assert.doesNotMatch(request.url, /^https?:\/\/(?!localhost|127\.0\.0\.1)/i, `no external origin: ${request.url}`);
     assert.doesNotMatch(request.url, /openai|anthropic|claude|gemini/i, `no external AI host: ${request.url}`);
   }
 });
