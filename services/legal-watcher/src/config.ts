@@ -1,7 +1,16 @@
 /**
- * Environment + CLI configuration. All defaults are safe (fail-closed) and all
- * HTTP knobs are bounded.
+ * Environment + CLI configuration.
+ *
+ * All defaults are safe (fail-closed): the watcher runs in DRY_RUN mode
+ * unless delivery is explicitly enabled with `--deliver` or
+ * `LEGAL_WATCHER_DELIVERY_MODE=DELIVER`. DELIVER mode additionally requires an
+ * explicit backend endpoint and app-only token configuration; otherwise
+ * configuration fails before any observation or network work. All HTTP knobs
+ * are bounded.
  */
+import type { AppOnlyTokenConfig } from './tokenProvider';
+import type { DeliveryMode } from './types';
+
 export const DEFAULT_EURLEX_ENDPOINT = 'https://publications.europa.eu/webapi/rdf/sparql';
 
 export interface WatcherConfig {
@@ -16,12 +25,21 @@ export interface WatcherConfig {
   httpBackoffFactor: number;
   responseMaxBytes: number;
   concurrency: number;
+  /** Explicit optional W2 delivery mode. Absent means DRY_RUN. */
+  deliveryMode?: DeliveryMode;
+  /** Backend base URL for W2 delivery; required in DELIVER mode. */
+  backendEndpoint?: string | null;
+  /** Observations per W2 request (1..200). */
+  deliveryBatchSize?: number;
+  /** App-only token configuration; required in DELIVER mode. */
+  tokenConfig?: AppOnlyTokenConfig | null;
 }
 
 export interface CliArgs {
   manifestPath?: string;
   stateDir?: string;
   reportOut?: string;
+  deliver: boolean;
   help: boolean;
 }
 
@@ -33,11 +51,15 @@ export class ConfigError extends Error {
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const out: CliArgs = { help: false };
+  const out: CliArgs = { deliver: false, help: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') {
       out.help = true;
+      continue;
+    }
+    if (arg === '--deliver') {
+      out.deliver = true;
       continue;
     }
     if (arg === '--manifest' || arg === '--state-dir' || arg === '--report-out') {
@@ -66,6 +88,48 @@ function envInt(name: string, fallback: number, min: number, max: number): numbe
   return value;
 }
 
+export function parseDeliveryMode(raw: string): DeliveryMode {
+  const normalized = raw.trim().toUpperCase();
+  if (normalized === 'DRY_RUN') return 'DRY_RUN';
+  if (normalized === 'DELIVER') return 'DELIVER';
+  throw new ConfigError(
+    `invalid LEGAL_WATCHER_DELIVERY_MODE: ${raw} (expected DRY_RUN or DELIVER)`,
+  );
+}
+
+function resolveBackendEndpoint(): string | null {
+  const raw = (process.env.LEGAL_WATCHER_BACKEND_ENDPOINT ?? '').trim();
+  if (raw === '') return null;
+  const normalized = raw.replace(/\/+$/, '');
+  if (!/^https?:\/\/[^\s]+$/.test(normalized)) {
+    throw new ConfigError(
+      `invalid LEGAL_WATCHER_BACKEND_ENDPOINT: ${raw} (expected an http(s) URL)`,
+    );
+  }
+  return normalized;
+}
+
+function resolveTokenConfig(): AppOnlyTokenConfig {
+  const tenantId = (process.env.LEGAL_WATCHER_AZURE_TENANT_ID ?? '').trim();
+  const clientId = (process.env.LEGAL_WATCHER_AZURE_CLIENT_ID ?? '').trim();
+  const clientSecret = process.env.LEGAL_WATCHER_AZURE_CLIENT_SECRET ?? '';
+  const scope = (process.env.LEGAL_WATCHER_AZURE_SCOPE ?? '').trim();
+  if (tenantId === '' || clientId === '' || clientSecret === '' || scope === '') {
+    throw new ConfigError(
+      'DELIVER mode requires LEGAL_WATCHER_AZURE_TENANT_ID, LEGAL_WATCHER_AZURE_CLIENT_ID, ' +
+        'LEGAL_WATCHER_AZURE_CLIENT_SECRET and LEGAL_WATCHER_AZURE_SCOPE',
+    );
+  }
+  const authorityHost = (process.env.LEGAL_WATCHER_AZURE_AUTHORITY_HOST ?? '').trim();
+  return {
+    tenantId,
+    clientId,
+    clientSecret,
+    scope,
+    ...(authorityHost === '' ? {} : { authorityHost }),
+  };
+}
+
 export function resolveConfig(args: CliArgs): WatcherConfig {
   const manifestPath =
     args.manifestPath ?? process.env.LEGAL_WATCHER_MANIFEST ?? '';
@@ -73,6 +137,17 @@ export function resolveConfig(args: CliArgs): WatcherConfig {
     throw new ConfigError(
       'missing --manifest <path> (or LEGAL_WATCHER_MANIFEST environment variable)',
     );
+  }
+  const deliveryMode: DeliveryMode = args.deliver
+    ? 'DELIVER'
+    : parseDeliveryMode(process.env.LEGAL_WATCHER_DELIVERY_MODE ?? 'DRY_RUN');
+  const backendEndpoint = resolveBackendEndpoint();
+  let tokenConfig: AppOnlyTokenConfig | null = null;
+  if (deliveryMode === 'DELIVER') {
+    if (backendEndpoint === null) {
+      throw new ConfigError('DELIVER mode requires LEGAL_WATCHER_BACKEND_ENDPOINT');
+    }
+    tokenConfig = resolveTokenConfig();
   }
   return {
     manifestPath,
@@ -92,5 +167,9 @@ export function resolveConfig(args: CliArgs): WatcherConfig {
       64 * 1024 * 1024,
     ),
     concurrency: envInt('LEGAL_WATCHER_CONCURRENCY', 2, 1, 8),
+    deliveryMode,
+    backendEndpoint,
+    deliveryBatchSize: envInt('LEGAL_WATCHER_DELIVERY_BATCH_SIZE', 50, 1, 200),
+    tokenConfig,
   };
 }

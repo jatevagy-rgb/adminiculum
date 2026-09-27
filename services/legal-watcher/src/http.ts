@@ -18,6 +18,11 @@ export interface BoundedHttpOptions {
   maxBytes: number;
   /** Hard wall-clock budget for one logical request including retries. */
   deadlineMs: number;
+  /**
+   * Optional retryability override. Defaults to the W1 source policy
+   * (429, 502, 503, 504 only) so existing behavior is unchanged.
+   */
+  retryableStatus?: (status: number) => boolean;
 }
 
 export type HttpErrorCode =
@@ -64,12 +69,31 @@ export async function nodeFetchPost(
   body: string,
   signal: AbortSignal,
 ): Promise<HttpStreamResponse> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
+  return nodeFetchWithHeaders(
+    url,
+    body,
+    {
       'content-type': 'application/x-www-form-urlencoded; charset=utf-8',
       accept: 'application/sparql-results+json',
     },
+    signal,
+  );
+}
+
+/**
+ * Generic bounded-response POST helper. Header-explicit variant used by the
+ * optional W2 delivery client; the W1 CELLAR path above keeps its exact
+ * headers and behavior.
+ */
+export async function nodeFetchWithHeaders(
+  url: string,
+  body: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+): Promise<HttpStreamResponse> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
     body,
     signal,
   });
@@ -119,6 +143,10 @@ function isAbortError(err: unknown): boolean {
   return err instanceof Error && err.name === 'AbortError';
 }
 
+function defaultRetryableStatus(status: number): boolean {
+  return RETRYABLE_STATUS.has(status);
+}
+
 /**
  * One logical POST with bounded retries. Returns { status, text } on success.
  * Every failure path throws HttpError with a stable code.
@@ -163,7 +191,7 @@ export async function boundedHttpPost(
         `HTTP ${response.status} from ${url}`,
         response.status,
       );
-      if (!RETRYABLE_STATUS.has(response.status)) throw httpError;
+      if (!(options.retryableStatus ?? defaultRetryableStatus)(response.status)) throw httpError;
       lastError = httpError;
       if (attempt === attempts - 1) {
         throw new HttpError(
