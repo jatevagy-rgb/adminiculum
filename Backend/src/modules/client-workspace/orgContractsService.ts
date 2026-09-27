@@ -43,10 +43,18 @@ export interface OrgContractItem {
   title: string;
   statusLabel: string;
   lifecycle: 'active' | 'upcoming' | 'terminating';
+  /** Canonical status-derived flag: true only for an ACTIVE ContractRecord. */
+  isActive: boolean;
   relatedMatterTitle: string | null;
   nextStep: string | null;
   customerActionRequired: boolean;
   keyDate: string | null;
+  effectiveDate: string | null;
+  expiryDate: string | null;
+  nextCriticalDate: string | null;
+  signatureDate: string | null;
+  /** True only when the canonical expiryDate falls in the portal's current month. */
+  expiresThisMonth: boolean;
   publishedDoc: OrgContractPublishedDoc | null;
 }
 
@@ -63,6 +71,37 @@ const CUSTOMER_STATUS_LABELS: Record<string, { label: string; lifecycle: OrgCont
 function iso(v: Date | string | null | undefined): string | null {
   if (!v) return null;
   return typeof v === 'string' ? v : v.toISOString();
+}
+
+/** Canonical customer-facing lifecycle derived from the ContractRecord status. */
+export function customerContractLifecycle(status: string): OrgContractItem['lifecycle'] {
+  return (CUSTOMER_STATUS_LABELS[status] || CUSTOMER_STATUS_LABELS.ACTIVE).lifecycle;
+}
+
+/**
+ * Strict canonical "active" test: only an ACTIVE ContractRecord status is active.
+ * Any other status (SIGNED_NOT_EFFECTIVE, TERMINATING, or a non-visible status
+ * such as DRAFT/EXPIRED) is NOT active; active state is never inferred from dates.
+ */
+export function isActiveContractStatus(status: string): boolean {
+  return String(status) === 'ACTIVE';
+}
+
+/** The portal's canonical server day (UTC YYYY-MM-DD), matching the customer calendar. */
+export function portalServerDay(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
+/**
+ * True only when a non-null expiry date falls in the same UTC calendar month as
+ * `now` — the same month convention the customer calendar already uses. A null or
+ * malformed expiry date yields false; no date is ever invented.
+ */
+export function expiresInPortalMonth(expiryDate: string | null | undefined, now: Date): boolean {
+  if (!expiryDate) return false;
+  const day = String(expiryDate).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+  return day.slice(0, 7) === portalServerDay(now).slice(0, 7);
 }
 
 interface PublishedPublication extends OrgContractPublishedDoc {
@@ -116,6 +155,7 @@ export async function getOrganizationalContracts(
   identityId: string,
   workspaceId: string,
   prisma: Prisma = defaultPrisma,
+  options: { now?: Date } = {},
 ): Promise<OrgContractsDto> {
   const workspace = await requireOrganizationWorkspace(workspaceId, prisma);
   const { byVersion, versionIds } = await publishedPublicationsByVersion(identityId, workspaceId, prisma);
@@ -133,20 +173,28 @@ export async function getOrganizationalContracts(
     : [];
   const joinByContract = new Map(joinRows.map((row) => [row.id, row]));
 
+  const now = options.now ?? new Date();
   const items: OrgContractItem[] = (library.items as any[]).map((contract) => {
     const canonical = joinByContract.get(String(contract.id))?.canonicalDocumentVersionId || null;
     const publication = canonical ? byVersion.get(canonical) || null : null;
     const statusMeta = CUSTOMER_STATUS_LABELS[String(contract.status)] || CUSTOMER_STATUS_LABELS.ACTIVE;
     const keyDate = iso(contract.expiryDate || contract.nextCriticalDate || contract.effectiveDate || null);
+    const expiryDate = iso(contract.expiryDate);
     return {
       reference: publication?.publicationId || String(contract.id),
       title: publication?.title || String(contract.title),
       statusLabel: statusMeta.label,
       lifecycle: statusMeta.lifecycle,
+      isActive: isActiveContractStatus(String(contract.status)),
       relatedMatterTitle: publication?.matterTitle ?? null,
       nextStep: null,
       customerActionRequired: false,
       keyDate,
+      effectiveDate: iso(contract.effectiveDate),
+      expiryDate,
+      nextCriticalDate: iso(contract.nextCriticalDate),
+      signatureDate: iso(contract.signatureDate),
+      expiresThisMonth: expiresInPortalMonth(expiryDate, now),
       publishedDoc: publication ? {
         publicationId: publication.publicationId,
         title: publication.title,
