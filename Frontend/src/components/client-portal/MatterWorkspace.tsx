@@ -108,9 +108,48 @@ function milestoneTone(state: string): string {
   return 'neutral';
 }
 
-function MatterProgressSection({ milestones }: { milestones?: PortalMilestone[] }) {
+/**
+ * Concise published progress strip. Every step comes from the immutable
+ * published milestone snapshot and the fill is driven only by the canonical
+ * published progressPercentage — never by local computation or internal
+ * workflow state. Zero/empty progress stays honest: no milestones means no
+ * strip, and a null percentage means no meter.
+ */
+function PublishedProgressStrip({ milestones, progressPercentage }: { milestones?: PortalMilestone[]; progressPercentage?: number | null }) {
   const ordered = (milestones ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
   if (!ordered.length) return null;
+  const percent = typeof progressPercentage === 'number' ? progressPercentage : null;
+  const current = ordered.find((milestone) => milestone.state === 'IN_PROGRESS') ?? null;
+  const allCompleted = ordered.every((milestone) => milestone.state === 'COMPLETED');
+  return (
+    <div className="mt-6" data-testid="matter-progress-strip">
+      {percent !== null ? (
+        <div className="flex items-center gap-3">
+          <div className="cp-progress-meter flex-1" data-testid="matter-progress-meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label={`Közzétett előrehaladás: ${percent}%`}>
+            <span className="cp-progress-meter-fill" style={{ width: `${percent}%` }} data-testid="matter-progress-fill" />
+          </div>
+          <span className="shrink-0 text-sm font-semibold text-[var(--adm-text)]">{percent}%</span>
+        </div>
+      ) : null}
+      <ol className="cp-progress-strip mt-5 hidden sm:flex">
+        {ordered.map((milestone, index) => (
+          <li key={milestone.reference} className="cp-progress-step" data-state={milestone.state} data-prev-state={index > 0 ? ordered[index - 1].state : undefined}>
+            {index > 0 ? <span className="cp-progress-connector" aria-hidden="true" /> : null}
+            <span className="cp-progress-dot" aria-hidden="true" />
+            <p className="cp-progress-title">{milestone.title}</p>
+            <p className="cp-progress-state">{milestoneStateLabel(milestone.state)}</p>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 text-sm text-[var(--adm-text-muted)] sm:hidden" data-testid="matter-progress-current">
+        {current ? `Jelenlegi állomás: ${current.title}` : allCompleted ? 'Minden közzétett mérföldkő teljesült.' : null}
+      </p>
+    </div>
+  );
+}
+
+function MatterProgressSection({ milestones, progressPercentage }: { milestones?: PortalMilestone[]; progressPercentage?: number | null }) {
+  const ordered = (milestones ?? []).slice().sort((a, b) => a.displayOrder - b.displayOrder);
   return (
     <Card>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -118,18 +157,21 @@ function MatterProgressSection({ milestones }: { milestones?: PortalMilestone[] 
         <span className="cp-kicker">Közzétett mérföldkövek</span>
       </div>
       {ordered.length ? (
-        <ol className="cp-milestones mt-6">
-          {ordered.map((milestone) => (
-            <li key={milestone.reference} className="cp-milestone" data-state={milestone.state}>
-              <span className="cp-milestone-dot" aria-hidden="true" />
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <p className="break-words font-semibold text-[var(--adm-text)]">{milestone.title}</p>
-                <span className="cp-pill" data-tone={milestoneTone(milestone.state)}>{milestoneStateLabel(milestone.state)}</span>
-              </div>
-              {milestone.description ? <p className="mt-2 break-words text-sm text-[var(--adm-text-muted)]">{milestone.description}</p> : null}
-            </li>
-          ))}
-        </ol>
+        <>
+          <PublishedProgressStrip milestones={ordered} progressPercentage={progressPercentage} />
+          <ol className="cp-milestones mt-6">
+            {ordered.map((milestone) => (
+              <li key={milestone.reference} className="cp-milestone" data-state={milestone.state}>
+                <span className="cp-milestone-dot" aria-hidden="true" />
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <p className="break-words font-semibold text-[var(--adm-text)]">{milestone.title}</p>
+                  <span className="cp-pill" data-tone={milestoneTone(milestone.state)}>{milestoneStateLabel(milestone.state)}</span>
+                </div>
+                {milestone.description ? <p className="mt-2 break-words text-sm text-[var(--adm-text-muted)]">{milestone.description}</p> : null}
+              </li>
+            ))}
+          </ol>
+        </>
       ) : (
         <p className="mt-4 text-sm text-[var(--adm-text-muted)]">Az iroda hamarosan közzéteszi az ügy mérföldköveit.</p>
       )}
@@ -150,6 +192,7 @@ export function MatterView({
   requestsSection,
   showDocuments = true,
   showMessages = true,
+  publishedProgressPercentage,
 }: {
   matter: MatterWorkspaceMatter;
   communicationSection?: React.ReactNode;
@@ -157,6 +200,8 @@ export function MatterView({
   requestsSection?: React.ReactNode;
   showDocuments?: boolean;
   showMessages?: boolean;
+  /** Canonical published progress (organization case detail DTO); never locally inferred. */
+  publishedProgressPercentage?: number | null;
 }) {
   return (
     <div className="space-y-6">
@@ -207,7 +252,7 @@ export function MatterView({
         </div>
       ) : null}
 
-      <MatterProgressSection milestones={matter.milestones} />
+      <MatterProgressSection milestones={matter.milestones} progressPercentage={publishedProgressPercentage} />
       {showDocuments ? (
         <Card>
           <h2 className="cp-card-heading">Dokumentumok</h2>
