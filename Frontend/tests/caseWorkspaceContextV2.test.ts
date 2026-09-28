@@ -184,9 +184,21 @@ describe("Case Workspace — Kontextus V2 additive contract", () => {
     assert.match(v2Review(), /nem talált érzékenynek tűnő elemet/);
   });
 
-  it("15. no backend/schema change ships in this frontend branch", () => {
+  it("15. V2 consumes the existing #393 backend contract without owning backend persistence", () => {
+    // The #393 prerequisite legitimately defines this model; this frontend
+    // branch consumes it and must NOT own backend persistence itself.
     const schema = read("../Backend/prisma/schema.prisma");
-    assert.doesNotMatch(schema, /model CaseContextSource/, "frontend branch must not add the backend model");
-    assert.ok(existsSync(path.resolve(process.cwd(), "src/lib/caseContextSources.ts")));
+    assert.match(
+      schema,
+      /^\s*model\s+CaseContextSource\s*\{/m,
+      "the #393 backend model must already exist in the repository schema",
+    );
+
+    assert.ok(existsSync(path.resolve(process.cwd(), "src/lib/caseContextSources.ts")), "the V2 API client exists");
+
+    const v2 = stripComments(v2All());
+    for (const forbidden of [/@prisma\/client/, /PrismaClient/, /schema\.prisma/, /prisma\/migrations/, /Backend\//]) {
+      assert.doesNotMatch(v2, forbidden, `V2 must not own backend persistence via ${forbidden}`);
+    }
   });
 });
