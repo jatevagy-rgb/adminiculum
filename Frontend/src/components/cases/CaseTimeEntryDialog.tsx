@@ -20,18 +20,20 @@ const today = () => new Date().toISOString().slice(0, 10);
 export function CaseTimeEntryDialog({
   caseId,
   tasks,
+  initialTaskId,
   onClose,
   onSaved,
 }: {
   caseId: string;
   tasks: WorkspaceTask[];
+  initialTaskId?: string;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [minutes, setMinutes] = useState(30);
   const [description, setDescription] = useState("");
   const [workType, setWorkType] = useState(WORK_TYPES[0].value);
-  const [taskId, setTaskId] = useState("");
+  const [taskId, setTaskId] = useState(initialTaskId || "");
   const [workDate, setWorkDate] = useState(today);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

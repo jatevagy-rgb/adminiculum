@@ -13,6 +13,7 @@ import Link from "next/link";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
+import { getCaseComments, createCaseComment, type CaseCommentDto } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
@@ -24,7 +25,9 @@ import { DocumentWorkCard } from "@/components/documents/DocumentWorkCard";
 import { DocumentPreparationDashboard } from "@/components/documents/DocumentPreparationDashboard";
 import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
+import { AIResultsTile } from "@/components/ai-prompts/AIResultsTile";
 import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
+import { CaseSubmissionHandoff } from "@/components/cases/CaseSubmissionHandoff";
 import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummary";
 import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
@@ -71,10 +74,16 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [aiPromptOpen, setAiPromptOpen] = useState(false);
+  const [aiPromptInitialDraftId, setAiPromptInitialDraftId] = useState<string | null>(null);
+  const [aiResultsRefreshKey, setAiResultsRefreshKey] = useState(0);
   const [lifecycleTasks, setLifecycleTasks] = useState<TaskLifecycleListItem[]>([]);
   const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
+  const [handoffTask, setHandoffTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeDialogOpen, setTimeDialogOpen] = useState(false);
+  const [timeDialogInitialTaskId, setTimeDialogInitialTaskId] = useState<string | undefined>(undefined);
+  const [timeDialogResumeTask, setTimeDialogResumeTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeRefreshKey, setTimeRefreshKey] = useState(0);
+  const [notesRefreshKey, setNotesRefreshKey] = useState(0);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
 
@@ -101,7 +110,11 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    try { await load({ background: true }); }
+    try {
+      await load({ background: true });
+      setNotesRefreshKey((value) => value + 1);
+      setAiResultsRefreshKey((value) => value + 1);
+    }
     finally { setRefreshing(false); }
   }, [load]);
 
@@ -167,6 +180,25 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     ...cp.deadlineGroups.thisWeek, ...cp.deadlineGroups.later,
   ];
 
+  // Leadás is a presentation/entry step only: every path ends in the canonical
+  // TaskSubmissionWorkspace. No task status is mutated here.
+  const openSubmissionHandoff = (item: TaskLifecycleListItem) => {
+    setActionError(null);
+    setHandoffTask(item);
+  };
+
+  const continueSubmission = (item: TaskLifecycleListItem) => {
+    setHandoffTask(null);
+    setSelectedLifecycleTask(item);
+  };
+
+  const recordTimeForSubmission = (item: TaskLifecycleListItem) => {
+    setHandoffTask(null);
+    setTimeDialogResumeTask(item);
+    setTimeDialogInitialTaskId(item.id);
+    setTimeDialogOpen(true);
+  };
+
   const taskRow = (t: WorkspaceTask, accent: Accent) => (
     <div key={t.id} className="border-b border-[rgba(22,32,26,0.06)] last:border-b-0">
       <TaskCard
@@ -188,17 +220,31 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t)}>
             {rowBusy === t.id ? "…" : "Indítás"}
           </AdminButton>
-        ) : ["IN_PROGRESS", "IN_REVIEW", "SUBMITTED", "RETURNED"].includes(t.status.toUpperCase()) ? (
-          <AdminButton
-            variant={t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED" ? "primary" : "neutral"}
-            size="xs"
-            disabled={!lifecycleTasks.some((task) => task.id === t.id)}
-            onClick={() => setSelectedLifecycleTask(lifecycleTasks.find((task) => task.id === t.id) || null)}
-            data-testid="task-submission-workspace"
-          >
-            {t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED" ? "Review megnyitása" : "Leadás megnyitása"}
-          </AdminButton>
-        ) : null}
+        ) : ["IN_PROGRESS", "IN_REVIEW", "SUBMITTED", "RETURNED"].includes(t.status.toUpperCase()) ? (() => {
+          const lifecycleItem = lifecycleTasks.find((task) => task.id === t.id) || null;
+          const reviewState = t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED";
+          return reviewState ? (
+            <AdminButton
+              variant="primary"
+              size="xs"
+              disabled={!lifecycleItem}
+              onClick={() => setSelectedLifecycleTask(lifecycleItem)}
+              data-testid="task-submission-workspace"
+            >
+              Review megnyitása
+            </AdminButton>
+          ) : (
+            <AdminButton
+              variant="primary"
+              size="xs"
+              disabled={!lifecycleItem}
+              onClick={() => lifecycleItem && openSubmissionHandoff(lifecycleItem)}
+              data-testid="task-submission-leadas"
+            >
+              Leadás
+            </AdminButton>
+          );
+        })() : null}
       </div>
     </div>
   );
@@ -251,12 +297,6 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
               </span>
             </div>
           </div>
-          {/* Primary actions — secondary links must not compete with these. */}
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <AdminButton variant="primary" size="sm" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
-            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "case-comment" })}>Kommunikáció hozzáadása</AdminButton>
-            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
-          </div>
         </div>
       </section>
 
@@ -279,20 +319,27 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
       <CaseInsightTiles workspace={ws} caseId={caseId} />
 
-      <section aria-label="Gyors műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
-        <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Gyors műveletek</span>
-        <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Feladat</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "deadline-create" })}>+ Határidő</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>+ Dokumentum</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés</AdminButton>
+      <section aria-label="Műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+        <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Műveletek</span>
+        <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés hozzáadása</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setAiPromptOpen(true)}>AI előkészítés</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setTimeDialogOpen(true)}>Munkaidő rögzítése</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => { setTimeDialogResumeTask(null); setTimeDialogInitialTaskId(undefined); setTimeDialogOpen(true); }}>Munkaidő rögzítése</AdminButton>
       </section>
+
+      {/* ---- 2b. Primary internal notes ------------------------------------ */}
+      <CaseWorkspaceNotesSection
+        caseId={caseId}
+        refreshKey={notesRefreshKey}
+        onCreateNote={() => setModal({ type: "case-comment" })}
+      />
 
       <nav aria-label="Ügy munkatér szakaszai" data-testid="case-workspace-section-nav" className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] font-semibold text-[var(--adm-green-800)]">
         <a href="#ck-tasks" className="hover:underline">Aktív munka</a>
         <a href="#ck-deadlines" className="hover:underline">Határidők</a>
         <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
+        <a href="#ck-notes-primary" className="hover:underline">Megjegyzések</a>
         <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
         <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>
       </nav>
@@ -301,8 +348,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         {/* -------- Left: work and time pressure -------- */}
         <div className="min-w-0 space-y-4">
-          <CockpitSection id="ck-tasks" title="Aktív munka" accent="petrol" count={ws.tasks.length}
-            action={<AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Feladat</AdminButton>}>
+          <CockpitSection id="ck-tasks" title="Aktív munka" accent="petrol" count={ws.tasks.length}>
             {warn("tasks") ? (
               <ActionableEmpty message="A feladatok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
             ) : ws.tasks.length === 0 ? (
@@ -331,8 +377,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             )}
           </CockpitSection>
 
-          <CockpitSection id="ck-deadlines" title="Határidők" accent="terracotta" count={cp.kpi.deadlines.count}
-            action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "deadline-create" })}>+ Határidő</AdminButton>}>
+          <CockpitSection id="ck-deadlines" title="Határidők" accent="terracotta" count={cp.kpi.deadlines.count}>
             {allDeadlines.length === 0 ? (
               <ActionableEmpty message="Nincs rögzített határidő." actionLabel="Határidő hozzáadása" onAction={() => setModal({ type: "deadline-create" })} />
             ) : (
@@ -390,6 +435,14 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
               </ul>
             )}
           </CockpitSection>
+
+          <AIResultsTile
+            caseId={caseId}
+            documents={ws.documents}
+            refreshKey={aiResultsRefreshKey}
+            onOpen={(draftId) => { setAiPromptInitialDraftId(draftId); setAiPromptOpen(true); }}
+            onOpenPreparation={() => { setAiPromptInitialDraftId(null); setAiPromptOpen(true); }}
+          />
 
           <CaseWorkspaceDocumentsSection
             documents={ws.documents}
@@ -493,22 +546,235 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       {modal?.type === "doc-upload" ? <DocumentUploadModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
-      {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} onClose={() => setAiPromptOpen(false)} /> : null}
+      {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} initialDraftId={aiPromptInitialDraftId} onClose={() => { setAiPromptOpen(false); setAiPromptInitialDraftId(null); setAiResultsRefreshKey((value) => value + 1); }} /> : null}
+      {handoffTask ? (() => {
+        const item = handoffTask;
+        return (
+          <CaseSubmissionHandoff
+            item={item}
+            onClose={() => setHandoffTask(null)}
+            onContinue={() => continueSubmission(item)}
+            onRecordTime={() => recordTimeForSubmission(item)}
+          />
+        );
+      })() : null}
       {selectedLifecycleTask ? <TaskSubmissionWorkspace item={selectedLifecycleTask} onClose={() => setSelectedLifecycleTask(null)} onWorkflowChanged={refresh} /> : null}
       {timeDialogOpen ? (
         <CaseTimeEntryDialog
           caseId={caseId}
           tasks={ws.tasks}
+          initialTaskId={timeDialogInitialTaskId}
           onClose={() => setTimeDialogOpen(false)}
           onSaved={() => {
             setTimeDialogOpen(false);
             setTimeRefreshKey((value) => value + 1);
             void refresh();
+            const resume = timeDialogResumeTask;
+            setTimeDialogResumeTask(null);
+            setTimeDialogInitialTaskId(undefined);
+            if (resume) setSelectedLifecycleTask(resume);
           }}
         />
       ) : null}
 
     </div>
+  );
+}
+
+const CASE_NOTE_THREAD_FETCH_LIMIT = 50;
+const CASE_NOTE_THREAD_VISIBLE_LIMIT = 5;
+
+export function groupCaseCommentThreads(comments: CaseCommentDto[]): {
+  topLevel: CaseCommentDto[];
+  repliesById: ReadonlyMap<string, CaseCommentDto[]>;
+} {
+  const repliesById = new Map<string, CaseCommentDto[]>();
+  const topLevel: CaseCommentDto[] = [];
+  for (const comment of comments) {
+    if (comment.parentId) {
+      const list = repliesById.get(comment.parentId) ?? [];
+      list.push(comment);
+      repliesById.set(comment.parentId, list);
+    } else {
+      topLevel.push(comment);
+    }
+  }
+  // Replies read oldest-first inside their thread; the API returns newest-first.
+  for (const list of repliesById.values()) {
+    list.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
+  }
+  return { topLevel, repliesById };
+}
+
+export interface CaseWorkspaceNotesSectionProps {
+  caseId: string;
+  refreshKey?: number;
+  onCreateNote?: () => void;
+}
+
+/**
+ * Primary case-note surface (CASE-NOTE-VISIBILITY-1 + CASE-NOTE-REPLIES-1).
+ *
+ * Renders case notes on the primary Overview so a freshly created note is
+ * visible without opening the collapsed "Ügy részletei" area. The canonical
+ * case-comments endpoint is the source of truth: body, author, created time,
+ * the existing open/resolved state and replies tied to their original note via
+ * the canonical Comment.parentId relation. Replies are created through the same
+ * case-comment endpoint (never faked through prefixes, activity records or
+ * document comments).
+ */
+export function CaseWorkspaceNotesSection({ caseId, refreshKey = 0, onCreateNote }: CaseWorkspaceNotesSectionProps) {
+  const [comments, setComments] = useState<CaseCommentDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const res = await getCaseComments(caseId, { limit: CASE_NOTE_THREAD_FETCH_LIMIT });
+      setComments(res.comments);
+    } catch {
+      setLoadError("A megjegyzések most nem tölthetők be.");
+    } finally {
+      setLoading(false);
+    }
+  }, [caseId]);
+
+  useEffect(() => { void load(); }, [load, refreshKey]);
+
+  const { topLevel, repliesById } = useMemo(() => groupCaseCommentThreads(comments), [comments]);
+  const visibleTopLevel = topLevel.slice(0, CASE_NOTE_THREAD_VISIBLE_LIMIT);
+
+  return (
+    <CockpitSection id="ck-notes-primary" title="Megjegyzések" accent="green" count={comments.length}
+      action={<AdminButton variant="neutral" size="xs" onClick={onCreateNote}>+ Megjegyzés</AdminButton>}>
+      {loading ? (
+        <p className="px-3 py-2 text-[11px] text-[var(--adm-text-muted)]">Betöltés…</p>
+      ) : loadError ? (
+        <ActionableEmpty message={loadError} actionLabel="Újratöltés" onAction={() => void load()} />
+      ) : comments.length === 0 ? (
+        <ActionableEmpty message="Ehhez az ügyhöz még nincs megjegyzés." actionLabel="Első megjegyzés írása" onAction={onCreateNote} />
+      ) : visibleTopLevel.length === 0 ? (
+        <p className="px-3 py-2 text-[11px] italic text-[var(--adm-text-muted)]">A látható időablakban csak korábbi megjegyzésekre érkezett válaszok vannak.</p>
+      ) : (
+        <CaseNotesThreadList
+          caseId={caseId}
+          comments={visibleTopLevel}
+          repliesById={repliesById}
+          onReplyCreated={() => void load()}
+        />
+      )}
+    </CockpitSection>
+  );
+}
+
+export interface CaseNotesThreadListProps {
+  caseId: string;
+  comments: CaseCommentDto[];
+  repliesById: ReadonlyMap<string, CaseCommentDto[]>;
+  onReplyCreated?: () => void;
+}
+
+/** Presentational thread list: top-level notes with their replies nested. */
+export function CaseNotesThreadList({ caseId, comments, repliesById, onReplyCreated }: CaseNotesThreadListProps) {
+  if (comments.length === 0) return null;
+  return (
+    <ul data-testid="case-notes-primary" className="divide-y divide-[rgba(22,32,26,0.06)]">
+      {comments.map((note) => (
+        <CaseNoteThread
+          key={note.id}
+          caseId={caseId}
+          note={note}
+          replies={repliesById.get(note.id) ?? []}
+          onReplyCreated={onReplyCreated}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function CaseNoteThread({ caseId, note, replies, onReplyCreated }: {
+  caseId: string;
+  note: CaseCommentDto;
+  replies: CaseCommentDto[];
+  onReplyCreated?: () => void;
+}) {
+  const [replying, setReplying] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+
+  const submitReply = useCallback(async () => {
+    if (busy) return;
+    if (!replyContent.trim()) { setReplyError("A válasz nem lehet üres."); return; }
+    setBusy(true);
+    setReplyError(null);
+    try {
+      await createCaseComment(caseId, replyContent.trim(), note.id);
+      setReplyContent("");
+      setReplying(false);
+      onReplyCreated?.();
+    } catch (error) {
+      setReplyError(error instanceof Error ? error.message : "A válasz mentése nem sikerült.");
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, replyContent, caseId, note.id, onReplyCreated]);
+
+  return (
+    <li data-testid="case-note" className="px-3 py-2">
+      <p className="whitespace-pre-line text-[12.5px] leading-5 text-[var(--adm-text)]">{note.content}</p>
+      <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10.5px] text-[var(--adm-text-muted)]">
+        <span data-testid="case-note-author" className="font-semibold text-[var(--adm-text)]">{note.author?.displayName || "Rendszer"}</span>
+        <span aria-hidden="true">·</span>
+        <span data-testid="case-note-created">{fmtDateTime(note.createdAt)}</span>
+        {note.status === "RESOLVED" ? (
+          <span data-testid="case-note-resolved" className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.neutral.soft} ${ACCENT.neutral.text}`}>Megoldva</span>
+        ) : null}
+      </p>
+
+      {replies.length > 0 ? (
+        <div data-testid="case-note-replies" className="mt-1.5 space-y-1.5 border-l-2 border-[rgba(22,32,26,0.12)] pl-3">
+          {replies.map((reply) => (
+            <div key={reply.id} data-testid="case-note-reply" className="rounded-md bg-[var(--adm-ivory-100)] px-2 py-1.5">
+              <p className="whitespace-pre-line text-[12px] leading-5 text-[var(--adm-text)]">{reply.content}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-[var(--adm-text-muted)]">
+                <span data-testid="case-note-reply-author" className="font-semibold text-[var(--adm-text)]">{reply.author?.displayName || "Rendszer"}</span>
+                <span aria-hidden="true">·</span>
+                <span data-testid="case-note-reply-created">{fmtDateTime(reply.createdAt)}</span>
+                {reply.status === "RESOLVED" ? (
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase ${ACCENT.neutral.soft} ${ACCENT.neutral.text}`}>Megoldva</span>
+                ) : null}
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {replying ? (
+        <div data-testid="case-note-reply-composer" className="mt-1.5 border-l-2 border-[rgba(22,32,26,0.12)] pl-3">
+          <textarea
+            className="mt-1 w-full resize-none rounded-md border border-[var(--adm-border)] bg-white px-2.5 py-2 text-[12px] focus:border-[var(--adm-green-800)] focus:outline-none"
+            rows={2}
+            value={replyContent}
+            onChange={(e) => { setReplyContent(e.target.value); setReplyError(null); }}
+            disabled={busy}
+            placeholder="Válasz a megjegyzésre…"
+            autoFocus
+          />
+          {replyError ? <p role="alert" className="mt-1 text-[11px] font-semibold text-[var(--adm-terracotta-700)]">{replyError}</p> : null}
+          <div className="mt-1 flex justify-end gap-2">
+            <AdminButton variant="neutral" size="xs" onClick={() => { setReplying(false); setReplyContent(""); setReplyError(null); }} disabled={busy}>Mégse</AdminButton>
+            <AdminButton variant="primary" size="xs" onClick={() => void submitReply()} disabled={busy || !replyContent.trim()}>{busy ? "Mentés…" : "Válasz küldése"}</AdminButton>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1">
+          <AdminButton variant="neutral" size="xs" data-testid="case-note-reply-action" onClick={() => setReplying(true)}>Válasz</AdminButton>
+        </div>
+      )}
+    </li>
   );
 }
 

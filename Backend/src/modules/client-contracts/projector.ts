@@ -44,6 +44,7 @@ export async function projectContractLibraryForCustomer(
     contractType: row.contractType,
     status: row.status,
     partners: row.parties.map((p) => ({ displayName: p.displayName, roleCode: p.roleCode })),
+    signatureDate: row.signatureDate ? row.signatureDate.toISOString() : null,
     effectiveDate: row.effectiveDate ? row.effectiveDate.toISOString() : null,
     expiryDate: row.expiryDate ? row.expiryDate.toISOString() : null,
     nextCriticalDate: row.nextCriticalDate ? row.nextCriticalDate.toISOString() : null,

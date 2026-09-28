@@ -237,6 +237,34 @@ export function submissionDisabledReason(
   return null;
 }
 
+export type LeadasHandoffMode = "CONTINUE" | "OFFER_TIME";
+
+/**
+ * Decides the Leadás handoff entry step for a canonical submission workflow.
+ *
+ * This reads the backend readiness projection and the backend permitted
+ * actions; it never re-derives readiness. "OFFER_TIME" is returned only when
+ * the canonical workflow says the time/zero-confirmation prerequisite is still
+ * outstanding AND the user is allowed to act on a draft. A recorded linked
+ * time or an already-confirmed zero time therefore never fabricates a missing
+ * time warning, and missing time alone never becomes a hard blocker because
+ * "OFFER_TIME" still offers the canonical "Kihagyás" (zeroTimeConfirmed) path.
+ */
+export function leadasHandoffMode(workflow: TaskSubmissionWorkflow | null): LeadasHandoffMode {
+  if (!workflow) return "CONTINUE";
+  const draft = workflow.activeDraft;
+  if (!draft) {
+    const canStartDraft = workflow.permittedActions.createDraft && !workflow.permittedActions.reviseReturned;
+    return canStartDraft ? "OFFER_TIME" : "CONTINUE";
+  }
+  const outstanding = [
+    ...(workflow.readiness?.missingPrerequisites || []),
+    ...(workflow.readiness?.blockingErrors || []),
+  ];
+  if (!outstanding.includes("TIME_ENTRY_OR_ZERO_CONFIRMATION_REQUIRED")) return "CONTINUE";
+  return workflow.permittedActions.editDraft ? "OFFER_TIME" : "CONTINUE";
+}
+
 export function isReturnFormValid(note: string, corrections: string): boolean {
   return Boolean(note.trim() && corrections.trim());
 }

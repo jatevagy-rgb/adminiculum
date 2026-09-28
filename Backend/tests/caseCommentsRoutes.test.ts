@@ -21,6 +21,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
 }));
 
 import { prisma } from '../src/prisma/prisma.service';
+import { validateCommentCreate } from '../src/modules/documents/documentComments.service';
 import casesRoutes from '../src/modules/cases/routes';
 
 type TestResponse = { status: number; body: any };
@@ -109,12 +110,89 @@ describe('Case comments routes', () => {
 
   it('lists only case-level notes (documentId null)', async () => {
     (prisma.comment.findMany as jest.Mock).mockResolvedValue([
-      { id: 'cm-1', caseId: 'case-1', documentId: null, userId: 'user-1', content: 'Jegyzet', isResolved: false, createdAt: new Date(), updatedAt: new Date(), user: { id: 'user-1', name: 'dr. Teszt' } },
+      { id: 'cm-1', caseId: 'case-1', documentId: null, parentId: null, userId: 'user-1', content: 'Jegyzet', isResolved: false, createdAt: new Date(), updatedAt: new Date(), user: { id: 'user-1', name: 'dr. Teszt' } },
     ]);
     const res = await request(createApp(), 'GET', '/cases/case-1/comments');
     expect(res.status).toBe(200);
     expect(res.body.comments).toHaveLength(1);
+    expect(res.body.comments[0].parentId).toBeNull();
     const whereArg = (prisma.comment.findMany as jest.Mock).mock.calls[0][0].where;
     expect(whereArg).toMatchObject({ caseId: 'case-1', documentId: null });
+  });
+
+  // ---- replies (canonical Comment.parentId, one visible thread level) ----
+
+  const CASE_LEVEL_PARENT = { id: 'cm-parent', caseId: 'case-1', documentId: null, parentId: null };
+  const REPLY_RECORD = {
+    id: 'cm-reply', caseId: 'case-1', documentId: null, parentId: 'cm-parent',
+    userId: 'user-1', content: 'Válasz', isResolved: false,
+    createdAt: new Date('2026-07-10'), updatedAt: new Date('2026-07-10'),
+    user: { id: 'user-1', name: 'dr. Teszt' },
+  };
+
+  it('creates a reply tied to a same-case top-level note', async () => {
+    (prisma.comment.findFirst as jest.Mock).mockResolvedValue(CASE_LEVEL_PARENT);
+    (prisma.comment.create as jest.Mock).mockResolvedValue(REPLY_RECORD);
+    const res = await request(createApp(), 'POST', '/cases/case-1/comments', { body: { content: 'Válasz', parentCommentId: 'cm-parent' } });
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ id: 'cm-reply', parentId: 'cm-parent', status: 'OPEN' });
+    const createArg = (prisma.comment.create as jest.Mock).mock.calls[0][0];
+    expect(createArg.data).toMatchObject({ caseId: 'case-1', documentId: null, userId: 'user-1', parentId: 'cm-parent' });
+    const parentLookup = (prisma.comment.findFirst as jest.Mock).mock.calls[0][0];
+    expect(parentLookup.where).toMatchObject({ id: 'cm-parent' });
+  });
+
+  it('rejects a reply whose parent does not exist', async () => {
+    (prisma.comment.findFirst as jest.Mock).mockResolvedValue(null);
+    const res = await request(createApp(), 'POST', '/cases/case-1/comments', { body: { content: 'Válasz', parentCommentId: 'nope' } });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('COMMENT_PARENT_NOT_FOUND');
+    expect(prisma.comment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cross-case parent without leaking its existence', async () => {
+    (prisma.comment.findFirst as jest.Mock).mockResolvedValue({ id: 'cm-parent', caseId: 'other-case', documentId: null, parentId: null });
+    const res = await request(createApp(), 'POST', '/cases/case-1/comments', { body: { content: 'Válasz', parentCommentId: 'cm-parent' } });
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('COMMENT_PARENT_NOT_FOUND');
+    expect(prisma.comment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a document-comment parent (case/document isolation)', async () => {
+    (prisma.comment.findFirst as jest.Mock).mockResolvedValue({ id: 'cm-parent', caseId: 'case-1', documentId: 'doc-1', parentId: null });
+    const res = await request(createApp(), 'POST', '/cases/case-1/comments', { body: { content: 'Válasz', parentCommentId: 'cm-parent' } });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('COMMENT_PARENT_IS_DOCUMENT_COMMENT');
+    expect(prisma.comment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects replying to a reply (one visible thread level)', async () => {
+    (prisma.comment.findFirst as jest.Mock).mockResolvedValue({ id: 'cm-parent', caseId: 'case-1', documentId: null, parentId: 'cm-grandparent' });
+    const res = await request(createApp(), 'POST', '/cases/case-1/comments', { body: { content: 'Válasz', parentCommentId: 'cm-parent' } });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('COMMENT_PARENT_IS_REPLY');
+    expect(prisma.comment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed parentCommentId', async () => {
+    const res = await request(createApp(), 'POST', '/cases/case-1/comments', { body: { content: 'Válasz', parentCommentId: 42 } });
+    expect(res.status).toBe(400);
+    expect(prisma.comment.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unauthorized reply (cannot access the case)', async () => {
+    (prisma.case.findUnique as jest.Mock).mockResolvedValue({ id: 'case-1', assignedLawyerId: 'other', createdById: 'other' });
+    (prisma.caseCollaborator.findFirst as jest.Mock).mockResolvedValue(null);
+    const res = await request(createApp(), 'POST', '/cases/case-1/comments', { body: { content: 'Válasz', parentCommentId: 'cm-parent' } });
+    expect(res.status).toBe(403);
+    expect(prisma.comment.create).not.toHaveBeenCalled();
+  });
+
+  it('document comments never accept parentCommentId', () => {
+    expect(() => validateCommentCreate({ content: 'Komment', parentCommentId: 'cm-1' }))
+      .toThrowError(/parentCommentId is not accepted/);
+    // The same validation explicitly allows it for the case-note reply flow.
+    expect(validateCommentCreate({ content: 'Jegyzet', parentCommentId: 'cm-1' }, { allowParentCommentId: true }))
+      .toBe('Jegyzet');
   });
 });

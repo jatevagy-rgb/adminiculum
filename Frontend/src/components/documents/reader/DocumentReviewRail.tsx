@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   DocumentAnnotationComment,
   DocumentReviewRailComment,
@@ -8,9 +8,10 @@ import type {
   DocumentReviewRailProposal,
 } from "@/lib/api";
 import { readerCopy } from "./readerCopy";
-import { mergeRailEntries } from "./readerContracts";
+import { mergeRailEntries, type MergedRailEntry } from "./readerContracts";
 
 export type RailFilter = "all" | "comments" | "proposals";
+export type RailEntry = MergedRailEntry;
 
 export interface DocumentReviewRailProps {
   rail: DocumentReviewRailDto | null;
@@ -32,11 +33,17 @@ export interface DocumentReviewRailProps {
   onLoadReplies: (annotationId: string) => void;
   onSubmitReply: (annotationId: string, body: string) => void;
   replyBusyId: string | null;
+  /** Optional anchored draft composer (narrow list renders it at the top). */
+  draft?: ReactNode;
 }
 
-type RailEntry = ReturnType<typeof mergeRailEntries>[number];
+export function filterRailEntries(entries: RailEntry[], filter: RailFilter): RailEntry[] {
+  return entries.filter((entry) =>
+    filter === "all" ? true : filter === "comments" ? entry.kind === "comment" : entry.kind === "proposal",
+  );
+}
 
-function formatDateTime(value: string | null): string {
+export function formatRailDateTime(value: string | null): string {
   if (!value) return "";
   try {
     return new Date(value).toLocaleString("hu-HU");
@@ -57,7 +64,54 @@ function statusTone(status: DocumentReviewRailProposal["status"]): string {
   return "border-[var(--adm-border-canonical)] text-[var(--adm-text-secondary)]";
 }
 
-function CommentCard({
+/** Shared header: title, counts, spatial filters and completion banner. */
+export function RailChrome({
+  rail,
+  filter,
+  onFilterChange,
+}: {
+  rail: DocumentReviewRailDto | null;
+  filter: RailFilter;
+  onFilterChange: (filter: RailFilter) => void;
+}) {
+  return (
+    <>
+      <header className="border-b border-[var(--adm-border-canonical)] px-4 py-3">
+        <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">{readerCopy.railTitle}</h2>
+        {rail ? (
+          <div data-testid="reader-rail-counts" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--adm-text-secondary)]">
+            <span>{readerCopy.countComments}: <b className="text-[var(--adm-text-primary)]">{rail.counts.commentCount}</b></span>
+            <span>{readerCopy.countProposals}: <b className="text-[var(--adm-text-primary)]">{rail.counts.modificationProposalCount}</b></span>
+            <span>{readerCopy.countPending}: <b className="text-[var(--adm-text-primary)]">{rail.counts.pendingProposalCount}</b></span>
+          </div>
+        ) : null}
+      </header>
+
+      <div className="flex gap-1 border-b border-[var(--adm-border-canonical)] px-4 py-2">
+        {(["all", "comments", "proposals"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            data-testid={`reader-rail-filter-${value}`}
+            aria-pressed={filter === value}
+            onClick={() => onFilterChange(value)}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${filter === value ? "bg-[var(--adm-brand-green)] text-white" : "text-[var(--adm-text-secondary)] hover:bg-[var(--adm-canvas-subtle)]"}`}
+          >
+            {value === "all" ? readerCopy.filterAll : value === "comments" ? readerCopy.filterComments : readerCopy.filterProposals}
+          </button>
+        ))}
+      </div>
+
+      {rail?.counts.proposalDecisionComplete ? (
+        <p data-testid="reader-rail-complete" className="border-b border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-4 py-2 text-xs font-semibold text-[var(--adm-brand-green)]">
+          {readerCopy.railComplete}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+export function CommentCard({
   comment,
   active,
   replies,
@@ -65,6 +119,8 @@ function CommentCard({
   onLoadReplies,
   onSubmitReply,
   replyBusy,
+  style,
+  cardRef,
 }: {
   comment: DocumentReviewRailComment;
   active: boolean;
@@ -73,6 +129,8 @@ function CommentCard({
   onLoadReplies: () => void;
   onSubmitReply: (body: string) => void;
   replyBusy: boolean;
+  style?: CSSProperties;
+  cardRef?: (element: HTMLElement | null) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [replyBody, setReplyBody] = useState("");
@@ -87,6 +145,8 @@ function CommentCard({
 
   return (
     <li
+      ref={cardRef}
+      style={style}
       data-testid="reader-rail-comment"
       data-rail-item-id={comment.id}
       className={`rounded-[10px] border p-3 ${active ? "border-[var(--adm-brand-green)] bg-[var(--adm-canvas-subtle)]" : "border-[var(--adm-border-canonical)] bg-white"}`}
@@ -102,7 +162,7 @@ function CommentCard({
         </span>
         <span className="block text-sm text-[var(--adm-text-primary)]">{comment.reviewComment || "—"}</span>
         <span className="mt-1 block text-[11px] text-[var(--adm-text-secondary)]">
-          {comment.createdBy?.name || "Ismeretlen"} · {formatDateTime(comment.createdAt)}
+          {comment.createdBy?.name || "Ismeretlen"} · {formatRailDateTime(comment.createdAt)}
         </span>
       </button>
       <button
@@ -155,6 +215,11 @@ function CommentCard({
   );
 }
 
+/**
+ * Narrow-viewport review list. Cards are ordered by anchor (`startOffset`), not
+ * by a global `createdAt` feed; the anchored desktop margin is rendered by
+ * `DocumentReviewMargin`.
+ */
 export function DocumentReviewRail({
   rail,
   loading,
@@ -175,51 +240,21 @@ export function DocumentReviewRail({
   onLoadReplies,
   onSubmitReply,
   replyBusyId,
+  draft,
 }: DocumentReviewRailProps) {
   const entries = useMemo<RailEntry[]>(
     () => (rail ? mergeRailEntries(rail.comments, rail.proposals) : []),
     [rail],
   );
 
-  const visible = entries.filter((entry) =>
-    filter === "all" ? true : filter === "comments" ? entry.kind === "comment" : entry.kind === "proposal",
-  );
+  const visible = useMemo(() => filterRailEntries(entries, filter), [entries, filter]);
 
   return (
     <section data-testid="document-review-rail" className="flex h-full min-h-0 flex-col">
-      <header className="border-b border-[var(--adm-border-canonical)] px-4 py-3">
-        <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">{readerCopy.railTitle}</h2>
-        {rail ? (
-          <div data-testid="reader-rail-counts" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--adm-text-secondary)]">
-            <span>{readerCopy.countComments}: <b className="text-[var(--adm-text-primary)]">{rail.counts.commentCount}</b></span>
-            <span>{readerCopy.countProposals}: <b className="text-[var(--adm-text-primary)]">{rail.counts.modificationProposalCount}</b></span>
-            <span>{readerCopy.countPending}: <b className="text-[var(--adm-text-primary)]">{rail.counts.pendingProposalCount}</b></span>
-          </div>
-        ) : null}
-      </header>
-
-      <div className="flex gap-1 border-b border-[var(--adm-border-canonical)] px-4 py-2">
-        {(["all", "comments", "proposals"] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            data-testid={`reader-rail-filter-${value}`}
-            aria-pressed={filter === value}
-            onClick={() => onFilterChange(value)}
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${filter === value ? "bg-[var(--adm-brand-green)] text-white" : "text-[var(--adm-text-secondary)] hover:bg-[var(--adm-canvas-subtle)]"}`}
-          >
-            {value === "all" ? readerCopy.filterAll : value === "comments" ? readerCopy.filterComments : readerCopy.filterProposals}
-          </button>
-        ))}
-      </div>
-
-      {rail?.counts.proposalDecisionComplete ? (
-        <p data-testid="reader-rail-complete" className="border-b border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-4 py-2 text-xs font-semibold text-[var(--adm-brand-green)]">
-          {readerCopy.railComplete}
-        </p>
-      ) : null}
+      <RailChrome rail={rail} filter={filter} onFilterChange={onFilterChange} />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {draft ? <div className="mb-2">{draft}</div> : null}
         {loading ? (
           <p data-testid="reader-rail-loading" className="text-sm text-[var(--adm-text-secondary)]">…</p>
         ) : error ? (
@@ -254,86 +289,128 @@ export function DocumentReviewRail({
                   replyBusy={replyBusyId === entry.comment.id}
                 />
               ) : (
-                <li
+                <ProposalCard
                   key={entry.proposal.id}
-                  data-testid="reader-rail-proposal"
-                  data-rail-item-id={entry.proposal.id}
-                  className={`rounded-[10px] border p-3 ${activeItemId === entry.proposal.id ? "border-[var(--adm-brand-green)] bg-[var(--adm-canvas-subtle)]" : "border-[var(--adm-border-canonical)] bg-white"}`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onFocusProposal(entry.proposal)}
-                    data-testid="reader-rail-proposal-focus"
-                    className="block w-full text-left"
-                  >
-                    <span className="mb-1 block text-xs text-[var(--adm-text-secondary)] line-through">
-                      {entry.proposal.selectedText}
-                    </span>
-                    <span className="block text-sm font-medium text-[var(--adm-text-primary)]">
-                      {entry.proposal.proposedText}
-                    </span>
-                    {entry.proposal.rationale ? (
-                      <span className="mt-1 block text-xs text-[var(--adm-text-secondary)]">{entry.proposal.rationale}</span>
-                    ) : null}
-                    <span className="mt-1 block text-[11px] text-[var(--adm-text-secondary)]">
-                      {entry.proposal.createdBy?.name || "Ismeretlen"} · {formatDateTime(entry.proposal.createdAt)}
-                    </span>
-                  </button>
-
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <span
-                      data-testid="reader-rail-proposal-status"
-                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(entry.proposal.status)}`}
-                    >
-                      {statusLabel(entry.proposal.status)}
-                    </span>
-                    {entry.proposal.status === "PENDING" && canDecide ? (
-                      <span className="flex gap-1.5">
-                        <button
-                          type="button"
-                          data-testid="reader-rail-proposal-accept"
-                          disabled={decisionBusyId === entry.proposal.id}
-                          onClick={() => onAccept(entry.proposal)}
-                          className="rounded-[6px] bg-[var(--adm-brand-green)] px-2 py-0.5 text-xs font-semibold text-white disabled:opacity-50"
-                        >
-                          {readerCopy.decisionAccept}
-                        </button>
-                        <button
-                          type="button"
-                          data-testid="reader-rail-proposal-reject"
-                          disabled={decisionBusyId === entry.proposal.id}
-                          onClick={() => onReject(entry.proposal)}
-                          className="rounded-[6px] border border-[var(--adm-brand-terracotta)] px-2 py-0.5 text-xs font-semibold text-[var(--adm-brand-terracotta)] disabled:opacity-50"
-                        >
-                          {readerCopy.decisionReject}
-                        </button>
-                      </span>
-                    ) : null}
-                  </div>
-
-                  {entry.proposal.status === "REJECTED" && entry.proposal.decisionReason ? (
-                    <p data-testid="reader-rail-proposal-reason" className="mt-1 text-xs text-[var(--adm-text-secondary)]">
-                      {readerCopy.rejectReasonLabel}: {entry.proposal.decisionReason}
-                    </p>
-                  ) : null}
-
-                  {entry.proposal.status === "PENDING" && currentUserId === entry.proposal.createdBy?.id ? (
-                    <button
-                      type="button"
-                      data-testid="reader-rail-proposal-withdraw"
-                      disabled={decisionBusyId === entry.proposal.id}
-                      onClick={() => onWithdraw(entry.proposal)}
-                      className="mt-2 text-[11px] font-semibold text-[var(--adm-text-secondary)] underline disabled:opacity-50"
-                    >
-                      {readerCopy.withdraw}
-                    </button>
-                  ) : null}
-                </li>
+                  entry={entry}
+                  active={activeItemId === entry.proposal.id}
+                  canDecide={canDecide}
+                  currentUserId={currentUserId}
+                  decisionBusyId={decisionBusyId}
+                  onFocus={() => onFocusProposal(entry.proposal)}
+                  onAccept={() => onAccept(entry.proposal)}
+                  onReject={() => onReject(entry.proposal)}
+                  onWithdraw={() => onWithdraw(entry.proposal)}
+                />
               ),
             )}
           </ul>
         )}
       </div>
     </section>
+  );
+}
+
+export function ProposalCard({
+  entry,
+  active,
+  canDecide,
+  currentUserId,
+  decisionBusyId,
+  onFocus,
+  onAccept,
+  onReject,
+  onWithdraw,
+  style,
+  cardRef,
+}: {
+  entry: Extract<MergedRailEntry, { kind: "proposal" }>;
+  active: boolean;
+  canDecide: boolean;
+  currentUserId: string | null;
+  decisionBusyId: string | null;
+  onFocus: () => void;
+  onAccept: () => void;
+  onReject: () => void;
+  onWithdraw: () => void;
+  style?: CSSProperties;
+  cardRef?: (element: HTMLElement | null) => void;
+}) {
+  return (
+    <li
+      ref={cardRef}
+      style={style}
+      data-testid="reader-rail-proposal"
+      data-rail-item-id={entry.proposal.id}
+      className={`rounded-[10px] border p-3 ${active ? "border-[var(--adm-brand-green)] bg-[var(--adm-canvas-subtle)]" : "border-[var(--adm-border-canonical)] bg-white"}`}
+    >
+      <button
+        type="button"
+        onClick={onFocus}
+        data-testid="reader-rail-proposal-focus"
+        className="block w-full text-left"
+      >
+        <span className="mb-1 block text-xs text-[var(--adm-text-secondary)] line-through">
+          {entry.proposal.selectedText}
+        </span>
+        <span className="block text-sm font-medium text-[var(--adm-text-primary)]">
+          {entry.proposal.proposedText}
+        </span>
+        {entry.proposal.rationale ? (
+          <span className="mt-1 block text-xs text-[var(--adm-text-secondary)]">{entry.proposal.rationale}</span>
+        ) : null}
+        <span className="mt-1 block text-[11px] text-[var(--adm-text-secondary)]">
+          {entry.proposal.createdBy?.name || "Ismeretlen"} · {formatRailDateTime(entry.proposal.createdAt)}
+        </span>
+      </button>
+
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <span
+          data-testid="reader-rail-proposal-status"
+          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusTone(entry.proposal.status)}`}
+        >
+          {statusLabel(entry.proposal.status)}
+        </span>
+        {entry.proposal.status === "PENDING" && canDecide ? (
+          <span className="flex gap-1.5">
+            <button
+              type="button"
+              data-testid="reader-rail-proposal-accept"
+              disabled={decisionBusyId === entry.proposal.id}
+              onClick={onAccept}
+              className="rounded-[6px] bg-[var(--adm-brand-green)] px-2 py-0.5 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {readerCopy.decisionAccept}
+            </button>
+            <button
+              type="button"
+              data-testid="reader-rail-proposal-reject"
+              disabled={decisionBusyId === entry.proposal.id}
+              onClick={onReject}
+              className="rounded-[6px] border border-[var(--adm-brand-terracotta)] px-2 py-0.5 text-xs font-semibold text-[var(--adm-brand-terracotta)] disabled:opacity-50"
+            >
+              {readerCopy.decisionReject}
+            </button>
+          </span>
+        ) : null}
+      </div>
+
+      {entry.proposal.status === "REJECTED" && entry.proposal.decisionReason ? (
+        <p data-testid="reader-rail-proposal-reason" className="mt-1 text-xs text-[var(--adm-text-secondary)]">
+          {readerCopy.rejectReasonLabel}: {entry.proposal.decisionReason}
+        </p>
+      ) : null}
+
+      {entry.proposal.status === "PENDING" && currentUserId === entry.proposal.createdBy?.id ? (
+        <button
+          type="button"
+          data-testid="reader-rail-proposal-withdraw"
+          disabled={decisionBusyId === entry.proposal.id}
+          onClick={onWithdraw}
+          className="mt-2 text-[11px] font-semibold text-[var(--adm-text-secondary)] underline disabled:opacity-50"
+        >
+          {readerCopy.withdraw}
+        </button>
+      ) : null}
+    </li>
   );
 }

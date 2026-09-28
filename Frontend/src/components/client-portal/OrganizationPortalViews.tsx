@@ -19,6 +19,7 @@ import {
   type PortalOrgCompany,
   type PortalOrgContract,
   type PortalOrgHomeAction,
+  type PortalOrgHomeDocument,
   type PortalOrganizationCase,
   type PortalOrganizationCaseDetail,
   type PortalOrganizationIntake,
@@ -31,6 +32,7 @@ import {
 import { clientSafeError, customerInteractionApi, type CustomerRequestDTO, type CustomerSubmissionDTO } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
 import { CustomerRequestDetail } from "./CustomerRequestDetail";
+import { TeendokInlineRequestDetail } from "./TeendokInlineRequestDetail";
 import { MatterView } from "./MatterWorkspace";
 import { ClientSafeResultCard, DemoContentBanner, PortalPersonHeader, PortalProfileCard } from "./PortalPresentationPrimitives";
 import { OrganizationCompanyProfile } from "./OrganizationCompanyProfile";
@@ -57,6 +59,7 @@ type OrgState = {
   intakes: PortalOrganizationIntake[];
   leadership: PortalLeadershipUnitAggregate[] | null;
   contracts: PortalOrgContract[];
+  recentDocuments: PortalOrgHomeDocument[];
   company: PortalOrgCompany | null;
   detail: PortalOrganizationCaseDetail | null;
   matter: FullPortalMatter | null;
@@ -97,8 +100,39 @@ export function selectCustomerPublishedDocuments(documents: PortalWorkspaceDocum
   return documents.filter(isCustomerPublishedDocument);
 }
 
+/**
+ * Canonical customer-actionable request kinds that must reach the Teendők
+ * entry list. The document/correction kinds keep their existing behaviour;
+ * INFORMATION_REQUEST, DATA_FORM and QUESTION_RESPONSE are the same canonical
+ * ClientRequest lifecycle and were previously missing from the entry point.
+ */
+export const CUSTOMER_REQUEST_KINDS: PortalWorkspaceDocument["kind"][] = [
+  "DOCUMENT_REQUEST",
+  "CORRECTION_REQUEST",
+  "INFORMATION_REQUEST",
+  "DATA_FORM",
+  "QUESTION_RESPONSE",
+];
+
+export function isCustomerRequestDocument(item: PortalWorkspaceDocument): boolean {
+  return (CUSTOMER_REQUEST_KINDS as string[]).includes(item.kind);
+}
+
 export function selectCustomerRequestDocuments(documents: PortalWorkspaceDocument[]): PortalWorkspaceDocument[] {
-  return documents.filter((item) => item.kind === "DOCUMENT_REQUEST" || item.kind === "CORRECTION_REQUEST");
+  return documents.filter(isCustomerRequestDocument);
+}
+
+/** Customer-facing labels for the canonical request kinds in the entry list. */
+export const CUSTOMER_REQUEST_KIND_LABELS: Record<string, string> = {
+  DOCUMENT_REQUEST: "Dokumentumkérés",
+  CORRECTION_REQUEST: "Javításkérés",
+  INFORMATION_REQUEST: "Információkérés",
+  DATA_FORM: "Adatlap",
+  QUESTION_RESPONSE: "Válaszadás",
+};
+
+export function customerRequestKindLabel(kind: string): string | null {
+  return CUSTOMER_REQUEST_KIND_LABELS[kind] ?? null;
 }
 
 export function selectCustomerSubmissionDocuments(documents: PortalWorkspaceDocument[]): PortalWorkspaceDocument[] {
@@ -313,6 +347,7 @@ function OrganizationMatterDetail({
       matter={matter}
       showDocuments={detail.capabilities.showDocuments}
       showMessages={detail.capabilities.showMessages}
+      publishedProgressPercentage={detail.progressPercentage}
       requestsSection={
         <CustomerInteractionCard caseId={matter.caseId} matterPublicationId={detail.matterPublicationId} scope="requests" />
       }
@@ -323,8 +358,22 @@ function OrganizationMatterDetail({
   );
 }
 
-function OrganizationDocuments({ workspace }: { workspace: PortalWorkspace }) {
+/**
+ * Slice 1 — reuse-only grouped documents surface. All three groups consume the
+ * canonical customer-safe projections and never derive dates, categories or
+ * recency locally:
+ *  - "Nemrég közzétett dokumentumok" is the canonical org-home
+ *    `recentDocuments` projection (`listPortalDocuments`, publishedAt DESC).
+ *  - "Aktív szerződések" and "Ebben a hónapban lejáró szerződések" reuse the
+ *    canonical `isActive` / `expiresThisMonth` flags with the same selectors as
+ *    the Szerződések page (Slice B).
+ */
+function OrganizationDocuments({ workspace, contracts, recentDocuments }: { workspace: PortalWorkspace; contracts: PortalOrgContract[]; recentDocuments: PortalOrgHomeDocument[] }) {
   const shared = dedupeCustomerItems(selectCustomerPublishedDocuments(workspace.documents));
+  const uploaded = shared.filter((item) => item.clientUploaded);
+  const compliancePolicies = shared.filter((item) => item.isCompliancePolicy);
+  const activeContracts = selectActiveContracts(contracts);
+  const expiringThisMonth = selectExpiringThisMonthContracts(contracts);
   return (
     <div className="space-y-5">
       <section className={card}>
@@ -332,6 +381,78 @@ function OrganizationDocuments({ workspace }: { workspace: PortalWorkspace }) {
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Az iroda által közzétett dokumentumok</h1>
         <p className="mt-2 text-sm text-stone-600">Itt csak azok a dokumentumok jelennek meg, amelyeket az iroda kifejezetten közzétett az Ön számára. A dokumentum- és adatbekérések, valamint a beküldött anyagok a Teendők között találhatók.</p>
       </section>
+      <Section title="Nemrég közzétett dokumentumok" empty={!recentDocuments.length} emptyText="Az iroda még nem tett közzé dokumentumot ezen az ügyfélfelületen.">
+        {recentDocuments.map((item) => (
+          <Link key={item.id} href={`/portal/documents/${encodeURIComponent(item.id)}`} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="break-words text-stone-950">{item.title}</b>
+              {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}
+            </div>
+            {item.publishedAt ? <span className="mt-1 block text-xs text-stone-500">Közzétéve: {formatDate(item.publishedAt)}</span> : null}
+            <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Dokumentum megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
+      <Section title="Feltöltött dokumentumok" empty={!uploaded.length} emptyText="Nincs ügyfél által feltöltött dokumentum ezen az ügyfélfelületen.">
+        {uploaded.map((item) => (
+          <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="break-words text-stone-950">{item.title}</b>
+              {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}
+            </div>
+            {item.publishedAt ? <span className="mt-1 block text-xs text-stone-500">Közzétéve: {formatDate(item.publishedAt)}</span> : null}
+            <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Dokumentum megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
+      <Section title="Compliance dokumentumok" empty={!compliancePolicies.length} emptyText="Nincs elérhető compliance dokumentum ezen az ügyfélfelületen.">
+        {compliancePolicies.map((item) => (
+          <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="break-words text-stone-950">{item.title}</b>
+              {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}
+            </div>
+            {item.publishedAt ? <span className="mt-1 block text-xs text-stone-500">Közzétéve: {formatDate(item.publishedAt)}</span> : null}
+            <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Dokumentum megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
+      <Section title="Aktív szerződések" empty={!activeContracts.length} emptyText="Jelenleg nincs hatályban lévő szerződése ezen az ügyfélfelületen.">
+        {activeContracts.map((contract) => (
+          <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
+                {contract.relatedMatterTitle ? <p className="mt-1 text-sm text-stone-600">Kapcsolódó ügy: {contract.relatedMatterTitle}</p> : null}
+              </div>
+              <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs font-semibold text-[#6f5514]">{contract.statusLabel}</span>
+            </div>
+            {contract.publishedDoc?.downloadAvailable ? (
+              <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
+                Dokumentum megnyitása
+              </Link>
+            ) : null}
+          </article>
+        ))}
+      </Section>
+      <Section title="Ebben a hónapban lejáró szerződések" empty={!expiringThisMonth.length} emptyText="Ebben a hónapban nincs lejáró szerződése.">
+        {expiringThisMonth.map((contract) => (
+          <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
+                <p className="mt-1 text-sm text-stone-600">Lejárat: {formatDate(contract.expiryDate)}</p>
+              </div>
+              <span className="text-xs font-semibold text-[var(--adm-terracotta-700)]">Ebben a hónapban lejár</span>
+            </div>
+            {contract.publishedDoc?.downloadAvailable ? (
+              <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
+                Dokumentum megnyitása
+              </Link>
+            ) : null}
+          </article>
+        ))}
+      </Section>
       <Section title="Közzétett dokumentumok" empty={!shared.length} emptyText="Az iroda még nem osztott meg dokumentumot ezen a munkaterületen.">
         {shared.map((item) => (
           <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
@@ -484,6 +605,7 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
 
   const requests = dedupeCustomerItems(selectCustomerRequestDocuments(workspace.documents));
   const submissions = dedupeCustomerItems(selectCustomerSubmissionDocuments(workspace.documents));
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   return (
     <div className="space-y-6">
       <section className={taskCard}>
@@ -511,17 +633,43 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
         })
       )}
       <Section title="Dokumentum- és adatbekérések" empty={!requests.length} emptyText="Jelenleg nincs Öntől szükséges dokumentum- vagy adatbekérés.">
-        {requests.map((item) => (
-          <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-xl border border-[#F1D7D1] bg-[#FBF0EE]/50 p-4 text-sm transition-colors hover:border-[#B85C4B] hover:bg-[#FBF0EE] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <b className="block break-words text-[#1F2937]">{item.title}</b>
-              {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-white px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
+        {requests.map((item) => {
+          const kindLabel = customerRequestKindLabel(item.kind);
+          const expanded = expandedRequestId === item.id;
+          return (
+            <div key={`${item.kind}-${item.id}`} className="min-w-0">
+              <Link href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="block rounded-xl border border-[#F1D7D1] bg-[#FBF0EE]/50 p-4 text-sm transition-colors hover:border-[#B85C4B] hover:bg-[#FBF0EE] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <b className="block break-words text-[#1F2937]">{item.title}</b>
+                  {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-white px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
+                </div>
+                <span className="mt-1 block text-[#6B7280]">
+                  {item.matterTitle || "Közzétett ügy"}
+                  {kindLabel ? ` · ${kindLabel}` : ""}
+                  {item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}
+                </span>
+                {item.description ? <span className="mt-1 block break-words text-[#6B7280]">{item.description}</span> : null}
+                <span className="mt-2 inline-flex font-semibold text-[#B85C4B]">Bekérés megnyitása →</span>
+              </Link>
+              {item.matterId ? (
+                <button
+                  type="button"
+                  data-testid="teendok-request-toggle"
+                  aria-expanded={expanded}
+                  onClick={() => setExpandedRequestId((current) => (current === item.id ? null : item.id))}
+                  className="mt-2 rounded-full border border-[#E5E7E6] bg-white px-3 py-1 text-xs font-semibold text-[#374151] transition-colors hover:border-[#B85C4B] hover:text-[#B85C4B] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30"
+                >
+                  {expanded ? "Bezárás" : "Válaszadás itt"}
+                </button>
+              ) : null}
+              {expanded && item.matterId ? (
+                <div className="mt-3 min-w-0 rounded-xl border border-[#E5E7E6] bg-white p-3" data-testid="teendok-inline-request">
+                  <TeendokInlineRequestDetail matterId={item.matterId} requestId={item.id} />
+                </div>
+              ) : null}
             </div>
-            <span className="mt-1 block text-[#6B7280]">{item.matterTitle || "Közzétett ügy"}</span>
-            {item.description ? <span className="mt-1 block break-words text-[#6B7280]">{item.description}</span> : null}
-            <span className="mt-2 inline-flex font-semibold text-[#B85C4B]">Bekérés megnyitása →</span>
-          </Link>
-        ))}
+          );
+        })}
       </Section>
       {submissions.length ? (
         <Section title="Beküldött anyagaim">
@@ -540,6 +688,28 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
   );
 }
 
+/** Canonical lifecycle date rows for a published contract. Null dates are omitted. */
+export type ContractDateRow = { key: "signature" | "effective" | "expiry" | "critical"; label: string; value: string };
+
+export function contractDateRows(contract: Pick<PortalOrgContract, "signatureDate" | "effectiveDate" | "expiryDate" | "nextCriticalDate">): ContractDateRow[] {
+  const rows: ContractDateRow[] = [];
+  if (contract.signatureDate) rows.push({ key: "signature", label: "Aláírás dátuma", value: contract.signatureDate });
+  if (contract.effectiveDate) rows.push({ key: "effective", label: "Hatálybalépés", value: contract.effectiveDate });
+  if (contract.expiryDate) rows.push({ key: "expiry", label: "Lejárat", value: contract.expiryDate });
+  if (contract.nextCriticalDate) rows.push({ key: "critical", label: "Következő kritikus dátum", value: contract.nextCriticalDate });
+  return rows;
+}
+
+/** Active contracts, derived only from the canonical status-backed `isActive` flag. */
+export function selectActiveContracts<T extends { isActive: boolean }>(contracts: readonly T[]): T[] {
+  return contracts.filter((contract) => contract.isActive);
+}
+
+/** Contracts whose canonical expiryDate falls in the current portal month. */
+export function selectExpiringThisMonthContracts<T extends { expiresThisMonth: boolean; expiryDate: string | null }>(contracts: readonly T[]): T[] {
+  return contracts.filter((contract) => contract.expiresThisMonth && Boolean(contract.expiryDate));
+}
+
 function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }) {
   if (!contracts.length) {
     return (
@@ -548,34 +718,68 @@ function OrganizationContracts({ contracts }: { contracts: PortalOrgContract[] }
       </Section>
     );
   }
+  const active = selectActiveContracts(contracts);
+  const expiringThisMonth = selectExpiringThisMonthContracts(contracts);
   return (
     <div className="space-y-5">
       <section className={card}>
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#b95e4b]">Szerződések</p>
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Közzétett szerződéses dokumentumok</h1>
         <p className="mt-2 text-sm text-stone-600">Csak azok a szerződéses dokumentumok láthatók, amelyeket az iroda közzétett az Ön számára.</p>
+        <dl className="mt-4 grid gap-3 sm:grid-cols-2" data-testid="org-contract-summary">
+          <div className="rounded-2xl bg-[var(--adm-ivory-100)] p-4">
+            <dt className="text-sm font-semibold text-stone-800">Aktív szerződések</dt>
+            <dd className="mt-1 text-2xl font-semibold text-stone-950">{active.length}</dd>
+          </div>
+          <div className="rounded-2xl bg-[var(--adm-ivory-100)] p-4">
+            <dt className="text-sm font-semibold text-stone-800">Ebben a hónapban lejáró szerződések</dt>
+            <dd className="mt-1 text-2xl font-semibold text-stone-950">{expiringThisMonth.length}</dd>
+          </div>
+        </dl>
+        {expiringThisMonth.length ? (
+          <div className="mt-4" data-testid="org-contract-expiring">
+            <p className="text-sm font-semibold text-stone-800">Ebben a hónapban lejáró szerződések</p>
+            <ul className="mt-2 grid gap-2 text-sm text-stone-700">
+              {expiringThisMonth.map((contract) => (
+                <li key={contract.reference} className="break-words">
+                  <b className="text-stone-950">{contract.title}</b>
+                  <span className="block text-stone-600">Lejárat: {formatDate(contract.expiryDate)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
       <Section title="Közzétett szerződések">
-        {contracts.map((contract) => (
-          <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
-                {contract.relatedMatterTitle ? <p className="mt-1 text-sm text-stone-600">Kapcsolódó ügy: {contract.relatedMatterTitle}</p> : null}
+        {contracts.map((contract) => {
+          const dateRows = contractDateRows(contract);
+          return (
+            <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
+                  {contract.relatedMatterTitle ? <p className="mt-1 text-sm text-stone-600">Kapcsolódó ügy: {contract.relatedMatterTitle}</p> : null}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs font-semibold text-[#6f5514]">{contract.statusLabel}</span>
+                  {contract.expiresThisMonth && contract.expiryDate ? <span className="text-xs font-semibold text-[var(--adm-terracotta-700)]">Ebben a hónapban lejár</span> : null}
+                </div>
               </div>
-              <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs font-semibold text-[#6f5514]">{contract.statusLabel}</span>
-            </div>
-            <dl className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
-              <div><dt className="font-semibold text-stone-800">Kulcsdátum</dt><dd>{formatDate(contract.keyDate)}</dd></div>
-              <div><dt className="font-semibold text-stone-800">Közzétett dokumentum</dt><dd>{contract.publishedDoc ? `${contract.publishedDoc.title || contract.title} · ${contract.publishedDoc.versionLabel}` : "Nincs letölthető dokumentum"}</dd></div>
-            </dl>
-            {contract.publishedDoc?.downloadAvailable ? (
-              <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
-                Dokumentum megnyitása
-              </Link>
-            ) : null}
-          </article>
-        ))}
+              <dl className="mt-3 grid gap-2 text-sm text-stone-600 sm:grid-cols-2">
+                {dateRows.map((row) => (
+                  <div key={row.key}><dt className="font-semibold text-stone-800">{row.label}</dt><dd>{formatDate(row.value)}</dd></div>
+                ))}
+                {!dateRows.length ? <div><dt className="font-semibold text-stone-800">Kulcsdátum</dt><dd>{formatDate(contract.keyDate)}</dd></div> : null}
+                <div><dt className="font-semibold text-stone-800">Közzétett dokumentum</dt><dd>{contract.publishedDoc ? `${contract.publishedDoc.title || contract.title} · ${contract.publishedDoc.versionLabel}` : "Nincs letölthető dokumentum"}</dd></div>
+              </dl>
+              {contract.publishedDoc?.downloadAvailable ? (
+                <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
+                  Dokumentum megnyitása
+                </Link>
+              ) : null}
+            </article>
+          );
+        })}
       </Section>
     </div>
   );
@@ -734,26 +938,30 @@ function LeadershipSummary({ units, mode }: { units: PortalLeadershipUnitAggrega
 }
 
 export function OrganizationPortalViews({ view, resourceId, requestId, context, workspace }: Props) {
-  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, contracts: [], company: null, detail: null, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: true, message: null });
+  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, contracts: [], recentDocuments: [], company: null, detail: null, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: true, message: null });
   const communicationDisabled = context.selectedWorkspace?.communicationMode === "EXTERNAL_ONLY";
   const isCaseRelay = context.selectedWorkspace?.mode === "CASE_RELAY";
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, message: null, detail: null, matter: null, matterError: null, requestDetail: null, requestUnavailable: false }));
     try {
-      const [unitsPage, casesPage, intakesPage, leadership, contractsPage, company] = await Promise.all([
+      const [unitsPage, casesPage, intakesPage, leadership, contractsPage, company, recentDocuments] = await Promise.all([
         getPortalOrganizationUnits(),
         getPortalOrganizationCases({ limit: 50 }),
         isCaseRelay ? Promise.resolve({ items: [] }) : getPortalOrganizationIntakes({ limit: 20 }),
         getPortalOrganizationSummary().then((result) => result.units).catch(() => null),
         getPortalOrganizationContracts().then((result) => result.items).catch(() => []),
         getPortalOrganizationCompany().catch(() => null),
+        // The Documents surface reuses the canonical org-home recent-documents
+        // projection (listPortalDocuments, publishedAt DESC). Loaded only for the
+        // documents view so every other surface keeps its existing payload.
+        view === "documents" ? getPortalOrgHome().then((result) => result.recentDocuments).catch(() => []) : Promise.resolve([]),
       ]);
       const caseReference = view === "matter" && resourceId
         ? (casesPage.items || []).find((item) => item.matterPublicationId === resourceId || item.publicReference === resourceId)?.publicReference || resourceId
         : null;
       const detail = caseReference ? await getPortalOrganizationCase(caseReference).catch(() => null) : null;
-      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, contracts: contractsPage, company, detail, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: false, message: null });
+      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, contracts: contractsPage, recentDocuments, company, detail, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: false, message: null });
       if (detail?.matterPublicationId) {
         setState((current) => ({ ...current, matterLoading: true }));
         try {
@@ -838,7 +1046,7 @@ export function OrganizationPortalViews({ view, resourceId, requestId, context, 
           <OrganizationMatterDetail detail={state.detail} matter={state.matter} matterLoading={state.matterLoading} matterError={state.matterError} />
         )
       ) : null}
-      {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
+      {view === "documents" ? <OrganizationDocuments workspace={workspace} contracts={state.contracts} recentDocuments={state.recentDocuments} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
       {view === "tasks" ? <OrganizationTasks workspace={workspace} mode={context.selectedWorkspace?.mode} /> : null}
       {view === "contracts" ? <OrganizationContracts contracts={state.contracts} /> : null}
