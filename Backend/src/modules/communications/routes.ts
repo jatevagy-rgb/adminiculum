@@ -154,7 +154,7 @@ type CommunicationListRow = {
   metadata?: unknown;
 };
 
-type CommunicationTriage = 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR';
+type CommunicationTriage = 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR' | 'NO_ACTION';
 
 type CommunicationListItem = Omit<
   CommunicationListRow,
@@ -246,6 +246,11 @@ function mapCommunicationListItem(
     triage = 'IGNORED';
   } else if (row.syncStatus === 'FAILED') {
     triage = 'DUPLICATE_OR_ERROR';
+  } else if ((row as any).direction === 'OUTBOUND') {
+    // Outbound mail the firm itself sent is not awaiting assignment merely
+    // because it has no case link. Explicit IGNORED/FAILED states above still
+    // win; nothing is persisted or auto-ignored by this projection.
+    triage = 'NO_ACTION';
   }
 
   return {

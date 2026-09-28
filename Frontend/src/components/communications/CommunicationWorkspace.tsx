@@ -15,6 +15,8 @@ import {
   getCommunicationById,
   linkCommunicationToCase,
   linkCommunicationToTask,
+  ignoreCommunication,
+  unignoreCommunication,
   getOutlookStatus,
   runOutlookSync,
   getMailboxConnections,
@@ -421,6 +423,14 @@ export default function CommunicationWorkspace() {
     setCommunications((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
   };
 
+  // Triage changes patch local state only when deterministic (ignore) and always
+  // re-fetch the canonical list so pending/filter state is server truth.
+  // Nothing is deleted or linked here.
+  const handleTriageChanged = (id: string, triage?: CommunicationItem["triage"]) => {
+    if (triage) updateCommunication(id, { triage });
+    setReloadToken((token) => token + 1);
+  };
+
   const openAssign = (item: CommunicationItem) => {
     setAssignTarget(item);
     setSelectedCaseId("");
@@ -624,7 +634,7 @@ export default function CommunicationWorkspace() {
           </section>
 
           <aside className="adm-panel self-start bg-white">
-            {!selected ? <EmptyState title="Válassz kommunikációt." /> : <CommunicationDetail item={selected} detail={selectedDetail} mailboxes={mailboxes} relatedCase={selected.caseId ? caseById.get(selected.caseId) : undefined} relatedClient={selected.clientId ? clientById.get(selected.clientId) : undefined} linkedTasks={linkedTasks} linkedTasksLoading={linkedTasksLoading} onAssign={openAssign} onCreateCase={openCreateCase} onCreateTask={openTask} onLinkTask={(item) => void openLinkTask(item)} />}
+            {!selected ? <EmptyState title="Válassz kommunikációt." /> : <CommunicationDetail item={selected} detail={selectedDetail} mailboxes={mailboxes} relatedCase={selected.caseId ? caseById.get(selected.caseId) : undefined} relatedClient={selected.clientId ? clientById.get(selected.clientId) : undefined} linkedTasks={linkedTasks} linkedTasksLoading={linkedTasksLoading} onAssign={openAssign} onCreateCase={openCreateCase} onCreateTask={openTask} onLinkTask={(item) => void openLinkTask(item)} onTriageChanged={handleTriageChanged} />}
           </aside>
         </div>
       </div>
@@ -658,7 +668,7 @@ export default function CommunicationWorkspace() {
   );
 }
 
-function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClient, linkedTasks, linkedTasksLoading, onAssign, onCreateCase, onCreateTask, onLinkTask }: { item: CommunicationItem; detail: ApiCommunicationDetail | null; mailboxes: MailboxConnection[]; relatedCase?: CaseListItem; relatedClient?: Client; linkedTasks: TaskListItem[]; linkedTasksLoading: boolean; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void }) {
+function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClient, linkedTasks, linkedTasksLoading, onAssign, onCreateCase, onCreateTask, onLinkTask, onTriageChanged }: { item: CommunicationItem; detail: ApiCommunicationDetail | null; mailboxes: MailboxConnection[]; relatedCase?: CaseListItem; relatedClient?: Client; linkedTasks: TaskListItem[]; linkedTasksLoading: boolean; onAssign: (item: CommunicationItem) => void; onCreateCase: (item: CommunicationItem) => void; onCreateTask: (item: CommunicationItem) => void; onLinkTask: (item: CommunicationItem) => void; onTriageChanged: (id: string, triage?: CommunicationItem["triage"]) => void }) {
   const signal = toCommunicationSignal(item);
   const [composerMode, setComposerMode] = useState<"reply" | "replyAll" | "forward" | null>(null);
   const [composerTo, setComposerTo] = useState("");
@@ -666,11 +676,35 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
   const [composerBody, setComposerBody] = useState("");
   const [composerBusy, setComposerBusy] = useState(false);
   const [composerFeedback, setComposerFeedback] = useState<string | null>(null);
+  const [triageBusy, setTriageBusy] = useState(false);
+  const [triageFeedback, setTriageFeedback] = useState<string | null>(null);
   const mailboxConnection = detail?.mailboxConnectionId
     ? mailboxes.find((mailbox) => mailbox.id === detail.mailboxConnectionId)
     : undefined;
   const isMailboxMessage = item.source === "MAILBOX" || detail?.source === "MAILBOX";
   const canSend = Boolean(mailboxConnection?.sendCapability && ["CONNECTED", "SYNCING"].includes(mailboxConnection.status));
+  const submitTriage = async (action: "ignore" | "unignore") => {
+    if (triageBusy) return;
+    setTriageBusy(true);
+    setTriageFeedback(null);
+    try {
+      if (action === "ignore") {
+        await ignoreCommunication(item.id);
+        onTriageChanged(item.id, "IGNORED");
+        setTriageFeedback("A kommunikáció nem igényel intézkedést.");
+      } else {
+        await unignoreCommunication(item.id);
+        // The canonical list re-fetch decides the resulting triage (outbound
+        // unlinked mail returns as NO_ACTION, not pending).
+        onTriageChanged(item.id);
+        setTriageFeedback("A kommunikáció újra feldolgozásra lett jelölve.");
+      }
+    } catch {
+      setTriageFeedback("A művelet most nem sikerült.");
+    } finally {
+      setTriageBusy(false);
+    }
+  };
   const openComposer = (mode: "reply" | "replyAll" | "forward") => {
     setComposerMode(mode);
     setComposerFeedback(null);
@@ -715,6 +749,16 @@ function CommunicationDetail({ item, detail, mailboxes, relatedCase, relatedClie
         {item.summary || item.contentPreview ? <p className="border-l-2 border-[var(--adm-blue-500)] pl-3 text-[11px] leading-5 text-[var(--adm-text-muted)]">{item.summary || item.contentPreview}</p> : null}
         {detail?.content ? <section aria-label="Üzenet tartalma" className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="whitespace-pre-wrap text-[11px] leading-5 text-[var(--adm-text)]">{detail.content}</p>{detail.attachments?.length ? <p className="mt-3 border-t border-[var(--adm-border)] pt-2 text-[10px] font-semibold text-[var(--adm-text-muted)]">{detail.attachments.length} melléklet csatolva</p> : null}</section> : null}
         <div className="flex flex-wrap gap-1"><StatusChip>{sourceLabel(item)}</StatusChip><StatusChip>{signal.direction === "incoming" ? "Bejövő" : "Kimenő"}</StatusChip><StatusChip>{signal.audience === "external" ? "Külső" : "Belső"}</StatusChip><StatusChip>{formatCommunicationType(item.type)}</StatusChip>{item.attachmentCount > 0 ? <StatusChip>{item.attachmentCount} melléklet</StatusChip> : null}{item.sourceTaskCount > 0 ? <StatusChip>{item.sourceTaskCount} feladat</StatusChip> : null}</div>
+        {item.triage === "NEEDS_ASSIGNMENT" || item.triage === "IGNORED" ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {item.triage === "NEEDS_ASSIGNMENT" ? (
+              <button type="button" disabled={triageBusy} onClick={() => void submitTriage("ignore")} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text-muted)] disabled:opacity-50">{triageBusy ? "Mentés…" : "Nem igényel intézkedést"}</button>
+            ) : (
+              <button type="button" disabled={triageBusy} onClick={() => void submitTriage("unignore")} className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[10px] font-semibold text-[var(--adm-text-muted)] disabled:opacity-50">{triageBusy ? "Mentés…" : "Újra feldolgozandó"}</button>
+            )}
+            {triageFeedback ? <p role="status" className="text-[10px] text-[var(--adm-text-muted)]">{triageFeedback}</p> : null}
+          </div>
+        ) : null}
         <dl className="grid grid-cols-[92px_1fr] gap-2 text-[11px]"><dt className="text-[var(--adm-text-muted)]">Ügyfél</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedClient?.name || (item.clientId ? "Ügyfélhez sorolt" : "Nincs ügyfél")}</dd><dt className="text-[var(--adm-text-muted)]">Ügy</dt><dd className="font-semibold text-[var(--adm-text)]">{relatedCase ? `${relatedCase.caseNumber} · ${relatedCase.title}` : item.caseId ? "Ügyhöz sorolt" : "Nincs ügy"}</dd><dt className="text-[var(--adm-text-muted)]">Idő</dt><dd className="font-semibold text-[var(--adm-text)]">{formatDate(item.effectiveMessageAt ?? item.createdAt)}</dd></dl>
         {item.sourceTaskCount > 0 ? <div className="border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[10px] font-bold uppercase tracking-[0.13em] text-[var(--adm-text-muted)]">Kapcsolt feladat</p>{linkedTasksLoading ? <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">Betöltés…</p> : linkedTasks.length ? <div className="mt-2 space-y-1">{linkedTasks.map((task) => <Link key={task.id} href={`/tasks?taskId=${encodeURIComponent(task.id)}`} className="block text-[11px] font-semibold text-[var(--adm-blue-700)] hover:underline">{task.title} · {task.status}</Link>)}</div> : <p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A feladatkapcsolat részlete nem érhető el.</p>}</div> : null}
         <div className="flex flex-wrap gap-2">{item.caseId ? <Link href={`/cases/${encodeURIComponent(item.caseId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügy megnyitása</Link> : null}{item.clientId ? <Link href={`/clients/${encodeURIComponent(item.clientId)}`} className="adm-link-button px-3 py-2 text-[10px]">Ügyfél megnyitása</Link> : null}{item.caseId && item.documentId ? <Link href={`/documents/compare?caseId=${encodeURIComponent(item.caseId)}&documentId=${encodeURIComponent(item.documentId)}`} className="adm-link-button px-3 py-2 text-[10px]">Dokumentum megnyitása</Link> : null}</div>
