@@ -20,11 +20,16 @@ import { formatDate } from "./MatterWorkspace";
 const card = "min-w-0 rounded-3xl border border-stone-200 bg-white p-5 shadow-sm";
 const compactState = "min-w-0 rounded-2xl border border-stone-200 bg-white px-4 py-3";
 
-/** The canonical destinations offered as quick actions on the organization home. */
-const QUICK_ACTIONS: Array<{ label: string; href: string }> = [
-  { label: "Ügyek", href: "/portal/ugyek" },
-  { label: "Teendők", href: "/portal/teendoim" },
-  { label: "Dokumentumok", href: "/portal/dokumentumok" },
+/**
+ * The canonical destinations offered as quick actions on the organization home.
+ * The three `primary` entries are the product's main entry points and carry the
+ * restrained terracotta identity; the remaining destinations stay reachable as
+ * secondary actions. Routes are unchanged — this is presentation only.
+ */
+const QUICK_ACTIONS: Array<{ label: string; href: string; primary?: boolean }> = [
+  { label: "Ügyek", href: "/portal/ugyek", primary: true },
+  { label: "Teendők", href: "/portal/teendoim", primary: true },
+  { label: "Dokumentumok", href: "/portal/dokumentumok", primary: true },
   { label: "Naptár", href: "/portal/naptar" },
 ];
 
@@ -194,7 +199,7 @@ function ActivityRow({ document }: { document: PortalOrgHome["recentDocuments"][
     <Link href={`/portal/documents/${encodeURIComponent(document.id)}`} className="flex min-w-0 items-start gap-3 rounded-2xl bg-stone-50 p-4">
       <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-emerald-600" aria-hidden="true" />
       <span className="min-w-0">
-        <span className="block break-words font-semibold text-stone-950">Új dokumentum érkezett</span>
+        <span className="block break-words font-semibold text-stone-950">Nemrég közzétett dokumentum</span>
         <span className="mt-1 block break-words text-sm text-stone-700">{document.title}</span>
         <span className="mt-1 block text-xs text-stone-500">
           {document.matterTitle || "Közzétett ügy"}
@@ -263,6 +268,14 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
   // that only the visible rows exist.
   const actionTotal = home?.actions.length ?? 0;
   const actionScopeNote = actionTotal > actionNow.length ? `${actionNow.length} megjelenítve · ${actionTotal} összesen` : undefined;
+
+  // "Ami most Öntől kell" is ONE parent container. Its actionable entries are
+  // derived only from signals the canonical DTO actually carries right now, so an
+  // empty signal never produces a fabricated row. There is deliberately no
+  // calendar-event count here: the org home DTO exposes no canonical event entity.
+  const unreadMessageCount = home?.contactSummary.unreadCount ?? 0;
+  const availableDocumentCount = home?.recentDocuments.length ?? 0;
+  const hasAttentionEntries = actionNow.length > 0 || unreadMessageCount > 0 || availableDocumentCount > 0;
 
   // "What is coming up?" — today or later, derived only from real published dates.
   // Overdue values stay on their canonical Teendők / attention surfaces; we never
@@ -349,24 +362,42 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         ) : null}
       </section>
 
-      {/* Quick actions — every canonical destination stays one tap away. */}
-      <nav aria-label="Gyors műveletek" className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {QUICK_ACTIONS.map((action) => (
-          <Link
-            key={action.href}
-            href={action.href}
-            className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-center text-sm font-semibold text-stone-800 transition hover:border-[#b99b45]"
-          >
-            {action.label}
-          </Link>
-        ))}
+      {/* Quick actions — every canonical destination stays one tap away. The three
+          primary entry points carry the restrained terracotta product identity. */}
+      <nav aria-label="Gyors műveletek" className="grid gap-3">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {QUICK_ACTIONS.filter((action) => action.primary).map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              data-testid="portal-primary-tile"
+              className="group flex min-w-0 items-center justify-between gap-3 rounded-2xl border border-[var(--adm-terracotta-700)] bg-[var(--adm-terracotta-700)] p-5 text-white shadow-sm transition hover:opacity-95 focus:outline-none focus:ring-4 focus:ring-[var(--adm-terracotta-100)]"
+            >
+              <span className="font-serif text-2xl font-semibold">{action.label}</span>
+              <span aria-hidden="true" className="text-lg font-semibold text-white/90 transition group-hover:translate-x-0.5">→</span>
+            </Link>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {QUICK_ACTIONS.filter((action) => !action.primary).map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              className="rounded-2xl border border-stone-200 bg-white px-4 py-3 text-center text-sm font-semibold text-stone-800 transition hover:border-[#b99b45]"
+            >
+              {action.label}
+            </Link>
+          ))}
+        </div>
       </nav>
 
-      {/* 1. AMI MOST ÖNTŐL KELL — dominant when actions exist, compact when empty */}
+      {/* 1. AMI MOST ÖNTŐL KELL — ONE parent container. Jogi/megfelelési teendők
+          plus only the other actionable signals the DTO carries right now. Each
+          row is gated on its own real data, never on a fabricated default. */}
       <Section
         kicker="Teendői"
         title="Ami most Öntől kell"
-        empty={!actionNow.length}
+        empty={!hasAttentionEntries}
         emptyText="Jelenleg nincs Önnek szóló teendő."
         note={actionScopeNote}
         actionLink={actionScopeNote ? "/portal/teendoim" : undefined}
@@ -375,6 +406,28 @@ export function OrgHomeView({ identity }: { identity: { displayName: string; job
         {actionNow.map((action) => (
           <ActionRow key={action.id} action={action} />
         ))}
+        {unreadMessageCount > 0 ? (
+          <Link
+            href="/portal/uzenetek"
+            data-testid="portal-attention-message"
+            className="cp-row block p-4 transition hover:border-[#b99b45]"
+          >
+            <p className="cp-kicker">Új üzenet</p>
+            <p className="cp-title mt-1 text-lg">{unreadMessageCount} olvasatlan üzenet</p>
+            <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Az iroda válasza megnyitásra vár.</p>
+          </Link>
+        ) : null}
+        {availableDocumentCount > 0 ? (
+          <Link
+            href="/portal/dokumentumok"
+            data-testid="portal-attention-document"
+            className="cp-row block p-4 transition hover:border-[#b99b45]"
+          >
+            <p className="cp-kicker">Nemrég közzétett dokumentum</p>
+            <p className="cp-title mt-1 text-lg">{availableDocumentCount} elérhető dokumentum</p>
+            <p className="mt-1 text-sm text-[var(--adm-text-muted)]">A legutóbb megosztott anyagok a Dokumentumok felületen.</p>
+          </Link>
+        ) : null}
       </Section>
 
       {/* 2. JOGI ÜGYEK */}
