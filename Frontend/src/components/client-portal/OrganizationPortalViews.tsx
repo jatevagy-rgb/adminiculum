@@ -32,6 +32,7 @@ import {
 import { clientSafeError, customerInteractionApi, type CustomerRequestDTO, type CustomerSubmissionDTO } from "@/lib/clientInteractionApi";
 import { CustomerInteractionCard } from "./CustomerInteractionCard";
 import { CustomerRequestDetail } from "./CustomerRequestDetail";
+import { TeendokInlineRequestDetail } from "./TeendokInlineRequestDetail";
 import { MatterView } from "./MatterWorkspace";
 import { ClientSafeResultCard, DemoContentBanner, PortalPersonHeader, PortalProfileCard } from "./PortalPresentationPrimitives";
 import { OrganizationCompanyProfile } from "./OrganizationCompanyProfile";
@@ -604,6 +605,7 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
 
   const requests = dedupeCustomerItems(selectCustomerRequestDocuments(workspace.documents));
   const submissions = dedupeCustomerItems(selectCustomerSubmissionDocuments(workspace.documents));
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
   return (
     <div className="space-y-6">
       <section className={taskCard}>
@@ -633,20 +635,39 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
       <Section title="Dokumentum- és adatbekérések" empty={!requests.length} emptyText="Jelenleg nincs Öntől szükséges dokumentum- vagy adatbekérés.">
         {requests.map((item) => {
           const kindLabel = customerRequestKindLabel(item.kind);
+          const expanded = expandedRequestId === item.id;
           return (
-            <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-xl border border-[#F1D7D1] bg-[#FBF0EE]/50 p-4 text-sm transition-colors hover:border-[#B85C4B] hover:bg-[#FBF0EE] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30">
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <b className="block break-words text-[#1F2937]">{item.title}</b>
-                {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-white px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
-              </div>
-              <span className="mt-1 block text-[#6B7280]">
-                {item.matterTitle || "Közzétett ügy"}
-                {kindLabel ? ` · ${kindLabel}` : ""}
-                {item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}
-              </span>
-              {item.description ? <span className="mt-1 block break-words text-[#6B7280]">{item.description}</span> : null}
-              <span className="mt-2 inline-flex font-semibold text-[#B85C4B]">Bekérés megnyitása →</span>
-            </Link>
+            <div key={`${item.kind}-${item.id}`} className="min-w-0">
+              <Link href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="block rounded-xl border border-[#F1D7D1] bg-[#FBF0EE]/50 p-4 text-sm transition-colors hover:border-[#B85C4B] hover:bg-[#FBF0EE] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <b className="block break-words text-[#1F2937]">{item.title}</b>
+                  {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-white px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
+                </div>
+                <span className="mt-1 block text-[#6B7280]">
+                  {item.matterTitle || "Közzétett ügy"}
+                  {kindLabel ? ` · ${kindLabel}` : ""}
+                  {item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}
+                </span>
+                {item.description ? <span className="mt-1 block break-words text-[#6B7280]">{item.description}</span> : null}
+                <span className="mt-2 inline-flex font-semibold text-[#B85C4B]">Bekérés megnyitása →</span>
+              </Link>
+              {item.matterId ? (
+                <button
+                  type="button"
+                  data-testid="teendok-request-toggle"
+                  aria-expanded={expanded}
+                  onClick={() => setExpandedRequestId((current) => (current === item.id ? null : item.id))}
+                  className="mt-2 rounded-full border border-[#E5E7E6] bg-white px-3 py-1 text-xs font-semibold text-[#374151] transition-colors hover:border-[#B85C4B] hover:text-[#B85C4B] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30"
+                >
+                  {expanded ? "Bezárás" : "Válaszadás itt"}
+                </button>
+              ) : null}
+              {expanded && item.matterId ? (
+                <div className="mt-3 min-w-0 rounded-xl border border-[#E5E7E6] bg-white p-3" data-testid="teendok-inline-request">
+                  <TeendokInlineRequestDetail matterId={item.matterId} requestId={item.id} />
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </Section>

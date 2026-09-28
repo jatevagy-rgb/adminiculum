@@ -103,7 +103,7 @@ describe("portal Teendők request entry points", () => {
     assert.match(body, /customerRequestDetailHref\(item\.matterId, item\.id\)/);
   });
 
-  it("7. adds no inline response form, uploader or submission state machine", () => {
+  it("7. the request list adds no response logic of its own", () => {
     const body = sliceFn(read("src/components/client-portal/OrganizationPortalViews.tsx"), "OrganizationTasks");
     assert.doesNotMatch(body, /RequestResponseCard/);
     assert.doesNotMatch(body, /customerInteractionApi/);
@@ -158,5 +158,66 @@ describe("portal Teendők request entry points", () => {
     for (const label of ["Információkérés", "Adatlap", "Válaszadás", "Dokumentumkérés", "Javítás", "Beküldés"]) {
       assert.ok(shell.includes(label), `missing label ${label}`);
     }
+  });
+});
+
+describe("Teendők inline canonical request response", () => {
+  const orgViews = () => read("src/components/client-portal/OrganizationPortalViews.tsx");
+  const inline = () => read("src/components/client-portal/TeendokInlineRequestDetail.tsx");
+
+  it("13. expands the canonical interaction from the Teendők request row", () => {
+    const body = sliceFn(orgViews(), "OrganizationTasks");
+    assert.match(body, /TeendokInlineRequestDetail/);
+    assert.match(body, /data-testid="teendok-request-toggle"/);
+    assert.ok(body.includes("aria-expanded={expanded}"));
+    assert.match(body, /data-testid="teendok-inline-request"/);
+    assert.match(body, /Válaszadás itt/);
+    assert.match(body, /Bezárás/);
+  });
+
+  it("14. reuses the existing canonical detail and response component instead of cloning it", () => {
+    const src = inline();
+    assert.match(src, /import \{ CustomerRequestDetail \} from "\.\/CustomerRequestDetail"/);
+    assert.match(src, /<CustomerRequestDetail/);
+    assert.doesNotMatch(src, /export function RequestResponseCard/);
+    const card = read("src/components/client-portal/CustomerInteractionCard.tsx");
+    assert.equal(card.match(/export function RequestResponseCard/g)?.length, 1, "RequestResponseCard has exactly one canonical implementation");
+    const detail = read("src/components/client-portal/CustomerRequestDetail.tsx");
+    assert.match(detail, /<RequestResponseCard/);
+  });
+
+  it("15. text, upload, unavailable and correction flows stay on the canonical #270 implementation", () => {
+    const card = read("src/components/client-portal/CustomerInteractionCard.tsx");
+    const detail = read("src/components/client-portal/CustomerRequestDetail.tsx");
+    assert.match(card, /customerInteractionApi\.submitAnswers\(/);
+    assert.match(card, /customerInteractionApi\.uploadFile\(/);
+    assert.match(card, /customerInteractionApi\.submitSubmission\(/);
+    assert.match(card, /correctionReason/);
+    assert.match(detail, /declareUnavailable/);
+    assert.match(detail, /unavailable-declaration-state/);
+  });
+
+  it("16. adds no second submission or upload state machine in the inline path", () => {
+    const src = inline() + sliceFn(orgViews(), "OrganizationTasks");
+    assert.doesNotMatch(src, /createSubmission|submitAnswers|uploadFile|declareUnavailable|submitSubmission/);
+    assert.doesNotMatch(src, /type="file"/);
+    assert.doesNotMatch(src, /localStorage|sessionStorage/);
+  });
+
+  it("17. inline fetch uses only canonical customer APIs with truthful loading and fallback states", () => {
+    const src = inline();
+    assert.match(src, /getPortalMatter\(matterId\)/);
+    assert.match(src, /customerInteractionApi\.getRequest\(matter\.caseId, requestId\)/);
+    assert.match(src, /customerInteractionApi\.listSubmissions\(matter\.caseId, requestId\)/);
+    assert.match(src, /A bekérés betöltése…/);
+    assert.match(src, /nem érhető el ezen az ügyfélfelületen/);
+    assert.doesNotMatch(src, /w-\[\d+px\]/, "no fixed-width layout that would break the mobile Teendők list");
+  });
+
+  it("18. the canonical deep link stays available next to the inline action", () => {
+    const body = sliceFn(orgViews(), "OrganizationTasks");
+    assert.match(body, /customerRequestDetailHref\(item\.matterId, item\.id\)/);
+    assert.match(body, /Bekérés megnyitása/);
+    assert.match(body, /Válaszadás itt/);
   });
 });
