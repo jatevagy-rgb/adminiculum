@@ -474,10 +474,12 @@ export function ClientCompanyWorkspace({
     void load();
   }, [load]);
 
-  // Single authoritative soft re-read of the read model. Used after a capture so
-  // the latest measured snapshot refreshes, and after a mutation succeeds so
-  // newly created/edited processes, steps and systems appear — without a full
-  // loading flash and without dropping user-entered form state or the capture
+  // Single authoritative soft re-read of the read model used by both feature
+  // paths — measurement capture (refreshDataRoom) and editor mutations
+  // (refreshWorkspace) — so neither flow duplicates a competing re-read. The
+  // mutation re-read keeps newly created/edited processes, steps and systems
+  // visible without a full loading flash or dropping user-entered form state;
+  // the capture re-read refreshes the latest measured snapshot while keeping the
   // confirmation message rendered by the process card.
   const refreshWorkspace = useCallback(async () => {
     try {
@@ -486,6 +488,10 @@ export function ClientCompanyWorkspace({
       // Keep already-rendered data on a transient re-read failure.
     }
   }, [clientId]);
+
+  // The #381 capture path named this same soft re-read refreshDataRoom; keep
+  // that name as an alias of the single implementation above.
+  const refreshDataRoom = refreshWorkspace;
 
   // Synchronize URL query parameter (?section=) with active section & support browser back/forward.
   // Cross-domain sections that now live in canonical modules redirect (replace) instead of rendering.
@@ -1227,7 +1233,7 @@ export function ClientCompanyWorkspace({
                       <ProcessSnapshotCapture
                         clientId={clientId}
                         processId={process.id}
-                        onCaptured={() => void refreshWorkspace()}
+                        onCaptured={() => void refreshDataRoom()}
                       />
                       <p className="text-[11px] text-stone-500">
                         A mérés a rögzített folyamatlépésekből determinisztikusan számított pillanatképet rögzít.
