@@ -13,9 +13,15 @@
 import { Request, Response, Router } from 'express';
 import { watcherMachineAuth } from '../../middleware/watcherAuth';
 import { InteractionError } from '../client-interaction/base';
+import { buildComplianceMonitoringManifest } from '../compliance-doc-intelligence/monitoringManifest';
 import { ingestLegalSourceObservations } from './legalSourceObservationService';
 
 const router = Router();
+
+router.get('/watcher-monitoring-manifest', watcherMachineAuth, async (req: Request, res: Response) => {
+  const manifest = await buildComplianceMonitoringManifest();
+  res.status(200).json(manifest);
+});
 
 router.post('/legal-source-observations', watcherMachineAuth, async (req: Request, res: Response) => {
   try {
