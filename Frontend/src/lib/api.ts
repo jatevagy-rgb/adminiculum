@@ -561,6 +561,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspace> {
 export interface CaseCommentDto {
   id: string;
   caseId: string;
+  parentId: string | null;
   author: { id: string; displayName: string };
   content: string;
   status: 'OPEN' | 'RESOLVED';
@@ -579,10 +580,12 @@ export async function getCaseComments(caseId: string, params: { limit?: number; 
   const qs = search.toString();
   return fetchApi<CaseCommentsResponse>(`/cases/${encodeURIComponent(caseId)}/comments${qs ? `?${qs}` : ''}`, { cache: 'no-store' });
 }
-export async function createCaseComment(caseId: string, content: string): Promise<CaseCommentDto> {
+export async function createCaseComment(caseId: string, content: string, parentCommentId?: string | null): Promise<CaseCommentDto> {
+  const body: Record<string, unknown> = { content };
+  if (parentCommentId) body.parentCommentId = parentCommentId;
   return fetchApi<CaseCommentDto>(`/cases/${encodeURIComponent(caseId)}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
 }
 export async function resolveCaseComment(caseId: string, commentId: string): Promise<CaseCommentDto> {

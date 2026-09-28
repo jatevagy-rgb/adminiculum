@@ -2497,6 +2497,14 @@ model Comment {
   documentId String?
   caseId     String?
 
+  // Optional self-reference: a reply to another comment. Replies are validated
+  // at the service layer to stay within one case and one domain (case notes only,
+  // one visible thread level). Additive and nullable — existing rows stay
+  // top-level (parentId null), no backfill.
+  parentId String?
+  parent   Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies  Comment[] @relation("CommentReplies")
+
   // Author
   userId String
 
@@ -2508,6 +2516,7 @@ model Comment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([parentId])
   @@map("comments")
 }
 
