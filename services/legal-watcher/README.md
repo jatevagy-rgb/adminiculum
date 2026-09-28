@@ -3,7 +3,7 @@
 Isolated legal-source watcher vertical slice:
 
 ```
-exported manifest snapshot
+manifest source (FILE snapshot | BACKEND watcher-monitoring manifest)
   -> distinct CELEX identifiers
   -> official Publications Office CELLAR SPARQL
   -> act-level amendment / consolidation observations
@@ -15,7 +15,14 @@ exported manifest snapshot
 
 ## WHAT_W1_DOES
 
-- Consumes an **exported manifest snapshot** (schema v1) supplied as a file.
+- Consumes the monitoring manifest (schema v1) in one of two explicit modes:
+  - **FILE** (default) — an exported snapshot file supplied with `--manifest`
+    (or `LEGAL_WATCHER_MANIFEST`); no backend call is ever made.
+  - **BACKEND** (`LEGAL_WATCHER_MANIFEST_MODE=BACKEND`) — reads the dedicated
+    app-only endpoint
+    `GET <backendEndpoint>/api/v1/compliance-intelligence/watcher-monitoring-manifest`
+    with the same app-only Bearer token used by W2 delivery. No wrapper, no
+    local-file fallback: a failed read fails the run before any CELLAR query.
 - Extracts only `identifierFamily === "CELEX"` entries, normalizes them with the
   same strict C3A token shape the backend uses (`^3[0-9]{4}[A-Z][0-9]{4}$`),
   deduplicates, and queries only those against the **official** CELLAR SPARQL
@@ -47,11 +54,13 @@ exported manifest snapshot
 
 ## WHAT_W1_DOES_NOT_DO
 
-- **Writes nothing by default.** No Adminiculum backend writes and no token
-  request happen unless delivery is explicitly enabled with `--deliver` or
-  `LEGAL_WATCHER_DELIVERY_MODE=DELIVER`.
-- The manifest is supplied as an **exported snapshot file**; the watcher never
-  calls the production manifest endpoint (workforce-authenticated).
+- **Writes nothing unless delivery is explicitly enabled.** No Adminiculum
+  backend writes happen in DRY_RUN. FILE manifest mode additionally makes no
+  token request; BACKEND manifest mode performs exactly one authenticated read
+  (the watcher-monitoring manifest) per run, still with zero backend writes.
+- FILE mode never calls the backend. BACKEND mode calls only the dedicated
+  app-only watcher-monitoring manifest endpoint — never the
+  workforce-authenticated production monitoring endpoint.
 - **No production scheduler** — the watcher is an on-demand CLI; no cron
   exists. There is no Azure deployment or provisioning in this repository.
 - **Only EUR-Lex** (official CELLAR): no NJT, no Magyar Közlöny, no case law,
@@ -69,10 +78,17 @@ exported manifest snapshot
 ```bash
 npm ci
 npm run build
+# FILE manifest mode (default): exported snapshot file
 npm run watcher -- --manifest ./manifest.json --state-dir ./state [--report-out ./report.json] [--deliver]
+# BACKEND manifest mode: read the watcher-monitoring manifest directly
+LEGAL_WATCHER_MANIFEST_MODE=BACKEND LEGAL_WATCHER_BACKEND_ENDPOINT=https://backend.example.test \
+  LEGAL_WATCHER_AZURE_TENANT_ID=... LEGAL_WATCHER_AZURE_CLIENT_ID=... \
+  LEGAL_WATCHER_AZURE_CLIENT_SECRET=... LEGAL_WATCHER_AZURE_SCOPE=api://.../.default \
+  npm run watcher -- --state-dir ./state
 ```
 
-- `--manifest <path>` — exported manifest snapshot (schema v1 JSON).
+- `--manifest <path>` — exported manifest snapshot (schema v1 JSON); required in
+  FILE mode, ignored in BACKEND mode.
 - `--state-dir <dir>` — watcher-owned durable state directory (default `./state`;
   never committed to git).
 - `--report-out <path>` — write the machine-readable JSON report to `<path>`;
@@ -80,18 +96,39 @@ npm run watcher -- --manifest ./manifest.json --state-dir ./state [--report-out 
 - `--deliver` — explicitly enable W2 backend delivery (default: dry run).
 - Human summary goes to stdout; structured JSON logs go to stderr.
 
-Environment equivalents: `LEGAL_WATCHER_STATE_DIR`, `LEGAL_WATCHER_EURLEX_ENDPOINT`,
+Environment equivalents: `LEGAL_WATCHER_MANIFEST_MODE` (`FILE`|`BACKEND`, default
+`FILE`), `LEGAL_WATCHER_MANIFEST` (snapshot path in FILE mode),
+`LEGAL_WATCHER_STATE_DIR`, `LEGAL_WATCHER_EURLEX_ENDPOINT`,
 `LEGAL_WATCHER_HTTP_TIMEOUT_MS`, `LEGAL_WATCHER_HTTP_RETRIES` (max 2),
 `LEGAL_WATCHER_HTTP_BACKOFF_MS`, `LEGAL_WATCHER_HTTP_BACKOFF_FACTOR`,
 `LEGAL_WATCHER_RESPONSE_MAX_BYTES`, `LEGAL_WATCHER_CONCURRENCY`.
+
+## Manifest source modes
+
+- `LEGAL_WATCHER_MANIFEST_MODE=FILE` (default): requires `--manifest <path>` or
+  `LEGAL_WATCHER_MANIFEST`. The watcher never calls the backend and, in
+  DRY_RUN, never requests a token.
+- `LEGAL_WATCHER_MANIFEST_MODE=BACKEND`: does not require `--manifest`; requires
+  `LEGAL_WATCHER_BACKEND_ENDPOINT` and app-only token configuration (exactly the
+  same `CLIENT_SECRET`/`MANAGED_IDENTITY` selection as W2 delivery), and reads
+  `GET <endpoint>/api/v1/compliance-intelligence/watcher-monitoring-manifest`
+  once per run. With `DELIVER` the single token provider instance is reused for
+  the manifest GET and the observation POST. Backend manifest failures abort the
+  run before any CELLAR query, delivery POST or state write; there is no
+  fallback to a local file.
+
+The remote response is the existing manifest schema v1 with no wrapper and is
+validated by the exact same parser/validator as a FILE snapshot, including the
+privacy guard for unexpected fields.
 
 Exit codes: `0` OK, `1` PARTIAL/FAILED, `2` fatal configuration/manifest/state
 error.
 
 ## W2 delivery (explicit opt-in)
 
-Default is `DRY_RUN`: zero backend writes, no token request, W1 output
-preserved exactly.
+Default is `DRY_RUN`: zero backend writes and W1 output preserved exactly. In
+FILE manifest mode DRY_RUN also makes no token request; in BACKEND manifest
+mode DRY_RUN performs exactly one authenticated manifest read.
 
 Required configuration for `DELIVER` (missing configuration fails closed at
 startup, before any observation):
@@ -169,7 +206,10 @@ identity is expected to later receive the `LegalSource.Ingest` application
 role on the Adminiculum API; the backend pins the identity's client/app id via
 `LEGAL_WATCHER_CLIENT_ID`. The job authenticates with
 `LEGAL_WATCHER_AZURE_AUTH_MODE=MANAGED_IDENTITY`, so no client secret is
-provisioned into the job.
+provisioned into the job. The same managed identity, endpoint and token
+provider instance are reused when the job runs with
+`LEGAL_WATCHER_MANIFEST_MODE=BACKEND`; both the manifest GET and the delivery
+POST run under one app-only token provider.
 
 State stays file-based (`state.json`, `delivery.json`); it is **not** moved to
 PostgreSQL. `LEGAL_WATCHER_STATE_DIR` must point at a persistent mounted
