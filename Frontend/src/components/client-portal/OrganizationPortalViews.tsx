@@ -337,6 +337,8 @@ function OrganizationMatterDetail({
  */
 function OrganizationDocuments({ workspace, contracts, recentDocuments }: { workspace: PortalWorkspace; contracts: PortalOrgContract[]; recentDocuments: PortalOrgHomeDocument[] }) {
   const shared = dedupeCustomerItems(selectCustomerPublishedDocuments(workspace.documents));
+  const uploaded = shared.filter((item) => item.clientUploaded);
+  const compliancePolicies = shared.filter((item) => item.isCompliancePolicy);
   const activeContracts = selectActiveContracts(contracts);
   const expiringThisMonth = selectExpiringThisMonthContracts(contracts);
   return (
@@ -349,6 +351,30 @@ function OrganizationDocuments({ workspace, contracts, recentDocuments }: { work
       <Section title="Nemrég közzétett dokumentumok" empty={!recentDocuments.length} emptyText="Az iroda még nem tett közzé dokumentumot ezen az ügyfélfelületen.">
         {recentDocuments.map((item) => (
           <Link key={item.id} href={`/portal/documents/${encodeURIComponent(item.id)}`} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="break-words text-stone-950">{item.title}</b>
+              {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}
+            </div>
+            {item.publishedAt ? <span className="mt-1 block text-xs text-stone-500">Közzétéve: {formatDate(item.publishedAt)}</span> : null}
+            <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Dokumentum megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
+      <Section title="Feltöltött dokumentumok" empty={!uploaded.length} emptyText="Nincs ügyfél által feltöltött dokumentum ezen az ügyfélfelületen.">
+        {uploaded.map((item) => (
+          <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="break-words text-stone-950">{item.title}</b>
+              {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}
+            </div>
+            {item.publishedAt ? <span className="mt-1 block text-xs text-stone-500">Közzétéve: {formatDate(item.publishedAt)}</span> : null}
+            <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Dokumentum megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
+      <Section title="Compliance dokumentumok" empty={!compliancePolicies.length} emptyText="Nincs elérhető compliance dokumentum ezen az ügyfélfelületen.">
+        {compliancePolicies.map((item) => (
+          <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <b className="break-words text-stone-950">{item.title}</b>
               {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}

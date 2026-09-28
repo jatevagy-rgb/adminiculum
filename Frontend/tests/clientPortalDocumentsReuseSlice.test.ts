@@ -58,7 +58,9 @@ describe("recent documents reuse the canonical publishedAt projection", () => {
     assert.ok(src.includes("Nemrég közzétett dokumentumok"));
     assert.ok(src.includes("Közzétéve:"));
     assert.ok(!src.includes("Frissen feltöltött"));
-    assert.ok(!src.includes("Feltöltött dokumentumok"));
+    // Slice 2 authorizes a real "Feltöltött dokumentumok" category; the recent
+    // section itself still must not call its rows uploaded.
+    assert.ok(!src.includes("Ön által feltöltött"));
   });
 
   it("renders the canonical publishedAt and links to the canonical document destination", () => {
@@ -108,9 +110,11 @@ describe("contract groups reuse the canonical Slice B selectors", () => {
 });
 
 describe("slice boundaries", () => {
-  it("adds no uploaded, compliance or grow category to the documents surface", () => {
+  it("adds no grow category or upload inference to the documents surface", () => {
     const src = documentsSurface();
-    for (const forbidden of ["Feltöltött", "Compliance dokumentumok", "Grow With Us", "megfeleles", "fejlesztes"]) {
+    // Slice 2 authorizes the real Feltöltött / Compliance dokumentumok
+    // categories (backed by canonical derived booleans); Grow remains deferred.
+    for (const forbidden of ["Grow With Us", "megfeleles", "fejlesztes"]) {
       assert.ok(!src.includes(forbidden), `must not add category ${forbidden}`);
     }
   });

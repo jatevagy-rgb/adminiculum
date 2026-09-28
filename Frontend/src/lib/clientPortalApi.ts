@@ -35,6 +35,8 @@ export type PortalDocument = {
   downloadAvailable: boolean;
   mimeType?: string | null;
   size?: number | null;
+  clientUploaded: boolean;
+  isCompliancePolicy: boolean;
 };
 
 export type PortalActionRequest = {
@@ -93,6 +95,10 @@ export type PortalWorkspaceDocument = {
   publishedAt?: string | null;
   kind: 'SHARED_DOCUMENT' | 'DOCUMENT_REQUEST' | 'CORRECTION_REQUEST' | 'SUBMISSION' | 'CORRECTION_SUBMISSION';
   actionUrl: string;
+  /** Derived customer-facing classification; the raw uploadSource enum is never exposed. */
+  clientUploaded: boolean;
+  /** Derived customer-facing classification; INTERNAL_ANALYSIS never qualifies. */
+  isCompliancePolicy: boolean;
 };
 
 export type PortalWorkspaceMessage = {
