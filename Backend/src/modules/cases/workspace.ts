@@ -7,6 +7,7 @@
  * so a single failure never 500s the whole workspace.
  */
 import { prisma } from '../../prisma/prisma.service';
+import { buildMailboxPrivacyWhere, resolveCommunicationPrivacyScope } from '../communications/readScope';
 import { buildCockpit, type CaseCockpit } from './workspaceCockpit';
 import { getCaseDocumentReviewSummaries, type DocumentReviewSummaryDto } from '../documents/reviewProjection.service';
 
@@ -166,7 +167,10 @@ async function safe<T>(section: string, code: string, message: string, fn: () =>
 }
 
 /** Returns the workspace DTO, or null when the case does not exist. */
-export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto | null> {
+export async function getCaseWorkspace(
+  caseId: string,
+  actor?: { userId?: string | null } | null,
+): Promise<CaseWorkspaceDto | null> {
   const caseRecord = await prisma.case.findUnique({
     where: { id: caseId },
     select: {
@@ -242,13 +246,20 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     warnings,
   );
 
+  // Mailbox ownership is a privacy boundary above role: the case workspace
+  // communication list/count and derived activity must respect it.
+  const communicationPrivacyScope = actor?.userId
+    ? await resolveCommunicationPrivacyScope(actor.userId)
+    : null;
+  const communicationPrivacyWhere = buildMailboxPrivacyWhere(communicationPrivacyScope);
+
   const communicationsRaw = await safe(
     'communications',
     'COMMUNICATIONS_UNAVAILABLE',
     'A kommunikáció most nem érhető el.',
     () =>
       prisma.communication.findMany({
-        where: { caseId },
+        where: { caseId, ...communicationPrivacyWhere },
         select: {
           id: true, type: true, subject: true, content: true, senderName: true,
           direction: true, clientId: true, documentId: true, createdAt: true,
@@ -264,7 +275,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspaceDto
     'communications',
     'COMMUNICATION_COUNT_UNAVAILABLE',
     'A kommunikáció száma most nem számítható.',
-    () => prisma.communication.count({ where: { caseId } }),
+    () => prisma.communication.count({ where: { caseId, ...communicationPrivacyWhere } }),
     communicationsRaw.length,
     warnings,
   );

@@ -23,6 +23,7 @@ export const CUSTOMER_CALENDAR_CATEGORIES = [
   'ACTION_REQUEST',
   'CUSTOMER_REQUEST',
   'CONTRACT_DATE',
+  'CONTRACT_OCCURRENCE',
   'COMPANY_MILESTONE',
   'GROW_TARGET',
   'COMPLIANCE_REVIEW',
@@ -36,6 +37,9 @@ export const CUSTOMER_CALENDAR_CATEGORY_LABELS: Record<CustomerCalendarCategory,
   ACTION_REQUEST: 'Ügyintézési teendő',
   CUSTOMER_REQUEST: 'Adat- vagy dokumentumkérés',
   CONTRACT_DATE: 'Szerződés kulcsdátuma',
+  // Explicitly published contract obligation occurrence (payment due /
+  // milestone / notice). Only published occurrences can ever emit here.
+  CONTRACT_OCCURRENCE: 'Szerződéses határidő',
   COMPANY_MILESTONE: 'Vállalati mérföldkő',
   // Grow initiative targetAt, already projected by the customer Grow surface.
   GROW_TARGET: 'Fejlesztési célhatáridő',

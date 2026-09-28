@@ -35,6 +35,8 @@ export type PortalDocument = {
   downloadAvailable: boolean;
   mimeType?: string | null;
   size?: number | null;
+  clientUploaded: boolean;
+  isCompliancePolicy: boolean;
 };
 
 export type PortalActionRequest = {
@@ -91,8 +93,13 @@ export type PortalWorkspaceDocument = {
   description?: string | null;
   status?: string | null;
   publishedAt?: string | null;
-  kind: 'SHARED_DOCUMENT' | 'DOCUMENT_REQUEST' | 'CORRECTION_REQUEST' | 'SUBMISSION' | 'CORRECTION_SUBMISSION';
+  dueAt?: string | null;
+  kind: 'SHARED_DOCUMENT' | 'DOCUMENT_REQUEST' | 'CORRECTION_REQUEST' | 'INFORMATION_REQUEST' | 'DATA_FORM' | 'QUESTION_RESPONSE' | 'SUBMISSION' | 'CORRECTION_SUBMISSION';
   actionUrl: string;
+  /** Derived customer-facing classification; the raw uploadSource enum is never exposed. */
+  clientUploaded: boolean;
+  /** Derived customer-facing classification; INTERNAL_ANALYSIS never qualifies. */
+  isCompliancePolicy: boolean;
 };
 
 export type PortalWorkspaceMessage = {
@@ -150,6 +157,8 @@ export type PortalOrganizationCase = {
 export type PortalOrganizationCaseDetail = PortalOrganizationCase & {
   requesterDisplayName: string | null;
   currentStatusText: string;
+  /** Canonical published progress, stored on the published matter revision. */
+  progressPercentage: number | null;
   safeMilestones: Array<{ reference?: string; title?: string; description?: string | null; state?: string; displayOrder?: number; completedAt?: string | null }>;
   capabilities: {
     showTimeline: boolean;
@@ -313,6 +322,7 @@ export type PortalCalendarCategory =
   | 'ACTION_REQUEST'
   | 'CUSTOMER_REQUEST'
   | 'CONTRACT_DATE'
+  | 'CONTRACT_OCCURRENCE'
   | 'COMPANY_MILESTONE'
   | 'GROW_TARGET'
   | 'COMPLIANCE_REVIEW';
@@ -526,10 +536,18 @@ export type PortalOrgContract = {
   title: string;
   statusLabel: string;
   lifecycle: "active" | "upcoming" | "terminating";
+  /** Canonical status-derived flag: true only for an ACTIVE contract. */
+  isActive: boolean;
   relatedMatterTitle: string | null;
   nextStep: string | null;
   customerActionRequired: boolean;
   keyDate: string | null;
+  effectiveDate: string | null;
+  expiryDate: string | null;
+  nextCriticalDate: string | null;
+  signatureDate: string | null;
+  /** True only when the canonical expiryDate falls in the portal's current month. */
+  expiresThisMonth: boolean;
   publishedDoc: PortalOrgContractPublishedDoc | null;
 };
 

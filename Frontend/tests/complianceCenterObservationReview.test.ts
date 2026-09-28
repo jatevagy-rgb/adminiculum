@@ -25,6 +25,7 @@ const readSrc = (relative: string): string => readFileSync(path.join(frontendRoo
 
 const panelSource = readSrc('src/components/compliance-center/LegalSourceObservationReviewPanel.tsx');
 const centerSource = readSrc('src/components/compliance-center/ComplianceCenter.tsx');
+const trackedLegislationPanelSource = readSrc('src/components/compliance-center/TrackedLegislationPanel.tsx');
 const clientSource = readSrc('src/lib/complianceCenterApi.ts');
 
 function count(haystack: string, needle: string): number {
@@ -191,7 +192,11 @@ test('ComplianceCenter mounts the queue above the registry and preserves existin
   for (const tab of ['Áttekintés', 'Jogforrás-változások', 'Dokumentumok', 'Felülvizsgálati munka']) {
     assert.ok(centerSource.includes(tab), `existing tab lost: ${tab}`);
   }
-  assert.ok(centerSource.includes('Nem fut folyamatos külső jogforrás-figyelő'));
+  assert.ok(centerSource.includes('<TrackedLegislationPanel'), 'the tracked-legislation (monitoring manifest) surface must remain mounted');
+  assert.ok(
+    trackedLegislationPanelSource.includes('Külső jogforrás-figyelést ez a felület nem végez.'),
+    'the truthful no-continuous-monitoring boundary must remain visible',
+  );
   assert.ok(centerSource.includes('<LegalSourceImpactPanel'), 'the existing impact panel must remain mounted');
   assert.ok(centerSource.includes('Jogforrás-nyilvántartás'));
 });

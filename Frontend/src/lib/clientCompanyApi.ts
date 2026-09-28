@@ -93,6 +93,84 @@ export type DevelopmentInitiative = {
   updatedAt: string;
 };
 
+export type CompanyBusinessSystem = {
+  id: string;
+  clientId: string;
+  name: string;
+  category: string;
+  vendor: string | null;
+  purpose: string | null;
+  ownerPersonId: string | null;
+  ownerPersonName: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanyBusinessProcessStep = {
+  id: string;
+  processId: string;
+  clientId: string;
+  position: number;
+  name: string;
+  stepType: string;
+  responsiblePersonId: string | null;
+  responsiblePersonName: string | null;
+  systemId: string | null;
+  systemName: string | null;
+  estimatedActiveMinutes: number | null;
+  estimatedWaitingMinutes: number | null;
+  isApproval: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CompanyBusinessProcess = {
+  id: string;
+  clientId: string;
+  name: string;
+  category: string;
+  description: string | null;
+  ownerPersonId: string | null;
+  ownerPersonName: string | null;
+  organizationGroupId: string | null;
+  organizationGroupName: string | null;
+  criticality: string;
+  frequency: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  steps?: CompanyBusinessProcessStep[];
+};
+
+export type BusinessSystemWriteInput = {
+  name: string;
+  category?: string;
+  vendor?: string;
+  purpose?: string | null;
+  ownerPersonId?: string | null;
+};
+
+export type BusinessProcessWriteInput = {
+  name: string;
+  category?: string;
+  description?: string | null;
+  criticality?: string;
+  frequency?: string;
+  ownerPersonId?: string | null;
+  organizationGroupId?: string | null;
+};
+
+export type BusinessProcessStepWriteInput = {
+  name: string;
+  stepType?: string;
+  isApproval?: boolean;
+  systemId?: string | null;
+  responsiblePersonId?: string | null;
+  estimatedActiveMinutes?: number | null;
+  estimatedWaitingMinutes?: number | null;
+};
+
 function url(clientId: string, path: string): string {
   return `/client-company/clients/${encodeURIComponent(clientId)}${path}`;
 }
@@ -148,6 +226,36 @@ export const clientCompanyApi = {
   },
   updateInitiative(initiativeId: string, payload: { status?: string; caseId?: string | null }) {
     return fetchApi<DevelopmentInitiative>(`/client-company/initiatives/${encodeURIComponent(initiativeId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+  listBusinessSystems(clientId: string) {
+    return fetchApi<CompanyBusinessSystem[]>(url(clientId, '/systems'));
+  },
+  createBusinessSystem(clientId: string, payload: BusinessSystemWriteInput) {
+    return fetchApi<CompanyBusinessSystem>(url(clientId, '/systems'), { method: 'POST', body: JSON.stringify(payload) });
+  },
+  updateBusinessSystem(systemId: string, payload: Partial<BusinessSystemWriteInput>) {
+    return fetchApi<CompanyBusinessSystem>(`/client-company/systems/${encodeURIComponent(systemId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+  listBusinessProcesses(clientId: string) {
+    return fetchApi<CompanyBusinessProcess[]>(url(clientId, '/processes'));
+  },
+  createBusinessProcess(clientId: string, payload: BusinessProcessWriteInput) {
+    return fetchApi<CompanyBusinessProcess>(url(clientId, '/processes'), { method: 'POST', body: JSON.stringify(payload) });
+  },
+  getBusinessProcess(processId: string) {
+    return fetchApi<CompanyBusinessProcess>(`/client-company/processes/${encodeURIComponent(processId)}`);
+  },
+  updateBusinessProcess(processId: string, payload: Partial<BusinessProcessWriteInput>) {
+    return fetchApi<CompanyBusinessProcess>(`/client-company/processes/${encodeURIComponent(processId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+  addBusinessProcessStep(processId: string, payload: BusinessProcessStepWriteInput) {
+    return fetchApi<CompanyBusinessProcessStep>(`/client-company/processes/${encodeURIComponent(processId)}/steps`, { method: 'POST', body: JSON.stringify(payload) });
+  },
+  updateBusinessProcessStep(stepId: string, payload: Partial<BusinessProcessStepWriteInput>) {
+    return fetchApi<CompanyBusinessProcessStep>(`/client-company/steps/${encodeURIComponent(stepId)}`, { method: 'PATCH', body: JSON.stringify(payload) });
+  },
+  reorderBusinessProcessSteps(processId: string, stepIds: string[]) {
+    return fetchApi<CompanyBusinessProcessStep[]>(`/client-company/processes/${encodeURIComponent(processId)}/reorder-steps`, { method: 'POST', body: JSON.stringify({ stepIds }) });
   },
 };
 

@@ -82,14 +82,20 @@ function normalizeOffset(value: unknown): number {
   return parsed;
 }
 
-export function validateCommentCreate(body: unknown): string {
+export function validateCommentCreate(body: unknown, options: { allowParentCommentId?: boolean } = {}): string {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new DocumentCommentError(400, 'INVALID_COMMENT_BODY', 'Comment body must be an object.');
   }
   const record = body as Record<string, unknown>;
-  for (const forbidden of ['authorId', 'userId', 'documentId', 'caseId', 'status', 'isResolved', 'resolvedAt', 'selectedText', 'editorJson', 'anchor', 'range']) {
-    if (Object.prototype.hasOwnProperty.call(record, forbidden)) {
-      throw new DocumentCommentError(400, 'COMMENT_FIELD_NOT_ACCEPTED', `Field ${forbidden} is not accepted.`);
+  const forbidden = ['authorId', 'userId', 'documentId', 'caseId', 'status', 'isResolved', 'resolvedAt', 'selectedText', 'editorJson', 'anchor', 'range'];
+  // Replies are a case-note concept only. Document comments never accept a
+  // parent so document comments cannot become thread members.
+  if (!options.allowParentCommentId) {
+    forbidden.push('parentCommentId');
+  }
+  for (const field of forbidden) {
+    if (Object.prototype.hasOwnProperty.call(record, field)) {
+      throw new DocumentCommentError(400, 'COMMENT_FIELD_NOT_ACCEPTED', `Field ${field} is not accepted.`);
     }
   }
   if (typeof record.content !== 'string') {

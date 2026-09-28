@@ -1,0 +1,176 @@
+{
+  "apiVersion": "2.155",
+  "terms": "",
+  "totalResults": 4207221,
+  "pageNumber": 1,
+  "pageSize": 10,
+  "sort": "relevance",
+  "results": [
+    {
+      "apiVersion": "2.155",
+      "reference": "114bg",
+      "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/events/114bg",
+      "contentType": "text/plain",
+      "language": "bg",
+      "databaseLabel": "",
+      "summary": "Информационна сесия: Покана на EUAA за представяне на предложения, насочени към университетите, за изследване и анализ на юриспруденцията в областта на международната закрила",
+      "content": "Информационна сесия: Покана на EUAA за представяне на предложения, насочени към университетите, за изследване и анализ на юриспруденцията в областта на международната закрила",
+      "checksum": "DBAC145CCCAD23240C79E1E2AB9086C500D5F15BA1AB1759D4C5B5C987D517ED",
+      "metadata": {
+        "esST_programmes": [
+          "Asylum, Migration and Integration Fund (AMIF)"
+        ],
+        "esNU_id": [
+          "114"
+        ],
+        "es_ContentType": [
+          "text/plain"
+        ],
+        "esBO_showOnHomepage": [
+          "true"
+        ],
+        "es_SortDate": [
+          "2026-05-10T14:18:04.593+0200"
+        ],
+        "esDA_FirstIngestDate": [
+          "2026-05-08T12:25:04.038+0200"
+        ],
+        "esDA_endDate": [
+          "2024-11-28T13:00:00.000+0100"
+        ],
+        "esDA_IngestDate": [
+          "2026-05-10T14:18:04.615+0200"
+        ],
+        "esST_audiences": [
+          "Applicant"
+        ],
+        "description": [
+          "Присъединете се към нас за информационна сесия относно първата покана за представяне на предложения на EUAA: „Изследване и анализ на съдебната практика в областта на международната закрила и регистрацията в базата данни на EUAA за съдебната практика“"
+        ],
+        "language": [
+          "bg"
+        ],
+        "title": [
+          "Информационна сесия: Покана на EUAA за представяне на предложения, насочени към университетите, за изследване и анализ на юриспруденцията в областта на международната закрила"
+        ],
+        "esST_checksum": [
+          "DBAC145CCCAD23240C79E1E2AB9086C500D5F15BA1AB1759D4C5B5C987D517ED"
+        ],
+        "esST_stages": [],
+        "url": [
+          "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/events/114bg"
+        ],
+        "esIN_detailsUrl": [
+          "https://events.teams.microsoft.com/event/9919bc06-a9ff-4de8-a3fb-b810d672e160@d19e4243-f480-4af5-8899-71f10798d806"
+        ],
+        "esST_URL": [
+          "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/events/114bg"
+        ],
+        "esDA_QueueDate": [
+          "2026-05-10T14:18:04.602+0200"
+        ],
+        "esST_FileName": [
+          "file.txt"
+        ],
+        "esST_recordingLink": [
+          "https://www.youtube.com/watch?v=tzSddVl743A"
+        ],
+        "DATASOURCE": [
+          "SEDIA-EVENTS-PROD"
+        ],
+        "REFERENCE": [
+          "114bg"
+        ],
+        "startDate": [
+          "2024-11-28T09:30:00.000+0100"
+        ],
+        "status": [
+          "published"
+        ]
+      }
+    },
+    {
+      "apiVersion": "2.155",
+      "reference": "117bg",
+      "url": "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/events/117bg",
+      "contentType": "text/plain",
+      "language": "bg",
+      "databaseLabel": "",
+      "summary": "Информационна сесия — Партньорства за сътрудничество в областта на младежта по програма „Еразъм+“, представени от европейски НПО през 2025 г.",
+      "content": "Информационна сесия — Партньорства за сътрудничество в областта на младежта по програма „Еразъм+“, представени от европейски НПО през 2025 г.",
+      "checksum": "55160D277F55015FBFD53BDE7A23D23B01D97C25F964CB08229D896CAA0AB375",
+      "metadata": {
+        "esST_programmes": [
+          "Erasmus+ Programme (ERASMUS)"
+        ],
+        "esNU_id": [
+          "117"
+        ],
+        "es_ContentType": [
+          "text/plain"
+        ],
+        "esBO_showOnHomepage": [
+          "true"
+        ],
+        "es_SortDate": [
+          "2026-05-10T14:26:47.833+0200"
+        ],
+        "esDA_FirstIngestDate": [
+          "2026-05-08T12:25:07.857+0200"
+        ],
+        "esDA_endDate": [
+          "2025-01-15T12:00:00.000+0100"
+        ],
+        "esDA_IngestDate": [
+          "2026-05-10T14:26:47.856+0200"
+        ],
+        "esST_audiences": [
+          "Applicant",
+          "Beneficiary",
+          "Newcomer"
+        ],
+        "description": [
+          "Европейски младежки НПО: Присъединете се към нашата информационна сесия, за да откриете възможности за финансиране за трансгранично и междусекторно сътрудничество!"
+        ],
+        "language": [
+          "bg"
+        ],
+        "title": [
+          "Информационна сесия — Партньорства за сътрудничество в областта на младежта по програма „Еразъм+“, представени от европейски НПО през 2025 г."
+        ],
+        "esST_checksum": [
+          "55160D277F55015FBFD53BDE7A23D23B01D97C25F964CB08229D896CAA0AB375"
+        ],
+        "esST_stages": [],
+        "url": [
+          "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/events/117bg"
+        ],
+        "esIN_detailsUrl": [
+          "https://www.eacea.ec.europa.eu/news-events/events/info-session-erasmus-cooperation-partnerships-field-youth-submitted-european-ngos-2025-2025-01-15_en"
+        ],
+        "esST_URL": [
+          "https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/events/117bg"
+        ],
+        "esDA_QueueDate": [
+          "2026-05-10T14:26:47.843+0200"
+        ],
+        "esST_FileName": [
+          "file.txt"
+        ],
+        "esST_recordingLink": [],
+        "DATASOURCE": [
+          "SEDIA-EVENTS-PROD"
+        ],
+        "REFERENCE": [
+          "117bg"
+        ],
+        "startDate": [
+          "2025-01-15T09:00:00.000+0100"
+        ],
+        "status": [
+          "published"
+        ]
+      }
+    }
+  ]
+}

@@ -7,7 +7,7 @@
  * unpublished revisions, private milestones, unpublished contracts) can ever
  * reach the projection.
  */
-import { CustomerCalendarSourceItem, CustomerCalendarStatus } from './projection';
+import { CustomerCalendarSourceItem, CustomerCalendarStatus, calendarDay, normalizeSourceDate } from './projection';
 
 export interface PortalMatterSourceRow {
   id: string;
@@ -37,6 +37,10 @@ export interface OrgContractSourceRow {
   reference: string;
   title: string;
   keyDate?: string | null;
+  effectiveDate?: string | null;
+  expiryDate?: string | null;
+  nextCriticalDate?: string | null;
+  signatureDate?: string | null;
   publishedDoc?: { publicationId?: string | null } | null;
 }
 
@@ -44,6 +48,19 @@ export interface CompanyMilestoneSourceRow {
   id: string;
   title: string;
   date?: string | null;
+}
+
+/**
+ * Customer-safe occurrence row from the canonical published-occurrence reader
+ * (listPublishedOccurrencesForCustomer). Only explicitly published occurrences
+ * with a due date reach this mapper — internal note/risk/reviewer metadata is
+ * already absent at the reader boundary.
+ */
+export interface OccurrenceSourceRow {
+  id: string;
+  occurrenceType: string;
+  title: string;
+  dueDate: string | Date | null;
 }
 
 /** Customer-safe Grow initiative row (from getOrganizationalGrow). */
@@ -152,20 +169,71 @@ export function mapCustomerRequestSource(row: CustomerRequestSourceRow, href: st
   }];
 }
 
+/** Concise Hungarian labels for the contract lifecycle dates the customer may see. */
+export const CONTRACT_DATE_LABELS = {
+  expiry: 'Lejárat',
+  critical: 'Következő kritikus dátum',
+  effective: 'Hatálybalépés',
+  signature: 'Aláírás dátuma',
+} as const;
+
 /**
- * A contract date is only projectable when the contract is EXPLICITLY published
- * to this customer (a published document publication exists). An unpublished
- * contract keyDate must never surface.
+ * Project the customer-safe lifecycle dates of a contract that is EXPLICITLY
+ * published to this customer (a published document publication exists). All four
+ * dates (signature / effective / expiry / next critical) are contract-level dates
+ * carried by the canonical customer-safe contract projector; none is an internal
+ * obligation/occurrence. An unpublished contract date must never surface.
+ *
+ * Only non-null dates produce items (a null date is dropped, never invented).
+ * To avoid double counting, the legacy single `keyDate` (which is derived from one
+ * of these dates) is emitted ONLY when no explicit date is present, and — when two
+ * canonical dates fall on the same day — exactly one deterministic item is emitted
+ * for that contract/day (priority: expiry > next critical > effective > signature).
  */
 export function mapOrgContractSource(contract: OrgContractSourceRow): CustomerCalendarSourceItem[] {
-  if (!contract.publishedDoc || !contract.keyDate) return [];
+  if (!contract.publishedDoc) return [];
+  const reference = String(contract.reference || '').trim();
+  if (!reference) return [];
+  const title = String(contract.title || '').trim() || 'Közzétett szerződés';
+  const href = '/portal/szerzodesek';
+
+  const candidates: Array<{ key: string; label: string; date?: string | null }> = [
+    { key: 'expiry', label: CONTRACT_DATE_LABELS.expiry, date: contract.expiryDate },
+    { key: 'critical', label: CONTRACT_DATE_LABELS.critical, date: contract.nextCriticalDate },
+    { key: 'effective', label: CONTRACT_DATE_LABELS.effective, date: contract.effectiveDate },
+    { key: 'signature', label: CONTRACT_DATE_LABELS.signature, date: contract.signatureDate },
+  ];
+
+  const items: CustomerCalendarSourceItem[] = [];
+  const seenDays = new Set<string>();
+  for (const candidate of candidates) {
+    const iso = normalizeSourceDate(candidate.date);
+    if (!iso) continue;
+    const day = calendarDay(iso);
+    if (seenDays.has(day)) continue;
+    seenDays.add(day);
+    items.push({
+      category: 'CONTRACT_DATE',
+      sourceKey: `contract-${reference}-${candidate.key}`,
+      title: `${title} · ${candidate.label}`,
+      date: iso,
+      status: 'INFO',
+      href,
+      matterTitle: null,
+    });
+  }
+  if (items.length) return items;
+
+  // Legacy fallback: keyDate only, so the previously projected item is preserved
+  // when the richer dates are absent. Never double counted with the items above.
+  if (!contract.keyDate) return [];
   return [{
     category: 'CONTRACT_DATE',
-    sourceKey: `contract-${contract.reference}`,
-    title: String(contract.title || '').trim() || 'Közzétett szerződés',
+    sourceKey: `contract-${reference}`,
+    title,
     date: contract.keyDate,
     status: 'INFO',
-    href: '/portal/szerzodesek',
+    href,
     matterTitle: null,
   }];
 }
@@ -180,6 +248,39 @@ export function mapCompanyMilestoneSource(milestone: CompanyMilestoneSourceRow):
     date: milestone.date,
     status: 'INFO',
     href: '/portal/vallalat',
+    matterTitle: null,
+  }];
+}
+
+/** Customer labels for the occurrence kinds that may be explicitly published. */
+export const CUSTOMER_OCCURRENCE_LABELS: Record<string, string> = {
+  PAYMENT: 'Fizetési határidő',
+  MILESTONE: 'Köztes teljesítés / mérföldkő',
+  NOTICE: 'Értesítési határidő',
+};
+
+/**
+ * Project ONE explicitly published contract occurrence into the customer
+ * calendar. Fail-closed: an occurrence without a known customer label (i.e.
+ * any kind outside PAYMENT / MILESTONE / NOTICE) emits nothing. The published
+ * reader already guarantees publishedAt != null and a due date, so this mapper
+ * never re-checks internal state and never duplicates contract lifecycle dates
+ * (distinct CONTRACT_OCCURRENCE category + occurrence-scoped sourceKey).
+ */
+export function mapPublishedOccurrenceSource(row: OccurrenceSourceRow): CustomerCalendarSourceItem[] {
+  const label = CUSTOMER_OCCURRENCE_LABELS[String(row.occurrenceType || '').toUpperCase()];
+  if (!label) return [];
+  const iso = normalizeSourceDate(row.dueDate);
+  if (!iso) return [];
+  const baseTitle = String(row.title || '').trim();
+  const title = baseTitle && baseTitle !== label ? `${baseTitle} · ${label}` : label;
+  return [{
+    category: 'CONTRACT_OCCURRENCE',
+    sourceKey: `occurrence-${row.id}`,
+    title,
+    date: iso,
+    status: 'OPEN',
+    href: '/portal/szerzodesek',
     matterTitle: null,
   }];
 }

@@ -1,0 +1,239 @@
+{
+  "TopicDetails": {
+    "type": 1,
+    "ccm2Id": 43493632,
+    "identifier": "AGRIP-MULTI-2021-IM",
+    "title": "Support for multi programmes – Union quality schemes OR merits of Union agricultural products (Topic 1)",
+    "publicationDateLong": 1611792000000,
+    "callIdentifier": "AGRIP-MULTI-2021",
+    "callTitle": "Call for proposals for multi programmes 2021 - Promotion of agricultural products",
+    "callccm2Id": 43493714,
+    "allowPartnerSearch": true,
+    "frameworkProgramme": {
+      "id": 43298664,
+      "abbreviation": "AGRIP2027",
+      "description": "Promotion of Agricultural Products (AGRIP)"
+    },
+    "programmeDivision": [
+      {
+        "id": 43251408,
+        "abbreviation": "AGRIP-1-1",
+        "description": "AGRIP-1-1"
+      }
+    ],
+    "topicMGAs": [
+      {
+        "id": 43246967,
+        "abbreviation": "AGRIP-AG",
+        "description": "AGRIP Action Grant Budget-Based"
+      }
+    ],
+    "keywords": [],
+    "tags": [
+      "EU funding agriculture",
+      "Food export",
+      "PR",
+      "SIMPLE-2021",
+      "activities",
+      "agri portal",
+      "agri-food",
+      "agricultural exports export of agricultural products"
+    ],
+    "sme": false,
+    "actions": [
+      {
+        "status": {
+          "id": 31094503,
+          "abbreviation": "Closed",
+          "description": "Closed"
+        },
+        "types": [
+          {
+            "typeOfAction": "AGRIP-MULTI-PJG AGRIP MULTI Project Grants",
+            "typeOfMGA": [
+              {
+                "id": 43246967,
+                "abbreviation": "AGRIP-AG",
+                "description": "AGRIP Action Grant Budget-Based"
+              }
+            ]
+          }
+        ],
+        "plannedOpeningDate": "1611792000000",
+        "submissionProcedure": {},
+        "deadlineDates": [
+          "1620691200000"
+        ]
+      }
+    ],
+    "latestInfos": [
+      {
+        "approvalDate": "2021-05-19",
+        "lastChangeDate": "2021-05-19T16:37:05.927",
+        "content": "<p>54 proposals were submitted in  response to the 2021 Call for proposals for MULTI programmes for the Promotion of agricultural products.</p>"
+      },
+      {
+        "approvalDate": "2021-03-10",
+        "lastChangeDate": "2021-03-10T15:42:04.666",
+        "content": "<p>The following corrigenda have been published on 9 March 2021, <a href=\"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv%3AOJ.C_.2021.080.01.0021.01.ENG&amp;toc=OJ%3AC%3A2021%3A080%3ATOC\" target=\"_blank\">OJ&#xa0;C 080/2021</a>:</p>\r\n<p>- Extension of submssion deadline until 11 May, 17:00</p>\r\n<p>- Revision of eligibility conditions</p>"
+      }
+    ],
+    "budgetOverviewJSONItem": {
+      "budgetTopicActionMap": {
+        "102685": [
+          {
+            "action": "AGRIP-MULTI-2021-TC-ALL - AGRIP-MULTI-PJG AGRIP MULTI Project Grants",
+            "plannedOpeningDate": "1611792000000",
+            "deadlineModel": "single-stage",
+            "deadlineDates": [
+              "1620691200000"
+            ],
+            "budgetYearMap": {
+              "2021": "25200000"
+            },
+            "expectedGrants": 0,
+            "minContribution": 0,
+            "maxContribution": 0
+          }
+        ],
+        "102686": [
+          {
+            "action": "AGRIP-MULTI-2021-IM-SUSTAINABLE - AGRIP-MULTI-PJG AGRIP MULTI Project Grants",
+            "plannedOpeningDate": "1611792000000",
+            "deadlineModel": "single-stage",
+            "deadlineDates": [
+              "1620691200000"
+            ],
+            "budgetYearMap": {
+              "2021": "12000000"
+            },
+            "expectedGrants": 0,
+            "minContribution": 0,
+            "maxContribution": 0
+          }
+        ],
+        "102687": [
+          {
+            "action": "AGRIP-MULTI-2021-IM-ORGANIC - AGRIP-MULTI-PJG AGRIP MULTI Project Grants",
+            "plannedOpeningDate": "1611792000000",
+            "deadlineModel": "single-stage",
+            "deadlineDates": [
+              "1620691200000"
+            ],
+            "budgetYearMap": {
+              "2021": "17000000"
+            },
+            "expectedGrants": 0,
+            "minContribution": 0,
+            "maxContribution": 0
+          }
+        ],
+        "102688": [
+          {
+            "action": "AGRIP-MULTI-2021-IM - AGRIP-MULTI-PJG AGRIP MULTI Project Grants",
+            "plannedOpeningDate": "1611792000000",
+            "deadlineModel": "single-stage",
+            "deadlineDates": [
+              "1620691200000"
+            ],
+            "budgetYearMap": {
+              "2021": "4200000"
+            },
+            "expectedGrants": 0,
+            "minContribution": 0,
+            "maxContribution": 0
+          }
+        ],
+        "102689": [
+          {
+            "action": "AGRIP-MULTI-2021-TC-ORGANICS - AGRIP-MULTI-PJG AGRIP MULTI Project Grants",
+            "plannedOpeningDate": "1611792000000",
+            "deadlineModel": "single-stage",
+            "deadlineDates": [
+              "1620691200000"
+            ],
+            "budgetYearMap": {
+              "2021": "14000000"
+            },
+            "expectedGrants": 0,
+            "minContribution": 0,
+            "maxContribution": 0
+          }
+        ],
+        "102690": [
+          {
+            "action": "AGRIP-MULTI-2021-IM-PROPER-DIET - AGRIP-MULTI-PJG AGRIP MULTI Project Grants",
+            "plannedOpeningDate": "1611792000000",
+            "deadlineModel": "single-stage",
+            "deadlineDates": [
+              "1620691200000"
+            ],
+            "budgetYearMap": {
+              "2021": "10000000"
+            },
+            "expectedGrants": 0,
+            "minContribution": 0,
+            "maxContribution": 0
+          }
+        ]
+      },
+      "budgetYearsColumns": [
+        "2021"
+      ]
+    },
+    "description": "<span class=\"topicdescriptionkind\">Scope:</span><ul level=\"0\"><li>For information provision and promotion programmes aiming at increasing the awareness and recognition of Union quality schemes mentioned in Article 5(4)(a) and (c) of Regulation (EU) No 1144/2014</li> </ul><p>The objective is to increase the awareness and recognition of the Union quality schemes, namely:<br>(a) quality schemes: protected designation of origin (PDO), protected geographical indication (PGI), traditional speciality g…[fixture-trimmed]",
+    "conditions": "<div class=\"eui-u-mt-l>\"><h4>Conditions</h4><div><h4> </h4><div class=\"eui-u-mt-s\"> </div></div><div><h4> </h4><div class=\"eui-u-mt-s\"><p><strong>1.   Eligible countries: as described in the <a href=\"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv%3AOJ.C_.2021.031.01.0027.01.ENG&amp;toc=OJ%3AC%3A2021%3A031%3ATOC\" target=\"_blank\">Call document.</a></strong></p>\r\n<p>&#xa0;</p></div></div><div><h4> </h4><div class=\"eui-u-mt-s\"><p><strong>2.   Eligibility and admissibility conditions:</s…[fixture-trimmed]",
+    "supportInfo": "<p>For help related to this <strong>call</strong>, please contact: CHAFEA-AGRI-CALLS@ec.europa.eu</p>\r\n<p><a href=\"https://ec.europa.eu/info/funding-tenders/opportunities/portal/screen/support/faq;grantAndTendertype=1;categories=;programme=null;actions=;keyword=;period=null\" target=\"_blank\">Funding&…[fixture-trimmed]",
+    "sepTemplate": "<p>No submission system is open for this topic.</p>",
+    "links": [],
+    "additionalDossiers": [],
+    "infoPackDossiers": [],
+    "callDetailsJSONItem": {
+      "latestInfos": [
+        {
+          "approvalDate": "2021-05-19",
+          "lastChangeDate": "2021-05-19T16:37:05.927",
+          "content": "<p>54 proposals were submitted in  response to the 2021 Call for proposals for MULTI programmes for the Promotion of agricultural products.</p>"
+        },
+        {
+          "approvalDate": "2021-03-10",
+          "lastChangeDate": "2021-03-10T15:42:04.666",
+          "content": "<p>The following corrigenda have been published on 9 March 2021, <a href=\"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv%3AOJ.C_.2021.080.01.0021.01.ENG&amp;toc=OJ%3AC%3A2021%3A080%3ATOC\" target=\"_blank\">OJ&#xa0;C 080/2021</a>:</p>\r\n<p>- Extension of submssion deadline until 11 May, 17:00</p>\r\n<p>- Revision of eligibility conditions</p>"
+        },
+        {
+          "approvalDate": "2021-03-09",
+          "lastChangeDate": "2021-03-09T19:54:08.988",
+          "content": "<p>The following corrigenda have been published on 9 March 2021, <a href=\"https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=uriserv%3AOJ.C_.2021.080.01.0021.01.ENG&amp;toc=OJ%3AC%3A2021%3A080%3ATOC\" target=\"_blank\">OJ&#xa0;C 080/2021</a>:</p>\r\n<p>- Extension of submssion deadline until 11 May, 17:00</p>\r\n<p>- Revision of eligibility conditions</p>"
+        },
+        {
+          "approvalDate": "2021-02-11",
+          "lastChangeDate": "2021-02-11T10:54:05.582",
+          "content": "<p>The deadline for submitting proposals has been extended to&#xa0;<strong>11 May, 17:00 CET</strong>. A corrigendum will be published shortly.</p>"
+        },
+        {
+          "approvalDate": "2021-02-10",
+          "lastChangeDate": "2021-02-10T16:32:45.801",
+          "content": "The submission session is now available for: AGRIP-MULTI-2021-IM-ORGANIC(AGRIP-PJG), AGRIP-MULTI-2021-IM-PROPER-DIET(AGRIP-PJG), AGRIP-MULTI-2021-TC-ORGANICS(AGRIP-PJG), AGRIP-MULTI-2021-IM(AGRIP-PJG), AGRIP-MULTI-2021-IM-SUSTAINABLE(AGRIP-PJG), AGRIP-MULTI-2021-TC-ALL(AGRIP-PJG)"
+        },
+        {
+          "approvalDate": "2021-02-05",
+          "lastChangeDate": "2021-02-05T10:39:15.646",
+          "content": "<p>&#xa0; The submission of proposals under this topic is possible now.</p>"
+        },
+        {
+          "approvalDate": "2021-02-04",
+          "lastChangeDate": "2021-02-04T17:07:25.528",
+          "content": "The submission session is now available for: AGRIP-MULTI-2021-IM-ORGANIC(AGRIP-PJG), AGRIP-MULTI-2021-IM-PROPER-DIET(AGRIP-PJG), AGRIP-MULTI-2021-TC-ORGANICS(AGRIP-PJG), AGRIP-MULTI-2021-IM(AGRIP-PJG), AGRIP-MULTI-2021-IM-SUSTAINABLE(AGRIP-PJG), AGRIP-MULTI-2021-TC-ALL(AGRIP-PJG)"
+        },
+        {
+          "approvalDate": "2021-01-28",
+          "lastChangeDate": "2021-01-28T10:36:53.913",
+          "content": "<p>&#xa0; The system for submissions of proposals under this topic will be open soon.</p>"
+        }
+      ],
+      "hasForthcomingTopics": false,
+      "hasOpenTopics": false,
+      "allClosedTopics": false
+    }
+  }
+}

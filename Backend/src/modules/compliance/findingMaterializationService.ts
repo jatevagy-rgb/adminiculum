@@ -161,6 +161,13 @@ export async function materializeRequirementApplicabilityFindingInTx(
   return materializeRequirementApplicabilityFindingInTxImpl(input, tx);
 }
 
+const RETRY_DELAY_BASE_MS = 25;
+const RETRY_DELAY_JITTER_MS = 75;
+
+function conflictRetryDelayMs(attempt: number): number {
+  return RETRY_DELAY_BASE_MS * (attempt + 1) + Math.floor(Math.random() * RETRY_DELAY_JITTER_MS);
+}
+
 export async function materializeRequirementApplicabilityFinding(
   input: FindingMaterializationInput,
   db: Db = new PrismaClient(),
@@ -175,6 +182,7 @@ export async function materializeRequirementApplicabilityFinding(
       const retryable = error instanceof FindingMaterializationIdentityConflictError
         || (isPrismaError && error.code === 'P2034');
       if (!retryable || attempt === 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, conflictRetryDelayMs(attempt)));
     }
   }
 

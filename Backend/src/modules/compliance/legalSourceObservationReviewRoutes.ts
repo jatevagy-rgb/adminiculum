@@ -10,15 +10,18 @@
  *
  *   GET  /api/v1/compliance/legal-source-observations
  *   GET  /api/v1/compliance/legal-source-observations/:id
+ *   GET  /api/v1/compliance/legal-source-observations/:id/impact
  *   POST /api/v1/compliance/legal-source-observations/:id/start-review
  *   POST /api/v1/compliance/legal-source-observations/:id/decision
  */
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { InteractionError, requireInternal } from '../client-interaction/base';
+import { resolveImpactAccessScope } from '../compliance-doc-intelligence/routes';
 import {
   decideLegalSourceObservationReview,
   getLegalSourceObservationDetail,
+  getLegalSourceObservationImpact,
   listLegalSourceObservations,
   startLegalSourceObservationReview,
   type LegalSourceObservationListQuery,
@@ -55,6 +58,28 @@ router.get('/legal-source-observations/:id', async (req: Request, res: Response)
     res.json(await getLegalSourceObservationDetail(String(req.params.id || '')));
   } catch (error) {
     sendError(res, error, 'OBSERVATION_REVIEW_DETAIL_FAILED', 'Legal source observation review detail failed.');
+  }
+});
+
+/**
+ * W3B — read-only impact projection for ONE IMPACT_CONFIRMED observation.
+ *
+ * Same internal boundary as the rest of this router (authenticate +
+ * requireInternal). The actor's access scope is resolved by the EXISTING
+ * canonical C4C resolver (`resolveImpactAccessScope`: canonical case scope +
+ * HR_CONFIDENTIAL boundary + derived client read scope) — no second access
+ * policy. The projection itself is the existing canonical
+ * `buildLegalSourceImpactForVersion` result; this route performs no writes and
+ * turns a legal change into a review signal only.
+ */
+router.get('/legal-source-observations/:id/impact', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const internal = actor(req);
+    requireInternal(internal);
+    const accessScope = await resolveImpactAccessScope(internal);
+    res.json(await getLegalSourceObservationImpact(String(req.params.id || ''), accessScope));
+  } catch (error) {
+    sendError(res, error, 'OBSERVATION_IMPACT_FAILED', 'Legal source observation impact projection failed.');
   }
 });
 

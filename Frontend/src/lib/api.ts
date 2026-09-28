@@ -561,6 +561,7 @@ export async function getCaseWorkspace(caseId: string): Promise<CaseWorkspace> {
 export interface CaseCommentDto {
   id: string;
   caseId: string;
+  parentId: string | null;
   author: { id: string; displayName: string };
   content: string;
   status: 'OPEN' | 'RESOLVED';
@@ -579,10 +580,12 @@ export async function getCaseComments(caseId: string, params: { limit?: number; 
   const qs = search.toString();
   return fetchApi<CaseCommentsResponse>(`/cases/${encodeURIComponent(caseId)}/comments${qs ? `?${qs}` : ''}`, { cache: 'no-store' });
 }
-export async function createCaseComment(caseId: string, content: string): Promise<CaseCommentDto> {
+export async function createCaseComment(caseId: string, content: string, parentCommentId?: string | null): Promise<CaseCommentDto> {
+  const body: Record<string, unknown> = { content };
+  if (parentCommentId) body.parentCommentId = parentCommentId;
   return fetchApi<CaseCommentDto>(`/cases/${encodeURIComponent(caseId)}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ content }),
+    body: JSON.stringify(body),
   });
 }
 export async function resolveCaseComment(caseId: string, commentId: string): Promise<CaseCommentDto> {
@@ -4038,9 +4041,12 @@ export interface CommunicationItem {
   providerConversationId: string | null;
   direction: 'INBOUND' | 'OUTBOUND' | null;
   receivedAt: string | null;
+  sentAt: string | null;
+  /** Canonical direction-aware message time (server-derived); always present. */
+  effectiveMessageAt: string;
   source: 'MANUAL' | 'OUTLOOK' | 'MAILBOX' | null;
   syncStatus: 'IMPORTED' | 'PENDING' | 'FAILED' | null;
-  triage: 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR';
+  triage: 'LINKED' | 'NEEDS_ASSIGNMENT' | 'IGNORED' | 'DUPLICATE_OR_ERROR' | 'NO_ACTION';
   case?: { id: string; caseNumber: string; title: string } | null;
   client?: { id: string; name: string; email: string } | null;
   createdBy?: { id: string; name: string; email: string };
@@ -4053,7 +4059,6 @@ export interface CommunicationDetail extends CommunicationItem {
   mailboxConnectionId?: string | null;
   mailboxProviderMessageId?: string | null;
   bodyHtmlSanitized?: string | null;
-  sentAt?: string | null;
   attachments: CommunicationAttachment[];
   relatedTasks: TaskListItem[];
   timelineEvents: CommunicationTimelineEventItem[];
@@ -6337,6 +6342,11 @@ export type AiPromptDraft = {
   approvedById: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Canonical title/type metadata captured from the prompt template at preparation time. */
+  promptTemplateSnapshot?: {
+    title?: string | null;
+    legalWorkCategory?: string | null;
+  } | null;
 };
 
 export async function listAiPromptTemplates(params: {

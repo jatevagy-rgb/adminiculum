@@ -19,6 +19,7 @@ jest.mock('../src/middleware/auth', () => ({
 
 jest.mock('../src/prisma/prisma.service', () => {
   const mock: any = {
+    $queryRaw: jest.fn(),
     communication: { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn(), count: jest.fn(), create: jest.fn() },
     communicationAttachment: { findMany: jest.fn() },
     client: { findUnique: jest.fn(), findMany: jest.fn() },
@@ -252,10 +253,15 @@ describe('communication case association and canonical case read projection', ()
     expect(response.status).toBe(action === 'create-case' ? 201 : 200);
     expect(stored).toMatchObject({ id: 'comm-1', caseId: 'case-new', clientId: 'client-1', content: 'Original incoming message' });
     expect((prisma as any).communication.create).not.toHaveBeenCalled();
-    (prisma as any).communication.findMany.mockResolvedValue([{ ...stored }]);
+    (prisma as any).$queryRaw.mockResolvedValue([{ ...stored }]);
     const listed = await requestJson(createApp(), 'GET', '/communications?caseId=case-new&clientId=client-1');
     expect(listed.status).toBe(200);
-    expect((prisma as any).communication.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ caseId: 'case-new', clientId: 'client-1', OR: expect.any(Array) }) }));
+    // The same canonical filter scope is applied to the ordered list read and
+    // its truthful total.
+    expect((prisma as any).communication.count).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ caseId: 'case-new', clientId: 'client-1', OR: expect.any(Array) }),
+    }));
+    expect((prisma as any).$queryRaw).toHaveBeenCalledTimes(1);
     expect(listed.body.communications).toEqual([expect.objectContaining({ id: 'comm-1', caseId: 'case-new', clientId: 'client-1', contentPreview: 'Original incoming message' })]);
   });
 

@@ -25,7 +25,9 @@ import {
   type ExactSelectionAnchor,
   type HighlightRange,
 } from "@/lib/documents/readerDomRange";
-import { DocumentReviewRail, type RailFilter } from "./DocumentReviewRail";
+import { type RailFilter } from "./DocumentReviewRail";
+import { DocumentReviewRail } from "./DocumentReviewRail";
+import { DocumentReviewMargin } from "./DocumentReviewMargin";
 import { DocumentReaderRailDrawer } from "./DocumentReaderRailDrawer";
 import { DocumentSelectionToolbar } from "./DocumentSelectionToolbar";
 import { ReviewCommentComposer } from "./ReviewCommentComposer";
@@ -57,9 +59,35 @@ export interface DocumentReaderWorkspaceProps {
   onOpenAdvanced: (mode: 'changes' | 'review' | 'versions') => void;
 }
 
+/** Layout identity of the anchored draft composer inside the review margin. */
+export const READER_DRAFT_ITEM_ID = "__reader-draft__";
+
 function actionErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 403) return readerCopy.decisionForbidden;
   return readerCopy.actionFailed;
+}
+
+/** True only on viewports where the anchored review margin is actually shown. */
+function useIsDesktopLayout(): boolean {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia("(min-width: 1024px)");
+    const apply = () => setIsDesktop(query.matches);
+    apply();
+    if (typeof query.addEventListener === "function") {
+      query.addEventListener("change", apply);
+      return () => query.removeEventListener("change", apply);
+    }
+    query.addListener(apply);
+    return () => query.removeListener(apply);
+  }, []);
+  return isDesktop;
+}
+
+function isCompactViewport(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(max-width: 1023px)").matches;
 }
 
 export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
@@ -89,7 +117,8 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
   const exactText = versionScoped ? versionText : documentTextPreview;
   const canAnchor = versionScoped && Boolean(versionText);
 
-  const readerRootRef = useRef<HTMLDivElement | null>(null);
+  const isDesktop = useIsDesktopLayout();
+  const readerRootRef = useRef<HTMLElement | null>(null);
   const highlightRef = useRef<HTMLElement | null>(null);
   const railToggleRef = useRef<HTMLButtonElement | null>(null);
 
@@ -193,16 +222,43 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
     setToolbarPos(null);
   }, []);
 
+  // On a narrow viewport the anchored margin is unavailable, so the draft
+  // composer is shown inside the review drawer instead.
+  const openNarrowDrawerForComposer = useCallback(() => {
+    if (isCompactViewport()) setRailDrawerOpen(true);
+  }, []);
+
   const openCommentComposer = useCallback(() => {
     if (!anchor) return;
     setComposerError(null);
     setCommentComposerOpen(true);
-  }, [anchor]);
+    setProposalComposerOpen(false);
+    openNarrowDrawerForComposer();
+  }, [anchor, openNarrowDrawerForComposer]);
 
   const openProposalComposer = useCallback(() => {
     if (!anchor) return;
     setComposerError(null);
     setProposalComposerOpen(true);
+    setCommentComposerOpen(false);
+    openNarrowDrawerForComposer();
+  }, [anchor, openNarrowDrawerForComposer]);
+
+  // Switching operations keeps the SAME anchor (no fresh selection) and never
+  // submits anything. Incompatible input is dropped because the other composer
+  // mounts fresh for the same targetKey.
+  const switchToProposal = useCallback(() => {
+    if (!anchor) return;
+    setComposerError(null);
+    setCommentComposerOpen(false);
+    setProposalComposerOpen(true);
+  }, [anchor]);
+
+  const switchToComment = useCallback(() => {
+    if (!anchor) return;
+    setComposerError(null);
+    setProposalComposerOpen(false);
+    setCommentComposerOpen(true);
   }, [anchor]);
 
   const submitComment = useCallback(async (body: string) => {
@@ -276,6 +332,18 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
     focusRailTarget(proposal.id, proposal.startOffset, proposal.endOffset);
   }, [focusRailTarget]);
 
+  // Clicking a document anchor/highlight activates its review item by exact id.
+  const activateReviewAnchor = useCallback((itemId: string) => {
+    if (!rail) return;
+    const comment = rail.comments.find((entry) => entry.id === itemId);
+    if (comment) {
+      focusComment(comment);
+      return;
+    }
+    const proposal = rail.proposals.find((entry) => entry.id === itemId);
+    if (proposal) focusProposal(proposal);
+  }, [focusComment, focusProposal, rail]);
+
   const loadReplies = useCallback((annotationId: string) => {
     if (!documentId || !documentVersionId) return;
     getDocumentAnnotationComments(documentId, documentVersionId, annotationId)
@@ -339,17 +407,51 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
 
   useEffect(() => { setSearchIndex(0); }, [searchTerm]);
 
+  // The document itself spatializes the review items: every anchored review
+  // range is rendered inline so its text location matches the margin card.
+  const reviewAnchorRanges = useMemo(() => {
+    if (!rail || !canAnchor) return [] as Array<{ id: string; kind: 'comment' | 'proposal'; start: number; end: number }>;
+    const ranges: Array<{ id: string; kind: 'comment' | 'proposal'; start: number; end: number }> = [];
+    for (const comment of rail.comments) {
+      if (typeof comment.startOffset === 'number' && typeof comment.endOffset === 'number' && comment.endOffset > comment.startOffset) {
+        ranges.push({ id: comment.id, kind: 'comment', start: comment.startOffset, end: comment.endOffset });
+      }
+    }
+    for (const proposal of rail.proposals) {
+      if (typeof proposal.startOffset === 'number' && typeof proposal.endOffset === 'number' && proposal.endOffset > proposal.startOffset) {
+        ranges.push({ id: proposal.id, kind: 'proposal', start: proposal.startOffset, end: proposal.endOffset });
+      }
+    }
+    return ranges;
+  }, [rail, canAnchor]);
+
   const segments = useMemo(() => {
     const text = exactText ?? '';
     if (!text) return [];
     const ranges: HighlightRange[] = [];
+    for (const reviewAnchor of reviewAnchorRanges) {
+      ranges.push({
+        start: reviewAnchor.start,
+        end: reviewAnchor.end,
+        className:
+          reviewAnchor.kind === 'proposal'
+            ? 'rounded-[2px] bg-[var(--adm-brand-terracotta-soft)]'
+            : 'rounded-[2px] border-b border-dotted border-[var(--adm-brand-green)]',
+        key: `${reviewAnchor.kind}-anchor-${reviewAnchor.id}`,
+        testId: 'reader-review-anchor',
+        anchorId: reviewAnchor.id,
+        kind: reviewAnchor.kind,
+        priority: 10,
+      });
+    }
     if (highlightRange) {
       ranges.push({
         start: highlightRange.start,
         end: highlightRange.end,
-        className: 'rounded-[2px] bg-[var(--adm-brand-terracotta-soft)]',
+        className: 'rounded-[2px] bg-[var(--adm-brand-terracotta-soft)] outline outline-1 outline-[var(--adm-brand-terracotta)]',
         key: 'active-anchor',
         testId: 'reader-active-anchor',
+        priority: 30,
       });
     }
     if (searchTerm) {
@@ -360,11 +462,12 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
           className: index === activeSearch ? 'bg-[var(--adm-semantic-warning-border)]' : 'bg-[var(--adm-semantic-warning-soft)]',
           key: `search-${index}`,
           testId: 'reader-search-match',
+          priority: 20,
         });
       });
     }
     return splitTextByHighlights(text, ranges);
-  }, [exactText, highlightRange, searchTerm, searchOffsets, activeSearch]);
+  }, [exactText, reviewAnchorRanges, highlightRange, searchTerm, searchOffsets, activeSearch]);
 
   const railCount = rail
     ? rail.counts.commentCount + rail.counts.modificationProposalCount
@@ -373,7 +476,34 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
   const hasDocument = Boolean(documentId);
   const hasVersion = Boolean(documentId && documentVersionId);
 
-  const railNode = !hasVersion ? (
+  const draftOpen = Boolean(anchor) && (commentComposerOpen || proposalComposerOpen);
+  const draftNode = draftOpen && anchor ? (
+    commentComposerOpen ? (
+      <ReviewCommentComposer
+        open={commentComposerOpen}
+        selectedText={anchor.selectedText}
+        busy={composerBusy}
+        error={composerError}
+        targetKey={anchor ? `${anchor.startOffset}:${anchor.endOffset}` : undefined}
+        onCancel={() => { setCommentComposerOpen(false); setComposerError(null); }}
+        onSubmit={(body) => { void submitComment(body); }}
+        onSwitchToProposal={switchToProposal}
+      />
+    ) : (
+      <ModificationProposalComposer
+        open={proposalComposerOpen}
+        selectedText={anchor.selectedText}
+        busy={composerBusy}
+        error={composerError}
+        targetKey={anchor ? `${anchor.startOffset}:${anchor.endOffset}` : undefined}
+        onCancel={() => { setProposalComposerOpen(false); setComposerError(null); }}
+        onSubmit={(payload) => { void submitProposal(payload); }}
+        onSwitchToComment={switchToComment}
+      />
+    )
+  ) : null;
+
+  const noVersionNode = (
     <section data-testid="document-review-rail" className="flex h-full min-h-0 flex-col">
       <header className="border-b border-[var(--adm-border-canonical)] px-4 py-3">
         <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">{readerCopy.railTitle}</h2>
@@ -384,7 +514,9 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         </p>
       </div>
     </section>
-  ) : (
+  );
+
+  const listRail = (
     <DocumentReviewRail
       rail={rail}
       loading={railLoading}
@@ -405,11 +537,40 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
       onLoadReplies={loadReplies}
       onSubmitReply={submitReply}
       replyBusyId={replyBusyId}
+      draft={isDesktop ? null : draftNode}
+    />
+  );
+
+  const anchoredMargin = (
+    <DocumentReviewMargin
+      rail={rail}
+      loading={railLoading}
+      error={railError}
+      onRetry={reloadRail}
+      filter={railFilter}
+      onFilterChange={setRailFilter}
+      activeItemId={activeItemId}
+      onFocusComment={focusComment}
+      onFocusProposal={focusProposal}
+      canDecide={canDecide}
+      currentUserId={currentUser?.id ?? null}
+      decisionBusyId={decisionBusyId}
+      onAccept={acceptProposal}
+      onReject={(proposal) => { setDecisionError(null); setRejectTarget(proposal); }}
+      onWithdraw={withdrawProposal}
+      repliesByAnnotationId={repliesByAnnotationId}
+      onLoadReplies={loadReplies}
+      onSubmitReply={submitReply}
+      replyBusyId={replyBusyId}
+      documentRef={readerRootRef}
+      draft={isDesktop ? draftNode : null}
+      draftId={READER_DRAFT_ITEM_ID}
+      draftOffset={anchor?.startOffset ?? null}
     />
   );
 
   return (
-    <div data-testid="document-reader-workspace" className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div data-testid="document-reader-workspace" className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--adm-canvas-subtle)]">
       <input type="hidden" value={caseId} readOnly aria-hidden="true" />
 
       {/* Minimal document header */}
@@ -519,84 +680,88 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px]">
-        {/* Dominant document reader */}
-        <main
-          data-testid="document-reader-text"
-          className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[var(--adm-canvas-white)]"
-        >
-          <div className="flex flex-wrap items-center gap-2 border-b border-[var(--adm-border-canonical)] px-4 py-2">
-            <label className="flex items-center gap-1 text-xs text-[var(--adm-text-secondary)]">
-              <span className="sr-only">Keresés a dokumentumszövegben</span>
-              <input
-                type="search"
-                data-testid="document-reader-search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Keresés a szövegben…"
-                disabled={!exactText}
-                className="w-52 rounded-[6px] border border-[var(--adm-border-canonical)] px-2 py-1 text-xs disabled:opacity-50"
-              />
-            </label>
-            {searchTerm ? (
-              <span data-testid="document-reader-search-status" className="text-[11px] text-[var(--adm-text-secondary)]" aria-live="polite">
-                {searchCount > 0 ? `${activeSearch + 1} / ${searchCount}` : 'Nincs találat'}
-              </span>
-            ) : null}
-            <button
-              type="button"
-              data-testid="document-reader-search-prev"
-              disabled={searchCount === 0}
-              onClick={() => setSearchIndex((index) => (index - 1 + searchCount) % Math.max(1, searchCount))}
-              className="rounded-[6px] border border-[var(--adm-border-canonical)] px-2 py-0.5 text-[11px] disabled:opacity-50"
-            >
-              Előző
-            </button>
-            <button
-              type="button"
-              data-testid="document-reader-search-next"
-              disabled={searchCount === 0}
-              onClick={() => setSearchIndex((index) => (index + 1) % Math.max(1, searchCount))}
-              className="rounded-[6px] border border-[var(--adm-border-canonical)] px-2 py-0.5 text-[11px] disabled:opacity-50"
-            >
-              Következő
-            </button>
-          </div>
-
-          {!canAnchor && !isLoadingText && exactText ? (
-            <p data-testid="document-reader-display-only" className="border-b border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-4 py-2 text-xs text-[var(--adm-text-secondary)]">
-              {readerCopy.displayOnlyNotice}
-            </p>
+      {/* Dominant document + anchored review margin share ONE scroll region so
+          cards stay vertically aligned with the text they reference. */}
+      <main
+        data-testid="document-reader-text"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--adm-canvas-white)]"
+      >
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--adm-border-canonical)] px-4 py-2">
+          <label className="flex items-center gap-1 text-xs text-[var(--adm-text-secondary)]">
+            <span className="sr-only">Keresés a dokumentumszövegben</span>
+            <input
+              type="search"
+              data-testid="document-reader-search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Keresés a szövegben…"
+              disabled={!exactText}
+              className="w-52 rounded-[6px] border border-[var(--adm-border-canonical)] px-2 py-1 text-xs disabled:opacity-50"
+            />
+          </label>
+          {searchTerm ? (
+            <span data-testid="document-reader-search-status" className="text-[11px] text-[var(--adm-text-secondary)]" aria-live="polite">
+              {searchCount > 0 ? `${activeSearch + 1} / ${searchCount}` : 'Nincs találat'}
+            </span>
           ) : null}
-          {anchorError ? (
-            <p data-testid="document-reader-anchor-error" role="alert" className="border-b border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-4 py-2 text-xs text-[var(--adm-brand-terracotta)]">
-              {anchorError}
-            </p>
-          ) : null}
+          <button
+            type="button"
+            data-testid="document-reader-search-prev"
+            disabled={searchCount === 0}
+            onClick={() => setSearchIndex((index) => (index - 1 + searchCount) % Math.max(1, searchCount))}
+            className="rounded-[6px] border border-[var(--adm-border-canonical)] px-2 py-0.5 text-[11px] disabled:opacity-50"
+          >
+            Előző
+          </button>
+          <button
+            type="button"
+            data-testid="document-reader-search-next"
+            disabled={searchCount === 0}
+            onClick={() => setSearchIndex((index) => (index + 1) % Math.max(1, searchCount))}
+            className="rounded-[6px] border border-[var(--adm-border-canonical)] px-2 py-0.5 text-[11px] disabled:opacity-50"
+          >
+            Következő
+          </button>
+        </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--adm-canvas-subtle)] p-4 sm:p-6">
+        {!canAnchor && !isLoadingText && exactText ? (
+          <p data-testid="document-reader-display-only" className="border-b border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-4 py-2 text-xs text-[var(--adm-text-secondary)]">
+            {readerCopy.displayOnlyNotice}
+          </p>
+        ) : null}
+        {anchorError ? (
+          <p data-testid="document-reader-anchor-error" role="alert" className="border-b border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-4 py-2 text-xs text-[var(--adm-brand-terracotta)]">
+            {anchorError}
+          </p>
+        ) : null}
+
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--adm-canvas-subtle)]">
+          <div className="mx-auto flex w-full max-w-[1560px] items-stretch gap-6 px-4 py-6 sm:px-6">
             {!hasDocument ? (
-              <div data-testid="document-reader-no-document" className="mx-auto flex max-w-[860px] flex-col items-center justify-center rounded-[4px] border border-dashed border-[var(--adm-border-canonical)] bg-white p-10 text-center">
+              <div data-testid="document-reader-no-document" className="mx-auto flex w-full max-w-[560px] flex-col items-center justify-center rounded-[4px] border border-dashed border-[var(--adm-border-canonical)] bg-white p-10 text-center">
                 <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Nincs kiválasztott dokumentum</h2>
                 <p className="mt-2 max-w-lg text-sm text-[var(--adm-text-secondary)]">Válassz dokumentumot az ügy iratai közül.</p>
               </div>
             ) : isLoadingText ? (
-              <div data-testid="document-reader-loading" className="mx-auto h-64 max-w-[860px] animate-pulse rounded-[4px] bg-white" />
+              <div data-testid="document-reader-loading" className="mx-auto h-64 w-full max-w-[560px] animate-pulse rounded-[4px] bg-white" />
             ) : exactText ? (
-              <div
+              <article
                 ref={readerRootRef}
                 data-testid="document-reader-surface"
                 onMouseUp={canAnchor ? captureSelection : undefined}
                 onKeyUp={canAnchor ? captureSelection : undefined}
-                className="mx-auto max-w-[860px] whitespace-pre-wrap rounded-[2px] border border-[var(--adm-border-canonical)] bg-white p-8 font-serif text-[15px] leading-7 text-[var(--adm-text-primary)] shadow-sm"
+                className="min-w-0 flex-1 whitespace-pre-wrap rounded-[4px] border border-[var(--adm-border-canonical)] bg-white p-6 font-serif text-[16px] leading-7 text-[var(--adm-text-primary)] shadow-sm sm:p-8"
               >
                 {segments.map((segment, index) =>
                   segment.range ? (
                     <mark
                       key={`${segment.range.key}-${index}`}
                       data-testid={segment.range.testId}
+                      data-anchor-id={segment.range.anchorId}
+                      data-anchor-kind={segment.range.kind}
                       ref={segment.range.key === 'active-anchor' ? highlightRef : undefined}
-                      className={segment.range.className}
+                      onClick={segment.range.anchorId ? () => activateReviewAnchor(segment.range!.anchorId as string) : undefined}
+                      className={segment.range.anchorId ? `cursor-pointer ${segment.range.className}` : segment.range.className}
                     >
                       {segment.text}
                     </mark>
@@ -604,37 +769,37 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
                     <span key={`plain-${index}`}>{segment.text}</span>
                   ),
                 )}
-              </div>
+              </article>
             ) : (
-              <div data-testid="document-reader-unavailable" className="mx-auto flex max-w-[860px] flex-col items-center justify-center rounded-[4px] border border-dashed border-[var(--adm-border-canonical)] bg-white p-10 text-center">
+              <div data-testid="document-reader-unavailable" className="mx-auto flex w-full max-w-[560px] flex-col items-center justify-center rounded-[4px] border border-dashed border-[var(--adm-border-canonical)] bg-white p-10 text-center">
                 <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Az előnézet jelenleg nem érhető el</h2>
                 <p className="mt-2 max-w-lg text-sm text-[var(--adm-text-secondary)]">
                   {textUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}
                 </p>
               </div>
             )}
+
+            {/* Desktop anchored review margin (single scroll region). */}
+            <aside
+              data-testid="document-reader-rail-desktop"
+              className="hidden w-[320px] shrink-0 lg:block xl:w-[360px] 2xl:w-[380px]"
+            >
+              {hasVersion ? anchoredMargin : noVersionNode}
+            </aside>
           </div>
-        </main>
+        </div>
+      </main>
 
-        {/* Desktop right rail */}
-        <aside
-          data-testid="document-reader-rail-desktop"
-          className="hidden min-h-0 min-w-0 overflow-hidden border-l border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] lg:flex lg:flex-col"
-        >
-          {railNode}
-        </aside>
-      </div>
-
-      {/* Narrow-viewport rail drawer */}
+      {/* Narrow-viewport rail drawer (list fallback, still offset-ordered). */}
       <DocumentReaderRailDrawer
         open={railDrawerOpen}
         onClose={() => setRailDrawerOpen(false)}
         returnFocusRef={railToggleRef}
       >
-        {railNode}
+        {hasVersion ? listRail : noVersionNode}
       </DocumentReaderRailDrawer>
 
-      {anchor && toolbarPos ? (
+      {anchor && toolbarPos && !draftOpen ? (
         <DocumentSelectionToolbar
           selectedText={anchor.selectedText}
           onAddComment={openCommentComposer}
@@ -643,24 +808,6 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         />
       ) : null}
 
-      <ReviewCommentComposer
-        open={commentComposerOpen}
-        selectedText={anchor?.selectedText ?? ''}
-        busy={composerBusy}
-        error={composerError}
-        targetKey={anchor ? `${anchor.startOffset}:${anchor.endOffset}` : undefined}
-        onCancel={() => { setCommentComposerOpen(false); setComposerError(null); }}
-        onSubmit={(body) => { void submitComment(body); }}
-      />
-      <ModificationProposalComposer
-        open={proposalComposerOpen}
-        selectedText={anchor?.selectedText ?? ''}
-        busy={composerBusy}
-        error={composerError}
-        targetKey={anchor ? `${anchor.startOffset}:${anchor.endOffset}` : undefined}
-        onCancel={() => { setProposalComposerOpen(false); setComposerError(null); }}
-        onSubmit={(payload) => { void submitProposal(payload); }}
-      />
       <ProposalDecisionDialog
         open={Boolean(rejectTarget)}
         busy={Boolean(rejectTarget && decisionBusyId === rejectTarget.id)}

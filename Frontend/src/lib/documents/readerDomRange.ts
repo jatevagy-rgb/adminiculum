@@ -89,6 +89,15 @@ export interface HighlightRange {
   className: string;
   testId?: string;
   key: string;
+  /** Optional identity of the review item this range belongs to. */
+  anchorId?: string;
+  /** Presentation kind for an anchored review range. */
+  kind?: string;
+  /**
+   * Overlap priority. When several ranges cover the same characters the highest
+   * priority wins (ties keep the earliest-starting range). Default 0.
+   */
+  priority?: number;
 }
 
 export function splitTextByHighlights(
@@ -113,7 +122,12 @@ export function splitTextByHighlights(
     const start = sorted[index];
     const end = sorted[index + 1];
     if (end <= start) continue;
-    const covering = usable.find((range) => range.start <= start && range.end >= end) ?? null;
+    let covering: HighlightRange | null = null;
+    for (const range of usable) {
+      if (range.start <= start && range.end >= end) {
+        if (!covering || (range.priority ?? 0) > (covering.priority ?? 0)) covering = range;
+      }
+    }
     segments.push({ text: text.slice(start, end), range: covering });
   }
   return segments;

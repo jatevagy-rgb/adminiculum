@@ -167,6 +167,50 @@ d('Phase 5B org contract + company customer surface (PostgreSQL)', () => {
     expect(view.items).toEqual([]);
   });
 
+  /* --------------- Slice B: active + expiring-this-month dates ------------ */
+
+  it('exposes the canonical status-derived active flag and only the allowed contract dates', async () => {
+    const view = await getOrganizationalContracts(ids.authorizedIdentity, ids.orgWsA, db, { now: new Date('2027-01-15T00:00:00.000Z') });
+    const items = view.items as any[];
+    const contract = items.find((item) => item.title === 'Keretszerződés (publikált)' || item.title === 'Beszállítói keretszerződés');
+    expect(contract).toBeTruthy();
+    // Active derives from the canonical ACTIVE status, not from dates.
+    expect(contract.isActive).toBe(true);
+    expect(contract.lifecycle).toBe('active');
+    // Allowed contract-level dates are exposed truthfully.
+    expect(contract.effectiveDate).toBe(new Date('2026-01-01T00:00:00.000Z').toISOString());
+    expect(contract.expiryDate).toBe(new Date('2027-01-01T00:00:00.000Z').toISOString());
+    expect(contract.keyDate).toBe(new Date('2027-01-01T00:00:00.000Z').toISOString());
+    // January 2027 is the expiry month -> expiresThisMonth is true.
+    expect(contract.expiresThisMonth).toBe(true);
+    // Missing dates are null, never fabricated.
+    expect(contract.signatureDate).toBeNull();
+    expect(contract.nextCriticalDate).toBeNull();
+    // Internal obligation/occurrence/entitlement data is NOT exposed.
+    expect(contract.obligations).toBeUndefined();
+    expect(contract.entitlements).toBeUndefined();
+    expect(JSON.stringify(view)).not.toContain('Éves beszámoló');
+  });
+
+  it('expiring-this-month is false outside the expiry month and never invents dates', async () => {
+    const view = await getOrganizationalContracts(ids.authorizedIdentity, ids.orgWsA, db, { now: new Date('2027-02-15T00:00:00.000Z') });
+    const contract = (view.items as any[]).find((item) => item.title === 'Keretszerződés (publikált)' || item.title === 'Beszállítói keretszerződés');
+    expect(contract).toBeTruthy();
+    expect(contract.expiresThisMonth).toBe(false);
+    // The canonical expiry date is still reported, just not this month.
+    expect(contract.expiryDate).toBe(new Date('2027-01-01T00:00:00.000Z').toISOString());
+  });
+
+  it('never marks a non-ACTIVE status as active', async () => {
+    // contractNoPublication is ACTIVE but unpublished; the DRAFT contractInternalOnly
+    // is not customer-visible at all. Neither can appear as an active contract.
+    const view = await getOrganizationalContracts(ids.authorizedIdentity, ids.orgWsA, db, { now: new Date('2027-01-15T00:00:00.000Z') });
+    const items = view.items as any[];
+    expect(items.find((item) => item.title === 'Belső tárgyalási anyag')).toBeUndefined();
+    expect(items.find((item) => item.title === 'Aktív, publikálatlan szerződés')).toBeUndefined();
+    expect(items.every((item) => item.isActive === (item.lifecycle === 'active'))).toBe(true);
+  });
+
   /* ----------------------- Vállalat (company) ----------------------------- */
 
   it('company overview requires an ORGANIZATION summary scope (fail closed without it)', async () => {

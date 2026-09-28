@@ -22,7 +22,12 @@ import type { Prisma as PrismaTypes, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { InteractionError, type InternalActor } from '../client-interaction/base';
 import { normalizeCelex } from '../compliance-doc-intelligence/legalSourceBinding';
-import { OBSERVATION_KINDS } from './legalSourceObservationService';
+import { OBSERVATION_KIND_AMENDMENT_PUBLISHED, OBSERVATION_KINDS } from './legalSourceObservationService';
+import {
+  buildLegalSourceImpactForVersion,
+  type LegalSourceImpactAccessScope,
+  type LegalSourceImpactProjection,
+} from './legalSourceImpact';
 
 type Db = PrismaClient;
 
@@ -378,4 +383,100 @@ export async function decideLegalSourceObservationReview(
   });
   if (!existing) throw new InteractionError(404, 'OBSERVATION_NOT_FOUND', 'Legal source observation not found.');
   throw invalidTransition(existing.reviewStatus);
+}
+
+/* ------------------------------------------------------------------ */
+/*  W3B — read-only impact adapter for one human-confirmed observation */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Read-only impact projection for ONE observation whose human reviewer
+ * authorized downstream assessment (IMPACT_CONFIRMED).
+ *
+ * HARD BOUNDARIES (same spirit as W3A / C4C):
+ *  - the gate NEVER mutates review state, and non-confirmed observations are
+ *    refused with 409 OBSERVATION_IMPACT_NOT_CONFIRMED (NEW, IN_REVIEW,
+ *    NO_IMPACT and REJECTED all stay impact-less);
+ *  - IMPACT_CONFIRMED means ONLY that the reviewer authorized assessment. The
+ *    projection stays an impact/review signal: it never claims non-compliance,
+ *    never opens a finding / task / case / proposal / notification, and
+ *    `automaticActionsCreated` stays 0;
+ *  - the projection is delegated verbatim to the EXISTING canonical
+ *    `buildLegalSourceImpactForVersion` reader — no second impact engine, no
+ *    new categories, confidence scores or collapsed kinds;
+ *  - this function performs ZERO writes.
+ *
+ * VERSION RESOLUTION — LOCKED:
+ *  - a persisted `legalSourceVersionId` is used EXACTLY as linked (a CANDIDATE /
+ *    UNREVIEWED version is never silently replaced by another version;
+ *    observation review and version review stay separate);
+ *  - an AMENDMENT_PUBLISHED observation without a linked version references the
+ *    watched/base LegalSource and resolves its CURRENT canonical version ONLY
+ *    when exactly ONE ACTIVE + APPROVED version exists: zero →
+ *    422 OBSERVATION_IMPACT_VERSION_UNAVAILABLE, more than one → 409
+ *    OBSERVATION_IMPACT_VERSION_AMBIGUOUS (never an arbitrary pick, never a
+ *    title / relatedIdentifier / CELEX fuzzy match);
+ *  - a CONSOLIDATED_VERSION_AVAILABLE observation without a linked version
+ *    fails closed with 422 OBSERVATION_IMPACT_VERSION_UNAVAILABLE: the observed
+ *    consolidated event has no version to assess, and falling back to the base
+ *    version would assess a different legal-source version.
+ */
+export async function getLegalSourceObservationImpact(
+  id: string,
+  accessScope: LegalSourceImpactAccessScope,
+  prisma: Db = defaultPrisma,
+): Promise<LegalSourceImpactProjection> {
+  const observation = await prisma.legalSourceObservation.findUnique({
+    where: { id },
+    select: { id: true, kind: true, legalSourceId: true, legalSourceVersionId: true, reviewStatus: true },
+  });
+  if (!observation) throw new InteractionError(404, 'OBSERVATION_NOT_FOUND', 'Legal source observation not found.');
+  if (String(observation.reviewStatus) !== OBSERVATION_REVIEW_STATUS_IMPACT_CONFIRMED) {
+    throw new InteractionError(
+      409,
+      'OBSERVATION_IMPACT_NOT_CONFIRMED',
+      'Impact is available only for an IMPACT_CONFIRMED observation.',
+    );
+  }
+
+  let legalSourceVersionId: string;
+  if (observation.legalSourceVersionId) {
+    legalSourceVersionId = observation.legalSourceVersionId;
+  } else if (String(observation.kind) === OBSERVATION_KIND_AMENDMENT_PUBLISHED) {
+    const candidates = await prisma.legalSourceVersion.findMany({
+      where: { legalSourceId: observation.legalSourceId, status: 'ACTIVE', reviewStatus: 'APPROVED' },
+      select: { id: true },
+    });
+    if (candidates.length === 0) {
+      throw new InteractionError(
+        422,
+        'OBSERVATION_IMPACT_VERSION_UNAVAILABLE',
+        'The watched legal source has no single ACTIVE + APPROVED version to assess.',
+      );
+    }
+    if (candidates.length > 1) {
+      throw new InteractionError(
+        409,
+        'OBSERVATION_IMPACT_VERSION_AMBIGUOUS',
+        'The watched legal source has more than one ACTIVE + APPROVED version; impact would be ambiguous.',
+      );
+    }
+    legalSourceVersionId = candidates[0].id;
+  } else {
+    throw new InteractionError(
+      422,
+      'OBSERVATION_IMPACT_VERSION_UNAVAILABLE',
+      'The observation is not linked to the legal source version it observed.',
+    );
+  }
+
+  const projection = await buildLegalSourceImpactForVersion(legalSourceVersionId, prisma, accessScope);
+  if (!projection) {
+    throw new InteractionError(
+      422,
+      'OBSERVATION_IMPACT_VERSION_UNAVAILABLE',
+      'The resolved legal source version is no longer readable.',
+    );
+  }
+  return projection;
 }

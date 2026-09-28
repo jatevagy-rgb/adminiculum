@@ -1,5 +1,6 @@
 import { prisma } from '../../prisma/prisma.service';
 import { deriveDeadlineUrgency as deriveCanonicalDeadlineUrgency } from '../agenda/deadlineEngine';
+import { buildMailboxPrivacyWhere, resolveCommunicationPrivacyScope } from '../communications/readScope';
 
 export type WorkflowNextActionKind =
   | 'OVERDUE_TASK'
@@ -319,6 +320,11 @@ export async function getCaseWorkflowSummary(
 
   if (!caseRecord) return null;
 
+  // Mailbox ownership is a privacy boundary above role: latestCommunication
+  // must skip foreign mailbox rows and select the next visible communication.
+  const privacyScope = await resolveCommunicationPrivacyScope(currentUserId);
+  const communicationPrivacyWhere = buildMailboxPrivacyWhere(privacyScope);
+
   const [tasks, documents, communications, collaborators] = await Promise.all([
     prisma.task.findMany({
       where: { caseId },
@@ -350,7 +356,7 @@ export async function getCaseWorkflowSummary(
       },
     }),
     prisma.communication.findMany({
-      where: { caseId },
+      where: { caseId, ...communicationPrivacyWhere },
       orderBy: { createdAt: 'desc' },
       take: 1,
       select: {

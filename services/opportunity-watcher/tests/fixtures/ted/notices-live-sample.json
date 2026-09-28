@@ -1,0 +1,164 @@
+{
+  "notices": [
+    {
+      "place-of-performance": [
+        "AT111",
+        "AUT"
+      ],
+      "change-reason-code": "update-add",
+      "deadline-receipt-tender-date-lot": [
+        "2025-09-04+02:00"
+      ],
+      "notice-type": "cn-standard",
+      "publication-number": "566524-2025",
+      "procedure-identifier": "68474b80-f5a6-4779-b152-2180fea3e044",
+      "BT-821-Lot": [
+        "epo-procurement-document"
+      ],
+      "place-of-performance-country-lot": [
+        "AUT"
+      ],
+      "classification-cpv": [
+        "45210000",
+        "45210000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {
+        "deu": [
+          "PEB – Projektentwicklung Burgenland GmbH"
+        ]
+      },
+      "notice-version": 1,
+      "links": {
+        "xml": {
+          "MUL": "https://ted.europa.eu/en/notice/566524-2025/xml"
+        },
+        "html": {
+          "ENG": "https://ted.europa.eu/en/notice/-/detail/566524-2025",
+          "HUN": "https://ted.europa.eu/hu/notice/-/detail/566524-2025"
+        }
+      },
+      "identifier-lot": [
+        "LOT-7460"
+      ],
+      "notice-title": {
+        "hun": "Ausztria – Magasépítési munka – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "deu": "Österreich – Bauleistungen im Hochbau – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "eng": "Austria – Building construction work – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau"
+      },
+      "sme-lot": [
+        true
+      ],
+      "BT-758-notice": "dea70baf-4089-4237-b5f1-e0623dbaad58-01"
+    },
+    {
+      "place-of-performance": [
+        "DE235",
+        "DEU",
+        "DE235",
+        "DE235",
+        "DE235",
+        "DE235",
+        "DEU",
+        "DEU",
+        "DEU",
+        "DEU"
+      ],
+      "notice-type": "can-standard",
+      "publication-number": "566527-2025",
+      "estimated-value-lot": [
+        "500000.00",
+        "200000.00",
+        "10000.00",
+        "200000.00"
+      ],
+      "estimated-value-cur-lot": [
+        "EUR"
+      ],
+      "procedure-identifier": "f54da681-f890-4ad1-aadf-ec1aaa9ebad3",
+      "place-of-performance-country-lot": [
+        "DEU",
+        "DEU",
+        "DEU",
+        "DEU"
+      ],
+      "classification-cpv": [
+        "32000000",
+        "32000000",
+        "32000000",
+        "32000000",
+        "32000000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {
+        "deu": [
+          "Eigenbetrieb Digitale Infrastruktur Landkreis Cham"
+        ]
+      },
+      "notice-version": 1,
+      "links": {
+        "xml": {
+          "MUL": "https://ted.europa.eu/en/notice/566527-2025/xml"
+        },
+        "html": {
+          "ENG": "https://ted.europa.eu/en/notice/-/detail/566527-2025",
+          "HUN": "https://ted.europa.eu/hu/notice/-/detail/566527-2025"
+        }
+      },
+      "identifier-lot": [
+        "LOT-0001",
+        "LOT-0002",
+        "LOT-0003",
+        "LOT-0004"
+      ],
+      "notice-title": {
+        "hun": "Németország – Rádiós, televíziós, hírközlési, távközlési és kapcsolódó berendezések – Rahmenvereinbarung: Lieferung der Materialien für den Glasfaserausbau im Landkreis Cham, PG 7, Cluster 7.1, 7.2 und 7.3",
+        "deu": "Deutschland – Rundfunk- und Fernsehgeräte, Kommunikations- und Fernmeldeanlagen und Zubehör – Rahmenvereinbarung: Lieferung der Materialien für den Glasfaserausbau im Landkreis Cham, PG 7, Cluster 7.1, 7.2 und 7.3",
+        "eng": "Germany – Radio, television, communication, telecommunication and related equipment – Rahmenvereinbarung: Lieferung der Materialien für den Glasfaserausbau im Landkreis Cham, PG 7, Cluster 7.1, 7.2 und 7.3"
+      }
+    },
+    {
+      "place-of-performance": [
+        "SI041",
+        "SVN",
+        "SI041",
+        "SVN"
+      ],
+      "place-of-performance-country-lot": [
+        "SVN"
+      ],
+      "notice-type": "can-modif",
+      "publication-number": "566529-2025",
+      "classification-cpv": [
+        "45200000",
+        "45200000",
+        "45200000",
+        "45200000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {},
+      "procedure-identifier": "ffc09b4b-9bd3-4d8c-8c77-8c08b695aa71",
+      "notice-version": 1,
+      "links": {
+        "xml": {
+          "MUL": "https://ted.europa.eu/en/notice/566529-2025/xml"
+        },
+        "html": {
+          "ENG": "https://ted.europa.eu/en/notice/-/detail/566529-2025",
+          "HUN": "https://ted.europa.eu/hu/notice/-/detail/566529-2025"
+        }
+      },
+      "identifier-lot": [
+        "LOT-0000"
+      ],
+      "notice-title": {
+        "hun": "Szlovénia – Teljes vagy részleges magas- és mélyépítési munka – KOMUNALNA IN PROMETNA UREDITEV OBMOČIJ ŠT. 1, 2, 4, 5, 6, 7, 8, 10, 11, 19, 27, 28, 29, 30, 32, 33, 34, 35, 36 IN 39, SOČASNO Z GRADNJO KANALIZACIJE PO PROJEKTU \"ODVAJANJE IN ČIŠČENJE ODPADNE VODE NA OBMOČJU VODONOSNIKA LJUBLJANSKEGA POLJA - DEL 3: DOGRADITEV JAVNE KANALIZACIJE V AGLOMERACIJAH NAD 2000 PE V MOL\"",
+        "deu": "Slowenien – Komplett- oder Teilbauleistungen im Hochbau sowie Tiefbauarbeiten – KOMUNALNA IN PROMETNA UREDITEV OBMOČIJ ŠT. 1, 2, 4, 5, 6, 7, 8, 10, 11, 19, 27, 28, 29, 30, 32, 33, 34, 35, 36 IN 39, SOČASNO Z GRADNJO KANALIZACIJE PO PROJEKTU \"ODVAJANJE IN ČIŠČENJE ODPADNE VODE NA OBMOČJU VODONOSNIKA LJUBLJANSKEGA POLJA - DEL 3: DOGRADITEV JAVNE KANALIZACIJE V AGLOMERACIJAH NAD 2000 PE V MOL\"",
+        "eng": "Slovenia – Works for complete or part construction and civil engineering work – KOMUNALNA IN PROMETNA UREDITEV OBMOČIJ ŠT. 1, 2, 4, 5, 6, 7, 8, 10, 11, 19, 27, 28, 29, 30, 32, 33, 34, 35, 36 IN 39, SOČASNO Z GRADNJO KANALIZACIJE PO PROJEKTU \"ODVAJANJE IN ČIŠČENJE ODPADNE VODE NA OBMOČJU VODONOSNIKA LJUBLJANSKEGA POLJA - DEL 3: DOGRADITEV JAVNE KANALIZACIJE V AGLOMERACIJAH NAD 2000 PE V MOL\""
+      }
+    }
+  ],
+  "totalNoticeCount": 968420,
+  "iterationNextToken": null,
+  "timedOut": false
+}

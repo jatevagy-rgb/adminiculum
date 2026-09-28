@@ -165,8 +165,19 @@ function WorkspaceActionCard({ action }: { action: PortalWorkspaceAction }) {
   );
 }
 
+const WORKSPACE_DOCUMENT_KIND_LABELS: Record<PortalWorkspaceDocument['kind'], string> = {
+  SHARED_DOCUMENT: 'Megosztott dokumentum',
+  DOCUMENT_REQUEST: 'Dokumentumkérés',
+  CORRECTION_REQUEST: 'Javítás',
+  SUBMISSION: 'Beküldés',
+  CORRECTION_SUBMISSION: 'Javítás',
+  INFORMATION_REQUEST: 'Információkérés',
+  DATA_FORM: 'Adatlap',
+  QUESTION_RESPONSE: 'Válaszadás',
+};
+
 function WorkspaceDocumentCard({ document }: { document: PortalWorkspaceDocument }) {
-  const kind = document.kind === 'SHARED_DOCUMENT' ? 'Megosztott dokumentum' : document.kind.includes('CORRECTION') ? 'Javítás' : document.kind === 'SUBMISSION' ? 'Beküldés' : 'Dokumentumkérés';
+  const kind = WORKSPACE_DOCUMENT_KIND_LABELS[document.kind] ?? 'Dokumentumkérés';
   return (
     <Link className="cp-row cp-card-hover block p-4 focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40" href={document.actionUrl}>
       <p className="cp-kicker">{kind} · {document.matterTitle || 'Közzétett ügy'}</p>

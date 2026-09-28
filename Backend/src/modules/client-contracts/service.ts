@@ -293,6 +293,7 @@ export function toOccurrenceDTO(row: any): any {
     relatedTaskId: row.relatedTaskId,
     sourceReference: row.sourceReference,
     internalNote: row.internalNote ?? null,
+    publishedAt: iso(row.publishedAt),
     revision: row.revision,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -928,4 +929,73 @@ export async function transitionObligationOccurrence(actor: InternalActor, occur
   };
   const updated = await prisma.clientObligationOccurrence.update({ where: { id: occurrenceId }, data });
   return toOccurrenceDTO(updated);
+}
+
+/* -------------------------------------------------------------------------- */
+/* Occurrence CUSTOMER PUBLICATION GATE                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The ONLY occurrence kinds a lawyer may explicitly publish to the customer
+ * calendar. Every other kind is fail-closed: it can never reach the customer.
+ */
+export const CUSTOMER_PUBLISHABLE_OCCURRENCE_TYPES = new Set(['PAYMENT', 'MILESTONE', 'NOTICE']);
+
+/**
+ * Deliberate publication action. Sets the explicit publishedAt/publishedById
+ * audit pair. NEVER implied by candidate confirmation (#399) or by occurrence
+ * creation: an occurrence stays customer-hidden until this exact action runs.
+ */
+export async function publishObligationOccurrence(actor: InternalActor, occurrenceId: string, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const row = await prisma.clientObligationOccurrence.findUnique({ where: { id: occurrenceId } });
+  if (!row) throw new InteractionError(404, 'OCCURRENCE_NOT_FOUND', 'Obligation occurrence not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+  if (!CUSTOMER_PUBLISHABLE_OCCURRENCE_TYPES.has(String(row.occurrenceType))) {
+    throw new InteractionError(400, 'OCCURRENCE_TYPE_NOT_PUBLISHABLE', 'This occurrence type cannot be published to the customer.');
+  }
+  if (!row.dueDate) {
+    throw new InteractionError(400, 'OCCURRENCE_DUE_DATE_REQUIRED', 'An occurrence without a due date cannot be published to the customer.');
+  }
+  const updated = await prisma.clientObligationOccurrence.update({
+    where: { id: occurrenceId },
+    data: { publishedAt: new Date(), publishedById: actor.userId, revision: { increment: 1 } },
+  });
+  return toOccurrenceDTO(updated);
+}
+
+/**
+ * Truthful revocation: clears the publication audit pair. The occurrence itself
+ * is untouched and becomes customer-hidden again immediately.
+ */
+export async function unpublishObligationOccurrence(actor: InternalActor, occurrenceId: string, prisma: Prisma = defaultPrisma) {
+  requireManager(actor);
+  const row = await prisma.clientObligationOccurrence.findUnique({ where: { id: occurrenceId } });
+  if (!row) throw new InteractionError(404, 'OCCURRENCE_NOT_FOUND', 'Obligation occurrence not found.');
+  await assertClientReadAccess(actor, row.clientId, prisma);
+  const updated = await prisma.clientObligationOccurrence.update({
+    where: { id: occurrenceId },
+    data: { publishedAt: null, publishedById: null, revision: { increment: 1 } },
+  });
+  return toOccurrenceDTO(updated);
+}
+
+/**
+ * Customer-safe reader for published occurrences of ONE client. Only explicitly
+ * published rows with a due date qualify, and only allowlisted customer-safe
+ * fields are selected — internalNote, sourceReference, expectedAmount, evidence
+ * and reviewer metadata can never cross this boundary.
+ */
+export async function listPublishedOccurrencesForCustomer(clientId: string, prisma: Prisma = defaultPrisma) {
+  const rows = await prisma.clientObligationOccurrence.findMany({
+    where: { clientId, publishedAt: { not: null }, dueDate: { not: null } },
+    select: { id: true, occurrenceType: true, title: true, dueDate: true },
+    orderBy: OCCURRENCE_ORDER,
+  });
+  return rows.map((row) => ({
+    id: String(row.id),
+    occurrenceType: String(row.occurrenceType),
+    title: String(row.title),
+    dueDate: row.dueDate,
+  }));
 }

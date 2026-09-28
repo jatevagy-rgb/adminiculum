@@ -152,6 +152,8 @@ export interface CommunicationRecordLike {
   senderName?: string | null;
   senderEmail?: string | null;
   recipientEmail?: string | null;
+  /** Canonical persisted direction (INBOUND/OUTBOUND). Absent on legacy/manual rows. */
+  direction?: "INBOUND" | "OUTBOUND" | null;
   summary?: string | null;
   caseId?: string | null;
   clientId?: string | null;
@@ -174,6 +176,19 @@ export function classifyAudience(record: CommunicationRecordLike): Communication
 }
 
 /**
+ * Canonical persisted direction when present. The sender-domain heuristic below
+ * is a legacy fallback for manual rows only; provider-sourced rows always carry
+ * the canonical INBOUND/OUTBOUND value from the backend DTO.
+ */
+export function canonicalCommunicationDirection(
+  record: Pick<CommunicationRecordLike, "direction">,
+): CommunicationDirection | null {
+  if (record.direction === "INBOUND") return "incoming";
+  if (record.direction === "OUTBOUND") return "outgoing";
+  return null;
+}
+
+/**
  * Map an existing communications-console record into a foundation CommunicationSignal.
  * Uses only data the app already loaded; `preview` is the summary, never the raw body.
  */
@@ -181,7 +196,8 @@ export function toCommunicationSignal(record: CommunicationRecordLike): Communic
   const audience = classifyAudience(record);
   const senderDomain = extractEmailDomain(record.senderEmail);
   const isNote = (record.type || "").toUpperCase() === "NOTE";
-  const direction: CommunicationDirection = isInternalDomain(senderDomain) ? "outgoing" : "incoming";
+  const direction: CommunicationDirection = canonicalCommunicationDirection(record)
+    ?? (isInternalDomain(senderDomain) ? "outgoing" : "incoming");
   const signalType: CommunicationSignalType = isNote
     ? "internal_note"
     : audience === "external"

@@ -63,3 +63,13 @@ export function workloadSummaryPanelClass(tone: WorkloadSummaryTone): string {
 export function workloadSummaryCaption(value: number | null, emptyLabel: string): string {
   return value === null ? "Most nem elérhető" : value === 0 ? emptyLabel : "Aktív tétel";
 }
+
+// "Review tételek" count contract: the tile counts the canonical review queue —
+// the exact population the /reviews destination renders via listTaskReviewQueue()
+// → GET /tasks/review-queue. It is deliberately NOT a case-status count and NOT
+// derived from task titles, and it must not re-filter the queue client-side, so
+// returned/completed/ineligible items stay governed solely by the queue endpoint.
+// null = the source failed (caption "Most nem elérhető", never a fake 0).
+export function reviewQueueSummaryCount(queue: readonly unknown[] | null | undefined): number | null {
+  return queue == null ? null : queue.length;
+}

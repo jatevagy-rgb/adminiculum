@@ -319,7 +319,7 @@ router.get('/:caseId/summary', authenticate, requireCaseReadAccess, async (req: 
 router.get('/:caseId/workspace', authenticate, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
-    const workspace = await getCaseWorkspace(caseId);
+    const workspace = await getCaseWorkspace(caseId, { userId: req.user?.userId ?? null });
     if (!workspace) {
       res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
       return;
@@ -463,7 +463,7 @@ router.get('/:caseId/activity', authenticate, requireCaseReadAccess, async (req:
       limit: req.query.limit,
       offset: req.query.offset,
       type: req.query.type,
-    });
+    }, { userId: req.user?.userId ?? null });
 
     if (!activity) {
       res.status(404).json({ status: 404, code: 'CASE_NOT_FOUND', message: 'Case not found' });
@@ -942,7 +942,7 @@ router.post('/:caseId/assign', authenticate, requireCaseManageAccess, async (req
 // ============================================================================
 router.get('/dashboard/stats', authenticate, async (req: Request, res: Response): Promise<void> => {
   try {
-    const stats = await casesService.getDashboardStats(req.user?.userId);
+    const stats = await casesService.getDashboardStats(req.user?.userId, req.user?.role);
     res.json(stats);
   } catch (error) {
     console.error('Get dashboard stats error:', error);

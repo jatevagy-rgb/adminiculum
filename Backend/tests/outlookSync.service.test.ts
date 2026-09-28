@@ -1,5 +1,6 @@
 import {
   applySafeConversationLinkage,
+  normalizeOutlookMessage,
   OutlookImportServiceError,
   syncOutlookMailbox,
 } from '../src/modules/communications/outlookImport.service';
@@ -144,6 +145,41 @@ describe('syncOutlookMailbox (service unit)', () => {
     expect((prisma as any).communication.create).toHaveBeenCalledTimes(1);
     expect(res.summary.imported).toBe(1);
   });
+
+  it('treats a message already imported by the per-user mailbox channel as a duplicate', async () => {
+    // A per-user mailbox row carries the same RFC Message-ID in the
+    // internetMessageId column while this channel anchors on externalMessageId.
+    (prisma as any).communication.findMany.mockResolvedValueOnce([
+      { id: 'mailbox-row', externalMessageId: null, internetMessageId: 'im-1' },
+    ]);
+    const res = await syncOutlookMailbox('u1', { reader: fakeReader([graphMsg('1', null)]) });
+    expect(res.summary).toEqual({ imported: 0, alreadyKnown: 1, needsAssignment: 0, failed: 0 });
+    expect(res.items[0]).toMatchObject({ duplicate: true, imported: false });
+    expect((prisma as any).communication.create).not.toHaveBeenCalled();
+  });
+
+  it('persists the provider-supplied RFC Message-ID and never derives it from a Graph id', async () => {
+    (prisma as any).communication.findMany.mockResolvedValue([]);
+    (prisma as any).communication.create.mockResolvedValue({ id: 'c1' });
+    (prisma as any).communicationAttachment.create.mockResolvedValue({ id: 'a1' });
+
+    await syncOutlookMailbox('u1', { reader: fakeReader([graphMsg('7', null)]) });
+    const rfcCreate = (prisma as any).communication.create.mock.calls[0][0];
+    expect(rfcCreate.data).toMatchObject({ externalMessageId: 'im-7', internetMessageId: 'im-7' });
+
+    await syncOutlookMailbox('u1', { reader: fakeReader([{ ...graphMsg('8', null), internetMessageId: undefined }]) });
+    const fallbackCreate = (prisma as any).communication.create.mock.calls[1][0];
+    expect(fallbackCreate.data).toMatchObject({ externalMessageId: 'g-8', internetMessageId: null });
+  });
+});
+
+describe('normalizeOutlookMessage cross-channel identity', () => {
+  it('uses only a provider-supplied internetMessageId, never the externalMessageId fallback', () => {
+    const fallbackOnly = normalizeOutlookMessage({ externalMessageId: 'graph-provider-id', subject: 'Téma' }, 'me@x', 'me@x');
+    expect(fallbackOnly.internetMessageId).toBeNull();
+    const withRfc = normalizeOutlookMessage({ externalMessageId: 'rfc@id', internetMessageId: ' rfc@id ', subject: 'Téma' }, 'me@x', 'me@x');
+    expect(withRfc.internetMessageId).toBe('rfc@id');
+  });
 });
 
 describe('applySafeConversationLinkage', () => {
@@ -201,5 +237,40 @@ describe('applySafeConversationLinkage', () => {
     ]);
     expect(linked).toEqual([]);
     expect(unassigned).toEqual(['new']);
+  });
+
+  it('leaves messages without a provider conversation id untouched', async () => {
+    const db = {
+      communication: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+    } as any;
+
+    const { linked, unassigned } = await applySafeConversationLinkage(db, [
+      { communicationId: 'new', providerConversationId: null },
+    ]);
+    expect(linked).toEqual([]);
+    expect(unassigned).toEqual(['new']);
+    expect(db.communication.findMany).not.toHaveBeenCalled();
+    expect(db.communication.update).not.toHaveBeenCalled();
+  });
+
+  it('never overwrites an explicit existing linkage on the referenced message', async () => {
+    const db = {
+      communication: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'explicit', caseId: 'case-explicit', clientId: 'client-explicit' },
+        ]),
+        update: jest.fn(),
+      },
+    } as any;
+
+    const { linked, unassigned } = await applySafeConversationLinkage(db, [
+      { communicationId: 'explicit', providerConversationId: 'conv-z' },
+    ]);
+    expect(linked).toEqual(['explicit']);
+    expect(unassigned).toEqual([]);
+    expect(db.communication.update).not.toHaveBeenCalled();
   });
 });
