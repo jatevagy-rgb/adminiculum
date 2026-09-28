@@ -42,40 +42,20 @@ function formatDate(value: string | null | undefined): string {
 }
 
 /**
- * C4C — legal-source impact drilldown. INTERNAL ONLY.
+ * Rendering-only exact-version impact projection. Shared by the C4C registry
+ * panel and the W3B observation impact flow so both surfaces render the SAME
+ * projection. INTERNAL ONLY.
  *
- * Renders the exact-version impact chain (documents → requirements → controls →
- * clients) from the existing canonical legal-source-impact projection. It makes
- * no claims of automatic non-compliance: the review signal is "felülvizsgálat
- * szükséges", never an automatic legal conclusion.
+ * It makes no claims of automatic non-compliance: the review signal is
+ * "felülvizsgálat szükséges", never an automatic legal conclusion.
  */
-export function LegalSourceImpactPanel({ legalSourceVersionId }: { legalSourceVersionId: string }) {
-  const [impact, setImpact] = useState<LegalSourceImpactProjection | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = () => {
-    setLoading(true);
-    setError(null);
-    complianceIntelligenceApi
-      .legalSourceImpact(legalSourceVersionId)
-      .then(setImpact)
-      .catch(() => setError("A jogforrás-hatásvizsgálat jelenleg nem tölthető be."))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [legalSourceVersionId]);
-
-  if (loading) {
-    return <p className="text-sm text-[var(--adm-text-muted)]">Hatásvizsgálat betöltése…</p>;
-  }
-  if (error || !impact) {
-    return <SafePanelError onRetry={load} detail={error ?? "A hatásvizsgálat nem érhető el."} />;
-  }
-
+export function LegalSourceImpactView({
+  impact,
+  onReload,
+}: {
+  impact: LegalSourceImpactProjection;
+  onReload?: () => void;
+}) {
   const subject = impact.subject;
   const requirementImpact = impact.requirementImpact;
   const controlImpact = impact.controlImpact;
@@ -269,11 +249,49 @@ export function LegalSourceImpactPanel({ legalSourceVersionId }: { legalSourceVe
         </section>
       ) : null}
 
-      <div className="flex justify-end">
-        <AdminButton size="sm" variant="neutral" onClick={load}>
-          Újratöltés
-        </AdminButton>
-      </div>
+      {onReload ? (
+        <div className="flex justify-end">
+          <AdminButton size="sm" variant="neutral" onClick={onReload}>
+            Újratöltés
+          </AdminButton>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/**
+ * C4C — legal-source impact drilldown. INTERNAL ONLY.
+ *
+ * Fetches the exact-version impact chain (documents → requirements → controls →
+ * clients) from the existing canonical legal-source-impact projection and
+ * renders it through the shared LegalSourceImpactView.
+ */
+export function LegalSourceImpactPanel({ legalSourceVersionId }: { legalSourceVersionId: string }) {
+  const [impact, setImpact] = useState<LegalSourceImpactProjection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    setLoading(true);
+    setError(null);
+    complianceIntelligenceApi
+      .legalSourceImpact(legalSourceVersionId)
+      .then(setImpact)
+      .catch(() => setError("A jogforrás-hatásvizsgálat jelenleg nem tölthető be."))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legalSourceVersionId]);
+
+  if (loading) {
+    return <p className="text-sm text-[var(--adm-text-muted)]">Hatásvizsgálat betöltése…</p>;
+  }
+  if (error || !impact) {
+    return <SafePanelError onRetry={load} detail={error ?? "A hatásvizsgálat nem érhető el."} />;
+  }
+  return <LegalSourceImpactView impact={impact} onReload={load} />;
 }

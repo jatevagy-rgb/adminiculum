@@ -1,4 +1,5 @@
 import { fetchApi } from './api';
+import type { LegalSourceImpactProjection } from './complianceIntelligenceApi';
 
 /**
  * C4D — office-wide Compliance Center read model (INTERNAL only).
@@ -202,6 +203,17 @@ export const complianceCenterApi = {
   getLegalSourceObservation(id: string) {
     return fetchApi<LegalSourceObservationDetail>(
       `/compliance/legal-source-observations/${encodeURIComponent(id)}`,
+      { cache: 'no-store' },
+    );
+  },
+  /**
+   * W3B — observation-specific impact projection. Only succeeds for an
+   * IMPACT_CONFIRMED observation; the response is the existing
+   * LegalSourceImpactProjection used by the C4C impact panel.
+   */
+  getLegalSourceObservationImpact(id: string) {
+    return fetchApi<LegalSourceImpactProjection>(
+      `/compliance/legal-source-observations/${encodeURIComponent(id)}/impact`,
       { cache: 'no-store' },
     );
   },
