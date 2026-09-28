@@ -7,12 +7,12 @@
  * approves or unapproves each candidate individually; only explicitly approved
  * ids are sent to the anonymize endpoint. Nothing is auto-approved.
  *
- * A short source excerpt around each span is rendered locally so the reviewer
- * understands the candidate without any separate reversible mapping.
+ * The row leads with the human decision object (originalText), then the
+ * category, the proposed replacement and a bounded local source excerpt.
+ * Confidence is a quiet secondary detail; detector internals stay out of view.
  */
 
 import React from "react";
-import { AdminBadge } from "@/components/adminiculum/ui";
 import { CONFIDENCE_LABELS, categoryLabel, type ReviewCandidate } from "@/lib/caseContextSources";
 
 const EXCERPT_RADIUS = 48;
@@ -27,12 +27,6 @@ function excerptAround(rawText: string, start: number, end: number): { before: s
     match: rawText.slice(safeStart, safeEnd),
     after: rawText.slice(safeEnd, afterEnd),
   };
-}
-
-function confidenceTone(confidence: ReviewCandidate["confidence"]): "green" | "gold" | "neutral" {
-  if (confidence === "HIGH") return "green";
-  if (confidence === "MEDIUM") return "gold";
-  return "neutral";
 }
 
 export function CandidateReviewList({
@@ -50,9 +44,10 @@ export function CandidateReviewList({
 }) {
   if (candidates.length === 0) {
     return (
-      <p data-testid="ccv2-no-candidates" className="px-4 py-3 text-[12px] text-[var(--adm-text-muted)]">
-        A detektálás nem talált érzékenynek tűnő elemet ebben a szövegben.
-      </p>
+      <div data-testid="ccv2-no-candidates" className="px-4 py-3 text-[12px] text-[var(--adm-text-muted)]">
+        <p>Nem jelöltünk meg automatikusan ellenőrizendő elemet.</p>
+        <p>Szükség esetén adj meg kifejezést kézzel.</p>
+      </div>
     );
   }
 
@@ -69,27 +64,26 @@ export function CandidateReviewList({
                 checked={approved}
                 disabled={disabled}
                 onChange={() => onToggle(candidate.id)}
+                aria-label={`${candidate.originalText} jóváhagyása`}
                 data-testid={`ccv2-candidate-checkbox-${candidate.id}`}
-                className="mt-0.5 h-4 w-4 shrink-0 accent-[#0F3D32]"
+                className="mt-1 h-4 w-4 shrink-0 accent-[#0F3D32]"
               />
               <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-[12.5px] font-semibold text-[var(--adm-text)]">{categoryLabel(candidate.type)}</span>
-                  <AdminBadge tone={confidenceTone(candidate.confidence)}>{CONFIDENCE_LABELS[candidate.confidence]}</AdminBadge>
-                  <span className="text-[10.5px] text-[var(--adm-text-soft)]">{candidate.detector}</span>
+                <span className="block break-words text-[13px] font-semibold leading-5 text-[var(--adm-text)]">
+                  {candidate.originalText}
                 </span>
-                <span className="mt-1.5 block rounded-[5px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-2.5 py-1.5 text-[11.5px] leading-5 text-[var(--adm-text)]">
-                  {excerpt.before ? <span className="text-[var(--adm-text-muted)]">…{excerpt.before}</span> : null}
-                  <span className="rounded-[2px] bg-[rgba(181,138,42,0.22)] px-0.5 font-semibold">{excerpt.match}</span>
-                  {excerpt.after ? <span className="text-[var(--adm-text-muted)]">{excerpt.after}…</span> : null}
+                <span className="mt-0.5 block text-[11px] text-[var(--adm-text-muted)]">{categoryLabel(candidate.type)}</span>
+                <span className="mt-1 block break-words text-[11.5px] leading-5 text-[var(--adm-text)]">
+                  <span className="font-semibold">Csere:</span>{" "}
+                  <code className="break-all rounded-[3px] bg-[var(--adm-surface)] px-1 py-0.5">{candidate.proposedReplacement}</code>
                 </span>
-                <span className="mt-1 block text-[11.5px] text-[var(--adm-text)]">
-                  <span className="font-semibold">Javasolt csere:</span>{" "}
-                  <code className="rounded-[3px] bg-[var(--adm-surface)] px-1 py-0.5">{candidate.proposedReplacement}</code>
+                <span className="mt-1 block break-words rounded-[5px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] px-2.5 py-1.5 text-[11.5px] leading-5 text-[var(--adm-text-muted)]">
+                  {excerpt.before ? <>…{excerpt.before}</> : null}
+                  <span className="rounded-[2px] bg-[rgba(181,138,42,0.22)] px-0.5 font-semibold text-[var(--adm-text)]">{excerpt.match}</span>
+                  {excerpt.after ? <>{excerpt.after}…</> : null}
                 </span>
-                {candidate.note ? <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">{candidate.note}</span> : null}
-                <span className={`mt-1.5 block text-[11px] font-semibold ${approved ? "text-[var(--adm-green-800)]" : "text-[var(--adm-text-muted)]"}`}>
-                  {approved ? "Jóváhagyva — alkalmazásra kerül" : "Nincs jóváhagyva — nem kerül alkalmazásra"}
+                <span className="mt-1 block text-[10.5px] text-[var(--adm-text-soft)]">
+                  Bizonyosság: {CONFIDENCE_LABELS[candidate.confidence]}
                 </span>
               </span>
             </label>
