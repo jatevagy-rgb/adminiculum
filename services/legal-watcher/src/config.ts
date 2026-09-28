@@ -3,7 +3,8 @@
  *
  * All defaults are safe (fail-closed): the watcher runs in DRY_RUN mode
  * unless delivery is explicitly enabled with `--deliver` or
- * `LEGAL_WATCHER_DELIVERY_MODE=DELIVER`. DELIVER mode additionally requires an
+ * `LEGAL_WATCHER_DELIVERY_MODE=DELIVER`. BACKEND manifest mode
+ * (`LEGAL_WATCHER_MANIFEST_MODE=BACKEND`) and DELIVER mode each require an
  * explicit backend endpoint and app-only token configuration; otherwise
  * configuration fails before any observation or network work. All HTTP knobs
  * are bounded.
@@ -19,8 +20,14 @@ import type { DeliveryMode } from './types';
 
 export const DEFAULT_EURLEX_ENDPOINT = 'https://publications.europa.eu/webapi/rdf/sparql';
 
+/** Manifest acquisition mode. FILE is the safe default; BACKEND is opt-in. */
+export type ManifestMode = 'FILE' | 'BACKEND';
+
 export interface WatcherConfig {
-  manifestPath: string;
+  /** Manifest acquisition mode. Absent means FILE (W1 default). */
+  manifestMode?: ManifestMode;
+  /** Exported snapshot path; required in FILE mode, null in BACKEND mode. */
+  manifestPath: string | null;
   stateDir: string;
   reportOutPath: string | null;
   eurlexEndpoint: string;
@@ -109,6 +116,15 @@ export function parseDeliveryMode(raw: string): DeliveryMode {
   );
 }
 
+export function parseManifestMode(raw: string): ManifestMode {
+  const normalized = raw.trim().toUpperCase();
+  if (normalized === '' || normalized === 'FILE') return 'FILE';
+  if (normalized === 'BACKEND') return 'BACKEND';
+  throw new ConfigError(
+    `invalid LEGAL_WATCHER_MANIFEST_MODE: ${raw} (expected FILE or BACKEND)`,
+  );
+}
+
 export function parseAzureAuthMode(raw: string): AzureAuthMode {
   const normalized = raw.trim().toUpperCase();
   if (normalized === '' || normalized === 'CLIENT_SECRET') return 'CLIENT_SECRET';
@@ -137,8 +153,9 @@ function resolveClientSecretTokenConfig(): AppOnlyTokenConfig {
   const scope = (process.env.LEGAL_WATCHER_AZURE_SCOPE ?? '').trim();
   if (tenantId === '' || clientId === '' || clientSecret === '' || scope === '') {
     throw new ConfigError(
-      'DELIVER mode requires LEGAL_WATCHER_AZURE_TENANT_ID, LEGAL_WATCHER_AZURE_CLIENT_ID, ' +
-        'LEGAL_WATCHER_AZURE_CLIENT_SECRET and LEGAL_WATCHER_AZURE_SCOPE',
+      'BACKEND manifest mode and DELIVER mode require LEGAL_WATCHER_AZURE_TENANT_ID, ' +
+        'LEGAL_WATCHER_AZURE_CLIENT_ID, LEGAL_WATCHER_AZURE_CLIENT_SECRET and ' +
+        'LEGAL_WATCHER_AZURE_SCOPE',
     );
   }
   const authorityHost = (process.env.LEGAL_WATCHER_AZURE_AUTHORITY_HOST ?? '').trim();
@@ -156,7 +173,8 @@ function resolveClientSecretTokenConfig(): AppOnlyTokenConfig {
  * selector. The Adminiculum API resource is derived from a terminal
  * `/.default` scope or given explicitly; Graph/ARM and non-api resources are
  * rejected. The runtime identity endpoint/header must already be injected
- * (Container Apps Job); otherwise configuration fails before any delivery.
+ * (Container Apps Job); otherwise configuration fails before any backend
+ * request.
  */
 function resolveManagedIdentityTokenConfig(): ManagedIdentityTokenConfig {
   const explicitResource = (process.env.LEGAL_WATCHER_AZURE_RESOURCE ?? '').trim();
@@ -198,9 +216,11 @@ function resolveManagedIdentityTokenConfig(): ManagedIdentityTokenConfig {
 }
 
 export function resolveConfig(args: CliArgs): WatcherConfig {
-  const manifestPath =
+  const manifestMode = parseManifestMode(process.env.LEGAL_WATCHER_MANIFEST_MODE ?? '');
+  const manifestPathRaw =
     args.manifestPath ?? process.env.LEGAL_WATCHER_MANIFEST ?? '';
-  if (!manifestPath) {
+  const manifestPath: string | null = manifestPathRaw === '' ? null : manifestPathRaw;
+  if (manifestMode === 'FILE' && manifestPath === null) {
     throw new ConfigError(
       'missing --manifest <path> (or LEGAL_WATCHER_MANIFEST environment variable)',
     );
@@ -209,11 +229,14 @@ export function resolveConfig(args: CliArgs): WatcherConfig {
     ? 'DELIVER'
     : parseDeliveryMode(process.env.LEGAL_WATCHER_DELIVERY_MODE ?? 'DRY_RUN');
   const backendEndpoint = resolveBackendEndpoint();
+  if (deliveryMode === 'DELIVER' && backendEndpoint === null) {
+    throw new ConfigError('DELIVER mode requires LEGAL_WATCHER_BACKEND_ENDPOINT');
+  }
+  if (manifestMode === 'BACKEND' && backendEndpoint === null) {
+    throw new ConfigError('BACKEND manifest mode requires LEGAL_WATCHER_BACKEND_ENDPOINT');
+  }
   let tokenConfig: WatcherTokenConfig | null = null;
-  if (deliveryMode === 'DELIVER') {
-    if (backendEndpoint === null) {
-      throw new ConfigError('DELIVER mode requires LEGAL_WATCHER_BACKEND_ENDPOINT');
-    }
+  if (deliveryMode === 'DELIVER' || manifestMode === 'BACKEND') {
     const authMode = parseAzureAuthMode(process.env.LEGAL_WATCHER_AZURE_AUTH_MODE ?? '');
     tokenConfig =
       authMode === 'MANAGED_IDENTITY'
@@ -221,6 +244,7 @@ export function resolveConfig(args: CliArgs): WatcherConfig {
         : resolveClientSecretTokenConfig();
   }
   return {
+    manifestMode,
     manifestPath,
     stateDir: args.stateDir ?? process.env.LEGAL_WATCHER_STATE_DIR ?? 'state',
     reportOutPath:

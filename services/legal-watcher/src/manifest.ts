@@ -1,19 +1,35 @@
 /**
- * Exported manifest snapshot (schema v1) loader + CELEX demand extraction.
+ * Manifest (schema v1) acquisition + CELEX demand extraction.
  *
- * W1 consumes an EXPORTED snapshot of the Adminiculum monitoring manifest
- * (GET /api/v1/compliance-intelligence/monitoring-manifest, schema version 1).
- * The watcher NEVER calls the production endpoint (workforce-authenticated)
- * and never needs customer/case/document identity.
+ * FILE mode (default) consumes an EXPORTED snapshot of the Adminiculum
+ * monitoring manifest and never calls any backend endpoint.
+ *
+ * BACKEND mode (explicit, `LEGAL_WATCHER_MANIFEST_MODE=BACKEND`) reads the
+ * dedicated app-only endpoint
+ * GET /api/v1/compliance-intelligence/watcher-monitoring-manifest with the
+ * same app-only Bearer token used by W2 delivery. The response is the existing
+ * monitoring manifest schema v1 with NO wrapper; there is no local-file
+ * fallback. Neither mode needs customer/case/document identity.
  *
  * PRIVACY GUARD: only the known manifest fields are read. Any unexpected
  * field — top level or per source — is dropped, counted by name, and never
  * propagated into watcher state or output.
  */
 import * as fs from 'node:fs';
+import {
+  boundedHttpGet,
+  HttpError,
+  type BoundedHttpOptions,
+  type HttpGetFn,
+} from './http';
+import { TokenProviderError, type AccessTokenProvider } from './tokenProvider';
 import type { ManifestCounts } from './types';
 
 export const MANIFEST_SCHEMA_VERSION = 1;
+
+/** Locked remote manifest contract path (app-only GET, schema v1, no wrapper). */
+export const REMOTE_MANIFEST_ENDPOINT_PATH =
+  '/api/v1/compliance-intelligence/watcher-monitoring-manifest';
 
 /** Same strict C3A token shape the backend uses (legalSourceBinding.ts). */
 export const CELEX_TOKEN = /^3[0-9]{4}[A-Z][0-9]{4}$/;
@@ -154,4 +170,59 @@ export function loadManifestFile(path: string): ValidatedManifest {
     throw new ManifestError(`cannot read manifest file: ${path}`);
   }
   return validateManifest(parseManifestJson(text));
+}
+
+export interface RemoteManifestOptions {
+  /** Backend base URL; the fixed manifest path is appended. */
+  endpoint: string;
+  tokenProvider: AccessTokenProvider;
+  get: HttpGetFn;
+  http: BoundedHttpOptions;
+}
+
+/**
+ * BACKEND manifest acquisition (explicit manifest mode only).
+ *
+ * GET <endpoint>/api/v1/compliance-intelligence/watcher-monitoring-manifest
+ * with `Authorization: Bearer <app-only token>` and no request body. The
+ * response flows through the same parseManifestJson/validateManifest pipeline
+ * as a FILE snapshot; every failure path throws ManifestError and there is no
+ * local-file fallback.
+ */
+export async function loadManifestFromBackend(
+  options: RemoteManifestOptions,
+): Promise<ValidatedManifest> {
+  const endpoint = options.endpoint.replace(/\/+$/, '');
+  const url = `${endpoint}${REMOTE_MANIFEST_ENDPOINT_PATH}`;
+  let token: string;
+  try {
+    token = await options.tokenProvider.getAccessToken();
+  } catch (err) {
+    const code = err instanceof TokenProviderError ? err.code : 'TOKEN_ERROR';
+    throw new ManifestError(`remote manifest token request failed (${code})`);
+  }
+  if (typeof token !== 'string' || token === '') {
+    throw new ManifestError('remote manifest token request returned an empty token');
+  }
+  let response: { status: number; text: string };
+  try {
+    response = await boundedHttpGet(options.http, options.get, url, {
+      authorization: `Bearer ${token}`,
+      accept: 'application/json',
+    });
+  } catch (err) {
+    if (err instanceof HttpError) {
+      const status = err.statusCode === undefined ? '' : ` HTTP ${err.statusCode}`;
+      throw new ManifestError(
+        `remote manifest fetch failed (${err.code}${status}): ${err.message}`,
+      );
+    }
+    throw new ManifestError(
+      `remote manifest fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+  if (response.status !== 200) {
+    throw new ManifestError(`remote manifest fetch failed: unexpected HTTP ${response.status}`);
+  }
+  return validateManifest(parseManifestJson(response.text));
 }

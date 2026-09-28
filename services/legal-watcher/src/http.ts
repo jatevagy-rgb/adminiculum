@@ -62,6 +62,13 @@ export type HttpPostFn = (
   signal: AbortSignal,
 ) => Promise<HttpStreamResponse>;
 
+/** Header-explicit bounded GET boundary (remote manifest retrieval). */
+export type HttpGetFn = (
+  url: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+) => Promise<HttpStreamResponse>;
+
 const RETRYABLE_STATUS = new Set([429, 502, 503, 504]);
 
 export async function nodeFetchPost(
@@ -97,6 +104,24 @@ export async function nodeFetchWithHeaders(
     body,
     signal,
   });
+  return wrapFetchResponse(response);
+}
+
+/** GET equivalent of nodeFetchWithHeaders. Never sends a request body. */
+export async function nodeFetchGetWithHeaders(
+  url: string,
+  headers: Record<string, string>,
+  signal: AbortSignal,
+): Promise<HttpStreamResponse> {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers,
+    signal,
+  });
+  return wrapFetchResponse(response);
+}
+
+function wrapFetchResponse(response: Response): HttpStreamResponse {
   const contentLengthRaw = response.headers.get('content-length');
   const contentLength =
     contentLengthRaw !== null && /^\d+$/.test(contentLengthRaw)
@@ -148,15 +173,14 @@ function defaultRetryableStatus(status: number): boolean {
 }
 
 /**
- * One logical POST with bounded retries. Returns { status, text } on success.
- * Every failure path throws HttpError with a stable code.
+ * One logical bounded request with bounded retries. Returns { status, text }
+ * on success. Every failure path throws HttpError with a stable code.
  */
-export async function boundedHttpPost(
+async function runBoundedHttp(
   options: BoundedHttpOptions,
-  post: HttpPostFn,
   url: string,
-  body: string,
-  sleep: (ms: number) => Promise<void> = defaultSleep,
+  send: (signal: AbortSignal) => Promise<HttpStreamResponse>,
+  sleep: (ms: number) => Promise<void>,
 ): Promise<{ status: number; text: string }> {
   const deadline = Date.now() + options.deadlineMs;
   const attempts = options.retries + 1;
@@ -173,7 +197,7 @@ export async function boundedHttpPost(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), Math.min(options.timeoutMs, remaining));
     try {
-      const response = await post(url, body, controller.signal);
+      const response = await send(controller.signal);
       let text: string;
       try {
         text = await response.readText(options.maxBytes);
@@ -227,4 +251,33 @@ export async function boundedHttpPost(
     'RETRY_EXHAUSTED',
     lastError ? `HTTP attempts exhausted (last: ${lastError.code})` : 'HTTP attempts exhausted',
   );
+}
+
+/**
+ * One logical POST with bounded retries. Returns { status, text } on success.
+ * Every failure path throws HttpError with a stable code.
+ */
+export async function boundedHttpPost(
+  options: BoundedHttpOptions,
+  post: HttpPostFn,
+  url: string,
+  body: string,
+  sleep: (ms: number) => Promise<void> = defaultSleep,
+): Promise<{ status: number; text: string }> {
+  return runBoundedHttp(options, url, (signal) => post(url, body, signal), sleep);
+}
+
+/**
+ * One logical GET with the identical bounded timeout/size/retry policy. The
+ * shared default retry set (429, 502, 503, 504) applies; 400, 401, 403 and 404
+ * are never retried.
+ */
+export async function boundedHttpGet(
+  options: BoundedHttpOptions,
+  get: HttpGetFn,
+  url: string,
+  headers: Record<string, string>,
+  sleep: (ms: number) => Promise<void> = defaultSleep,
+): Promise<{ status: number; text: string }> {
+  return runBoundedHttp(options, url, (signal) => get(url, headers, signal), sleep);
 }
