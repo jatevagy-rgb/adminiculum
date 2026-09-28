@@ -31,6 +31,7 @@ import {
   type DashboardPrimaryActionIcon,
 } from "@/lib/dashboardPresentation";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
+import { listTaskReviewQueue } from "@/lib/taskLifecycleApi";
 import {
   deriveDashboardAvailability,
   getDashboardGlobalFailure,
@@ -39,6 +40,7 @@ import {
   type DashboardAvailability,
 } from "@/lib/dashboardLoadState";
 import {
+  reviewQueueSummaryCount,
   WORKLOAD_SUMMARY_CARDS,
   workloadSummaryCaption,
   workloadSummaryPanelClass,
@@ -76,7 +78,6 @@ type FocusItem = {
 };
 
 
-const completedStatuses = new Set(["COMPLETED", "DONE", "APPROVED", "FINALIZED", "ARCHIVED", "CANCELLED"]);
 // Restored verbatim from the legacy "Napi munka összefoglaló" summary cards (DashboardFocused @ a948839).
 const closedCaseStatuses = new Set(["CLOSED", "COMPLETED", "ARCHIVED", "CANCELLED"]);
 
@@ -115,15 +116,6 @@ function formatDeadlineTime(item: WorkflowDeadlineItem) {
   if (item.allDay) return "Egész nap";
   const date = new Date(item.dueAt);
   return Number.isNaN(date.getTime()) ? "Nincs időadat" : date.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
-}
-
-function isReviewTask(task: TaskItem) {
-  const status = String(task.status || "").toUpperCase();
-  return ["SUBMITTED", "REVIEW_NEEDED", "IN_REVIEW"].includes(status) || /review|ellenőrz/i.test(task.title);
-}
-
-function isOpenTask(task: TaskItem) {
-  return !completedStatuses.has(String(task.status || "").toUpperCase());
 }
 
 function taskUrgency(task: Pick<TaskItem, "dueDate">) {
@@ -356,13 +348,13 @@ function DashboardAttentionWorkloadBlock({
 }
 
 export function DashboardFocused() {
-  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [communications, setCommunications] = useState<CommunicationItem[]>([]);
   const [agenda, setAgenda] = useState<WorkflowAgendaResponse | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [operational, setOperational] = useState<DashboardOperationalOverview | null>(null);
+  const [reviewQueueCount, setReviewQueueCount] = useState<number | null>(null);
   const [news, setNews] = useState<NewsArticle[]>([]);
   const [availability, setAvailability] = useState<DashboardAvailability>(UNAVAILABLE);
   const [loading, setLoading] = useState(true);
@@ -374,8 +366,9 @@ export function DashboardFocused() {
     setLoading(true);
     setError(false);
     setAvailability(UNAVAILABLE);
+    setReviewQueueCount(null);
     try {
-      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult, operationalResult] = await Promise.all([
+      const [taskResult, caseResult, clientResult, communicationResult, agendaResult, statsResult, operationalResult, reviewQueueResult] = await Promise.all([
         getMyTasks().catch(() => null),
         getCases(1, 200).catch(() => null),
         getClients().catch(() => null),
@@ -383,9 +376,10 @@ export function DashboardFocused() {
         getWorkflowAgenda({ scope: "MY_WORK", status: "OPEN", limit: 50 }).catch(() => null),
         getDashboardStats().catch(() => null),
         getDashboardOperationalOverview().catch(() => null),
+        listTaskReviewQueue().catch(() => null),
       ]);
 
-      setTasks(taskResult || []);
+      setReviewQueueCount(reviewQueueSummaryCount(reviewQueueResult));
       setCases(caseResult?.data || []);
       setClients(clientResult?.data || []);
       setCommunications(communicationResult?.communications || []);
@@ -412,11 +406,6 @@ export function DashboardFocused() {
       .catch(() => setNews([]));
   }, []);
 
-  const openTasks = useMemo(
-    () => tasks.filter(isOpenTask).sort((left, right) => taskUrgency(left) - taskUrgency(right)),
-    [tasks],
-  );
-  const reviewTasks = useMemo(() => openTasks.filter(isReviewTask), [openTasks]);
   const deadlines = useMemo<WorkflowDeadlineItem[]>(
     () => (agenda?.days || []).flatMap((day) => day.items).filter((item) => item.status === "OPEN"),
     [agenda],
@@ -457,15 +446,11 @@ export function DashboardFocused() {
     ? cases.filter((item) => !closedCaseStatuses.has(String(item.status || "").toUpperCase())).length
     : null;
   const summaryDeadlineCount = availability.agenda ? deadlines.length : null;
-  // Legacy access hardened with optional chaining on the nested field so a
-  // malformed (non-conforming 200) source degrades to a count rather than
-  // crashing — required to keep the validated partial-load contract green.
-  // Value is identical to the legacy for well-formed data.
-  const summaryReviewCount = availability.stats
-    ? stats?.stats?.inReview ?? 0
-    : availability.tasks
-      ? reviewTasks.length
-      : null;
+  // "Review tételek" tile: the canonical review-queue length — the same
+  // population the /reviews destination renders (listTaskReviewQueue →
+  // GET /tasks/review-queue). Deliberately not a case-status count and not
+  // derived from task titles; a failed source stays null ("Most nem elérhető").
+  const summaryReviewCount = reviewQueueCount;
   const summaryTodayTaskCount = availability.agenda ? agenda?.summary?.today ?? 0 : null;
   const workloadSummaryValues: Record<WorkloadSummaryValueKey, number | null> = {
     openCases: summaryOpenCaseCount,

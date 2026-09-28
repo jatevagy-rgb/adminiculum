@@ -4,10 +4,14 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { clientWorkspaceApi, type CompanyDataRoom } from "@/lib/clientWorkspaceApi";
+import { growApi } from "@/lib/growApi";
 import { companyFactTypeLabel, factVerificationLabel } from "@/lib/clientCompanyApi";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
 import { ClientCompanyOperationsLegacy } from "@/components/clients/ClientCompanyOperationsLegacy";
 import { DemoContentBanner } from "@/components/client-portal/PortalPresentationPrimitives";
+import { BusinessSystemPanel, type SystemEditValue } from "@/components/clients/company-operations/BusinessSystemPanel";
+import { BusinessProcessPanel, type ProcessEditValue } from "@/components/clients/company-operations/BusinessProcessPanel";
+import { BusinessProcessStepsPanel } from "@/components/clients/company-operations/BusinessProcessStepsPanel";
 
 export type WorkspaceSection =
   | "overview"
@@ -377,6 +381,65 @@ function CountCard({
   return content;
 }
 
+/**
+ * Restrained per-process capture action for the existing canonical snapshot
+ * endpoint. The server stays authoritative for the snapshot structure, metric
+ * computation, measured values and timestamps — the frontend only sends the
+ * already-known client and process ids and re-reads the data room afterwards.
+ */
+function ProcessSnapshotCapture({
+  clientId,
+  processId,
+  onCaptured,
+}: {
+  clientId: string;
+  processId: string;
+  onCaptured: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
+
+  const capture = async () => {
+    setBusy(true);
+    setMessage(null);
+    setCaptureError(null);
+    try {
+      await growApi.captureProcessObservation(clientId, processId);
+      setMessage("Mérés rögzítve.");
+      onCaptured();
+    } catch {
+      setCaptureError("A mérés rögzítése nem sikerült.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button
+        type="button"
+        onClick={() => void capture()}
+        disabled={busy}
+        data-testid={`capture-process-snapshot-${processId}`}
+        className="rounded-xl border border-[var(--adm-green-800)] bg-white px-3.5 py-1.5 text-xs font-semibold text-[#014337] shadow-xs transition-colors hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[#014337]"
+      >
+        {busy ? "Rögzítés…" : "Mérés rögzítése"}
+      </button>
+      {message ? (
+        <span className="text-xs font-semibold text-emerald-800" role="status">
+          {message}
+        </span>
+      ) : null}
+      {captureError ? (
+        <span className="text-xs font-medium text-red-700" role="alert">
+          {captureError}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export function ClientCompanyWorkspace({
   clientId,
   clientName,
@@ -389,6 +452,11 @@ export function ClientCompanyWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("overview");
   const router = useRouter();
+  const [systemPanelValue, setSystemPanelValue] = useState<SystemEditValue | null>(null);
+  const [systemPanelOpen, setSystemPanelOpen] = useState(false);
+  const [processPanelValue, setProcessPanelValue] = useState<ProcessEditValue | null>(null);
+  const [processPanelOpen, setProcessPanelOpen] = useState(false);
+  const [stepsTarget, setStepsTarget] = useState<{ id: string; name: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -405,6 +473,25 @@ export function ClientCompanyWorkspace({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Single authoritative soft re-read of the read model used by both feature
+  // paths — measurement capture (refreshDataRoom) and editor mutations
+  // (refreshWorkspace) — so neither flow duplicates a competing re-read. The
+  // mutation re-read keeps newly created/edited processes, steps and systems
+  // visible without a full loading flash or dropping user-entered form state;
+  // the capture re-read refreshes the latest measured snapshot while keeping the
+  // confirmation message rendered by the process card.
+  const refreshWorkspace = useCallback(async () => {
+    try {
+      setRoom(await clientWorkspaceApi.getDataRoom(clientId));
+    } catch {
+      // Keep already-rendered data on a transient re-read failure.
+    }
+  }, [clientId]);
+
+  // The #381 capture path named this same soft re-read refreshDataRoom; keep
+  // that name as an alias of the single implementation above.
+  const refreshDataRoom = refreshWorkspace;
 
   // Synchronize URL query parameter (?section=) with active section & support browser back/forward.
   // Cross-domain sections that now live in canonical modules redirect (replace) instead of rendering.
@@ -995,6 +1082,22 @@ export function ClientCompanyWorkspace({
 
           {activeSection === "processes" ? (
             <Panel id="processes" title="Folyamatok">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-stone-500">
+                  Rögzített folyamatok: <strong className="text-stone-800">{room.processes.length}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setProcessPanelValue(null);
+                    setProcessPanelOpen(true);
+                  }}
+                  data-testid="add-process"
+                  className="adm-link-button px-3 py-1.5 text-xs font-semibold"
+                >
+                  + Folyamat rögzítése
+                </button>
+              </div>
               <div className="space-y-4">
                 {room.processes.map((process) => (
                   <article
@@ -1010,9 +1113,38 @@ export function ClientCompanyWorkspace({
                           <span className="font-medium text-stone-700">{humanStatus(process.status)}</span>
                         </p>
                       </div>
-                      <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-stone-600">
-                        Becsült értékek
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setStepsTarget({ id: process.id, name: process.name })}
+                          data-testid={`manage-steps-${process.id}`}
+                          className="adm-link-button px-2.5 py-1 text-xs"
+                        >
+                          Lépések
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setProcessPanelValue({
+                              id: process.id,
+                              name: process.name,
+                              category: process.category,
+                              description: process.description,
+                              criticality: process.criticality,
+                              frequency: process.frequency,
+                              ownerPersonId: process.owner?.id ?? null,
+                            });
+                            setProcessPanelOpen(true);
+                          }}
+                          data-testid={`edit-process-${process.id}`}
+                          className="adm-link-button px-2.5 py-1 text-xs"
+                        >
+                          Szerkesztés
+                        </button>
+                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider text-stone-600">
+                          Becsült értékek
+                        </span>
+                      </div>
                     </div>
 
                     {process.description ? (
@@ -1096,6 +1228,17 @@ export function ClientCompanyWorkspace({
                     ) : (
                       <p className="mt-3 text-xs text-stone-500">Ehhez a folyamathoz nincs mért pillanatkép.</p>
                     )}
+
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3">
+                      <ProcessSnapshotCapture
+                        clientId={clientId}
+                        processId={process.id}
+                        onCaptured={() => void refreshDataRoom()}
+                      />
+                      <p className="text-[11px] text-stone-500">
+                        A mérés a rögzített folyamatlépésekből determinisztikusan számított pillanatképet rögzít.
+                      </p>
+                    </div>
                   </article>
                 ))}
                 {!room.processes.length ? (
@@ -1107,6 +1250,22 @@ export function ClientCompanyWorkspace({
 
           {activeSection === "systems" ? (
             <Panel id="systems" title="Rendszerek">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-stone-500">
+                  Nyilvántartott rendszerek: <strong className="text-stone-800">{room.systems.length}</strong>
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSystemPanelValue(null);
+                    setSystemPanelOpen(true);
+                  }}
+                  data-testid="add-system"
+                  className="adm-link-button px-3 py-1.5 text-xs font-semibold"
+                >
+                  + Rendszer rögzítése
+                </button>
+              </div>
               <div className="grid gap-4 md:grid-cols-2">
                 {room.systems.map((system) => (
                   <article
@@ -1115,9 +1274,28 @@ export function ClientCompanyWorkspace({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <h3 className="font-semibold text-stone-900">{system.name}</h3>
-                      <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[10px] font-semibold text-stone-600 uppercase">
-                        {humanStatus(system.status)}
-                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[10px] font-semibold text-stone-600 uppercase">
+                          {humanStatus(system.status)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSystemPanelValue({
+                              id: system.id,
+                              name: system.name,
+                              category: system.category,
+                              purpose: system.purpose,
+                              ownerPersonId: system.owner?.id ?? null,
+                            });
+                            setSystemPanelOpen(true);
+                          }}
+                          data-testid={`edit-system-${system.id}`}
+                          className="adm-link-button px-2.5 py-1 text-xs"
+                        >
+                          Szerkesztés
+                        </button>
+                      </div>
                     </div>
                     <p className="mt-1 text-xs text-stone-500">Kategória: {system.category}</p>
                     {system.vendor || system.purpose ? (
@@ -1366,6 +1544,46 @@ export function ClientCompanyWorkspace({
             <ClientCompanyOperationsLegacy clientId={clientId} clientName={clientName} />
           </div>
         </section>
+      ) : null}
+
+      {systemPanelOpen ? (
+        <BusinessSystemPanel
+          clientId={clientId}
+          system={systemPanelValue}
+          people={room?.organization.people ?? []}
+          onSaved={() => {
+            setSystemPanelOpen(false);
+            void refreshWorkspace();
+          }}
+          onClose={() => setSystemPanelOpen(false)}
+        />
+      ) : null}
+
+      {processPanelOpen ? (
+        <BusinessProcessPanel
+          clientId={clientId}
+          process={processPanelValue}
+          people={room?.organization.people ?? []}
+          onSaved={(created) => {
+            setProcessPanelOpen(false);
+            if (created) {
+              setStepsTarget({ id: created.id, name: created.name });
+            }
+            void refreshWorkspace();
+          }}
+          onClose={() => setProcessPanelOpen(false)}
+        />
+      ) : null}
+
+      {stepsTarget ? (
+        <BusinessProcessStepsPanel
+          processId={stepsTarget.id}
+          processName={stepsTarget.name}
+          systems={room?.systems ?? []}
+          people={room?.organization.people ?? []}
+          onSaved={() => void refreshWorkspace()}
+          onClose={() => setStepsTarget(null)}
+        />
       ) : null}
     </div>
   );

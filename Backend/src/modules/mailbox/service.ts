@@ -1,5 +1,6 @@
 import { Prisma, type MailboxConnectionStatus } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
+import { applySafeConversationLinkage, type ConversationLinkageDb, type ImportedMessageRef } from '../communications/outlookImport.service';
 import { sanitizeEmailHtml, toPlainText } from './htmlSanitizer';
 import { getMailboxProvider, type MailboxMessage } from './provider';
 import { getSecretStore, type SecretStore } from './secretStore';
@@ -54,7 +55,22 @@ function recipients(message: MailboxMessage) {
     ...(message.bcc ?? []).map((x) => ({ ...x, kind: 'BCC' })),
   ];
 }
-async function persistMessage(connection: Awaited<ReturnType<typeof ownedMailbox>>, message: MailboxMessage, createdById: string, context?: { caseId: string | null; clientId: string | null } | null) {
+async function persistMessage(connection: Awaited<ReturnType<typeof ownedMailbox>>, message: MailboxMessage, createdById: string, context?: { caseId: string | null; clientId: string | null } | null): Promise<{ id: string; providerConversationId: string | null }> {
+  // Cross-channel identity: the RFC Internet Message-ID. If the app-only channel
+  // already imported this physical message (its externalMessageId holds the RFC
+  // id), adopt that canonical row instead of creating a duplicate. Rows owned by
+  // per-user mailbox connections keep their per-connection copies (shared
+  // mailbox semantics), so only channel-agnostic rows (mailboxConnectionId null)
+  // are adopted.
+  if (message.internetMessageId) {
+    const canonical = await prisma.communication.findFirst({
+      where: { OR: [{ internetMessageId: message.internetMessageId }, { externalMessageId: message.internetMessageId }] },
+      select: { id: true, providerConversationId: true, mailboxConnectionId: true },
+    });
+    if (canonical && canonical.mailboxConnectionId === null) {
+      return { id: canonical.id, providerConversationId: canonical.providerConversationId };
+    }
+  }
   const html = message.bodyHtml ? sanitizeEmailHtml(message.bodyHtml) : null;
   const text = message.bodyText || toPlainText(html);
   const row = await prisma.communication.upsert({
@@ -96,7 +112,24 @@ export async function syncMailbox(id: string, ownerUserId: string, store: Secret
   await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_STARTED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: 'SYNCING' });
   try {
     const result = await runWithRefresh(connection, store, (secret) => getMailboxProvider(connection.provider).listMessagesSinceCursor({ secret, mailboxAddress: connection.mailboxAddress, cursor: connection.syncCursor, maxMessages: 250 }));
-    for (const message of result.messages) await persistMessage(connection, message, ownerUserId);
+    const linkageRefs: ImportedMessageRef[] = [];
+    for (const message of result.messages) {
+      const row = await persistMessage(connection, message, ownerUserId);
+      if (row?.providerConversationId) {
+        linkageRefs.push({ communicationId: row.id, providerConversationId: row.providerConversationId });
+      }
+    }
+    // Reuse the canonical safe conversation linkage (single-distinct-case rule,
+    // providerConversationId only) for the conversations touched by this batch.
+    // Best-effort enrichment: a linkage failure must not fail the already
+    // persisted sync batch; the next sync retries it.
+    if (linkageRefs.length > 0) {
+      try {
+        await applySafeConversationLinkage(prisma as unknown as ConversationLinkageDb, linkageRefs);
+      } catch {
+        // Intentionally swallowed — see comment above.
+      }
+    }
     const updated = await prisma.communicationMailboxConnection.update({ where: { id }, data: { status: connection.sendCapability ? 'CONNECTED' : 'CONNECTED_READ_ONLY', syncCursor: result.nextCursor, syncCursorUpdatedAt: new Date(), lastSyncedAt: new Date(), lastSyncStatus: 'SUCCEEDED' } });
     await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_SUCCEEDED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: updated.status });
     return updated;

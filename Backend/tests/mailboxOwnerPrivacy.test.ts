@@ -119,6 +119,66 @@ function applyOrderBy(rows: Row[], orderBy: any): Row[] {
   });
 }
 
+/**
+ * Emulates the effective-time raw SQL list query (master #414) against the
+ * in-memory rows, applying the identical mailbox-privacy and role semantics
+ * the route embeds in the generated SQL. The generated Sql object is parsed:
+ * parameterized values carry the role userId, the canonical privacy email,
+ * the owned connection / accessible case id lists, and LIMIT/OFFSET.
+ */
+function applyRawListQuery(query: any): Row[] {
+  const strings: string[] = Array.isArray(query?.strings) ? query.strings : [];
+  const values: unknown[] = Array.isArray(query?.values) ? query.values : [];
+  const text = strings
+    .map((segment: string, index: number) => `${segment}${index < values.length ? `\u0000${index}\u0000` : ''}`)
+    .join('');
+
+  const readIdList = (pattern: RegExp): string[] => {
+    const match = text.match(pattern);
+    if (!match) return [];
+    return match[1]
+      .split(',')
+      .map((token) => token.trim())
+      .filter((token) => /^\u0000\d+\u0000$/.test(token))
+      .map((token) => String(values[Number(token.replace(/\u0000/g, ''))]));
+  };
+  const ownedConnectionIds = readIdList(/"mailboxConnectionId" IN \(([^)]*)\)/);
+  const accessibleCaseIds = readIdList(/"caseId" IN \(([^)]*)\)/);
+
+  const readParam = (marker: string): unknown | null => {
+    const index = text.indexOf(marker);
+    if (index < 0) return null;
+    const match = text.slice(index + marker.length).match(/^\u0000(\d+)\u0000/);
+    return match ? values[Number(match[1])] : null;
+  };
+  const userIdParam = readParam('"createdById" = ');
+  const canonicalEmailParam = readParam('LOWER("mailboxAddress") = ');
+  const takeParam = readParam('LIMIT ');
+  const skipParam = readParam('::int OFFSET ');
+  const take = takeParam == null ? 20 : Number(takeParam);
+  const skip = skipParam == null ? 0 : Number(skipParam);
+
+  const filtered = state.rows.filter((row) => {
+    const passesPrivacy =
+      (row.mailboxConnectionId != null && ownedConnectionIds.includes(row.mailboxConnectionId)) ||
+      (row.mailboxConnectionId == null &&
+        row.source === 'OUTLOOK' &&
+        canonicalEmailParam != null &&
+        normalize(row.mailboxAddress) === normalize(String(canonicalEmailParam))) ||
+      (row.mailboxConnectionId == null && row.source == null) ||
+      (row.mailboxConnectionId == null && row.source === 'MANUAL');
+    if (!passesPrivacy) return false;
+    if (userIdParam != null) {
+      const rolePass =
+        (row.caseId == null && row.createdById === String(userIdParam)) ||
+        (row.caseId != null && accessibleCaseIds.includes(row.caseId));
+      if (!rolePass) return false;
+    }
+    return true;
+  });
+  return filtered.slice(skip, skip + take);
+}
+
 const state: { rows: Row[]; userEmail: string; connectionIds: string[] } = {
   rows: [],
   userEmail: 'user-a@firm.example',
@@ -126,6 +186,7 @@ const state: { rows: Row[]; userEmail: string; connectionIds: string[] } = {
 };
 
 const prismaMock: any = {
+  $queryRaw: jest.fn(async (query: any) => applyRawListQuery(query)),
   user: {
     findUnique: jest.fn(async () => ({
       id: 'user-a',

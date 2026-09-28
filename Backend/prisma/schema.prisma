@@ -222,6 +222,8 @@ model Client {
   discoveryRuns             DiscoveryRun[]
   observations              Observation[]
 
+  externalOpportunities     ExternalOpportunity[]
+
   processObservationSnapshots ProcessObservationSnapshot[]
 
   researchEvidence         ResearchEvidence[]
@@ -5652,7 +5654,8 @@ model LegalSource {
   createdAt         DateTime                  @default(now())
   updatedAt         DateTime                  @updatedAt
 
-  versions LegalSourceVersion[]
+  versions     LegalSourceVersion[]
+  observations LegalSourceObservation[]
 
   @@index([jurisdictionCode, instrumentType])
   @@index([status])
@@ -5682,6 +5685,7 @@ model LegalSourceVersion {
   captures  LegalSourceCapture[]
   citations RequirementCitation[]
   clauseAnchors ComplianceDocumentClauseAnchor[]
+  observations LegalSourceObservation[]
 
   @@unique([legalSourceId, legalVersionKey])
   @@unique([id, legalSourceId])
@@ -5706,10 +5710,67 @@ model LegalSourceCapture {
   selectedForReviewAt  DateTime?
   createdAt            DateTime                          @default(now())
 
+  observations LegalSourceObservation[]
+
   @@unique([legalSourceVersionId, sourceSha256])
   @@index([sourceSha256])
   @@index([legalSourceVersionId, captureStatus])
   @@map("legal_source_captures")
+}
+
+/// W2 — machine-ingested watcher legal-source observation (NON-TENANT, INTERNAL).
+///
+/// Deliberately NOT the client-scoped Observation model: it carries no
+/// clientId/caseId/documentId and is written only by the dedicated machine
+/// endpoint using the narrow watcher auth. An observation is durable provenance
+/// for ONE source-side legal event: `sourceIdentifier` is the watched/base act,
+/// `relatedIdentifier` is the source-side object that caused the event (amending
+/// act or consolidated version CELEX).
+///
+/// V1 kinds:
+///  - AMENDMENT_PUBLISHED: observation only; no version, no capture.
+///  - CONSOLIDATED_VERSION_AVAILABLE: observation + optional CANDIDATE /
+///    UNREVIEWED LegalSourceVersion (legalVersionKey = relatedIdentifier) and an
+///    optional LegalSourceCapture keyed by (version, sourceSha256).
+///
+/// Idempotency: idempotencyKey is unique; payloadDigest is a SHA-256 over the
+/// canonicalized semantic payload. Same key + same digest replays with zero new
+/// writes; same key + different digest is rejected and never overwritten.
+enum LegalSourceObservationKind {
+  AMENDMENT_PUBLISHED
+  CONSOLIDATED_VERSION_AVAILABLE
+}
+
+model LegalSourceObservation {
+  id                   String                    @id @default(uuid())
+  schemaVersion        Int                       @default(1)
+  idempotencyKey       String                    @unique @db.VarChar(255)
+  payloadDigest        String                    @db.VarChar(64)
+  kind                 LegalSourceObservationKind
+  source               String
+  identifierFamily     String
+  sourceIdentifier     String
+  relatedIdentifier    String
+  legalSourceId        String
+  legalSource          LegalSource               @relation(fields: [legalSourceId], references: [id], onDelete: Restrict)
+  effectiveFrom        DateTime?
+  sourceUri            String
+  evidenceSha256       String                    @db.VarChar(64)
+  capturedAt           DateTime
+  queryProvenance      Json?
+  warnings             Json?
+  legalSourceVersionId String?
+  legalSourceVersion   LegalSourceVersion?       @relation(fields: [legalSourceVersionId], references: [id], onDelete: Restrict)
+  legalSourceCaptureId String?
+  legalSourceCapture   LegalSourceCapture?       @relation(fields: [legalSourceCaptureId], references: [id], onDelete: Restrict)
+  ingestedAt           DateTime                  @default(now())
+
+  @@index([legalSourceId, kind])
+  @@index([sourceIdentifier, kind])
+  @@index([legalSourceVersionId])
+  @@index([legalSourceCaptureId])
+  @@index([capturedAt])
+  @@map("legal_source_observations")
 }
 
 enum RequirementStatus {
@@ -6187,6 +6248,8 @@ model ExternalSourceConnection {
   runs         DiscoveryRun[]
   observations Observation[]
 
+  externalOpportunities ExternalOpportunity[]
+
   @@unique([id, clientId])
   @@index([clientId, status])
   @@map("external_source_connections")
@@ -6227,11 +6290,53 @@ model Observation {
   createdAt       DateTime                 @default(now())
   evidenceRecords EvidenceRecord[]
 
+  currentForExternalOpportunities ExternalOpportunity[] @relation("ExternalOpportunityCurrentObservation")
+
   @@unique([id, clientId])
   @@unique([clientId, connectionId, idempotencyKey])
   @@index([clientId, observationType])
   @@index([clientId, connectionId, discoveryRunId])
   @@map("observations")
+}
+
+/// GWO-3A — company-scoped current projection of an external opportunity.
+/// One row per (client, sourceType, businessKey, scopeKey). Identity never
+/// includes title/language/revision/observedAt. Immutable history stays in
+/// Observation; `currentObservationId` points at the current immutable row.
+/// No evaluation, criterion, saved/watch, handoff or notification fields.
+model ExternalOpportunity {
+  id                     String                   @id @default(uuid())
+  clientId               String
+  client                 Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceType             String
+  connectionId           String
+  connection             ExternalSourceConnection @relation(fields: [connectionId, clientId], references: [id, clientId], onDelete: Restrict)
+  businessKey            String
+  scopeKey               String
+  kind                   String
+  title                  String
+  sourceUrl              String
+  status                 String
+  publicationAt          DateTime?
+  openingAt              DateTime?
+  deadlineAt             DateTime?
+  sourceMetadata         Json                     @default("{}")
+  lastRevisionIdentifier String?
+  lastContentHash        String                   @db.VarChar(64)
+  schemaVersion          Int
+  currentObservationId   String
+  currentObservation     Observation              @relation("ExternalOpportunityCurrentObservation", fields: [currentObservationId, clientId], references: [id, clientId], onDelete: Restrict)
+  lastSeenAt             DateTime
+  revision               Int                      @default(1)
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+
+  @@unique([id, clientId])
+  @@unique([clientId, sourceType, businessKey, scopeKey])
+  @@index([clientId, status])
+  @@index([clientId, sourceType])
+  @@index([clientId, deadlineAt])
+  @@map("external_opportunities")
 }
 
 enum ControlDefinitionType {
