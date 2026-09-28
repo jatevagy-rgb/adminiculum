@@ -6340,6 +6340,11 @@ export type AiPromptDraft = {
   approvedById: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Canonical title/type metadata captured from the prompt template at preparation time. */
+  promptTemplateSnapshot?: {
+    title?: string | null;
+    legalWorkCategory?: string | null;
+  } | null;
 };
 
 export async function listAiPromptTemplates(params: {
