@@ -879,21 +879,29 @@ return {
   /**
    * Get dashboard stats
    */
-  async getDashboardStats(userId?: string): Promise<{
+  async getDashboardStats(userId?: string, role?: string | null): Promise<{
     stats: { totalCases: number; inReview: number; pendingClient: number; completedThisMonth: number };
     recentActivity: Array<{ id: string; type: string; text: string; timestamp: Date; caseId?: string; taskId?: string; documentId?: string; href?: string }>;
   }> {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
+    // Canonical case-read scope — the same predicate as GET /cases and
+    // userCanReadCase/requireCaseReadAccess. ADMIN/PARTNER stay unrestricted
+    // (null); every other actor's dashboard aggregates count only cases they
+    // created, are assigned to, or collaborate on. A missing user resolves to
+    // an empty id list, so counts fail closed instead of leaking globally.
+    const caseReadScope = buildCaseReadScope(userId, role) ?? {};
+
     const [totalCases, inReview, pendingClient, completedThisMonth] = await Promise.all([
-      prisma.case.count(),
-      prisma.case.count({ where: { status: 'IN_REVIEW' as any } }),
-      prisma.case.count({ where: { status: 'CLIENT_INPUT' as any } }),
+      prisma.case.count({ where: caseReadScope }),
+      prisma.case.count({ where: { status: 'IN_REVIEW' as any, ...caseReadScope } }),
+      prisma.case.count({ where: { status: 'CLIENT_INPUT' as any, ...caseReadScope } }),
       prisma.case.count({
         where: {
           status: 'FINAL' as any,
-          updatedAt: { gte: startOfMonth }
+          updatedAt: { gte: startOfMonth },
+          ...caseReadScope
         }
       })
     ]);
