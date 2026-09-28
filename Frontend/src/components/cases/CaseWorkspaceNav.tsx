@@ -50,11 +50,11 @@ export function CaseWorkspaceNav({
   // primary tab simply renders with no highlighted primary tab rather than breaking.
   const tabs = [
     { id: "overview" as const, label: "Áttekintés", href: `/cases/${caseId}` },
-    // Kontextus is a navigation seam only in this PR. It points at the existing
-    // case-context panel on the Áttekintés surface; the full Kontextus workspace
-    // (email-thread view, free-text paste, custom anonymization, ingestion) is a
-    // later, separate deliverable. No placeholder surface is fabricated here.
-    { id: "context" as const, label: "Kontextus", href: `/cases/${caseId}#ck-starting-context` },
+    // Kontextus opens the dedicated, read-only V1 context surface. It reuses the
+    // existing starting context, case description and linked communication
+    // projection. Free-text paste, custom anonymization and ingestion remain
+    // later, separate deliverables — no placeholder is fabricated here.
+    { id: "context" as const, label: "Kontextus", href: `/cases/${caseId}/context` },
     { id: "clientPortal" as const, label: "Ügyfélportál", href: `/cases/${caseId}/client-portal` },
   ];
   const secondaryLinks = [
