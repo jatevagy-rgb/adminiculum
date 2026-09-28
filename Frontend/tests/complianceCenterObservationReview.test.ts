@@ -15,9 +15,10 @@ import { hasMoreObservationPages } from '../src/components/compliance-center/Leg
  * W3C-A — Compliance Center review UI for legal-source observations.
  *
  * Proves the locked W3A contract is consumed from the existing
- * Jogforrás-változások tab: human review lifecycle only, no W3B impact call,
- * no internal capture provenance rendered, safe Hungarian review labels, and
- * the existing Compliance Center surfaces preserved.
+ * Jogforrás-változások tab: human review lifecycle, safe Hungarian review
+ * labels, no internal capture provenance rendered, and the existing Compliance
+ * Center surfaces preserved. The explicit W3B observation-impact entry point is
+ * covered by complianceCenterObservationImpact.test.ts.
  */
 
 const frontendRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -59,7 +60,7 @@ test('the W3A review states, kinds and decisions match the locked lifecycle', ()
   );
 });
 
-test('the API client calls only the locked W3A endpoints', () => {
+test('the API client calls the locked W3A endpoints', () => {
   for (const endpoint of [
     '/compliance/legal-source-observations${buildLegalSourceObservationListQuery(params)}',
     '/compliance/legal-source-observations/${encodeURIComponent(id)}',
@@ -69,7 +70,6 @@ test('the API client calls only the locked W3A endpoints', () => {
     assert.ok(clientSource.includes(endpoint), `missing W3A endpoint: ${endpoint}`);
   }
   assert.ok(clientSource.includes('{ decision, note: trimmedNote }'), 'decision body must carry decision + note');
-  assert.equal(count(clientSource, '/impact'), 0, 'the client must not call any W3B impact endpoint');
 });
 
 test('the queue section uses the required Hungarian labels and the shared DataTable', () => {
@@ -177,9 +177,7 @@ test('the review UI never renders internal capture provenance', () => {
   }
 });
 
-test('no W3B impact call is added by the review UI or its client', () => {
-  assert.equal(count(panelSource, '/impact'), 0);
-  assert.equal(count(clientSource, '/impact'), 0);
+test('the review UI calls the typed client, never raw observation endpoints', () => {
   assert.equal(count(panelSource, 'observations/'), 0, 'panel must call the typed client, not raw endpoints');
 });
 
