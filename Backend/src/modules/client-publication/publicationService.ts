@@ -345,30 +345,130 @@ export async function updateMatterPublication(actor: Actor, publicationId: strin
 
 const MILESTONE_STATES = new Set(['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED']);
 
-type StoredMilestone = { publicKey: string; sourceTaskId: string | null; safeTitle: string; safeDescription: string | null; displayOrder: number; weight: number | null; completionState: string; completedAt: string | null };
+type StoredMilestone = { publicKey: string; sourceTaskId: string | null; sourceStageKey: string | null; safeTitle: string; safeDescription: string | null; displayOrder: number; weight: number | null; completionState: string; completedAt: string | null };
 
-function normalizeMilestones(input: unknown, caseTaskIds: Set<string>): StoredMilestone[] {
+// ---------------------------------------------------------------------------
+// Customer-safe handling stage catalog.
+// Each entry maps ONE real canonical case/document processing state to a
+// customer-facing Hungarian milestone. Stages are derived only from canonical
+// rows (presence query per stage); a stage whose canonical signal is absent is
+// never fabricated and is omitted from every projection. The catalog feeds the
+// SAME milestone draft -> publish engine and the SAME published
+// progressPercentage projection — it is not a second progress engine.
+// ---------------------------------------------------------------------------
+
+const CASE_PROGRESS_STAGE_CATALOG: ReadonlyArray<{
+  stageKey: string;
+  displayOrder: number;
+  safeTitle: string;
+  safeDescription: string | null;
+  signalSql: string;
+}> = [
+  {
+    stageKey: 'anonymized',
+    displayOrder: 100,
+    safeTitle: 'Iratok anonimizálva',
+    safeDescription: 'Az ügy iratai anonimizálásra kerültek.',
+    signalSql: 'SELECT 1 FROM anonymous_documents ad JOIN documents d ON d.id = ad."sourceDocId" WHERE d."caseId" = $1 LIMIT 1',
+  },
+  {
+    stageKey: 'first-review',
+    displayOrder: 200,
+    safeTitle: 'Első átnézés megtörtént',
+    safeDescription: 'Az ügy iratait az iroda először átnézte.',
+    signalSql: 'SELECT 1 FROM document_review_rounds rr JOIN document_reviews r ON r.id = rr."reviewId" JOIN documents d ON d.id = r."documentId" WHERE d."caseId" = $1 AND rr."submittedAt" IS NOT NULL LIMIT 1',
+  },
+  {
+    stageKey: 'lawyer-returned',
+    displayOrder: 300,
+    safeTitle: 'Ügyvéd visszaküldte átnézésre',
+    safeDescription: 'Az ügyvéd kiegészítést kért, az irat visszakerült átnézésre.',
+    signalSql: "SELECT 1 FROM review_decisions rd JOIN document_reviews r ON r.id = rd.\"reviewId\" JOIN documents d ON d.id = r.\"documentId\" WHERE d.\"caseId\" = $1 AND rd.action::text = 'CHANGES_REQUESTED' LIMIT 1",
+  },
+  {
+    stageKey: 'contract-in-library',
+    displayOrder: 400,
+    safeTitle: 'Szerződés felvéve a szerződéstárba',
+    safeDescription: 'Az ügy szerződése bekerült a szerződéstárba.',
+    signalSql: 'SELECT 1 FROM contract_records WHERE "sourceCaseId" = $1 LIMIT 1',
+  },
+];
+
+const CASE_PROGRESS_STAGE_KEYS = new Set(CASE_PROGRESS_STAGE_CATALOG.map((stage) => stage.stageKey));
+
+/** Canonical presence of every catalog stage for one case. A stage is present
+ *  only when its canonical row exists — presence is never inferred. */
+async function resolvePresentStageKeys(db: Db, caseId: string): Promise<Set<string>> {
+  const present = new Set<string>();
+  for (const stage of CASE_PROGRESS_STAGE_CATALOG) {
+    const row = await one(db, stage.signalSql, caseId);
+    if (row) present.add(stage.stageKey);
+  }
+  return present;
+}
+
+/** Workforce-only (internal) stage candidates derived from canonical
+ *  case/document state, in deterministic catalog order. Never returned to the
+ *  customer; the customer read path only ever sees published milestones. */
+async function deriveCaseProgressStageCandidates(db: Db, caseId: string): Promise<Row[]> {
+  const candidates: Row[] = [];
+  for (const stage of CASE_PROGRESS_STAGE_CATALOG) {
+    const row = await one(db, stage.signalSql, caseId);
+    if (!row) continue;
+    candidates.push({
+      stageKey: stage.stageKey,
+      safeTitle: stage.safeTitle,
+      safeDescription: stage.safeDescription,
+      displayOrder: stage.displayOrder,
+      suggestedState: 'COMPLETED',
+    });
+  }
+  return candidates;
+}
+
+function normalizeMilestones(input: unknown, caseTaskIds: Set<string>, presentStageKeys: Set<string>): StoredMilestone[] {
   const list = Array.isArray(input) ? input : [];
   const keys = new Set<string>();
-  const out = list.map((raw: Row, index: number): StoredMilestone => {
-    const publicKey = text(raw.publicKey ?? raw.reference, 'publicKey', 80, true)!;
+  const out = list.map((raw: Row, index: number): StoredMilestone | null => {
+    const sourceTaskId = raw.sourceTaskId ? String(raw.sourceTaskId) : null;
+    const sourceStageKey = raw.sourceStageKey ? String(raw.sourceStageKey) : null;
+    if (sourceTaskId && sourceStageKey) throw new ClientPublicationError(400, 'MILESTONE_SOURCE_CONFLICT', 'Milestone cannot have both a source step and a stage key.');
+    const publicKey = text(raw.publicKey ?? (sourceStageKey || raw.reference), 'publicKey', 80, true)!;
     if (keys.has(publicKey)) throw new ClientPublicationError(400, 'MILESTONE_KEY_DUPLICATE', 'Duplicate milestone key.');
     keys.add(publicKey);
-    const safeTitle = text(raw.safeTitle ?? raw.title, 'safeTitle', 200, true)!;
-    const safeDescription = text(raw.safeDescription ?? raw.description, 'safeDescription', 1000, false);
-    const completionState = String(raw.completionState ?? raw.state ?? 'NOT_STARTED').toUpperCase();
-    if (!MILESTONE_STATES.has(completionState)) throw new ClientPublicationError(400, 'MILESTONE_STATE_INVALID', 'Invalid milestone state.');
+    if (sourceTaskId && !caseTaskIds.has(sourceTaskId)) throw new ClientPublicationError(400, 'MILESTONE_SOURCE_STEP_INVALID', 'Milestone source step is not a candidate task on this Case.');
     let weight: number | null = null;
     if (raw.weight != null && String(raw.weight).trim() !== '') {
       weight = Number(raw.weight);
       if (!Number.isFinite(weight) || weight <= 0) throw new ClientPublicationError(400, 'MILESTONE_WEIGHT_INVALID', 'Milestone weight must be greater than zero.');
     }
     const displayOrder = Number.isFinite(Number(raw.displayOrder)) ? Number(raw.displayOrder) : index;
-    const sourceTaskId = raw.sourceTaskId ? String(raw.sourceTaskId) : null;
-    if (sourceTaskId && !caseTaskIds.has(sourceTaskId)) throw new ClientPublicationError(400, 'MILESTONE_SOURCE_STEP_INVALID', 'Milestone source step is not a candidate task on this Case.');
+    if (sourceStageKey) {
+      // Explicit customer-safe stage mapping: label, description and state are
+      // data-driven from the catalog + canonical signal. An absent signal
+      // drops the milestone instead of fabricating a stage.
+      const stage = CASE_PROGRESS_STAGE_CATALOG.find((candidate) => candidate.stageKey === sourceStageKey);
+      if (!stage) throw new ClientPublicationError(400, 'MILESTONE_STAGE_INVALID', 'Unknown milestone stage key.');
+      if (!presentStageKeys.has(sourceStageKey)) return null;
+      return {
+        publicKey,
+        sourceTaskId: null,
+        sourceStageKey,
+        safeTitle: stage.safeTitle,
+        safeDescription: stage.safeDescription,
+        displayOrder: Number.isFinite(Number(raw.displayOrder)) ? Number(raw.displayOrder) : stage.displayOrder,
+        weight,
+        completionState: 'COMPLETED',
+        completedAt: null,
+      };
+    }
+    const safeTitle = text(raw.safeTitle ?? raw.title, 'safeTitle', 200, true)!;
+    const safeDescription = text(raw.safeDescription ?? raw.description, 'safeDescription', 1000, false);
+    const completionState = String(raw.completionState ?? raw.state ?? 'NOT_STARTED').toUpperCase();
+    if (!MILESTONE_STATES.has(completionState)) throw new ClientPublicationError(400, 'MILESTONE_STATE_INVALID', 'Invalid milestone state.');
     const completedAt = completionState === 'COMPLETED' && raw.completedAt ? new Date(String(raw.completedAt)).toISOString() : null;
-    return { publicKey, sourceTaskId, safeTitle, safeDescription, displayOrder, weight, completionState, completedAt };
-  });
+    return { publicKey, sourceTaskId, sourceStageKey: null, safeTitle, safeDescription, displayOrder, weight, completionState, completedAt };
+  }).filter((milestone): milestone is StoredMilestone => milestone !== null);
   out.sort((a, b) => a.displayOrder - b.displayOrder || a.publicKey.localeCompare(b.publicKey));
   return out;
 }
@@ -412,12 +512,18 @@ async function latestCasePublication(db: Db, caseId: string, forUpdate = false):
 }
 
 /** Workforce: list the internal workflow steps eligible to become milestones.
- *  Internal-only view (task title/status) — never returned to the customer. */
+ *  Internal-only view (task title/status) — never returned to the customer.
+ *  Also lists customer-safe handling stage candidates derived from canonical
+ *  case/document state (anonymization, first review, lawyer return, contract
+ *  library); a stage without its canonical signal is omitted. */
 export async function listEligibleMilestoneSteps(actor: Actor, caseId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
   requireFoundation(); requireInternal(actor);
   await assertCaseAccess(db, actor, caseId);
   const rows = await many(db, 'SELECT id, title, status::text AS status, "workflowStepKey", "workflowActivatedAt" FROM tasks WHERE "caseId"=$1 AND "workflowPublicMilestoneCandidate"=true ORDER BY "createdAt" ASC', caseId);
-  return { items: rows.map((row) => ({ taskId: row.id, stepKey: row.workflowStepKey ?? null, internalTitle: row.title, internalStatus: row.status, suggestedState: row.status === 'DONE' || row.status === 'COMPLETED' ? 'COMPLETED' : row.workflowActivatedAt ? 'IN_PROGRESS' : 'NOT_STARTED' })) };
+  return {
+    items: rows.map((row) => ({ taskId: row.id, stepKey: row.workflowStepKey ?? null, internalTitle: row.title, internalStatus: row.status, suggestedState: row.status === 'DONE' || row.status === 'COMPLETED' ? 'COMPLETED' : row.workflowActivatedAt ? 'IN_PROGRESS' : 'NOT_STARTED' })),
+    stageCandidates: await deriveCaseProgressStageCandidates(db, caseId),
+  };
 }
 
 /** Workforce: read the mutable milestone draft (never customer-visible). */
@@ -443,7 +549,7 @@ export async function saveMilestoneDraft(actor: Actor, caseId: string, milestone
     const caseRow = await getCase(tx, caseId);
     const pub = await latestCasePublication(tx, caseId, true);
     if (!pub) throw new ClientPublicationError(409, 'MATTER_PUBLICATION_REQUIRED', 'Publish the matter first, then add customer milestones.');
-    const normalized = normalizeMilestones(milestones, await caseCandidateTaskIds(tx, caseId));
+    const normalized = normalizeMilestones(milestones, await caseCandidateTaskIds(tx, caseId), await resolvePresentStageKeys(tx, caseId));
     const stored = JSON.stringify(normalized);
     if (forbidden(normalized)) throw new ClientPublicationError(400, 'FORBIDDEN_CLIENT_FIELD', 'Milestone draft contains internal-only data.');
     await exec(tx, 'UPDATE client_matter_publications SET "milestoneDraftSnapshot"=$1::jsonb, "updatedAt"=now() WHERE id=$2', stored, pub.id);
@@ -459,7 +565,7 @@ export async function previewMilestonePublication(actor: Actor, caseId: string, 
   await assertCaseAccess(db, actor, caseId);
   const pub = await latestCasePublication(db, caseId);
   const draft = pub?.milestoneDraftSnapshot ?? [];
-  const normalized = normalizeMilestones(draft, await caseCandidateTaskIds(db, caseId));
+  const normalized = normalizeMilestones(draft, await caseCandidateTaskIds(db, caseId), await resolvePresentStageKeys(db, caseId));
   const dto = { milestones: toCustomerMilestones(normalized), progressPercentage: computeMilestoneProgress(normalized) };
   assertNoForbiddenPortalFields(dto);
   return dto;
@@ -479,7 +585,7 @@ export async function publishMilestoneRevision(actor: Actor, caseId: string, db:
     if (!pub || !pub.currentRevisionId) throw new ClientPublicationError(409, 'MATTER_PUBLICATION_REQUIRED', 'Publish the matter first, then publish customer milestones.');
     const current = await one(tx, 'SELECT * FROM client_matter_publication_revisions WHERE id=$1', pub.currentRevisionId);
     if (!current) throw new ClientPublicationError(409, 'MATTER_REVISION_MISSING', 'Current matter revision is missing.');
-    const normalized = normalizeMilestones(pub.milestoneDraftSnapshot ?? [], await caseCandidateTaskIds(tx, caseId));
+    const normalized = normalizeMilestones(pub.milestoneDraftSnapshot ?? [], await caseCandidateTaskIds(tx, caseId), await resolvePresentStageKeys(tx, caseId));
     const progress = computeMilestoneProgress(normalized);
     const nextNumber = Number(current.revisionNumber) + 1;
     const revisionId = newId();
