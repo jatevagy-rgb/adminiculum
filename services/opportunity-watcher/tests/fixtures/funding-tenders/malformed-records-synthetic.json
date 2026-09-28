@@ -1,0 +1,47 @@
+{
+  "searchResults": [
+    {
+      "reference": "broken-1",
+      "language": "en",
+      "content": "no metadata at all",
+      "metadata": {}
+    },
+    {
+      "reference": "broken-2",
+      "language": "en",
+      "metadata": {
+        "identifier": [],
+        "title": [
+          "Missing identity title"
+        ]
+      }
+    },
+    {
+      "reference": "broken-3",
+      "language": "en",
+      "metadata": {
+        "identifier": [
+          "X"
+        ],
+        "title": [
+          "Title only, no status"
+        ]
+      }
+    },
+    {
+      "reference": "broken-4",
+      "language": "en",
+      "metadata": {
+        "identifier": [
+          "Y"
+        ],
+        "title": [
+          "Unsupported type"
+        ],
+        "type": [
+          "9"
+        ]
+      }
+    }
+  ]
+}

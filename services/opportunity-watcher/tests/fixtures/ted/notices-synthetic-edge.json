@@ -1,0 +1,250 @@
+{
+  "notices": [
+    {
+      "place-of-performance": [
+        "AT111",
+        "AUT"
+      ],
+      "change-reason-code": "update-add",
+      "deadline-receipt-tender-date-lot": [
+        "2025-09-04+02:00"
+      ],
+      "notice-type": "cn-standard",
+      "publication-number": "566524-2025",
+      "BT-821-Lot": [
+        "epo-procurement-document"
+      ],
+      "place-of-performance-country-lot": [
+        "AUT"
+      ],
+      "classification-cpv": [
+        "45210000",
+        "45210000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {
+        "deu": [
+          "PEB – Projektentwicklung Burgenland GmbH"
+        ]
+      },
+      "notice-version": 1,
+      "links": {
+        "xml": {
+          "MUL": "https://ted.europa.eu/en/notice/566524-2025/xml"
+        },
+        "html": {
+          "ENG": "https://ted.europa.eu/en/notice/-/detail/566524-2025",
+          "HUN": "https://ted.europa.eu/hu/notice/-/detail/566524-2025"
+        }
+      },
+      "identifier-lot": [
+        "LOT-7460"
+      ],
+      "notice-title": {
+        "hun": "Ausztria – Magasépítési munka – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "deu": "Österreich – Bauleistungen im Hochbau – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "eng": "Austria – Building construction work – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau"
+      },
+      "sme-lot": [
+        true
+      ],
+      "BT-758-notice": "dea70baf-4089-4237-b5f1-e0623dbaad58-01"
+    },
+    {
+      "place-of-performance": [
+        "AT111",
+        "AUT"
+      ],
+      "change-reason-code": "update-add",
+      "deadline-receipt-tender-date-lot": [
+        "2025-09-04+02:00"
+      ],
+      "notice-type": "cn-standard",
+      "publication-number": "566524-2025",
+      "procedure-identifier": "68474b80-f5a6-4779-b152-2180fea3e044",
+      "BT-821-Lot": [
+        "epo-procurement-document"
+      ],
+      "place-of-performance-country-lot": [
+        "AUT"
+      ],
+      "classification-cpv": [
+        "45210000",
+        "45210000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {
+        "deu": [
+          "PEB – Projektentwicklung Burgenland GmbH"
+        ]
+      },
+      "notice-version": 1,
+      "links": {
+        "xml": {
+          "MUL": "https://ted.europa.eu/en/notice/566524-2025/xml"
+        },
+        "html": {
+          "ENG": "https://ted.europa.eu/en/notice/-/detail/566524-2025",
+          "HUN": "https://ted.europa.eu/hu/notice/-/detail/566524-2025"
+        }
+      },
+      "notice-title": {
+        "hun": "Ausztria – Magasépítési munka – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "deu": "Österreich – Bauleistungen im Hochbau – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "eng": "Austria – Building construction work – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau"
+      },
+      "sme-lot": [
+        true
+      ],
+      "BT-758-notice": "dea70baf-4089-4237-b5f1-e0623dbaad58-01"
+    },
+    {
+      "place-of-performance": [
+        "AT111",
+        "AUT"
+      ],
+      "change-reason-code": "update-add",
+      "deadline-receipt-tender-date-lot": [
+        "2025-12-01+01:00",
+        "2025-12-01+01:00"
+      ],
+      "notice-type": "cn-standard",
+      "publication-number": "566524-2025",
+      "procedure-identifier": "68474b80-f5a6-4779-b152-2180fea3e044",
+      "BT-821-Lot": [
+        "epo-procurement-document"
+      ],
+      "place-of-performance-country-lot": [
+        "AUT"
+      ],
+      "classification-cpv": [
+        "45210000",
+        "45210000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {
+        "deu": [
+          "PEB – Projektentwicklung Burgenland GmbH"
+        ]
+      },
+      "notice-version": 1,
+      "links": {
+        "xml": {
+          "MUL": "https://ted.europa.eu/en/notice/566524-2025/xml"
+        },
+        "html": {
+          "ENG": "https://ted.europa.eu/en/notice/-/detail/566524-2025",
+          "HUN": "https://ted.europa.eu/hu/notice/-/detail/566524-2025"
+        }
+      },
+      "identifier-lot": [
+        "LOT-0001",
+        "",
+        "LOT-0003"
+      ],
+      "notice-title": {
+        "hun": "Ausztria – Magasépítési munka – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "deu": "Österreich – Bauleistungen im Hochbau – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "eng": "Austria – Building construction work – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau"
+      },
+      "sme-lot": [
+        true,
+        false,
+        true
+      ],
+      "BT-758-notice": "dea70baf-4089-4237-b5f1-e0623dbaad58-01"
+    },
+    {
+      "place-of-performance": [
+        "AT111",
+        "AUT"
+      ],
+      "change-reason-code": "update-add",
+      "deadline-receipt-tender-date-lot": [
+        "2025-09-04+02:00"
+      ],
+      "notice-type": "cn-standard",
+      "publication-number": "566524-2025",
+      "procedure-identifier": "68474b80-f5a6-4779-b152-2180fea3e044",
+      "BT-821-Lot": [
+        "epo-procurement-document"
+      ],
+      "place-of-performance-country-lot": [
+        "AUT"
+      ],
+      "classification-cpv": [
+        "45210000",
+        "45210000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {
+        "deu": [
+          "PEB – Projektentwicklung Burgenland GmbH"
+        ]
+      },
+      "notice-version": 1,
+      "identifier-lot": [
+        "LOT-7460"
+      ],
+      "notice-title": {
+        "deu": "Österreich – Bauleistungen im Hochbau – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau"
+      },
+      "sme-lot": [
+        true
+      ],
+      "BT-758-notice": "dea70baf-4089-4237-b5f1-e0623dbaad58-01"
+    },
+    {
+      "place-of-performance": [
+        "AT111",
+        "AUT"
+      ],
+      "deadline-receipt-tender-date-lot": [
+        "2025-09-04+02:00"
+      ],
+      "notice-type": "cn-standard",
+      "publication-number": "566524-2025",
+      "procedure-identifier": "68474b80-f5a6-4779-b152-2180fea3e044",
+      "BT-821-Lot": [
+        "epo-procurement-document"
+      ],
+      "place-of-performance-country-lot": [
+        "AUT"
+      ],
+      "classification-cpv": [
+        "45210000",
+        "45210000"
+      ],
+      "publication-date": "2025-09-01+02:00",
+      "buyer-name": {
+        "deu": [
+          "PEB – Projektentwicklung Burgenland GmbH"
+        ]
+      },
+      "notice-version": 2,
+      "links": {
+        "xml": {
+          "MUL": "https://ted.europa.eu/en/notice/566524-2025/xml"
+        },
+        "html": {
+          "ENG": "https://ted.europa.eu/en/notice/-/detail/566524-2025",
+          "HUN": "https://ted.europa.eu/hu/notice/-/detail/566524-2025"
+        }
+      },
+      "identifier-lot": [
+        "LOT-7460"
+      ],
+      "notice-title": {
+        "hun": "Ausztria – Magasépítési munka – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "deu": "Österreich – Bauleistungen im Hochbau – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau",
+        "eng": "Austria – Building construction work – Schul- und Kindergartencampus Lackenbach - Baumeister Hochbau"
+      },
+      "sme-lot": [
+        true
+      ]
+    }
+  ],
+  "totalNoticeCount": 5,
+  "iterationNextToken": null,
+  "timedOut": false
+}

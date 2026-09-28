@@ -119,14 +119,25 @@ describe("Case Workspace — Kontextus V1", () => {
     }
   });
 
-  it("14. no backend/schema/migration change and no new context model", () => {
+  it("14. no backend/schema/migration change and no forbidden V1 persistence model", () => {
     const src = contextView() + contextPage() + nav();
     assert.doesNotMatch(src, /Backend\//);
     assert.doesNotMatch(src, /prisma|migration/i);
     assert.doesNotMatch(src, /fetch\(|XMLHttpRequest/);
     const schema = read("../Backend/prisma/schema.prisma");
-    for (const forbidden of ["model CaseContext", "model ContextEntry", "model CaseContextItem"]) {
-      assert.doesNotMatch(schema, new RegExp(forbidden));
+    // Kontextus V1 must not declare its own persistence models. Match exact
+    // Prisma model declarations: an independently approved model that merely
+    // shares the prefix (CaseContextSource, #393) is not a V1 violation.
+    for (const forbiddenModel of [
+      "CaseContext",
+      "ContextEntry",
+      "CaseContextItem",
+    ]) {
+      assert.doesNotMatch(
+        schema,
+        new RegExp(`^\\s*model\\s+${forbiddenModel}\\s*\\{`, "m"),
+        `no forbidden V1 persistence model: ${forbiddenModel}`,
+      );
     }
   });
 

@@ -1,0 +1,285 @@
+{
+  "schemaVersion": 1,
+  "provenance": {
+    "generator": "scripts/extract-reference-dictionary.mjs",
+    "generatedAt": "2026-09-27T17:23:12.997Z",
+    "sourceName": "EU Funding & Tenders Portal reference data (grantsTenders.json)",
+    "sourceUrl": "https://ec.europa.eu/info/funding-tenders/opportunities/data/referenceData/grantsTenders.json",
+    "capturedAt": "2026-09-27T17:23:13.013Z",
+    "sha256": "5cc44bf1eaeb8ee2c9c2f26322dc9a30bdd6dacea6d6fbe1dbaeeab34672dd94",
+    "bytes": 130072378,
+    "records": 11163,
+    "note": "Minimized: only distinct status objects and frameworkProgramme objects are extracted. State mapping is derived from official labels with a documented rule; unmatched labels stay null and render as UNKNOWN at runtime. No other reference content is copied."
+  },
+  "statuses": {
+    "31094501": {
+      "abbreviation": "Forthcoming",
+      "description": "Forthcoming",
+      "state": "FORTHCOMING"
+    },
+    "31094502": {
+      "abbreviation": "Open",
+      "description": "Open",
+      "state": "OPEN"
+    },
+    "31094503": {
+      "abbreviation": "Closed",
+      "description": "Closed",
+      "state": "CLOSED"
+    }
+  },
+  "programmes": {
+    "31045243": {
+      "abbreviation": "H2020",
+      "description": "Horizon 2020 Framework Programme"
+    },
+    "31059083": {
+      "abbreviation": "CREA",
+      "description": "Creative Europe"
+    },
+    "31059088": {
+      "abbreviation": "EFC",
+      "description": "Europe For Citizens"
+    },
+    "31059093": {
+      "abbreviation": "EPLUS",
+      "description": "Erasmus+ Programme"
+    },
+    "31059098": {
+      "abbreviation": "EUAID",
+      "description": "EU Aid Volunteers programme"
+    },
+    "31059643": {
+      "abbreviation": "COSME",
+      "description": "Programme for the Competitiveness of Enterprises and small and medium-sized enterprises"
+    },
+    "31061225": {
+      "abbreviation": "RFCS",
+      "description": "Research Fund for Coal & Steel"
+    },
+    "31061266": {
+      "abbreviation": "3HP",
+      "description": "3rd Health Programme"
+    },
+    "31061273": {
+      "abbreviation": "CP",
+      "description": "Consumer Programme"
+    },
+    "31070247": {
+      "abbreviation": "JUST",
+      "description": "Justice Programme"
+    },
+    "31072773": {
+      "abbreviation": "AGRIP",
+      "description": "Promotion of Agricultural Products"
+    },
+    "31075571": {
+      "abbreviation": "PANAF",
+      "description": "Intra-Africa Academic Mobility Scheme"
+    },
+    "31076817": {
+      "abbreviation": "REC",
+      "description": "Rights, Equality and Citizenship Programme"
+    },
+    "31077795": {
+      "abbreviation": "AMIF",
+      "description": "Asylum, Migration and Integration Fund"
+    },
+    "31077817": {
+      "abbreviation": "ISFP",
+      "description": "Internal Security Fund Police"
+    },
+    "31077833": {
+      "abbreviation": "ISFB",
+      "description": "Internal Security Fund Borders and Visa"
+    },
+    "31082527": {
+      "abbreviation": "UCPM",
+      "description": "Union Civil Protection Mechanism"
+    },
+    "31084250": {
+      "abbreviation": "PPPA",
+      "description": "Pilot Projects and Preparatory Actions"
+    },
+    "31084392": {
+      "abbreviation": "HERC",
+      "description": "Hercule III"
+    },
+    "31088049": {
+      "abbreviation": "ESTAT",
+      "description": "European Statistics"
+    },
+    "31098847": {
+      "abbreviation": "EMFF",
+      "description": "European Maritime and Fisheries Fund"
+    },
+    "31107710": {
+      "abbreviation": "LIFE",
+      "description": "Programme for the Environment and Climate Action"
+    },
+    "31109727": {
+      "abbreviation": "EDIDP",
+      "description": "European Defence Industrial Development Programme"
+    },
+    "42198993": {
+      "abbreviation": "IMCAP",
+      "description": "Support for information measures relating to the common agricultural policy"
+    },
+    "42810547": {
+      "abbreviation": "ED",
+      "description": "Europe Direct"
+    },
+    "42992790": {
+      "abbreviation": "ESC",
+      "description": "European Solidarity Corps"
+    },
+    "43089234": {
+      "abbreviation": "INNOVFUND",
+      "description": "Innovation Fund (INNOVFUND)"
+    },
+    "43108390": {
+      "abbreviation": "HORIZON",
+      "description": "Horizon Europe Framework Programme (HORIZON)"
+    },
+    "43152860": {
+      "abbreviation": "DIGITAL",
+      "description": "Digital Europe Programme (DIGITAL)"
+    },
+    "43251447": {
+      "abbreviation": "AMIF2027",
+      "description": "Asylum, Migration and Integration Fund (AMIF)"
+    },
+    "43251530": {
+      "abbreviation": "BMVI",
+      "description": "Border Management and Visa Policy Instrument (BMVI)"
+    },
+    "43251567": {
+      "abbreviation": "CEF2027",
+      "description": "Connecting Europe Facility (CEF)"
+    },
+    "43251589": {
+      "abbreviation": "CERV",
+      "description": "Citizens, Equality, Rights and Values Programme (CERV)"
+    },
+    "43251814": {
+      "abbreviation": "CREA2027",
+      "description": "Creative Europe Programme (CREA)"
+    },
+    "43251842": {
+      "abbreviation": "EUAF",
+      "description": "Union Anti-fraud Programme (EUAF)"
+    },
+    "43251882": {
+      "abbreviation": "IMCAP2027",
+      "description": "Information Measures for the Common Agricultural Policy (IMCAP)"
+    },
+    "43252368": {
+      "abbreviation": "ISF",
+      "description": "Internal Security Fund (ISF)"
+    },
+    "43252386": {
+      "abbreviation": "JUST2027",
+      "description": "Justice Programme (JUST)"
+    },
+    "43252405": {
+      "abbreviation": "LIFE2027",
+      "description": "Programme for the Environment and Climate Action (LIFE)"
+    },
+    "43252433": {
+      "abbreviation": "PERI",
+      "description": "Programme for the Protection of the Euro against Counterfeiting  (PERICLES IV)"
+    },
+    "43252449": {
+      "abbreviation": "RFCS2027",
+      "description": "Research Fund for Coal & Steel (RFCS)"
+    },
+    "43252476": {
+      "abbreviation": "SMP",
+      "description": "Single Market Programme (SMP)"
+    },
+    "43252517": {
+      "abbreviation": "SOCPL",
+      "description": "Social Prerogative and Specific Competencies Lines (SOCPL)"
+    },
+    "43253967": {
+      "abbreviation": "RENEWFM",
+      "description": "Union Renewable Energy Financing Mechanism (RENEWFM)"
+    },
+    "43254019": {
+      "abbreviation": "ESF",
+      "description": "European Social Fund + (ESF)"
+    },
+    "43254037": {
+      "abbreviation": "ESC2027",
+      "description": "European Solidarity Corps (ESC)"
+    },
+    "43298203": {
+      "abbreviation": "UCPM2027",
+      "description": "Union Civil Protection Mechanism (UCPM)"
+    },
+    "43298664": {
+      "abbreviation": "AGRIP2027",
+      "description": "Promotion of Agricultural Products (AGRIP)"
+    },
+    "43298916": {
+      "abbreviation": "EURATOM2027",
+      "description": "Euratom Research and Training Programme (EURATOM)"
+    },
+    "43332642": {
+      "abbreviation": "EU4H",
+      "description": "EU4Health Programme (EU4H)"
+    },
+    "43353764": {
+      "abbreviation": "ERASMUS2027",
+      "description": "Erasmus+ (ERASMUS+)"
+    },
+    "43392145": {
+      "abbreviation": "EMFAF",
+      "description": "European Maritime, Fisheries and Aquaculture Fund (EMFAF)"
+    },
+    "43637601": {
+      "abbreviation": "PPPA2027",
+      "description": "Pilot Projects and Preparation Actions (PPPA)"
+    },
+    "43697167": {
+      "abbreviation": "EP",
+      "description": "European Parliament (EP)"
+    },
+    "44181033": {
+      "abbreviation": "EDF",
+      "description": "European Defence Fund (EDF)"
+    },
+    "44416173": {
+      "abbreviation": "I3",
+      "description": "Interregional Innovation Investments Instrument (I3)"
+    },
+    "44773066": {
+      "abbreviation": "JTM",
+      "description": "Just Transition Mechanism (JTM)"
+    },
+    "44773133": {
+      "abbreviation": "IMREG",
+      "description": "Information Measures for the EU Cohesion policy (IMREG)"
+    },
+    "45532249": {
+      "abbreviation": "EUBA",
+      "description": "EU Bodies and Agencies"
+    },
+    "45876777": {
+      "abbreviation": "NDICI",
+      "description": "Neighbourhood, Development and International Cooperation Instrument – Global Europe (NDICI)"
+    },
+    "46324255": {
+      "abbreviation": "ERDFTA",
+      "description": "Technical assistance for ERDF, CF and JTF (ERDF-TA)"
+    },
+    "47376280": {
+      "abbreviation": "RELEX2027",
+      "description": "EU External Action (RELEX)"
+    },
+    "47786028": {
+      "abbreviation": "BCS",
+      "description": "Business and Consumer Surveys Programme (BCS)"
+    }
+  }
+}
