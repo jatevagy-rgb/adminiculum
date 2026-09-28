@@ -4,7 +4,7 @@ import Link from "next/link";
 import { AdminStatusPill } from "@/components/adminiculum/ui";
 import { getCaseDisplayTitle, getCaseStatusLabel } from "@/lib/caseLabels";
 
-export type CaseWorkspaceNavTab = "overview" | "documents" | "tasks" | "communications" | "deadlines" | "time" | "clientPortal";
+export type CaseWorkspaceNavTab = "overview" | "context" | "documents" | "tasks" | "communications" | "deadlines" | "time" | "clientPortal";
 
 type CaseWorkspaceNavProps = {
   caseId: string;
@@ -40,16 +40,25 @@ export function CaseWorkspaceNav({
   responsibleName,
   deadline,
 }: CaseWorkspaceNavProps) {
-  // Primary case tabs are intentionally reduced to Áttekintés + Kommunikáció.
-  // Documents / Feladatok / Határidők / Munkaórák are no longer co-equal primary
-  // tabs — the Áttekintés workspace is the dominant surface and exposes those via
-  // discreet secondary actions. The underlying routes stay reachable by direct URL
-  // (compatibility), so an incoming activeTab that is no longer a primary tab simply
-  // renders with no highlighted primary tab rather than breaking.
+  // Primary case tabs are intentionally reduced to the three destinations that
+  // describe the case: Áttekintés, Kontextus and Ügyfélportál. Communication is a
+  // different concept from case context, so it is no longer a co-equal top tab:
+  // its route stays reachable through the restrained secondary navigation below.
+  // Documents / Feladatok / Határidők / Munkaórák are not co-equal primary tabs
+  // either — the Áttekintés workspace exposes them in-page. The underlying routes
+  // stay reachable by direct URL, so an incoming activeTab that is no longer a
+  // primary tab simply renders with no highlighted primary tab rather than breaking.
   const tabs = [
     { id: "overview" as const, label: "Áttekintés", href: `/cases/${caseId}` },
-    { id: "communications" as const, label: "Kommunikáció", href: `/cases/${caseId}/communications` },
+    // Kontextus is a navigation seam only in this PR. It points at the existing
+    // case-context panel on the Áttekintés surface; the full Kontextus workspace
+    // (email-thread view, free-text paste, custom anonymization, ingestion) is a
+    // later, separate deliverable. No placeholder surface is fabricated here.
+    { id: "context" as const, label: "Kontextus", href: `/cases/${caseId}#ck-starting-context` },
     { id: "clientPortal" as const, label: "Ügyfélportál", href: `/cases/${caseId}/client-portal` },
+  ];
+  const secondaryLinks = [
+    { id: "communications" as const, label: "Kommunikáció", href: `/cases/${caseId}/communications` },
   ];
   const visibleDeadline = formatDeadline(deadline);
 
@@ -76,6 +85,17 @@ export function CaseWorkspaceNav({
         {tabs.map((tab) => (
           <Link key={tab.id} href={tab.href} className={itemClass(activeTab === tab.id)} aria-current={activeTab === tab.id ? "page" : undefined}>
             {tab.label}
+          </Link>
+        ))}
+      </nav>
+
+      {/* Restrained secondary destinations. These are routes, not actions, and
+          must not compete with the primary tabs above. */}
+      <nav data-testid="case-workspace-secondary-nav" aria-label="Ügy további nézetei" className="flex flex-wrap items-center gap-x-2 gap-y-1 pt-1 text-[11px]">
+        <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">További nézetek</span>
+        {secondaryLinks.map((link) => (
+          <Link key={link.id} href={link.href} className="font-semibold text-[var(--adm-text-muted)] hover:text-[var(--adm-text)] hover:underline">
+            {link.label}
           </Link>
         ))}
       </nav>

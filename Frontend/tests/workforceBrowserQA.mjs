@@ -91,6 +91,9 @@ function complianceFindings() {
 
 function responseFor(url, mode = "populated") {
   if (url.includes("/auth/me")) return { status: 200, body: AUTH_ME };
+  // Hourly rates are not part of the case-workspace IA fixture: return the
+  // canonical "no rate" failure instead of leaking a wrong-shape /clients body.
+  if (url.includes("/hourly-rates/")) return { status: 404, body: { status: 404, code: "QA_NO_HOURLY_RATE" } };
   if (url.includes("/dashboard/stats")) return {
     status: 200,
     body: { stats: { totalCases: 1, inReview: 0, pendingClient: 0, completedThisMonth: 0 }, recentActivity: [] },
@@ -220,6 +223,9 @@ function responseFor(url, mode = "populated") {
   if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workflow-graph`)) return { status: 200, body: { caseId: WORKFORCE_FIXTURE.case.id, nodes: [], edges: [], currentStatus: "ACTIVE", possibleTransitions: [] } };
   if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workflow-history`)) return { status: 200, body: [] };
   if (url.includes("/users")) return { status: 200, body: { data: [AUTH_ME] } };
+  // Case Workspace lifecycle list (GET /tasks without a query). Empty so the
+  // workspace projection stays the single source of task data.
+  if (url.endsWith("/tasks")) return { status: 200, body: [] };
   if (url.includes(`/tasks?`)) return { status: 200, body: [WORKFORCE_FIXTURE.task] };
   if (url.includes("/cases?")) return { status: 200, body: mode === "case-out-of-window" ? { data: [], page: 1, limit: 100, total: 0, totalPages: 1 } : { data: [WORKFORCE_FIXTURE.case], page: 1, limit: 100, total: 1, totalPages: 1 } };
   if (mode === "case-out-of-window" && url.endsWith(`/cases/${WORKFORCE_FIXTURE.case.id}`)) return { status: 200, body: WORKFORCE_FIXTURE.case };
@@ -245,6 +251,9 @@ function responseFor(url, mode = "populated") {
   if (url.includes(`/client-identity/admin/workspaces?clientId=${WORKFORCE_FIXTURE.client.id}`)) return { status: 200, body: { items: [{ id: "qa-workspace", clientId: WORKFORCE_FIXTURE.client.id, mode: "ORGANIZATION", status: "ACTIVE" }] } };
   if (url.endsWith(`/clients/${WORKFORCE_FIXTURE.client.id}`)) return { status: 200, body: WORKFORCE_FIXTURE.client };
   if (url.includes("/clients")) return { status: 200, body: { data: [WORKFORCE_FIXTURE.client] } };
+  if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/communications`)) return { status: 200, body: [] };
+  // Case-scoped communication list used by the Communication Workspace route.
+  if (url.includes("/communications")) return { status: 200, body: { communications: [] } };
   if (url.includes(`/cases/${WORKFORCE_FIXTURE.case.id}/workspace`)) return {
     status: 200,
     body: {
@@ -378,6 +387,68 @@ async function assertComplianceMode(browser, mode, viewport) {
   await qa.context.close();
 }
 
+async function assertCaseWorkspaceIa(browser) {
+  const qa = await newPage(browser, "populated", VIEWPORTS[0]);
+  const target = `/cases/${WORKFORCE_FIXTURE.case.id}`;
+  const gotoCase = () => qa.page.goto(`${BASE_URL}${target}`, { waitUntil: "networkidle" });
+  await gotoCase();
+
+  // The converged top navigation is exactly Áttekintés / Kontextus / Ügyfélportál.
+  const primaryTabs = await qa.page.locator('nav[aria-label="Ügy munkaterület"] a').allInnerTexts();
+  const expectedTabs = ["Áttekintés", "Kontextus", "Ügyfélportál"];
+  if (JSON.stringify(primaryTabs) !== JSON.stringify(expectedTabs)) {
+    throw new Error(`Case Workspace top nav mismatch: ${JSON.stringify(primaryTabs)}`);
+  }
+
+  const body = await qa.page.locator("body").innerText();
+  if (/gyors műveletek/i.test(body)) throw new Error("legacy 'Gyors műveletek' presentation returned");
+
+  // Exactly one primary action surface, labelled Műveletek, with the canonical
+  // actions and without the demoted standalone deadline trigger.
+  const actionSurface = qa.page.locator('[data-testid="case-workspace-quick-actions"]');
+  if (!await actionSurface.isVisible()) {
+    throw new Error(`the single Műveletek action surface is missing (count=${await actionSurface.count()})`);
+  }
+  const actionText = (await actionSurface.textContent()) || "";
+  for (const label of ["Műveletek", "Új feladat", "Dokumentum feltöltése", "Megjegyzés hozzáadása", "AI előkészítés", "Munkaidő rögzítése"]) {
+    if (!actionText.includes(label)) throw new Error(`Műveletek surface is missing: ${label}`);
+  }
+  if (actionText.includes("+ Határidő")) throw new Error("standalone + Határidő trigger is still on the primary action surface");
+
+  // Kontextus is a truthful seam to the existing case-context panel.
+  const contextHref = await qa.page.locator('nav[aria-label="Ügy munkaterület"] a', { hasText: "Kontextus" }).getAttribute("href");
+  if (!contextHref || !contextHref.endsWith("#ck-starting-context")) {
+    throw new Error("Kontextus tab is not a truthful seam to existing context data");
+  }
+
+  // Communication is demoted to a restrained secondary route and stays reachable.
+  const secondary = qa.page.locator('[data-testid="case-workspace-secondary-nav"] a');
+  const secondaryTexts = await secondary.allInnerTexts();
+  if (!secondaryTexts.includes("Kommunikáció")) throw new Error("Communication secondary route is missing");
+  const commHref = await secondary.first().getAttribute("href");
+  if (!commHref || !commHref.endsWith(`/cases/${WORKFORCE_FIXTURE.case.id}/communications`)) {
+    throw new Error("Communication secondary route href is not canonical");
+  }
+  await secondary.first().click();
+  await qa.page.waitForURL(`**/cases/${WORKFORCE_FIXTURE.case.id}/communications`);
+  const commBody = await qa.page.locator("body").innerText();
+  if (!commBody.includes("Kommunikáció")) throw new Error("Communication route did not render");
+
+  // Screenshot the converged Case Workspace at each viewport without overflow.
+  await gotoCase();
+  for (const viewport of VIEWPORTS) {
+    await qa.page.setViewportSize(viewport);
+    await gotoCase();
+    if (await qa.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) {
+      throw new Error(`Case Workspace IA has horizontal overflow at ${viewport.width}`);
+    }
+    await qa.page.screenshot({ path: path.join(SHOTS, `case-workspace-ia-${viewport.width}.png`), fullPage: true });
+  }
+
+  if (qa.hardErrors.length) throw new Error(`Case Workspace IA browser errors: ${qa.hardErrors.join("; ")}`);
+  await qa.context.close();
+}
+
 async function main() {
   assertFixtureContract();
   fs.mkdirSync(SHOTS, { recursive: true });
@@ -399,6 +470,7 @@ async function main() {
       if (qa.hardErrors.length) throw new Error(`${target.label} browser errors: ${qa.hardErrors.join("; ")}`);
       await qa.context.close();
     }
+    await assertCaseWorkspaceIa(browser);
     for (const viewport of VIEWPORTS) {
       for (const mode of ["populated", "loading", "empty", "unavailable"]) {
         await assertComplianceMode(browser, mode, viewport);

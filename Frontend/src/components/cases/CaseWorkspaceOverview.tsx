@@ -288,12 +288,6 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
               </span>
             </div>
           </div>
-          {/* Primary actions — secondary links must not compete with these. */}
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <AdminButton variant="primary" size="sm" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
-            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés hozzáadása</AdminButton>
-            <AdminButton variant="neutral" size="sm" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
-          </div>
         </div>
       </section>
 
@@ -316,12 +310,11 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
 
       <CaseInsightTiles workspace={ws} caseId={caseId} />
 
-      <section aria-label="Gyors műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
-        <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Gyors műveletek</span>
-        <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Feladat</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "deadline-create" })}>+ Határidő</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>+ Dokumentum</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés</AdminButton>
+      <section aria-label="Műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
+        <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Műveletek</span>
+        <AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>Új feladat</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>Dokumentum feltöltése</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés hozzáadása</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setAiPromptOpen(true)}>AI előkészítés</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => { setTimeDialogResumeTask(null); setTimeDialogInitialTaskId(undefined); setTimeDialogOpen(true); }}>Munkaidő rögzítése</AdminButton>
       </section>
@@ -345,8 +338,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         {/* -------- Left: work and time pressure -------- */}
         <div className="min-w-0 space-y-4">
-          <CockpitSection id="ck-tasks" title="Aktív munka" accent="petrol" count={ws.tasks.length}
-            action={<AdminButton variant="primary" size="xs" onClick={() => setModal({ type: "task-create" })}>+ Feladat</AdminButton>}>
+          <CockpitSection id="ck-tasks" title="Aktív munka" accent="petrol" count={ws.tasks.length}>
             {warn("tasks") ? (
               <ActionableEmpty message="A feladatok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
             ) : ws.tasks.length === 0 ? (
@@ -375,8 +367,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             )}
           </CockpitSection>
 
-          <CockpitSection id="ck-deadlines" title="Határidők" accent="terracotta" count={cp.kpi.deadlines.count}
-            action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "deadline-create" })}>+ Határidő</AdminButton>}>
+          <CockpitSection id="ck-deadlines" title="Határidők" accent="terracotta" count={cp.kpi.deadlines.count}>
             {allDeadlines.length === 0 ? (
               <ActionableEmpty message="Nincs rögzített határidő." actionLabel="Határidő hozzáadása" onAction={() => setModal({ type: "deadline-create" })} />
             ) : (
