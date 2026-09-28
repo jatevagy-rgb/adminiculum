@@ -1,11 +1,14 @@
 /**
  * W1 CLI entry point + run orchestrator. W2 delivery is explicit opt-in.
  *
- * Pipeline: manifest snapshot -> distinct CELEX -> official CELLAR SPARQL ->
- * act-level amendment/consolidation observations -> deterministic diff against
+ * Pipeline: manifest (FILE snapshot or BACKEND watcher-monitoring manifest) ->
+ * distinct CELEX -> official CELLAR SPARQL -> act-level
+ * amendment/consolidation observations -> deterministic diff against
  * watcher-owned durable local baseline -> dry-run report. In explicit DELIVER
  * mode additionally: W2 mapping -> app-only token -> batched observation POST
- * -> bounded result interpretation -> SEPARATE delivery bookkeeping.
+ * -> bounded result interpretation -> SEPARATE delivery bookkeeping. In
+ * BACKEND manifest mode the same app-only token provider instance is reused
+ * for the manifest GET and the delivery POST; there is no local-file fallback.
  *
  * Per-CELEX isolation: a failed identifier retains its previous state and
  * reports SOURCE_ERROR; other identifiers may still commit their own
@@ -22,7 +25,13 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CellarAdapter, SourceError, type EurlexAdapter } from './adapters/eurlex';
 import { createFileStateStore, StateError, type StateStore } from './capture';
-import { ConfigError, parseArgs, resolveConfig, type WatcherConfig } from './config';
+import {
+  ConfigError,
+  parseArgs,
+  resolveConfig,
+  type ManifestMode,
+  type WatcherConfig,
+} from './config';
 import {
   createFileDeliveryStateStore,
   deliverObservations,
@@ -33,11 +42,19 @@ import {
 import { diffCelex, mergeEventsForState } from './diff';
 import {
   HttpError,
+  nodeFetchGetWithHeaders,
   nodeFetchPost,
   nodeFetchWithHeaders,
   type BoundedHttpOptions,
+  type HttpGetFn,
 } from './http';
-import { extractCelexDemand, loadManifestFile, ManifestError } from './manifest';
+import {
+  extractCelexDemand,
+  loadManifestFile,
+  loadManifestFromBackend,
+  ManifestError,
+  type ValidatedManifest,
+} from './manifest';
 import { createJsonLogger, truncate, type Logger } from './logging';
 import { buildReport, renderHumanSummary } from './report';
 import { createTokenProviderFromConfig, type AccessTokenProvider } from './tokenProvider';
@@ -64,6 +81,8 @@ export interface WatcherDeps {
   deliveryStore?: DeliveryStateStore;
   tokenProvider?: AccessTokenProvider;
   deliveryPost?: DeliveryPostFn;
+  /** Optional remote manifest GET boundary (required in BACKEND manifest mode). */
+  manifestGet?: HttpGetFn;
 }
 
 export interface WatcherOutcome {
@@ -72,9 +91,10 @@ export interface WatcherOutcome {
 }
 
 export const HELP_TEXT = [
-  'Usage: node dist/index.js --manifest <path> [--state-dir <dir>] [--report-out <path|->] [--deliver]',
+  'Usage: node dist/index.js [--manifest <path>] [--state-dir <dir>] [--report-out <path|->] [--deliver]',
   '',
-  '  --manifest <path>   exported monitoring manifest snapshot (schema v1, JSON)',
+  '  --manifest <path>   exported monitoring manifest snapshot (schema v1, JSON);',
+  '                      required in FILE manifest mode (the default)',
   '  --state-dir <dir>   watcher-owned durable state directory (default: ./state)',
   '  --report-out <path> write the machine-readable JSON report to <path>',
   '                      ("-" prints the JSON report to stdout)',
@@ -82,24 +102,30 @@ export const HELP_TEXT = [
   '  --help              show this help',
   '',
   'Environment:',
+  '  LEGAL_WATCHER_MANIFEST_MODE (FILE|BACKEND; default FILE),',
+  '  LEGAL_WATCHER_MANIFEST (manifest snapshot path in FILE mode),',
   '  LEGAL_WATCHER_STATE_DIR, LEGAL_WATCHER_EURLEX_ENDPOINT,',
   '  LEGAL_WATCHER_HTTP_TIMEOUT_MS (<=30000), LEGAL_WATCHER_HTTP_RETRIES (<=2),',
   '  LEGAL_WATCHER_HTTP_BACKOFF_MS, LEGAL_WATCHER_HTTP_BACKOFF_FACTOR,',
   '  LEGAL_WATCHER_RESPONSE_MAX_BYTES, LEGAL_WATCHER_CONCURRENCY,',
   '  LEGAL_WATCHER_DELIVERY_MODE (DRY_RUN|DELIVER), LEGAL_WATCHER_DELIVERY_BATCH_SIZE,',
-  '  LEGAL_WATCHER_BACKEND_ENDPOINT (DELIVER only),',
+  '  LEGAL_WATCHER_BACKEND_ENDPOINT (required in BACKEND manifest mode and DELIVER mode),',
   '  LEGAL_WATCHER_AZURE_AUTH_MODE (CLIENT_SECRET|MANAGED_IDENTITY; default CLIENT_SECRET),',
   '  CLIENT_SECRET mode (default): LEGAL_WATCHER_AZURE_TENANT_ID, LEGAL_WATCHER_AZURE_CLIENT_ID,',
   '  LEGAL_WATCHER_AZURE_CLIENT_SECRET, LEGAL_WATCHER_AZURE_SCOPE,',
-  '  LEGAL_WATCHER_AZURE_AUTHORITY_HOST (DELIVER only),',
+  '  LEGAL_WATCHER_AZURE_AUTHORITY_HOST (BACKEND manifest mode and DELIVER mode),',
   '  MANAGED_IDENTITY mode: LEGAL_WATCHER_AZURE_SCOPE (api://<backend-app-id>/.default) or',
   '  LEGAL_WATCHER_AZURE_RESOURCE (api://<backend-app-id>), plus the runtime-provided',
-  '  IDENTITY_ENDPOINT and IDENTITY_HEADER (DELIVER only; no secret required)',
+  '  IDENTITY_ENDPOINT and IDENTITY_HEADER (BACKEND manifest mode and DELIVER mode; no',
+  '  secret required)',
   '',
-  'DEFAULT IS DRY RUN: zero Adminiculum backend writes, no token request. First',
-  'successful observation of a CELEX establishes a FIRST_SEEN_BASELINE (historical',
-  'relationships are never reported as new and are never delivered). Exit code:',
-  '0 = OK, 1 = PARTIAL/FAILED, 2 = fatal configuration/manifest/state error.',
+  'DEFAULT IS DRY RUN: zero Adminiculum backend writes. FILE manifest mode performs no',
+  'token request and never calls the backend. BACKEND manifest mode performs exactly one',
+  'authenticated read (GET the watcher-monitoring manifest) per run with the same',
+  'app-only token used by delivery; there is no local-file fallback. First successful',
+  'observation of a CELEX establishes a FIRST_SEEN_BASELINE (historical relationships',
+  'are never reported as new and are never delivered). Exit code: 0 = OK,',
+  '1 = PARTIAL/FAILED, 2 = fatal configuration/manifest/state error.',
 ].join('\n');
 
 function sanitizeSourceError(sourceIdentifier: string, err: unknown): SanitizedError {
@@ -167,14 +193,17 @@ export async function runWatcher(
   const runId = deps.uuid();
   const logger = deps.logger;
   const deliveryMode: DeliveryMode = config.deliveryMode ?? 'DRY_RUN';
-  logger.info('LW_RUN_START', 'watcher run started', { runId, deliveryMode });
+  const manifestMode: ManifestMode = config.manifestMode ?? 'FILE';
+  logger.info('LW_RUN_START', 'watcher run started', { runId, deliveryMode, manifestMode });
 
   let deliveryStore: DeliveryStateStore | null = null;
   let tokenProvider: AccessTokenProvider | null = null;
   let deliveryState: DeliveryState | null = null;
+  if (deliveryMode === 'DELIVER' || manifestMode === 'BACKEND') {
+    tokenProvider = deps.tokenProvider ?? null;
+  }
   if (deliveryMode === 'DELIVER') {
     deliveryStore = deps.deliveryStore ?? null;
-    tokenProvider = deps.tokenProvider ?? null;
     if (deliveryStore === null) {
       throw new ConfigError('DELIVER mode requires a delivery state store');
     }
@@ -187,7 +216,27 @@ export async function runWatcher(
     deliveryState = deliveryStore.load();
   }
 
-  const manifest = loadManifestFile(config.manifestPath);
+  let manifest: ValidatedManifest;
+  if (manifestMode === 'BACKEND') {
+    const endpoint = config.backendEndpoint ?? null;
+    if (endpoint === null) {
+      throw new ConfigError('BACKEND manifest mode requires a backend endpoint');
+    }
+    if (tokenProvider === null) {
+      throw new ConfigError('BACKEND manifest mode requires an app-only token provider');
+    }
+    manifest = await loadManifestFromBackend({
+      endpoint,
+      tokenProvider,
+      get: deps.manifestGet ?? nodeFetchGetWithHeaders,
+      http: httpOptionsFromConfig(config),
+    });
+  } else {
+    if (config.manifestPath === null) {
+      throw new ConfigError('FILE manifest mode requires a manifest path');
+    }
+    manifest = loadManifestFile(config.manifestPath);
+  }
   const demand = extractCelexDemand(manifest, (droppedPath) =>
     logger.warn('LW_PRIVACY_GUARD', 'dropped unexpected manifest field', { path: droppedPath }),
   );
@@ -373,6 +422,7 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
     }
     const config = resolveConfig(args);
     const httpOptions = httpOptionsFromConfig(config);
+    const manifestMode: ManifestMode = config.manifestMode ?? 'FILE';
     const deps: WatcherDeps = {
       adapter: new CellarAdapter({
         post: nodeFetchPost,
@@ -384,12 +434,16 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
       now: () => new Date(),
       uuid: () => randomUUID(),
     };
-    if (config.deliveryMode === 'DELIVER') {
+    if (config.deliveryMode === 'DELIVER' || manifestMode === 'BACKEND') {
       if (!config.tokenConfig) {
-        throw new ConfigError('DELIVER mode requires app-only token configuration');
+        throw new ConfigError(
+          'BACKEND manifest mode and DELIVER mode require app-only token configuration',
+        );
       }
-      deps.deliveryStore = createFileDeliveryStateStore(config.stateDir);
       deps.tokenProvider = createTokenProviderFromConfig(config.tokenConfig);
+    }
+    if (config.deliveryMode === 'DELIVER') {
+      deps.deliveryStore = createFileDeliveryStateStore(config.stateDir);
       deps.deliveryPost = nodeFetchWithHeaders;
     }
     const { report, exitCode } = await runWatcher(config, deps);
