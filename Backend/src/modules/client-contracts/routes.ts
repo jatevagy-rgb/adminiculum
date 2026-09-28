@@ -95,6 +95,15 @@ clientContractsRouter.post('/occurrences/:occurrenceId/status', async (req, res)
   try { res.json(await contracts.transitionObligationOccurrence(actor(req), String(req.params.occurrenceId), req.body?.status)); } catch (e) { fail(res, e); }
 });
 
+// Occurrence customer-publication gate — a deliberate action, never implied by
+// occurrence creation or candidate confirmation (#399).
+clientContractsRouter.post('/occurrences/:occurrenceId/publish', async (req, res) => {
+  try { res.json(await contracts.publishObligationOccurrence(actor(req), String(req.params.occurrenceId))); } catch (e) { fail(res, e); }
+});
+clientContractsRouter.post('/occurrences/:occurrenceId/unpublish', async (req, res) => {
+  try { res.json(await contracts.unpublishObligationOccurrence(actor(req), String(req.params.occurrenceId))); } catch (e) { fail(res, e); }
+});
+
 // ContractEntitlement
 clientContractsRouter.get('/contracts/:contractId/entitlements', async (req, res) => {
   try { res.json(await contracts.listEntitlements(actor(req), String(req.params.contractId), { status: req.query.status as string })); } catch (e) { fail(res, e); }

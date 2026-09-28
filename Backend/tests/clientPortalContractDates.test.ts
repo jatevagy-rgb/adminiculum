@@ -38,6 +38,7 @@ function readers(overrides: Partial<CustomerCalendarReaders> = {}): CustomerCale
     grantedCaseIds: async () => [],
     listCaseRequests: async () => [],
     listContracts: async () => [],
+    listPublishedOccurrences: async () => [],
     listCompanyMilestones: async () => [],
     listGrowInitiatives: async () => [],
     listComplianceReviews: async () => [],
@@ -181,14 +182,15 @@ describe('contract date mapper (canonical published projection only)', () => {
 
 describe('contract calendar integration reuses the canonical projection', () => {
   it('projects the customer-safe contract dates without an extra event model', async () => {
-    // The category set is unchanged: contract dates reuse the existing CONTRACT_DATE
-    // category rather than introducing a second calendar/event store.
+    // Contract dates reuse the existing CONTRACT_DATE category. The additive
+    // CONTRACT_OCCURRENCE category carries ONLY explicitly published occurrences.
     expect([...CUSTOMER_CALENDAR_CATEGORIES]).toEqual([
       'MATTER_TARGET',
       'PUBLISHED_DEADLINE',
       'ACTION_REQUEST',
       'CUSTOMER_REQUEST',
       'CONTRACT_DATE',
+      'CONTRACT_OCCURRENCE',
       'COMPANY_MILESTONE',
       'GROW_TARGET',
       'COMPLIANCE_REVIEW',
