@@ -1,4 +1,9 @@
 import { prisma } from '../../prisma/prisma.service';
+import {
+  buildMailboxPrivacyWhere,
+  resolveCommunicationPrivacyScope,
+  visibleCommunicationIdSet,
+} from '../communications/readScope';
 
 export type CaseActivityKind = 'TASK' | 'DOCUMENT' | 'COMMUNICATION' | 'TIMELINE';
 export type CaseActivitySource = 'tasks' | 'documents' | 'communications' | 'timeline_events';
@@ -80,12 +85,18 @@ function countByKey(rows: Array<Record<string, unknown>>, key: string): Map<stri
 export async function getCaseActivity(
   caseId: string,
   query: { limit?: unknown; offset?: unknown; type?: unknown } = {},
+  actor?: { userId?: string | null } | null,
 ): Promise<CaseActivityDto | null> {
   const caseRecord = await prisma.case.findUnique({
     where: { id: caseId },
     select: { id: true },
   });
   if (!caseRecord) return null;
+
+  // Mailbox ownership is a privacy boundary above role: communication activity
+  // (and task/timeline source links to communications) must respect it.
+  const privacyScope = actor?.userId ? await resolveCommunicationPrivacyScope(actor.userId) : null;
+  const communicationPrivacyWhere = buildMailboxPrivacyWhere(privacyScope);
 
   const limit = parseLimit(query.limit);
   const offset = parseOffset(query.offset);
@@ -130,7 +141,7 @@ export async function getCaseActivity(
       : Promise.resolve([]),
     !typeFilter || typeFilter === 'COMMUNICATION'
       ? prisma.communication.findMany({
-          where: { caseId },
+          where: { caseId, ...communicationPrivacyWhere },
           select: {
             id: true,
             subject: true,
@@ -181,6 +192,22 @@ export async function getCaseActivity(
     sourceTaskCounts = countByKey(communicationTasks as Array<Record<string, unknown>>, 'sourceCommunicationId');
   }
 
+  // Task / timeline source links pointing at a hidden foreign mailbox
+  // communication are nulled so the activity feed never exposes them. Fail
+  // closed (hide links) when the membership check itself cannot run.
+  let readableCommunicationIds = new Set<string>();
+  try {
+    readableCommunicationIds = await visibleCommunicationIdSet(
+      [
+        ...tasks.map((task) => task.sourceCommunicationId),
+        ...timelineEvents.map((event) => event.communicationId),
+      ],
+      privacyScope,
+    );
+  } catch {
+    readableCommunicationIds = new Set();
+  }
+
   const items: CaseActivityItem[] = [
     ...tasks.map((task) => ({
       id: `task-${task.id}`,
@@ -191,7 +218,7 @@ export async function getCaseActivity(
       occurredAt: toIso(task.updatedAt || task.createdAt),
       caseId,
       documentId: task.documentId || null,
-      communicationId: task.sourceCommunicationId || null,
+      communicationId: task.sourceCommunicationId && readableCommunicationIds.has(task.sourceCommunicationId) ? task.sourceCommunicationId : null,
       taskId: task.id,
       href: `/tasks?taskId=${encodeURIComponent(task.id)}`,
       meta: { status: task.status ? String(task.status) : null, type: task.taskType ? String(task.taskType) : null },
@@ -237,7 +264,7 @@ export async function getCaseActivity(
       occurredAt: toIso(event.createdAt),
       caseId,
       documentId: event.documentId || null,
-      communicationId: event.communicationId || null,
+      communicationId: event.communicationId && readableCommunicationIds.has(event.communicationId) ? event.communicationId : null,
       taskId: event.taskId || null,
       href: `/cases/${encodeURIComponent(caseId)}`,
       meta: { type: String(event.type || event.eventType || '') || null },
