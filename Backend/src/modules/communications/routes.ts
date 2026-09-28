@@ -31,6 +31,11 @@ import casesService from '../cases/services';
 import { userCanManageCase as canonicalUserCanManageCase } from '../cases/authorization';
 import { InteractionError, type InternalActor } from '../client-interaction/base';
 import { listClientCommunicationSummary } from './clientSummary.service';
+import {
+  buildMailboxPrivacyWhere,
+  resolveCommunicationPrivacyScope,
+  userCanReadMailboxCommunication,
+} from './readScope';
 
 const router = Router();
 
@@ -66,13 +71,20 @@ router.param('id', async (req: Request, res: Response, next: NextFunction, id: s
   try {
     const row = await prisma.communication.findUnique({
       where: { id: String(id) },
-      select: { id: true, caseId: true, createdById: true },
+      select: { id: true, caseId: true, createdById: true, mailboxConnectionId: true, source: true, mailboxAddress: true },
     });
     if (!row) {
       res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
       return;
     }
-    if (!req.user?.userId || !(await userCanReadCommunication(req.user.userId, req.user.role, row))) {
+    const userId = req.user?.userId;
+    // Mailbox ownership is a privacy boundary above role: ADMIN/PARTNER never
+    // bypass it. Non-mailbox rows keep the existing case/creator authorization.
+    if (
+      !userId
+      || !(await userCanReadMailboxCommunication(userId, row))
+      || !(await userCanReadCommunication(userId, req.user!.role, row))
+    ) {
       const isLinkedCaseReassignment = req.method === 'POST' && req.path.endsWith('/link-case') && Boolean(row.caseId);
       res.status(403).json(isLinkedCaseReassignment
         ? { status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to the currently linked case.' }
@@ -384,6 +396,27 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     const take = parseListLimit(req.query.limit);
     const skip = parseNonNegativeInteger(req.query.offset, 0);
 
+    // List AND count must use the identical scope: mailbox ownership is a
+    // privacy boundary above role, so ADMIN/PARTNER do not bypass it. The
+    // privacy fragment is merged as an AND conjunct so the pre-existing
+    // case/query filters keep their shape. The raw effective-time query gets
+    // the identical boundary as raw SQL.
+    const privacyScope = await resolveCommunicationPrivacyScope(req.user.userId);
+    const scopedWhere = {
+      ...where,
+      AND: [...(Array.isArray(where.AND) ? where.AND : []), buildMailboxPrivacyWhere(privacyScope)],
+    };
+    const rawPrivacyFilters: Prisma.Sql[] = [];
+    if (privacyScope.ownedMailboxConnectionIds.length > 0) {
+      rawPrivacyFilters.push(Prisma.sql`"mailboxConnectionId" IN (${Prisma.join(privacyScope.ownedMailboxConnectionIds)})`);
+    }
+    if (privacyScope.canonicalEmail) {
+      rawPrivacyFilters.push(Prisma.sql`("mailboxConnectionId" IS NULL AND "source"::text = 'OUTLOOK' AND LOWER("mailboxAddress") = ${privacyScope.canonicalEmail})`);
+    }
+    rawPrivacyFilters.push(Prisma.sql`("mailboxConnectionId" IS NULL AND "source" IS NULL)`);
+    rawPrivacyFilters.push(Prisma.sql`("mailboxConnectionId" IS NULL AND "source"::text = 'MANUAL')`);
+    rawFilters.push(Prisma.sql`(${Prisma.join(rawPrivacyFilters, ' OR ')})`);
+
     let rows: CommunicationListRow[] = [];
     try {
       // Ordered by canonical effective message time BEFORE take/skip so
@@ -448,7 +481,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 
     let total = 0;
     try {
-      total = await prisma.communication.count({ where });
+      total = await prisma.communication.count({ where: scopedWhere });
     } catch (countError) {
       logPrismaRouteError('GET /communications count-total', countError);
       total = rows.length;

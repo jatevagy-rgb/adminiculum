@@ -73,7 +73,9 @@ describe('communications effective message time and ordering', () => {
     expect(handler).toContain('"caseId" IS NULL AND "createdById" = ');
     expect(handler).toContain('"caseId" IN (');
     expect(handler).toContain('type::text = ');
-    expect(handler).toMatch(/prisma\.communication\.count\(\{ where \}\)/);
+    // The canonical total keeps the identical permission scope; #434 extends
+    // it with the mailbox privacy boundary (list and count share scopedWhere).
+    expect(handler).toMatch(/prisma\.communication\.count\(\{ where: scopedWhere \}\)/);
   });
 
   it('does not persist an effective-time column (no schema or migration change)', () => {

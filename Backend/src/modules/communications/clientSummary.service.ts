@@ -6,6 +6,7 @@ import {
   type InternalActor,
   type Prisma,
 } from '../client-interaction/base';
+import { buildMailboxPrivacyWhere, resolveCommunicationPrivacyScope } from './readScope';
 
 export type ClientCommunicationSummaryItem = {
   id: string;
@@ -74,11 +75,19 @@ export async function listClientCommunicationSummary(
   const readableCaseIds = readableClientCases.map((item) => item.id);
   const caseById = new Map(readableClientCases.map((item) => [item.id, item]));
 
+  // Mailbox ownership is a privacy boundary above role: the client summary
+  // must never reveal another user's mailbox email, even to ADMIN/PARTNER.
+  const privacyScope = await resolveCommunicationPrivacyScope(actor.userId, prisma);
   const where: PrismaTypes.CommunicationWhereInput = {
-    OR: [
-      { clientId, caseId: null },
-      { caseId: { in: readableCaseIds }, clientId: null },
-      { caseId: { in: readableCaseIds }, clientId },
+    AND: [
+      {
+        OR: [
+          { clientId, caseId: null },
+          { caseId: { in: readableCaseIds }, clientId: null },
+          { caseId: { in: readableCaseIds }, clientId },
+        ],
+      },
+      buildMailboxPrivacyWhere(privacyScope),
     ],
   };
   const limit = clampLimit(opts.limit);

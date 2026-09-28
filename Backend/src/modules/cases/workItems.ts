@@ -1,5 +1,10 @@
 import { prisma } from '../../prisma/prisma.service';
 import { isDatabaseFoundationEnabled } from '../../middleware/featureAvailability';
+import {
+  buildMailboxPrivacyWhere,
+  resolveCommunicationPrivacyScope,
+  visibleCommunicationIdSet,
+} from '../communications/readScope';
 
 export type WorkItemType = 'TASK' | 'HANDOFF' | 'DOCUMENT' | 'COMMUNICATION';
 export type WorkflowCategory = 'OPEN' | 'IN_PROGRESS' | 'BLOCKED' | 'WAITING' | 'REVIEW' | 'HANDOFF' | 'COMPLETED';
@@ -290,6 +295,12 @@ export async function getCaseWorkItems(
   });
   if (!caseRecord) return null;
 
+  // Mailbox ownership is a privacy boundary above role: neither the
+  // communication work items nor task source projections may expose another
+  // user's mailbox email.
+  const privacyScope = await resolveCommunicationPrivacyScope(currentUserId);
+  const communicationPrivacyWhere = buildMailboxPrivacyWhere(privacyScope);
+
   const [tasks, documents, communications, handoffs] = await Promise.all([
     prisma.task.findMany({
       where: { caseId },
@@ -329,7 +340,7 @@ export async function getCaseWorkItems(
       take: 20,
     }),
     prisma.communication.findMany({
-      where: { caseId },
+      where: { caseId, ...communicationPrivacyWhere },
       select: {
         id: true,
         subject: true,
@@ -366,12 +377,28 @@ export async function getCaseWorkItems(
       : Promise.resolve([]),
   ]);
 
+  // Task source links pointing at a hidden foreign mailbox communication fall
+  // back to the case source. Fail closed (hide the link) when the membership
+  // check itself cannot run.
+  let readableCommunicationIds = new Set<string>();
+  try {
+    readableCommunicationIds = await visibleCommunicationIdSet(
+      tasks.map((task) => task.sourceCommunicationId),
+      privacyScope,
+    );
+  } catch {
+    readableCommunicationIds = new Set();
+  }
+
   const taskItems = tasks.map((task) => {
     const stuckReason = null;
     const stuckSince = null;
     const workflowCategory = deriveWorkflowCategory(task.status, stuckReason);
     const urgency = deriveUrgency(task.dueDate, now);
     const capabilities = deriveTaskCapabilities(task, currentUserId, currentUserRole);
+    const communicationSourceId = task.sourceCommunicationId && readableCommunicationIds.has(task.sourceCommunicationId)
+      ? task.sourceCommunicationId
+      : null;
     const item = {
       id: task.id,
       type: 'TASK' as const,
@@ -410,10 +437,10 @@ export async function getCaseWorkItems(
             displayName: 'Kapcsolt dokumentum',
             href: `/documents/compare?caseId=${encodeURIComponent(task.caseId)}&documentId=${encodeURIComponent(task.documentId)}`,
           }
-        : task.sourceCommunicationId
+        : communicationSourceId
           ? {
               type: 'COMMUNICATION' as const,
-              id: task.sourceCommunicationId,
+              id: communicationSourceId,
               displayName: 'Kapcsolt kommunikáció',
               href: `/cases/${encodeURIComponent(task.caseId)}/communications`,
             }
@@ -424,7 +451,7 @@ export async function getCaseWorkItems(
               href: `/cases/${encodeURIComponent(task.caseId)}`,
             },
       urgency,
-      capabilities: { ...capabilities, canOpenSource: Boolean(task.documentId || task.sourceCommunicationId) },
+      capabilities: { ...capabilities, canOpenSource: Boolean(task.documentId || communicationSourceId) },
       href: `/tasks?taskId=${encodeURIComponent(task.id)}`,
     };
     return item;
