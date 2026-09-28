@@ -98,11 +98,22 @@ startup, before any observation):
 
 - `LEGAL_WATCHER_DELIVERY_MODE=DELIVER` (or `--deliver`)
 - `LEGAL_WATCHER_BACKEND_ENDPOINT` — backend base URL (http(s))
-- `LEGAL_WATCHER_AZURE_TENANT_ID`, `LEGAL_WATCHER_AZURE_CLIENT_ID`,
-  `LEGAL_WATCHER_AZURE_CLIENT_SECRET`, `LEGAL_WATCHER_AZURE_SCOPE` — app-only
-  client-credentials token (no `az login`, no human/workforce token, no token
-  storage or logging)
-- optional: `LEGAL_WATCHER_AZURE_AUTHORITY_HOST`,
+- `LEGAL_WATCHER_AZURE_AUTH_MODE` — `CLIENT_SECRET` (default when unset) or
+  `MANAGED_IDENTITY`
+- CLIENT_SECRET mode (default, unchanged): `LEGAL_WATCHER_AZURE_TENANT_ID`,
+  `LEGAL_WATCHER_AZURE_CLIENT_ID`, `LEGAL_WATCHER_AZURE_CLIENT_SECRET`,
+  `LEGAL_WATCHER_AZURE_SCOPE` — app-only client-credentials token (no
+  `az login`, no human/workforce token, no token storage or logging)
+- MANAGED_IDENTITY mode: no secret/tenant environment. Requires
+  `LEGAL_WATCHER_AZURE_SCOPE` (`api://<backend-app-id>/.default`; the resource
+  is derived by stripping exactly that terminal suffix) or
+  `LEGAL_WATCHER_AZURE_RESOURCE` (`api://<backend-app-id>`), plus the
+  runtime-injected `IDENTITY_ENDPOINT` and `IDENTITY_HEADER` of the Azure
+  managed identity. Only `api://` resources are accepted; Graph/ARM resources
+  fail closed. Missing runtime variables fail configuration before any
+  observation. Requests are bounded, the token is cached in memory only, and
+  there is no silent fallback to CLIENT_SECRET.
+- optional: `LEGAL_WATCHER_AZURE_AUTHORITY_HOST` (CLIENT_SECRET mode),
   `LEGAL_WATCHER_DELIVERY_BATCH_SIZE` (1..100, default 50)
 
 Wire contract per run (only when there is something to deliver):
@@ -148,6 +159,26 @@ Delivery semantics:
 - Source-seen state and delivery state are **separate**: a source event that
   was observed but could not be delivered is not `NEW` again on the next run,
   while its delivery remains retryable. The W1 baseline is never rolled back.
+
+## Production runtime (Azure Container Apps Job)
+
+The chosen production runtime is an Azure Container Apps Job reusing the
+existing `adminiculum-malware-ca-env` environment (Austria East, consumption
+profile), running with a **system-assigned managed identity**. The managed
+identity is expected to later receive the `LegalSource.Ingest` application
+role on the Adminiculum API; the backend pins the identity's client/app id via
+`LEGAL_WATCHER_CLIENT_ID`. The job authenticates with
+`LEGAL_WATCHER_AZURE_AUTH_MODE=MANAGED_IDENTITY`, so no client secret is
+provisioned into the job.
+
+State stays file-based (`state.json`, `delivery.json`); it is **not** moved to
+PostgreSQL. `LEGAL_WATCHER_STATE_DIR` must point at a persistent mounted
+volume inside the job — the planned production mount is Azure Files. Running
+the job on an ephemeral container filesystem would lose the W1 baseline and
+pending W2 deliveries between runs.
+
+No Azure resource is provisioned by this repository; the description above is
+an operational requirement, not an automated deployment step.
 
 ## Manifest snapshot contract
 
@@ -205,7 +236,9 @@ tokens or identity. Writes are atomic. If delivery bookkeeping cannot be
 persisted, the source baseline is not advanced so no undelivered event can be
 stranded.
 
-State must not be committed to git (service-local `.gitignore`).
+State must not be committed to git (service-local `.gitignore`). In production
+`LEGAL_WATCHER_STATE_DIR` must be a persistent mounted volume (see
+"Production runtime" above).
 
 ## Testing
 
