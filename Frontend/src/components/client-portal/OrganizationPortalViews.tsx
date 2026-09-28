@@ -19,6 +19,7 @@ import {
   type PortalOrgCompany,
   type PortalOrgContract,
   type PortalOrgHomeAction,
+  type PortalOrgHomeDocument,
   type PortalOrganizationCase,
   type PortalOrganizationCaseDetail,
   type PortalOrganizationIntake,
@@ -57,6 +58,7 @@ type OrgState = {
   intakes: PortalOrganizationIntake[];
   leadership: PortalLeadershipUnitAggregate[] | null;
   contracts: PortalOrgContract[];
+  recentDocuments: PortalOrgHomeDocument[];
   company: PortalOrgCompany | null;
   detail: PortalOrganizationCaseDetail | null;
   matter: FullPortalMatter | null;
@@ -323,8 +325,20 @@ function OrganizationMatterDetail({
   );
 }
 
-function OrganizationDocuments({ workspace }: { workspace: PortalWorkspace }) {
+/**
+ * Slice 1 — reuse-only grouped documents surface. All three groups consume the
+ * canonical customer-safe projections and never derive dates, categories or
+ * recency locally:
+ *  - "Nemrég közzétett dokumentumok" is the canonical org-home
+ *    `recentDocuments` projection (`listPortalDocuments`, publishedAt DESC).
+ *  - "Aktív szerződések" and "Ebben a hónapban lejáró szerződések" reuse the
+ *    canonical `isActive` / `expiresThisMonth` flags with the same selectors as
+ *    the Szerződések page (Slice B).
+ */
+function OrganizationDocuments({ workspace, contracts, recentDocuments }: { workspace: PortalWorkspace; contracts: PortalOrgContract[]; recentDocuments: PortalOrgHomeDocument[] }) {
   const shared = dedupeCustomerItems(selectCustomerPublishedDocuments(workspace.documents));
+  const activeContracts = selectActiveContracts(contracts);
+  const expiringThisMonth = selectExpiringThisMonthContracts(contracts);
   return (
     <div className="space-y-5">
       <section className={card}>
@@ -332,6 +346,54 @@ function OrganizationDocuments({ workspace }: { workspace: PortalWorkspace }) {
         <h1 className="mt-2 font-serif text-3xl font-semibold text-stone-950">Az iroda által közzétett dokumentumok</h1>
         <p className="mt-2 text-sm text-stone-600">Itt csak azok a dokumentumok jelennek meg, amelyeket az iroda kifejezetten közzétett az Ön számára. A dokumentum- és adatbekérések, valamint a beküldött anyagok a Teendők között találhatók.</p>
       </section>
+      <Section title="Nemrég közzétett dokumentumok" empty={!recentDocuments.length} emptyText="Az iroda még nem tett közzé dokumentumot ezen az ügyfélfelületen.">
+        {recentDocuments.map((item) => (
+          <Link key={item.id} href={`/portal/documents/${encodeURIComponent(item.id)}`} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <b className="break-words text-stone-950">{item.title}</b>
+              {item.matterTitle ? <span className="rounded-full bg-stone-100 px-3 py-1 text-xs text-stone-700">{item.matterTitle}</span> : null}
+            </div>
+            {item.publishedAt ? <span className="mt-1 block text-xs text-stone-500">Közzétéve: {formatDate(item.publishedAt)}</span> : null}
+            <span className="mt-2 inline-flex text-sm font-semibold text-[#7a5f18]">Dokumentum megnyitása →</span>
+          </Link>
+        ))}
+      </Section>
+      <Section title="Aktív szerződések" empty={!activeContracts.length} emptyText="Jelenleg nincs hatályban lévő szerződése ezen az ügyfélfelületen.">
+        {activeContracts.map((contract) => (
+          <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
+                {contract.relatedMatterTitle ? <p className="mt-1 text-sm text-stone-600">Kapcsolódó ügy: {contract.relatedMatterTitle}</p> : null}
+              </div>
+              <span className="rounded-full bg-[#f3ead2] px-3 py-1 text-xs font-semibold text-[#6f5514]">{contract.statusLabel}</span>
+            </div>
+            {contract.publishedDoc?.downloadAvailable ? (
+              <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
+                Dokumentum megnyitása
+              </Link>
+            ) : null}
+          </article>
+        ))}
+      </Section>
+      <Section title="Ebben a hónapban lejáró szerződések" empty={!expiringThisMonth.length} emptyText="Ebben a hónapban nincs lejáró szerződése.">
+        {expiringThisMonth.map((contract) => (
+          <article key={contract.reference} className="rounded-2xl border border-stone-200 bg-white p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h3 className="break-words text-lg font-semibold text-stone-950">{contract.title}</h3>
+                <p className="mt-1 text-sm text-stone-600">Lejárat: {formatDate(contract.expiryDate)}</p>
+              </div>
+              <span className="text-xs font-semibold text-[var(--adm-terracotta-700)]">Ebben a hónapban lejár</span>
+            </div>
+            {contract.publishedDoc?.downloadAvailable ? (
+              <Link className="mt-3 inline-flex rounded-full bg-stone-950 px-4 py-2 text-sm font-semibold text-white" href={`/portal/documents/${encodeURIComponent(contract.publishedDoc.publicationId)}`}>
+                Dokumentum megnyitása
+              </Link>
+            ) : null}
+          </article>
+        ))}
+      </Section>
       <Section title="Közzétett dokumentumok" empty={!shared.length} emptyText="Az iroda még nem osztott meg dokumentumot ezen a munkaterületen.">
         {shared.map((item) => (
           <Link key={`${item.kind}-${item.id}`} href={item.actionUrl} className="rounded-2xl border border-stone-200 bg-white p-4 transition hover:border-[#b99b45] focus:outline-none focus:ring-4 focus:ring-[#d7c48a]/40">
@@ -790,26 +852,30 @@ function LeadershipSummary({ units, mode }: { units: PortalLeadershipUnitAggrega
 }
 
 export function OrganizationPortalViews({ view, resourceId, requestId, context, workspace }: Props) {
-  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, contracts: [], company: null, detail: null, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: true, message: null });
+  const [state, setState] = useState<OrgState>({ units: [], cases: [], intakes: [], leadership: null, contracts: [], recentDocuments: [], company: null, detail: null, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: true, message: null });
   const communicationDisabled = context.selectedWorkspace?.communicationMode === "EXTERNAL_ONLY";
   const isCaseRelay = context.selectedWorkspace?.mode === "CASE_RELAY";
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, message: null, detail: null, matter: null, matterError: null, requestDetail: null, requestUnavailable: false }));
     try {
-      const [unitsPage, casesPage, intakesPage, leadership, contractsPage, company] = await Promise.all([
+      const [unitsPage, casesPage, intakesPage, leadership, contractsPage, company, recentDocuments] = await Promise.all([
         getPortalOrganizationUnits(),
         getPortalOrganizationCases({ limit: 50 }),
         isCaseRelay ? Promise.resolve({ items: [] }) : getPortalOrganizationIntakes({ limit: 20 }),
         getPortalOrganizationSummary().then((result) => result.units).catch(() => null),
         getPortalOrganizationContracts().then((result) => result.items).catch(() => []),
         getPortalOrganizationCompany().catch(() => null),
+        // The Documents surface reuses the canonical org-home recent-documents
+        // projection (listPortalDocuments, publishedAt DESC). Loaded only for the
+        // documents view so every other surface keeps its existing payload.
+        view === "documents" ? getPortalOrgHome().then((result) => result.recentDocuments).catch(() => []) : Promise.resolve([]),
       ]);
       const caseReference = view === "matter" && resourceId
         ? (casesPage.items || []).find((item) => item.matterPublicationId === resourceId || item.publicReference === resourceId)?.publicReference || resourceId
         : null;
       const detail = caseReference ? await getPortalOrganizationCase(caseReference).catch(() => null) : null;
-      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, contracts: contractsPage, company, detail, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: false, message: null });
+      setState({ units: unitsPage.items || [], cases: casesPage.items || [], intakes: intakesPage.items || [], leadership, contracts: contractsPage, recentDocuments, company, detail, matter: null, matterLoading: false, matterError: null, requestDetail: null, requestUnavailable: false, loading: false, message: null });
       if (detail?.matterPublicationId) {
         setState((current) => ({ ...current, matterLoading: true }));
         try {
@@ -894,7 +960,7 @@ export function OrganizationPortalViews({ view, resourceId, requestId, context, 
           <OrganizationMatterDetail detail={state.detail} matter={state.matter} matterLoading={state.matterLoading} matterError={state.matterError} />
         )
       ) : null}
-      {view === "documents" ? <OrganizationDocuments workspace={workspace} /> : null}
+      {view === "documents" ? <OrganizationDocuments workspace={workspace} contracts={state.contracts} recentDocuments={state.recentDocuments} /> : null}
       {view === "messages" ? <OrganizationMessages workspace={workspace} cases={state.cases} /> : null}
       {view === "tasks" ? <OrganizationTasks workspace={workspace} mode={context.selectedWorkspace?.mode} /> : null}
       {view === "contracts" ? <OrganizationContracts contracts={state.contracts} /> : null}
