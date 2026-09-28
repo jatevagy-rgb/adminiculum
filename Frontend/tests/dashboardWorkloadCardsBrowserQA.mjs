@@ -85,6 +85,18 @@ const makeStats = (n = 3) => ({
   stats: { totalCases: 12, inReview: n, pendingClient: 2, completedThisMonth: 5 },
   recentActivity: [{ id: "a1", type: "DOCUMENT_UPLOADED", text: "Dokumentum feltoltve", timestamp: new Date().toISOString(), caseId: "case-1", href: "/cases/case-1/documents" }],
 });
+// Canonical review queue (GET /tasks/review-queue) — the population the
+// "Review tételek" card must count and the /reviews destination renders.
+const makeReviewQueue = (n = 2) =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `submission-${i + 1}`, source: "TASK_SUBMISSION", taskId: `task-${i + 1}`, submissionId: `submission-${i + 1}`,
+    revisionNumber: 1, title: `Bekuldott revision ${i + 1}`, status: "SUBMITTED", priority: "NORMAL",
+    dueDate: new Date(Date.now() - 86400000).toISOString(), submittedAt: new Date(Date.now() - i * 3600000).toISOString(),
+    submittedBy: { id: "user-qa-001", displayName: "QA Tesztelo", role: "ADMIN" },
+    assignedReviewer: { id: "user-qa-001", displayName: "QA Tesztelo", role: "ADMIN" },
+    submissionDocumentCount: 1, linkedTimeMinutes: 30, nextActionCode: "REVIEW_SUBMISSION",
+    case: { id: `case-${i + 1}`, caseNumber: `QA-2026-${100 + i}`, title: `Szintetikus ugy ${i + 1}`, clientId: CLIENT_A.id, clientName: CLIENT_A.name, clientColorKey: CLIENT_A.colorKey, matterType: "CONTRACT" },
+  }));
 const makeOperational = (open = true) => ({
   generatedAt: new Date().toISOString(),
   resume: open ? { item: { id: "r1", taskId: "task-1", submissionId: null, title: "Szerzodes attekintese", status: "IN_PROGRESS", nextActionCode: "CONTINUE_SUBMISSION", actionLabel: "Folytatas", href: "/tasks?taskId=task-1", dueAt: new Date(Date.now() + 86400000).toISOString(), case: { id: "case-1", caseNumber: "QA-2026-100", title: "Szintetikus ugy 1", client: { id: CLIENT_A.id, displayName: CLIENT_A.name, clientColorKey: CLIENT_A.colorKey } } } } : { item: null },
@@ -97,6 +109,7 @@ const makeNews = () => ({ articles: [{ title: "Jogi hir 1", source: "QA", date: 
 function resolve(url, o) {
   if (url.includes("/auth/me")) return { status: 200, body: AUTH_ME };
   if (url.includes("/tasks/my/tasks")) return o.tasks === "error500" ? { status: 500, body: { error: "e" } } : { status: 200, body: o.empty ? [] : makeTasks() };
+  if (url.includes("/tasks/review-queue")) return o.reviewQueue === "error500" ? { status: 500, body: { error: "e" } } : { status: 200, body: o.empty ? [] : makeReviewQueue(2) };
   if (url.includes("operational-overview")) return o.operational === "error500" ? { status: 500, body: { error: "e" } } : { status: 200, body: makeOperational(!o.empty) };
   if (url.includes("dashboard/stats")) return o.stats === "error500" ? { status: 500, body: { error: "e" } } : { status: 200, body: makeStats(o.empty ? 0 : 3) };
   if (url.includes("/cases")) return o.cases === "error500" ? { status: 500, body: { error: "e" } } : { status: 200, body: o.empty ? { data: [], pagination: { page: 1, limit: 200, total: 0 } } : makeCases() };
@@ -189,6 +202,7 @@ async function main() {
       check("POP", `Külső card has terracotta bg (${ext?.bg})`, !!ext && ext.bg !== "rgba(0, 0, 0, 0)" && ext.bg !== "rgb(255, 255, 255)");
       check("POP", `Belső card has dark-green bg (${intl?.bg})`, !!intl && intl.bg !== "rgba(0, 0, 0, 0)" && intl.bg !== "rgb(255, 255, 255)");
       check("POP", "Counts are live (Nyitott ügyek = 4 active of 5)", grid?.find((c) => c.label === "Nyitott ügyek")?.count === "4");
+      check("POP", "Review tételek counts the review queue (2), not stats.inReview (3)", grid?.find((c) => c.label === "Review tételek")?.count === "2");
       check("POP", "No 'Most nem elérhető' when all sources OK", !grid?.some((c) => c.caption === "Most nem elérhető"));
       // Quick Actions preserved: 4 light cards
       const t = await txt(q.page);
@@ -208,6 +222,12 @@ async function main() {
       check("POP", "No global critical banner", !t.includes("A műszerfal alapadatai nem tölthetők be"));
       check("POP", "Hard errors = 0", q.hard.length === 0);
       for (const vp of [{ width: 1366, height: 768 }, { width: 1440, height: 900 }, { width: 1100, height: 800 }]) await shot(q.page, "populated", vp);
+      // COUNT ↔ DESTINATION reconciliation: /reviews renders the same queue.
+      await q.page.goto(`${BASE_URL}/reviews`, { waitUntil: "domcontentloaded" });
+      await q.page.waitForSelector('text="Review sor"', { timeout: 30000 });
+      await q.page.waitForTimeout(800);
+      const reviewTxt = await txt(q.page);
+      check("POP", "Review destination lists the same 2 queue items as the card", reviewTxt.includes("2 tétel"));
       await q.ctx.close();
     }
     // EMPTY (successful zero)
@@ -218,19 +238,21 @@ async function main() {
       check("EMPTY", "6 cards render", grid?.length === 6);
       check("EMPTY", "Zero shows empty label, not 'Most nem elérhető'", grid?.some((c) => /^Nincs /.test(c.caption)) && !grid?.some((c) => c.caption === "Most nem elérhető"));
       check("EMPTY", "Nyitott ügyek empty label", grid?.find((c) => c.label === "Nyitott ügyek")?.caption === "Nincs ügy");
+      check("EMPTY", "Review tételek empty label for an empty queue", grid?.find((c) => c.label === "Review tételek")?.caption === "Nincs review tétel");
       check("EMPTY", "Hard errors = 0", q.hard.length === 0);
       await shot(q.page, "empty-zero", { width: 1440, height: 900 });
       await q.ctx.close();
     }
     // FAILURE (partial-load local fallback)
     {
-      const q = await newPage(browser, { cases: "error500", agenda: "error500", stats: "error500", communications: "error500", tasks: "error500" });
+      const q = await newPage(browser, { cases: "error500", agenda: "error500", stats: "error500", communications: "error500", tasks: "error500", reviewQueue: "error500" });
       await goto(q.page);
       const grid = await readGrid(q.page);
       const t = await txt(q.page);
       check("FAIL", "6 cards still render", grid?.length === 6);
       check("FAIL", "Failed sources show 'Most nem elérhető' (not fake 0)", grid?.some((c) => c.caption === "Most nem elérhető"));
       check("FAIL", "Nyitott ügyek unavailable (cases failed)", grid?.find((c) => c.label === "Nyitott ügyek")?.caption === "Most nem elérhető");
+      check("FAIL", "Review tételek unavailable (queue failed), never a fake 0", grid?.find((c) => c.label === "Review tételek")?.caption === "Most nem elérhető");
       check("FAIL", "No global critical banner (cases+tasks... operational ok)", !t.includes("A műszerfal alapadatai nem tölthetők be") || true);
       check("FAIL", "Hard errors = 0", q.hard.length === 0);
       await shot(q.page, "source-failure", { width: 1440, height: 900 });
