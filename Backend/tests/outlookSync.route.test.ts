@@ -39,7 +39,7 @@ jest.mock('../src/prisma/prisma.service', () => {
   const caseCollaborator = { findFirst: jest.fn() };
   const task = { findMany: jest.fn(), create: jest.fn(), update: jest.fn(), findUnique: jest.fn() };
   const timelineEvent = { create: jest.fn() };
-  const mock: any = { communication, communicationAttachment, client, case: caseData, caseCollaborator, task, timelineEvent };
+  const mock: any = { $queryRaw: jest.fn(), communication, communicationAttachment, client, case: caseData, caseCollaborator, task, timelineEvent };
   mock.$transaction = jest.fn((cb: any) => cb(mock));
   return { prisma: mock };
 });
@@ -253,7 +253,7 @@ describe('GET /communications (list DTO triage + bounded shape)', () => {
   });
 
   it('maps triage for linked / needs-assignment / ignored rows', async () => {
-    (prisma as any).communication.findMany.mockResolvedValue([
+    (prisma as any).$queryRaw.mockResolvedValue([
       { id: 'c-link', type: 'EMAIL', subject: 'S', senderName: 'A', senderEmail: 'a@x', recipientName: null, recipientEmail: null, content: 'body', summary: null, caseId: 'case-1', clientId: 'client-1', documentId: null, createdById: 'u', createdAt: new Date('2026-01-01T00:00:00Z'), updatedAt: new Date('2026-01-01T00:00:00Z'), providerConversationId: 'conv-1', direction: 'INBOUND', receivedAt: new Date('2026-01-01T00:00:00Z'), source: 'OUTLOOK', syncStatus: 'IMPORTED', metadata: {} },
       { id: 'c-need', type: 'EMAIL', subject: 'S2', senderName: 'B', senderEmail: 'b@x', recipientName: null, recipientEmail: null, content: null, summary: null, caseId: null, clientId: null, documentId: null, createdById: 'u', createdAt: new Date('2026-01-02T00:00:00Z'), updatedAt: new Date('2026-01-02T00:00:00Z'), providerConversationId: 'conv-2', direction: 'INBOUND', receivedAt: new Date('2026-01-02T00:00:00Z'), source: 'OUTLOOK', syncStatus: 'IMPORTED', metadata: {} },
       { id: 'c-ign', type: 'EMAIL', subject: 'S3', senderName: 'C', senderEmail: 'c@x', recipientName: null, recipientEmail: null, content: null, summary: null, caseId: null, clientId: null, documentId: null, createdById: 'u', createdAt: new Date('2026-01-03T00:00:00Z'), updatedAt: new Date('2026-01-03T00:00:00Z'), providerConversationId: null, direction: 'INBOUND', receivedAt: new Date('2026-01-03T00:00:00Z'), source: 'OUTLOOK', syncStatus: 'IMPORTED', metadata: { triage: 'IGNORED' } },
