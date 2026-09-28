@@ -76,6 +76,29 @@ describeWithDatabase('universal mailbox PostgreSQL boundary', () => {
       providerMessages = defaultMessages;
     }
   });
+  it('adopts an app-only canonical row instead of creating a cross-channel duplicate', async () => {
+    const base = { direction: 'INBOUND', from: { email: 'sender@example.invalid' }, to: [{ email: 'owner@example.invalid' }], cc: [], subject: 'Cross-channel', bodyText: 'cross body', bodyHtml: '<p>cross</p>', attachments: [] };
+    const rfc = `<cross-${suffix}@example.invalid>`;
+    const rowByMessageId = (messageId: string) => db.communication.findFirstOrThrow({ where: { mailboxConnectionId: connectionA, mailboxProviderMessageId: messageId } });
+    const appOnly = await db.communication.create({ data: { type: 'EMAIL', subject: 'Cross-channel', source: 'OUTLOOK', externalMessageId: rfc, createdById: ownerId } });
+    try {
+      providerMessages = [{ ...base, providerMessageId: 'cross-mailbox-1', internetMessageId: rfc }];
+      await syncMailbox(connectionA, ownerId, store);
+      // Exactly one canonical row exists for the RFC identity, and no mailbox
+      // copy was created; the app-only row keeps its channel identity.
+      expect(await db.communication.count({ where: { OR: [{ internetMessageId: rfc }, { externalMessageId: rfc }] } })).toBe(1);
+      expect(await db.communication.count({ where: { mailboxProviderMessageId: 'cross-mailbox-1' } })).toBe(0);
+      expect(await db.communication.findUniqueOrThrow({ where: { id: appOnly.id } })).toMatchObject({ source: 'OUTLOOK', mailboxConnectionId: null, externalMessageId: rfc });
+
+      // A genuinely new RFC identity still imports with internetMessageId persisted.
+      const freshRfc = `<fresh-${suffix}@example.invalid>`;
+      providerMessages = [{ ...base, providerMessageId: 'cross-new-1', internetMessageId: freshRfc }];
+      await syncMailbox(connectionA, ownerId, store);
+      expect(await rowByMessageId('cross-new-1')).toMatchObject({ internetMessageId: freshRfc, source: 'MAILBOX' });
+    } finally {
+      providerMessages = defaultMessages;
+    }
+  });
   it('persists outbound only after provider confirmation and rejects revoked connections', async () => {
     await expect(sendMailboxMessage({ id: connectionA, ownerUserId: ownerId, to: [{ email: 'to@example.invalid' }], subject: 'reply', bodyText: 'text' }, store)).resolves.toMatchObject({ direction: 'OUTBOUND' });
     failSend = true; const before = await db.communication.count({ where: { mailboxConnectionId: connectionA, mailboxProviderMessageId: 'sent-message-failed' } }); await expect(sendMailboxMessage({ id: connectionA, ownerUserId: ownerId, to: [{ email: 'to@example.invalid' }], subject: 'fail', bodyText: 'text' }, store)).rejects.toThrow(); expect(await db.communication.count({ where: { mailboxConnectionId: connectionA, mailboxProviderMessageId: 'sent-message-failed' } })).toBe(before); failSend = false;
