@@ -440,7 +440,7 @@ export type ImportedMessageRef = {
   providerConversationId: string | null;
 };
 
-type ConversationLinkageDb = {
+export type ConversationLinkageDb = {
   communication: {
     findMany: (args: {
       where: Record<string, unknown>;

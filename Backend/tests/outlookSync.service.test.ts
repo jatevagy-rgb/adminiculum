@@ -202,4 +202,39 @@ describe('applySafeConversationLinkage', () => {
     expect(linked).toEqual([]);
     expect(unassigned).toEqual(['new']);
   });
+
+  it('leaves messages without a provider conversation id untouched', async () => {
+    const db = {
+      communication: {
+        findMany: jest.fn(),
+        update: jest.fn(),
+      },
+    } as any;
+
+    const { linked, unassigned } = await applySafeConversationLinkage(db, [
+      { communicationId: 'new', providerConversationId: null },
+    ]);
+    expect(linked).toEqual([]);
+    expect(unassigned).toEqual(['new']);
+    expect(db.communication.findMany).not.toHaveBeenCalled();
+    expect(db.communication.update).not.toHaveBeenCalled();
+  });
+
+  it('never overwrites an explicit existing linkage on the referenced message', async () => {
+    const db = {
+      communication: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'explicit', caseId: 'case-explicit', clientId: 'client-explicit' },
+        ]),
+        update: jest.fn(),
+      },
+    } as any;
+
+    const { linked, unassigned } = await applySafeConversationLinkage(db, [
+      { communicationId: 'explicit', providerConversationId: 'conv-z' },
+    ]);
+    expect(linked).toEqual(['explicit']);
+    expect(unassigned).toEqual([]);
+    expect(db.communication.update).not.toHaveBeenCalled();
+  });
 });

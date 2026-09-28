@@ -1,5 +1,6 @@
 import { Prisma, type MailboxConnectionStatus } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
+import { applySafeConversationLinkage, type ConversationLinkageDb, type ImportedMessageRef } from '../communications/outlookImport.service';
 import { sanitizeEmailHtml, toPlainText } from './htmlSanitizer';
 import { getMailboxProvider, type MailboxMessage } from './provider';
 import { getSecretStore, type SecretStore } from './secretStore';
@@ -96,7 +97,24 @@ export async function syncMailbox(id: string, ownerUserId: string, store: Secret
   await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_STARTED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: 'SYNCING' });
   try {
     const result = await runWithRefresh(connection, store, (secret) => getMailboxProvider(connection.provider).listMessagesSinceCursor({ secret, mailboxAddress: connection.mailboxAddress, cursor: connection.syncCursor, maxMessages: 250 }));
-    for (const message of result.messages) await persistMessage(connection, message, ownerUserId);
+    const linkageRefs: ImportedMessageRef[] = [];
+    for (const message of result.messages) {
+      const row = await persistMessage(connection, message, ownerUserId);
+      if (row?.providerConversationId) {
+        linkageRefs.push({ communicationId: row.id, providerConversationId: row.providerConversationId });
+      }
+    }
+    // Reuse the canonical safe conversation linkage (single-distinct-case rule,
+    // providerConversationId only) for the conversations touched by this batch.
+    // Best-effort enrichment: a linkage failure must not fail the already
+    // persisted sync batch; the next sync retries it.
+    if (linkageRefs.length > 0) {
+      try {
+        await applySafeConversationLinkage(prisma as unknown as ConversationLinkageDb, linkageRefs);
+      } catch {
+        // Intentionally swallowed — see comment above.
+      }
+    }
     const updated = await prisma.communicationMailboxConnection.update({ where: { id }, data: { status: connection.sendCapability ? 'CONNECTED' : 'CONNECTED_READ_ONLY', syncCursor: result.nextCursor, syncCursorUpdatedAt: new Date(), lastSyncedAt: new Date(), lastSyncStatus: 'SUCCEEDED' } });
     await recordMailboxAudit({ eventType: 'MAILBOX_SYNC_SUCCEEDED', actorUserId: ownerUserId, mailboxConnectionId: id, provider: connection.provider, status: updated.status });
     return updated;
