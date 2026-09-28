@@ -117,7 +117,45 @@ async function portalIntake(req: Request, res: Response): Promise<boolean> {
 }
 
 const COMPLETED_REQUEST_STATUSES = new Set(['COMPLETED', 'CANCELLED', 'EXPIRED']);
-const DOCUMENT_REQUEST_TYPES = new Set(['DOCUMENT_UPLOAD', 'MISSING_DOCUMENT_REQUEST', 'CORRECTION_REQUEST']);
+
+/**
+ * Canonical ClientRequestType -> customer-facing Teendők row kind. Every
+ * actionable request type is projected here; document and correction requests
+ * keep their existing kinds so the document/data-request section cannot change
+ * shape for the already-working entries.
+ */
+const CUSTOMER_REQUEST_ROW_KINDS: Record<string, string> = {
+  DOCUMENT_UPLOAD: 'DOCUMENT_REQUEST',
+  MISSING_DOCUMENT_REQUEST: 'DOCUMENT_REQUEST',
+  CORRECTION_REQUEST: 'CORRECTION_REQUEST',
+  INFORMATION_REQUEST: 'INFORMATION_REQUEST',
+  DATA_FORM: 'DATA_FORM',
+  QUESTION_RESPONSE: 'QUESTION_RESPONSE',
+};
+
+/**
+ * Customer-safe Teendők entry row for one canonical ClientRequest: only the
+ * fields required to render the row and reach the canonical request-detail
+ * journey. Terminal requests (completed/cancelled/expired) are not entry
+ * points and return null, so the list never claims outstanding work.
+ */
+export function toCustomerRequestEntryRow(request: Record<string, any>): Record<string, any> | null {
+  const kind = CUSTOMER_REQUEST_ROW_KINDS[request.type];
+  if (!kind) return null;
+  if (COMPLETED_REQUEST_STATUSES.has(String(request.rawStatus))) return null;
+  return {
+    id: request.id,
+    matterId: request.matterId,
+    matterTitle: request.matterTitle,
+    title: request.title,
+    description: request.description,
+    status: request.status,
+    publishedAt: request.publishedAt,
+    dueAt: request.dueAt ?? null,
+    kind,
+    actionUrl: request.actionUrl,
+  };
+}
 
 function customerRequestStatus(status: string): string {
   const labels: Record<string, string> = {
@@ -224,17 +262,7 @@ async function portalWorkspace(req: Request) {
   }));
   const documentItems = [
     ...(documents.items as Array<Record<string, unknown>>).map((item) => ({ ...item, kind: 'SHARED_DOCUMENT', actionUrl: `/portal/documents/${encodeURIComponent(String(item.id))}` })),
-    ...requests.filter((request) => DOCUMENT_REQUEST_TYPES.has(request.type)).map(({ rawStatus, ...request }) => ({
-      id: request.id,
-      matterId: request.matterId,
-      matterTitle: request.matterTitle,
-      title: request.title,
-      description: request.description,
-      status: request.status,
-      publishedAt: request.publishedAt,
-      kind: request.type === 'CORRECTION_REQUEST' ? 'CORRECTION_REQUEST' : 'DOCUMENT_REQUEST',
-      actionUrl: request.actionUrl,
-    })),
+    ...requests.map((request) => toCustomerRequestEntryRow(request)).filter((row): row is Record<string, any> => row !== null),
     ...submissions.map((submission) => ({
       id: submission.id,
       matterId: submission.matterId,

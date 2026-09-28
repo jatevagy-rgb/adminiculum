@@ -99,8 +99,39 @@ export function selectCustomerPublishedDocuments(documents: PortalWorkspaceDocum
   return documents.filter(isCustomerPublishedDocument);
 }
 
+/**
+ * Canonical customer-actionable request kinds that must reach the Teendők
+ * entry list. The document/correction kinds keep their existing behaviour;
+ * INFORMATION_REQUEST, DATA_FORM and QUESTION_RESPONSE are the same canonical
+ * ClientRequest lifecycle and were previously missing from the entry point.
+ */
+export const CUSTOMER_REQUEST_KINDS: PortalWorkspaceDocument["kind"][] = [
+  "DOCUMENT_REQUEST",
+  "CORRECTION_REQUEST",
+  "INFORMATION_REQUEST",
+  "DATA_FORM",
+  "QUESTION_RESPONSE",
+];
+
+export function isCustomerRequestDocument(item: PortalWorkspaceDocument): boolean {
+  return (CUSTOMER_REQUEST_KINDS as string[]).includes(item.kind);
+}
+
 export function selectCustomerRequestDocuments(documents: PortalWorkspaceDocument[]): PortalWorkspaceDocument[] {
-  return documents.filter((item) => item.kind === "DOCUMENT_REQUEST" || item.kind === "CORRECTION_REQUEST");
+  return documents.filter(isCustomerRequestDocument);
+}
+
+/** Customer-facing labels for the canonical request kinds in the entry list. */
+export const CUSTOMER_REQUEST_KIND_LABELS: Record<string, string> = {
+  DOCUMENT_REQUEST: "Dokumentumkérés",
+  CORRECTION_REQUEST: "Javításkérés",
+  INFORMATION_REQUEST: "Információkérés",
+  DATA_FORM: "Adatlap",
+  QUESTION_RESPONSE: "Válaszadás",
+};
+
+export function customerRequestKindLabel(kind: string): string | null {
+  return CUSTOMER_REQUEST_KIND_LABELS[kind] ?? null;
 }
 
 export function selectCustomerSubmissionDocuments(documents: PortalWorkspaceDocument[]): PortalWorkspaceDocument[] {
@@ -600,17 +631,24 @@ function OrganizationTasks({ workspace, mode, canonicalActions }: { workspace: P
         })
       )}
       <Section title="Dokumentum- és adatbekérések" empty={!requests.length} emptyText="Jelenleg nincs Öntől szükséges dokumentum- vagy adatbekérés.">
-        {requests.map((item) => (
-          <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-xl border border-[#F1D7D1] bg-[#FBF0EE]/50 p-4 text-sm transition-colors hover:border-[#B85C4B] hover:bg-[#FBF0EE] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <b className="block break-words text-[#1F2937]">{item.title}</b>
-              {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-white px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
-            </div>
-            <span className="mt-1 block text-[#6B7280]">{item.matterTitle || "Közzétett ügy"}</span>
-            {item.description ? <span className="mt-1 block break-words text-[#6B7280]">{item.description}</span> : null}
-            <span className="mt-2 inline-flex font-semibold text-[#B85C4B]">Bekérés megnyitása →</span>
-          </Link>
-        ))}
+        {requests.map((item) => {
+          const kindLabel = customerRequestKindLabel(item.kind);
+          return (
+            <Link key={`${item.kind}-${item.id}`} href={item.matterId ? customerRequestDetailHref(item.matterId, item.id) : item.actionUrl} className="rounded-xl border border-[#F1D7D1] bg-[#FBF0EE]/50 p-4 text-sm transition-colors hover:border-[#B85C4B] hover:bg-[#FBF0EE] focus:outline-none focus:ring-2 focus:ring-[#B85C4B]/30">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <b className="block break-words text-[#1F2937]">{item.title}</b>
+                {item.status ? <span className="rounded-full border border-[#E5E7E6] bg-white px-2.5 py-0.5 text-xs text-[#374151]">{item.status}</span> : null}
+              </div>
+              <span className="mt-1 block text-[#6B7280]">
+                {item.matterTitle || "Közzétett ügy"}
+                {kindLabel ? ` · ${kindLabel}` : ""}
+                {item.dueAt ? ` · Határidő: ${formatDate(item.dueAt)}` : ""}
+              </span>
+              {item.description ? <span className="mt-1 block break-words text-[#6B7280]">{item.description}</span> : null}
+              <span className="mt-2 inline-flex font-semibold text-[#B85C4B]">Bekérés megnyitása →</span>
+            </Link>
+          );
+        })}
       </Section>
       {submissions.length ? (
         <Section title="Beküldött anyagaim">
