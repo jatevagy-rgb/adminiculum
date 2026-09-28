@@ -10,6 +10,8 @@ import {
   type LegalSourceObservationReviewStatus,
 } from "@/lib/complianceCenterApi";
 import { ApiError } from "@/lib/api";
+import type { LegalSourceImpactProjection } from "@/lib/complianceIntelligenceApi";
+import { LegalSourceImpactView } from "./LegalSourceImpactPanel";
 import {
   DataTable,
   DataTableBody,
@@ -130,6 +132,11 @@ export function LegalSourceObservationReviewPanel() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
 
+  const [impact, setImpact] = useState<LegalSourceImpactProjection | null>(null);
+  const [impactRequested, setImpactRequested] = useState(false);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [impactError, setImpactError] = useState<string | null>(null);
+
   const loadPage = useCallback(
     (nextOffset: number) => {
       setLoadError(null);
@@ -164,6 +171,10 @@ export function LegalSourceObservationReviewPanel() {
     setDetail(null);
     setDetailError(null);
     setActionError(null);
+    setImpact(null);
+    setImpactRequested(false);
+    setImpactLoading(false);
+    setImpactError(null);
     void loadPage(0);
   }, [loadPage]);
 
@@ -172,6 +183,10 @@ export function LegalSourceObservationReviewPanel() {
     setDetail(null);
     setDetailError(null);
     setActionError(null);
+    setImpact(null);
+    setImpactRequested(false);
+    setImpactLoading(false);
+    setImpactError(null);
     setNote("");
     setDetailLoading(true);
     complianceCenterApi
@@ -218,6 +233,61 @@ export function LegalSourceObservationReviewPanel() {
     [loadPage, refreshSelectedDetail, selectedId],
   );
 
+  const handleImpactError = useCallback(
+    (error: unknown) => {
+      const status = error instanceof ApiError ? error.status : 0;
+      const code = error instanceof ApiError ? error.code : undefined;
+      if (status === 409 && code === "OBSERVATION_IMPACT_NOT_CONFIRMED") {
+        setImpact(null);
+        setImpactRequested(false);
+        setImpactError(
+          "A tétel felülvizsgálati állapota időközben megváltozott, ezért a hatásvizsgálat nem nyitható meg. A részletek frissítésre kerültek.",
+        );
+        if (selectedId) refreshSelectedDetail(selectedId);
+        return;
+      }
+      if (status === 409 && code === "OBSERVATION_IMPACT_VERSION_AMBIGUOUS") {
+        setImpact(null);
+        setImpactError(
+          "A hatásvizsgálat nem indítható egyértelműen, mert több aktuális jogforrás-verzió található.",
+        );
+        return;
+      }
+      if (status === 422 && code === "OBSERVATION_IMPACT_VERSION_UNAVAILABLE") {
+        setImpact(null);
+        setImpactError(
+          "A hatásvizsgálathoz szükséges pontos jogforrás-verzió jelenleg nem áll rendelkezésre.",
+        );
+        return;
+      }
+      if (status === 404) {
+        setSelectedId(null);
+        setDetail(null);
+        setImpact(null);
+        setImpactRequested(false);
+        setImpactError(null);
+        setActionError("A tétel már nem található. A lista frissítésre került.");
+        void loadPage(0);
+        return;
+      }
+      setImpact(null);
+      setImpactError("A hatásvizsgálat jelenleg nem nyitható meg. Próbáld újra később.");
+    },
+    [loadPage, refreshSelectedDetail, selectedId],
+  );
+
+  const openImpact = () => {
+    if (!selectedId || impactLoading) return;
+    setImpactRequested(true);
+    setImpactLoading(true);
+    setImpactError(null);
+    complianceCenterApi
+      .getLegalSourceObservationImpact(selectedId)
+      .then((projection) => setImpact(projection))
+      .catch(handleImpactError)
+      .finally(() => setImpactLoading(false));
+  };
+
   const runStartReview = () => {
     if (!selectedId || actionBusy) return;
     setActionBusy(true);
@@ -252,6 +322,7 @@ export function LegalSourceObservationReviewPanel() {
 
   const canStartReview = detail?.reviewStatus === "NEW";
   const canDecide = detail?.reviewStatus === "IN_REVIEW";
+  const canOpenImpact = detail?.reviewStatus === "IMPACT_CONFIRMED";
   const terminalCopy = detail ? terminalStatusCopy[detail.reviewStatus] : undefined;
   const hasMore = hasMoreObservationPages(items.length, total);
 
@@ -570,6 +641,32 @@ export function LegalSourceObservationReviewPanel() {
                 <p className="mt-4 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[12px] text-[var(--adm-text)]">
                   {terminalCopy}
                 </p>
+              ) : null}
+
+              {canOpenImpact ? (
+                <div className="mt-4">
+                  <AdminButton size="sm" variant="primary" onClick={openImpact} disabled={impactLoading}>
+                    Hatásvizsgálat megnyitása
+                  </AdminButton>
+                </div>
+              ) : null}
+
+              {impactError ? (
+                <div className="mt-3">
+                  <CompactState tone="error" title="A hatásvizsgálat nem nyitható meg." detail={impactError} />
+                </div>
+              ) : null}
+
+              {canOpenImpact && impactRequested ? (
+                impactLoading ? (
+                  <p role="status" className="mt-3 text-sm text-[var(--adm-text-muted)]">
+                    Hatásvizsgálat betöltése…
+                  </p>
+                ) : impact ? (
+                  <div className="mt-4">
+                    <LegalSourceImpactView impact={impact} onReload={openImpact} />
+                  </div>
+                ) : null
               ) : null}
 
               {actionBusy ? (
