@@ -47,9 +47,19 @@ export type MergedRailEntry =
   | { kind: "comment"; createdAt: string; comment: DocumentReviewRailComment }
   | { kind: "proposal"; createdAt: string; proposal: DocumentReviewRailProposal };
 
+function entryAnchorStart(entry: MergedRailEntry): number {
+  const value = entry.kind === "comment" ? entry.comment.startOffset : entry.proposal.startOffset;
+  if (value === null || value === undefined || Number.isNaN(value)) return Number.MAX_SAFE_INTEGER;
+  return value;
+}
+
 /**
- * Chronological client-side merge of the two independent rail collections.
- * No sequence numbers are fabricated: ordering is solely by the real `createdAt`.
+ * Anchor-first client-side merge of the two independent rail collections.
+ *
+ * The default review presentation is spatial, not chronological: items are
+ * ordered primarily by their version-scoped `startOffset` (document position).
+ * `createdAt` only breaks ties for identical anchors, then kind, so the order is
+ * deterministic without fabricating sequence numbers.
  */
 export function mergeRailEntries(
   comments: DocumentReviewRailComment[],
@@ -60,7 +70,10 @@ export function mergeRailEntries(
     ...proposals.map((proposal) => ({ kind: "proposal" as const, createdAt: proposal.createdAt, proposal })),
   ];
   return entries.sort((a, b) => {
-    const byTime = a.createdAt.localeCompare(b.createdAt);
+    const anchorA = entryAnchorStart(a);
+    const anchorB = entryAnchorStart(b);
+    if (anchorA !== anchorB) return anchorA - anchorB;
+    const byTime = (a.createdAt || "").localeCompare(b.createdAt || "");
     if (byTime !== 0) return byTime;
     return a.kind === b.kind ? 0 : a.kind === "comment" ? -1 : 1;
   });

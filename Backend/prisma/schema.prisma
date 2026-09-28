@@ -125,6 +125,9 @@ model User {
   deletedDocumentModificationProposals DocumentModificationProposal[]      @relation("DocumentModificationProposalDeletedBy")
   documentModificationProposalEvents   DocumentModificationProposalEvent[] @relation("DocumentModificationProposalEventActor")
   publishedObligationOccurrences      ClientObligationOccurrence[]             @relation("ObligationOccurrencePublishedBy")
+  caseContextSources                  CaseContextSource[]               @relation("CaseContextSourceCreatedBy")
+  createdContractDateCandidates        ContractDateCandidate[]             @relation("ContractDateCandidateCreatedBy")
+  decidedContractDateCandidates        ContractDateCandidate[]             @relation("ContractDateCandidateDecidedBy")
 
   @@map("users")
 }
@@ -848,6 +851,7 @@ model Case {
   contractRecords           ContractRecord[]
   workPackage               CaseWorkPackage?
   caseTimeEntries           TimeEntry[]                @relation("CaseTimeEntries")
+  caseContextSources        CaseContextSource[]
 
   @@map("cases")
 }
@@ -1281,6 +1285,7 @@ model Document {
   taskSubmissionDocuments TaskSubmissionDocument[]
   complianceDocuments     ComplianceDocument[]
   modificationProposals   DocumentModificationProposal[]
+  dateCandidates          ContractDateCandidate[]
 
   // ---- Document work context (DOCUMENT-WORK-CONTEXT-1) --------------------
   // A filename is not a work instruction. These columns carry the operational
@@ -1436,6 +1441,7 @@ model DocumentVersion {
   evidenceRecords         EvidenceRecord[]
   complianceClauseAnchors ComplianceDocumentClauseAnchor[]
   modificationProposals   DocumentModificationProposal[]
+  dateCandidates          ContractDateCandidate[]
 
   @@unique([documentId, version])
   @@unique([documentId, id])
@@ -1715,6 +1721,72 @@ model DocumentModificationProposalEvent {
   @@index([proposalId, createdAt])
   @@index([actorId, createdAt])
   @@map("document_modification_proposal_events")
+}
+
+enum ContractDateCandidateStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+/// Contract Date Extraction (internal): extraction output is a CANDIDATE and can
+/// NEVER write canonical contract dates directly. Every candidate is bound to ONE
+/// immutable DocumentVersion (exact source version), carries its supporting
+/// excerpt, and only an explicit lawyer Confirm writes through the canonical
+/// ContractRecord / ClientObligationOccurrence service. Rejected candidates stay
+/// terminal for their (version, type, date, excerpt) identity so a rejected value
+/// cannot reappear unless the source version or extraction output actually changes.
+model ContractDateCandidate {
+  id                String                      @id @default(uuid())
+  documentId        String
+  documentVersionId String
+
+  /// Validated STRING registry code (no Prisma enum): EFFECTIVE | EXPIRY |
+  /// NEXT_CRITICAL | PAYMENT_DUE | MILESTONE | NOTICE | OTHER.
+  dateType String
+
+  proposedDate DateTime
+
+  /// Supporting source excerpt copied from the exact version text.
+  sourceExcerpt      String
+  excerptStartOffset Int?
+  excerptEndOffset   Int?
+  /// Short normalized hash of sourceExcerpt used for dedupe and staleness.
+  excerptHash String?
+
+  /// RULE_BASED_EXTRACTION | MANUAL | AI_IMPORT — extraction provenance only;
+  /// no confidence score is fabricated.
+  provenance      String
+  aiPromptDraftId String?
+
+  status ContractDateCandidateStatus @default(PENDING)
+
+  /// Set only by a confirmed candidate; the canonical row written through the
+  /// existing contract/occurrence service.
+  targetContractId   String?
+  targetContract     ContractRecord?             @relation(fields: [targetContractId], references: [id], onDelete: SetNull)
+  targetOccurrenceId String?
+
+  decisionReason String?
+  decidedById    String?
+  decidedBy      User?                           @relation("ContractDateCandidateDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedAt      DateTime?
+
+  createdById String
+  createdBy   User        @relation("ContractDateCandidateCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  document        Document        @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentId, documentVersionId], references: [documentId, id], onDelete: Restrict)
+
+  @@unique([documentVersionId, dateType, proposedDate, excerptHash])
+  @@index([documentId, status])
+  @@index([documentVersionId, status])
+  @@index([targetContractId])
+  @@index([decidedById])
+  @@map("contract_date_candidates")
 }
 
 model DocumentReview {
@@ -2426,6 +2498,14 @@ model Comment {
   documentId String?
   caseId     String?
 
+  // Optional self-reference: a reply to another comment. Replies are validated
+  // at the service layer to stay within one case and one domain (case notes only,
+  // one visible thread level). Additive and nullable — existing rows stay
+  // top-level (parentId null), no backfill.
+  parentId String?
+  parent   Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies  Comment[] @relation("CommentReplies")
+
   // Author
   userId String
 
@@ -2437,6 +2517,7 @@ model Comment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([parentId])
   @@map("comments")
 }
 
@@ -3649,6 +3730,7 @@ model Communication {
   // Relations - optional back relations
   attachments  CommunicationAttachment[]
   relatedTasks Task[]                    @relation("CommunicationTasks")
+  caseContextSources CaseContextSource[]
 
   @@unique([mailboxConnectionId, mailboxProviderMessageId], map: "communications_mailbox_message_unique")
   @@index([caseId, createdAt])
@@ -5146,6 +5228,7 @@ model ContractRecord {
   obligations                ClientObligation[]
   entitlements               ContractEntitlement[]
   obligationOccurrences      ClientObligationOccurrence[]
+  dateCandidates             ContractDateCandidate[]
   factSubjects               FactSubject[]                  @relation("FactSubjectContract")
   businessOwnerPersonId      String?
   businessOwnerPerson        OrganizationPerson?            @relation(fields: [businessOwnerPersonId], references: [id], onDelete: SetNull)
@@ -6654,4 +6737,59 @@ model TaskCollaborator {
   @@unique([taskId, userId])
   @@index([userId])
   @@map("task_collaborators")
+}
+
+// ============================================================================
+// CASE CONTEXT SOURCES (CASE-CONTEXT-V2-BACKEND)
+//
+// Workforce-internal, additive only. A CaseContextSource persists raw pasted
+// case context (or a server-side snapshot of a Communication body) immutably,
+// plus — after an approved anonymize apply — a derived `anonymizedText` and a
+// safe, non-reversible `anonymizationSnapshot`. The reversible
+// original→placeholder mapping is NEVER persisted: it exists only in the
+// in-memory anonymization result and is discarded after each request.
+//
+// `rawText` is immutable by construction — the API/service exposes no update
+// path. A corrected source means creating a new CaseContextSource. Durable state
+// is derived, not stored: RAW == anonymizedText IS NULL, ANONYMIZED == NOT NULL.
+//
+// Never exposed to the Client Portal.
+// ============================================================================
+
+enum CaseContextOrigin {
+  PASTED
+  COMMUNICATION
+}
+
+model CaseContextSource {
+  id          String            @id @default(uuid())
+  caseId      String
+  case        Case              @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User              @relation("CaseContextSourceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  origin CaseContextOrigin
+
+  // Provenance for COMMUNICATION-origin sources. Nullable SetNull so deleting a
+  // Communication never deletes the snapshotted legal context source.
+  sourceCommunicationId String?
+  sourceCommunication   Communication? @relation(fields: [sourceCommunicationId], references: [id], onDelete: SetNull)
+
+  // Immutable raw source text. No PATCH/PUT exists; corrections create a new row.
+  rawText String
+
+  // Derived, persisted only after an approved one-shot anonymize apply.
+  anonymizedText String?
+
+  // Safe, non-reversible metadata only (algorithmRevision, sourceHash,
+  // resultHash, appliedCount, categoryCounts, warnings, mappingLocation). Never
+  // the reversible mapping, never candidate originalText, never manual terms.
+  anonymizationSnapshot Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([caseId, createdAt])
+  @@index([sourceCommunicationId])
+  @@map("case_context_sources")
 }

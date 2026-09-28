@@ -19,6 +19,7 @@ type CommentRecord = {
   id: string;
   caseId: string | null;
   documentId: string | null;
+  parentId: string | null;
   userId: string;
   content: string;
   isResolved: boolean;
@@ -30,6 +31,7 @@ type CommentRecord = {
 export type CaseCommentDto = {
   id: string;
   caseId: string;
+  parentId: string | null;
   author: { id: string; displayName: string };
   content: string;
   status: 'OPEN' | 'RESOLVED';
@@ -78,6 +80,7 @@ const COMMENT_SELECT = {
   id: true,
   caseId: true,
   documentId: true,
+  parentId: true,
   userId: true,
   content: true,
   isResolved: true,
@@ -106,6 +109,7 @@ function mapCaseComment(comment: CommentRecord, actorId: string, isCaseManager: 
   return {
     id: comment.id,
     caseId: comment.caseId,
+    parentId: comment.parentId ?? null,
     author: { id: comment.user.id, displayName: comment.user.name || 'Ismeretlen felhasználó' },
     content: comment.content,
     status: comment.isResolved ? 'RESOLVED' : 'OPEN',
@@ -154,11 +158,57 @@ export async function listCaseComments(req: Request, caseId: string, query: { li
   };
 }
 
+/**
+ * Read the optional reply target from the request body. Only a non-empty string
+ * is accepted; everything else (numbers, objects, empty strings) is ignored or
+ * rejected so no client can smuggle a parent the server did not validate.
+ */
+function readParentCommentId(body: unknown): string | null {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const value = (body as Record<string, unknown>).parentCommentId;
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string') {
+    throw new CaseCommentError(400, 'INVALID_PARENT_COMMENT_ID', 'parentCommentId must be a string.');
+  }
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length > 100) {
+    throw new CaseCommentError(400, 'INVALID_PARENT_COMMENT_ID', 'parentCommentId is not valid.');
+  }
+  return trimmed;
+}
+
+/**
+ * Replies stay canonical: the parent must exist, belong to THIS case, be a case
+ * note (not a document comment) and be a top-level note (one visible thread
+ * level). A parent from another case or domain is rejected without leaking its
+ * existence.
+ */
+async function validateReplyParent(caseId: string, parentCommentId: string): Promise<void> {
+  const parent = await prisma.comment.findFirst({
+    where: { id: parentCommentId },
+    select: { id: true, caseId: true, documentId: true, parentId: true },
+  });
+  if (!parent || parent.caseId !== caseId) {
+    throw new CaseCommentError(404, 'COMMENT_PARENT_NOT_FOUND', 'A hivatkozott megjegyzés nem található ezen az ügyön.');
+  }
+  if (parent.documentId !== null) {
+    throw new CaseCommentError(400, 'COMMENT_PARENT_IS_DOCUMENT_COMMENT', 'Dokumentum-kommentre nem írható ügyjegyzet-válasz.');
+  }
+  if (parent.parentId !== null) {
+    throw new CaseCommentError(400, 'COMMENT_PARENT_IS_REPLY', 'Válaszra nem írható újabb válasz.');
+  }
+}
+
 export async function createCaseComment(req: Request, caseId: string, body: unknown): Promise<CaseCommentDto> {
   const access = await requireCaseAccess(req, caseId);
-  const content = validateCommentCreate(body);
+  const content = validateCommentCreate(body, { allowParentCommentId: true });
+  const parentId = readParentCommentId(body);
+  if (parentId) {
+    await validateReplyParent(caseId, parentId);
+  }
   const comment = await prisma.comment.create({
-    data: { caseId, documentId: null, userId: access.actorId, content },
+    data: { caseId, documentId: null, userId: access.actorId, content, parentId: parentId ?? null },
     select: COMMENT_SELECT,
   });
   return mapCaseComment(comment, access.actorId, access.isCaseManager);
