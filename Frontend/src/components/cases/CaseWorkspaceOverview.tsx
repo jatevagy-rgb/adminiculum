@@ -25,6 +25,7 @@ import { DocumentPreparationDashboard } from "@/components/documents/DocumentPre
 import { CaseWorkPackagePanel } from "@/components/cases/CaseWorkPackagePanel";
 import { AIPromptPreparationModal } from "@/components/ai-prompts/AIPromptPreparationModal";
 import { TaskSubmissionWorkspace } from "@/components/tasks/TaskSubmissionWorkspace";
+import { CaseSubmissionHandoff } from "@/components/cases/CaseSubmissionHandoff";
 import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummary";
 import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
@@ -73,7 +74,10 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [aiPromptOpen, setAiPromptOpen] = useState(false);
   const [lifecycleTasks, setLifecycleTasks] = useState<TaskLifecycleListItem[]>([]);
   const [selectedLifecycleTask, setSelectedLifecycleTask] = useState<TaskLifecycleListItem | null>(null);
+  const [handoffTask, setHandoffTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeDialogOpen, setTimeDialogOpen] = useState(false);
+  const [timeDialogInitialTaskId, setTimeDialogInitialTaskId] = useState<string | undefined>(undefined);
+  const [timeDialogResumeTask, setTimeDialogResumeTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeRefreshKey, setTimeRefreshKey] = useState(0);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
@@ -167,6 +171,25 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     ...cp.deadlineGroups.thisWeek, ...cp.deadlineGroups.later,
   ];
 
+  // Leadás is a presentation/entry step only: every path ends in the canonical
+  // TaskSubmissionWorkspace. No task status is mutated here.
+  const openSubmissionHandoff = (item: TaskLifecycleListItem) => {
+    setActionError(null);
+    setHandoffTask(item);
+  };
+
+  const continueSubmission = (item: TaskLifecycleListItem) => {
+    setHandoffTask(null);
+    setSelectedLifecycleTask(item);
+  };
+
+  const recordTimeForSubmission = (item: TaskLifecycleListItem) => {
+    setHandoffTask(null);
+    setTimeDialogResumeTask(item);
+    setTimeDialogInitialTaskId(item.id);
+    setTimeDialogOpen(true);
+  };
+
   const taskRow = (t: WorkspaceTask, accent: Accent) => (
     <div key={t.id} className="border-b border-[rgba(22,32,26,0.06)] last:border-b-0">
       <TaskCard
@@ -188,17 +211,31 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           <AdminButton variant="neutral" size="xs" disabled={rowBusy === t.id} onClick={() => void quickStatus(t)}>
             {rowBusy === t.id ? "…" : "Indítás"}
           </AdminButton>
-        ) : ["IN_PROGRESS", "IN_REVIEW", "SUBMITTED", "RETURNED"].includes(t.status.toUpperCase()) ? (
-          <AdminButton
-            variant={t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED" ? "primary" : "neutral"}
-            size="xs"
-            disabled={!lifecycleTasks.some((task) => task.id === t.id)}
-            onClick={() => setSelectedLifecycleTask(lifecycleTasks.find((task) => task.id === t.id) || null)}
-            data-testid="task-submission-workspace"
-          >
-            {t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED" ? "Review megnyitása" : "Leadás megnyitása"}
-          </AdminButton>
-        ) : null}
+        ) : ["IN_PROGRESS", "IN_REVIEW", "SUBMITTED", "RETURNED"].includes(t.status.toUpperCase()) ? (() => {
+          const lifecycleItem = lifecycleTasks.find((task) => task.id === t.id) || null;
+          const reviewState = t.status.toUpperCase() === "IN_REVIEW" || t.status.toUpperCase() === "SUBMITTED";
+          return reviewState ? (
+            <AdminButton
+              variant="primary"
+              size="xs"
+              disabled={!lifecycleItem}
+              onClick={() => setSelectedLifecycleTask(lifecycleItem)}
+              data-testid="task-submission-workspace"
+            >
+              Review megnyitása
+            </AdminButton>
+          ) : (
+            <AdminButton
+              variant="primary"
+              size="xs"
+              disabled={!lifecycleItem}
+              onClick={() => lifecycleItem && openSubmissionHandoff(lifecycleItem)}
+              data-testid="task-submission-leadas"
+            >
+              Leadás
+            </AdminButton>
+          );
+        })() : null}
       </div>
     </div>
   );
@@ -286,7 +323,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "doc-upload" })}>+ Dokumentum</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>Megjegyzés</AdminButton>
         <AdminButton variant="neutral" size="xs" onClick={() => setAiPromptOpen(true)}>AI előkészítés</AdminButton>
-        <AdminButton variant="neutral" size="xs" onClick={() => setTimeDialogOpen(true)}>Munkaidő rögzítése</AdminButton>
+        <AdminButton variant="neutral" size="xs" onClick={() => { setTimeDialogResumeTask(null); setTimeDialogInitialTaskId(undefined); setTimeDialogOpen(true); }}>Munkaidő rögzítése</AdminButton>
       </section>
 
       {/* ---- 2b. Primary internal notes ------------------------------------ */}
@@ -501,16 +538,32 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       {modal?.type === "case-comment" ? <CaseCommentModal caseId={caseId} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {modal?.type === "doc-comments" ? <DocumentCommentsModal documentId={modal.doc.id} documentName={modal.doc.fileName} onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}
       {aiPromptOpen ? <AIPromptPreparationModal caseId={caseId} onClose={() => setAiPromptOpen(false)} /> : null}
+      {handoffTask ? (() => {
+        const item = handoffTask;
+        return (
+          <CaseSubmissionHandoff
+            item={item}
+            onClose={() => setHandoffTask(null)}
+            onContinue={() => continueSubmission(item)}
+            onRecordTime={() => recordTimeForSubmission(item)}
+          />
+        );
+      })() : null}
       {selectedLifecycleTask ? <TaskSubmissionWorkspace item={selectedLifecycleTask} onClose={() => setSelectedLifecycleTask(null)} onWorkflowChanged={refresh} /> : null}
       {timeDialogOpen ? (
         <CaseTimeEntryDialog
           caseId={caseId}
           tasks={ws.tasks}
+          initialTaskId={timeDialogInitialTaskId}
           onClose={() => setTimeDialogOpen(false)}
           onSaved={() => {
             setTimeDialogOpen(false);
             setTimeRefreshKey((value) => value + 1);
             void refresh();
+            const resume = timeDialogResumeTask;
+            setTimeDialogResumeTask(null);
+            setTimeDialogInitialTaskId(undefined);
+            if (resume) setSelectedLifecycleTask(resume);
           }}
         />
       ) : null}
