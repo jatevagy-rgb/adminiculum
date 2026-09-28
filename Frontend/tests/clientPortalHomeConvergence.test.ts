@@ -79,6 +79,54 @@ describe("Client portal home — Ami most Öntől kell container", () => {
   });
 });
 
+describe("Client portal home — ACTION vs INFORMATION distinction", () => {
+  it("separates the container into a Teendő (action) and an Új információ (FYI) subsection", () => {
+    const src = orgHome();
+    assert.match(src, /data-testid="portal-action-subsection"/);
+    assert.match(src, /data-testid="portal-fyi-subsection"/);
+    assert.match(src, /Teendő · Öntől vár megoldás/);
+    assert.match(src, /Új információ · tájékoztatás, nem teendő/);
+  });
+
+  it("only canonical action objects and canonical unread state enter the Teendő subsection", () => {
+    const src = orgHome();
+    // The action rows are the published action requests from the org-home DTO.
+    assert.match(src, /actionNow\.map\(\(action\) => \(\s*<ActionRow key=\{action\.id\} action=\{action\} \/>\s*\)\)/);
+    // The unread message row is gated on the canonical read-state counter and
+    // lives inside the action subsection, never as a fabricated default.
+    assert.match(src, /\{unreadMessageCount > 0 \? \(\s*<Link[\s\S]*?data-testid="portal-attention-message"/);
+  });
+
+  it("presents recently published documents as information, never as a required action", () => {
+    const src = orgHome();
+    // The document link sits inside the FYI subsection, after the explicit
+    // "tájékoztatás, nem teendő" label — it can never read as a task.
+    const fyiMarker = src.indexOf('data-testid="portal-fyi-subsection"');
+    const docMarker = src.indexOf('data-testid="portal-attention-document"');
+    assert.ok(fyiMarker > 0 && docMarker > fyiMarker, "document row must live inside the FYI subsection");
+    // The document copy never claims a due date, a task or an obligation.
+    const fyiEnd = src.indexOf("</Section>", fyiMarker);
+    const fyiSection = src.slice(fyiMarker, fyiEnd);
+    assert.doesNotMatch(fyiSection, /Teendő szükséges/);
+    assert.doesNotMatch(fyiSection, /Határidő/);
+    assert.doesNotMatch(fyiSection, /Öntől vár/i);
+  });
+
+  it("invents no Grow request, compliance todo or calendar action inside the container", () => {
+    const src = orgHome();
+    // Grow: the org-home DTO carries no client-facing Grow request object.
+    assert.doesNotMatch(src, /fejleszt[eé]si k[eé]r[eé]s|growRequest|GrowRequest/i);
+    // Compliance: only compliance actions that already arrive through the
+    // canonical actions[] DTO may render (area === "COMPLIANCE"), never a count
+    // derived on the client from the summary numbers.
+    assert.match(src, /action\.area === "COMPLIANCE"/);
+    // Calendar: no calendar-event row or count is fabricated in the container.
+    assert.doesNotMatch(src, /esem[eé]ny/i);
+    assert.doesNotMatch(src, /eventCount|calendarEvent|naptarEvent|esemenyCount/i);
+    assert.doesNotMatch(src, /getPortalCalendar/);
+  });
+});
+
 describe("Client portal home — preserved routes and no backend/DTO change", () => {
   it("preserves every canonical customer-portal destination from the home", () => {
     const src = orgHome();
