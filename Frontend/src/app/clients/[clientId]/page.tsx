@@ -521,7 +521,7 @@ function ClientDetailContent() {
             ) : (
               <div className="space-y-2">
                 {documents.map((doc) => (
-                  <Link key={doc.id} href={`/cases/${doc.caseId}/documents`} className="adm-board-list-row block p-3">
+                  <Link key={doc.id} href={`/cases/${doc.caseId}/documents?documentId=${encodeURIComponent(doc.id)}`} className="adm-board-list-row block p-3">
                     <p className="text-xs font-semibold text-[var(--adm-text)] truncate">{doc.fileName}</p>
                     <p className="text-[10px] text-[var(--adm-text-muted)] mt-1">{doc.caseNumber} · {doc.documentType || "Dokumentum"} · {formatDate(doc.createdAt)}</p>
                   </Link>
