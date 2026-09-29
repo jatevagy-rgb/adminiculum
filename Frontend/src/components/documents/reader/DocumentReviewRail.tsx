@@ -149,7 +149,9 @@ export function CommentCard({
       style={style}
       data-testid="reader-rail-comment"
       data-rail-item-id={comment.id}
-      className={`rounded-[10px] border p-3 ${active ? "border-[var(--adm-brand-green)] bg-[var(--adm-canvas-subtle)]" : "border-[var(--adm-border-canonical)] bg-white"}`}
+      // Light-blue semantic/info family keeps comments visually distinct from
+      // the warm proposal family in the same rail.
+      className={`rounded-[10px] border p-3 ${active ? "border-[var(--adm-semantic-info)] bg-[var(--adm-semantic-info-soft)]" : "border-[var(--adm-semantic-info-border)] bg-[var(--adm-semantic-info-soft)]"}`}
     >
       <button
         type="button"

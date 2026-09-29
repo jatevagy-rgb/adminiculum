@@ -78,6 +78,12 @@ export function DocumentReviewMargin(props: DocumentReviewMarginProps) {
             startOffset: entry.comment.startOffset,
             endOffset: entry.comment.endOffset,
             createdAt: entry.comment.createdAt,
+            // Comment-only anchor recovery: if the stored offset is missing or
+            // stale, the layout resolves the comment's own quoted text instead
+            // of stacking it below the previous card.
+            selectedText: entry.comment.selectedText,
+            textPrefix: entry.comment.textPrefix,
+            textSuffix: entry.comment.textSuffix,
           }
         : {
             id: entry.proposal.id,
