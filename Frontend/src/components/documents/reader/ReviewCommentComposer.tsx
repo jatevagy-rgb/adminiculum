@@ -46,7 +46,7 @@ export function ReviewCommentComposer({
   }, [open, targetKey]);
 
   useEffect(() => {
-    if (open) textareaRef.current?.focus();
+    if (open) textareaRef.current?.focus({ preventScroll: true });
   }, [open, targetKey]);
 
   if (!open) return null;

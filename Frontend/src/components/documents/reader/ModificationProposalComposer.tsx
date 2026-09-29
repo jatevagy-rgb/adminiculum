@@ -49,7 +49,7 @@ export function ModificationProposalComposer({
   }, [open, targetKey]);
 
   useEffect(() => {
-    if (open) textareaRef.current?.focus();
+    if (open) textareaRef.current?.focus({ preventScroll: true });
   }, [open, targetKey]);
 
   const normalizedOriginal = selectedText.replace(/\s+/g, " ").trim();
