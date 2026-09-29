@@ -4,66 +4,80 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 /**
- * Organization portal shell + home convergence.
+ * Organization portal shell + home convergence (Client Portal 3.0).
  *
- * The organization portal must behave like ONE product: every canonical customer
- * domain is reachable from the same navigation the loader serves, and navigation
- * availability must not contradict the route's actual customer-safe availability
- * model. These tests pin the converged information architecture, the responsive
- * contract and the promise that this is presentation-only (no authorization
- * change, no faked data).
+ * The organization portal must behave like ONE product: the seven canonical V3
+ * primary destinations come from a single navigation module, Naptár and
+ * Kommunikáció are utilities (never primary), the mobile bottom navigation
+ * carries exactly four slots, and the whole cutover is presentation-only (no
+ * authorization change, no faked data). INDIVIDUAL and CASE_RELAY navigation
+ * stays on the legacy shell untouched.
  */
 
 const root = process.cwd();
 const read = (relative: string) => readFileSync(path.join(root, relative), "utf8");
 
 const shell = () => read("src/components/client-portal/ClientPortalShell.tsx");
+const navModule = () => read("src/components/client-portal-v3/navigation.ts");
+const shellV3 = () => read("src/components/client-portal-v3/PortalShellV3.tsx");
+const primaryNav = () => read("src/components/client-portal-v3/PortalPrimaryNav.tsx");
+const utilityTray = () => read("src/components/client-portal-v3/PortalUtilityTray.tsx");
+const mobileNav = () => read("src/components/client-portal-v3/PortalMobileNav.tsx");
 const orgHome = () => read("src/components/client-portal/OrgHomeView.tsx");
 
-function orgNavBlock(): string {
-  const src = shell();
-  const start = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
-  const end = src.indexOf("if (workspace.mode === 'CASE_RELAY')");
-  assert.ok(start !== -1 && end > start, "the organization nav block must exist");
+function orgPrimaryNavBlock(): string {
+  const src = navModule();
+  const start = src.indexOf("ORG_PRIMARY_NAV");
+  const end = src.indexOf("ORG_MOBILE_PRIMARY_NAV");
+  assert.ok(start !== -1 && end > start, "the V3 organization primary nav block must exist");
   return src.slice(start, end);
 }
 
-const CANONICAL_ORG_DOMAINS: Array<[string, string]> = [
+const CANONICAL_ORG_PRIMARY_DOMAINS: Array<[string, string]> = [
   ["Áttekintés", "/portal"],
   ["Ügyek", "/portal/ugyek"],
   ["Teendők", "/portal/teendoim"],
   ["Dokumentumok", "/portal/dokumentumok"],
-  ["Naptár", "/portal/naptar"],
+  ["Vállalat", "/portal/vallalat"],
   ["Fejlesztés", "/portal/fejlesztes"],
   ["Megfelelés", "/portal/megfeleles"],
-  ["Kommunikáció", "/portal/uzenetek"],
-  ["Vállalat", "/portal/vallalat"],
 ];
 
-describe("Organization portal navigation convergence", () => {
-  it("every canonical organization domain is reachable from the organization navigation", () => {
-    const block = orgNavBlock();
-    for (const [label, href] of CANONICAL_ORG_DOMAINS) {
-      assert.ok(block.includes(`['${label}', '${href}']`), `organization navigation is missing ${label} → ${href}`);
+describe("Organization portal navigation convergence (V3)", () => {
+  it("every canonical V3 primary domain is reachable from the organization navigation", () => {
+    const block = orgPrimaryNavBlock();
+    for (const [label, href] of CANONICAL_ORG_PRIMARY_DOMAINS) {
+      assert.ok(block.includes(`label: "${label}", href: "${href}"`), `organization navigation is missing ${label} → ${href}`);
     }
   });
 
+  it("the ORGANIZATION primary navigation has exactly seven destinations", () => {
+    const block = orgPrimaryNavBlock();
+    const count = (block.match(/label: "/g) || []).length;
+    assert.equal(count, 7, "the ORGANIZATION primary navigation must contain exactly seven destinations");
+  });
+
+  it("Naptár and Kommunikáció are utilities, never primary destinations", () => {
+    const block = orgPrimaryNavBlock();
+    assert.ok(!block.includes('label: "Naptár"'), "Naptár must not be a primary destination");
+    assert.ok(!block.includes('label: "Kommunikáció"'), "Kommunikáció must not be a primary destination");
+    assert.ok(!block.includes("Szerződés"), "Szerződések must not be a primary destination");
+    assert.ok(!block.includes("Szervezeti áttekintés"), "Szervezeti áttekintés must not be a primary destination");
+  });
+
   it("does not hide organization domains behind the individual workspace capability flags", () => {
-    const block = orgNavBlock();
-    // The loader serves organization content through case grants / org projections,
-    // so navigation must not re-hide Ügyek or Dokumentumok on capability flags.
-    assert.doesNotMatch(block, /capabilities\.matters/);
-    assert.doesNotMatch(block, /capabilities\.tasks/);
-    assert.doesNotMatch(block, /capabilities\.documents/);
+    const src = primaryNav() + navModule();
+    assert.doesNotMatch(src, /capabilities\.matters/);
+    assert.doesNotMatch(src, /capabilities\.tasks/);
+    assert.doesNotMatch(src, /capabilities\.documents/);
   });
 
   it("keeps Kommunikáció gated only by the authoritative communication mode", () => {
-    const src = shell();
-    const block = orgNavBlock();
-    assert.match(src, /communicationMode !== 'EXTERNAL_ONLY'/);
-    assert.match(block, /href === '\/portal\/uzenetek' && !communicationEnabled/);
+    const src = shellV3() + utilityTray();
+    assert.match(src, /communicationMode !== ['"]EXTERNAL_ONLY['"]/);
+    assert.match(src, /communicationEnabled/);
     // The individual messaging capability must not be the organization gate.
-    assert.doesNotMatch(block, /capabilities\.messages/);
+    assert.doesNotMatch(src, /capabilities\.messages/);
   });
 
   it("keeps the individual and case-relay navigation untouched", () => {
@@ -73,26 +87,35 @@ describe("Organization portal navigation convergence", () => {
     assert.match(src, /capabilities\.home \? \['Főoldal', '\/portal'\] : null/);
   });
 
-  it("offers a compact responsive mobile navigation with the remaining domains reachable", () => {
-    const src = shell();
-    // Preferred compact primary destinations plus an explicit overflow control.
-    assert.match(src, /ORG_MOBILE_PRIMARY_HREFS = \['\/portal', '\/portal\/teendoim', '\/portal\/dokumentumok'\]/);
-    assert.match(src, /data-testid="org-portal-mobile-nav"/);
-    assert.match(src, /aria-expanded=\{mobileNavOpen\}/);
-    assert.match(src, /aria-controls="org-portal-more-nav"/);
-    assert.match(src, /id="org-portal-more-nav"/);
-    assert.match(src, /Továbbiak/);
-    // The overflow panel derives from the same canonical navigation, so every
-    // remaining domain stays reachable on small screens.
-    assert.match(src, /nav\s*\n?\s*\.filter\(\(\[, href\]\) => !ORG_MOBILE_PRIMARY_HREFS\.includes\(href\)\)/);
-    // Desktop hides the wrapped nav for organization; mobile must not.
-    assert.match(src, /isOrganization \? 'hidden sm:flex' : 'flex'/);
+  it("offers a four-slot mobile bottom navigation with Több exposing the remaining domains", () => {
+    const src = mobileNav();
+    const nav = navModule();
+    assert.match(src, /data-testid="org-portal-mobile-nav-v3"/);
+    assert.match(src, /grid grid-cols-4/);
+    assert.match(src, /data-testid="org-portal-more-trigger"/);
+    assert.match(src, /Több/);
+    assert.match(src, /aria-haspopup="dialog"/);
+    assert.match(src, /<Modal/);
+    // The three compact primary destinations plus Több.
+    for (const label of ['label: "Áttekintés"', 'label: "Ügyek"', 'label: "Teendők"']) {
+      assert.ok(nav.includes(label), `mobile primary nav missing ${label}`);
+    }
+    // The remaining domains stay reachable through the Több sheet.
+    for (const label of ["Dokumentumok", "Vállalat", "Fejlesztés", "Megfelelés", "Naptár", "Kommunikáció"]) {
+      assert.ok(nav.includes(`label: "${label}"`), `mobile Több nav missing ${label}`);
+    }
     // Active destination is exposed, never hover-only.
-    assert.match(src, /aria-current=\{isActiveNav\(href\) \? 'page' : undefined\}/);
+    assert.match(src, /aria-current=\{active \? ['"]page['"] : undefined\}/);
+  });
+
+  it("renders the V3 shell for the ready ORGANIZATION runtime", () => {
+    const src = shell();
+    assert.match(src, /<PortalShellV3/);
+    assert.match(shellV3(), /data-testid="client-portal-shell-v3"/);
   });
 
   it("is presentation-only and introduces no authorization change", () => {
-    const src = shell();
+    const src = shellV3() + primaryNav() + utilityTray() + mobileNav() + navModule();
     for (const forbidden of [
       /bypass/i,
       /escalat/i,
@@ -104,8 +127,8 @@ describe("Organization portal navigation convergence", () => {
     ]) {
       assert.doesNotMatch(src, forbidden, `navigation must not introduce an authorization change: ${forbidden}`);
     }
-    // The navigation is derived from the exact same workspace context the loader used.
-    assert.match(src, /state\.context\.selectedWorkspace/);
+    // The shell receives the exact same server-resolved context the loader used.
+    assert.match(shellV3(), /context\.selectedWorkspace/);
   });
 });
 
