@@ -151,7 +151,7 @@ function evaluationStatusClass(summary: EvaluationSummary): string {
   if (!summary.enrolled) return "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]";
   if (summary.findingsCreated > 0) return "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]";
   if (summary.baseline) return "border-[var(--adm-border)] bg-white text-[var(--adm-text)]";
-  if (summary.snapshotsCreated > 0) return "border-[#BFD6C6] bg-[#EEF5F0] text-[var(--adm-green-800)]";
+  if (summary.snapshotsCreated > 0) return "border-[var(--adm-semantic-success-border)] bg-[var(--adm-semantic-success-soft)] text-[var(--adm-semantic-success)]";
   return "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
 }
 
