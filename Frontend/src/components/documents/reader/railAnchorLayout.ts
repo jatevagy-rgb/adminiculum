@@ -22,6 +22,15 @@ export interface RailLayoutItem {
   endOffset: number | null;
   /** Real creation timestamp; only a tie-breaker, never the primary order. */
   createdAt: string;
+  /**
+   * Comment-only anchor recovery hints. Comments are the only rail items whose
+   * stored offset may be absent (legacy comments, re-extracted version text), so
+   * the layout may resolve their own anchor from the quoted text instead of
+   * treating them as unplaced. Proposals never need these.
+   */
+  selectedText?: string | null;
+  textPrefix?: string | null;
+  textSuffix?: string | null;
 }
 
 /** Sentinel used for items without a usable anchor so they sort after anchored ones. */

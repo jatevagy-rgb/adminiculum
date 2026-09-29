@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
-import { measureAnchorYPositions } from "@/lib/documents/readerAnchorMeasure";
+import { measureAnchorYPositions, resolveRailItemOffset } from "@/lib/documents/readerAnchorMeasure";
 import { computeAnchoredLayout, type RailLayoutItem } from "./railAnchorLayout";
 
 export interface ReaderRailLayoutState {
@@ -90,17 +90,29 @@ export function useReaderRailLayout(params: UseReaderRailLayoutParams): ReaderRa
       return;
     }
 
+    // Comment-only anchor recovery: a comment whose stored offset is missing or
+    // no longer fits the rendered text resolves its own anchor from its quoted
+    // text, so it is ordered and measured by its own document position instead
+    // of stacking after the previous card as an unplaced item. A comment with a
+    // usable offset and every proposal/draft keep the exact legacy path.
+    const rootText = document.textContent ?? "";
+    const layoutItems = currentItems.map((item) => {
+      if (item.kind !== "comment") return item;
+      const resolved = resolveRailItemOffset(rootText, item);
+      return resolved === item.startOffset ? item : { ...item, startOffset: resolved };
+    });
+
     const desiredYById = measureAnchorYPositions(
       container,
       document,
-      currentItems.map((item) => ({ id: item.id, startOffset: item.startOffset })),
+      layoutItems.map((item) => ({ id: item.id, startOffset: item.startOffset })),
     );
     const heightById: Record<string, number> = {};
-    for (const item of currentItems) {
+    for (const item of layoutItems) {
       heightById[item.id] = cardElementsRef.current.get(item.id)?.offsetHeight ?? 0;
     }
 
-    const next = computeAnchoredLayout({ items: currentItems, desiredYById, heightById, gap, minY });
+    const next = computeAnchoredLayout({ items: layoutItems, desiredYById, heightById, gap, minY });
     setState((prev) => (sameLayout(prev, next) ? prev : next));
   }, [containerRef, documentRef, enabled, gap, minY]);
 

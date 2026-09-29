@@ -85,3 +85,76 @@ export function measureAnchorYPositions(
   }
   return result;
 }
+
+/**
+ * Comment anchor recovery.
+ *
+ * Comments are the only rail items whose stored `startOffset` may be absent:
+ * legacy review comments were authored before every path required offsets, and
+ * a re-extracted version text can push a recorded offset outside the rendered
+ * document. An unplaced comment must NOT silently inherit the previous card's
+ * stack position — it has to be placed beside its own quoted text. These pure
+ * helpers resolve a trustworthy offset from the comment's own selectedText and
+ * its stored prefix/suffix context; they never invent an anchor for text that
+ * does not occur in the rendered document.
+ */
+export interface AnchorTextHints {
+  selectedText?: string | null;
+  textPrefix?: string | null;
+  textSuffix?: string | null;
+}
+
+/** Offset of the quoted text occurrence that matches the stored context, else the first occurrence. */
+export function resolveTextAnchorOffset(rootText: string, hints: AnchorTextHints): number | null {
+  const needle = typeof hints.selectedText === "string" ? hints.selectedText : "";
+  if (!rootText || !needle) return null;
+  const prefix = typeof hints.textPrefix === "string" ? hints.textPrefix : "";
+  const suffix = typeof hints.textSuffix === "string" ? hints.textSuffix : "";
+
+  const candidates: number[] = [];
+  let from = 0;
+  while (from < rootText.length) {
+    const index = rootText.indexOf(needle, from);
+    if (index < 0) break;
+    candidates.push(index);
+    from = index + 1;
+  }
+  if (candidates.length === 0) return null;
+
+  const contextMatches = candidates.filter((index) => {
+    if (prefix) {
+      const before = rootText.slice(Math.max(0, index - prefix.length), index);
+      if (!before.endsWith(prefix)) return false;
+    }
+    if (suffix) {
+      const after = rootText.slice(index + needle.length, index + needle.length + suffix.length);
+      if (!after.startsWith(suffix)) return false;
+    }
+    return true;
+  });
+  return contextMatches.length > 0 ? contextMatches[0] : candidates[0];
+}
+
+/**
+ * Effective anchor offset for one rail item.
+ *
+ * A numeric offset inside the rendered text always wins — comments with a valid
+ * offset and every proposal/draft stay on the exact legacy path. Only a comment
+ * whose offset is missing or no longer fits the rendered text falls back to its
+ * own quoted text; when even that fails the original value is preserved so the
+ * legacy deterministic stacking behaviour is unchanged.
+ */
+export function resolveRailItemOffset(
+  rootText: string,
+  item: { kind: string; startOffset?: number | null } & AnchorTextHints,
+): number | null {
+  const numeric = item.startOffset;
+  const usable =
+    typeof numeric === "number" && Number.isFinite(numeric) && numeric >= 0 && numeric <= rootText.length;
+  if (usable) return numeric;
+  if (item.kind === "comment") {
+    const resolved = resolveTextAnchorOffset(rootText, item);
+    if (resolved !== null) return resolved;
+  }
+  return numeric ?? null;
+}
