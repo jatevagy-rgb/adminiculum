@@ -80,6 +80,7 @@ describe('Action Center read-model boundaries', () => {
       actionLabel: 'Feltöltés megnyitása',
       href: '/portal/matters/m1/requests/r1',
       canCompleteInPortal: true,
+      matterPublicationId: 'm1',
     };
     expect(() => assertActionCenterDtoSafe({ items: [clean], counts: { open: 1, overdue: 0, dueSoon: 0 } })).not.toThrow();
     for (const forbidden of ['workInstruction', 'taskNotes', 'reviewer', 'internalOwner', 'sharePoint', 'spItemId', 'aiPrompt', 'aiResponse', 'auditEvent', 'requirementVersionId', 'clientControlId', 'findingId']) {

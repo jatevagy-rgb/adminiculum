@@ -73,6 +73,13 @@ export interface PortalActionItem {
   actionLabel: string;
   href: string;
   canCompleteInPortal: boolean;
+  /**
+   * Canonical matter publication id when the source is matter-scoped
+   * (CLIENT_REQUEST / CLIENT_SUBMISSION / CLIENT_ACTION_REQUEST); null for
+   * workspace-scoped sources (INTAKE / COMPLIANCE). Additive, customer-safe:
+   * the publication id is already the customer-facing matter identity.
+   */
+  matterPublicationId: string | null;
 }
 
 export interface PortalActionCenterDto {
@@ -368,6 +375,7 @@ export async function getOrganizationalActionCenter(
         ? `${matterHref(matterPublicationId)}/requests/${encodeURIComponent(correction.requestId)}`
         : '/portal/ugyek',
       canCompleteInPortal: true,
+      matterPublicationId: matterPublicationId,
     });
   }
 
@@ -392,6 +400,7 @@ export async function getOrganizationalActionCenter(
         ? `${matterHref(request.matterPublicationId)}/requests/${encodeURIComponent(request.id)}`
         : '/portal/ugyek',
       canCompleteInPortal: true,
+      matterPublicationId: request.matterPublicationId,
     });
   }
 
@@ -416,6 +425,7 @@ export async function getOrganizationalActionCenter(
       // Online completion of published action requests is not implemented yet;
       // the canonical journey is the read-only action request / matter page.
       canCompleteInPortal: false,
+      matterPublicationId: matterPublicationId,
     });
   }
 
@@ -439,6 +449,7 @@ export async function getOrganizationalActionCenter(
       actionLabel: CUSTOMER_ACTION_LABELS.INTAKE_MORE_INFO,
       href: `/portal/megkeresesek/${encodeURIComponent(String(intake.reference))}`,
       canCompleteInPortal: true,
+      matterPublicationId: null,
     });
   }
 
@@ -471,6 +482,7 @@ export async function getOrganizationalActionCenter(
         actionLabel: CUSTOMER_ACTION_LABELS.PROFILE_FACT,
         href: '/portal/megfeleles',
         canCompleteInPortal: true,
+        matterPublicationId: null,
       });
     }
   }

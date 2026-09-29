@@ -551,6 +551,8 @@ export type PortalActionItem = {
   actionLabel: string;
   href: string;
   canCompleteInPortal: boolean;
+  /** Canonical matter publication id for matter-scoped sources; null for workspace-scoped sources. */
+  matterPublicationId: string | null;
 };
 
 export type PortalActionCenter = {

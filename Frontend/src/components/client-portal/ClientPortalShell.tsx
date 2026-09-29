@@ -13,6 +13,8 @@ import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import { PortalShellV3 } from '@/components/client-portal-v3/PortalShellV3';
 import { PortalHomeV3 } from '@/components/client-portal-v3/PortalHomeV3';
 import { PortalActionCenter } from '@/components/client-portal-v3/actions/PortalActionCenter';
+import { PortalMattersV3 } from '@/components/client-portal-v3/matters/PortalMattersV3';
+import { PortalMatterWorkspaceV3 } from '@/components/client-portal-v3/matters/PortalMatterWorkspaceV3';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import { PortalCalendarView } from './PortalCalendarView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
@@ -479,8 +481,10 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
       >
         {view === 'home' ? <PortalHomeV3 identityName={state.context.identity?.displayName} /> : null}
         {view === 'tasks' ? <PortalActionCenter /> : null}
+        {view === 'matters' ? <PortalMattersV3 /> : null}
+        {view === 'matter' ? <PortalMatterWorkspaceV3 matterPublicationId={resourceId} requestId={requestId} /> : null}
         {view === 'calendar' ? <PortalCalendarView /> : null}
-        {view !== 'calendar' && view !== 'home' && view !== 'tasks' ? (
+        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
