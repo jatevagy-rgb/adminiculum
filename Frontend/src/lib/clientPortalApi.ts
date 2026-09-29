@@ -654,6 +654,43 @@ export type PortalOrgCompanyProcess = {
   frequency: string;
 };
 
+export type PortalOrgCompanyDataSummary = {
+  relevantQuestionCount: number;
+  answeredCount: number;
+  unknownCount: number;
+  unansweredCount: number;
+  needsCompletion: boolean;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyDocumentsSummary = {
+  visibleDocumentCount: number;
+  latestPublishedAt: string | null;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyComplianceSummary = {
+  topicCount: number;
+  moreInformationNeededCount: number;
+  lawyerReviewRequiredCount: number;
+  actionInProgressCount: number;
+  resolvedCount: number;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyDevelopmentSummary = {
+  initiativeCount: number;
+  activeInitiativeCount: number;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyOutcomeSummary = {
+  measuredCount: number;
+  calculatedCount: number;
+  estimatedCount: number;
+  portalPath: string;
+};
+
 export type PortalOrgCompany = {
   companyName: string;
   profileHeadline: string | null;
@@ -665,6 +702,11 @@ export type PortalOrgCompany = {
   initiatives: Array<{ id: string; title: string; targetState: string | null; statusLabel: string; targetAt: string | null }>;
   systems?: PortalOrgCompanySystem[];
   processes?: PortalOrgCompanyProcess[];
+  dataSummary?: PortalOrgCompanyDataSummary | null;
+  documentsSummary?: PortalOrgCompanyDocumentsSummary | null;
+  complianceSummary?: PortalOrgCompanyComplianceSummary | null;
+  developmentSummary?: PortalOrgCompanyDevelopmentSummary | null;
+  outcomeSummary?: PortalOrgCompanyOutcomeSummary | null;
 };
 
 export async function getPortalOrganizationContracts() {
