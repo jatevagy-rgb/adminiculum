@@ -27,6 +27,7 @@ import { PortalNewIntakeV3 } from '@/components/client-portal-v3/intake/PortalNe
 import { PortalIntakeDetailV3 } from '@/components/client-portal-v3/intake/PortalIntakeDetailV3';
 import { PortalContractsV3 } from '@/components/client-portal-v3/contracts/PortalContractsV3';
 import { PortalLeadershipV3 } from '@/components/client-portal-v3/leadership/PortalLeadershipV3';
+import { PortalActionDetailV3 } from '@/components/client-portal-v3/actions/PortalActionDetailV3';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import { CustomerIntakeDetail } from './CustomerIntake';
 import { PortalCalendarView } from './PortalCalendarView';
@@ -425,7 +426,11 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         // copy; a missing publication must not dead-end the whole shell.
         // INDIVIDUAL and CASE_RELAY keep the canonical loader + DocumentView.
         if (view === 'document' && resourceId && !isOrganizationWorkspace) detail = { document: await getPortalDocument(resourceId) };
-        if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };
+        // Organization action detail self-fetches via the V3 component; the eager
+        // shell fetch is preserved for the legacy (INDIVIDUAL / CASE_RELAY) path.
+        if (view === 'action' && resourceId && !isOrganizationWorkspace) {
+          detail = { action: await getPortalActionRequest(resourceId) };
+        }
         if (!cancelled) setState({ status: 'ready', context, home, workspace, ...detail });
       } catch (error) {
         if (error instanceof InteractionRequiredAuthError) {
@@ -513,7 +518,8 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         {view === 'intake' ? <PortalIntakeDetailV3 intakeId={resourceId ?? ''} /> : null}
         {view === 'contracts' ? <PortalContractsV3 /> : null}
         {view === 'leadership' ? <PortalLeadershipV3 /> : null}
-        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' && view !== 'documents' && view !== 'document' && view !== 'company' && view !== 'messages' && view !== 'grow' && view !== 'compliance' && view !== 'intakes' && view !== 'new-intake' && view !== 'intake' && view !== 'contracts' && view !== 'leadership' ? (
+        {view === 'action' ? <PortalActionDetailV3 requestId={resourceId ?? ''} /> : null}
+        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' && view !== 'documents' && view !== 'document' && view !== 'company' && view !== 'messages' && view !== 'grow' && view !== 'compliance' && view !== 'intakes' && view !== 'new-intake' && view !== 'intake' && view !== 'contracts' && view !== 'leadership' && view !== 'action' ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
@@ -522,7 +528,6 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
             workspace={state.workspace}
           />
         ) : null}
-        {view === 'action' && state.action ? <ActionView action={state.action} /> : null}
       </PortalShellV3>
     );
   }
