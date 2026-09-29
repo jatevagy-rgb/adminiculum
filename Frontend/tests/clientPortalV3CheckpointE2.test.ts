@@ -145,11 +145,12 @@ describe("Checkpoint E2 — 4-step intake journey & targeted acceptance repair",
     assert.match(src, /h-10/);
   });
 
-  it("17. ClientPortalShell remains untouched", () => {
+  it("17. ClientPortalShell wires the intake V3 bodies in the ORGANIZATION branch and keeps the legacy detail for other modes", () => {
     const src = shell();
-    assert.doesNotMatch(src, /PortalIntakesV3/);
-    assert.doesNotMatch(src, /PortalNewIntakeV3/);
-    assert.doesNotMatch(src, /PortalIntakeDetailV3/);
+    assert.match(src, /view === 'intakes' \? <PortalIntakesV3 \/> : null/);
+    assert.match(src, /view === 'new-intake' \? <PortalNewIntakeV3 \/> : null/);
+    assert.match(src, /view === 'intake' \? <PortalIntakeDetailV3 intakeId=\{resourceId \?\? ''\} \/> : null/);
+    assert.match(src, /view === 'intake' && state\.context\.selectedWorkspace\?\.mode !== 'ORGANIZATION' \? <CustomerIntakeDetail intakeId=\{resourceId \?\? ''\} \/> : null/);
   });
 
   it("18. navigation remains untouched", () => {

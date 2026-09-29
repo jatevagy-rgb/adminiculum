@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, SafePanelError } from "@/components/ui";
-import { AdminStatusPill } from "@/components/adminiculum/ui";
+import { AdminBadge, AdminStatusPill } from "@/components/adminiculum/ui";
 import {
   getPortalGrowAssessment,
   getPortalOrgGrow,
@@ -1812,11 +1812,7 @@ export function PortalGrowV3() {
                                   <div>
                                     <div className="flex items-center justify-between gap-2">
                                       <span className={`text-xs font-semibold ${MUTED}`}>{step.position}. lépés</span>
-                                      {step.isApproval ? (
-                                        <span className="rounded-full border border-[var(--adm-brand-terracotta)] px-2 py-0.5 text-[11px] font-semibold text-[var(--adm-brand-terracotta)]">
-                                          Jóváhagyási kapu
-                                        </span>
-                                      ) : null}
+                                      {step.isApproval ? <AdminBadge tone="burgundy">Jóváhagyási kapu</AdminBadge> : null}
                                     </div>
                                     <p className="mt-1 font-medium leading-snug text-[var(--adm-text-primary)]">{step.name}</p>
                                   </div>

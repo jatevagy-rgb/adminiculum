@@ -22,7 +22,13 @@ import { PortalCommunicationV3 } from '@/components/client-portal-v3/communicati
 import { PortalCalendarV3 } from '@/components/client-portal-v3/calendar/PortalCalendarV3';
 import { PortalGrowV3 } from '@/components/client-portal-v3/grow/PortalGrowV3';
 import { PortalComplianceV3 } from '@/components/client-portal-v3/compliance/PortalComplianceV3';
+import { PortalIntakesV3 } from '@/components/client-portal-v3/intake/PortalIntakesV3';
+import { PortalNewIntakeV3 } from '@/components/client-portal-v3/intake/PortalNewIntakeV3';
+import { PortalIntakeDetailV3 } from '@/components/client-portal-v3/intake/PortalIntakeDetailV3';
+import { PortalContractsV3 } from '@/components/client-portal-v3/contracts/PortalContractsV3';
+import { PortalLeadershipV3 } from '@/components/client-portal-v3/leadership/PortalLeadershipV3';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
+import { CustomerIntakeDetail } from './CustomerIntake';
 import { PortalCalendarView } from './PortalCalendarView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
 import { CustomerRequestDetail } from './CustomerRequestDetail';
@@ -50,7 +56,7 @@ import {
   type PortalIdentityContext,
 } from '@/lib/clientPortalApi';
 
-type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'calendar' | 'intakes' | 'new-intake' | 'leadership' | 'contracts' | 'company' | 'grow' | 'compliance';
+type PortalView = 'home' | 'matters' | 'tasks' | 'documents' | 'messages' | 'matter' | 'document' | 'action' | 'calendar' | 'intakes' | 'new-intake' | 'intake' | 'leadership' | 'contracts' | 'company' | 'grow' | 'compliance';
 
 type Props = { view: PortalView; resourceId?: string; requestId?: string };
 
@@ -502,7 +508,12 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         {view === 'calendar' ? <PortalCalendarV3 /> : null}
         {view === 'grow' ? <PortalGrowV3 /> : null}
         {view === 'compliance' ? <PortalComplianceV3 /> : null}
-        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' && view !== 'documents' && view !== 'document' && view !== 'company' && view !== 'messages' && view !== 'grow' && view !== 'compliance' ? (
+        {view === 'intakes' ? <PortalIntakesV3 /> : null}
+        {view === 'new-intake' ? <PortalNewIntakeV3 /> : null}
+        {view === 'intake' ? <PortalIntakeDetailV3 intakeId={resourceId ?? ''} /> : null}
+        {view === 'contracts' ? <PortalContractsV3 /> : null}
+        {view === 'leadership' ? <PortalLeadershipV3 /> : null}
+        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' && view !== 'documents' && view !== 'document' && view !== 'company' && view !== 'messages' && view !== 'grow' && view !== 'compliance' && view !== 'intakes' && view !== 'new-intake' && view !== 'intake' && view !== 'contracts' && view !== 'leadership' ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
@@ -560,8 +571,9 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         {state.status === 'workspace-empty' ? <Card><h1 className="cp-title text-3xl">{state.context.selectedWorkspace?.name}</h1><p className="cp-subtitle mt-3">Az ügyfélfelülethez való hozzáférése aktív, de ezen a felületen jelenleg nincs elérhető tartalom.</p></Card> : null}
         {state.status === 'service-error' ? <Card><h1 className="cp-title text-3xl">A portál jelenleg nem érhető el</h1><p className="cp-subtitle mt-3">Kérjük, próbálja újra később.</p></Card> : null}
         {state.status === 'denied' ? <Card>{state.message}</Card> : null}
+        {state.status === 'ready' && view === 'intake' && state.context.selectedWorkspace?.mode !== 'ORGANIZATION' ? <CustomerIntakeDetail intakeId={resourceId ?? ''} /> : null}
         {state.status === 'ready' && view === 'calendar' ? <PortalCalendarView /> : null}
-        {state.status === 'ready' && view !== 'calendar' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && !(state.context.selectedWorkspace?.mode === 'ORGANIZATION' && view === 'home') ? (
+        {state.status === 'ready' && view !== 'calendar' && view !== 'intake' && (state.context.selectedWorkspace?.mode === 'ORGANIZATION' || state.context.selectedWorkspace?.mode === 'CASE_RELAY') && !(state.context.selectedWorkspace?.mode === 'ORGANIZATION' && view === 'home') ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
