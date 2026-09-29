@@ -113,9 +113,16 @@ export function useReaderRailLayout(params: UseReaderRailLayoutParams): ReaderRa
     });
   }, [recompute]);
 
+  // The rendered item set (rail items, active filter, opened draft composer)
+  // drives the layout. Recompute SYNCHRONOUSLY here so a newly opened draft
+  // composer or a newly created review card is painted at its measured anchor Y
+  // in the very same commit — never first at the fallback top (0). Deferring
+  // this to a rAF let the browser paint (and focus-scroll to) the temporary
+  // top:0 position, which jumped the shared scroll container to the document
+  // top in live acceptance. Resize-driven recomputes stay on the rAF path.
   useLayoutEffect(() => {
-    scheduleRecompute();
-  }, [scheduleRecompute, itemsKey]);
+    recompute();
+  }, [recompute, itemsKey]);
 
   // The rail items and the rendered document arrive in any order in live use
   // (the rail API often resolves before the version text). Refs populate after
