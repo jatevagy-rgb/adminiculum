@@ -15,6 +15,8 @@ import { PortalHomeV3 } from '@/components/client-portal-v3/PortalHomeV3';
 import { PortalActionCenter } from '@/components/client-portal-v3/actions/PortalActionCenter';
 import { PortalMattersV3 } from '@/components/client-portal-v3/matters/PortalMattersV3';
 import { PortalMatterWorkspaceV3 } from '@/components/client-portal-v3/matters/PortalMatterWorkspaceV3';
+import { PortalDocumentLibraryV3 } from '@/components/client-portal-v3/documents/PortalDocumentLibraryV3';
+import { PortalDocumentDetailV3 } from '@/components/client-portal-v3/documents/PortalDocumentDetailV3';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import { PortalCalendarView } from './PortalCalendarView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
@@ -383,6 +385,7 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         setSelectedPortalWorkspace(context.selectedWorkspace.publicReference);
         const capabilities = context.selectedWorkspace.capabilities;
         const isCollaborationWorkspace = context.selectedWorkspace.mode === 'ORGANIZATION' || context.selectedWorkspace.mode === 'CASE_RELAY';
+        const isOrganizationWorkspace = context.selectedWorkspace.mode === 'ORGANIZATION';
         // Organization and case-relay customers surface their content via explicit
         // Case grants and the collaboration home (fetched by OrganizationPortalViews), not via the
         // workspace-level capability flags — so they must never dead-end on the
@@ -406,7 +409,11 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
             }
           }
         }
-        if (view === 'document' && resourceId) detail = { document: await getPortalDocument(resourceId) };
+        // ORGANIZATION document detail is resolved by the V3 detail surface
+        // (PortalDocumentDetailV3), which renders its own fail-closed 403/404
+        // copy; a missing publication must not dead-end the whole shell.
+        // INDIVIDUAL and CASE_RELAY keep the canonical loader + DocumentView.
+        if (view === 'document' && resourceId && !isOrganizationWorkspace) detail = { document: await getPortalDocument(resourceId) };
         if (view === 'action' && resourceId) detail = { action: await getPortalActionRequest(resourceId) };
         if (!cancelled) setState({ status: 'ready', context, home, workspace, ...detail });
       } catch (error) {
@@ -483,8 +490,10 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         {view === 'tasks' ? <PortalActionCenter /> : null}
         {view === 'matters' ? <PortalMattersV3 /> : null}
         {view === 'matter' ? <PortalMatterWorkspaceV3 matterPublicationId={resourceId} requestId={requestId} /> : null}
+        {view === 'documents' ? <PortalDocumentLibraryV3 /> : null}
+        {view === 'document' ? <PortalDocumentDetailV3 publicationId={resourceId} /> : null}
         {view === 'calendar' ? <PortalCalendarView /> : null}
-        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' ? (
+        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' && view !== 'documents' && view !== 'document' ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
@@ -493,7 +502,6 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
             workspace={state.workspace}
           />
         ) : null}
-        {view === 'document' && state.document ? <DocumentView document={state.document} /> : null}
         {view === 'action' && state.action ? <ActionView action={state.action} /> : null}
       </PortalShellV3>
     );

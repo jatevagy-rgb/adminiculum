@@ -44,6 +44,7 @@ import { getOrganizationalCaseDetail, listOrganizationalCases, OrganizationalCas
 import { organizationSummary, unitSummary } from '../modules/client-workspace/leadershipSummaryService';
 import { getOrganizationalHome } from '../modules/client-workspace/orgHomeService';
 import { getOrganizationalActionCenter } from '../modules/client-workspace/orgActionCenterService';
+import { getOrganizationalDocumentLibrary } from '../modules/client-workspace/orgDocumentLibraryService';
 import { getOrganizationalContracts } from '../modules/client-workspace/orgContractsService';
 import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
 import { getOrganizationalGrow } from '../modules/client-workspace/orgGrowService';
@@ -503,6 +504,18 @@ router.get('/org/action-center', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await getOrganizationalActionCenter(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// CLIENT PORTAL 3.0 — document library read model: published documents from
+// the canonical publication boundary + the customer's own submission history.
+router.get('/org/documents', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalDocumentLibrary(identityId, workspaceId));
   } catch (error) {
     fail(res, error);
   }

@@ -564,6 +564,38 @@ export async function getPortalActionCenter() {
   return fetchApi<PortalActionCenter>('/client-portal/org/action-center', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
 
+export type OrgDocumentLibrarySubmissionStatus =
+  | 'SUBMITTED'
+  | 'CORRECTION_REQUESTED'
+  | 'ACCEPTED_INTO_MATTER'
+  | 'REJECTED';
+
+export type OrgDocumentLibraryDto = {
+  published: Array<{
+    publicationId: string;
+    title: string;
+    versionLabel: string;
+    publishedAt: string | null;
+    matterTitle: string | null;
+    tags: string[];
+    downloadAvailable: boolean;
+  }>;
+  submitted: Array<{
+    submissionId: string;
+    requestTitle: string;
+    files: Array<{ id: string; title: string; statusLabel: string }>;
+    submittedAt: string | null;
+    status: OrgDocumentLibrarySubmissionStatus;
+    matterTitle: string | null;
+    matterPublicationId: string | null;
+    requestId: string | null;
+  }>;
+};
+
+export async function getPortalOrganizationDocuments() {
+  return fetchApi<OrgDocumentLibraryDto>('/client-portal/org/documents', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
 export async function getPortalUnitSummary(groupId: string) {
   return fetchApi<PortalLeadershipUnitAggregate>(`/client-portal/org/summary/unit/${encodeURIComponent(groupId)}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
