@@ -147,7 +147,9 @@ describe("Checkpoint A — runtime cutover", () => {
 
   it("10. the existing ORGANIZATION route bodies still render inside the V3 frame", () => {
     const shell = read("src/components/client-portal/ClientPortalShell.tsx");
-    assert.match(shell, /<OrgHomeView identity=\{state\.context\.identity\} \/>/);
+    // Client Portal 3.0 checkpoint B: home and tasks now use the V3 bodies.
+    assert.match(shell, /<PortalHomeV3 identityName=\{state\.context\.identity\?\.displayName\} \/>/);
+    assert.match(shell, /<PortalActionCenter \/>/);
     assert.match(shell, /<PortalCalendarView \/>/);
     assert.match(shell, /<OrganizationPortalViews[\s\S]*?requestId=\{requestId\}[\s\S]*?context=\{state\.context\}/);
     assert.match(shell, /view=\{view as OrganizationPortalView\}/);

@@ -19,7 +19,10 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(shell(), /selectedWorkspace\?\.mode === 'ORGANIZATION'/);
     assert.match(shell(), /selectedWorkspace\?\.mode === 'CASE_RELAY'/);
     assert.match(shell(), /OrganizationPortalViews/);
-    assert.match(shell(), /OrgHomeView/);
+    // Client Portal 3.0: the ORGANIZATION home body is the V3 home; the legacy
+    // OrgHomeView remains in the repository for rollback only.
+    assert.match(shell(), /PortalHomeV3/);
+    assert.equal(existsSync(path.join(root, "src/components/client-portal/OrgHomeView.tsx")), true);
     for (const label of ["'Főoldal', '\/portal'", "'Teendőim', '\/portal\/teendoim'", "'Dokumentumok', '\/portal\/dokumentumok'", "'Üzenetek', '\/portal\/uzenetek'"]) {
       assert.match(shell(), new RegExp(label));
     }

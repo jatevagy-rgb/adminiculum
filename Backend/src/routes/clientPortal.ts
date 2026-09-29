@@ -43,6 +43,7 @@ import { resolveMemberUnits } from '../modules/client-workspace/organizationUnit
 import { getOrganizationalCaseDetail, listOrganizationalCases, OrganizationalCaseListParams } from '../modules/client-workspace/organizationalCaseService';
 import { organizationSummary, unitSummary } from '../modules/client-workspace/leadershipSummaryService';
 import { getOrganizationalHome } from '../modules/client-workspace/orgHomeService';
+import { getOrganizationalActionCenter } from '../modules/client-workspace/orgActionCenterService';
 import { getOrganizationalContracts } from '../modules/client-workspace/orgContractsService';
 import { getOrganizationalCompany } from '../modules/client-workspace/orgCompanyService';
 import { getOrganizationalGrow } from '../modules/client-workspace/orgGrowService';
@@ -489,6 +490,19 @@ router.get('/org/home', async (req, res) => {
     if (!(await portalRead(req, res))) return;
     const { identityId, workspaceId } = orgContext(req);
     res.json(await getOrganizationalHome(identityId, workspaceId));
+  } catch (error) {
+    fail(res, error);
+  }
+});
+
+// CLIENT PORTAL 3.0 — unified Action Center. Read-only projection over the
+// canonical interaction/publication/intake/compliance sources; the resolved
+// portal session + workspace are the only scope inputs.
+router.get('/org/action-center', async (req, res) => {
+  try {
+    if (!(await portalRead(req, res))) return;
+    const { identityId, workspaceId } = orgContext(req);
+    res.json(await getOrganizationalActionCenter(identityId, workspaceId));
   } catch (error) {
     fail(res, error);
   }

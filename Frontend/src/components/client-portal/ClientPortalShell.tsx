@@ -11,8 +11,9 @@ import { PortalEntryLanding } from './PortalEntryLanding';
 import { PortalOnboarding } from './PortalOnboarding';
 import { PortalWorkspaceSelector } from './PortalWorkspaceSelector';
 import { PortalShellV3 } from '@/components/client-portal-v3/PortalShellV3';
+import { PortalHomeV3 } from '@/components/client-portal-v3/PortalHomeV3';
+import { PortalActionCenter } from '@/components/client-portal-v3/actions/PortalActionCenter';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
-import { OrgHomeView } from './OrgHomeView';
 import { PortalCalendarView } from './PortalCalendarView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
 import { CustomerRequestDetail } from './CustomerRequestDetail';
@@ -476,9 +477,10 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         }}
         onLogout={logoutCustomer}
       >
-        {view === 'home' ? <OrgHomeView identity={state.context.identity} /> : null}
+        {view === 'home' ? <PortalHomeV3 identityName={state.context.identity?.displayName} /> : null}
+        {view === 'tasks' ? <PortalActionCenter /> : null}
         {view === 'calendar' ? <PortalCalendarView /> : null}
-        {view !== 'calendar' && view !== 'home' ? (
+        {view !== 'calendar' && view !== 'home' && view !== 'tasks' ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}

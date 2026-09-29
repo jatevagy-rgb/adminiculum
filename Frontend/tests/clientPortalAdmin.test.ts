@@ -164,7 +164,9 @@ describe('internal portal-admin UI', () => {
     assert.match(shell, /'\/portal\/uzenetek'/);
     assert.match(shell, /Amit most érdemes elintézni/);
     assert.match(shell, /Kérdések és válaszok/);
-    assert.match(shell, /OrgHomeView/);
+    // Client Portal 3.0: the ORGANIZATION home body is PortalHomeV3.
+    assert.match(shell, /PortalHomeV3/);
+    assert.equal(existsSync(path.join(root, 'src/components/client-portal/OrgHomeView.tsx')), true, 'legacy OrgHomeView must remain in the repository');
     assert.match(read('src/lib/clientPortalApi.ts'), /intakes\?: boolean/);
     assert.match(read('src/lib/clientPortalApi.ts'), /leadership\?: boolean/);
     assert.doesNotMatch(shell, /Belső munkapad|Review sor|Munkaórák/);

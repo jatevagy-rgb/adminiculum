@@ -519,6 +519,49 @@ export async function getPortalOrgHome() {
   return fetchApi<PortalOrgHome>('/client-portal/org/home', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
 
+export type PortalActionDomain = 'LEGAL' | 'COMPLIANCE' | 'GROW' | 'COMPANY' | 'INTAKE';
+
+export type PortalActionKind =
+  | 'UPLOAD'
+  | 'FORM'
+  | 'ANSWER'
+  | 'CORRECTION'
+  | 'CONFIRM'
+  | 'PROFILE_FACT'
+  | 'INTAKE_MORE_INFO'
+  | 'GROW_INPUT';
+
+export type PortalActionItem = {
+  id: string;
+  sourceType:
+    | 'CLIENT_ACTION_REQUEST'
+    | 'CLIENT_REQUEST'
+    | 'CLIENT_SUBMISSION'
+    | 'INTAKE'
+    | 'COMPLIANCE_MISSING_FACT'
+    | 'GROW_REQUEST';
+  sourceId: string;
+  domain: PortalActionDomain;
+  kind: PortalActionKind;
+  title: string;
+  contextLabel: string | null;
+  dueAt: string | null;
+  urgency: 'OVERDUE' | 'DUE_SOON' | 'NORMAL';
+  state: 'OPEN' | 'IN_PROGRESS' | 'CORRECTION_REQUIRED';
+  actionLabel: string;
+  href: string;
+  canCompleteInPortal: boolean;
+};
+
+export type PortalActionCenter = {
+  items: PortalActionItem[];
+  counts: { open: number; overdue: number; dueSoon: number };
+};
+
+export async function getPortalActionCenter() {
+  return fetchApi<PortalActionCenter>('/client-portal/org/action-center', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
 export async function getPortalUnitSummary(groupId: string) {
   return fetchApi<PortalLeadershipUnitAggregate>(`/client-portal/org/summary/unit/${encodeURIComponent(groupId)}`, { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
