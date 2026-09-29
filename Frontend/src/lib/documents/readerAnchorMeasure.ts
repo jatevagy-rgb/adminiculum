@@ -40,10 +40,45 @@ export function offsetToTextPosition(root: HTMLElement | null, offset: number): 
   return null;
 }
 
+/** The text node immediately before/after `from` inside `root`, if any. */
+function adjacentTextNode(root: HTMLElement, from: Text, direction: 1 | -1): Text | null {
+  const doc = root.ownerDocument ?? (typeof document !== "undefined" ? document : null);
+  if (!doc) return null;
+  const walker = doc.createTreeWalker(root, SHOW_TEXT);
+  walker.currentNode = from;
+  return (direction === 1 ? walker.nextNode() : walker.previousNode()) as Text | null;
+}
+
+/** Collapsed caret rectangle for one text position, or null when unavailable. */
+function collapsedCaretRect(doc: Document, position: OffsetTextPosition): DOMRect | null {
+  const range = doc.createRange();
+  try {
+    range.setStart(position.node, position.offset);
+    range.setEnd(position.node, position.offset);
+  } catch {
+    return null;
+  }
+  if (typeof range.getBoundingClientRect !== "function") return null;
+  return range.getBoundingClientRect() || null;
+}
+
+function isDegenerateRect(rect: DOMRect): boolean {
+  return rect.top === 0 && rect.bottom === 0 && rect.height === 0 && rect.width === 0;
+}
+
 /**
  * Vertical position (px) of `offset` relative to the top of `container`.
  * Returns null when the DOM cannot be laid out (e.g. jsdom has no layout), so
  * callers fall back to deterministic sequential stacking.
+ *
+ * A collapsed caret at the END of a text node that ends with line breaks (an
+ * anchor at the very start of a new paragraph/segment) measures a degenerate
+ * all-zero rectangle in Chromium even though the surrounding text is laid out
+ * normally. Treating that as "no layout" misplaces the card/composer far from
+ * its own anchor, so the measurement probes the adjacent caret positions first:
+ * the start of the following text node is the exact anchor line for a
+ * paragraph-start boundary. Only when every probe is degenerate is the
+ * position treated as unmeasured.
  */
 export function measureOffsetY(
   container: HTMLElement | null,
@@ -56,20 +91,28 @@ export function measureOffsetY(
   const position = offsetToTextPosition(root, offset);
   if (!position) return null;
 
-  const range = doc.createRange();
-  try {
-    range.setStart(position.node, position.offset);
-    range.setEnd(position.node, position.offset);
-  } catch {
-    return null;
+  const candidates: OffsetTextPosition[] = [position];
+  if (position.offset >= position.node.data.length) {
+    const next = adjacentTextNode(root, position.node, 1);
+    if (next) candidates.push({ node: next, offset: 0 });
   }
-  if (typeof range.getBoundingClientRect !== "function") return null;
-  const rect = range.getBoundingClientRect();
-  if (!rect) return null;
-  if (rect.top === 0 && rect.bottom === 0 && rect.height === 0 && rect.width === 0) return null;
+  if (position.offset <= 0) {
+    const previous = adjacentTextNode(root, position.node, -1);
+    if (previous && previous.data.length > 0) candidates.push({ node: previous, offset: previous.data.length - 1 });
+  }
+  if (position.offset > 0) candidates.push({ node: position.node, offset: position.offset - 1 });
+  if (position.offset < position.node.data.length) {
+    candidates.push({ node: position.node, offset: position.offset + 1 });
+  }
+
   if (typeof container.getBoundingClientRect !== "function") return null;
   const containerRect = container.getBoundingClientRect();
-  return rect.top - containerRect.top;
+  for (const candidate of candidates) {
+    const rect = collapsedCaretRect(doc, candidate);
+    if (!rect || isDegenerateRect(rect)) continue;
+    return rect.top - containerRect.top;
+  }
+  return null;
 }
 
 /** Measures every anchored item in one pass. */
