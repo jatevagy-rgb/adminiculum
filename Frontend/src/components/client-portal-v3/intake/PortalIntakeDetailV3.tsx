@@ -140,9 +140,6 @@ export function PortalIntakeDetailV3({ intakeId }: { intakeId: string }) {
             <h1 className="break-words font-serif text-2xl font-semibold tracking-tight text-[var(--adm-text-primary)] sm:text-3xl">
               {intake.subject}
             </h1>
-            <p className="mt-1 text-xs text-[var(--adm-text-secondary)]">
-              Azonosító: {intake.reference}
-            </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <PortalIntakeStatusBadge status={intake.status} />

@@ -73,7 +73,7 @@ export function PortalIntakeStatusBadge({
     <span
       data-testid="portal-intake-status-badge"
       data-status-code={status.code}
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${style.bg} ${style.text} ${style.border}`}
+      className={`inline-flex items-center rounded-[6px] border px-2.5 py-0.5 text-xs font-semibold ${style.bg} ${style.text} ${style.border}`}
     >
       {status.label}
     </span>
@@ -117,7 +117,7 @@ export function PortalIntakeAttachments({
                 </p>
               ) : null}
             </div>
-            <span className="inline-flex rounded-full border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-2.5 py-0.5 text-xs text-[var(--adm-text-secondary)]">
+            <span className="inline-flex items-center rounded-[6px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-2.5 py-0.5 text-xs text-[var(--adm-text-secondary)]">
               {attachmentStateLabel(att.state)}
             </span>
           </li>
@@ -170,7 +170,7 @@ export function PortalIntakeInfoRequest({
       className="rounded-[8px] border border-[var(--adm-brand-terracotta)]/40 bg-[var(--adm-canvas-white)] p-5"
     >
       <div className="border-b border-[var(--adm-border-canonical)] pb-3">
-        <span className="inline-flex items-center rounded-full border border-[var(--adm-brand-terracotta)]/30 bg-[var(--adm-brand-terracotta)]/10 px-2.5 py-0.5 text-xs font-semibold text-[var(--adm-brand-terracotta)]">
+        <span className="inline-flex items-center rounded-[6px] border border-[var(--adm-brand-terracotta)]/30 bg-[var(--adm-brand-terracotta)]/10 px-2.5 py-0.5 text-xs font-semibold text-[var(--adm-brand-terracotta)]">
           Válaszát várjuk
         </span>
         <h2 className="mt-2 font-serif text-lg font-semibold text-[var(--adm-text-primary)]">
