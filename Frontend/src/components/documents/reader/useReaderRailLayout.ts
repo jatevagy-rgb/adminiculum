@@ -47,6 +47,10 @@ export function useReaderRailLayout(params: UseReaderRailLayoutParams): ReaderRa
 } {
   const { containerRef, documentRef, items, gap = 12, minY = 0, enabled } = params;
   const [state, setState] = useState<ReaderRailLayoutState>({ positions: {}, contentHeight: 0 });
+  const [observedNodes, setObservedNodes] = useState<{ container: HTMLElement | null; document: HTMLElement | null }>({
+    container: null,
+    document: null,
+  });
 
   const cardElementsRef = useRef(new Map<string, HTMLElement>());
   const refCallbacksRef = useRef(new Map<string, (element: HTMLElement | null) => void>());
@@ -113,6 +117,21 @@ export function useReaderRailLayout(params: UseReaderRailLayoutParams): ReaderRa
     scheduleRecompute();
   }, [scheduleRecompute, itemsKey]);
 
+  // The rail items and the rendered document arrive in any order in live use
+  // (the rail API often resolves before the version text). Refs populate after
+  // commit without changing the hook's dependencies, so this commit-time check
+  // tracks node identity and forces a re-measure the moment the positioning
+  // container or the document element actually mounts — otherwise every card
+  // keeps the empty-layout fallback and stacks at the top of the margin.
+  useLayoutEffect(() => {
+    const container = containerRef.current ?? null;
+    const document = documentRef.current ?? null;
+    if (container !== observedNodes.container || document !== observedNodes.document) {
+      setObservedNodes({ container, document });
+      scheduleRecompute();
+    }
+  });
+
   useEffect(() => {
     if (!enabled) return;
     const handle = () => scheduleRecompute();
@@ -120,7 +139,7 @@ export function useReaderRailLayout(params: UseReaderRailLayoutParams): ReaderRa
 
     const observers: ResizeObserver[] = [];
     if (typeof ResizeObserver !== "undefined") {
-      for (const element of [containerRef.current, documentRef.current]) {
+      for (const element of [observedNodes.container, observedNodes.document]) {
         if (!element) continue;
         const observer = new ResizeObserver(handle);
         observer.observe(element);
@@ -137,7 +156,7 @@ export function useReaderRailLayout(params: UseReaderRailLayoutParams): ReaderRa
       window.removeEventListener("resize", handle);
       observers.forEach((observer) => observer.disconnect());
     };
-  }, [containerRef, documentRef, enabled, itemsKey, scheduleRecompute]);
+  }, [observedNodes.container, observedNodes.document, enabled, itemsKey, scheduleRecompute]);
 
   return { ...state, registerCard };
 }

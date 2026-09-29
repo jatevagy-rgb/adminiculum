@@ -119,6 +119,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
 
   const isDesktop = useIsDesktopLayout();
   const readerRootRef = useRef<HTMLElement | null>(null);
+  const workspaceRootRef = useRef<HTMLDivElement | null>(null);
   const highlightRef = useRef<HTMLElement | null>(null);
   const railToggleRef = useRef<HTMLButtonElement | null>(null);
 
@@ -206,11 +207,21 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
     setProposalComposerOpen(false);
     const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
     const rect = range?.getBoundingClientRect();
-    if (rect) {
-      setToolbarPos({
-        top: Math.max(8, rect.top - 44),
-        left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - 300)),
-      });
+    const rootRect = workspaceRootRef.current?.getBoundingClientRect() ?? null;
+    if (rect && rootRect) {
+      // Root-relative coordinates: the toolbar is absolutely positioned inside
+      // the workspace root, which scrolls together with the document, so it
+      // stays beside the selection at any scroll depth instead of clamping to
+      // the top of the viewport. When the selection starts too close to the
+      // workspace top for the above placement, the toolbar drops below the
+      // selection instead.
+      const above = rect.top - rootRect.top - 44;
+      const top = above >= 8 ? above : rect.bottom - rootRect.top + 8;
+      const left = Math.min(
+        Math.max(8, rect.left - rootRect.left),
+        Math.max(8, rootRect.width - 300),
+      );
+      setToolbarPos({ top, left });
     } else {
       setToolbarPos(null);
     }
@@ -570,7 +581,11 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
   );
 
   return (
-    <div data-testid="document-reader-workspace" className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--adm-canvas-subtle)]">
+    <div
+      ref={workspaceRootRef}
+      data-testid="document-reader-workspace"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--adm-canvas-subtle)]"
+    >
       <input type="hidden" value={caseId} readOnly aria-hidden="true" />
 
       {/* Minimal document header */}
@@ -804,7 +819,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
           selectedText={anchor.selectedText}
           onAddComment={openCommentComposer}
           onAddProposal={openProposalComposer}
-          style={{ position: 'fixed', top: toolbarPos.top, left: toolbarPos.left }}
+          style={{ position: 'absolute', top: toolbarPos.top, left: toolbarPos.left }}
         />
       ) : null}
 

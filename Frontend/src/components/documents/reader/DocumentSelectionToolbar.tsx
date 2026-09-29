@@ -7,7 +7,7 @@ export interface DocumentSelectionToolbarProps {
   selectedText: string;
   onAddComment: () => void;
   onAddProposal: () => void;
-  /** Viewport position derived from the live selection range. */
+  /** Root-relative position derived from the live selection range and the workspace root. */
   style?: CSSProperties;
 }
 
