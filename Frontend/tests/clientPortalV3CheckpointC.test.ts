@@ -118,7 +118,7 @@ describe("Checkpoint C — matter workspace", () => {
     const src = workspaceV3();
     assert.match(src, /requestId/);
     assert.match(src, /customerInteractionApi\.getRequest\(published\.caseId, requestId\)/);
-    assert.match(src, /<CustomerRequestDetail/);
+    assert.match(src, /<PortalRequestDetailV3/);
     assert.equal(exists("src/app/portal/matters/[publicationId]/requests/[requestId]/page.tsx"), true);
   });
 

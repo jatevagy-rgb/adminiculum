@@ -14,8 +14,8 @@ import {
   type PortalSafeUpdate,
 } from "@/lib/clientPortalApi";
 import { clientSafeError, customerInteractionApi } from "@/lib/clientInteractionApi";
-import { CustomerRequestDetail } from "@/components/client-portal/CustomerRequestDetail";
-import { CustomerInteractionCard } from "@/components/client-portal/CustomerInteractionCard";
+import { PortalRequestDetailV3 } from "../request/PortalRequestDetailV3";
+import { PortalInteractionCardV3 } from "../interaction/PortalInteractionCardV3";
 import { PortalActionRow } from "../actions/PortalActionRow";
 import { PortalEmptyInline } from "../shared/PortalEmptyInline";
 import { PortalMatterDocumentsSection, PortalMatterUpdatesSection } from "./PortalMatterSections";
@@ -143,7 +143,7 @@ export function PortalMatterWorkspaceV3({ matterPublicationId, requestId }: { ma
     if (requestDetail) {
       return (
         <div data-testid="portal-matter-workspace">
-          <CustomerRequestDetail
+          <PortalRequestDetailV3
             caseId={matter.caseId}
             publicationId={detail.matterPublicationId}
             request={requestDetail.request}
@@ -242,7 +242,7 @@ export function PortalMatterWorkspaceV3({ matterPublicationId, requestId }: { ma
         <section data-testid="portal-matter-communication" className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)]">
           <h2 className="border-b border-[var(--adm-border-canonical)] px-4 py-3 font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Kommunikáció</h2>
           <div className="p-4">
-            <CustomerInteractionCard caseId={matter.caseId} allowAsk={detail.capabilities.allowMessages} matterPublicationId={detail.matterPublicationId} scope="questions" />
+            <PortalInteractionCardV3 caseId={matter.caseId} allowAsk={detail.capabilities.allowMessages} matterPublicationId={detail.matterPublicationId} scope="questions" />
           </div>
         </section>
       ) : null}
@@ -250,7 +250,7 @@ export function PortalMatterWorkspaceV3({ matterPublicationId, requestId }: { ma
       <section data-testid="portal-matter-requests" className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)]">
         <h2 className="border-b border-[var(--adm-border-canonical)] px-4 py-3 font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Adat- és dokumentumkérések</h2>
         <div className="p-4">
-          <CustomerInteractionCard caseId={matter.caseId} matterPublicationId={detail.matterPublicationId} scope="requests" />
+          <PortalInteractionCardV3 caseId={matter.caseId} matterPublicationId={detail.matterPublicationId} scope="requests" />
         </div>
       </section>
 
