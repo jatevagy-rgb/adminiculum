@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
@@ -16,8 +16,8 @@ import {
 import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlsState } from "@/components/clients/compliance/ComplianceOverview";
 import { ComplianceDocumentsSection } from "@/components/clients/compliance/ComplianceDocumentsSection";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
-import { complianceWorkspaceApi, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
-import { getClient, getCases, type Client, type CaseListItem } from "@/lib/api";
+import { complianceWorkspaceApi, type ComplianceReconcileResult, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
+import { ApiError, getClient, getCases, type Client, type CaseListItem } from "@/lib/api";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
 import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
@@ -62,6 +62,143 @@ function formatDate(value: string | null): string {
   } catch {
     return value;
   }
+}
+
+function formatDateTime(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleString("hu-HU");
+  } catch {
+    return value;
+  }
+}
+
+/** True when both timestamps point at the same minute (no new snapshot was recorded). */
+function sameMinute(left?: string | null, right?: string | null): boolean {
+  if (!left || !right) return false;
+  const a = new Date(left);
+  const b = new Date(right);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return false;
+  return Math.floor(a.getTime() / 60000) === Math.floor(b.getTime() / 60000);
+}
+
+/** Areas whose evaluated outcome actually changed between two workspace projections. */
+function outcomeChangedAreas(
+  before: ComplianceWorkspace | null,
+  after: ComplianceWorkspace | null,
+): ComplianceWorkspaceArea[] {
+  if (!before || !after) return [];
+  const previousOutcome = new Map(before.areas.map((area) => [area.applicabilityId, area.outcome]));
+  return after.areas.filter((area) => {
+    const outcome = previousOutcome.get(area.applicabilityId);
+    return Boolean(outcome) && outcome !== area.outcome;
+  });
+}
+
+/** First distinct area titles (after-state), bounded for a compact summary. */
+function uniqueAreaTitles(areas: ComplianceWorkspaceArea[], limit: number): string[] {
+  const seen = new Set<string>();
+  const titles: string[] = [];
+  for (const area of areas) {
+    if (titles.length >= limit) break;
+    if (seen.has(area.title)) continue;
+    seen.add(area.title);
+    titles.push(area.title);
+  }
+  return titles;
+}
+
+/** Count of distinct area titles across the changed areas. */
+function uniqueAreaCount(areas: ComplianceWorkspaceArea[]): number {
+  return new Set(areas.map((area) => area.title)).size;
+}
+
+/**
+ * Safe reason category for a failed evaluation run. 5xx stays generic on
+ * purpose: the raw upstream error text is never allowed to reach the user.
+ */
+function resolveEvaluationErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 401 || error.status === 403) {
+      return "Az értékelés nem futtatható: nincs jogosultság ehhez az ügyfélhez.";
+    }
+    if (error.status === 404) {
+      return "Az értékelés nem futtatható: az ügyfél vagy a kapcsolódó adat nem található.";
+    }
+    if (error.status === 0) {
+      return "Az értékelés nem indítható: a szolgáltatás jelenleg nem elérhető. Próbáld újra később.";
+    }
+    if (error.status > 499) {
+      return "Az értékelés szerverhiba miatt nem futott le. Próbáld újra később.";
+    }
+  }
+  return "Az értékelés indítása jelenleg nem sikerült.";
+}
+
+type EvaluationSummary = {
+  runAt: string;
+  enrolled: boolean;
+  evaluated: number;
+  snapshotsCreated: number;
+  findingsCreated: number;
+  baseline: boolean;
+  affectedAreaCount: number;
+  affectedAreas: string[];
+  previousEvaluatedAt: string | null;
+};
+
+function evaluationStatusClass(summary: EvaluationSummary): string {
+  if (!summary.enrolled) return "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]";
+  if (summary.findingsCreated > 0) return "border-[#DCCCA6] bg-[#FFF9E9] text-[#735D16]";
+  if (summary.baseline) return "border-[var(--adm-border)] bg-white text-[var(--adm-text)]";
+  if (summary.snapshotsCreated > 0) return "border-[var(--adm-semantic-success-border)] bg-[var(--adm-semantic-success-soft)] text-[var(--adm-semantic-success)]";
+  return "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text-muted)]";
+}
+
+function evaluationStatusLabel(summary: EvaluationSummary): string {
+  if (!summary.enrolled) return "Az ügyfél nincs értékelésbe kapcsolva.";
+  // The baseline wording wins: a first evaluation compares against nothing,
+  // so it must never be framed as an incremental change.
+  if (summary.baseline) return "Első értékelés lefutott";
+  if (summary.findingsCreated > 0) return "Új megállapítás keletkezett – ellenőrzés szükséges";
+  if (summary.snapshotsCreated > 0) return "Új értékelési eredmény érkezett";
+  return "Nincs új változás";
+}
+
+function evaluatedTimestampNote(summary: EvaluationSummary): string {
+  if (!summary.enrolled) return "Az értékelés nem futott le, mert az ügyfél nincs bekapcsolva.";
+  if (!summary.previousEvaluatedAt) return "Korábbi értékelési időpont nem volt rögzítve.";
+  if (sameMinute(summary.previousEvaluatedAt, summary.runAt)) {
+    return "Az értékelési időpont nem változott, mert nem keletkezett új értékelési rekord – a meglévő állapot változatlan.";
+  }
+  return "Az értékelési időpont az új értékelési rekordhoz igazodik.";
+}
+
+function changeSincePrevious(summary: EvaluationSummary): string[] {
+  if (summary.baseline) {
+    return [
+      "Ez az első értékelés ennél az ügyfélnél. Összehasonlítási alap a következő értékeléstől áll rendelkezésre. Az érintett területek a jogi hivatkozások listájában ellenőrizhetők.",
+    ];
+  }
+  const findings: string[] = [];
+  const snapshots: string[] = [];
+  const areas: string[] = [];
+  if (summary.findingsCreated > 0) {
+    findings.push(`Új, ellenőrzést igénylő megállapítás: ${summary.findingsCreated} db.`);
+  }
+  if (summary.snapshotsCreated > 0) {
+    snapshots.push(`Új értékelési rekord készült: ${summary.snapshotsCreated} db.`);
+  }
+  if (summary.affectedAreas.length) {
+    const listed = summary.affectedAreas.join(", ");
+    const overflowCount = summary.affectedAreaCount - summary.affectedAreas.length;
+    const overflow = overflowCount > 0 ? ` és további ${overflowCount} terület` : "";
+    areas.push(`Érintett terület: ${listed}${overflow}.`);
+  }
+  if (!findings.length && !snapshots.length && !areas.length) {
+    return ["Az értékelés lefutott. Nincs új változás az előző értékelés óta."];
+  }
+  return [...findings, ...snapshots, ...areas];
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
@@ -222,6 +359,8 @@ export default function ClientCompliancePage() {
   const [workspaceLoading, setWorkspaceLoading] = useState(true);
   const [reconciling, setReconciling] = useState(false);
   const [reconcileError, setReconcileError] = useState<string | null>(null);
+  const [evaluationSummary, setEvaluationSummary] = useState<EvaluationSummary | null>(null);
+  const evaluationRunRef = useRef<{ previousWorkspace: ComplianceWorkspace | null; previousEvaluatedAt: string | null } | null>(null);
 
   useEffect(() => {
     if (!clientId) return;
@@ -296,16 +435,18 @@ export default function ClientCompliancePage() {
     }
   }, [clientId, route]);
 
-  const loadWorkspace = useCallback(async () => {
+  const loadWorkspace = useCallback(async (): Promise<ComplianceWorkspace | null> => {
     const generation = route.generation;
     setWorkspaceLoading(true);
     setWorkspaceError(null);
     try {
       const workspaceResult = await complianceWorkspaceApi.getWorkspace(clientId);
-      if (!route.isActive(generation)) return;
+      if (!route.isActive(generation)) return null;
       setWorkspace(workspaceResult);
+      return workspaceResult;
     } catch {
       if (route.isActive(generation)) setWorkspaceError("A compliance munkaterület adatai jelenleg nem tölthetők be.");
+      return null;
     } finally {
       if (route.isActive(generation)) setWorkspaceLoading(false);
     }
@@ -318,15 +459,39 @@ export default function ClientCompliancePage() {
     if (reconciling) return;
     setReconciling(true);
     setReconcileError(null);
+    setEvaluationSummary(null);
+    evaluationRunRef.current = {
+      previousWorkspace: workspace,
+      previousEvaluatedAt: workspace?.evaluatedAt ?? null,
+    };
     try {
-      await complianceWorkspaceApi.reconcile(clientId);
-      await Promise.all([loadWorkspace(), loadCompliance()]);
-    } catch {
-      setReconcileError("Az értékelés indítása jelenleg nem sikerült.");
+      const result: ComplianceReconcileResult = await complianceWorkspaceApi.reconcile(clientId);
+      const runAt = new Date().toISOString();
+      const [afterWorkspace] = await Promise.all([loadWorkspace(), loadCompliance()]);
+      const run = evaluationRunRef.current;
+      const previousWorkspace = run?.previousWorkspace ?? null;
+      const changedAreas = outcomeChangedAreas(previousWorkspace, afterWorkspace);
+      const baseline = previousWorkspace != null && previousWorkspace.summary.evaluatedCount === 0;
+      const previousEvaluatedAt = run?.previousEvaluatedAt ?? null;
+      if (result && typeof result.enrolled === "boolean") {
+        setEvaluationSummary({
+          runAt,
+          enrolled: result.enrolled,
+          evaluated: Number(result.evaluated ?? 0),
+          snapshotsCreated: Number(result.snapshotsCreated ?? 0),
+          findingsCreated: Number(result.findingsCreated ?? 0),
+          baseline,
+          affectedAreaCount: uniqueAreaCount(changedAreas),
+          affectedAreas: uniqueAreaTitles(changedAreas, 6),
+          previousEvaluatedAt,
+        });
+      }
+    } catch (caught) {
+      setReconcileError(resolveEvaluationErrorMessage(caught));
     } finally {
       setReconciling(false);
     }
-  }, [clientId, reconciling, loadWorkspace, loadCompliance]);
+  }, [clientId, reconciling, loadWorkspace, loadCompliance, workspace]);
 
   const missingInformation = useMemo(() => {
     if (!workspace) return [] as Array<{ factKey: string; label: string | null; profileAnswerable: boolean; genericOnly: boolean }>;
@@ -412,6 +577,28 @@ export default function ClientCompliancePage() {
                         <ClientRequestComposer cases={clientCases} clients={client ? [client] : []} triggerVariant="neutral" />
                       </div>
                     </div>
+                    {/* Immediate, view-independent feedback for the evaluation action. */}
+                    {evaluationSummary ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#DCCCA6] pt-3 text-xs">
+                        <span className={`rounded border px-2 py-1 font-medium ${evaluationStatusClass(evaluationSummary)}`}>
+                          {evaluationStatusLabel(evaluationSummary)}
+                        </span>
+                        <span className="text-stone-600">
+                          Futtatás: {formatDateTime(evaluationSummary.runAt)}
+                          {evaluationSummary.affectedAreaCount > 0
+                            ? ` · Érintett terület: ${evaluationSummary.affectedAreaCount}`
+                            : ""}
+                          {evaluationSummary.findingsCreated > 0
+                            ? ` · Új megállapítás: ${evaluationSummary.findingsCreated}`
+                            : ""}
+                        </span>
+                      </div>
+                    ) : null}
+                    {reconcileError && !evaluationSummary ? (
+                      <p role="alert" className="mt-3 border-t border-[#DCCCA6] pt-3 text-xs text-red-800">
+                        {reconcileError}
+                      </p>
+                    ) : null}
                   </header>
 
                   {/* Professional state-first workspace: peer tabs, not one endless scroll. */}
@@ -461,9 +648,6 @@ export default function ClientCompliancePage() {
                                       ? "Első megfelelőségi értékelés indítása"
                                       : "Értékelés frissítése"}
                                 </button>
-                                {reconcileError ? (
-                                  <span role="alert" className="ml-3 text-xs text-red-800">{reconcileError}</span>
-                                ) : null}
                               </div>
                             ) : null}
                             {workspace.summary.evaluatedCount === 0 ? (
@@ -496,6 +680,68 @@ export default function ClientCompliancePage() {
                             {workspace.evaluatedAt ? (
                               <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Utolsó értékelés: {formatDate(workspace.evaluatedAt)}</p>
                             ) : null}
+                          </>
+                        ) : null}
+                      </Section>
+
+                      <Section title="Legutóbbi értékelés eredménye">
+                        {!evaluationSummary && !reconciling && !reconcileError ? (
+                          <p className="text-sm text-[var(--adm-text-muted)]">
+                            Itt jelenik meg az értékelés eredménye és a változások összegzése az „Értékelés frissítése” indítása után.
+                          </p>
+                        ) : null}
+                        {reconcileError ? (
+                          <p role="alert" className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                            {reconcileError}
+                          </p>
+                        ) : null}
+                        {evaluationSummary ? (
+                          <>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`rounded border px-2 py-1 text-xs font-medium ${evaluationStatusClass(evaluationSummary)}`}>
+                                {evaluationStatusLabel(evaluationSummary)}
+                              </span>
+                              <span className="text-xs text-[var(--adm-text-muted)]">Futtatás ideje: <b className="text-[var(--adm-text)]">{formatDateTime(evaluationSummary.runAt)}</b></span>
+                              <span className="text-xs text-[var(--adm-text-muted)]">
+                                Utolsó értékelési állapot: {workspace?.evaluatedAt ? formatDateTime(workspace.evaluatedAt) : "nincs rögzítve"}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs text-[var(--adm-text-muted)]">{evaluatedTimestampNote(evaluationSummary)}</p>
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                                Kiértékelt terület: <b>{evaluationSummary.evaluated}</b>
+                              </span>
+                              <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                                Új értékelési rekord: <b>{evaluationSummary.snapshotsCreated}</b>
+                              </span>
+                              <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                                Új megállapítás: <b>{evaluationSummary.findingsCreated}</b>
+                              </span>
+                              <span className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-xs text-[var(--adm-text)]">
+                                Érintett terület: <b>{evaluationSummary.affectedAreaCount}</b>
+                              </span>
+                            </div>
+                            {evaluationSummary.affectedAreas.length ? (
+                              <div className="mt-3">
+                                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Érintett területek</p>
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {evaluationSummary.affectedAreas.map((title) => (
+                                    <span key={title} className="rounded border border-[#DCCCA6] bg-[#FFF9E9] px-2 py-1 text-xs text-[#735D16]">{title}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                            <div className="mt-3 border-t border-[var(--adm-border)] pt-3">
+                              <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Mi változott az előző értékelés óta?</p>
+                              <ul className="mt-1 space-y-1">
+                                {changeSincePrevious(evaluationSummary).map((line, index) => (
+                                  <li key={index} className="text-sm text-[var(--adm-text)]">{line}</li>
+                                ))}
+                              </ul>
+                            </div>
+                            <p className="mt-3 text-xs text-[var(--adm-text-muted)]">
+                              A jogi hivatkozások kinyerése megtörtént; automatikus jogszabályváltozás még nem érkezett. Az értékelés a vállalati profil adatai és a jóváhagyott követelmények alapján fut; a jogi forrásokból önmagukban nem keletkezik meg nem felelés.
+                            </p>
                           </>
                         ) : null}
                       </Section>
