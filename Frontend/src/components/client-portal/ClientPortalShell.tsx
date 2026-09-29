@@ -20,6 +20,8 @@ import { PortalDocumentDetailV3 } from '@/components/client-portal-v3/documents/
 import { PortalCompanyV3 } from '@/components/client-portal-v3/company/PortalCompanyV3';
 import { PortalCommunicationV3 } from '@/components/client-portal-v3/communication/PortalCommunicationV3';
 import { PortalCalendarV3 } from '@/components/client-portal-v3/calendar/PortalCalendarV3';
+import { PortalGrowV3 } from '@/components/client-portal-v3/grow/PortalGrowV3';
+import { PortalComplianceV3 } from '@/components/client-portal-v3/compliance/PortalComplianceV3';
 import { OrganizationPortalViews, type OrganizationPortalView } from './OrganizationPortalViews';
 import { PortalCalendarView } from './PortalCalendarView';
 import { CustomerInteractionCard } from './CustomerInteractionCard';
@@ -498,7 +500,9 @@ export function ClientPortalShell({ view, resourceId, requestId }: Props) {
         {view === 'company' ? <PortalCompanyV3 /> : null}
         {view === 'messages' ? <PortalCommunicationV3 communicationMode={state.context.selectedWorkspace?.communicationMode} /> : null}
         {view === 'calendar' ? <PortalCalendarV3 /> : null}
-        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' && view !== 'documents' && view !== 'document' && view !== 'company' && view !== 'messages' ? (
+        {view === 'grow' ? <PortalGrowV3 /> : null}
+        {view === 'compliance' ? <PortalComplianceV3 /> : null}
+        {view !== 'calendar' && view !== 'home' && view !== 'tasks' && view !== 'matters' && view !== 'matter' && view !== 'documents' && view !== 'document' && view !== 'company' && view !== 'messages' && view !== 'grow' && view !== 'compliance' ? (
           <OrganizationPortalViews
             view={view as OrganizationPortalView}
             resourceId={resourceId}
