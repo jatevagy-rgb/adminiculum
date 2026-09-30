@@ -106,10 +106,29 @@ export function DocumentReviewMargin(props: DocumentReviewMarginProps) {
     enabled: true,
   });
 
+  const pendingProposals = useMemo(
+    () => (rail?.proposals ?? []).filter((p) => p.status === "PENDING"),
+    [rail?.proposals],
+  );
+
+  const handleJumpNextPending = pendingProposals.length > 0 ? () => {
+    const currentIndex = pendingProposals.findIndex((p) => p.id === activeItemId);
+    const nextIndex = currentIndex === -1 || currentIndex >= pendingProposals.length - 1 ? 0 : currentIndex + 1;
+    const target = pendingProposals[nextIndex];
+    if (target) {
+      onFocusProposal(target);
+    }
+  } : undefined;
+
   return (
     <section data-testid="document-review-margin" className="relative flex h-full min-h-0 w-full flex-col">
       <div className="sticky top-0 z-20 border-b border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)]">
-        <RailChrome rail={rail} filter={filter} onFilterChange={onFilterChange} />
+        <RailChrome
+          rail={rail}
+          filter={filter}
+          onFilterChange={onFilterChange}
+          onJumpNextPending={handleJumpNextPending}
+        />
       </div>
 
       <div

@@ -320,14 +320,16 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
     }
   }, [anchor, clearSelection, documentId, documentVersionId, reloadRail]);
 
-  const focusRailTarget = useCallback((itemId: string, startOffset: number | null, endOffset: number | null) => {
+  const focusRailTarget = useCallback((itemId: string, startOffset: number | null, endOffset: number | null, closeDrawer = true) => {
     setActiveItemId(itemId);
     if (startOffset !== null && endOffset !== null && endOffset > startOffset) {
       setHighlightRange({ start: startOffset, end: endOffset });
     } else {
       setHighlightRange(null);
     }
-    setRailDrawerOpen(false);
+    if (closeDrawer) {
+      setRailDrawerOpen(false);
+    }
     if (typeof window !== 'undefined') {
       window.requestAnimationFrame(() => {
         highlightRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -336,24 +338,29 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
   }, []);
 
   const focusComment = useCallback((comment: DocumentReviewRailComment) => {
-    focusRailTarget(comment.id, comment.startOffset, comment.endOffset);
+    focusRailTarget(comment.id, comment.startOffset, comment.endOffset, true);
   }, [focusRailTarget]);
 
-  const focusProposal = useCallback((proposal: DocumentReviewRailProposal) => {
-    focusRailTarget(proposal.id, proposal.startOffset, proposal.endOffset);
+  const focusProposal = useCallback((proposal: DocumentReviewRailProposal, closeDrawer = true) => {
+    focusRailTarget(proposal.id, proposal.startOffset, proposal.endOffset, closeDrawer);
   }, [focusRailTarget]);
 
   // Clicking a document anchor/highlight activates its review item by exact id.
+  // On compact viewports (mobile/phone), also open the drawer so the reviewer immediately sees the card.
   const activateReviewAnchor = useCallback((itemId: string) => {
     if (!rail) return;
     const comment = rail.comments.find((entry) => entry.id === itemId);
     if (comment) {
-      focusComment(comment);
+      focusRailTarget(comment.id, comment.startOffset, comment.endOffset, false);
+      if (isCompactViewport()) setRailDrawerOpen(true);
       return;
     }
     const proposal = rail.proposals.find((entry) => entry.id === itemId);
-    if (proposal) focusProposal(proposal);
-  }, [focusComment, focusProposal, rail]);
+    if (proposal) {
+      focusRailTarget(proposal.id, proposal.startOffset, proposal.endOffset, false);
+      if (isCompactViewport()) setRailDrawerOpen(true);
+    }
+  }, [focusRailTarget, rail]);
 
   const loadReplies = useCallback((annotationId: string) => {
     if (!documentId || !documentVersionId) return;
@@ -681,16 +688,16 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
             </div>
           </details>
           {hasVersion ? (
-          <button
-            type="button"
-            ref={railToggleRef}
-            data-testid="document-reader-rail-toggle"
-            aria-expanded={railDrawerOpen}
-            onClick={() => setRailDrawerOpen((value) => !value)}
-            className="rounded-[8px] bg-[var(--adm-brand-green)] px-3 py-1.5 text-sm font-semibold text-white lg:hidden"
-          >
-            {readerCopy.railOpenLabel} ({railCount})
-          </button>
+            <button
+              type="button"
+              ref={railToggleRef}
+              data-testid="document-reader-rail-toggle"
+              aria-expanded={railDrawerOpen}
+              onClick={() => setRailDrawerOpen((value) => !value)}
+              className="inline-flex min-h-[40px] items-center justify-center rounded-[8px] bg-[var(--adm-brand-green)] px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-[var(--adm-brand-green)] focus:ring-offset-1 lg:hidden"
+            >
+              {readerCopy.railOpenLabel} ({railCount})
+            </button>
           ) : null}
         </div>
       </header>

@@ -99,12 +99,20 @@ export function WorkflowDialog({
             <h2 id="workflow-dialog-title" className="font-serif text-[22px] text-[var(--adm-text)]">{title}</h2>
             {description ? <p id="workflow-dialog-description" className="mt-1 text-[12px] leading-5 text-[var(--adm-text-muted)]">{description}</p> : null}
           </div>
-          <button type="button" onClick={onClose} disabled={busy} className="rounded px-2 text-xl text-[var(--adm-text-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="Párbeszédablak bezárása">×</button>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-[6px] text-xl text-[var(--adm-text-muted)] hover:text-[var(--adm-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)]"
+            aria-label="Párbeszédablak bezárása"
+          >
+            ×
+          </button>
         </div>
         <div className="px-5 py-4">{children}</div>
-        <div className="flex justify-end gap-2 border-t border-[var(--adm-border)] px-5 py-4">
-          <AdminButton variant="neutral" onClick={onClose} disabled={busy}>Mégse</AdminButton>
-          <AdminButton variant={destructive ? "danger" : "primary"} onClick={onConfirm} disabled={primaryDisabled || busy}>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-[var(--adm-border)] px-5 py-4">
+          <AdminButton className="min-h-[40px] w-full sm:w-auto" variant="neutral" onClick={onClose} disabled={busy}>Mégse</AdminButton>
+          <AdminButton className="min-h-[40px] w-full sm:w-auto" variant={destructive ? "danger" : "primary"} onClick={onConfirm} disabled={primaryDisabled || busy}>
             {busy ? "Folyamatban…" : primaryLabel}
           </AdminButton>
         </div>
