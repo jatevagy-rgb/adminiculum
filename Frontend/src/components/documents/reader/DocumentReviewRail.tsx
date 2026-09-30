@@ -64,30 +64,47 @@ function statusTone(status: DocumentReviewRailProposal["status"]): string {
   return "border-[var(--adm-border-canonical)] text-[var(--adm-text-secondary)]";
 }
 
-/** Shared header: title, counts, spatial filters and completion banner. */
+/** Shared header: title, counts, spatial filters, next pending proposal jump and completion banner. */
 export function RailChrome({
   rail,
   filter,
   onFilterChange,
+  onJumpNextPending,
 }: {
   rail: DocumentReviewRailDto | null;
   filter: RailFilter;
   onFilterChange: (filter: RailFilter) => void;
+  onJumpNextPending?: () => void;
 }) {
   return (
     <>
       <header className="border-b border-[var(--adm-border-canonical)] px-4 py-3">
-        <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">{readerCopy.railTitle}</h2>
-        {rail ? (
-          <div data-testid="reader-rail-counts" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--adm-text-secondary)]">
-            <span>{readerCopy.countComments}: <b className="text-[var(--adm-text-primary)]">{rail.counts.commentCount}</b></span>
-            <span>{readerCopy.countProposals}: <b className="text-[var(--adm-text-primary)]">{rail.counts.modificationProposalCount}</b></span>
-            <span>{readerCopy.countPending}: <b className="text-[var(--adm-text-primary)]">{rail.counts.pendingProposalCount}</b></span>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">{readerCopy.railTitle}</h2>
+            {rail ? (
+              <div data-testid="reader-rail-counts" className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[var(--adm-text-secondary)]">
+                <span>{readerCopy.countComments}: <b className="text-[var(--adm-text-primary)]">{rail.counts.commentCount}</b></span>
+                <span>{readerCopy.countProposals}: <b className="text-[var(--adm-text-primary)]">{rail.counts.modificationProposalCount}</b></span>
+                <span>{readerCopy.countPending}: <b className="text-[var(--adm-text-primary)]">{rail.counts.pendingProposalCount}</b></span>
+              </div>
+            ) : null}
           </div>
-        ) : null}
+          {rail && rail.counts.pendingProposalCount > 0 && onJumpNextPending ? (
+            <button
+              type="button"
+              data-testid="reader-rail-jump-next-pending"
+              onClick={onJumpNextPending}
+              className="inline-flex min-h-[36px] items-center gap-1 rounded-[6px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--adm-text-primary)] hover:border-[var(--adm-brand-green)] hover:text-[var(--adm-brand-green)]"
+              title="Ugrás a következő döntendő javaslatra"
+            >
+              Következő döntendő →
+            </button>
+          ) : null}
+        </div>
       </header>
 
-      <div className="flex gap-1 border-b border-[var(--adm-border-canonical)] px-4 py-2">
+      <div className="flex items-center gap-1 border-b border-[var(--adm-border-canonical)] px-4 py-2">
         {(["all", "comments", "proposals"] as const).map((value) => (
           <button
             key={value}
@@ -95,7 +112,7 @@ export function RailChrome({
             data-testid={`reader-rail-filter-${value}`}
             aria-pressed={filter === value}
             onClick={() => onFilterChange(value)}
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${filter === value ? "bg-[var(--adm-brand-green)] text-white" : "text-[var(--adm-text-secondary)] hover:bg-[var(--adm-canvas-subtle)]"}`}
+            className={`min-h-[32px] rounded-full px-2.5 py-1 text-xs font-semibold ${filter === value ? "bg-[var(--adm-brand-green)] text-white" : "text-[var(--adm-text-secondary)] hover:bg-[var(--adm-canvas-subtle)]"}`}
           >
             {value === "all" ? readerCopy.filterAll : value === "comments" ? readerCopy.filterComments : readerCopy.filterProposals}
           </button>
@@ -251,9 +268,28 @@ export function DocumentReviewRail({
 
   const visible = useMemo(() => filterRailEntries(entries, filter), [entries, filter]);
 
+  const pendingProposals = useMemo(
+    () => (rail?.proposals ?? []).filter((p) => p.status === "PENDING"),
+    [rail?.proposals],
+  );
+
+  const handleJumpNextPending = pendingProposals.length > 0 ? () => {
+    const currentIndex = pendingProposals.findIndex((p) => p.id === activeItemId);
+    const nextIndex = currentIndex === -1 || currentIndex >= pendingProposals.length - 1 ? 0 : currentIndex + 1;
+    const target = pendingProposals[nextIndex];
+    if (target) {
+      onFocusProposal(target);
+    }
+  } : undefined;
+
   return (
     <section data-testid="document-review-rail" className="flex h-full min-h-0 flex-col">
-      <RailChrome rail={rail} filter={filter} onFilterChange={onFilterChange} />
+      <RailChrome
+        rail={rail}
+        filter={filter}
+        onFilterChange={onFilterChange}
+        onJumpNextPending={handleJumpNextPending}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {draft ? <div className="mb-2">{draft}</div> : null}
@@ -373,13 +409,13 @@ export function ProposalCard({
           {statusLabel(entry.proposal.status)}
         </span>
         {entry.proposal.status === "PENDING" && canDecide ? (
-          <span className="flex gap-1.5">
+          <span className="flex items-center gap-2">
             <button
               type="button"
               data-testid="reader-rail-proposal-accept"
               disabled={decisionBusyId === entry.proposal.id}
               onClick={onAccept}
-              className="rounded-[6px] bg-[var(--adm-brand-green)] px-2 py-0.5 text-xs font-semibold text-white disabled:opacity-50"
+              className="inline-flex min-h-[36px] items-center justify-center rounded-[6px] bg-[var(--adm-brand-green)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-95 disabled:opacity-50"
             >
               {readerCopy.decisionAccept}
             </button>
@@ -388,7 +424,7 @@ export function ProposalCard({
               data-testid="reader-rail-proposal-reject"
               disabled={decisionBusyId === entry.proposal.id}
               onClick={onReject}
-              className="rounded-[6px] border border-[var(--adm-brand-terracotta)] px-2 py-0.5 text-xs font-semibold text-[var(--adm-brand-terracotta)] disabled:opacity-50"
+              className="inline-flex min-h-[36px] items-center justify-center rounded-[6px] border border-[var(--adm-brand-terracotta)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-brand-terracotta)] hover:bg-[var(--adm-canvas-subtle)] disabled:opacity-50"
             >
               {readerCopy.decisionReject}
             </button>
