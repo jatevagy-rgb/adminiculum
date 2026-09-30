@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { AdminButton, CompactState, FormField, SafePanelError } from "@/components/ui";
 import {
   clientSafeError,
   customerInteractionApi,
@@ -10,7 +11,6 @@ import {
 } from "@/lib/clientInteractionApi";
 import { PortalQuestionThreadV3 } from "./PortalQuestionThreadV3";
 import { PortalRequestResponseV3 } from "./PortalRequestResponseV3";
-import { PortalEmptyInline } from "../shared/PortalEmptyInline";
 
 const INPUT_CLASS =
   "w-full rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-2 text-sm text-[var(--adm-text-primary)] placeholder:text-[var(--adm-text-secondary)] focus:border-[var(--adm-brand-green)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)]";
@@ -22,19 +22,26 @@ const INPUT_CLASS =
  * content only: no unread counters, internal participants or mailbox
  * metadata.
  */
-export function PortalInteractionCardV3({
-  caseId,
-  allowAsk = true,
-  scope = "all",
-  matterPublicationId,
-  heading,
-}: {
+type InteractionCardProps = {
   caseId: string;
   allowAsk?: boolean;
   scope?: "all" | "requests" | "questions";
   matterPublicationId?: string;
   heading?: string;
-}) {
+};
+
+export function PortalInteractionCardV3(props: InteractionCardProps) {
+  // Drafts, cached lists and pending reads belong to one exact case and scope.
+  return <InteractionCard key={`${props.caseId}:${props.scope ?? "all"}`} {...props} />;
+}
+
+function InteractionCard({
+  caseId,
+  allowAsk = true,
+  scope = "all",
+  matterPublicationId,
+  heading,
+}: InteractionCardProps) {
   const [requests, setRequests] = useState<CustomerRequestDTO[]>([]);
   const [questions, setQuestions] = useState<CustomerQuestionThreadDTO[]>([]);
   const [submissions, setSubmissions] = useState<CustomerSubmissionDTO[]>([]);
@@ -44,24 +51,44 @@ export function PortalInteractionCardV3({
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState({ requests: false, questions: false });
+  const [loading, setLoading] = useState(true);
+  const loadSequence = useRef(0);
+  const sending = useRef(false);
+  const subjectId = useId();
+  const bodyId = useId();
 
   const load = useCallback(async () => {
-    const [requestPage, questionPage, submissionPage] = await Promise.all([
-      customerInteractionApi.listRequests(caseId),
-      customerInteractionApi.listQuestions(caseId),
-      customerInteractionApi.listSubmissions(caseId),
+    const sequence = ++loadSequence.current;
+    setLoading(true);
+    setLoadError({ requests: false, questions: false });
+    const [requestResult, questionResult] = await Promise.allSettled([
+      scope === "questions" ? Promise.resolve(null) : Promise.all([
+        customerInteractionApi.listRequests(caseId),
+        customerInteractionApi.listSubmissions(caseId),
+      ]),
+      scope === "requests" ? Promise.resolve(null) : customerInteractionApi.listQuestions(caseId),
     ]);
-    setRequests(requestPage.items || []);
-    setQuestions(questionPage.items || []);
-    setSubmissions(submissionPage.items || []);
-  }, [caseId]);
+    if (sequence !== loadSequence.current) return;
+    if (requestResult.status === "fulfilled" && requestResult.value) {
+      setRequests(requestResult.value[0].items || []);
+      setSubmissions(requestResult.value[1].items || []);
+    }
+    if (questionResult.status === "fulfilled" && questionResult.value) {
+      setQuestions(questionResult.value.items || []);
+    }
+    setLoadError({ requests: requestResult.status === "rejected", questions: questionResult.status === "rejected" });
+    setLoading(false);
+  }, [caseId, scope]);
 
   useEffect(() => {
-    void load().catch(() => setLoadError(true));
+    void load();
+    return () => { loadSequence.current += 1; };
   }, [load]);
 
   const sendQuestion = async () => {
+    if (!allowAsk || sending.current || !subject.trim() || !body.trim()) return;
+    sending.current = true;
     setBusy(true);
     setMessage(null);
     try {
@@ -69,61 +96,92 @@ export function PortalInteractionCardV3({
       setSubject("");
       setBody("");
       setMessage("A kérdés beküldve. Az iroda válasza itt fog megjelenni.");
-      await load();
     } catch (error) {
       setMessage(clientSafeError(error));
+      return;
     } finally {
+      sending.current = false;
       setBusy(false);
     }
+    // A failed refresh must not turn a confirmed POST into a failed send.
+    await load();
   };
+
+  const listState = (failed: boolean) => loading ? (
+    <div role="status"><CompactState title="Betöltés…" /></div>
+  ) : failed ? (
+    <div role="status" className="[&_button]:min-h-10 [&_button]:min-w-10">
+      <SafePanelError detail="Az interakciók jelenleg nem érhetők el. A lista újratöltése nem ismétli meg a beküldést." onRetry={() => void load()} />
+    </div>
+  ) : null;
+
+  const questionList = (
+    <div className="min-w-0 space-y-2" data-testid="portal-question-list" aria-busy={loading}>
+      {listState(loadError.questions)}
+      <div hidden={loading || loadError.questions} className="space-y-2">
+      {questions.length ? (
+        questions.map((thread) => <PortalQuestionThreadV3 key={thread.id} caseId={caseId} thread={thread} />)
+      ) : !loading && !loadError.questions ? (
+        <p className="text-sm text-[var(--adm-text-secondary)]">Még nincs kérdésszál.</p>
+      ) : null}
+      </div>
+    </div>
+  );
 
   const questionsPanel = allowAsk ? (
     <div className="space-y-3" data-testid="portal-questions-panel">
-      <div className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-3">
+      <div className="min-w-0 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-3">
         <h3 className="text-sm font-semibold text-[var(--adm-text-primary)]">Kérdés küldése</h3>
+        <FormField label="Tárgy" controlId={subjectId} required className="mt-3">
         <input
+          id={subjectId}
+          name="subject"
+          required
+          disabled={busy}
           value={subject}
           onChange={(event) => setSubject(event.target.value)}
           maxLength={200}
-          className={`${INPUT_CLASS} mt-3`}
+          className={`${INPUT_CLASS} min-h-10`}
           placeholder="Tárgy"
         />
+        </FormField>
+        <FormField label="Kérdés szövege" controlId={bodyId} required className="mt-3">
         <textarea
+          id={bodyId}
+          name="body"
+          required
+          disabled={busy}
           value={body}
           onChange={(event) => setBody(event.target.value)}
           maxLength={4000}
-          className={`${INPUT_CLASS} mt-2 min-h-28`}
+          className={`${INPUT_CLASS} min-h-28`}
           placeholder="Kérdés szövege"
         />
-        <button
-          className="mt-2 inline-flex h-10 items-center justify-center rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-brand-green)] px-4 text-sm font-medium text-[var(--adm-canvas-white)] transition-colors hover:border-[var(--adm-brand-deep)] hover:bg-[var(--adm-brand-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-2 disabled:opacity-50"
+        </FormField>
+        <AdminButton
+          variant="primary"
+          className="mt-3 min-h-10"
           disabled={busy || !subject.trim() || !body.trim()}
           onClick={() => void sendQuestion()}
           data-testid="portal-question-send"
         >
-          Kérdés beküldése
-        </button>
+          {busy ? "Beküldés…" : "Kérdés beküldése"}
+        </AdminButton>
       </div>
-      <div className="space-y-2">
-        {questions.length ? (
-          questions.map((thread) => <PortalQuestionThreadV3 key={thread.id} caseId={caseId} thread={thread} />)
-        ) : (
-          <p className="text-sm text-[var(--adm-text-secondary)]">Még nincs kérdésszál.</p>
-        )}
-      </div>
+      {questionList}
     </div>
   ) : (
     <div className="space-y-2" data-testid="portal-questions-panel">
-      {questions.length ? (
-        questions.map((thread) => <PortalQuestionThreadV3 key={thread.id} caseId={caseId} thread={thread} />)
-      ) : (
-        <p className="text-sm text-[var(--adm-text-secondary)]">Még nincs kérdésszál.</p>
-      )}
+      {questionList}
     </div>
   );
 
   const requestsPanel = (
-    <div className="space-y-3" data-testid="portal-requests-panel">
+    <div className="min-w-0 space-y-3" data-testid="portal-requests-panel" aria-busy={loading}>
+      {listState(loadError.requests)}
+      {/* Keep response composers mounted across refreshes: selected files and
+          partial-success submission references must survive a list retry. */}
+      <div hidden={loading || loadError.requests} className="space-y-3">
       {requests.length ? (
         requests.map((request) => (
           <PortalRequestResponseV3
@@ -145,9 +203,10 @@ export function PortalInteractionCardV3({
             }
           />
         ))
-      ) : (
+      ) : !loading && !loadError.requests ? (
         <p className="text-sm text-[var(--adm-text-secondary)]">Nincs aktív dokumentum- vagy adatbekérés.</p>
-      )}
+      ) : null}
+      </div>
     </div>
   );
 
@@ -157,17 +216,10 @@ export function PortalInteractionCardV3({
     </p>
   ) : null;
 
-  const loadErrorNote = loadError ? (
-    <p className="mb-3 rounded-[8px] border border-[var(--adm-brand-terracotta)]/30 bg-[var(--adm-brand-terracotta)]/10 p-3 text-sm text-[var(--adm-brand-terracotta)]" role="status">
-      Az interakciók jelenleg nem érhetők el.
-    </p>
-  ) : null;
-
   if (scope === "requests") {
     return (
       <div data-testid="portal-interaction-card" data-scope="requests">
         {status}
-        {loadErrorNote}
         {requestsPanel}
       </div>
     );
@@ -178,7 +230,6 @@ export function PortalInteractionCardV3({
       <div data-testid="portal-interaction-card" data-scope="questions">
         <p className="mb-3 text-sm text-[var(--adm-text-secondary)]">Itt kérdezhet az irodától, és itt jelennek meg az iroda elküldött válaszai.</p>
         {status}
-        {loadErrorNote}
         {questionsPanel}
       </div>
     );
@@ -188,7 +239,6 @@ export function PortalInteractionCardV3({
     <div data-testid="portal-interaction-card" data-scope="all">
       <p className="mb-3 text-sm text-[var(--adm-text-secondary)]">Itt jelennek meg az ehhez az ügyhöz tartozó kérdések és az iroda válaszai.</p>
       {status}
-      {loadErrorNote}
       <div className="grid gap-4 lg:grid-cols-2">
         {requestsPanel}
         {questionsPanel}
