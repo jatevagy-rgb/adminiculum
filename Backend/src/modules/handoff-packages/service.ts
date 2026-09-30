@@ -5,6 +5,7 @@
  */
 
 import { prisma } from '../../prisma/prisma.service';
+import { withCaseWorkGuard } from '../cases/caseMutationGuard';
 import { isDatabaseFoundationEnabled } from '../../middleware/featureAvailability';
 
 export type LawyerHandoffPackageType = 'STANDARD' | 'FINAL_APPROVAL';
@@ -316,7 +317,7 @@ class HandoffPackagesService {
     const packageType = params.packageType ? assertPackageType(params.packageType) : 'STANDARD';
 
     const repo = this.assertRepoAvailable();
-    const record = await repo.create({
+    const record = await withCaseWorkGuard(prisma, caseId, (tx) => (tx as any).lawyerHandoffPackage.create({
       data: {
         caseId,
         packageType,
@@ -329,7 +330,7 @@ class HandoffPackagesService {
         preparedById: params.userId || null,
         status: 'DRAFT',
       },
-    });
+    }));
 
     const result = toResult(record);
     await createTimelineEvent({
@@ -401,9 +402,11 @@ class HandoffPackagesService {
       }
     }
 
-    const record = await repo.update({
-      where: { id },
-      data: updateData,
+    const record = await withCaseWorkGuard(prisma, existing.caseId, async (tx) => {
+      const current = await (tx as any).lawyerHandoffPackage.findUnique({ where: { id } });
+      if (!current) throw new HandoffPackageServiceError(404, 'HANDOFF_PACKAGE_NOT_FOUND', 'Handoff package not found');
+      if (params.status !== undefined) assertEditableStatusTransition(current.status, assertStatus(params.status));
+      return (tx as any).lawyerHandoffPackage.update({ where: { id }, data: updateData });
     });
 
     const result = toResult(record);

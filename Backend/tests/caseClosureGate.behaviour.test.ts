@@ -200,6 +200,7 @@ beforeEach(() => {
     count: jest.fn(async () => counts.publishedDocs),
   };
   prismaDouble.timelineEvent = { create: jest.fn(async () => ({ id: 'evt' })) };
+  prismaDouble.$queryRaw = jest.fn(async () => [{ status: caseRow.status }]);
   prismaDouble.$transaction = jest.fn(async (fn: any) => fn(prismaDouble));
 });
 

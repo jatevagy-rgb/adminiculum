@@ -10,8 +10,8 @@
  */
 
 import { prisma } from '../../prisma/prisma.service';
-import { PrismaClient } from '@prisma/client';
-import type { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
+import { lockCaseForMutation } from './caseMutationGuard';
 import { CLOSED_TASK_STATUSES, REVIEW_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   CaseClosureBlocker,
@@ -92,8 +92,8 @@ function isCaseManager(row: LifecycleCaseRow, actor: LifecycleActor): boolean {
   return row.assignedLawyerId === actor.userId || row.createdById === actor.userId;
 }
 
-async function loadCaseRow(caseId: string): Promise<LifecycleCaseRow | null> {
-  return prisma.case.findUnique({
+async function loadCaseRow(caseId: string, db: LifecycleDb = prisma): Promise<LifecycleCaseRow | null> {
+  return db.case.findUnique({
     where: { id: caseId },
     select: {
       id: true,
@@ -367,28 +367,28 @@ async function applyLifecycleAction(
   }
 
   const targetStatus = decision.targetStatus as PersistableCaseStatus;
-  const fromStatus = caseRow.status;
 
-  await prisma.$transaction(async (tx) => {
-    // CLOSE/RACE RE-CHECK: re-evaluate closure blockers inside the write
-    // transaction, as close to the case update as the current architecture
-    // allows, so a required review that became active after the pre-check
-    // fails the close instead of silently succeeding. This is NOT transactional
-    // serialization — no row locks are taken on tasks/submissions/reviews and
-    // the schema provides no closure invariant — so a concurrent create that
-    // lands between this re-check and the commit could still slip through.
-    // Forced close is the explicit exception and skips the re-check.
-    if (action === 'CLOSE' && !opts.force) {
-      const txBlockers = await collectBlockers(caseRow, now, tx);
-      if (txBlockers.length > 0) {
-        throw new LifecycleServiceError(
-          409,
-          'CLOSURE_BLOCKED',
-          'Az ügy operatív lezárásának feltételei még nem teljesülnek.',
-          txBlockers
-        );
-      }
+  const mutate = async (tx: Prisma.TransactionClient) => {
+    await lockCaseForMutation(tx, caseId, false);
+    const currentRow = await loadCaseRow(caseId, tx);
+    if (!currentRow) throw new LifecycleServiceError(404, 'CASE_NOT_FOUND', 'Case not found');
+    // All participating work writers take this case lock before their own
+    // task/document locks and check that the case remains operational.
+    const currentBlockers = action === 'CLOSE' && !opts.force ? await collectBlockers(currentRow, now, tx) : [];
+    const currentDecision = validateCaseLifecycleTransition({
+      action,
+      currentCategory: deriveLifecycleCategory(currentRow.status),
+      isCaseManager: isCaseManager(currentRow, actor),
+      blockers: currentBlockers,
+    });
+    if (!currentDecision.allowed) {
+      if (currentDecision.errorCode === 'CASE_MANAGE_FORBIDDEN')
+        throw new LifecycleServiceError(403, 'CASE_MANAGE_FORBIDDEN', currentDecision.reason || 'Forbidden');
+      if (currentDecision.errorCode === 'CLOSURE_BLOCKED')
+        throw new LifecycleServiceError(409, 'CLOSURE_BLOCKED', currentDecision.reason || 'Closure blocked', currentDecision.blockers);
+      throw new LifecycleServiceError(409, 'INVALID_LIFECYCLE_TRANSITION', currentDecision.reason || 'Invalid transition');
     }
+    // Forced close is the authorized exception and deliberately skips blockers.
 
     // Forced close: cancel every still-open task (including workflow steps) so it
     // leaves the responsible lawyers' queues. No workflow successor is activated
@@ -431,13 +431,21 @@ async function applyLifecycleAction(
         description: ACTION_EVENT_LABEL[action],
         metadata: {
           lifecycleAction: action,
-          fromStatus,
+          fromStatus: currentRow.status,
           toStatus: targetStatus,
           forced: Boolean(opts.force),
         },
       },
     });
-  });
+  };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await prisma.$transaction(mutate, { isolationLevel: 'Serializable', timeout: 15000 });
+      break;
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') || attempt === 2) throw error;
+    }
+  }
 
   const updatedRow = await loadCaseRow(caseId);
   const finalRow = updatedRow || { ...caseRow, status: targetStatus };

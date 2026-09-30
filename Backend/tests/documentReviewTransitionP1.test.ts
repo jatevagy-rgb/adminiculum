@@ -137,6 +137,7 @@ describe('Document Review transition P1 hotfix', () => {
       findUnique: jest.fn().mockResolvedValue({ id: 'case-1', assignedLawyerId: 'user-1', createdById: 'user-1' }),
       update: jest.fn().mockImplementation(async ({ data }: any) => { if (data.status) caseStatus = data.status; return {}; }),
     };
+    prismaMock.$queryRaw = jest.fn().mockImplementation(async () => [{ status: caseStatus }]);
     prismaMock.timelineEvent = {
       create: jest.fn().mockImplementation(async () => { timelineCalls += 1; }),
     };
@@ -277,5 +278,18 @@ describe('Document Review transition P1 hotfix', () => {
     wireMocks();
     await transitionReview('review-1', 'CLOSE', { userId: 'user-1', role: 'LAWYER' }, {}, prismaMock);
     expect(versionReviewStatuses['ver-1']).toBe('NOT_IN_REVIEW');
+  });
+
+  it('14. closed case rejects legacy approval and rejection before any review or folder side effect', async () => {
+    wireMocks();
+    caseStatus = 'FINAL';
+    await expect(documentsService.approveDocument('doc-1', 'user-1', 'ok', 'LAWYER'))
+      .rejects.toMatchObject({ code: 'CASE_REOPEN_REQUIRED' });
+    await expect(documentsService.rejectDocument('doc-1', 'user-1', 'changes', 'LAWYER'))
+      .rejects.toMatchObject({ code: 'CASE_REOPEN_REQUIRED' });
+    expect(reviewStatus).toBe('IN_REVIEW');
+    expect(documentUpdateCalls).toBe(0);
+    expect(checkinCalls).toBe(0);
+    expect(timelineCalls).toBe(0);
   });
 });

@@ -30,6 +30,7 @@ import { validateWorkforceUpload, mapWorkforceUploadRejection } from '../upload-
 import { requireDocumentObjectReadAccess, requireDocumentObjectManageAccess } from './documentObjectAuthorization';
 import { getCaseReadScope, userCanManageCase, requireCaseReadAccess } from '../cases/authorization';
 import { createTaskFromDocumentSource, SourceLinkedTaskError } from '../tasks/services';
+import { CaseMutationGuardError } from '../cases/caseMutationGuard';
 import { getDocumentEditorMetadata } from '../documentEditor/service';
 import { retryDocumentVersionScan, securityScanBlock } from './securityScan.service';
 import { readVersionContentText, planDocumentTextSources, VERSION_CONTENT_SOURCE } from './versionContent.service';
@@ -1093,6 +1094,10 @@ router.post('/:id/submit-review', authenticate, requireDocumentObjectManageAcces
 
     res.json({ success: true, message: 'Document submitted for review' });
   } catch (error) {
+    if (error instanceof CaseMutationGuardError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
     console.error('Submit for review error:', error);
     res.status(500).json({ 
       status: 500, 
@@ -1124,6 +1129,10 @@ router.post('/:id/approve', authenticate, requireDocumentObjectManageAccess, asy
 
     res.json({ success: true, message: 'Document approved' });
   } catch (error) {
+    if (error instanceof CaseMutationGuardError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
     if (typeof (error as any)?.status === 'number' && typeof (error as any)?.code === 'string') {
       res.status((error as any).status).json({ status: (error as any).status, code: (error as any).code, message: (error as any).message });
       return;
@@ -1169,6 +1178,10 @@ router.post('/:id/reject', authenticate, requireDocumentObjectManageAccess, asyn
 
     res.json({ success: true, message: 'Document rejected' });
   } catch (error) {
+    if (error instanceof CaseMutationGuardError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
     if (typeof (error as any)?.status === 'number' && typeof (error as any)?.code === 'string') {
       res.status((error as any).status).json({ status: (error as any).status, code: (error as any).code, message: (error as any).message });
       return;

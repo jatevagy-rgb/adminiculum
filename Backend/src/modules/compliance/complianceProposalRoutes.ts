@@ -1,6 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { InteractionError } from '../client-interaction/base';
+import { CaseMutationGuardError } from '../cases/caseMutationGuard';
 import * as proposals from './complianceProposalService';
 
 const router = Router();
@@ -10,6 +11,10 @@ function actor(req: Request) {
 }
 
 function fail(res: Response, error: unknown): void {
+  if (error instanceof CaseMutationGuardError) {
+    res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+    return;
+  }
   if (error instanceof InteractionError) {
     res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
     return;

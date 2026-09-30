@@ -14,14 +14,16 @@ import {
   updatePoint,
 } from './reviewService';
 import { toDecisionDto, toPointDto, toReviewDto } from './reviewDto';
+import { CaseMutationGuardError } from '../../cases/caseMutationGuard';
 
 function actor(req: Request) {
   return { userId: String((req as any).user?.userId || ''), role: String((req as any).user?.role || '') };
 }
 
 function fail(res: Response, error: unknown) {
-  if (error instanceof DocumentReviewWorkflowError) {
-    res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+  if (error instanceof DocumentReviewWorkflowError || error instanceof CaseMutationGuardError) {
+    const status = error instanceof DocumentReviewWorkflowError ? error.status : error.statusCode;
+    res.status(status).json({ status, code: error.code, message: error.message });
     return;
   }
   res.status(500).json({ status: 500, code: 'INTERNAL_ERROR', message: 'Internal server error' });

@@ -8,6 +8,7 @@ import {
 import prisma from '../../config/database';
 import { canUserActOnTask } from './taskAuthorization';
 import { WorkflowTransitionError } from '../cases/workItems';
+import { lockTaskCaseForWork } from '../cases/caseMutationGuard';
 import { planCanonicalTaskTransition } from './taskLifecycle.service';
 import { ATTENTION_DURATION_BANDS, isAttentionCategory, type AttentionCategory } from './attentionCategory';
 import {
@@ -474,6 +475,7 @@ export class TaskSubmissionService {
   ): Promise<{ created: boolean; workflow: TaskSubmissionWorkflowDto }> {
     try {
       const result = await withSerializableRetry(this.db, async (tx) => {
+        await lockTaskCaseForWork(tx, taskId);
         const { task, access } = await this.getTaskForActor(taskId, actorId, tx);
         this.assertCanPrepare(access);
         this.assertTaskOpen(task);
@@ -543,6 +545,7 @@ export class TaskSubmissionService {
     }
 
     await withSerializableRetry(this.db, async (tx) => {
+      await lockTaskCaseForWork(tx, taskId);
       const { task, access } = await this.getTaskForActor(taskId, actorId, tx);
       const submission = await this.getSubmission(taskId, submissionId, tx);
       this.assertCanPrepare(access, submission, actorId);
@@ -628,6 +631,7 @@ export class TaskSubmissionService {
       throw new TaskSubmissionServiceError(400, 'INVALID_SUBMISSION_DOCUMENT_ROLE', 'Document role is invalid.');
     }
     const created = await withSerializableRetry(this.db, async (tx) => {
+      await lockTaskCaseForWork(tx, taskId);
       const { task, access } = await this.getTaskForActor(taskId, actorId, tx);
       const submission = await this.getSubmission(taskId, submissionId, tx);
       this.assertCanPrepare(access, submission, actorId);
@@ -695,6 +699,7 @@ export class TaskSubmissionService {
     actorId: string,
   ): Promise<TaskSubmissionWorkflowDto> {
     await withSerializableRetry(this.db, async (tx) => {
+      await lockTaskCaseForWork(tx, taskId);
       const { access } = await this.getTaskForActor(taskId, actorId, tx);
       const submission = await this.getSubmission(taskId, submissionId, tx);
       this.assertCanPrepare(access, submission, actorId);
@@ -711,6 +716,7 @@ export class TaskSubmissionService {
     input: AttachTimeEntryInput,
   ): Promise<{ created: boolean; workflow: TaskSubmissionWorkflowDto }> {
     const created = await withSerializableRetry(this.db, async (tx) => {
+      await lockTaskCaseForWork(tx, taskId);
       const { task, access } = await this.getTaskForActor(taskId, actorId, tx);
       const submission = await this.getSubmission(taskId, submissionId, tx);
       this.assertCanPrepare(access, submission, actorId);
@@ -757,6 +763,7 @@ export class TaskSubmissionService {
     actorId: string,
   ): Promise<TaskSubmissionWorkflowDto> {
     await withSerializableRetry(this.db, async (tx) => {
+      await lockTaskCaseForWork(tx, taskId);
       const { access } = await this.getTaskForActor(taskId, actorId, tx);
       const submission = await this.getSubmission(taskId, submissionId, tx);
       this.assertCanPrepare(access, submission, actorId);
@@ -953,6 +960,7 @@ export class TaskSubmissionService {
       : [];
 
     const result = await withSerializableRetry(this.db, async (tx) => {
+      await lockTaskCaseForWork(tx, taskId);
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "tasks" WHERE "id" = ${taskId} FOR UPDATE`);
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "task_submissions" WHERE "id" = ${submissionId} FOR UPDATE`);
 

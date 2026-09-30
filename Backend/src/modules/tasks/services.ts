@@ -13,6 +13,7 @@ import {
 } from '../cases/workItems';
 import { planCanonicalTaskTransition } from './taskLifecycle.service';
 import { activateReadyWorkflowSuccessors } from '../cases/caseWorkflowOrchestration';
+import { lockCaseForMutation, withCaseWorkGuard } from '../cases/caseMutationGuard';
 import {
   AttentionCategory,
   isAttentionCategory,
@@ -188,13 +189,17 @@ async function transitionTask(taskId: string, userId: string, action: SupportedT
     throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to perform this task action.');
   }
 
-  const transition = planCanonicalTaskTransition(existing, action as Extract<SupportedTaskAction, 'START' | 'SUBMIT_FOR_REVIEW' | 'APPROVE' | 'RETURN_FOR_CORRECTION'>, userId, actor.role);
-  const task = await prisma.task.update({
-    where: { id: taskId },
-    data: {
-      ...transition.data,
-      ...extraData,
-    } as any,
+  const { task, transition } = await withCaseWorkGuard(prisma, existing.caseId, async (tx) => {
+    const current = await tx.task.findUnique({ where: { id: taskId } });
+    if (!current) throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'Task not found.');
+    const currentActor = await canUserActOnTask(current, userId, tx);
+    if (!currentActor.allowed) throw new WorkflowTransitionError(403, 'TASK_ACTION_FORBIDDEN', 'You are not allowed to perform this task action.');
+    const transition = planCanonicalTaskTransition(current, action as Extract<SupportedTaskAction, 'START' | 'SUBMIT_FOR_REVIEW' | 'APPROVE' | 'RETURN_FOR_CORRECTION'>, userId, currentActor.role);
+    const task = await tx.task.update({
+      where: { id: taskId },
+      data: { ...transition.data, ...extraData } as any,
+    });
+    return { task, transition };
   });
 
   await createTimelineEvent({
@@ -332,6 +337,11 @@ export async function createTask(data: {
   plannedReviewerId?: string | null;
   collaboratorUserIds?: string[];
 }, db: PrismaClient | Prisma.TransactionClient = prisma) {
+  if ('$transaction' in db) {
+    const created: any = await withCaseWorkGuard(db, data.caseId, (tx) => createTask(data, tx));
+    return db === prisma ? (await getTask(created.id)) || created : created;
+  }
+  await lockCaseForMutation(db, data.caseId);
   const prismaTaskType = mapAnyTaskTypeToPrisma((data.taskType as string | undefined) || (data.type as string | undefined));
   const requestedByOrganizationPersonId = await validateTaskRequester(data.caseId, data.requestedByOrganizationPersonId, db);
 

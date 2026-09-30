@@ -49,6 +49,7 @@ import {
   listCaseResponsibleCandidates,
   mutateCaseWorkPackageItem,
 } from './caseWorkPackageOperational.service';
+import { CaseMutationGuardError } from './caseMutationGuard';
 
 const router = Router();
 
@@ -676,6 +677,10 @@ router.get('/:caseId/client-house-style', authenticate, async (req: Request, res
 // ============================================================================
 // Work Package operational runtime. These must remain before /:caseId.
 function sendWorkPackageOperationalError(res: Response, error: unknown): void {
+  if (error instanceof CaseMutationGuardError) {
+    res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+    return;
+  }
   if (error instanceof CaseWorkPackageOperationalError) {
     res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
     return;
@@ -841,6 +846,10 @@ router.patch('/:caseId', authenticate, requireCaseManageAccess, async (req: Requ
     res.json({ success: true, ...result });
   } catch (error) {
     console.error('Update case error:', error);
+    if (error instanceof CaseMutationGuardError) {
+      res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
+      return;
+    }
     const message = error instanceof Error ? error.message : 'Internal server error';
     if (message === 'Case not found') {
       res.status(404).json({ status: 404, code: 'NOT_FOUND', message });

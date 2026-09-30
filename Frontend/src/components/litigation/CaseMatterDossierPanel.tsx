@@ -207,14 +207,14 @@ export function CaseMatterDossierPanel({ caseId, compact = false }: Props) {
         ) : null}
 
         {lifecycle.warnings.length > 0 ? (
-          <div className="mt-2 rounded border border-[rgba(22,32,26,0.12)] bg-[rgba(22,32,26,0.03)] px-2 py-1.5">
-            <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#7A8479]">
+          <div className="mt-2 rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] px-2 py-1.5">
+            <p className="text-[10.5px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-soft)]">
               Figyelmeztetések — nem akadályozzák a lezárást
             </p>
             <ul className="mt-1 space-y-0.5">
               {lifecycle.warnings.map((warning) => (
-                <li key={warning.code} className="flex items-center gap-2 text-[12px] text-[#4a524c]">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#7A8479]" />
+                <li key={warning.code} className="flex items-center gap-2 text-[12px] text-[var(--adm-text-muted)]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[var(--adm-text-soft)]" />
                   <span>{warning.label}</span>
                 </li>
               ))}
