@@ -94,7 +94,7 @@ export function MetricTile({
   const styles = toneStyles[resolvedTone];
 
   if ("onClick" in props && typeof props.onClick === "function") {
-    const { onClick, selected = false, disabled = false, ...btnProps } = props as MetricTileInteractiveProps;
+    const { onClick, selected = false, disabled = false, ...btnProps } = props;
     return (
       <button
         type="button"
@@ -118,7 +118,7 @@ export function MetricTile({
     );
   }
 
-  const { onClick: _o, selected: _s, ...divProps } = props as MetricTileStaticProps;
+  const { onClick: _o, selected: _s, ...divProps } = props;
   return (
     <div
       className={`p-4 rounded-[8px] border ${styles.container} ${className}`}
