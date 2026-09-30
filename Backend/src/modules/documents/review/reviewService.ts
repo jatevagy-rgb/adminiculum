@@ -2,6 +2,12 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../../prisma/prisma.service';
 import { evaluateTransition, candidateActions, versionReviewStatusFor, type ReviewAction, type ReviewStatus } from './reviewWorkflow';
 
+type ReviewAuthorityRecord = {
+  ownerId?: string | null;
+  assignedReviewerId?: string | null;
+  createdById?: string | null;
+};
+
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = { userId: string; role?: string };
 
@@ -185,11 +191,40 @@ export async function getReview(reviewId: string, actor: Actor, db: PrismaClient
   return review;
 }
 
+/**
+ * Canonical review authority (DOC-REVIEW-WORKFLOW-1): the acting user is the
+ * review owner or the assigned reviewer. Legacy rows may predate `ownerId`, in
+ * which case the review creator is the fallback owner. This is the ONLY
+ * reviewer concept the model represents; decision authority is never derived
+ * from case access alone.
+ */
+export function actorOwnsReview(review: ReviewAuthorityRecord, actorUserId: string): boolean {
+  return (
+    actorUserId === review.ownerId ||
+    actorUserId === review.assignedReviewerId ||
+    (review.ownerId == null && actorUserId === review.createdById)
+  );
+}
+
+/**
+ * Actor-aware projection of the actions the canonical workflow currently
+ * permits. Drives truthful UI affordances: a user with case access but without
+ * review authority sees no transition action.
+ */
+export function permittedReviewActions(
+  review: ReviewAuthorityRecord & { status: string },
+  actor: Actor,
+): ReviewAction[] {
+  if (!actorOwnsReview(review, actor.userId)) return [];
+  return candidateActions(String(review.status) as ReviewStatus);
+}
+
 export async function transitionReview(reviewId: string, action: ReviewAction, actor: Actor, input: { reviewerId?: string; versionId?: string; safeRationale?: string; expectedRevision?: number; idempotencyKey?: string } = {}, db: PrismaClient = defaultPrisma) {
   return db.$transaction(async (tx) => {
     const review = await loadReview(tx, reviewId);
     await assertActorAccess(tx, actor, review.document.caseId);
     requireExpectedRevision(review.revision, input.expectedRevision);
+    const actorAuthorized = actorOwnsReview(review, actor.userId);
     const reviewerId = input.reviewerId || review.assignedReviewerId;
     if (action === 'ASSIGN' && !reviewerId) throw new DocumentReviewWorkflowError(400, 'REVIEWER_REQUIRED', 'reviewerId is required.');
     const reviewerHasAccess = reviewerId ? await userHasCaseAccess(tx, reviewerId, review.document.caseId) : true;
@@ -227,7 +262,7 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
     if (action === 'RESUBMIT' && input.versionId && !requestedResubmitVersion) throw new DocumentReviewWorkflowError(400, 'INVALID_REVIEW_VERSION', 'Resubmission version must belong to the reviewed document.');
     const resubmitVersion = action === 'RESUBMIT' ? (requestedResubmitVersion || latest) : null;
     const verdict = evaluateTransition(String(review.status) as ReviewStatus, action, {
-      actorAuthorized: true,
+      actorAuthorized,
       reviewerHasAccess,
       openPoints,
       openBlockingPoints,

@@ -275,7 +275,10 @@ export class TaskReviewDecisionService {
         role,
         internal,
         canRead,
-        canDecide: decisionRole && !submitter && (assignedReviewer || scopedSupervisor),
+        // Canonical review contract: a decision is accepted ONLY from the
+        // submission's assigned reviewer. Broader case supervision keeps read
+        // visibility and external-completion recording, but never decide power.
+        canDecide: decisionRole && !submitter && assignedReviewer,
         canRevise: internal && taskWorker && submission.submittedById === actorId,
         canRecordExternalCompletion: decisionRole && !submitter && scopedSupervisor,
       },

@@ -561,6 +561,14 @@ export class TaskSubmissionService {
       if (!document) {
         throw new TaskSubmissionServiceError(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
       }
+      // EXACT-VERSION BINDING: the reviewed output is bound to the document's
+      // current version at attach time, so a later upload can never silently
+      // float an approved submission onto a different DocumentVersion.
+      const currentVersion = await tx.documentVersion.findFirst({
+        where: { documentId: input.documentId, isCurrent: true },
+        orderBy: { version: 'desc' },
+        select: { id: true },
+      });
       const existing = await tx.taskSubmissionDocument.findUnique({
         where: {
           submissionId_documentId_role: {
@@ -576,6 +584,7 @@ export class TaskSubmissionService {
         data: {
           submissionId,
           documentId: input.documentId,
+          documentVersionId: currentVersion?.id || null,
           role: input.role as TaskSubmissionDocumentRole,
           createdById: actorId,
         },

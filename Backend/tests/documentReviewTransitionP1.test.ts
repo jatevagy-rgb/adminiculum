@@ -122,6 +122,11 @@ describe('Document Review transition P1 hotfix', () => {
       findFirst: jest.fn().mockResolvedValue(null),
       update: jest.fn().mockResolvedValue({}),
     };
+    // The canonical APPROVE gate inspects the exact previous->reviewed comparison
+    // for unresolved change segments; the legacy double models "no comparison
+    // exists / no unresolved segments" so approval proceeds to the state machine.
+    prismaMock.documentComparison = { findFirst: jest.fn().mockResolvedValue(null) };
+    prismaMock.documentChangeSegment = { count: jest.fn().mockResolvedValue(0) };
     prismaMock.reviewDecision = {
       findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue({}),
