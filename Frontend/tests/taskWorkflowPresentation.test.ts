@@ -64,6 +64,7 @@ function submission(overrides: Partial<TaskSubmission> = {}): TaskSubmission {
     remainingIssues: null,
     reviewerNote: null,
     requestedAttention: null,
+    attentionEstimate: null,
     externalActionRequired: false,
     externalActionType: null,
     zeroTimeConfirmed: false,

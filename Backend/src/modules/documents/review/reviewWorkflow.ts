@@ -124,6 +124,14 @@ export interface TransitionContext {
   reviewerHasAccess?: boolean;
   /** Whether the acting user is the owner or the assigned reviewer. */
   actorAuthorized?: boolean;
+  /**
+   * Whether the acting user may take a REVIEW VERDICT (REQUEST_CHANGES,
+   * APPROVE). False closes the worker self-approval gap: a workforce role
+   * (e.g. TRAINEE, LEGAL_ASSISTANT) that created/owns a review cannot grant
+   * formal document approval. Absent (undefined) keeps legacy behavior for
+   * callers that predate the guard.
+   */
+  actorCanDecide?: boolean;
   /** Count of review points still blocking (severity BLOCKING and not resolved/deferred/rejected). */
   openBlockingPoints?: number;
   /** Total number of open points (any severity). */
@@ -189,6 +197,7 @@ export function evaluateTransition(status: ReviewStatus, action: ReviewAction, c
 
     case 'REQUEST_CHANGES': {
       if (!REVIEWABLE.has(status)) return deny('INVALID_STATE');
+      if (ctx.actorCanDecide === false) return deny('DECISION_AUTHORITY_MISSING');
       // Changes requested must be actionable: at least one open point or a rationale.
       if (!(ctx.openPoints && ctx.openPoints > 0) && ctx.hasRationale !== true) {
         return deny('RATIONALE_OR_POINTS_REQUIRED');
@@ -216,6 +225,11 @@ export function evaluateTransition(status: ReviewStatus, action: ReviewAction, c
 
     case 'APPROVE': {
       if (!REVIEWABLE.has(status)) return deny('INVALID_STATE');
+      // Formal document approval requires decision authority: a workforce role
+      // that merely created/owns the review can never self-approve. This is
+      // checked before content gates so unauthorized actors always get the
+      // authorization denial, never a masquerading validation failure.
+      if (ctx.actorCanDecide === false) return deny('DECISION_AUTHORITY_MISSING');
       // No approval while blocking points remain open.
       if ((ctx.openBlockingPoints ?? 0) > 0) return deny('BLOCKING_POINTS_OPEN');
       // No approval while the exact relevant comparison still has unresolved

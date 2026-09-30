@@ -39,6 +39,25 @@ export const ATTENTION_LABELS: Record<string, string> = {
   DETAILED_REVIEW: "Részletes ellenőrzés",
 };
 
+/**
+ * Indicative PLANNING duration bands (same canonical bands as the backend
+ * attentionCategory contract). Approximate review attention/time only —
+ * NOT actual TimeEntry, NOT Task.estimatedMinutes, NOT billing time.
+ */
+export const ATTENTION_DURATION_BANDS: Record<string, { minMinutes: number; maxMinutes: number }> = {
+  QUICK_SCAN: { minMinutes: 5, maxMinutes: 15 },
+  APPROVAL: { minMinutes: 10, maxMinutes: 20 },
+  SIGNATURE: { minMinutes: 5, maxMinutes: 10 },
+  EDITING: { minMinutes: 30, maxMinutes: 60 },
+  DETAILED_REVIEW: { minMinutes: 60, maxMinutes: 120 },
+};
+
+export function attentionDurationLabel(attention: string | null | undefined): string | null {
+  const band = ATTENTION_DURATION_BANDS[String(attention || "").toUpperCase()];
+  if (!band) return null;
+  return band.minMinutes === band.maxMinutes ? `≈ ${band.minMinutes} perc` : `≈ ${band.minMinutes}–${band.maxMinutes} perc`;
+}
+
 export const DOCUMENT_ROLE_LABELS: Record<string, string> = {
   PRIMARY_OUTPUT: "Elsődleges eredmény",
   SUPPORTING_DOCUMENT: "Kiegészítő dokumentum",
@@ -66,8 +85,12 @@ export const READINESS_LABELS: Record<SubmissionReadinessCode, string> = {
   REVIEW_ATTENTION_REQUIRED: "Válassza ki a review típusát.",
   REVIEWER_REQUIRED: "Válasszon reviewert.",
   REVIEWER_INELIGIBLE: "A kiválasztott reviewer már nem jogosult.",
+  REVIEWER_MUST_BE_RESPONSIBLE_LAWYER: "A Leadás reviewerét csak az ügy felelős ügyvédje lehet.",
+  RESPONSIBLE_LAWYER_MISSING: "Az ügyhöz nincs felelős ügyvéd rendelve; a Leadás nem küldhető be.",
+  RESPONSIBLE_LAWYER_INELIGIBLE: "Az ügy felelős ügyvédje inaktív vagy nem jogosult jogi review-ra.",
   SELF_REVIEW_NOT_ALLOWED: "A beadó nem review-zhatja saját munkáját.",
   OUTPUT_REQUIRED: "Kapcsoljon elsődleges eredménydokumentumot.",
+  EXACT_VERSION_REQUIRED: "A dokumentumhoz nincs pontos verzió kötve; kapcsolja újra az eredménydokumentumot.",
   TIME_ENTRY_OR_ZERO_CONFIRMATION_REQUIRED: "Kapcsoljon munkaórát, vagy erősítse meg, hogy nincs rögzítendő idő.",
   TASK_STATE_NOT_SUBMITTABLE: "A feladat jelenlegi állapotában nem adható le.",
   SUBMISSION_NOT_DRAFT: "Ez a Leadás már nem szerkeszthető.",
@@ -80,12 +103,14 @@ export const READINESS_COMPLETED_LABELS: Partial<Record<SubmissionReadinessCode,
   REVIEW_ATTENTION_REQUIRED: "A review típusa kiválasztva.",
   REVIEWER_REQUIRED: "A reviewer kiválasztva.",
   OUTPUT_REQUIRED: "Az elsődleges eredménydokumentum kapcsolva.",
+  EXACT_VERSION_REQUIRED: "A pontos dokumentumverzió kötve.",
   TIME_ENTRY_OR_ZERO_CONFIRMATION_REQUIRED: "A munkaidő feltétel teljesítve.",
   TASK_STATE_NOT_SUBMITTABLE: "A feladat jelenlegi állapotában leadható.",
 };
 
 export const WARNING_LABELS: Record<SubmissionWarningCode, string> = {
   ZERO_TIME_CONFIRMED: "A Leadás nulla rögzített munkaórával kerül review-ra.",
+  VERSION_NOT_CURRENT: "Egy kapcsolt dokumentumnak újabb verziója létezik. A beküldésnél a pontos verziót kifejezetten meg kell erősíteni.",
 };
 
 export const NEXT_ACTION_LABELS: Record<string, string> = {
@@ -285,6 +310,7 @@ export function safeReviewProjectionKeys(): string[] {
     "case",
     "submission",
     "outputs",
+    "documentReviews",
     "time",
     "history",
     "decision",
@@ -300,6 +326,12 @@ const ERROR_MESSAGES: Record<string, string> = {
   REVIEW_ALREADY_DECIDED: "Erről a Leadásról már döntés született.",
   SELF_REVIEW_NOT_ALLOWED: "Saját Leadás nem review-zható.",
   REVIEWER_INELIGIBLE: "A kiválasztott reviewer nem jogosult.",
+  REVIEWER_MUST_BE_RESPONSIBLE_LAWYER: "A Leadás reviewerét csak az ügy felelős ügyvédje lehet.",
+  RESPONSIBLE_LAWYER_MISSING: "Az ügyhöz nincs felelős ügyvéd rendelve; a Leadás nem küldhető be.",
+  RESPONSIBLE_LAWYER_INELIGIBLE: "Az ügy felelős ügyvédje inaktív vagy nem jogosult jogi review-ra.",
+  EXACT_VERSION_REQUIRED: "A dokumentumhoz nincs pontos verzió kötve; kapcsolja újra az eredménydokumentumot.",
+  EXACT_VERSION_CONFIRMATION_REQUIRED: "Újabb dokumentumverzió létezik. Erősítse meg a beküldött pontos verziót, vagy kapcsolja újra a dokumentumot.",
+  EXACT_VERSION_INVALID: "A kiválasztott verzió nem tartozik a kapcsolt dokumentumhoz.",
   HANDOFF_NOT_READY: "A Leadás még nem küldhető review-ra.",
   TASK_SUBMISSION_NOT_READY: "A Leadás még nem küldhető review-ra.",
   IDEMPOTENCY_KEY_REUSED: "A műveletazonosító már más kéréshez tartozik. Frissítse az oldalt.",

@@ -3,15 +3,24 @@ export type SubmissionReadinessCode =
   | 'REVIEW_ATTENTION_REQUIRED'
   | 'REVIEWER_REQUIRED'
   | 'REVIEWER_INELIGIBLE'
+  | 'REVIEWER_MUST_BE_RESPONSIBLE_LAWYER'
+  | 'RESPONSIBLE_LAWYER_MISSING'
+  | 'RESPONSIBLE_LAWYER_INELIGIBLE'
   | 'SELF_REVIEW_NOT_ALLOWED'
   | 'OUTPUT_REQUIRED'
+  | 'EXACT_VERSION_REQUIRED'
   | 'TIME_ENTRY_OR_ZERO_CONFIRMATION_REQUIRED'
   | 'TASK_STATE_NOT_SUBMITTABLE'
   | 'SUBMISSION_NOT_DRAFT'
   | 'DOCUMENT_SCOPE_INVALID'
   | 'TIME_ENTRY_SCOPE_INVALID';
 
-export type SubmissionWarningCode = 'ZERO_TIME_CONFIRMED';
+export type SubmissionWarningCode = 'ZERO_TIME_CONFIRMED' | 'VERSION_NOT_CURRENT';
+
+export interface AttentionEstimateDto {
+  minMinutes: number;
+  maxMinutes: number;
+}
 
 export interface SafeUserDto {
   id: string;
@@ -25,6 +34,8 @@ export interface TaskSubmissionDocumentDto {
   documentVersionId: string | null;
   role: string;
   createdAt: string;
+  linkedVersion: number | null;
+  isCurrentVersion: boolean;
   document: {
     id: string;
     name: string;
@@ -60,6 +71,7 @@ export interface TaskSubmissionDto {
   remainingIssues: string | null;
   reviewerNote: string | null;
   requestedAttention: string | null;
+  attentionEstimate: AttentionEstimateDto | null;
   externalActionRequired: boolean;
   externalActionType: string | null;
   zeroTimeConfirmed: boolean;
@@ -116,6 +128,8 @@ export interface TaskSubmissionWorkflowDto {
   latestSubmittedRevision: TaskSubmissionDto | null;
   latestDecision: TaskSubmissionDto['reviewDecision'];
   currentReviewer: SafeUserDto | null;
+  responsibleLawyerFlow: boolean;
+  responsibleLawyer: SafeUserDto | null;
   readiness: SubmissionReadinessDto | null;
   permittedActions: {
     read: boolean;
@@ -154,6 +168,8 @@ export interface UpdateDraftInput {
 export interface AttachDocumentInput {
   documentId: string;
   role: string;
+  /** Optional explicit exact version pinning; defaults to the current version. */
+  documentVersionId?: string;
 }
 
 export interface AttachTimeEntryInput {

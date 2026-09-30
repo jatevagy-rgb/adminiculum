@@ -7,15 +7,24 @@ export type SubmissionReadinessCode =
   | "REVIEW_ATTENTION_REQUIRED"
   | "REVIEWER_REQUIRED"
   | "REVIEWER_INELIGIBLE"
+  | "REVIEWER_MUST_BE_RESPONSIBLE_LAWYER"
+  | "RESPONSIBLE_LAWYER_MISSING"
+  | "RESPONSIBLE_LAWYER_INELIGIBLE"
   | "SELF_REVIEW_NOT_ALLOWED"
   | "OUTPUT_REQUIRED"
+  | "EXACT_VERSION_REQUIRED"
   | "TIME_ENTRY_OR_ZERO_CONFIRMATION_REQUIRED"
   | "TASK_STATE_NOT_SUBMITTABLE"
   | "SUBMISSION_NOT_DRAFT"
   | "DOCUMENT_SCOPE_INVALID"
   | "TIME_ENTRY_SCOPE_INVALID";
 
-export type SubmissionWarningCode = "ZERO_TIME_CONFIRMED";
+export type SubmissionWarningCode = "ZERO_TIME_CONFIRMED" | "VERSION_NOT_CURRENT";
+
+export interface AttentionEstimate {
+  minMinutes: number;
+  maxMinutes: number;
+}
 
 export interface SafeWorkflowUser {
   id: string;
@@ -36,6 +45,8 @@ export interface TaskSubmissionDocument {
   documentVersionId: string | null;
   role: string;
   createdAt: string;
+  linkedVersion: number | null;
+  isCurrentVersion: boolean;
   document: {
     id: string;
     name: string;
@@ -82,6 +93,7 @@ export interface TaskSubmission {
   remainingIssues: string | null;
   reviewerNote: string | null;
   requestedAttention: string | null;
+  attentionEstimate: AttentionEstimate | null;
   externalActionRequired: boolean;
   externalActionType: string | null;
   zeroTimeConfirmed: boolean;
@@ -129,6 +141,8 @@ export interface TaskSubmissionWorkflow {
   latestSubmittedRevision: TaskSubmission | null;
   latestDecision: TaskReviewDecision | null;
   currentReviewer: SafeWorkflowUser | null;
+  responsibleLawyerFlow: boolean;
+  responsibleLawyer: SafeWorkflowUser | null;
   readiness: SubmissionReadiness | null;
   permittedActions: {
     read: boolean;
@@ -214,10 +228,14 @@ export interface TaskReviewQueueItem {
   submittedBy?: SafeWorkflowUser | null;
   assignedReviewer?: SafeWorkflowUser | null;
   requestedAttention?: string | null;
+  attentionEstimate?: AttentionEstimate | null;
   externalActionRequired?: boolean;
   workSummaryPreview?: string | null;
   submissionDocumentCount?: number;
+  documentVersions?: Array<{ documentId: string; documentVersionId: string | null; role: string }>;
   linkedTimeMinutes?: number;
+  actionable?: boolean;
+  readOnly?: boolean;
   nextActionCode: string;
   case: {
     id: string;
@@ -251,6 +269,7 @@ export interface TaskSubmissionReviewDetail {
     submittedAt: string | null;
     assignedReviewer: SafeWorkflowUser;
     requestedAttention: string | null;
+    attentionEstimate: AttentionEstimate | null;
     externalActionRequired: boolean;
     externalActionType: string | null;
     externalCompletedAt: string | null;
@@ -267,6 +286,24 @@ export interface TaskSubmissionReviewDetail {
     category: string;
     currentVersion: number;
     linkedVersion: number | null;
+    isCurrentVersion: boolean;
+    newerVersionExists: boolean;
+  }>;
+  documentReviews: Array<{
+    documentId: string;
+    documentVersionId: string;
+    reviews: Array<{
+      id: string;
+      status: string;
+      currentRoundNumber: number;
+      documentVersionId: string | null;
+      approvedVersionId: string | null;
+      reviewer: SafeWorkflowUser | null;
+      rounds: Array<{ id: string; roundNumber: number; reviewVersionId: string; status: string }>;
+      counts: { open: number; blocking: number; total: number };
+      lastDecision: { action: string; actorId: string; versionId: string | null; createdAt: string } | null;
+      reviewLink: string;
+    }>;
   }>;
   time: {
     entries: Array<{
@@ -289,6 +326,7 @@ export interface TaskSubmissionReviewDetail {
     returnedAt: string | null;
     approvedAt: string | null;
     supersedesSubmissionId: string | null;
+    outputs: Array<{ documentId: string; documentVersionId: string | null; linkedVersion: number | null }>;
     decision: TaskReviewDecision | null;
   }>;
   decision: TaskReviewDecision | null;
@@ -410,10 +448,11 @@ export async function attachTaskSubmissionDocument(
   submissionId: string,
   documentId: string,
   role: string,
+  documentVersionId?: string,
 ): Promise<TaskSubmissionWorkflow> {
   return fetchApi<TaskSubmissionWorkflow>(`/tasks/${encoded(taskId)}/submissions/${encoded(submissionId)}/documents`, {
     method: "POST",
-    body: JSON.stringify({ documentId, role }),
+    body: JSON.stringify(documentVersionId ? { documentId, role, documentVersionId } : { documentId, role }),
   });
 }
 
@@ -452,11 +491,12 @@ export async function submitTaskSubmissionForReview(
   taskId: string,
   submissionId: string,
   idempotencyKey: string,
+  confirmedDocumentVersionIds: string[] = [],
 ): Promise<{ idempotentReplay: boolean; submission: TaskSubmission; workflow: TaskSubmissionWorkflow }> {
   return fetchApi(`/tasks/${encoded(taskId)}/submissions/${encoded(submissionId)}/submit`, {
     method: "POST",
     headers: { "Idempotency-Key": idempotencyKey },
-    body: JSON.stringify({}),
+    body: JSON.stringify({ confirmedDocumentVersionIds }),
   });
 }
 

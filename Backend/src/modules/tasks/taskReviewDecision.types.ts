@@ -4,6 +4,33 @@ export interface ReviewSafeUserDto {
   role: string;
 }
 
+export interface AttentionEstimateDto {
+  minMinutes: number;
+  maxMinutes: number;
+}
+
+export interface DocumentReviewContextDto {
+  documentId: string;
+  documentVersionId: string;
+  reviews: Array<{
+    id: string;
+    status: string;
+    currentRoundNumber: number;
+    documentVersionId: string | null;
+    approvedVersionId: string | null;
+    reviewer: ReviewSafeUserDto | null;
+    rounds: Array<{ id: string; roundNumber: number; reviewVersionId: string; status: string }>;
+    counts: { open: number; blocking: number; total: number };
+    lastDecision: {
+      action: string;
+      actorId: string;
+      versionId: string | null;
+      createdAt: string;
+    } | null;
+    reviewLink: string;
+  }>;
+}
+
 export interface TaskReviewDecisionDto {
   id: string;
   decision: string;
@@ -47,6 +74,7 @@ export interface TaskSubmissionReviewDetailDto {
     submittedAt: string | null;
     assignedReviewer: ReviewSafeUserDto;
     requestedAttention: string | null;
+    attentionEstimate: AttentionEstimateDto | null;
     externalActionRequired: boolean;
     externalActionType: string | null;
     externalCompletedAt: string | null;
@@ -63,7 +91,10 @@ export interface TaskSubmissionReviewDetailDto {
     category: string;
     currentVersion: number;
     linkedVersion: number | null;
+    isCurrentVersion: boolean;
+    newerVersionExists: boolean;
   }>;
+  documentReviews: DocumentReviewContextDto[];
   time: {
     entries: Array<{
       id: string;
@@ -85,6 +116,7 @@ export interface TaskSubmissionReviewDetailDto {
     returnedAt: string | null;
     approvedAt: string | null;
     supersedesSubmissionId: string | null;
+    outputs: Array<{ documentId: string; documentVersionId: string | null; linkedVersion: number | null }>;
     decision: TaskReviewDecisionDto | null;
   }>;
   decision: TaskReviewDecisionDto | null;

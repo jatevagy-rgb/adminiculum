@@ -9,6 +9,7 @@ import prisma from '../../config/database';
 import { canUserActOnTask } from './taskAuthorization';
 import { WorkflowTransitionError } from '../cases/workItems';
 import { planCanonicalTaskTransition } from './taskLifecycle.service';
+import { ATTENTION_DURATION_BANDS, isAttentionCategory, type AttentionCategory } from './attentionCategory';
 import {
   AttachDocumentInput,
   AttachTimeEntryInput,
@@ -27,6 +28,7 @@ type DatabaseClient = PrismaClient | Prisma.TransactionClient;
 const TERMINAL_TASK_STATUSES = new Set(['COMPLETED', 'DONE', 'CANCELLED']);
 const REVIEWER_ROLES = new Set(['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']);
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
+const DECISION_ROLES = new Set(['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']);
 const ATTENTION_VALUES = new Set(Object.values(ReviewAttentionLevel));
 const DOCUMENT_ROLE_VALUES = new Set(Object.values(TaskSubmissionDocumentRole));
 const EXTERNAL_ACTION_VALUES = new Set(Object.values(ExternalActionType));
@@ -53,6 +55,7 @@ const workflowTaskSelect = {
       matterId: true,
       assignedLawyerId: true,
       createdById: true,
+      assignedLawyer: { select: { id: true, name: true, email: true, role: true } },
       client: { select: { id: true, name: true } },
     },
   },
@@ -67,7 +70,18 @@ const submissionInclude = {
   },
   documents: {
     include: {
-      document: { select: { id: true, name: true, fileName: true, category: true, currentVersion: true, caseId: true } },
+      document: {
+        select: {
+          id: true,
+          name: true,
+          fileName: true,
+          category: true,
+          currentVersion: true,
+          caseId: true,
+          versions: { where: { isCurrent: true }, select: { id: true }, take: 1 },
+        },
+      },
+      documentVersion: { select: { id: true, version: true } },
     },
     orderBy: { createdAt: 'asc' as const },
   },
@@ -138,6 +152,13 @@ function boundedPreview(value: string | null): string | null {
   return `${normalized.slice(0, MAX_QUEUE_SUMMARY_LENGTH - 3)}...`;
 }
 
+/** Indicative planning band for the canonical review attention level. */
+function attentionEstimateFor(requestedAttention: ReviewAttentionLevel | null): { minMinutes: number; maxMinutes: number } | null {
+  if (!requestedAttention || !isAttentionCategory(requestedAttention)) return null;
+  const band = ATTENTION_DURATION_BANDS[requestedAttention as AttentionCategory];
+  return { minMinutes: band.minMinutes, maxMinutes: band.maxMinutes };
+}
+
 function toSubmissionDto(submission: SubmissionRecord): TaskSubmissionDto {
   const documents = submission.documents.map((link) => ({
     id: link.id,
@@ -145,6 +166,8 @@ function toSubmissionDto(submission: SubmissionRecord): TaskSubmissionDto {
     documentVersionId: link.documentVersionId,
     role: String(link.role),
     createdAt: link.createdAt.toISOString(),
+    linkedVersion: link.documentVersion?.version || null,
+    isCurrentVersion: Boolean(link.documentVersionId && link.document.versions.some((version) => version.id === link.documentVersionId)),
     document: {
       id: link.document.id,
       name: link.document.fileName || link.document.name,
@@ -179,6 +202,7 @@ function toSubmissionDto(submission: SubmissionRecord): TaskSubmissionDto {
     remainingIssues: submission.remainingIssues,
     reviewerNote: submission.reviewerNote,
     requestedAttention: submission.requestedAttention ? String(submission.requestedAttention) : null,
+    attentionEstimate: attentionEstimateFor(submission.requestedAttention),
     externalActionRequired: submission.externalActionRequired,
     externalActionType: submission.externalActionType ? String(submission.externalActionType) : null,
     zeroTimeConfirmed: submission.zeroTimeConfirmed,
@@ -353,12 +377,21 @@ export class TaskSubmissionService {
   private async resolveInitialReviewer(
     task: WorkflowTaskRecord,
     actorId: string,
+    actorRole: string,
     explicitReviewerId: string | undefined,
     db: DatabaseClient,
   ): Promise<string> {
-    const candidates = [explicitReviewerId, task.assignedById || undefined, task.case.assignedLawyerId || undefined, task.case.createdById]
-      .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
     const futureSubmitters = [actorId, task.assignedToId || ''];
+    const responsibleLawyerFlow = task.assignedToId === actorId && !DECISION_ROLES.has(actorRole);
+    if (responsibleLawyerFlow) {
+      return this.resolveResponsibleLawyerReviewer(task, explicitReviewerId, futureSubmitters, db);
+    }
+
+    // Canonical default order: the case responsible lawyer wins over the task
+    // assigner; the task assigner wins over the case creator. An explicit
+    // reviewer selection (non-final reviewer behavior) still takes precedence.
+    const candidates = [explicitReviewerId, task.case.assignedLawyerId || undefined, task.assignedById || undefined, task.case.createdById]
+      .filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
 
     if (explicitReviewerId) {
       await this.assertEligibleReviewer(task, explicitReviewerId, futureSubmitters, db);
@@ -371,6 +404,39 @@ export class TaskSubmissionService {
     }
 
     throw new TaskSubmissionServiceError(409, 'REVIEWER_REQUIRED', 'An eligible reviewer must be selected before creating this draft.');
+  }
+
+  /**
+   * Responsible-lawyer Leadás routing (WORKER → RESPONSIBLE LAWYER). Fails
+   * closed: the reviewer MUST be the case's assigned lawyer, who must be
+   * present, active, review-eligible and different from the worker/submitter.
+   * There is deliberately NO fallback to the task assigner, case creator,
+   * collaborator, admin or another eligible reviewer.
+   */
+  private async resolveResponsibleLawyerReviewer(
+    task: WorkflowTaskRecord,
+    explicitReviewerId: string | undefined,
+    submitterIds: string[],
+    db: DatabaseClient,
+  ): Promise<string> {
+    const lawyerId = task.case.assignedLawyerId || null;
+    if (!lawyerId) {
+      throw new TaskSubmissionServiceError(409, 'RESPONSIBLE_LAWYER_MISSING', 'The case has no responsible lawyer; the Leadás cannot be routed for legal review.');
+    }
+    if (explicitReviewerId && explicitReviewerId !== lawyerId) {
+      throw new TaskSubmissionServiceError(409, 'REVIEWER_MUST_BE_RESPONSIBLE_LAWYER', 'The responsible-lawyer Leadás must be reviewed by the case responsible lawyer.');
+    }
+    if (submitterIds.filter(Boolean).includes(lawyerId)) {
+      throw new TaskSubmissionServiceError(409, 'SELF_REVIEW_NOT_ALLOWED', 'The responsible lawyer cannot review their own Leadás.');
+    }
+    const lawyer = await db.user.findUnique({
+      where: { id: lawyerId },
+      select: { id: true, role: true, status: true, isActive: true },
+    });
+    if (!lawyer || !lawyer.isActive || lawyer.status !== 'ACTIVE' || !REVIEWER_ROLES.has(String(lawyer.role))) {
+      throw new TaskSubmissionServiceError(409, 'RESPONSIBLE_LAWYER_INELIGIBLE', 'The case responsible lawyer is inactive or not eligible for legal review.');
+    }
+    return lawyerId;
   }
 
   async listEligibleReviewers(taskId: string, actorId: string): Promise<EligibleReviewerDto[]> {
@@ -430,7 +496,7 @@ export class TaskSubmissionService {
         if (latest?.status === 'RETURNED') {
           throw new TaskSubmissionServiceError(409, 'TASK_SUBMISSION_REVISE_REQUIRED', 'A returned revision must be continued through the explicit revise action.');
         }
-        const reviewerId = await this.resolveInitialReviewer(task, actorId, input.assignedReviewerId, tx);
+        const reviewerId = await this.resolveInitialReviewer(task, actorId, access.role, input.assignedReviewerId, tx);
 
         await tx.taskSubmission.create({
           data: {
@@ -496,6 +562,13 @@ export class TaskSubmissionService {
         }
       }
       if (input.assignedReviewerId) {
+        // Responsible-lawyer Leadás: the worker cannot tamper the reviewer to
+        // anyone but the case responsible lawyer. Decision-capable actors keep
+        // the existing non-final reviewer selection.
+        const responsibleLawyerFlow = task.assignedToId === actorId && !DECISION_ROLES.has(access.role);
+        if (responsibleLawyerFlow && input.assignedReviewerId !== task.case.assignedLawyerId) {
+          throw new TaskSubmissionServiceError(403, 'REVIEWER_MUST_BE_RESPONSIBLE_LAWYER', 'The responsible-lawyer Leadás reviewer cannot be changed by the worker.');
+        }
         await this.assertEligibleReviewer(task, input.assignedReviewerId, [actorId, task.assignedToId || ''], tx);
         data.assignedReviewer = { connect: { id: input.assignedReviewerId } };
       }
@@ -563,12 +636,27 @@ export class TaskSubmissionService {
       }
       // EXACT-VERSION BINDING: the reviewed output is bound to the document's
       // current version at attach time, so a later upload can never silently
-      // float an approved submission onto a different DocumentVersion.
-      const currentVersion = await tx.documentVersion.findFirst({
-        where: { documentId: input.documentId, isCurrent: true },
-        orderBy: { version: 'desc' },
-        select: { id: true },
-      });
+      // float an approved submission onto a different DocumentVersion. An
+      // explicit documentVersionId lets the worker pin a specific version when
+      // the current one is not the intended output.
+      let boundVersionId: string | null = null;
+      if (input.documentVersionId) {
+        const explicitVersion = await tx.documentVersion.findFirst({
+          where: { id: input.documentVersionId, documentId: input.documentId },
+          select: { id: true },
+        });
+        if (!explicitVersion) {
+          throw new TaskSubmissionServiceError(400, 'EXACT_VERSION_INVALID', 'The selected document version does not belong to the attached document.');
+        }
+        boundVersionId = explicitVersion.id;
+      } else {
+        const currentVersion = await tx.documentVersion.findFirst({
+          where: { documentId: input.documentId, isCurrent: true },
+          orderBy: { version: 'desc' },
+          select: { id: true },
+        });
+        boundVersionId = currentVersion?.id || null;
+      }
       const existing = await tx.taskSubmissionDocument.findUnique({
         where: {
           submissionId_documentId_role: {
@@ -584,7 +672,7 @@ export class TaskSubmissionService {
         data: {
           submissionId,
           documentId: input.documentId,
-          documentVersionId: currentVersion?.id || null,
+          documentVersionId: boundVersionId,
           role: input.role as TaskSubmissionDocumentRole,
           createdById: actorId,
         },
@@ -681,7 +769,7 @@ export class TaskSubmissionService {
   ): Promise<SubmissionReadinessDto> {
     const missing: SubmissionReadinessCode[] = [];
     const blocking: SubmissionReadinessCode[] = [];
-    const warnings: Array<'ZERO_TIME_CONFIRMED'> = [];
+    const warnings: Array<'ZERO_TIME_CONFIRMED' | 'VERSION_NOT_CURRENT'> = [];
 
     if (submission.status !== 'DRAFT') blocking.push('SUBMISSION_NOT_DRAFT');
     if (!submission.workSummary?.trim()) missing.push('WORK_SUMMARY_REQUIRED');
@@ -693,8 +781,40 @@ export class TaskSubmissionService {
     } else if (!(await this.reviewerPreference(task, submission.assignedReviewerId, db))) {
       blocking.push('REVIEWER_INELIGIBLE');
     }
+
+    // Responsible-lawyer Leadás: when the worker (non-decision role) submits,
+    // the reviewer MUST still resolve to the case's responsible lawyer. Fail
+    // closed with a specific, actionable readiness state.
+    const responsibleLawyerFlow = task.assignedToId === actorId && !DECISION_ROLES.has(actorRole);
+    if (responsibleLawyerFlow) {
+      if (!task.case.assignedLawyerId) {
+        blocking.push('RESPONSIBLE_LAWYER_MISSING');
+      } else if (submission.assignedReviewerId && submission.assignedReviewerId !== task.case.assignedLawyerId) {
+        blocking.push('REVIEWER_MUST_BE_RESPONSIBLE_LAWYER');
+      } else if (task.case.assignedLawyerId) {
+        const lawyer = await db.user.findUnique({
+          where: { id: task.case.assignedLawyerId },
+          select: { id: true, role: true, status: true, isActive: true },
+        });
+        if (!lawyer || !lawyer.isActive || lawyer.status !== 'ACTIVE' || !REVIEWER_ROLES.has(String(lawyer.role))) {
+          blocking.push('RESPONSIBLE_LAWYER_INELIGIBLE');
+        }
+      }
+    }
+
     if (!submission.documents.some((link) => link.role === 'PRIMARY_OUTPUT')) missing.push('OUTPUT_REQUIRED');
     if (submission.documents.some((link) => link.document.caseId !== task.caseId)) blocking.push('DOCUMENT_SCOPE_INVALID');
+
+    // EXACT VERSION: every linked output must carry a non-null exact
+    // DocumentVersion. Legacy null-version rows are preserved as history but a
+    // new Leadás cannot be submitted without an exact version binding.
+    for (const link of submission.documents) {
+      if (!link.documentVersionId) missing.push('EXACT_VERSION_REQUIRED');
+      const isCurrent = link.document.versions.some((version) => version.id === link.documentVersionId);
+      if (link.documentVersionId && link.document.versions.length > 0 && !isCurrent) {
+        warnings.push('VERSION_NOT_CURRENT');
+      }
+    }
 
     const invalidTime = submission.timeEntries.some((link) =>
       link.timeEntry.matterId !== task.matterId || link.timeEntry.taskId !== task.id,
@@ -743,6 +863,8 @@ export class TaskSubmissionService {
     const readiness = activeDraft
       ? await this.computeReadiness(task, activeDraft, actorId, access.role, this.db)
       : null;
+    const responsibleLawyerFlow = task.assignedToId === actorId && !DECISION_ROLES.has(access.role);
+    const responsibleLawyer = safeUser(task.case.assignedLawyer || null);
     const canEditDraft = Boolean(activeDraft) && access.canPrepare && activeDraft?.assignedReviewerId !== actorId;
     const returnedRevision = submissions.find((submission) => submission.status === 'RETURNED') || null;
     const approvedRevision = submissions.find((submission) => submission.status === 'APPROVED') || null;
@@ -790,6 +912,8 @@ export class TaskSubmissionService {
       latestSubmittedRevision: latestSubmitted ? toSubmissionDto(latestSubmitted) : null,
       latestDecision: latestSubmitted?.reviewDecision ? toSubmissionDto(latestSubmitted).reviewDecision : null,
       currentReviewer: safeUser(activeDraft?.assignedReviewer || latestSubmitted?.assignedReviewer || null),
+      responsibleLawyerFlow,
+      responsibleLawyer,
       readiness,
       permittedActions: {
         read: true,
@@ -797,7 +921,7 @@ export class TaskSubmissionService {
         editDraft: canEditDraft,
         attachDocument: canEditDraft,
         attachTimeEntry: canEditDraft,
-        assignReviewer: canEditDraft,
+        assignReviewer: canEditDraft && !responsibleLawyerFlow,
         submit: Boolean(activeDraft && readiness?.ready && access.isTaskAssignee),
         reviewSubmitted: Boolean(latestSubmitted && readableSubmitted && latestSubmitted.assignedReviewerId === actorId && latestSubmitted.submittedById !== actorId),
         reviseReturned: canReviseReturned,
@@ -812,11 +936,15 @@ export class TaskSubmissionService {
     submissionId: string,
     actorId: string,
     idempotencyKey: string,
+    confirmedDocumentVersionIds: string[] = [],
   ): Promise<{ idempotentReplay: boolean; workflow: TaskSubmissionWorkflowDto; submission: TaskSubmissionDto }> {
     const normalizedKey = idempotencyKey.trim();
     if (!normalizedKey || normalizedKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
       throw new TaskSubmissionServiceError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'A valid Idempotency-Key header is required.');
     }
+    const confirmedIds = Array.isArray(confirmedDocumentVersionIds)
+      ? confirmedDocumentVersionIds.map((value) => String(value)).filter(Boolean)
+      : [];
 
     const result = await withSerializableRetry(this.db, async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "tasks" WHERE "id" = ${taskId} FOR UPDATE`);
@@ -844,6 +972,35 @@ export class TaskSubmissionService {
 
       this.assertCanPrepare(access, submission, actorId);
       this.assertDraft(submission);
+
+      // Responsible-lawyer contract at submit time (authoritative fail-closed
+      // gate with specific, actionable errors): for a worker (non-decision
+      // role) Leadás the reviewer MUST resolve to the case's responsible
+      // lawyer — present, active, review-eligible, different from the worker.
+      const responsibleLawyerFlow = task.assignedToId === actorId && !DECISION_ROLES.has(access.role);
+      if (responsibleLawyerFlow) {
+        await this.resolveResponsibleLawyerReviewer(task, submission.assignedReviewerId, [actorId, task.assignedToId || ''], tx);
+      }
+
+      // EXACT VERSION at Leadás: when a bound output version is no longer the
+      // document's current version (a newer version exists), the worker must
+      // explicitly confirm the exact submitted version ids. Confirmation ids
+      // must match the bound ids exactly — no silent substitution.
+      const boundVersionIds = submission.documents
+        .map((link) => link.documentVersionId)
+        .filter((value): value is string => Boolean(value));
+      const hasSupersededOutput = submission.documents.some(
+        (link) => link.documentVersionId && link.document.versions.length > 0 && !link.document.versions.some((version) => version.id === link.documentVersionId),
+      );
+      if (hasSupersededOutput) {
+        const confirmedSet = new Set(confirmedIds);
+        const unconfirmed = boundVersionIds.filter((id) => !confirmedSet.has(id));
+        const unknown = confirmedIds.filter((id) => !boundVersionIds.includes(id));
+        if (unconfirmed.length > 0 || unknown.length > 0) {
+          throw new TaskSubmissionServiceError(409, 'EXACT_VERSION_CONFIRMATION_REQUIRED', 'A newer document version exists. Confirm the exact submitted version(s) before Leadás.');
+        }
+      }
+
       const readiness = await this.computeReadiness(task, submission, actorId, access.role, tx);
       if (!readiness.ready) {
         throw new TaskSubmissionServiceError(409, 'HANDOFF_NOT_READY', 'The task submission is not ready.',);
@@ -877,6 +1034,7 @@ export class TaskSubmissionService {
         eventType: auditType,
         attention: submission.requestedAttention,
         documentCount: submission.documents.length,
+        documentVersionIds: boundVersionIds,
         timeEntryCount: submission.timeEntries.length,
         zeroTimeConfirmed: submission.zeroTimeConfirmed,
         status: 'SUBMITTED',
@@ -916,6 +1074,10 @@ export class TaskSubmissionService {
   async getSubmissionReviewQueue(userId: string): Promise<any[]> {
     const user = await this.db.user.findUnique({ where: { id: userId }, select: { id: true, role: true } });
     if (!user) return [];
+    // Visibility keeps the legacy navigation rows (assigner, responsible
+    // lawyer, case creator, collaborators) so no existing surface loses its
+    // read access; ACTIONABLE authority below is granted ONLY to the
+    // submission's assigned reviewer.
     const submissions = await this.db.taskSubmission.findMany({
       where: {
         status: 'SUBMITTED',
@@ -939,6 +1101,10 @@ export class TaskSubmissionService {
         submittedAt: true,
         submittedBy: { select: { id: true, name: true, email: true, role: true } },
         assignedReviewer: { select: { id: true, name: true, email: true, role: true } },
+        documents: {
+          select: { id: true, documentId: true, documentVersionId: true, role: true },
+          orderBy: { createdAt: 'asc' as const },
+        },
         task: {
           select: {
             id: true,
@@ -967,6 +1133,7 @@ export class TaskSubmissionService {
 
     return submissions.map((submission) => {
       const { client, ...safeCase } = submission.task.case;
+      const actionable = submission.assignedReviewer?.id === userId;
       return {
       id: submission.taskId,
       source: 'TASK_SUBMISSION',
@@ -982,11 +1149,19 @@ export class TaskSubmissionService {
       submittedBy: safeUser(submission.submittedBy),
       assignedReviewer: safeUser(submission.assignedReviewer),
       requestedAttention: submission.requestedAttention ? String(submission.requestedAttention) : null,
+      attentionEstimate: attentionEstimateFor(submission.requestedAttention),
       externalActionRequired: submission.externalActionRequired,
       workSummaryPreview: boundedPreview(submission.workSummary),
       submissionDocumentCount: submission._count.documents,
+      documentVersions: (submission.documents ?? []).map((link) => ({
+        documentId: link.documentId,
+        documentVersionId: link.documentVersionId,
+        role: String(link.role),
+      })),
       linkedTimeMinutes: submission.timeEntries.reduce((sum, link) => sum + link.timeEntry.minutes, 0),
-      nextActionCode: 'OPEN_REVIEW',
+      actionable,
+      readOnly: !actionable,
+      nextActionCode: actionable ? 'OPEN_REVIEW' : 'VIEW_SUBMISSION',
       case: { ...safeCase, clientColorKey: client?.colorKey ? String(client.colorKey) : null },
       };
     });
