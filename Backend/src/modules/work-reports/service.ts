@@ -20,11 +20,13 @@
 
 import { resolveTimeEntryAttribution } from '../../routes/timeEntries';
 import { buildCaseReadScope } from '../cases/authorization';
+import { readIssuerProfile } from '../invoice-drafts/service';
 import {
   CASE_STATUS_LABELS,
   CLIENT_EXPORT_UNKNOWN_WORK_TYPE_LABEL,
   CLIENT_WORK_REPORT_CASES_KIND,
   CLIENT_WORK_REPORT_KIND,
+  CLIENT_WORK_REPORT_OWNERS_KIND,
   CLOSED_CASE_STATUSES,
   SAFE_UPDATE_CATEGORY_LABELS,
   WORK_TYPE_LABELS,
@@ -33,6 +35,10 @@ import {
   type ClientWorkReportCasesResponse,
   type ClientWorkReportCaseSummary,
   type ClientWorkReportExport,
+  type ClientWorkReportIssuer,
+  type ClientWorkReportOwner,
+  type ClientWorkReportOwnerCandidate,
+  type ClientWorkReportOwnersResponse,
   type ClientWorkReportPeriod,
   type WorkReportRow,
   type WorkReportSafeUpdate,
@@ -295,6 +301,113 @@ async function loadSafeUpdates(db: any, caseId: string): Promise<WorkReportSafeU
     }));
 }
 
+// ============================================================================
+// ISSUER IDENTITY AND CLIENT-SIDE OWNER RESOLUTION
+// ============================================================================
+//
+// The issuer is the law firm; Adminiculum is only the software that prepares
+// the report. Identity is read from the existing billing.issuerProfile
+// SystemSetting (single source of truth), projected to the narrow identity
+// fields only — bank, VAT, rate and payment configuration never leave the
+// invoice module and never reach this report.
+//
+// The client-side owner ("Ügygazda az ügyfélnél") is a REPORT-LEVEL selection
+// from OrganizationPerson rows of the report's client, validated server-side
+// against the canonical clientId relation. It is deliberately NOT derived from
+// Case.assignedLawyer, a task assignee, a reviewer, an email sender, or the
+// first requester. It does not create a durable case-owner assignment.
+
+export interface WorkReportIssuerResolution {
+  issuer: ClientWorkReportIssuer;
+  missingEssential: string[];
+  officeIdentifierNote: string;
+}
+
+export type WorkReportOwnerResolution = { owner: ClientWorkReportOwner | null } | { invalid: true };
+
+/** Identity-only projection of the billing issuer profile. Never returns
+ * financial configuration, never looks anything up online. */
+export async function resolveWorkReportIssuer(db: any): Promise<WorkReportIssuerResolution> {
+  const profile = await readIssuerProfile(db);
+  const issuer: ClientWorkReportIssuer = {
+    legalName: profile.legalName?.trim() || null,
+    address: profile.address?.trim() || null,
+    taxNumber: profile.taxNumber?.trim() || null,
+    email: profile.email?.trim() || null,
+    phone: profile.phone?.trim() || null,
+  };
+  const missingEssential: string[] = [];
+  if (!issuer.legalName) missingEssential.push('Kiállító neve');
+  if (!issuer.address) missingEssential.push('Kiállító címe');
+  if (!issuer.taxNumber) missingEssential.push('Kiállító adószáma');
+  // The stored registrationNumber's meaning for a law firm (chamber registry
+  // number vs company registry number) is not independently verified, so it is
+  // never printed in the customer PDF; its presence/absence is flagged here.
+  const officeIdentifierNote = profile.registrationNumber?.trim()
+    ? 'A kiállítói profilban szereplő nyilvántartási szám ügyvédi irodára vonatkozó értelmezése nem ellenőrzött, ezért az ügyfél-kivonat nem tartalmazza.'
+    : 'Az iroda kamarai nyilvántartási száma nem szerepel a kiállítói profilban, ezért az ügyfél-kivonat nem tartalmazza.';
+  return { issuer, missingEssential, officeIdentifierNote };
+}
+
+/**
+ * Resolves a report-level client-side owner by stable person id, strictly
+ * inside the report's client. A missing selection resolves to null ("Nincs
+ * megadva"); a person that does not exist or belongs to another client fails
+ * safely as `invalid` — it is never guessed from the first requester.
+ */
+export async function resolveWorkReportOwner(
+  db: any,
+  input: { clientId: string; ownerPersonId: string | null },
+): Promise<WorkReportOwnerResolution> {
+  const ownerPersonId = input.ownerPersonId?.trim() || null;
+  if (!ownerPersonId) return { owner: null };
+  const person = await db.organizationPerson.findUnique({
+    where: { id: ownerPersonId },
+    select: {
+      id: true,
+      clientId: true,
+      name: true,
+      jobTitle: true,
+      organizationGroup: { select: { name: true } },
+    },
+  });
+  if (!person || person.clientId !== input.clientId) return { invalid: true };
+  return {
+    owner: {
+      personId: person.id,
+      name: person.name,
+      jobTitle: person.jobTitle ?? null,
+      organizationGroupName: person.organizationGroup?.name ?? null,
+    },
+  };
+}
+
+/** People of one client eligible for the report-level owner selection. */
+export async function listReportOwnerCandidates(
+  db: any,
+  input: { clientId: string },
+): Promise<ClientWorkReportOwnersResponse | null> {
+  const client = await db.client.findUnique({ where: { id: input.clientId }, select: { id: true, name: true } });
+  if (!client) return null;
+  const people = await db.organizationPerson.findMany({
+    where: { clientId: input.clientId },
+    select: { id: true, name: true, jobTitle: true, organizationGroup: { select: { name: true } } },
+    orderBy: [{ name: 'asc' }],
+  });
+  const candidates: ClientWorkReportOwnerCandidate[] = people.map((person: any) => ({
+    personId: person.id,
+    name: person.name,
+    jobTitle: person.jobTitle ?? null,
+    organizationGroupName: person.organizationGroup?.name ?? null,
+  }));
+  return {
+    kind: CLIENT_WORK_REPORT_OWNERS_KIND,
+    client: { id: client.id, name: client.name },
+    people: candidates,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
 /**
  * Lists client cases eligible for the work report: every closed case is kept
  * even with zero time, plus every case that has any in-period work in scope.
@@ -386,8 +499,15 @@ export async function buildCaseReport(
  * Only the finite work-type label map is used for the category; an unknown
  * work type receives the neutral truthful label instead of an invented
  * narrative or a leaked internal enum.
+ *
+ * The issuer identity and the resolved report-level client-side owner are
+ * passed in explicitly, so the export preview and the PDF always carry the
+ * exact same server-resolved projection — the frontend never guesses them.
  */
-export function projectClientWorkReportExport(report: ClientWorkReport): ClientWorkReportExport {
+export function projectClientWorkReportExport(
+  report: ClientWorkReport,
+  context: { issuer: ClientWorkReportIssuer | null; owner: ClientWorkReportOwner | null },
+): ClientWorkReportExport {
   return {
     kind: report.kind,
     client: report.client,
@@ -406,6 +526,8 @@ export function projectClientWorkReportExport(report: ClientWorkReport): ClientW
       recordedMinutes: report.case.recordedMinutes,
       recordedEntryCount: report.case.recordedEntryCount,
     },
+    owner: context.owner,
+    issuer: context.issuer,
     rows: report.rows.map((row) => ({
       timeEntryId: row.timeEntryId,
       workDate: row.workDate,

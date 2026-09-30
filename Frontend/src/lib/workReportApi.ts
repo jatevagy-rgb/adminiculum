@@ -40,6 +40,35 @@ export interface WorkReportPeriod {
   endDate: string | null;
 }
 
+export interface ClientWorkReportIssuer {
+  legalName: string | null;
+  address: string | null;
+  taxNumber: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+export interface ClientWorkReportOwner {
+  personId: string;
+  name: string;
+  jobTitle: string | null;
+  organizationGroupName: string | null;
+}
+
+export interface ClientWorkReportOwnerCandidate {
+  personId: string;
+  name: string;
+  jobTitle: string | null;
+  organizationGroupName: string | null;
+}
+
+export interface ClientWorkReportOwnersResponse {
+  kind: 'CLIENT_WORK_REPORT_OWNERS_V1';
+  client: { id: string; name: string };
+  people: ClientWorkReportOwnerCandidate[];
+  generatedAt: string;
+}
+
 export interface ClientWorkReportCaseListItem {
   caseId: string;
   caseNumber: string;
@@ -100,6 +129,47 @@ export interface ClientWorkReport {
   generatedAt: string;
 }
 
+export interface ClientWorkReportExportRow {
+  timeEntryId: string;
+  workDate: string;
+  workerName: string | null;
+  workTypeLabel: string;
+  minutes: number;
+}
+
+export interface ClientWorkReportExport {
+  kind: 'CLIENT_WORK_REPORT_V1';
+  client: { id: string; name: string };
+  period: WorkReportPeriod;
+  case: {
+    caseId: string;
+    caseNumber: string;
+    caseTitle: string;
+    caseStatusLabel: string;
+    completedAt: string | null;
+    matter: { id: string; title: string } | null;
+    responsibleLawyerName: string | null;
+    requesterNames: string[];
+    organizationGroupNames: string[];
+    departmentNames: string[];
+    recordedMinutes: number;
+    recordedEntryCount: number;
+  };
+  owner: ClientWorkReportOwner | null;
+  issuer: ClientWorkReportIssuer | null;
+  rows: ClientWorkReportExportRow[];
+  safeUpdates: WorkReportSafeUpdate[];
+  generatedAt: string;
+}
+
+export interface ClientWorkReportDetail extends ClientWorkReport {
+  owner: ClientWorkReportOwner | null;
+  issuer: ClientWorkReportIssuer | null;
+  issuerMissing: string[];
+  officeIdentifierNote: string;
+  exportPreview: ClientWorkReportExport | null;
+}
+
 export interface WorkReportPeriodQuery {
   startDate?: string;
   endDate?: string;
@@ -113,14 +183,23 @@ function periodParams(period?: WorkReportPeriodQuery): string {
   return suffix ? `?${suffix}` : '';
 }
 
+function withOwnerParam(pathWithPeriod: string, ownerPersonId?: string | null): string {
+  if (!ownerPersonId) return pathWithPeriod;
+  return `${pathWithPeriod}${pathWithPeriod.includes('?') ? '&' : '?'}ownerPersonId=${encodeURIComponent(ownerPersonId)}`;
+}
+
 export function listWorkReportCases(clientId: string, period?: WorkReportPeriodQuery): Promise<ClientWorkReportCasesResponse> {
   return fetchApi<ClientWorkReportCasesResponse>(`/work-reports/cases?clientId=${encodeURIComponent(clientId)}${periodParams(period).replace('?', '&')}`);
 }
 
-export function getWorkReportCase(caseId: string, period?: WorkReportPeriodQuery): Promise<ClientWorkReport> {
-  return fetchApi<ClientWorkReport>(`/work-reports/cases/${encodeURIComponent(caseId)}${periodParams(period)}`);
+export function listWorkReportOwnerCandidates(clientId: string): Promise<ClientWorkReportOwnersResponse> {
+  return fetchApi<ClientWorkReportOwnersResponse>(`/work-reports/clients/${encodeURIComponent(clientId)}/owners`);
 }
 
-export function downloadWorkReportPdf(caseId: string, period?: WorkReportPeriodQuery): Promise<{ blob: Blob; filename: string | null }> {
-  return fetchApiBlob(`/work-reports/cases/${encodeURIComponent(caseId)}/pdf${periodParams(period)}`);
+export function getWorkReportCase(caseId: string, period?: WorkReportPeriodQuery, ownerPersonId?: string | null): Promise<ClientWorkReportDetail> {
+  return fetchApi<ClientWorkReportDetail>(withOwnerParam(`/work-reports/cases/${encodeURIComponent(caseId)}${periodParams(period)}`, ownerPersonId));
+}
+
+export function downloadWorkReportPdf(caseId: string, period?: WorkReportPeriodQuery, ownerPersonId?: string | null): Promise<{ blob: Blob; filename: string | null }> {
+  return fetchApiBlob(withOwnerParam(`/work-reports/cases/${encodeURIComponent(caseId)}/pdf${periodParams(period)}`, ownerPersonId));
 }

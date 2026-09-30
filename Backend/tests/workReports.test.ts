@@ -3,11 +3,14 @@ import {
   buildCaseReport,
   bucketCaseEntries,
   listReportCases,
+  listReportOwnerCandidates,
   parsePeriodQuery,
   projectClientWorkReportExport,
+  resolveWorkReportIssuer,
+  resolveWorkReportOwner,
 } from '../src/modules/work-reports/service';
 import { renderClientWorkReportPdf } from '../src/modules/work-reports/pdf';
-import type { ClientWorkReport } from '../src/modules/work-reports/types';
+import type { ClientWorkReport, ClientWorkReportIssuer, ClientWorkReportOwner } from '../src/modules/work-reports/types';
 
 // ── fixtures ────────────────────────────────────────────────────────────────
 
@@ -63,6 +66,35 @@ function dbFor(caseRow: any, entries: any[] = [], safeUpdates: any[] = [], extra
 }
 
 const PERIOD_ALL = { startDate: null, endDate: null, dto: { startDate: null, endDate: null } };
+
+// Configured law-firm issuer identity (reference data for tests only — the
+// renderer always uses the resolved issuer, never a hardcoded firm name).
+const ISSUER: ClientWorkReportIssuer = {
+  legalName: 'Bálintfy és Társai Ügyvédi Iroda',
+  address: '1061 Budapest, Andrássy út 2. IV. emelet',
+  taxNumber: '28067935-2-42',
+  email: 'info@balintfy.hu',
+  phone: '+36 1 302 8900',
+};
+
+const OWNER_KISS_ILONA: ClientWorkReportOwner = {
+  personId: 'op-9',
+  name: 'Kiss Ilona',
+  jobTitle: 'Beszerzési vezető',
+  organizationGroupName: 'Beszerzés',
+};
+
+function project(report: ClientWorkReport, owner: ClientWorkReportOwner | null = null) {
+  return projectClientWorkReportExport(report, { issuer: ISSUER, owner });
+}
+
+function issuerDb(profileValue: unknown): any {
+  return {
+    systemSetting: {
+      findUnique: async () => (profileValue === undefined ? null : { key: 'billing.issuerProfile', value: profileValue }),
+    },
+  } as any;
+}
 
 const FORBIDDEN_KEY = /\b(rate|hourlyRate|rateVersion|rateScope|rateOverride|netAmount|vatRate|vatAmount|grossAmount|unitPrice|price|fee|amount|currency|adjustment|billing|invoice|money)\b/i;
 
@@ -317,11 +349,11 @@ describe('rate-free work-report PDF', () => {
   }
 
   it('renders the client work report and prints no rate, amount, or VAT anywhere', async () => {
-    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(await sampleReport()));
+    const pdf = await renderClientWorkReportPdf(project(await sampleReport()));
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
     const parsed = await pdfText(pdf);
     const text = parsed.text.replace(/\s+/g, ' ');
-    expect(text).toContain('ÜGYFÉL MUNKAJELENTÉS');
+    expect(text).toContain('MUNKAÓRA-KIMUTATÁS');
     expect(text).not.toContain('Szerződés tervezet előkészítése');
     expect(text).toContain('Szerkesztés');
     expect(text).toContain('Nagy Réka');
@@ -337,7 +369,7 @@ describe('rate-free work-report PDF', () => {
   });
 
   it('is deterministic for the same frozen report snapshot', async () => {
-    const report = projectClientWorkReportExport(await sampleReport());
+    const report = project(await sampleReport());
     const first = await pdfText(await renderClientWorkReportPdf(report));
     const second = await pdfText(await renderClientWorkReportPdf(report));
     expect(second.text).toBe(first.text);
@@ -396,8 +428,8 @@ describe('client-export boundary (internal diagnostics never reach the client PD
   });
 
   it('excludes ambiguous and excluded rows and aggregates from the client-export DTO', async () => {
-    const exportReport = projectClientWorkReportExport(await markerReport());
-    expect(Object.keys(exportReport)).toEqual(['kind', 'client', 'period', 'case', 'rows', 'safeUpdates', 'generatedAt']);
+    const exportReport = project(await markerReport());
+    expect(Object.keys(exportReport)).toEqual(['kind', 'client', 'period', 'case', 'owner', 'issuer', 'rows', 'safeUpdates', 'generatedAt']);
     expect(Object.keys(exportReport.case)).toEqual([
       'caseId', 'caseNumber', 'caseTitle', 'caseStatusLabel', 'completedAt', 'matter',
       'responsibleLawyerName', 'requesterNames', 'organizationGroupNames', 'departmentNames',
@@ -415,7 +447,7 @@ describe('client-export boundary (internal diagnostics never reach the client PD
   });
 
   it('never prints ambiguous or excluded content in the client PDF', async () => {
-    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(await markerReport()));
+    const pdf = await renderClientWorkReportPdf(project(await markerReport()));
     const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
     expect(text).not.toContain(AMBIG_MARKER);
     expect(text).not.toContain(EXCLUDED_MARKER);
@@ -427,7 +459,7 @@ describe('client-export boundary (internal diagnostics never reach the client PD
   });
 
   it('client PDF totals equal included time only', async () => {
-    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(await markerReport()));
+    const pdf = await renderClientWorkReportPdf(project(await markerReport()));
     const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
     expect(text).toContain('1 ó 30 p');
     expect(text).not.toContain('1 ó 15 p');
@@ -444,7 +476,7 @@ describe('client-export boundary (internal diagnostics never reach the client PD
     } as any;
     const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
     expect(report!.rows).toHaveLength(0);
-    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(report!));
+    const pdf = await renderClientWorkReportPdf(project(report!));
     const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
     expect(text).toContain('nincs rögzített');
     expect(text).not.toContain(AMBIG_MARKER);
@@ -458,7 +490,7 @@ describe('client-export boundary (internal diagnostics never reach the client PD
       clientSafeUpdate: { findMany: async () => [{ id: 'su-1', caseId: 'case-1', title: 'Állapotfrissítés', body: 'Az ügy lezárult.', category: 'STATUS', status: 'PUBLISHED', publishedAt: new Date('2026-09-10T00:00:00.000Z') }] },
     } as any;
     const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
-    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(report!));
+    const pdf = await renderClientWorkReportPdf(project(report!));
     const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
     expect(text).toContain('ÜGYFÉLNEK KÖZZÉTETT TÁJÉKOZTATÁSOK');
     expect(text).toContain('Állapotfrissítés');
@@ -476,7 +508,7 @@ describe('client-export boundary (internal diagnostics never reach the client PD
     expect(report!.rows[0].description).toBe(`Szerződés tervezet előkészítése ${INCLUDED_MARKER}`);
     expect(JSON.stringify(report)).toContain(INCLUDED_MARKER);
 
-    const exportReport = projectClientWorkReportExport(report!);
+    const exportReport = project(report!);
     expect(JSON.stringify(exportReport)).not.toContain(INCLUDED_MARKER);
 
     const pdf = await renderClientWorkReportPdf(exportReport);
@@ -502,7 +534,7 @@ describe('client-export boundary (internal diagnostics never reach the client PD
     } as any;
     const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
     expect(report!.rows[0].workTypeLabel).toBe('EXOTIC_TYPE');
-    const exportReport = projectClientWorkReportExport(report!);
+    const exportReport = project(report!);
     expect(exportReport.rows[0].workTypeLabel).toBe('Egyéb');
     expect(JSON.stringify(exportReport)).not.toContain('EXOTIC_TYPE');
   });
@@ -537,6 +569,8 @@ describe('client-export boundary (internal diagnostics never reach the client PD
       safeUpdates: [
         { title: 'Állapotfrissítés', body: 'Az árvíztűrő tükörfúrógép beszerzése a jóváhagyási szakaszba lépett.', category: 'STATUS', categoryLabel: 'Állapot', publishedAt: '2026-09-30' },
       ],
+      owner: OWNER_KISS_ILONA,
+      issuer: ISSUER,
       generatedAt: '2026-09-30T20:00:00.000Z',
     };
     const pdf = await renderClientWorkReportPdf(exportReport);
@@ -557,5 +591,211 @@ describe('client-export boundary (internal diagnostics never reach the client PD
     for (const forbidden of ['Óradíj', 'Nettó', 'ÁFA', 'Bruttó', 'Ft', 'HUF']) {
       expect(text).not.toContain(forbidden);
     }
+  });
+});
+
+// ── law-firm issuer identity ────────────────────────────────────────────────
+
+describe('law-firm issuer identity for the client export', () => {
+  it('projects only identity fields from the billing issuer profile', async () => {
+    const db = issuerDb({
+      legalName: 'Bálintfy és Társai Ügyvédi Iroda',
+      address: '1061 Budapest, Andrássy út 2. IV. emelet',
+      taxNumber: '28067935-2-42',
+      registrationNumber: 'K-999',
+      bankName: 'BELSŐ-BANK-NÉV',
+      bankAccountNumber: '111-222-333',
+      defaultVatRate: '27',
+      defaultPaymentTermDays: 8,
+      email: 'info@balintfy.hu',
+      phone: '+36 1 302 8900',
+    });
+    const result = await resolveWorkReportIssuer(db);
+    expect(result.issuer).toEqual({
+      legalName: 'Bálintfy és Társai Ügyvédi Iroda',
+      address: '1061 Budapest, Andrássy út 2. IV. emelet',
+      taxNumber: '28067935-2-42',
+      email: 'info@balintfy.hu',
+      phone: '+36 1 302 8900',
+    });
+    expect(result.missingEssential).toEqual([]);
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('BELSŐ-BANK-NÉV');
+    expect(serialized).not.toContain('111-222-333');
+    expect(serialized).not.toContain('defaultVatRate');
+    expect(serialized).not.toContain('defaultPaymentTermDays');
+    expect(serialized).not.toContain('K-999');
+    expect(result.officeIdentifierNote).toMatch(/nem ellenőrzött/);
+  });
+
+  it('flags missing essential identity fields with actionable Hungarian labels', async () => {
+    const result = await resolveWorkReportIssuer(issuerDb({}));
+    expect(result.missingEssential).toEqual(['Kiállító neve', 'Kiállító címe', 'Kiállító adószáma']);
+    expect(result.issuer.legalName).toBeNull();
+    expect(result.officeIdentifierNote).toMatch(/nem szerepel a kiállítói profilban/);
+  });
+
+  it('never invents or mislabels an unverified registration identifier in the customer PDF', async () => {
+    const db = issuerDb({
+      legalName: ISSUER.legalName,
+      address: ISSUER.address,
+      taxNumber: ISSUER.taxNumber,
+      registrationNumber: 'KAMARA-12345',
+      email: ISSUER.email,
+      phone: ISSUER.phone,
+    });
+    const issuerResolution = await resolveWorkReportIssuer(db);
+    expect(JSON.stringify(issuerResolution.issuer)).not.toContain('KAMARA-12345');
+    const report = await buildCaseReport(
+      dbFor(caseRecord(), [entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60 })]),
+      { caseId: 'case-1', period: PERIOD_ALL },
+    );
+    const exportReport = projectClientWorkReportExport(report!, { issuer: issuerResolution.issuer, owner: null });
+    expect(JSON.stringify(exportReport)).not.toContain('KAMARA-12345');
+    const pdf = await renderClientWorkReportPdf(exportReport);
+    const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
+    expect(text).not.toContain('KAMARA-12345');
+    expect(text).not.toContain('Cégjegyzékszám');
+    expect(text).not.toContain('Kamarai nyilvántartási szám');
+  });
+
+  it('prints the configured law firm as issuer in header, footer and PDF metadata', async () => {
+    const report = await buildCaseReport(
+      dbFor(caseRecord(), [entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60 })]),
+      { caseId: 'case-1', period: PERIOD_ALL },
+    );
+    const pdf = await renderClientWorkReportPdf(project(report!));
+    const parsed = await pdfText(pdf);
+    const text = parsed.text.replace(/\s+/g, ' ');
+    expect(text).toContain('Bálintfy és Társai Ügyvédi Iroda');
+    expect(text).toContain('1061 Budapest, Andrássy út 2. IV. emelet');
+    expect(text).toContain('Adószám: 28067935-2-42');
+    expect(text).toContain('info@balintfy.hu');
+    expect(text).toContain('+36 1 302 8900');
+    expect(text).toContain('MUNKAÓRA-KIMUTATÁS');
+    expect(text).toContain('Készült az Adminiculum rendszerében');
+    expect(parsed.info ?? '').toContain('Bálintfy és Társai Ügyvédi Iroda');
+    expect(parsed.info ?? '').toContain('Adminiculum');
+  });
+
+  it('refuses to render without the essential issuer identity', async () => {
+    const report = await buildCaseReport(
+      dbFor(caseRecord(), [entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60 })]),
+      { caseId: 'case-1', period: PERIOD_ALL },
+    );
+    const exportReport = projectClientWorkReportExport(report!, {
+      issuer: { legalName: null, address: null, taxNumber: null, email: null, phone: null },
+      owner: null,
+    });
+    await expect(renderClientWorkReportPdf(exportReport)).rejects.toMatchObject({ code: 'WORK_REPORT_ISSUER_CONFIGURATION_REQUIRED' });
+  });
+});
+
+// ── client-side case owner ──────────────────────────────────────────────────
+
+describe('report-level client-side case owner (Ügygazda az ügyfélnél)', () => {
+  it('resolves the owner from a stable person id inside the report client', async () => {
+    const db = {
+      organizationPerson: {
+        findUnique: async () => ({ id: 'op-9', clientId: 'client-1', name: 'Kiss Ilona', jobTitle: 'Beszerzési vezető', organizationGroup: { name: 'Beszerzés' } }),
+      },
+    } as any;
+    const result = await resolveWorkReportOwner(db, { clientId: 'client-1', ownerPersonId: 'op-9' });
+    expect('invalid' in result).toBe(false);
+    expect(result).toEqual({ owner: OWNER_KISS_ILONA });
+  });
+
+  it('rejects a cross-client owner selection safely', async () => {
+    const db = {
+      organizationPerson: {
+        findUnique: async () => ({ id: 'op-9', clientId: 'client-2', name: 'Idegen Ilona', jobTitle: null, organizationGroup: null }),
+      },
+    } as any;
+    const result = await resolveWorkReportOwner(db, { clientId: 'client-1', ownerPersonId: 'op-9' });
+    expect(result).toEqual({ invalid: true });
+  });
+
+  it('rejects an unknown owner person id safely', async () => {
+    const db = {
+      organizationPerson: { findUnique: async () => null },
+    } as any;
+    const result = await resolveWorkReportOwner(db, { clientId: 'client-1', ownerPersonId: 'ghost' });
+    expect(result).toEqual({ invalid: true });
+  });
+
+  it('never infers an owner when none is selected', async () => {
+    const db = {
+      organizationPerson: { findUnique: async () => { throw new Error('must not be called'); } },
+    } as any;
+    const result = await resolveWorkReportOwner(db, { clientId: 'client-1', ownerPersonId: null });
+    expect(result).toEqual({ owner: null });
+  });
+
+  it('lists only people of the requested client as owner candidates', async () => {
+    const db = {
+      client: { findUnique: async () => ({ id: 'client-1', name: 'Minta Kft.' }) },
+      organizationPerson: {
+        findMany: async () => [
+          { id: 'op-1', name: 'Nagy Réka', jobTitle: 'HR vezető', organizationGroup: { name: 'HR' } },
+          { id: 'op-2', name: 'Kiss Ilona', jobTitle: null, organizationGroup: null },
+        ],
+      },
+    } as any;
+    const result = await listReportOwnerCandidates(db, { clientId: 'client-1' });
+    expect(result!.kind).toBe('CLIENT_WORK_REPORT_OWNERS_V1');
+    expect(result!.client).toEqual({ id: 'client-1', name: 'Minta Kft.' });
+    expect(result!.people.map((person) => person.personId)).toEqual(['op-1', 'op-2']);
+    expect(result!.people[0].organizationGroupName).toBe('HR');
+    expect(result!.people[1].organizationGroupName).toBeNull();
+  });
+
+  it('returns null owner candidates for a missing client', async () => {
+    const db = {
+      client: { findUnique: async () => null },
+      organizationPerson: { findMany: async () => [] },
+    } as any;
+    const result = await listReportOwnerCandidates(db, { clientId: 'ghost' });
+    expect(result).toBeNull();
+  });
+
+  it('keeps the owner distinct from the responsible lawyer and the original requester', async () => {
+    const task = {
+      id: 'task-1', title: 'HR kérés feldolgozása', caseId: 'case-1', matterId: 'matter-1', workPackageItem: null,
+      requestedByOrganizationPerson: {
+        id: 'op-1', name: 'Nagy Réka', jobTitle: 'HR vezető',
+        organizationGroup: { id: 'g-1', name: 'HR' },
+      },
+    };
+    const rows = [
+      entry({ id: 'te-1', caseId: null, matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 45, task }),
+    ];
+    const report = await buildCaseReport(dbFor(caseRecord(), rows), { caseId: 'case-1', period: PERIOD_ALL });
+    const exportReport = project(report!, OWNER_KISS_ILONA);
+    expect(exportReport.owner!.name).toBe('Kiss Ilona');
+    expect(exportReport.owner!.name).not.toBe(exportReport.case.responsibleLawyerName);
+    expect(exportReport.case.responsibleLawyerName).toBe('Dr. Kovács Péter');
+    expect(exportReport.case.requesterNames).toEqual(['Nagy Réka']);
+    expect(exportReport.owner!.name).not.toBe('Nagy Réka');
+
+    const pdf = await renderClientWorkReportPdf(exportReport);
+    const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
+    expect(text).toContain('ÜGYGAZDA AZ ÜGYFÉLNÉL');
+    expect(text).toContain('Kiss Ilona');
+    expect(text).toContain('SZERVEZETI EGYSÉG AZ ÜGYFÉLNÉL');
+    expect(text).toContain('Beszerzés');
+    // Megrendelő = confirmed client organization, not the first requester.
+    expect(text).toContain('MEGRENDELŐ');
+    expect(text).toContain('Minta Kft.');
+  });
+
+  it('shows Nincs megadva for an unselected owner in the PDF', async () => {
+    const report = await buildCaseReport(
+      dbFor(caseRecord(), [entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60 })]),
+      { caseId: 'case-1', period: PERIOD_ALL },
+    );
+    const pdf = await renderClientWorkReportPdf(project(report!, null));
+    const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
+    expect(text).toContain('ÜGYGAZDA AZ ÜGYFÉLNÉL');
+    expect(text).toContain('Nincs megadva');
   });
 });

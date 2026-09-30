@@ -22,6 +22,7 @@ test('work-report page wires shell, journey and download', () => {
   assert.match(page, /section="work-report"/);
   assert.match(page, /<PageHeader/);
   assert.match(page, /listWorkReportCases/);
+  assert.match(page, /listWorkReportOwnerCandidates/);
   assert.match(page, /getWorkReportCase/);
   assert.match(page, /downloadWorkReportPdf/);
   assert.match(page, /PDF letöltése/);
@@ -67,6 +68,13 @@ test('backend report routes require workforce + case read access', () => {
   assert.match(routes, /application\/pdf/);
 });
 
+test('backend routes validate the report-level owner and the issuer configuration', () => {
+  assert.match(routes, /ownerPersonId/);
+  assert.match(routes, /WORK_REPORT_OWNER_NOT_IN_CLIENT/);
+  assert.match(routes, /WORK_REPORT_ISSUER_CONFIGURATION_REQUIRED/);
+  assert.match(routes, /listReportOwnerCandidates/);
+});
+
 test('backend report service never reads billing or rate models', () => {
   assert.doesNotMatch(service, /hourlyRateVersion|billingPreparation|invoiceDraft|netAmountForMinutes/);
   assert.match(service, /requestedByOrganizationPerson/);
@@ -77,7 +85,7 @@ test('backend report service never reads billing or rate models', () => {
 test('PDF renderer prints no rate or money labels and marks itself as a report', () => {
   assert.doesNotMatch(pdf, /Óradíj|Nettó|ÁFA|Bruttó|Ft/);
   assert.match(pdf, /nem számla/);
-  assert.match(pdf, /ÜGYFÉL MUNKAJELENTÉS/);
+  assert.match(pdf, /MUNKAÓRA-KIMUTATÁS/);
 });
 
 test('PDF renderer receives only the client-export projection, never internal diagnostics', () => {
@@ -85,6 +93,15 @@ test('PDF renderer receives only the client-export projection, never internal di
   assert.match(pdf, /ClientWorkReportExport/);
   assert.match(routes, /projectClientWorkReportExport/);
   assert.doesNotMatch(routes, /renderClientWorkReportPdf\(report\)/);
+});
+
+test('PDF renderer uses the configured law firm as issuer, never Adminiculum as the issuer', () => {
+  assert.match(pdf, /issuer\.legalName/);
+  assert.match(pdf, /Author: issuer\.legalName/);
+  assert.match(pdf, /Creator: 'Adminiculum'/);
+  assert.match(pdf, /Készült az Adminiculum rendszerében/);
+  assert.match(pdf, /WORK_REPORT_ISSUER_CONFIGURATION_REQUIRED/);
+  assert.doesNotMatch(pdf, /'Adminiculum', margin, y/);
 });
 
 test('client-export PDF never prints raw work descriptions', () => {
@@ -109,4 +126,20 @@ test('internal review shows full descriptions while the export preview omits the
   assert.match(previewBlock, /row\.workerName/);
   assert.match(previewBlock, /row\.workTypeLabel/);
   assert.match(previewBlock, /row\.minutes/);
+});
+
+test('export preview renders the same server-side projection the PDF uses', () => {
+  assert.match(page, /exportPreview/);
+  assert.match(page, /report\.exportPreview\.rows/);
+  assert.match(page, /issuerMissing/);
+  assert.match(page, /officeIdentifierNote/);
+});
+
+test('report page offers the report-level client-side owner, never a fake persisted assignment', () => {
+  assert.match(page, /Ügygazda az ügyfélnél/);
+  assert.match(page, /ez a kiválasztás ehhez a jelentéshez tartozik/i);
+  assert.match(page, /person\.personId/);
+  assert.match(page, /WORK_REPORT_OWNER_NOT_IN_CLIENT/);
+  assert.match(page, /reportSeq/);
+  assert.match(page, /casesSeq/);
 });

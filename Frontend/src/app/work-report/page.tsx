@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
   Alert,
@@ -19,14 +19,16 @@ import {
   MetricTile,
   PageHeader,
 } from "@/components/ui";
-import { getClients } from "@/lib/api";
+import { ApiError, getClients } from "@/lib/api";
 import {
   downloadWorkReportPdf,
   getWorkReportCase,
   listWorkReportCases,
-  type ClientWorkReport,
+  listWorkReportOwnerCandidates,
   type ClientWorkReportCaseListItem,
   type ClientWorkReportCasesResponse,
+  type ClientWorkReportDetail,
+  type ClientWorkReportOwnerCandidate,
 } from "@/lib/workReportApi";
 
 const ZERO_TIME_TEXT =
@@ -77,11 +79,18 @@ function WorkReportPageContent() {
   const [period, setPeriod] = useState<string>(currentMonth());
   const [caseList, setCaseList] = useState<ClientWorkReportCasesResponse | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [report, setReport] = useState<ClientWorkReport | null>(null);
+  const [report, setReport] = useState<ClientWorkReportDetail | null>(null);
+  const [ownerPeople, setOwnerPeople] = useState<ClientWorkReportOwnerCandidate[]>([]);
+  const [ownerPersonId, setOwnerPersonId] = useState<string>("");
   const [loadingCases, setLoadingCases] = useState(false);
   const [loadingReport, setLoadingReport] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Source-switch guards: a response that belongs to an older request must
+  // never restore a previous case's report, owner or case list.
+  const casesSeq = useRef(0);
+  const reportSeq = useRef(0);
+  const peopleSeq = useRef(0);
 
   useEffect(() => {
     getClients()
@@ -100,40 +109,107 @@ function WorkReportPageContent() {
       setCaseList(null);
       setSelectedCaseId(null);
       setReport(null);
+      setOwnerPersonId("");
       return;
     }
     setLoadingCases(true);
     setError(null);
     setSelectedCaseId(null);
     setReport(null);
+    setOwnerPersonId("");
+    const seq = ++casesSeq.current;
     listWorkReportCases(clientId, periodQuery)
-      .then((response) => setCaseList(response))
-      .catch(() => setError("Az ügylista nem tölthető be."))
-      .finally(() => setLoadingCases(false));
+      .then((response) => {
+        if (seq === casesSeq.current) setCaseList(response);
+      })
+      .catch(() => {
+        if (seq === casesSeq.current) setError("Az ügylista nem tölthető be.");
+      })
+      .finally(() => {
+        if (seq === casesSeq.current) setLoadingCases(false);
+      });
   }, [clientId, periodQuery]);
 
   useEffect(() => {
     loadCases();
   }, [loadCases]);
 
-  const openCase = useCallback(
-    (caseId: string) => {
+  useEffect(() => {
+    if (!clientId) {
+      setOwnerPeople([]);
+      return;
+    }
+    const seq = ++peopleSeq.current;
+    listWorkReportOwnerCandidates(clientId)
+      .then((response) => {
+        if (seq === peopleSeq.current) setOwnerPeople(response.people ?? []);
+      })
+      .catch(() => {
+        // Owner candidates are optional context; the report itself is unaffected.
+      });
+  }, [clientId]);
+
+  const loadReport = useCallback(
+    (caseId: string, ownerId: string | null) => {
       if (!periodQuery) return;
-      setSelectedCaseId(caseId);
       setLoadingReport(true);
       setError(null);
-      getWorkReportCase(caseId, periodQuery)
-        .then((loaded) => setReport(loaded))
-        .catch(() => setError("A jelentés nem tölthető be."))
-        .finally(() => setLoadingReport(false));
+      const seq = ++reportSeq.current;
+      getWorkReportCase(caseId, periodQuery, ownerId)
+        .then((loaded) => {
+          if (seq !== reportSeq.current) return;
+          setReport(loaded);
+        })
+        .catch((caught) => {
+          if (seq !== reportSeq.current) return;
+          if (caught instanceof ApiError && caught.code === "WORK_REPORT_OWNER_NOT_IN_CLIENT") {
+            // Cross-client or unknown owner: fail safely, clear the selection
+            // and reload without an owner instead of keeping a wrong one.
+            setOwnerPersonId("");
+            setError(caught.message || "A kiválasztott ügygazda nem tartozik az ügy ügyfeléhez.");
+            const retrySeq = ++reportSeq.current;
+            getWorkReportCase(caseId, periodQuery, null)
+              .then((reloaded) => {
+                if (retrySeq === reportSeq.current) setReport(reloaded);
+              })
+              .catch(() => {
+                if (retrySeq === reportSeq.current) setError("A jelentés nem tölthető be.");
+              })
+              .finally(() => {
+                if (retrySeq === reportSeq.current) setLoadingReport(false);
+              });
+            return;
+          }
+          setError("A jelentés nem tölthető be.");
+        })
+        .finally(() => {
+          if (seq === reportSeq.current) setLoadingReport(false);
+        });
     },
     [periodQuery],
+  );
+
+  const openCase = useCallback(
+    (caseId: string) => {
+      setSelectedCaseId(caseId);
+      setOwnerPersonId("");
+      loadReport(caseId, null);
+    },
+    [loadReport],
+  );
+
+  const changeOwner = useCallback(
+    (personId: string) => {
+      setOwnerPersonId(personId);
+      if (selectedCaseId) loadReport(selectedCaseId, personId || null);
+    },
+    [selectedCaseId, loadReport],
   );
 
   const downloadPdf = useCallback(() => {
     if (!selectedCaseId || !periodQuery) return;
     setDownloading(true);
-    downloadWorkReportPdf(selectedCaseId, periodQuery)
+    downloadWorkReportPdf(selectedCaseId, periodQuery, ownerPersonId || null)
       .then(({ blob, filename }) => {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
@@ -146,7 +222,7 @@ function WorkReportPageContent() {
       })
       .catch(() => setError("A PDF letöltése nem sikerült."))
       .finally(() => setDownloading(false));
-  }, [selectedCaseId, periodQuery]);
+  }, [selectedCaseId, periodQuery, ownerPersonId]);
 
   const selectedSummary = report?.case ?? null;
 
@@ -270,10 +346,44 @@ function WorkReportPageContent() {
                   {formatDayHu(report?.period.startDate ?? null)} – {formatDayHu(report?.period.endDate ?? null)}
                 </p>
               </div>
-              <Button variant="primary" size="sm" onClick={downloadPdf} isLoading={downloading || loadingReport}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={downloadPdf}
+                isLoading={downloading || loadingReport}
+                disabled={report ? report.issuerMissing.length > 0 : true}
+              >
                 PDF letöltése
               </Button>
             </div>
+
+            <Card>
+              <CardContent>
+                <div className="flex flex-col gap-2">
+                  <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
+                    Ügygazda az ügyfélnél
+                    <select
+                      value={ownerPersonId}
+                      onChange={(event) => changeOwner(event.target.value)}
+                      disabled={loadingReport}
+                      className="h-9 rounded-[8px] border border-[var(--adm-border-canonical)] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[var(--adm-text-primary)]"
+                    >
+                      <option value="">Nincs megadva</option>
+                      {ownerPeople.map((person) => (
+                        <option key={person.personId} value={person.personId}>
+                          {person.name}
+                          {person.organizationGroupName ? ` — ${person.organizationGroupName}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="text-xs text-[var(--adm-text-secondary)]">
+                    Ez a kiválasztás ehhez a jelentéshez tartozik; az ügy tartós ügygazda-beállítását nem módosítja.
+                    A jelentés és a PDF a kiválasztott személyt a hozzá tartozó szervezeti egységgel együtt mutatja.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
 
             {loadingReport ? (
               <p className="text-sm text-[var(--adm-text-secondary)]">A jelentés betöltése…</p>
@@ -312,9 +422,15 @@ function WorkReportPageContent() {
                       Ügyösszefoglaló
                     </h3>
                     <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                      <InfoRow label="Ügyfél" value={report.client.name} />
                       <InfoRow label="Ügytárgy" value={report.case.matter?.title ?? NOT_SPECIFIED} />
                       <InfoRow label="Felelős ügyvéd" value={report.case.responsibleLawyerName ?? NOT_SPECIFIED} />
-                      <InfoRow label="Megrendelő" value={joinNames(report.case.requesterNames)} />
+                      <InfoRow label="Ügygazda az ügyfélnél" value={report.owner?.name ?? NOT_SPECIFIED} />
+                      <InfoRow
+                        label="Szervezeti egység az ügyfélnél"
+                        value={report.owner?.organizationGroupName ?? NOT_SPECIFIED}
+                      />
+                      <InfoRow label="Kezdeményező" value={joinNames(report.case.requesterNames)} />
                       <InfoRow label="Kezdeményező szervezeti egység" value={joinNames(report.case.organizationGroupNames)} />
                       <InfoRow label="Szakterület" value={joinNames(report.case.departmentNames)} />
                       <InfoRow
@@ -371,9 +487,29 @@ function WorkReportPageContent() {
                   <p className="text-xs text-[var(--adm-text-secondary)]">
                     Az ügyfélnek készülő kivonat a belső munkaleírásokat nem tartalmazza.
                   </p>
-                  {report.rows.length === 0 ? (
-                    <EmptyState title="Nincs rögzített munkaidő" description={ZERO_TIME_TEXT} />
-                  ) : (
+                  {report.issuerMissing.length > 0 ? (
+                    <Alert variant="error" title="A PDF exportálásához hiányosak a kiállítói adatok">
+                      {report.issuerMissing.join(", ")}. A belső nézet használható, de a PDF addig nem tölthető le, amíg a
+                      kiállítói profil nem teljes.
+                    </Alert>
+                  ) : null}
+                  {report.officeIdentifierNote ? (
+                    <p className="text-xs text-[var(--adm-text-secondary)]">{report.officeIdentifierNote}</p>
+                  ) : null}
+                  {report.exportPreview && report.exportPreview.issuer?.legalName ? (
+                    <div className="flex flex-col gap-1 rounded-[8px] border border-[var(--adm-border-canonical)] bg-white p-3 text-xs text-[var(--adm-text-primary)]">
+                      <p className="font-semibold">{report.exportPreview.issuer.legalName}</p>
+                      <p className="text-[var(--adm-text-secondary)]">
+                        {report.exportPreview.issuer.address} · Adószám: {report.exportPreview.issuer.taxNumber}
+                      </p>
+                      {report.exportPreview.issuer.email || report.exportPreview.issuer.phone ? (
+                        <p className="text-[var(--adm-text-secondary)]">
+                          {[report.exportPreview.issuer.email, report.exportPreview.issuer.phone].filter(Boolean).join(" · ")}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {report.exportPreview ? (
                     <DataTable minWidth={560}>
                       <DataTableHead>
                         <DataTableHeaderCell>Dátum</DataTableHeaderCell>
@@ -382,7 +518,7 @@ function WorkReportPageContent() {
                         <DataTableHeaderCell align="right">Időtartam</DataTableHeaderCell>
                       </DataTableHead>
                       <DataTableBody>
-                        {report.rows.map((row) => (
+                        {report.exportPreview.rows.map((row) => (
                           <DataTableRow key={row.timeEntryId}>
                             <DataTableCell>{formatDayHu(row.workDate)}</DataTableCell>
                             <DataTableCell>{row.workerName ?? NOT_SPECIFIED}</DataTableCell>
@@ -392,7 +528,10 @@ function WorkReportPageContent() {
                         ))}
                       </DataTableBody>
                     </DataTable>
-                  )}
+                  ) : null}
+                  {report.exportPreview && report.exportPreview.rows.length === 0 ? (
+                    <EmptyState title="Nincs rögzített munkaidő" description={ZERO_TIME_TEXT} />
+                  ) : null}
                 </section>
 
                 {report.ambiguousRows.length > 0 ? (

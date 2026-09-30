@@ -14,6 +14,7 @@
 
 export const CLIENT_WORK_REPORT_KIND = 'CLIENT_WORK_REPORT_V1' as const;
 export const CLIENT_WORK_REPORT_CASES_KIND = 'CLIENT_WORK_REPORT_CASES_V1' as const;
+export const CLIENT_WORK_REPORT_OWNERS_KIND = 'CLIENT_WORK_REPORT_OWNERS_V1' as const;
 
 export const CLOSED_CASE_STATUSES: readonly string[] = ['FINAL', 'CANCELLED', 'ARCHIVED'];
 
@@ -167,6 +168,49 @@ export interface ClientWorkReport {
 /** Neutral, truthful category label for work types outside the finite label map. */
 export const CLIENT_EXPORT_UNKNOWN_WORK_TYPE_LABEL = 'Egyéb';
 
+/**
+ * Issuer identity for the client export: the LAW FIRM is the issuer,
+ * Adminiculum is only the tool used to prepare the report. Only verified
+ * identity fields cross this boundary — bank, VAT, rate and payment
+ * configuration never do. The office/chamber registration identifier is
+ * deliberately absent: its stored meaning is not independently verified, so it
+ * must not be printed or mislabeled in the customer artifact.
+ */
+export interface ClientWorkReportIssuer {
+  legalName: string | null;
+  address: string | null;
+  taxNumber: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+/**
+ * Report-level client-side case owner ("Ügygazda az ügyfélnél"). This is a
+ * selection scoped to ONE report; it is not a persisted Case owner, not the
+ * responsible lawyer and not the original requester.
+ */
+export interface ClientWorkReportOwner {
+  personId: string;
+  name: string;
+  jobTitle: string | null;
+  organizationGroupName: string | null;
+}
+
+/** A person of the report's client eligible for the report-level owner selection. */
+export interface ClientWorkReportOwnerCandidate {
+  personId: string;
+  name: string;
+  jobTitle: string | null;
+  organizationGroupName: string | null;
+}
+
+export interface ClientWorkReportOwnersResponse {
+  kind: typeof CLIENT_WORK_REPORT_OWNERS_KIND;
+  client: { id: string; name: string };
+  people: ClientWorkReportOwnerCandidate[];
+  generatedAt: string;
+}
+
 /** One row as disclosed to the client. Raw description and internal attribution diagnostics are absent. */
 export interface ClientWorkReportExportRow {
   timeEntryId: string;
@@ -198,6 +242,8 @@ export interface ClientWorkReportExport {
   client: { id: string; name: string };
   period: ClientWorkReportPeriod;
   case: ClientWorkReportExportCaseSummary;
+  owner: ClientWorkReportOwner | null;
+  issuer: ClientWorkReportIssuer | null;
   rows: ClientWorkReportExportRow[];
   safeUpdates: WorkReportSafeUpdate[];
   generatedAt: string;
