@@ -12,6 +12,8 @@ type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = { userId: string; role?: string };
 
 const ACTIVE_REVIEW_STATUSES = ['DRAFT', 'ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'] as const;
+/** Roles allowed to take a formal review verdict (REQUEST_CHANGES / APPROVE). */
+const DOC_DECISION_ROLES = new Set(['ADMIN', 'PARTNER', 'LAWYER', 'COLLAB_LAWYER']);
 
 /**
  * Write-through of the canonical review verdict onto the exact version under
@@ -207,16 +209,32 @@ export function actorOwnsReview(review: ReviewAuthorityRecord, actorUserId: stri
 }
 
 /**
+ * Decision authority for formal review verdicts (REQUEST_CHANGES, APPROVE).
+ * The ownership/coordination authority of `actorOwnsReview` is NOT sufficient
+ * for a verdict: a workforce role (TRAINEE, LEGAL_ASSISTANT, ...) that created
+ * or owns a review must never be able to self-approve it. When the actor's
+ * role is unknown (legacy callers), the ownership authority is preserved.
+ */
+export function actorCanDecideReview(actor: Actor): boolean {
+  return !actor.role || DOC_DECISION_ROLES.has(String(actor.role).toUpperCase());
+}
+
+/**
  * Actor-aware projection of the actions the canonical workflow currently
  * permits. Drives truthful UI affordances: a user with case access but without
- * review authority sees no transition action.
+ * review authority sees no transition action; a non-decision role never sees
+ * a review verdict action even when they own the review.
  */
 export function permittedReviewActions(
   review: ReviewAuthorityRecord & { status: string },
   actor: Actor,
 ): ReviewAction[] {
   if (!actorOwnsReview(review, actor.userId)) return [];
-  return candidateActions(String(review.status) as ReviewStatus);
+  const actions = candidateActions(String(review.status) as ReviewStatus);
+  if (!actorCanDecideReview(actor)) {
+    return actions.filter((action) => action !== 'APPROVE' && action !== 'REQUEST_CHANGES');
+  }
+  return actions;
 }
 
 export async function transitionReview(reviewId: string, action: ReviewAction, actor: Actor, input: { reviewerId?: string; versionId?: string; safeRationale?: string; expectedRevision?: number; idempotencyKey?: string } = {}, db: PrismaClient = defaultPrisma) {
@@ -263,6 +281,7 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
     const resubmitVersion = action === 'RESUBMIT' ? (requestedResubmitVersion || latest) : null;
     const verdict = evaluateTransition(String(review.status) as ReviewStatus, action, {
       actorAuthorized,
+      actorCanDecide: actorCanDecideReview(actor),
       reviewerHasAccess,
       openPoints,
       openBlockingPoints,
@@ -276,7 +295,17 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
       resubmitVersionId: resubmitVersion?.id,
       resubmitVersionNumber: resubmitVersion?.version,
     });
-    if (!verdict.allowed) throw new DocumentReviewWorkflowError(verdict.reason === 'BLOCKING_POINTS_OPEN' || verdict.reason === 'COMPARISON_SEGMENTS_UNRESOLVED' ? 409 : 400, verdict.reason || 'TRANSITION_BLOCKED', 'Review transition is not allowed.');
+    if (!verdict.allowed) {
+      // Authorization denials are authorization problems (403), never generic
+      // validation failures. Content gates keep their specific status codes.
+      if (verdict.reason === 'ACTOR_NOT_AUTHORIZED' || verdict.reason === 'DECISION_AUTHORITY_MISSING') {
+        throw new DocumentReviewWorkflowError(403, verdict.reason, 'Review transition is not allowed.');
+      }
+      if (verdict.reason === 'BLOCKING_POINTS_OPEN' || verdict.reason === 'COMPARISON_SEGMENTS_UNRESOLVED') {
+        throw new DocumentReviewWorkflowError(409, verdict.reason, 'Review transition is not allowed.');
+      }
+      throw new DocumentReviewWorkflowError(400, verdict.reason || 'TRANSITION_BLOCKED', 'Review transition is not allowed.');
+    }
 
     let roundId = review.currentRoundId;
     let versionId = currentVersion.id;

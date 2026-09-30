@@ -8,8 +8,10 @@ import {
 import prisma from '../../config/database';
 import { WorkflowTransitionError } from '../cases/workItems';
 import { planCanonicalTaskTransition } from './taskLifecycle.service';
+import { ATTENTION_DURATION_BANDS, isAttentionCategory, type AttentionCategory } from './attentionCategory';
 import {
   ApproveSubmissionInput,
+  DocumentReviewContextDto,
   ExternalCompletionInput,
   ReviewMutationResult,
   ReviewSafeUserDto,
@@ -58,7 +60,17 @@ const reviewSubmissionInclude = {
   assignedReviewer: { select: { id: true, name: true, email: true, role: true } },
   documents: {
     include: {
-      document: { select: { id: true, name: true, fileName: true, category: true, currentVersion: true, caseId: true } },
+      document: {
+        select: {
+          id: true,
+          name: true,
+          fileName: true,
+          category: true,
+          currentVersion: true,
+          caseId: true,
+          versions: { where: { isCurrent: true }, select: { id: true }, take: 1 },
+        },
+      },
       documentVersion: { select: { id: true, version: true } },
     },
     orderBy: { createdAt: 'asc' as const },
@@ -196,12 +208,22 @@ function reviewVersion(submission: ReviewSubmissionRecord): string {
       String(submission.status),
       submission.reviewDecision?.id || '',
       submission.externalCompletedAt?.toISOString() || '',
+      // Exact output identity: a decision is bound to the submitted document
+      // versions, so a stale client that saw different versions fails closed.
+      submission.documents.map((link) => `${link.documentId}:${link.documentVersionId || ''}`).join(','),
     ].join(':'))
     .digest('hex');
 }
 
 function normalizeReviewVersion(value: string): string {
   return value.trim().replace(/^W\//, '').replace(/^"|"$/g, '');
+}
+
+/** Indicative planning band for the canonical review attention level. */
+function attentionEstimateFor(requestedAttention: string | null): { minMinutes: number; maxMinutes: number } | null {
+  if (!requestedAttention || !isAttentionCategory(requestedAttention)) return null;
+  const band = ATTENTION_DURATION_BANDS[requestedAttention as AttentionCategory];
+  return { minMinutes: band.minMinutes, maxMinutes: band.maxMinutes };
 }
 
 function isRetryableTransactionError(error: unknown): boolean {
@@ -342,6 +364,70 @@ export class TaskReviewDecisionService {
     });
   }
 
+  /**
+   * COMPOSED DOCUMENT REVIEW CONTEXT: projects the matching DocumentReview /
+   * rounds for each (documentId, documentVersionId) output pair. Read-only
+   * context only — task approval remains task approval and document approval
+   * remains the formal exact-document approval of the DocumentReview.
+   */
+  private async loadDocumentReviewContext(
+    db: DatabaseClient,
+    caseId: string,
+    outputs: Array<{ documentId: string; documentVersionId: string | null }>,
+  ): Promise<DocumentReviewContextDto[]> {
+    const targets = outputs.filter((output) => output.documentId && output.documentVersionId);
+    if (targets.length === 0) return [];
+    const reviews = await db.documentReview.findMany({
+      where: { documentId: { in: Array.from(new Set(targets.map((target) => target.documentId))) } },
+      include: {
+        currentRound: { select: { id: true, roundNumber: true, reviewVersionId: true, status: true } },
+        rounds: { select: { id: true, roundNumber: true, reviewVersionId: true, status: true }, orderBy: { roundNumber: 'asc' as const } },
+        assignedReviewer: { select: { id: true, name: true, email: true } },
+        points: { select: { id: true, status: true, severity: true } },
+        decisions: { select: { id: true, action: true, actorId: true, versionId: true, createdAt: true }, orderBy: { createdAt: 'desc' as const }, take: 1 },
+      },
+    });
+    return targets.map((target) => {
+      const matching = reviews.filter((review) =>
+        review.documentId === target.documentId
+        && (review.documentVersionId === target.documentVersionId || review.currentRound?.reviewVersionId === target.documentVersionId));
+      return {
+        documentId: target.documentId,
+        documentVersionId: target.documentVersionId,
+        reviews: matching.map((review) => ({
+          id: review.id,
+          status: String(review.status),
+          currentRoundNumber: review.currentRoundNumber,
+          documentVersionId: review.documentVersionId,
+          approvedVersionId: review.approvedVersionId,
+          reviewer: review.assignedReviewer
+            ? { id: review.assignedReviewer.id, displayName: review.assignedReviewer.name || review.assignedReviewer.email, role: '' }
+            : null,
+          rounds: review.rounds.map((round) => ({
+            id: round.id,
+            roundNumber: round.roundNumber,
+            reviewVersionId: round.reviewVersionId,
+            status: String(round.status),
+          })),
+          counts: {
+            open: review.points.filter((point) => ['OPEN', 'ANSWERED'].includes(String(point.status))).length,
+            blocking: review.points.filter((point) => point.severity === 'BLOCKING' && ['OPEN', 'ANSWERED'].includes(String(point.status))).length,
+            total: review.points.length,
+          },
+          lastDecision: review.decisions[0]
+            ? {
+                action: String(review.decisions[0].action),
+                actorId: review.decisions[0].actorId,
+                versionId: review.decisions[0].versionId,
+                createdAt: review.decisions[0].createdAt.toISOString(),
+              }
+            : null,
+          reviewLink: `/cases/${encodeURIComponent(caseId)}/documents?documentId=${encodeURIComponent(target.documentId)}&mode=review`,
+        })),
+      };
+    });
+  }
+
   async getReviewDetail(taskId: string, submissionId: string, actorId: string): Promise<TaskSubmissionReviewDetailDto> {
     const { task, submission, scope } = await this.getContext(taskId, submissionId, actorId);
     const history = await this.loadHistory(taskId);
@@ -354,7 +440,10 @@ export class TaskReviewDecisionService {
       category: String(link.document.category),
       currentVersion: link.document.currentVersion,
       linkedVersion: link.documentVersion?.version || null,
+      isCurrentVersion: Boolean(link.documentVersionId && link.document.versions.some((version) => version.id === link.documentVersionId)),
+      newerVersionExists: Boolean(link.documentVersionId && link.document.versions.length > 0 && !link.document.versions.some((version) => version.id === link.documentVersionId)),
     }));
+    const documentReviews = await this.loadDocumentReviewContext(this.db, task.caseId, outputs);
     const timeEntries = submission.timeEntries.map((link) => ({
       id: link.id,
       timeEntryId: link.timeEntryId,
@@ -407,6 +496,7 @@ export class TaskReviewDecisionService {
         submittedAt: submission.submittedAt?.toISOString() || null,
         assignedReviewer: safeUser(submission.assignedReviewer)!,
         requestedAttention: submission.requestedAttention ? String(submission.requestedAttention) : null,
+        attentionEstimate: attentionEstimateFor(submission.requestedAttention ? String(submission.requestedAttention) : null),
         externalActionRequired: submission.externalActionRequired,
         externalActionType: submission.externalActionType ? String(submission.externalActionType) : null,
         externalCompletedAt: submission.externalCompletedAt?.toISOString() || null,
@@ -415,6 +505,7 @@ export class TaskReviewDecisionService {
         zeroTimeConfirmed: submission.zeroTimeConfirmed,
       },
       outputs,
+      documentReviews,
       time: {
         entries: timeEntries,
         totalMinutes,
@@ -429,6 +520,11 @@ export class TaskReviewDecisionService {
         returnedAt: revision.returnedAt?.toISOString() || null,
         approvedAt: revision.approvedAt?.toISOString() || null,
         supersedesSubmissionId: revision.supersedesSubmissionId,
+        outputs: revision.documents.map((link) => ({
+          documentId: link.documentId,
+          documentVersionId: link.documentVersionId,
+          linkedVersion: link.documentVersion?.version || null,
+        })),
         decision: toDecisionDto(revision.reviewDecision),
       })),
       decision,

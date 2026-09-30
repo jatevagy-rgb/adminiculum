@@ -79,11 +79,17 @@ router.post('/:taskId/submissions/:submissionId/documents', authenticate, requir
     if (documentId === null) {
       return res.status(400).json({ status: 400, code: 'INVALID_ID', message: 'documentId must be a valid identifier.' });
     }
+    const documentVersionId = req.body?.documentVersionId
+      ? parseCanonicalStringId(req.body.documentVersionId)
+      : undefined;
+    if (req.body?.documentVersionId && documentVersionId === null) {
+      return res.status(400).json({ status: 400, code: 'INVALID_ID', message: 'documentVersionId must be a valid identifier.' });
+    }
     const result = await taskSubmissionService.attachSubmissionDocument(
       req.params.taskId as string,
       req.params.submissionId as string,
       getActorId(req),
-      { documentId, role: String(req.body?.role || '') },
+      { documentId, role: String(req.body?.role || ''), documentVersionId: documentVersionId || undefined },
     );
     return res.status(result.created ? 201 : 200).json(result.workflow);
   } catch (error) {
@@ -137,11 +143,24 @@ router.delete('/:taskId/submissions/:submissionId/time-entries/:timeEntryId', au
 
 router.post('/:taskId/submissions/:submissionId/submit', authenticate, requireCanonicalStringParams('taskId', 'submissionId'), async (req, res) => {
   try {
+    const idempotencyKey = String(req.header('Idempotency-Key') || '');
+    if (req.body && Array.isArray(req.body.confirmedDocumentVersionIds)) {
+      const confirmedDocumentVersionIds = (req.body.confirmedDocumentVersionIds as unknown[]).map((value) => String(value));
+      const result = await taskSubmissionService.submitTaskSubmission(
+        req.params.taskId as string,
+        req.params.submissionId as string,
+        getActorId(req),
+        idempotencyKey,
+        confirmedDocumentVersionIds,
+      );
+      res.status(200).json(result);
+      return;
+    }
     const result = await taskSubmissionService.submitTaskSubmission(
       req.params.taskId as string,
       req.params.submissionId as string,
       getActorId(req),
-      String(req.header('Idempotency-Key') || ''),
+      idempotencyKey,
     );
     res.status(200).json(result);
   } catch (error) {

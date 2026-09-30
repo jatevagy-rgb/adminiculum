@@ -32,6 +32,7 @@ function draftWith(overrides: Partial<TaskSubmission> = {}): TaskSubmission {
     remainingIssues: null,
     reviewerNote: null,
     requestedAttention: null,
+    attentionEstimate: null,
     externalActionRequired: false,
     externalActionType: null,
     zeroTimeConfirmed: false,
@@ -70,6 +71,8 @@ function workflowWith(overrides: Partial<TaskSubmissionWorkflow> = {}): TaskSubm
     latestSubmittedRevision: null,
     latestDecision: null,
     currentReviewer: null,
+    responsibleLawyerFlow: false,
+    responsibleLawyer: null,
     readiness: null,
     permittedActions: {
       read: true,
