@@ -31,6 +31,7 @@ import {
   type ClientWorkReportCaseListItem,
   type ClientWorkReportCasesResponse,
   type ClientWorkReportCaseSummary,
+  type ClientWorkReportExport,
   type ClientWorkReportPeriod,
   type WorkReportRow,
   type WorkReportSafeUpdate,
@@ -368,5 +369,45 @@ export async function buildCaseReport(
     excludedRows: buckets.excludedRows,
     safeUpdates,
     generatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Projects the internal review DTO onto the explicit client-export boundary.
+ *
+ * The ambiguous and excluded buckets (and their summary aggregates) are
+ * workforce review diagnostics and are structurally dropped here. The source
+ * records are never mutated, deleted, reassigned or billed differently by this
+ * projection — the internal review response keeps serving them.
+ */
+export function projectClientWorkReportExport(report: ClientWorkReport): ClientWorkReportExport {
+  return {
+    kind: report.kind,
+    client: report.client,
+    period: report.period,
+    case: {
+      caseId: report.case.caseId,
+      caseNumber: report.case.caseNumber,
+      caseTitle: report.case.caseTitle,
+      caseStatusLabel: report.case.caseStatusLabel,
+      completedAt: report.case.completedAt,
+      matter: report.case.matter,
+      responsibleLawyerName: report.case.responsibleLawyerName,
+      requesterNames: report.case.requesterNames,
+      organizationGroupNames: report.case.organizationGroupNames,
+      departmentNames: report.case.departmentNames,
+      recordedMinutes: report.case.recordedMinutes,
+      recordedEntryCount: report.case.recordedEntryCount,
+    },
+    rows: report.rows.map((row) => ({
+      timeEntryId: row.timeEntryId,
+      workDate: row.workDate,
+      workerName: row.workerName,
+      workTypeLabel: row.workTypeLabel,
+      description: row.description,
+      minutes: row.minutes,
+    })),
+    safeUpdates: report.safeUpdates,
+    generatedAt: report.generatedAt,
   };
 }

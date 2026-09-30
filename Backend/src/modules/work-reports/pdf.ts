@@ -2,15 +2,17 @@
 // WORK REPORTS — rate-free client work-report PDF renderer.
 // ============================================================================
 //
-// Renders the allowlisted ClientWorkReport DTO. The DTO carries no rate,
-// amount, VAT, or billing fields, and this renderer prints none. The output is
-// deterministic for a given report snapshot: no randomness, no live source
-// reads, fixed row ordering (workDate, timeEntryId).
+// Renders the explicit client-export projection (ClientWorkReportExport). The
+// projection carries no rate, amount, VAT, or billing fields, no ambiguous or
+// excluded row details and no internal diagnostic aggregates, and this
+// renderer prints none of them. The output is deterministic for a given
+// report snapshot: no randomness, no live source reads, fixed row ordering
+// (workDate, timeEntryId).
 // ============================================================================
 
 import PDFDocument from 'pdfkit';
 import path from 'node:path';
-import type { ClientWorkReport, WorkReportRow } from './types';
+import type { ClientWorkReportExport, ClientWorkReportExportRow } from './types';
 
 // Same redistributable font the billing-prep build step copies next to the
 // compiled billing-preparations module; resolve it relative to this module.
@@ -28,13 +30,6 @@ const detailColumns = [
   { key: 'worker', label: 'Munkatárs', width: 84, align: 'left' as const },
   { key: 'work', label: 'Munkavégzés leírása', width: 208, align: 'left' as const },
   { key: 'type', label: 'Típus', width: 78, align: 'left' as const },
-  { key: 'duration', label: 'Időtartam', width: 56, align: 'right' as const },
-];
-
-const extraColumns = [
-  { key: 'date', label: 'Dátum', width: 58, align: 'left' as const },
-  { key: 'worker', label: 'Munkatárs', width: 100, align: 'left' as const },
-  { key: 'work', label: 'Leírás', width: 240, align: 'left' as const },
   { key: 'duration', label: 'Időtartam', width: 56, align: 'right' as const },
 ];
 
@@ -58,7 +53,7 @@ export function formatMinutesHu(minutes: number): string {
   return rest === 0 ? `${hours} ó` : `${hours} ó ${rest} p`;
 }
 
-function rowValues(row: WorkReportRow, columns: typeof detailColumns) {
+function rowValues(row: ClientWorkReportExportRow, columns: typeof detailColumns) {
   const values: Record<string, string> = {
     date: reportDate(row.workDate),
     worker: row.workerName || 'Nincs megadva',
@@ -82,7 +77,7 @@ function writeTableHeader(doc: PDFKit.PDFDocument, columns: typeof detailColumns
 
 function writeTable(
   doc: PDFKit.PDFDocument,
-  rows: WorkReportRow[],
+  rows: ClientWorkReportExportRow[],
   columns: typeof detailColumns,
   startY: number,
   pageFor: (y: number) => number,
@@ -122,8 +117,8 @@ function keyValue(doc: PDFKit.PDFDocument, label: string, value: string, y: numb
   return y + 15;
 }
 
-/** Renders the frozen report DTO. No live reads, no monetary fields. */
-export async function renderClientWorkReportPdf(report: ClientWorkReport): Promise<Buffer> {
+/** Renders the frozen client-export projection. No live reads, no monetary fields, no internal diagnostics. */
+export async function renderClientWorkReportPdf(report: ClientWorkReportExport): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin, info: { Title: 'Ügyfél munkaóra-jelentés', Author: 'Adminiculum' } });
   doc.registerFont('NotoSans', fontPath);
   doc.font('NotoSans');
@@ -176,12 +171,6 @@ export async function renderClientWorkReportPdf(report: ClientWorkReport): Promi
   y = keyValue(doc, 'Összes rögzített idő', formatMinutesHu(caseSummary.recordedMinutes), y, margin);
   y = keyValue(doc, 'Munkanapok', workDateMin ? `${reportDate(workDateMin)} – ${reportDate(workDateMax)}` : null, y, margin);
   y = keyValue(doc, 'Rögzített bejegyzések', String(caseSummary.recordedEntryCount), y, margin);
-  if (caseSummary.ambiguousMinutes > 0) {
-    y = keyValue(doc, 'Bizonytalan hozzárendelésű idő (nem szerepel az összegben)', formatMinutesHu(caseSummary.ambiguousMinutes), y, margin);
-  }
-  if (caseSummary.excludedMinutes > 0) {
-    y = keyValue(doc, 'Kizárt idő – belső jellegű munka (nem szerepel az összegben)', formatMinutesHu(caseSummary.excludedMinutes), y, margin);
-  }
   y += 8;
 
   // ── DETAIL ────────────────────────────────────────────────────────────────
@@ -196,34 +185,6 @@ export async function renderClientWorkReportPdf(report: ClientWorkReport): Promi
     y += 22;
   } else {
     y = writeTable(doc, report.rows, detailColumns, y, pageFor);
-  }
-
-  // ── AMBIGUOUS ─────────────────────────────────────────────────────────────
-  if (report.ambiguousRows.length > 0) {
-    const ambiguousPageFor = (currentY: number): number => {
-      doc.addPage();
-      return writeTableHeader(doc, extraColumns, margin);
-    };
-    y += 8;
-    y = sectionLabel(doc, 'BIZONYTALAN HOZZÁRENDELÉSŰ IDŐ', y);
-    doc.fillColor(textSecondary).fontSize(8).text('Ezek a bejegyzések az ügy ügytárgyához tartoznak, de nem rendelhetők hozzá egyértelműen ehhez az ügyhöz, ezért nem szerepelnek az összesített időben.', margin, y, { width: pageWidth - margin * 2 });
-    y += 24;
-    y = writeTableHeader(doc, extraColumns, y);
-    y = writeTable(doc, report.ambiguousRows, extraColumns, y, ambiguousPageFor);
-  }
-
-  // ── EXCLUDED ──────────────────────────────────────────────────────────────
-  if (report.excludedRows.length > 0) {
-    const excludedPageFor = (currentY: number): number => {
-      doc.addPage();
-      return writeTableHeader(doc, extraColumns, margin);
-    };
-    y += 8;
-    y = sectionLabel(doc, 'KIZÁRT MUNKAIDŐ – BELSŐ JELLEGŰ', y);
-    doc.fillColor(textSecondary).fontSize(8).text('Belső jellegű munkaidő, amely nem része az ügyféljelentésnek, és nem szerepel az összesített időben.', margin, y, { width: pageWidth - margin * 2 });
-    y += 24;
-    y = writeTableHeader(doc, extraColumns, y);
-    y = writeTable(doc, report.excludedRows, extraColumns, y, excludedPageFor);
   }
 
   // ── OPTIONAL SAFE MATTER DETAIL ───────────────────────────────────────────

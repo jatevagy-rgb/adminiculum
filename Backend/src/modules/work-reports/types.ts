@@ -146,3 +146,53 @@ export interface ClientWorkReport {
   safeUpdates: WorkReportSafeUpdate[];
   generatedAt: string;
 }
+
+// ============================================================================
+// CLIENT EXPORT PROJECTION
+// ============================================================================
+//
+// The internal review DTO above carries workforce diagnostics (ambiguous and
+// excluded buckets plus their aggregates). Those are review aids, not client
+// disclosures: not summing a row is not the same as not disclosing it.
+//
+// The client-export boundary is therefore a separate, explicit projection.
+// The PDF renderer only ever receives ClientWorkReportExport, so ambiguous and
+// excluded row details and internal diagnostic aggregates are structurally
+// absent from the client artifact.
+
+/** One row as disclosed to the client. Internal attribution diagnostics are absent. */
+export interface ClientWorkReportExportRow {
+  timeEntryId: string;
+  workDate: string;
+  workerName: string | null;
+  workTypeLabel: string;
+  description: string;
+  minutes: number;
+}
+
+/** Case summary as disclosed to the client: facts only, no diagnostic aggregates. */
+export interface ClientWorkReportExportCaseSummary {
+  caseId: string;
+  caseNumber: string;
+  caseTitle: string;
+  caseStatusLabel: string;
+  completedAt: string | null;
+  matter: { id: string; title: string } | null;
+  responsibleLawyerName: string | null;
+  requesterNames: string[];
+  organizationGroupNames: string[];
+  departmentNames: string[];
+  recordedMinutes: number;
+  recordedEntryCount: number;
+}
+
+/** The only DTO the client-export PDF renderer accepts. */
+export interface ClientWorkReportExport {
+  kind: typeof CLIENT_WORK_REPORT_KIND;
+  client: { id: string; name: string };
+  period: ClientWorkReportPeriod;
+  case: ClientWorkReportExportCaseSummary;
+  rows: ClientWorkReportExportRow[];
+  safeUpdates: WorkReportSafeUpdate[];
+  generatedAt: string;
+}

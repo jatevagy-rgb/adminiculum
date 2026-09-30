@@ -28,6 +28,19 @@ test('work-report page wires shell, journey and download', () => {
   assert.match(page, /type="month"/);
 });
 
+test('work-report page is a valid Next.js page: only the default export', () => {
+  assert.match(page, /export default function WorkReportPage/);
+  assert.doesNotMatch(page, /export\s+function\s+WorkReportPageContent/);
+  assert.doesNotMatch(page, /export\s+\{/);
+});
+
+test('work-report page uses semantic tokens, no arbitrary hex colors', () => {
+  assert.doesNotMatch(page, /(?:bg|text|border|ring|fill|stroke)-\[#[0-9a-fA-F]{3,8}\]/);
+  assert.match(page, /var\(--adm-text-primary\)/);
+  assert.match(page, /var\(--adm-text-secondary\)/);
+  assert.match(page, /var\(--adm-border-canonical\)/);
+});
+
 test('work-report page distinguishes honest time states', () => {
   assert.match(page, /Ehhez az ügyhöz a kiválasztott időszakban nincs rögzített/);
   assert.match(page, /Bizonytalan hozzárendelésű idő/);
@@ -65,4 +78,11 @@ test('PDF renderer prints no rate or money labels and marks itself as a report',
   assert.doesNotMatch(pdf, /Óradíj|Nettó|ÁFA|Bruttó|Ft/);
   assert.match(pdf, /nem számla/);
   assert.match(pdf, /ÜGYFÉL MUNKAJELENTÉS/);
+});
+
+test('PDF renderer receives only the client-export projection, never internal diagnostics', () => {
+  assert.doesNotMatch(pdf, /ambiguousRows|excludedRows|ambiguousMinutes|excludedMinutes/);
+  assert.match(pdf, /ClientWorkReportExport/);
+  assert.match(routes, /projectClientWorkReportExport/);
+  assert.doesNotMatch(routes, /renderClientWorkReportPdf\(report\)/);
 });

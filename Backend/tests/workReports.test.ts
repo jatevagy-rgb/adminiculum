@@ -4,6 +4,7 @@ import {
   bucketCaseEntries,
   listReportCases,
   parsePeriodQuery,
+  projectClientWorkReportExport,
 } from '../src/modules/work-reports/service';
 import { renderClientWorkReportPdf } from '../src/modules/work-reports/pdf';
 import type { ClientWorkReport } from '../src/modules/work-reports/types';
@@ -284,6 +285,9 @@ describe('closed-case discovery and client scoping', () => {
 
 // ── PDF ─────────────────────────────────────────────────────────────────────
 
+const AMBIG_MARKER = 'BELSŐ-TITOK-AMBIG-7F3A';
+const EXCLUDED_MARKER = 'BELSŐ-TITOK-KIZÁRT-9C21';
+
 describe('rate-free work-report PDF', () => {
   async function sampleReport(): Promise<ClientWorkReport> {
     const task = {
@@ -296,8 +300,8 @@ describe('rate-free work-report PDF', () => {
     const rows = [
       entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60, workDate: new Date('2026-09-01T00:00:00.000Z') }),
       entry({ id: 'te-2', caseId: null, matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 30, workDate: new Date('2026-09-02T00:00:00.000Z'), task }),
-      entry({ id: 'te-3', caseId: null, matterId: 'matter-1', matter: matterOf('matter-1', ['case-1', 'case-2']), minutes: 75, workDate: new Date('2026-09-03T00:00:00.000Z') }),
-      entry({ id: 'te-4', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 20, billable: false, description: 'Belső egyeztetés' }),
+      entry({ id: 'te-3', caseId: null, matterId: 'matter-1', matter: matterOf('matter-1', ['case-1', 'case-2']), minutes: 75, workDate: new Date('2026-09-03T00:00:00.000Z'), description: `Két ügyre is illik ${AMBIG_MARKER}` }),
+      entry({ id: 'te-4', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 95, billable: false, description: `Belső egyeztetés ${EXCLUDED_MARKER}` }),
     ];
     const safeUpdates = [
       { id: 'su-1', caseId: 'case-1', title: 'Állapotfrissítés', body: 'Az ügy lezárult.', category: 'STATUS', status: 'PUBLISHED', publishedAt: new Date('2026-09-10T00:00:00.000Z') },
@@ -312,7 +316,7 @@ describe('rate-free work-report PDF', () => {
   }
 
   it('renders the client work report and prints no rate, amount, or VAT anywhere', async () => {
-    const pdf = await renderClientWorkReportPdf(await sampleReport());
+    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(await sampleReport()));
     expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
     const parsed = await pdfText(pdf);
     const text = parsed.text.replace(/\s+/g, ' ');
@@ -322,8 +326,6 @@ describe('rate-free work-report PDF', () => {
     expect(text).toContain('HR');
     expect(text).toContain('ÜGYSZÁM');
     expect(text).toContain('1 ó 30 p');
-    expect(text).toContain('BIZONYTALAN HOZZÁRENDELÉSŰ IDŐ');
-    expect(text).toContain('KIZÁRT MUNKAIDŐ');
     expect(text).toContain('ÜGYFÉLNEK KÖZZÉTETT TÁJÉKOZTATÁSOK');
     expect(text).toContain('nem számla');
     for (const forbidden of ['Óradíj', 'Nettó', 'ÁFA', 'Bruttó', 'Ft', 'HUF', 'óradíj', 'nettó']) {
@@ -332,7 +334,7 @@ describe('rate-free work-report PDF', () => {
   });
 
   it('is deterministic for the same frozen report snapshot', async () => {
-    const report = await sampleReport();
+    const report = projectClientWorkReportExport(await sampleReport());
     const first = await pdfText(await renderClientWorkReportPdf(report));
     const second = await pdfText(await renderClientWorkReportPdf(report));
     expect(second.text).toBe(first.text);
@@ -349,5 +351,113 @@ describe('rate-free work-report PDF', () => {
     const second = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
     const strip = (report: ClientWorkReport) => JSON.stringify({ ...report, generatedAt: null });
     expect(strip(second!)).toBe(strip(first!));
+  });
+});
+
+// ── client-export boundary ──────────────────────────────────────────────────
+
+describe('client-export boundary (internal diagnostics never reach the client PDF)', () => {
+  async function markerReport(): Promise<ClientWorkReport> {
+    const task = {
+      id: 'task-1', title: 'HR kérés feldolgozása', caseId: 'case-1', matterId: 'matter-1', workPackageItem: null,
+      requestedByOrganizationPerson: {
+        id: 'op-1', name: 'Nagy Réka', jobTitle: 'HR vezető',
+        organizationGroup: { id: 'g-1', name: 'HR' },
+      },
+    };
+    const rows = [
+      entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60, workDate: new Date('2026-09-01T00:00:00.000Z') }),
+      entry({ id: 'te-2', caseId: null, matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 30, workDate: new Date('2026-09-02T00:00:00.000Z'), task }),
+      entry({ id: 'te-3', caseId: null, matterId: 'matter-1', matter: matterOf('matter-1', ['case-1', 'case-2']), minutes: 75, workDate: new Date('2026-09-03T00:00:00.000Z'), description: `Két ügyre is illik ${AMBIG_MARKER}` }),
+      entry({ id: 'te-4', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 95, billable: false, description: `Belső egyeztetés ${EXCLUDED_MARKER}` }),
+    ];
+    const db = {
+      case: { findUnique: async () => caseRecord() },
+      timeEntry: { findMany: async () => rows },
+      clientSafeUpdate: { findMany: async () => [] },
+    } as any;
+    const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
+    return report!;
+  }
+
+  it('keeps ambiguous and excluded records in the internal review response', async () => {
+    const report = await markerReport();
+    const serialized = JSON.stringify(report);
+    expect(report.ambiguousRows.map((row) => row.description)).toContain(`Két ügyre is illik ${AMBIG_MARKER}`);
+    expect(report.excludedRows.map((row) => row.description)).toContain(`Belső egyeztetés ${EXCLUDED_MARKER}`);
+    expect(serialized).toContain(AMBIG_MARKER);
+    expect(serialized).toContain(EXCLUDED_MARKER);
+    expect(report.case.recordedMinutes).toBe(90);
+    expect(report.case.ambiguousMinutes).toBe(75);
+    expect(report.case.excludedMinutes).toBe(95);
+  });
+
+  it('excludes ambiguous and excluded rows and aggregates from the client-export DTO', async () => {
+    const exportReport = projectClientWorkReportExport(await markerReport());
+    expect(Object.keys(exportReport)).toEqual(['kind', 'client', 'period', 'case', 'rows', 'safeUpdates', 'generatedAt']);
+    expect(Object.keys(exportReport.case)).toEqual([
+      'caseId', 'caseNumber', 'caseTitle', 'caseStatusLabel', 'completedAt', 'matter',
+      'responsibleLawyerName', 'requesterNames', 'organizationGroupNames', 'departmentNames',
+      'recordedMinutes', 'recordedEntryCount',
+    ]);
+    const serialized = JSON.stringify(exportReport);
+    expect(serialized).not.toContain(AMBIG_MARKER);
+    expect(serialized).not.toContain(EXCLUDED_MARKER);
+    expect(serialized).not.toContain('ambiguous');
+    expect(serialized).not.toContain('excluded');
+    expect(exportReport.rows.map((row) => row.timeEntryId)).toEqual(['te-1', 'te-2']);
+    expect(exportReport.case.recordedMinutes).toBe(90);
+    assertNoForbiddenKeys(exportReport);
+  });
+
+  it('never prints ambiguous or excluded content in the client PDF', async () => {
+    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(await markerReport()));
+    const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
+    expect(text).not.toContain(AMBIG_MARKER);
+    expect(text).not.toContain(EXCLUDED_MARKER);
+    expect(text).not.toContain('Belső egyeztetés');
+    expect(text).not.toContain('BIZONYTALAN HOZZÁRENDELÉSŰ IDŐ');
+    expect(text).not.toContain('KIZÁRT MUNKAIDŐ');
+    expect(text).not.toContain('belső jellegű');
+    expect(text).not.toContain('nem szerepel az összegben');
+  });
+
+  it('client PDF totals equal included time only', async () => {
+    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(await markerReport()));
+    const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
+    expect(text).toContain('1 ó 30 p');
+    expect(text).not.toContain('1 ó 15 p');
+    expect(text).not.toContain('1 ó 35 p');
+    expect(text).toContain('RÖGZÍTETT BEJEGYZÉSEK 2');
+  });
+
+  it('preserves the honest zero-time message for a report with no includable rows', async () => {
+    const closed = caseRecord({ status: 'FINAL', completedAt: new Date('2026-09-15T00:00:00.000Z') });
+    const db = {
+      case: { findUnique: async () => closed },
+      timeEntry: { findMany: async () => [] },
+      clientSafeUpdate: { findMany: async () => [] },
+    } as any;
+    const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
+    expect(report!.rows).toHaveLength(0);
+    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(report!));
+    const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
+    expect(text).toContain('nincs rögzített');
+    expect(text).not.toContain(AMBIG_MARKER);
+    expect(text).not.toContain(EXCLUDED_MARKER);
+  });
+
+  it('still prints published safe updates in the client PDF', async () => {
+    const db = {
+      case: { findUnique: async () => caseRecord() },
+      timeEntry: { findMany: async () => [entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60 })] },
+      clientSafeUpdate: { findMany: async () => [{ id: 'su-1', caseId: 'case-1', title: 'Állapotfrissítés', body: 'Az ügy lezárult.', category: 'STATUS', status: 'PUBLISHED', publishedAt: new Date('2026-09-10T00:00:00.000Z') }] },
+    } as any;
+    const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
+    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(report!));
+    const text = (await pdfText(pdf)).text.replace(/\s+/g, ' ');
+    expect(text).toContain('ÜGYFÉLNEK KÖZZÉTETT TÁJÉKOZTATÁSOK');
+    expect(text).toContain('Állapotfrissítés');
+    expect(text).toContain('Az ügy lezárult.');
   });
 });

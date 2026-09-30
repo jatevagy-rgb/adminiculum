@@ -7,7 +7,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseReadAccess } from '../cases/authorization';
 import { prisma } from '../../prisma/prisma.service';
-import { buildCaseReport, listReportCases, parsePeriodQuery } from './service';
+import { buildCaseReport, listReportCases, parsePeriodQuery, projectClientWorkReportExport } from './service';
 import { renderClientWorkReportPdf } from './pdf';
 
 const router = Router();
@@ -67,7 +67,7 @@ router.get('/cases/:caseId/pdf', authenticate, requireWorkforceUser, requireCase
     if (!report) {
       return res.status(404).json({ status: 404, code: 'WORK_REPORT_CASE_NOT_FOUND', message: 'Case not found' });
     }
-    const pdf = await renderClientWorkReportPdf(report);
+    const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(report));
     res.type('application/pdf');
     res.attachment(`munkaora-jelentes-${safeFileStem(report.case.caseNumber || report.case.caseId)}.pdf`);
     res.send(pdf);
