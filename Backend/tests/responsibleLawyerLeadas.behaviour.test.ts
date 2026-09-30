@@ -242,6 +242,42 @@ describe('Responsible-lawyer Leadás routing', () => {
     expect(prismaDouble.taskSubmission.update).toHaveBeenCalled();
   });
 
+  function staleReviewerDraft() {
+    return draftRecord({
+      assignedReviewerId: IDS.supervisor,
+      assignedReviewer: { id: IDS.supervisor, name: 'Supervisor', email: 's@x.invalid', role: 'PARTNER' },
+    });
+  }
+
+  it('5c. a worker draft with a stale existing reviewer can still save non-reviewer fields', async () => {
+    wireSubmissionMocks({ actorRole: 'TRAINEE', draft: staleReviewerDraft() });
+    const service = new TaskSubmissionService(prismaDouble);
+    await service.updateTaskSubmissionDraft(IDS.task, 'sub-1', IDS.worker, {
+      workSummary: 'Updated summary',
+      assignedReviewerId: IDS.supervisor,
+    });
+    expect(prismaDouble.taskSubmission.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ workSummary: 'Updated summary' }),
+    }));
+  });
+
+  it('5d. a worker cannot change a stale reviewer to an arbitrary third party', async () => {
+    wireSubmissionMocks({ actorRole: 'TRAINEE', draft: staleReviewerDraft() });
+    const service = new TaskSubmissionService(prismaDouble);
+    await expect(service.updateTaskSubmissionDraft(IDS.task, 'sub-1', IDS.worker, { assignedReviewerId: IDS.outsider }))
+      .rejects.toMatchObject({ code: 'REVIEWER_MUST_BE_RESPONSIBLE_LAWYER', statusCode: 403 });
+    expect(prismaDouble.taskSubmission.update).not.toHaveBeenCalled();
+  });
+
+  it('5e. a worker can reconcile a stale reviewer to the current responsible lawyer', async () => {
+    wireSubmissionMocks({ actorRole: 'TRAINEE', draft: staleReviewerDraft() });
+    const service = new TaskSubmissionService(prismaDouble);
+    await service.updateTaskSubmissionDraft(IDS.task, 'sub-1', IDS.worker, { assignedReviewerId: IDS.lawyer });
+    expect(prismaDouble.taskSubmission.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ assignedReviewer: { connect: { id: IDS.lawyer } } }),
+    }));
+  });
+
   it('6. an exact documentVersionId is required before submission', async () => {
     wireSubmissionMocks({
       actorRole: 'TRAINEE',
@@ -261,6 +297,32 @@ describe('Responsible-lawyer Leadás routing', () => {
     await expect(service.submitTaskSubmission(IDS.task, 'sub-1', IDS.worker, 'submit-key', []))
       .rejects.toMatchObject({ code: 'EXACT_VERSION_CONFIRMATION_REQUIRED', statusCode: 409 });
     await expect(service.submitTaskSubmission(IDS.task, 'sub-1', IDS.worker, 'submit-key-2', [IDS.ver2]))
+      .resolves.toEqual(expect.objectContaining({ idempotentReplay: false }));
+  });
+
+  it('7b. submission with a stale reviewer still fails closed until routing is reconciled', async () => {
+    wireSubmissionMocks({
+      actorRole: 'TRAINEE',
+      draft: draftRecord({
+        assignedReviewerId: IDS.supervisor,
+        assignedReviewer: { id: IDS.supervisor, name: 'Supervisor', email: 's@x.invalid', role: 'PARTNER' },
+        documents: [documentLink(IDS.ver2, IDS.ver2)],
+      }),
+    });
+    const service = new TaskSubmissionService(prismaDouble);
+    await expect(service.submitTaskSubmission(IDS.task, 'sub-1', IDS.worker, 'stale-submit-key', [IDS.ver2]))
+      .rejects.toMatchObject({ code: 'REVIEWER_MUST_BE_RESPONSIBLE_LAWYER', statusCode: 409 });
+    expect(prismaDouble.taskSubmission.update).not.toHaveBeenCalled();
+  });
+
+  it('7c. a normal current-responsible-lawyer draft still saves and submits', async () => {
+    wireSubmissionMocks({
+      actorRole: 'TRAINEE',
+      draft: draftRecord({ documents: [documentLink(IDS.ver2, IDS.ver2)] }),
+    });
+    const service = new TaskSubmissionService(prismaDouble);
+    await service.updateTaskSubmissionDraft(IDS.task, 'sub-1', IDS.worker, { workSummary: 'Updated', assignedReviewerId: IDS.lawyer });
+    await expect(service.submitTaskSubmission(IDS.task, 'sub-1', IDS.worker, 'normal-submit-key', [IDS.ver2]))
       .resolves.toEqual(expect.objectContaining({ idempotentReplay: false }));
   });
 });
@@ -574,5 +636,53 @@ describe('Review decision ETag and idempotency contract', () => {
     expect(attachMock.taskSubmissionDocument.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ documentVersionId: IDS.ver3 }),
     }));
+  });
+
+  it('15. the review detail and history expose the exact submitted version identity', async () => {
+    wireDecisionMocks();
+    taskMock.documentReview = { findMany: jest.fn().mockResolvedValue([]) };
+    submission.documents = [{
+      id: 'link-1',
+      documentId: IDS.doc,
+      documentVersionId: IDS.ver2,
+      role: 'PRIMARY_OUTPUT',
+      documentVersion: { id: IDS.ver2, version: 2 },
+      document: {
+        id: IDS.doc,
+        name: 'Output',
+        fileName: 'output.docx',
+        category: 'OTHER',
+        currentVersion: 2,
+        caseId: IDS.case,
+        versions: [{ id: IDS.ver2 }],
+      },
+    }];
+    const service = new TaskReviewDecisionService(taskMock as any);
+    const detail = await service.getReviewDetail(ids.task, 'sub-1', ids.reviewer);
+    expect(detail.reviewVersion).toBeTruthy();
+    expect(detail.outputs).toEqual([expect.objectContaining({
+      documentId: IDS.doc,
+      documentVersionId: IDS.ver2,
+      linkedVersion: 2,
+      isCurrentVersion: true,
+      newerVersionExists: false,
+    })]);
+    expect(detail.history[0].outputs).toEqual([
+      { documentId: IDS.doc, documentVersionId: IDS.ver2, linkedVersion: 2 },
+    ]);
+
+    // A newer current version is reported explicitly and never replaces the
+    // submitted exact version identity in the reviewer detail.
+    submission.documents[0].document.versions = [{ id: IDS.ver3 }];
+    submission.documents[0].document.currentVersion = 3;
+    const superseded = await service.getReviewDetail(ids.task, 'sub-1', ids.reviewer);
+    expect(superseded.outputs).toEqual([expect.objectContaining({
+      documentId: IDS.doc,
+      documentVersionId: IDS.ver2,
+      linkedVersion: 2,
+      isCurrentVersion: false,
+      newerVersionExists: true,
+      currentVersion: 3,
+    })]);
   });
 });

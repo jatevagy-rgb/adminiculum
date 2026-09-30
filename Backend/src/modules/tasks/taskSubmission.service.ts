@@ -562,11 +562,17 @@ export class TaskSubmissionService {
         }
       }
       if (input.assignedReviewerId) {
-        // Responsible-lawyer Leadás: the worker cannot tamper the reviewer to
-        // anyone but the case responsible lawyer. Decision-capable actors keep
-        // the existing non-final reviewer selection.
+        // Responsible-lawyer Leadás: the worker cannot CHANGE the reviewer to
+        // anyone but the case responsible lawyer. Re-sending the draft's
+        // unchanged existing reviewer (even a stale one after a case-lawyer
+        // reassignment) is not tampering and must not block ordinary draft
+        // edits; submission still fails closed until routing is reconciled.
+        // Decision-capable actors keep the existing non-final selection.
         const responsibleLawyerFlow = task.assignedToId === actorId && !DECISION_ROLES.has(access.role);
-        if (responsibleLawyerFlow && input.assignedReviewerId !== task.case.assignedLawyerId) {
+        const reviewerUnchanged = Boolean(submission.assignedReviewerId)
+          && input.assignedReviewerId === submission.assignedReviewerId;
+        const reviewerIsResponsibleLawyer = input.assignedReviewerId === task.case.assignedLawyerId;
+        if (responsibleLawyerFlow && !reviewerUnchanged && !reviewerIsResponsibleLawyer) {
           throw new TaskSubmissionServiceError(403, 'REVIEWER_MUST_BE_RESPONSIBLE_LAWYER', 'The responsible-lawyer Leadás reviewer cannot be changed by the worker.');
         }
         await this.assertEligibleReviewer(task, input.assignedReviewerId, [actorId, task.assignedToId || ''], tx);
