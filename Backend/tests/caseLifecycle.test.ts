@@ -41,6 +41,13 @@ jest.mock('../src/prisma/prisma.service', () => {
     communication: { findMany: jest.fn() },
     communicationAttachment: { count: jest.fn() },
     lawyerHandoffPackage: { count: jest.fn() },
+    taskSubmission: { count: jest.fn() },
+    documentReview: { count: jest.fn(), findMany: jest.fn(async () => []) },
+    reviewPoint: { count: jest.fn() },
+    taskSubmissionDocument: { findMany: jest.fn(async () => []) },
+    timeEntry: { count: jest.fn() },
+    billingPreparationItem: { count: jest.fn() },
+    clientDocumentPublication: { count: jest.fn() },
     timelineEvent: { create: jest.fn() },
     $transaction: jest.fn(async (fn: any) => fn(prisma)),
   };
@@ -285,6 +292,8 @@ describe('GET /cases/:caseId/lifecycle', () => {
     expect(res.body.capabilities.canStartClosing).toBe(false);
     expect(res.body.closureReadiness.ready).toBe(false);
     expect(res.body.blockers.map((b: any) => b.code)).toContain('OPEN_TASKS');
+    // Structured warnings are part of the DTO and never feed the blockers.
+    expect(Array.isArray(res.body.warnings)).toBe(true);
   });
 });
 

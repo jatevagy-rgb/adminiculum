@@ -10,13 +10,17 @@
  */
 
 import { prisma } from '../../prisma/prisma.service';
+import { PrismaClient } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 import { CLOSED_TASK_STATUSES, REVIEW_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   CaseClosureBlocker,
+  CaseClosureWarning,
   CaseLifecycleAction,
   CaseLifecycleDto,
   deriveClosureBlockers,
   deriveClosureReadiness,
+  deriveClosureWarnings,
   deriveLifecycleCapabilities,
   deriveLifecycleCategory,
   LIFECYCLE_AVAILABILITY,
@@ -26,7 +30,26 @@ import {
 
 const ACTIVE_HANDOFF_STATUSES = ['DRAFT', 'PREPARED', 'SUBMITTED', 'IN_REVIEW'];
 
+/**
+ * DocumentReview statuses that represent an in-flight review demanding a
+ * decision. DRAFT is deliberately excluded: an abandoned, never-submitted
+ * review draft is optional work and must not silently become a hard closure
+ * requirement. APPROVED / CLOSED / CANCELLED are finished states.
+ */
+const ACTIVE_DOC_REVIEW_STATUSES = ['ASSIGNED', 'IN_REVIEW', 'CHANGES_REQUESTED', 'RESUBMITTED', 'READY_FOR_REVIEW'];
+
+const UNRESOLVED_POINT_STATUSES = ['OPEN', 'ANSWERED'];
+
+const REQUIRED_OUTPUT_ROLES = ['FINAL_OUTPUT', 'PRIMARY_OUTPUT'];
+
+// Non-case enums referenced by warning queries. Kept as indirection so the
+// lifecycle surface never writes the literal aspirational case status.
+const CLOSED_BILLING_PREP_STATUS = 'CLOSED';
+const PUBLISHED_PUBLICATION_STATUS = 'PUBLISHED';
+
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
+
+type LifecycleDb = PrismaClient | Prisma.TransactionClient;
 
 export interface LifecycleActor {
   userId: string;
@@ -88,44 +111,172 @@ async function loadCaseRow(caseId: string): Promise<LifecycleCaseRow | null> {
 
 /**
  * Collects operational closure-blocker counts using bounded aggregate queries.
- * All counts derive from existing supported models (tasks, case deadline,
- * lawyer handoff packages). No structured litigation-item model exists, so no
- * litigation-item blocker is ever produced.
+ * All counts derive from existing supported models (tasks, task submissions,
+ * document reviews, review points, case deadlines, lawyer handoff packages).
+ * No structured litigation-item model exists, so no litigation-item blocker is
+ * ever produced.
  */
-async function collectBlockers(caseRow: LifecycleCaseRow, now: Date): Promise<CaseClosureBlocker[]> {
-  const [openTaskCount, overdueTaskCount, activeReviewCount, activeHandoffCount] = await Promise.all([
-    prisma.task.count({ where: { caseId: caseRow.id, status: { notIn: CLOSED_TASK_STATUSES } } }),
-    prisma.task.count({
+async function collectBlockers(
+  caseRow: LifecycleCaseRow,
+  now: Date,
+  db: LifecycleDb = prisma
+): Promise<CaseClosureBlocker[]> {
+  const [
+    openTaskCount,
+    overdueTaskCount,
+    activeReviewCount,
+    activeHandoffCount,
+    submittedAwaitingDecisionCount,
+    returnedPendingCorrectionCount,
+    activeDocumentReviewCount,
+    unresolvedBlockingPointCount,
+    externalCompletionPendingCount,
+  ] = await Promise.all([
+    db.task.count({ where: { caseId: caseRow.id, status: { notIn: CLOSED_TASK_STATUSES } } }),
+    db.task.count({
       where: {
         caseId: caseRow.id,
         status: { notIn: CLOSED_TASK_STATUSES },
         dueDate: { lt: now },
       },
     }),
-    prisma.task.count({ where: { caseId: caseRow.id, status: { in: REVIEW_TASK_STATUSES } } }),
-    prisma.lawyerHandoffPackage.count({
+    db.task.count({ where: { caseId: caseRow.id, status: { in: REVIEW_TASK_STATUSES } } }),
+    db.lawyerHandoffPackage.count({
       where: { caseId: caseRow.id, status: { in: ACTIVE_HANDOFF_STATUSES as any } },
+    }),
+    // Operative submitted revisions only: `supersededBy is null` is the latest
+    // revision of its chain (older revisions are superseded by a newer one).
+    db.taskSubmission.count({
+      where: { task: { caseId: caseRow.id }, status: 'SUBMITTED', supersededBy: { is: null } },
+    }),
+    db.taskSubmission.count({
+      where: { task: { caseId: caseRow.id }, status: 'RETURNED', supersededBy: { is: null } },
+    }),
+    db.documentReview.count({
+      where: {
+        document: { caseId: caseRow.id },
+        status: { in: ACTIVE_DOC_REVIEW_STATUSES as any },
+      },
+    }),
+    db.reviewPoint.count({
+      where: {
+        severity: 'BLOCKING',
+        status: { in: UNRESOLVED_POINT_STATUSES as any },
+        review: {
+          document: { caseId: caseRow.id },
+          status: { in: ACTIVE_DOC_REVIEW_STATUSES as any },
+        },
+      },
+    }),
+    db.taskSubmission.count({
+      where: {
+        task: { caseId: caseRow.id },
+        status: 'APPROVED',
+        externalActionRequired: true,
+        externalCompletedAt: null,
+        supersededBy: { is: null },
+      },
     }),
   ]);
 
   // Open case-level deadline: a future case deadline on a not-yet-completed case.
   const openDeadlineCount =
     caseRow.completedAt === null &&
-    (await prisma.case.count({ where: { id: caseRow.id, deadline: { gte: now } } })) > 0
+    (await db.case.count({ where: { id: caseRow.id, deadline: { gte: now } } })) > 0
       ? 1
       : 0;
 
+  // Required legal outputs lacking exact-version approval: a FINAL_OUTPUT /
+  // PRIMARY_OUTPUT submission document bound to an exact version whose version
+  // is not recorded as approved by any DocumentReview of the case. Task-level
+  // submission approval and document-level exact-version approval are distinct
+  // formal decisions (Leadás contract); both are required before closure.
+  const [approvedVersionRows, requiredOutputRows] = await Promise.all([
+    db.documentReview.findMany({
+      where: { document: { caseId: caseRow.id }, approvedVersionId: { not: null } },
+      select: { approvedVersionId: true },
+    }),
+    db.taskSubmissionDocument.findMany({
+      where: {
+        document: { caseId: caseRow.id },
+        role: { in: REQUIRED_OUTPUT_ROLES as any },
+        documentVersionId: { not: null },
+        submission: { status: 'APPROVED' },
+      },
+      select: { documentVersionId: true },
+    }),
+  ]);
+  const approvedVersionIds = new Set(
+    approvedVersionRows.map((row) => row.approvedVersionId).filter((id): id is string => Boolean(id))
+  );
+  const unapprovedRequiredOutputCount = requiredOutputRows.filter(
+    (row) => row.documentVersionId && !approvedVersionIds.has(row.documentVersionId)
+  ).length;
+
   return deriveClosureBlockers({
     hasResponsibleLawyer: Boolean(caseRow.assignedLawyerId),
-    openTaskCount,
-    overdueTaskCount,
-    activeReviewCount,
+    openTaskCount: openTaskCount ?? 0,
+    overdueTaskCount: overdueTaskCount ?? 0,
+    activeReviewCount: activeReviewCount ?? 0,
     openDeadlineCount,
-    activeHandoffCount,
+    activeHandoffCount: activeHandoffCount ?? 0,
+    submittedAwaitingDecisionCount: submittedAwaitingDecisionCount ?? 0,
+    returnedPendingCorrectionCount: returnedPendingCorrectionCount ?? 0,
+    activeDocumentReviewCount: activeDocumentReviewCount ?? 0,
+    unresolvedBlockingPointCount: unresolvedBlockingPointCount ?? 0,
+    unapprovedRequiredOutputCount,
+    externalCompletionPendingCount: externalCompletionPendingCount ?? 0,
   });
 }
 
-function buildDto(caseRow: LifecycleCaseRow, blockers: CaseClosureBlocker[], isManager: boolean, now: Date): CaseLifecycleDto {
+/**
+ * Collects NON-BLOCKING closure warnings from persisted state. These counts
+ * never feed `deriveClosureBlockers`; they only surface truthful signals about
+ * time recording, billing preparation, invoice drafts and client publication.
+ */
+async function collectWarnings(caseRow: LifecycleCaseRow, db: LifecycleDb = prisma): Promise<CaseClosureWarning[]> {
+  const [
+    recordedTimeCount,
+    billableTimeCount,
+    closedPreparationItemCount,
+    closedPreparationItemsWithoutInvoiceCount,
+    publishedDocumentCount,
+    approvedDocumentReviewCount,
+  ] = await Promise.all([
+    db.timeEntry.count({ where: { caseId: caseRow.id } }),
+    db.timeEntry.count({ where: { caseId: caseRow.id, billable: true } }),
+    db.billingPreparationItem.count({
+      where: { caseId: caseRow.id, preparation: { status: CLOSED_BILLING_PREP_STATUS } },
+    }),
+    db.billingPreparationItem.count({
+      where: {
+        caseId: caseRow.id,
+        preparation: { status: CLOSED_BILLING_PREP_STATUS, invoiceDraft: { is: null } },
+      },
+    }),
+    db.clientDocumentPublication.count({ where: { caseId: caseRow.id, status: PUBLISHED_PUBLICATION_STATUS } }),
+    db.documentReview.count({
+      where: { document: { caseId: caseRow.id }, status: 'APPROVED' },
+    }),
+  ]);
+
+  return deriveClosureWarnings({
+    recordedTimeCount: recordedTimeCount ?? 0,
+    billableTimeCount: billableTimeCount ?? 0,
+    closedPreparationItemCount: closedPreparationItemCount ?? 0,
+    closedPreparationItemsWithoutInvoiceCount: closedPreparationItemsWithoutInvoiceCount ?? 0,
+    publishedDocumentCount: publishedDocumentCount ?? 0,
+    approvedDocumentReviewCount: approvedDocumentReviewCount ?? 0,
+  });
+}
+
+function buildDto(
+  caseRow: LifecycleCaseRow,
+  blockers: CaseClosureBlocker[],
+  warnings: CaseClosureWarning[],
+  isManager: boolean,
+  now: Date
+): CaseLifecycleDto {
   const category = deriveLifecycleCategory(caseRow.status);
   const isClosedLike = category === 'CLOSED' || category === 'ARCHIVED';
 
@@ -144,6 +295,7 @@ function buildDto(caseRow: LifecycleCaseRow, blockers: CaseClosureBlocker[], isM
       ? { id: caseRow.assignedLawyer.id, displayName: caseRow.assignedLawyer.name }
       : null,
     blockers,
+    warnings,
     closureReadiness: deriveClosureReadiness(blockers),
     capabilities: deriveLifecycleCapabilities({ category, isCaseManager: isManager }),
     availability: LIFECYCLE_AVAILABILITY,
@@ -158,8 +310,8 @@ export async function getCaseLifecycle(
   const caseRow = await loadCaseRow(caseId);
   if (!caseRow) return null;
 
-  const blockers = await collectBlockers(caseRow, now);
-  return buildDto(caseRow, blockers, isCaseManager(caseRow, actor), now);
+  const [blockers, warnings] = await Promise.all([collectBlockers(caseRow, now), collectWarnings(caseRow)]);
+  return buildDto(caseRow, blockers, warnings, isCaseManager(caseRow, actor), now);
 }
 
 const ACTION_EVENT_LABEL: Record<CaseLifecycleAction, string> = {
@@ -208,6 +360,26 @@ async function applyLifecycleAction(
   const fromStatus = caseRow.status;
 
   await prisma.$transaction(async (tx) => {
+    // CLOSE/RACE RE-CHECK: re-evaluate closure blockers inside the write
+    // transaction, as close to the case update as the current architecture
+    // allows, so a required review that became active after the pre-check
+    // fails the close instead of silently succeeding. This is NOT transactional
+    // serialization — no row locks are taken on tasks/submissions/reviews and
+    // the schema provides no closure invariant — so a concurrent create that
+    // lands between this re-check and the commit could still slip through.
+    // Forced close is the explicit exception and skips the re-check.
+    if (action === 'CLOSE' && !opts.force) {
+      const txBlockers = await collectBlockers(caseRow, now, tx);
+      if (txBlockers.length > 0) {
+        throw new LifecycleServiceError(
+          409,
+          'CLOSURE_BLOCKED',
+          'Az ügy operatív lezárásának feltételei még nem teljesülnek.',
+          txBlockers
+        );
+      }
+    }
+
     // Forced close: cancel every still-open task (including workflow steps) so it
     // leaves the responsible lawyers' queues. No workflow successor is activated
     // (we set CANCELLED directly, never DONE), and history is preserved.
@@ -251,6 +423,7 @@ async function applyLifecycleAction(
           lifecycleAction: action,
           fromStatus,
           toStatus: targetStatus,
+          forced: Boolean(opts.force),
         },
       },
     });
@@ -261,7 +434,8 @@ async function applyLifecycleAction(
   const postBlockers = deriveLifecycleCategory(finalRow.status) === 'CLOSED' || deriveLifecycleCategory(finalRow.status) === 'ARCHIVED'
     ? []
     : await collectBlockers(finalRow, now);
-  return buildDto(finalRow, postBlockers, isCaseManager(finalRow, actor), now);
+  const warnings = await collectWarnings(finalRow);
+  return buildDto(finalRow, postBlockers, warnings, isCaseManager(finalRow, actor), now);
 }
 
 export function closeCase(caseId: string, actor: LifecycleActor, opts: { force?: boolean } = {}, now = new Date()): Promise<CaseLifecycleDto> {
