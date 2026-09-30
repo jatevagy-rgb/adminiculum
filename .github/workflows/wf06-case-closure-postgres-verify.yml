@@ -1,0 +1,172 @@
+# WF06 QA-only verification workflow (no application/test expectation changes).
+#
+# The five case-closure concurrency tests in
+#   Backend/tests/caseClosureConcurrency.integration.test.ts
+# were skipping everywhere because no environment provided both
+# CASE_CLOSURE_REPAIR_TEST_DATABASE_URL and a matching DATABASE_URL on a
+# dedicated loopback PostgreSQL database. This workflow provides exactly that:
+#
+#   1. standard postgres:16 service container (same image as
+#      backend-postgresql-integration.yml) bound to localhost:5432;
+#   2. canonical schema replay via the existing `db:migrations:verify-replay`
+#      bootstrap into `adminiculum_replay_ci`;
+#   3. a disposable schema copy (`CREATE DATABASE ... TEMPLATE`), the same
+#      dedicated-database pattern used by ci-provision-task-document-dbs.mjs,
+#      named `adminiculum_case_closure_repair_ci` to satisfy the suite's guard;
+#   4. the single targeted suite, with machine-readable jest JSON output and an
+#      enforcement step that fails the job if EXECUTED != 5 or SKIPPED != 0.
+#
+# No production secrets, no Azure access, no deploy/publish steps.
+
+name: WF06 Case Closure PostgreSQL Verification (QA-only)
+
+on:
+  push:
+    branches:
+      - kilo/wf06-closure-pg-verify
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wf06-case-closure-pg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  case-closure-concurrency:
+    name: Case closure concurrency on dedicated PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adminiculum_replay_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Disposable loopback-only CI service-container credentials (not secrets).
+      CASE_CLOSURE_REPAIR_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_case_closure_repair_ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: Backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: Backend
+        run: npm ci
+
+      - name: Provision canonical schema (empty migration replay)
+        working-directory: Backend
+        env:
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+        run: npm run db:migrations:verify-replay
+
+      - name: Verify replay database identity
+        working-directory: Backend
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d adminiculum_replay_ci -v ON_ERROR_STOP=1 \
+            -c 'SELECT current_database() AS database, inet_server_addr() AS host;'
+
+      - name: Create dedicated closure database from canonical schema copy
+        working-directory: Backend
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -v ON_ERROR_STOP=1 \
+            -c 'CREATE DATABASE adminiculum_case_closure_repair_ci TEMPLATE adminiculum_replay_ci'
+
+      - name: Verify dedicated closure database identity
+        working-directory: Backend
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d adminiculum_case_closure_repair_ci -v ON_ERROR_STOP=1 \
+            -c 'SELECT current_database() AS database, inet_server_addr() AS host;'
+
+      - name: Run case closure concurrency suite (5 tests)
+        working-directory: Backend
+        env:
+          # The suite refuses to run unless DATABASE_URL is exactly this URL,
+          # the host is loopback, and the database name carries its guard prefix.
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_case_closure_repair_ci
+        run: |
+          set -o pipefail
+          npx jest --runInBand --verbose --json \
+            --outputFile=wf06-case-closure-results.json \
+            tests/caseClosureConcurrency.integration.test.ts 2>&1 | tee wf06-case-closure-console.log
+
+      - name: Assert executed=5 skipped=0 and summarize counts
+        if: always()
+        working-directory: Backend
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const file = 'wf06-case-closure-results.json';
+          if (!fs.existsSync(file)) {
+            console.log('EXECUTED=0');
+            console.log('SKIPPED=unknown');
+            console.log('ENFORCEMENT FAILED: jest machine-readable result file is missing.');
+            process.exit(1);
+          }
+          const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+          const executed = r.numTotalTests;
+          const passed = r.numPassedTests;
+          const failed = r.numFailedTests;
+          const skipped = r.numPendingTests + (r.numTodoTests || 0);
+          console.log(`EXECUTED=${executed}`);
+          console.log(`PASSED=${passed}`);
+          console.log(`FAILED=${failed}`);
+          console.log(`SKIPPED=${skipped}`);
+          const failing = [];
+          for (const suite of r.testResults || []) {
+            for (const t of suite.assertionResults || []) {
+              if (t.status === 'failed') {
+                failing.push(`- ${t.fullName}`);
+                for (const m of t.failureMessages || []) {
+                  console.log(`FAILURE MESSAGE [${t.fullName}]: ${m}`);
+                }
+              }
+            }
+          }
+          if (failing.length) {
+            console.log('PRECISE_FAILING_ASSERTIONS:');
+            for (const line of failing) console.log(line);
+          }
+          if (executed !== 5 || skipped !== 0) {
+            console.log(`ENFORCEMENT FAILED: expected 5 executed and 0 skipped, got ${executed} executed and ${skipped} skipped.`);
+            process.exit(1);
+          }
+          if (failed > 0) {
+            console.log(`ENFORCEMENT: ${failed} executed test(s) failed; see failure messages above.`);
+            process.exit(1);
+          }
+          console.log('ENFORCEMENT OK: 5 executed, 0 skipped.');
+          NODE
+
+      - name: Upload machine-readable results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wf06-case-closure-pg-results
+          path: |
+            Backend/wf06-case-closure-results.json
+            Backend/wf06-case-closure-console.log
+          if-no-files-found: warn
+          retention-days: 14
