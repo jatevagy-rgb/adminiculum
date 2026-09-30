@@ -74,7 +74,8 @@ test("Alert renders semantic status and alert roles based on variant", () => {
     React.createElement(Alert, {
       variant: "info",
       title: "Tájékoztatás",
-    }, "Rendszerfrissítés elérhető.")
+      children: "Rendszerfrissítés elérhető.",
+    })
   );
   assert.match(infoHtml, /role="status"/);
   assert.match(infoHtml, /aria-live="polite"/);
@@ -86,7 +87,8 @@ test("Alert renders semantic status and alert roles based on variant", () => {
     React.createElement(Alert, {
       variant: "error",
       title: "Hiba",
-    }, "A mentés meghiúsult.")
+      children: "A mentés meghiúsult.",
+    })
   );
   assert.match(errorHtml, /role="alert"/);
   assert.match(errorHtml, /aria-live="assertive"/);
@@ -99,7 +101,8 @@ test("Alert renders optional dismiss button with accessible label", () => {
       variant: "warning",
       title: "Figyelmeztetés",
       onDismiss: () => undefined,
-    }, "Figyelem szükséges.")
+      children: "Figyelem szükséges.",
+    })
   );
   assert.match(dismissHtml, /aria-label="Értesítés bezárása"/);
   assert.match(dismissHtml, /<button[^>]+type="button"/);
@@ -110,7 +113,8 @@ test("Alert supports custom action slot", () => {
     React.createElement(Alert, {
       variant: "info",
       action: React.createElement("button", { type: "button" }, "Részletek"),
-    }, "További információ")
+      children: "További információ",
+    })
   );
   assert.match(actionHtml, /Részletek/);
   assert.match(actionHtml, /További információ/);
