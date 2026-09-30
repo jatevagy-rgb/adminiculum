@@ -9,6 +9,7 @@ export * from "./Form";
 export * from "./QuietLink";
 export * from "./DataTable";
 export * from "./ConfirmationDialog";
+export * from "./MetricTile";
 export * from "./tokens";
 
 // Adminiculum Canonical Primitives

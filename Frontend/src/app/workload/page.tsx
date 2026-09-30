@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
-import { Alert, Button, DataTable, DataTableBody, DataTableCell, DataTableEmpty, DataTableHead, DataTableHeaderCell, DataTableRow, EmptyState, PageHeader, QuietLink } from "@/components/ui";
+import { Alert, Button, DataTable, DataTableBody, DataTableCell, DataTableEmpty, DataTableHead, DataTableHeaderCell, DataTableRow, EmptyState, MetricTile, PageHeader, QuietLink } from "@/components/ui";
 import { getWorkflowWorkload, type WorkflowWorkloadResponse } from "@/lib/api";
 
 type Scope = "MY_WORK" | "MY_CASES" | "TEAM";
@@ -112,7 +112,7 @@ function WorkloadContent() {
 }
 
 function SummaryCell({ label, value, overdue = false }: { label: string; value: string; overdue?: boolean }) {
-  return <div className="bg-white p-4"><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280]">{label}</p><p className={`mt-2 text-xl font-semibold ${overdue ? "text-[#B85C4B]" : "text-[#1F2937]"}`}>{value}</p></div>;
+  return <MetricTile label={label} value={value} overdue={overdue} className="rounded-none border-0" />;
 }
 
 export default function WorkloadPage() {
