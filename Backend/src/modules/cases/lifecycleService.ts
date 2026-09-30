@@ -147,10 +147,10 @@ async function collectBlockers(
     // Operative submitted revisions only: `supersededBy is null` is the latest
     // revision of its chain (older revisions are superseded by a newer one).
     db.taskSubmission.count({
-      where: { task: { caseId: caseRow.id }, status: 'SUBMITTED', supersededBy: { is: null } },
+      where: { task: { caseId: caseRow.id, status: { not: 'CANCELLED' } }, status: 'SUBMITTED', supersededBy: { is: null } },
     }),
     db.taskSubmission.count({
-      where: { task: { caseId: caseRow.id }, status: 'RETURNED', supersededBy: { is: null } },
+      where: { task: { caseId: caseRow.id, status: { not: 'CANCELLED' } }, status: 'RETURNED', supersededBy: { is: null } },
     }),
     db.documentReview.count({
       where: {
@@ -170,7 +170,7 @@ async function collectBlockers(
     }),
     db.taskSubmission.count({
       where: {
-        task: { caseId: caseRow.id },
+        task: { caseId: caseRow.id, status: { not: 'CANCELLED' } },
         status: 'APPROVED',
         externalActionRequired: true,
         externalCompletedAt: null,
@@ -186,31 +186,41 @@ async function collectBlockers(
       ? 1
       : 0;
 
-  // Required legal outputs lacking exact-version approval: a FINAL_OUTPUT /
-  // PRIMARY_OUTPUT submission document bound to an exact version whose version
-  // is not recorded as approved by any DocumentReview of the case. Task-level
-  // submission approval and document-level exact-version approval are distinct
-  // formal decisions (Leadás contract); both are required before closure.
-  const [approvedVersionRows, requiredOutputRows] = await Promise.all([
-    db.documentReview.findMany({
-      where: { document: { caseId: caseRow.id }, approvedVersionId: { not: null } },
-      select: { approvedVersionId: true },
-    }),
-    db.taskSubmissionDocument.findMany({
+  // Output role identifies a deliverable, not a mandate for formal legal
+  // review. Only an operative output with an active formal review of its exact
+  // document version can contribute this blocker. Independent active reviews
+  // remain covered by activeDocumentReviewCount above.
+  const outputRows = await db.taskSubmissionDocument.findMany({
+    where: {
+      document: { caseId: caseRow.id },
+      role: { in: REQUIRED_OUTPUT_ROLES as any },
+      documentVersionId: { not: null },
+      submission: {
+        status: 'APPROVED',
+        supersededBy: { is: null },
+        task: { caseId: caseRow.id, status: { not: 'CANCELLED' } },
+      },
+    },
+    select: { documentId: true, documentVersionId: true, documentVersion: { select: { documentId: true } } },
+  });
+  const operativeOutputs = outputRows.filter(
+    (row) => row.documentVersionId && row.documentVersion?.documentId === row.documentId
+  );
+  const activeOutputReviews = operativeOutputs.length > 0
+    ? await db.documentReview.findMany({
       where: {
         document: { caseId: caseRow.id },
-        role: { in: REQUIRED_OUTPUT_ROLES as any },
-        documentVersionId: { not: null },
-        submission: { status: 'APPROVED' },
+        status: { in: ACTIVE_DOC_REVIEW_STATUSES as any },
+        currentRound: { reviewVersionId: { in: operativeOutputs.map((row) => row.documentVersionId!) } },
       },
-      select: { documentVersionId: true },
-    }),
-  ]);
-  const approvedVersionIds = new Set(
-    approvedVersionRows.map((row) => row.approvedVersionId).filter((id): id is string => Boolean(id))
-  );
-  const unapprovedRequiredOutputCount = requiredOutputRows.filter(
-    (row) => row.documentVersionId && !approvedVersionIds.has(row.documentVersionId)
+      select: { documentId: true, currentRound: { select: { reviewVersionId: true } } },
+    })
+    : [];
+  const activeFormalVersions = new Set(activeOutputReviews.map(
+    (review) => `${review.documentId}:${review.currentRound?.reviewVersionId || ''}`
+  ));
+  const unapprovedRequiredOutputCount = operativeOutputs.filter(
+    (row) => activeFormalVersions.has(`${row.documentId}:${row.documentVersionId}`)
   ).length;
 
   return deriveClosureBlockers({

@@ -8,8 +8,8 @@
  *   3. a RETURNED submission awaiting correction blocks;
  *   4. an active required DocumentReview blocks;
  *   5. an unresolved BLOCKING review point blocks;
- *   6. a required legal output without exact-version approval blocks, and a
- *      recorded exact-version approval releases the gate;
+ *   6. an output role alone does not require formal review; an operative
+ *      output under active exact-version review retains its blocker;
  *   7. a completed required review (nothing outstanding) permits close;
  *   8. a zero-recorded-time case still closes (warning, never a blocker);
  *   9. incomplete billing preparation does NOT block (warning only);
@@ -49,11 +49,15 @@ interface Counts {
   blockingPoints: number;
   approvedVersionIds: string[];
   requiredOutputVersionIds: string[];
+  formalReviewVersionIds: string[];
   recorded: number;
   billable: number;
   closedItems: number;
   closedItemsWithoutInvoice: number;
   publishedDocs: number;
+  cancelledTaskSubmitted: number;
+  cancelledTaskReturned: number;
+  cancelledTaskExternalPending: number;
 }
 
 const counts: Counts = {
@@ -70,11 +74,15 @@ const counts: Counts = {
   blockingPoints: 0,
   approvedVersionIds: [],
   requiredOutputVersionIds: [],
+  formalReviewVersionIds: [],
   recorded: 5,
   billable: 0,
   closedItems: 0,
   closedItemsWithoutInvoice: 0,
   publishedDocs: 0,
+  cancelledTaskSubmitted: 0,
+  cancelledTaskReturned: 0,
+  cancelledTaskExternalPending: 0,
 };
 
 function resetCounts(overrides: Partial<Counts> = {}) {
@@ -92,11 +100,15 @@ function resetCounts(overrides: Partial<Counts> = {}) {
     blockingPoints: 0,
     approvedVersionIds: [],
     requiredOutputVersionIds: [],
+    formalReviewVersionIds: [],
     recorded: 5,
     billable: 0,
     closedItems: 0,
     closedItemsWithoutInvoice: 0,
     publishedDocs: 0,
+    cancelledTaskSubmitted: 0,
+    cancelledTaskReturned: 0,
+    cancelledTaskExternalPending: 0,
   }, overrides);
 }
 
@@ -136,7 +148,11 @@ beforeEach(() => {
       if (where.status?.in) return counts.review;
       return counts.open;
     }),
-    updateMany: jest.fn(async () => ({ count: counts.open })),
+    updateMany: jest.fn(async () => {
+      const cancelled = counts.open;
+      counts.open = 0;
+      return { count: cancelled };
+    }),
   };
   prismaDouble.lawyerHandoffPackage = {
     count: jest.fn(async () => counts.handoff),
@@ -144,9 +160,11 @@ beforeEach(() => {
   prismaDouble.taskSubmission = {
     count: jest.fn(async (args: any) => {
       const status = (args?.where || {}).status;
-      if (status === 'SUBMITTED') return counts.submitted;
-      if (status === 'RETURNED') return counts.returned;
-      return counts.externalPending;
+      const taskStatus = args?.where?.task?.status;
+      const excludesCancelled = taskStatus?.not === 'CANCELLED' || (taskStatus?.notIn || []).includes('CANCELLED');
+      if (status === 'SUBMITTED') return counts.submitted + (excludesCancelled ? 0 : counts.cancelledTaskSubmitted);
+      if (status === 'RETURNED') return counts.returned + (excludesCancelled ? 0 : counts.cancelledTaskReturned);
+      return counts.externalPending + (excludesCancelled ? 0 : counts.cancelledTaskExternalPending);
     }),
   };
   prismaDouble.documentReview = {
@@ -154,8 +172,10 @@ beforeEach(() => {
       if ((args?.where || {}).status === 'APPROVED') return counts.approvedReviews;
       return counts.activeDocReviews;
     }),
-    findMany: jest.fn(async () =>
-      counts.approvedVersionIds.map((id) => ({ approvedVersionId: id }))
+    findMany: jest.fn(async (args: any) =>
+      args?.where?.status?.in
+        ? counts.formalReviewVersionIds.map((id) => ({ documentId: 'doc-1', currentRound: { reviewVersionId: id } }))
+        : counts.approvedVersionIds.map((id) => ({ approvedVersionId: id }))
     ),
   };
   prismaDouble.reviewPoint = {
@@ -163,7 +183,7 @@ beforeEach(() => {
   };
   prismaDouble.taskSubmissionDocument = {
     findMany: jest.fn(async () =>
-      counts.requiredOutputVersionIds.map((id) => ({ documentVersionId: id }))
+      counts.requiredOutputVersionIds.map((id) => ({ documentId: 'doc-1', documentVersionId: id, documentVersion: { documentId: 'doc-1' } }))
     ),
   };
   prismaDouble.timeEntry = {
@@ -234,17 +254,19 @@ describe('case closure gate — ordinary close', () => {
     expect(prismaDouble.case.update).not.toHaveBeenCalled();
   });
 
-  it('6. blocks a required legal output without exact-version approval, and releases with it', async () => {
+  it('6. does not invent formal review from an administrative primary output role', async () => {
     resetCounts({ requiredOutputVersionIds: ['ver-1'], approvedVersionIds: [] });
-    const blocked = await closeCase('case-1', MANAGER).catch((e: any) => e);
-    expect(blocked.code).toBe('CLOSURE_BLOCKED');
-    expect(blockerCodes({ blockers: blocked.blockers })).toContain('LEGAL_OUTPUT_EXACT_VERSION_UNAPPROVED');
-
-    resetCounts({ requiredOutputVersionIds: ['ver-1'], approvedVersionIds: ['ver-1'] });
     const dto = await closeCase('case-1', MANAGER);
     expect(blockerCodes(dto)).not.toContain('LEGAL_OUTPUT_EXACT_VERSION_UNAPPROVED');
     expect(caseRow.status).toBe('FINAL');
     expect(caseRow.completedAt).not.toBeNull();
+  });
+
+  it('6b. retains the exact-version output blocker when formal review is active', async () => {
+    resetCounts({ requiredOutputVersionIds: ['ver-1'], formalReviewVersionIds: ['ver-1'], activeDocReviews: 1 });
+    const error = await closeCase('case-1', MANAGER).catch((e: any) => e);
+    expect(blockerCodes({ blockers: error.blockers })).toContain('LEGAL_OUTPUT_EXACT_VERSION_UNAPPROVED');
+    expect(blockerCodes({ blockers: error.blockers })).toContain('ACTIVE_DOCUMENT_REVIEW');
   });
 
   it('7. closes when nothing is outstanding and writes the audit event', async () => {
@@ -352,6 +374,21 @@ describe('case closure gate — reopen and archive', () => {
       statusCode: 409,
       code: 'INVALID_LIFECYCLE_TRANSITION',
     });
+  });
+});
+
+describe('case closure gate — cancelled task history', () => {
+  it('force-close then reopen allows ordinary close while cancelled submissions remain', async () => {
+    resetCounts({ open: 1, cancelledTaskSubmitted: 1, cancelledTaskReturned: 1, cancelledTaskExternalPending: 1 });
+    await closeCase('case-1', MANAGER, { force: true });
+    expect(caseRow.status).toBe('FINAL');
+    await reopenCase('case-1', MANAGER);
+    expect(counts.cancelledTaskSubmitted).toBe(1);
+    expect(counts.cancelledTaskReturned).toBe(1);
+    expect(counts.cancelledTaskExternalPending).toBe(1);
+    const dto = await closeCase('case-1', MANAGER);
+    expect(dto.status).toBe('FINAL');
+    expect(dto.blockers).toHaveLength(0);
   });
 });
 
