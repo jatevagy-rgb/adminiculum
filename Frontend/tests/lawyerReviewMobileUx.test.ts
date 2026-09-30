@@ -58,15 +58,34 @@ test("lawyer review mobile UX: DocumentReviewRail includes next pending proposal
   // Next pending jump button
   assert.match(content, /data-testid="reader-rail-jump-next-pending"/, "Must render next pending proposal jump button");
   assert.match(content, /Következő döntendő/, "Jump button must have clear Hungarian copy");
-  // Accept and Reject buttons have min-h-[36px]
-  assert.match(content, /data-testid="reader-rail-proposal-accept"[\s\S]*?min-h-\[36px\]/, "Accept button must have min-h-[36px]");
-  assert.match(content, /data-testid="reader-rail-proposal-reject"[\s\S]*?min-h-\[36px\]/, "Reject button must have min-h-[36px]");
+  assert.match(content, /data-testid="reader-rail-jump-next-pending"[\s\S]*?min-h-\[40px\]/, "Jump button must have min-h-[40px]");
+  // Jump keeps drawer open by passing closeDrawer = false
+  assert.match(content, /onFocusProposal\(target,\s*false\)/, "Jump must pass false to onFocusProposal to keep drawer open");
+  // Accept and Reject buttons have min-h-[40px] min-w-[40px]
+  assert.match(content, /data-testid="reader-rail-proposal-accept"[\s\S]*?min-h-\[40px\][\s\S]*?min-w-\[40px\]/, "Accept button must have at least 40x40px touch target");
+  assert.match(content, /data-testid="reader-rail-proposal-reject"[\s\S]*?min-h-\[40px\][\s\S]*?min-w-\[40px\]/, "Reject button must have at least 40x40px touch target");
+  // Rail filter buttons have min-h-[40px]
+  assert.match(content, /data-testid=\{`reader-rail-filter-\$\{value\}`\}[\s\S]*?min-h-\[40px\]/, "Rail filter pills must have min-h-[40px]");
+});
+
+test("lawyer review mobile UX: DocumentReaderRailDrawer has 40x40px touch-friendly close button", () => {
+  const drawerPath = path.resolve(process.cwd(), "src/components/documents/reader/DocumentReaderRailDrawer.tsx");
+  const content = readFileSync(drawerPath, "utf-8");
+
+  assert.match(content, /data-testid="document-reader-rail-drawer-close"[\s\S]*?min-h-\[40px\][\s\S]*?min-w-\[40px\]/, "Drawer close button must have at least 40x40px touch target");
 });
 
 test("lawyer review mobile UX: DocumentReviewWorkflowPanel has comfortable touch targets for point closing", () => {
   const panelPath = path.resolve(process.cwd(), "src/components/documents/review/DocumentReviewWorkflowPanel.tsx");
   const content = readFileSync(panelPath, "utf-8");
 
-  assert.match(content, /min-h-\[36px\]/, "Point resolution button must have min-h-[36px]");
+  assert.match(content, /min-h-\[40px\]/, "Point resolution button must have min-h-[40px]");
   assert.match(content, /min-h-\[40px\]/, "Workflow transition buttons must have min-h-[40px]");
+});
+
+test("lawyer review mobile UX: WorkflowDialog has touch-friendly buttons on mobile", () => {
+  const dialogPath = path.resolve(process.cwd(), "src/components/tasks/WorkflowDialog.tsx");
+  const content = readFileSync(dialogPath, "utf-8");
+
+  assert.match(content, /min-h-\[40px\]/, "Workflow dialog buttons must have min-h-[40px]");
 });

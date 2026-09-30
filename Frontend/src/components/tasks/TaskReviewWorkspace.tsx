@@ -315,20 +315,30 @@ export function TaskReviewWorkspace({
 
             {(review.permittedActions.return || review.permittedActions.approve) ? (
               <div className="sticky bottom-0 z-20 rounded-[8px] border border-[var(--adm-border)] bg-white/95 p-3 shadow-lg backdrop-blur">
-                <div data-testid="exact-decision-version" className="mb-2 flex flex-wrap items-center justify-between gap-1 border-b border-[var(--adm-border-canonical)] pb-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-[var(--adm-text-secondary)]">
-                    <span className="font-semibold text-[var(--adm-text-primary)]">Döntési verzió:</span>
-                    {review.outputs.length > 0 ? (
-                      <span className="font-mono font-bold text-[var(--adm-brand-green)]">
-                        {review.outputs.map((o) => `${o.name} v${o.linkedVersion || "?"}`).join(", ")}
-                      </span>
-                    ) : (
-                      <span>Általános feladatleadás</span>
-                    )}
+                <div data-testid="exact-decision-version" className="mb-2 border-b border-[var(--adm-border-canonical)] pb-2 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-1 text-[var(--adm-text-secondary)]">
+                    <span className="font-semibold text-[var(--adm-text-primary)]">
+                      {review.outputs.length > 1 ? "Döntési verziók:" : "Döntési verzió:"}
+                    </span>
+                    <span className="text-[11px]">
+                      {review.submission.revisionNumber}. revision
+                    </span>
                   </div>
-                  <span className="text-[11px] text-[var(--adm-text-secondary)]">
-                    {review.submission.revisionNumber}. revision
-                  </span>
+                  {review.outputs.length > 0 ? (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {review.outputs.map((o) => (
+                        <span
+                          key={o.id}
+                          className="inline-flex items-center gap-1 rounded bg-[var(--adm-canvas-subtle)] px-2 py-0.5 font-mono text-[11px] font-semibold text-[var(--adm-brand-green)] border border-[var(--adm-border-canonical)]"
+                        >
+                          <span className="truncate max-w-[180px]">{o.name}</span>
+                          <span>v{o.linkedVersion || "?"}</span>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-[var(--adm-text-secondary)]">Általános feladatleadás</span>
+                  )}
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2.5">
                   <AdminButton

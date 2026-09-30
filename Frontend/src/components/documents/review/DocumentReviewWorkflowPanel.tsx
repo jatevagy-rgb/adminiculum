@@ -200,7 +200,7 @@ export function DocumentReviewWorkflowPanel({
             <div className="min-w-0 space-y-3">
               <div data-testid="review-point-filters" className="flex flex-wrap gap-2">
                 {[['all','Mind'],['open','Nyitott'],['blocking','Blokkoló'],['resolved','Megoldott'],['annotation','Annotáció'],['comparison','Összehasonlítás'],['whole','Teljes dokumentum'],['task','Feladat']].map(([value,label]) => (
-                  <button key={value} type="button" onClick={() => setFilter(value)} className={`min-h-[36px] flex items-center rounded px-2.5 py-1 text-xs font-semibold ${filter === value ? 'bg-[var(--adm-green-800)] text-white' : 'bg-[var(--adm-surface)] text-[#3D4842]'}`}>{label}</button>
+                  <button key={value} type="button" onClick={() => setFilter(value)} className={`min-h-[40px] flex items-center rounded px-3 py-1.5 text-xs font-semibold ${filter === value ? 'bg-[var(--adm-green-800)] text-white' : 'bg-[var(--adm-surface)] text-[#3D4842]'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]`}>{label}</button>
                 ))}
               </div>
               <div data-testid="review-point-list" className="space-y-2">
@@ -216,7 +216,7 @@ export function DocumentReviewWorkflowPanel({
                       {point.comparisonSegmentId ? <a href={`#comparison-segment-${point.comparisonSegmentId}`}>Összehasonlítási szegmens</a> : null}
                       {point.linkedTaskId ? <Link href={`/tasks?taskId=${encodeURIComponent(point.linkedTaskId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt feladat megnyitása</Link> : null}
                     </div>
-                    {!closedPointStatuses.has(point.status) ? <AdminButton className="mt-2 min-h-[36px]" size="xs" variant="neutral" disabled={busy} onClick={() => run(() => updateReviewPoint(review.id, point.id, { status: "RESOLVED", expectedRevision: point.revision }))}>Pont lezárása</AdminButton> : null}
+                    {!closedPointStatuses.has(point.status) ? <AdminButton className="mt-2 min-h-[40px] px-3 py-2" size="xs" variant="neutral" disabled={busy} onClick={() => run(() => updateReviewPoint(review.id, point.id, { status: "RESOLVED", expectedRevision: point.revision }))}>Pont lezárása</AdminButton> : null}
                   </div>
                 ))}
               </div>

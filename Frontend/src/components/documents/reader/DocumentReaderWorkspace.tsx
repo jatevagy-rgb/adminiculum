@@ -341,8 +341,8 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
     focusRailTarget(comment.id, comment.startOffset, comment.endOffset, true);
   }, [focusRailTarget]);
 
-  const focusProposal = useCallback((proposal: DocumentReviewRailProposal) => {
-    focusRailTarget(proposal.id, proposal.startOffset, proposal.endOffset, true);
+  const focusProposal = useCallback((proposal: DocumentReviewRailProposal, closeDrawer = true) => {
+    focusRailTarget(proposal.id, proposal.startOffset, proposal.endOffset, closeDrawer);
   }, [focusRailTarget]);
 
   // Clicking a document anchor/highlight activates its review item by exact id.

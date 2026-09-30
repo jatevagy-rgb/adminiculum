@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type {
   DocumentAnnotationComment,
   DocumentReviewRailComment,
@@ -22,7 +22,7 @@ export interface DocumentReviewRailProps {
   onFilterChange: (filter: RailFilter) => void;
   activeItemId: string | null;
   onFocusComment: (comment: DocumentReviewRailComment) => void;
-  onFocusProposal: (proposal: DocumentReviewRailProposal) => void;
+  onFocusProposal: (proposal: DocumentReviewRailProposal, closeDrawer?: boolean) => void;
   canDecide: boolean;
   currentUserId: string | null;
   decisionBusyId: string | null;
@@ -95,7 +95,7 @@ export function RailChrome({
               type="button"
               data-testid="reader-rail-jump-next-pending"
               onClick={onJumpNextPending}
-              className="inline-flex min-h-[36px] items-center gap-1 rounded-[6px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-2.5 py-1 text-xs font-semibold text-[var(--adm-text-primary)] hover:border-[var(--adm-brand-green)] hover:text-[var(--adm-brand-green)]"
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-[6px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-3 py-2 text-xs font-semibold text-[var(--adm-text-primary)] hover:border-[var(--adm-brand-green)] hover:text-[var(--adm-brand-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)]"
               title="Ugrás a következő döntendő javaslatra"
             >
               Következő döntendő →
@@ -112,7 +112,7 @@ export function RailChrome({
             data-testid={`reader-rail-filter-${value}`}
             aria-pressed={filter === value}
             onClick={() => onFilterChange(value)}
-            className={`min-h-[32px] rounded-full px-2.5 py-1 text-xs font-semibold ${filter === value ? "bg-[var(--adm-brand-green)] text-white" : "text-[var(--adm-text-secondary)] hover:bg-[var(--adm-canvas-subtle)]"}`}
+            className={`min-h-[40px] rounded-full px-3 py-1.5 text-xs font-semibold ${filter === value ? "bg-[var(--adm-brand-green)] text-white" : "text-[var(--adm-text-secondary)] hover:bg-[var(--adm-canvas-subtle)]"} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)]`}
           >
             {value === "all" ? readerCopy.filterAll : value === "comments" ? readerCopy.filterComments : readerCopy.filterProposals}
           </button>
@@ -190,7 +190,7 @@ export function CommentCard({
         data-reply-count={comment.replyCount}
         aria-expanded={expanded}
         onClick={toggleReplies}
-        className="mt-2 text-xs font-semibold text-[var(--adm-brand-green)]"
+        className="mt-2 inline-flex min-h-[40px] items-center text-xs font-semibold text-[var(--adm-brand-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)]"
       >
         {comment.replyCount > 0 ? `${readerCopy.repliesShow} (${comment.replyCount})` : readerCopy.replyAction}
       </button>
@@ -273,12 +273,20 @@ export function DocumentReviewRail({
     [rail?.proposals],
   );
 
+  const activeCardRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (activeItemId && activeCardRef.current) {
+      activeCardRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [activeItemId]);
+
   const handleJumpNextPending = pendingProposals.length > 0 ? () => {
     const currentIndex = pendingProposals.findIndex((p) => p.id === activeItemId);
     const nextIndex = currentIndex === -1 || currentIndex >= pendingProposals.length - 1 ? 0 : currentIndex + 1;
     const target = pendingProposals[nextIndex];
     if (target) {
-      onFocusProposal(target);
+      onFocusProposal(target, false);
     }
   } : undefined;
 
@@ -320,6 +328,7 @@ export function DocumentReviewRail({
                   key={entry.comment.id}
                   comment={entry.comment}
                   active={activeItemId === entry.comment.id}
+                  cardRef={activeItemId === entry.comment.id ? (element) => { activeCardRef.current = element; } : undefined}
                   replies={repliesByAnnotationId[entry.comment.id]}
                   onFocus={() => onFocusComment(entry.comment)}
                   onLoadReplies={() => onLoadReplies(entry.comment.id)}
@@ -331,10 +340,11 @@ export function DocumentReviewRail({
                   key={entry.proposal.id}
                   entry={entry}
                   active={activeItemId === entry.proposal.id}
+                  cardRef={activeItemId === entry.proposal.id ? (element) => { activeCardRef.current = element; } : undefined}
                   canDecide={canDecide}
                   currentUserId={currentUserId}
                   decisionBusyId={decisionBusyId}
-                  onFocus={() => onFocusProposal(entry.proposal)}
+                  onFocus={() => onFocusProposal(entry.proposal, true)}
                   onAccept={() => onAccept(entry.proposal)}
                   onReject={() => onReject(entry.proposal)}
                   onWithdraw={() => onWithdraw(entry.proposal)}
@@ -415,7 +425,7 @@ export function ProposalCard({
               data-testid="reader-rail-proposal-accept"
               disabled={decisionBusyId === entry.proposal.id}
               onClick={onAccept}
-              className="inline-flex min-h-[36px] items-center justify-center rounded-[6px] bg-[var(--adm-brand-green)] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-95 disabled:opacity-50"
+              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-[6px] bg-[var(--adm-brand-green)] px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] disabled:opacity-50"
             >
               {readerCopy.decisionAccept}
             </button>
@@ -424,7 +434,7 @@ export function ProposalCard({
               data-testid="reader-rail-proposal-reject"
               disabled={decisionBusyId === entry.proposal.id}
               onClick={onReject}
-              className="inline-flex min-h-[36px] items-center justify-center rounded-[6px] border border-[var(--adm-brand-terracotta)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-brand-terracotta)] hover:bg-[var(--adm-canvas-subtle)] disabled:opacity-50"
+              className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-[6px] border border-[var(--adm-brand-terracotta)] px-3.5 py-2 text-xs font-semibold text-[var(--adm-brand-terracotta)] hover:bg-[var(--adm-canvas-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-terracotta)] disabled:opacity-50"
             >
               {readerCopy.decisionReject}
             </button>
