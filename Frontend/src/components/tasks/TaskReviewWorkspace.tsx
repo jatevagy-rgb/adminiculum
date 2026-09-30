@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
+import { AdminBadge, AdminButton, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { WorkflowDialog } from "@/components/tasks/WorkflowDialog";
 import { ClientAccent } from "@/components/clients/ClientAccent";
