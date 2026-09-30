@@ -71,7 +71,7 @@ function joinNames(values: string[]): string {
   return present.length > 0 ? present.join(", ") : NOT_SPECIFIED;
 }
 
-export function WorkReportPageContent() {
+function WorkReportPageContent() {
   const [clients, setClients] = useState<Array<{ id: string; name: string }>>([]);
   const [clientId, setClientId] = useState<string>("");
   const [period, setPeriod] = useState<string>(currentMonth());
@@ -151,7 +151,7 @@ export function WorkReportPageContent() {
   const selectedSummary = report?.case ?? null;
 
   return (
-    <div className="min-h-screen bg-white text-[#1F2937]">
+    <div className="min-h-screen bg-white text-[var(--adm-text-primary)]">
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6">
         <PageHeader
           title="Munkaóra-jelentés"
@@ -162,12 +162,12 @@ export function WorkReportPageContent() {
         <Card>
           <CardContent>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+              <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
                 Ügyfél
                 <select
                   value={clientId}
                   onChange={(event) => setClientId(event.target.value)}
-                  className="h-9 rounded-[8px] border border-[#E5E7E6] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[#1F2937]"
+                  className="h-9 rounded-[8px] border border-[var(--adm-border-canonical)] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[var(--adm-text-primary)]"
                 >
                   <option value="">Válassz ügyfelet…</option>
                   {clients.map((client) => (
@@ -177,13 +177,13 @@ export function WorkReportPageContent() {
                   ))}
                 </select>
               </label>
-              <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+              <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
                 Időszak
                 <input
                   type="month"
                   value={period}
                   onChange={(event) => setPeriod(event.target.value)}
-                  className="h-9 rounded-[8px] border border-[#E5E7E6] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[#1F2937]"
+                  className="h-9 rounded-[8px] border border-[var(--adm-border-canonical)] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[var(--adm-text-primary)]"
                 />
               </label>
               <Button variant="secondary" size="sm" onClick={loadCases} isLoading={loadingCases}>
@@ -200,7 +200,7 @@ export function WorkReportPageContent() {
         ) : null}
 
         <section aria-label="Ügyek" className="flex flex-col gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
             Ügyek a kiválasztott időszakban
           </h2>
           {!clientId ? (
@@ -260,12 +260,12 @@ export function WorkReportPageContent() {
 
         {selectedCaseId ? (
           <section aria-label="Jelentés részletei" className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2 border-b border-[#E5E7E6] pb-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-2 border-b border-[var(--adm-border-canonical)] pb-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 className="font-serif text-xl font-semibold text-[#1F2937]">
+                <h2 className="font-serif text-xl font-semibold text-[var(--adm-text-primary)]">
                   {selectedSummary?.caseNumber ?? ""} — {selectedSummary?.caseTitle ?? ""}
                 </h2>
-                <p className="mt-0.5 text-xs text-[#6B7280]">
+                <p className="mt-0.5 text-xs text-[var(--adm-text-secondary)]">
                   Ügyfél: {report?.client.name ?? ""} · Időszak:{" "}
                   {formatDayHu(report?.period.startDate ?? null)} – {formatDayHu(report?.period.endDate ?? null)}
                 </p>
@@ -276,7 +276,7 @@ export function WorkReportPageContent() {
             </div>
 
             {loadingReport ? (
-              <p className="text-sm text-[#6B7280]">A jelentés betöltése…</p>
+              <p className="text-sm text-[var(--adm-text-secondary)]">A jelentés betöltése…</p>
             ) : report ? (
               <>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -308,7 +308,7 @@ export function WorkReportPageContent() {
 
                 <Card>
                   <CardContent>
-                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
                       Ügyösszefoglaló
                     </h3>
                     <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
@@ -326,7 +326,7 @@ export function WorkReportPageContent() {
                 </Card>
 
                 <section aria-label="Rögzített munkaidő" className="flex flex-col gap-2">
-                  <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
                     Rögzített munkaidő
                   </h3>
                   {report.rows.length === 0 ? (
@@ -423,19 +423,19 @@ export function WorkReportPageContent() {
 
                 {report.safeUpdates.length > 0 ? (
                   <section aria-label="Ügyfélnek közzétett tájékoztatások" className="flex flex-col gap-2">
-                    <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[#6B7280]">
+                    <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
                       Ügyfélnek közzétett tájékoztatások
                     </h3>
                     <div className="flex flex-col gap-2">
                       {report.safeUpdates.map((update) => (
                         <Card key={`${update.title}-${update.publishedAt ?? ""}`} variant="subtle">
                           <CardContent>
-                            <p className="text-sm font-semibold text-[#1F2937]">{update.title}</p>
-                            <p className="mt-0.5 text-xs text-[#6B7280]">
+                            <p className="text-sm font-semibold text-[var(--adm-text-primary)]">{update.title}</p>
+                            <p className="mt-0.5 text-xs text-[var(--adm-text-secondary)]">
                               {update.categoryLabel}
                               {update.publishedAt ? ` · ${formatDayHu(update.publishedAt)}` : ""}
                             </p>
-                            <p className="mt-2 text-sm leading-relaxed text-[#1F2937]">{update.body}</p>
+                            <p className="mt-2 text-sm leading-relaxed text-[var(--adm-text-primary)]">{update.body}</p>
                           </CardContent>
                         </Card>
                       ))}
@@ -454,8 +454,8 @@ export function WorkReportPageContent() {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#6B7280]">{label}</dt>
-      <dd className="text-[#1F2937]">{value}</dd>
+      <dt className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-secondary)]">{label}</dt>
+      <dd className="text-[var(--adm-text-primary)]">{value}</dd>
     </div>
   );
 }
