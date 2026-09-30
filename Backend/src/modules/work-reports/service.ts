@@ -22,6 +22,7 @@ import { resolveTimeEntryAttribution } from '../../routes/timeEntries';
 import { buildCaseReadScope } from '../cases/authorization';
 import {
   CASE_STATUS_LABELS,
+  CLIENT_EXPORT_UNKNOWN_WORK_TYPE_LABEL,
   CLIENT_WORK_REPORT_CASES_KIND,
   CLIENT_WORK_REPORT_KIND,
   CLOSED_CASE_STATUSES,
@@ -376,9 +377,15 @@ export async function buildCaseReport(
  * Projects the internal review DTO onto the explicit client-export boundary.
  *
  * The ambiguous and excluded buckets (and their summary aggregates) are
- * workforce review diagnostics and are structurally dropped here. The source
- * records are never mutated, deleted, reassigned or billed differently by this
- * projection — the internal review response keeps serving them.
+ * workforce review diagnostics and are structurally dropped here, and raw
+ * TimeEntry descriptions never cross this boundary: billable=true is not a
+ * review of the free text. The source records are never mutated, deleted,
+ * reassigned or billed differently by this projection — the internal review
+ * response keeps serving them with their original descriptions.
+ *
+ * Only the finite work-type label map is used for the category; an unknown
+ * work type receives the neutral truthful label instead of an invented
+ * narrative or a leaked internal enum.
  */
 export function projectClientWorkReportExport(report: ClientWorkReport): ClientWorkReportExport {
   return {
@@ -403,8 +410,7 @@ export function projectClientWorkReportExport(report: ClientWorkReport): ClientW
       timeEntryId: row.timeEntryId,
       workDate: row.workDate,
       workerName: row.workerName,
-      workTypeLabel: row.workTypeLabel,
-      description: row.description,
+      workTypeLabel: WORK_TYPE_LABELS[row.workType] ?? CLIENT_EXPORT_UNKNOWN_WORK_TYPE_LABEL,
       minutes: row.minutes,
     })),
     safeUpdates: report.safeUpdates,

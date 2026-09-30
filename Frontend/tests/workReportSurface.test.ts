@@ -86,3 +86,27 @@ test('PDF renderer receives only the client-export projection, never internal di
   assert.match(routes, /projectClientWorkReportExport/);
   assert.doesNotMatch(routes, /renderClientWorkReportPdf\(report\)/);
 });
+
+test('client-export PDF never prints raw work descriptions', () => {
+  assert.doesNotMatch(pdf, /Munkavégzés leírása/);
+  assert.doesNotMatch(pdf, /row\.description/);
+  assert.match(pdf, /munkaleírásokat nem tartalmazza/);
+});
+
+test('internal review shows full descriptions while the export preview omits them', () => {
+  assert.match(page, /Belső áttekintés/);
+  assert.match(page, /Munkavégzés leírása/);
+  assert.match(page, /row\.description/);
+  const previewBlock = page.slice(page.indexOf('Ügyfél-export előnézete'), page.indexOf('Bizonytalan hozzárendelésű idő'));
+  assert.match(previewBlock, /az ügyfélnek készülő kivonat a belső munkaleírásokat nem tartalmazza/i);
+  assert.match(previewBlock, /Munkatárs/);
+  assert.match(previewBlock, /Típus/);
+  assert.match(previewBlock, /Időtartam/);
+  assert.doesNotMatch(previewBlock, /Munkavégzés leírása/);
+  assert.doesNotMatch(previewBlock, /row\.description/);
+  assert.doesNotMatch(previewBlock, /requesterName|organizationGroupName|departmentName/);
+  assert.match(previewBlock, /row\.workDate/);
+  assert.match(previewBlock, /row\.workerName/);
+  assert.match(previewBlock, /row\.workTypeLabel/);
+  assert.match(previewBlock, /row\.minutes/);
+});

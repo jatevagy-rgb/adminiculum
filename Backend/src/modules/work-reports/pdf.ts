@@ -4,10 +4,10 @@
 //
 // Renders the explicit client-export projection (ClientWorkReportExport). The
 // projection carries no rate, amount, VAT, or billing fields, no ambiguous or
-// excluded row details and no internal diagnostic aggregates, and this
-// renderer prints none of them. The output is deterministic for a given
-// report snapshot: no randomness, no live source reads, fixed row ordering
-// (workDate, timeEntryId).
+// excluded row details, no internal diagnostic aggregates and no raw
+// TimeEntry descriptions, and this renderer prints none of them. The output is
+// deterministic for a given report snapshot: no randomness, no live source
+// reads, fixed row ordering (workDate, timeEntryId).
 // ============================================================================
 
 import PDFDocument from 'pdfkit';
@@ -25,12 +25,13 @@ const textPrimary = '#1F2937';
 const textSecondary = '#6B7280';
 const borderLight = '#E5E7E6';
 
+const OMISSION_NOTE = 'Ez az alap kivitelű kivonat a belső munkaleírásokat nem tartalmazza.';
+
 const detailColumns = [
-  { key: 'date', label: 'Dátum', width: 58, align: 'left' as const },
-  { key: 'worker', label: 'Munkatárs', width: 84, align: 'left' as const },
-  { key: 'work', label: 'Munkavégzés leírása', width: 208, align: 'left' as const },
-  { key: 'type', label: 'Típus', width: 78, align: 'left' as const },
-  { key: 'duration', label: 'Időtartam', width: 56, align: 'right' as const },
+  { key: 'date', label: 'Dátum', width: 64, align: 'left' as const },
+  { key: 'worker', label: 'Munkatárs', width: 152, align: 'left' as const },
+  { key: 'type', label: 'Típus', width: 160, align: 'left' as const },
+  { key: 'duration', label: 'Időtartam', width: 135, align: 'right' as const },
 ];
 
 function reportDate(value: string | null): string {
@@ -57,7 +58,6 @@ function rowValues(row: ClientWorkReportExportRow, columns: typeof detailColumns
   const values: Record<string, string> = {
     date: reportDate(row.workDate),
     worker: row.workerName || 'Nincs megadva',
-    work: row.description || '—',
     type: row.workTypeLabel,
     duration: formatMinutesHu(row.minutes),
   };
@@ -179,6 +179,8 @@ export async function renderClientWorkReportPdf(report: ClientWorkReportExport):
     return writeTableHeader(doc, detailColumns, margin);
   };
   y = sectionLabel(doc, 'RÉSZLETES IDŐKIMUTATÁS', y);
+  doc.fillColor(textSecondary).fontSize(7.5).text(OMISSION_NOTE, margin, y, { width: pageWidth - margin * 2 });
+  y += 12;
   y = writeTableHeader(doc, detailColumns, y);
   if (report.rows.length === 0) {
     doc.fillColor(textSecondary).fontSize(8.5).text('Ehhez az ügyhöz ebben az időszakban nincs rögzített, a jelentésbe sorolható munkaidő.', margin, y + 4, { width: pageWidth - margin * 2 });
@@ -211,7 +213,7 @@ export async function renderClientWorkReportPdf(report: ClientWorkReportExport):
     y = margin;
   }
   doc.moveTo(margin, y + 6).lineTo(pageWidth - margin, y + 6).strokeColor(borderLight).stroke();
-  doc.fillColor(textSecondary).fontSize(7).text('Ez a dokumentum tájékoztató jellegű munkaidő-kimutatás, nem számla.', margin, y + 12);
+  doc.fillColor(textSecondary).fontSize(7).text('Ez a dokumentum tájékoztató jellegű munkaidő-kimutatás, nem számla. A belső munkaleírásokat nem tartalmazza.', margin, y + 12, { width: pageWidth - margin * 2 });
   doc.text(`Adminiculum · ${dateTime(report.generatedAt)}`, margin, y + 24);
 
   doc.end();

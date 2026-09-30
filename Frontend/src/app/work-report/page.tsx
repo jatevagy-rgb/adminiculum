@@ -329,6 +329,9 @@ function WorkReportPageContent() {
                   <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
                     Rögzített munkaidő
                   </h3>
+                  <p className="text-xs text-[var(--adm-text-secondary)]">
+                    Belső áttekintés — a munkavégzés leírásai itt teljes terjedelemben láthatók.
+                  </p>
                   {report.rows.length === 0 ? (
                     <EmptyState title="Nincs rögzített munkaidő" description={ZERO_TIME_TEXT} />
                   ) : (
@@ -354,6 +357,37 @@ function WorkReportPageContent() {
                             <DataTableCell>{row.requesterName ?? NOT_SPECIFIED}</DataTableCell>
                             <DataTableCell>{row.organizationGroupName ?? NOT_SPECIFIED}</DataTableCell>
                             <DataTableCell>{row.departmentName ?? NOT_SPECIFIED}</DataTableCell>
+                          </DataTableRow>
+                        ))}
+                      </DataTableBody>
+                    </DataTable>
+                  )}
+                </section>
+
+                <section aria-label="Ügyfél-export előnézete" className="flex flex-col gap-2">
+                  <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-[var(--adm-text-secondary)]">
+                    Ügyfél-export előnézete
+                  </h3>
+                  <p className="text-xs text-[var(--adm-text-secondary)]">
+                    Az ügyfélnek készülő kivonat a belső munkaleírásokat nem tartalmazza.
+                  </p>
+                  {report.rows.length === 0 ? (
+                    <EmptyState title="Nincs rögzített munkaidő" description={ZERO_TIME_TEXT} />
+                  ) : (
+                    <DataTable minWidth={560}>
+                      <DataTableHead>
+                        <DataTableHeaderCell>Dátum</DataTableHeaderCell>
+                        <DataTableHeaderCell>Munkatárs</DataTableHeaderCell>
+                        <DataTableHeaderCell>Típus</DataTableHeaderCell>
+                        <DataTableHeaderCell align="right">Időtartam</DataTableHeaderCell>
+                      </DataTableHead>
+                      <DataTableBody>
+                        {report.rows.map((row) => (
+                          <DataTableRow key={row.timeEntryId}>
+                            <DataTableCell>{formatDayHu(row.workDate)}</DataTableCell>
+                            <DataTableCell>{row.workerName ?? NOT_SPECIFIED}</DataTableCell>
+                            <DataTableCell>{row.workTypeLabel}</DataTableCell>
+                            <DataTableCell align="right">{formatMinutesHu(row.minutes)}</DataTableCell>
                           </DataTableRow>
                         ))}
                       </DataTableBody>

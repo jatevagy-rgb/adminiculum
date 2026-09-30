@@ -152,21 +152,27 @@ export interface ClientWorkReport {
 // ============================================================================
 //
 // The internal review DTO above carries workforce diagnostics (ambiguous and
-// excluded buckets plus their aggregates). Those are review aids, not client
-// disclosures: not summing a row is not the same as not disclosing it.
+// excluded buckets plus their aggregates) and raw TimeEntry descriptions.
+// Those are review aids, not client disclosures: not summing a row is not the
+// same as not disclosing it, and billable=true is not a review of the free
+// text itself.
 //
 // The client-export boundary is therefore a separate, explicit projection.
 // The PDF renderer only ever receives ClientWorkReportExport, so ambiguous and
-// excluded row details and internal diagnostic aggregates are structurally
-// absent from the client artifact.
+// excluded row details, internal diagnostic aggregates and raw descriptions
+// are structurally absent from the client artifact. A reviewed/sanitized
+// detailed narrative remains a separate future product requirement; this
+// boundary does not invent a publication engine for it.
 
-/** One row as disclosed to the client. Internal attribution diagnostics are absent. */
+/** Neutral, truthful category label for work types outside the finite label map. */
+export const CLIENT_EXPORT_UNKNOWN_WORK_TYPE_LABEL = 'Egyéb';
+
+/** One row as disclosed to the client. Raw description and internal attribution diagnostics are absent. */
 export interface ClientWorkReportExportRow {
   timeEntryId: string;
   workDate: string;
   workerName: string | null;
   workTypeLabel: string;
-  description: string;
   minutes: number;
 }
 

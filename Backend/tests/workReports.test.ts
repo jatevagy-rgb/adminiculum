@@ -79,11 +79,11 @@ function assertNoForbiddenKeys(value: unknown, path = '$'): void {
   }
 }
 
-async function pdfText(bytes: Buffer): Promise<{ text: string; pages: unknown[] }> {
-  const script = `const { PDFParse } = require('pdf-parse'); const chunks=[]; process.stdin.on('data', c=>chunks.push(c)); process.stdin.on('end', async()=>{ const parser=new PDFParse({data:Buffer.concat(chunks)}); try { const text=await parser.getText(); process.stdout.write(JSON.stringify({text:text.text,pages:text.pages})); } finally { await parser.destroy(); } });`;
+async function pdfText(bytes: Buffer): Promise<{ text: string; pages: Array<{ num: number; text: string }>; info: string }> {
+  const script = `const { PDFParse } = require('pdf-parse'); const chunks=[]; process.stdin.on('data', c=>chunks.push(c)); process.stdin.on('end', async()=>{ const parser=new PDFParse({data:Buffer.concat(chunks)}); try { const text=await parser.getText(); const info=await parser.getInfo(); process.stdout.write(JSON.stringify({text:text.text,pages:text.pages,info:info.info?JSON.stringify(info.info):null})); } finally { await parser.destroy(); } });`;
   const result = spawnSync(process.execPath, ['-e', script], { input: bytes, encoding: 'utf8', timeout: 30_000 });
   if (result.status !== 0) throw new Error(result.stderr || 'pdf-parse child process failed');
-  return JSON.parse(result.stdout) as { text: string; pages: unknown[] };
+  return JSON.parse(result.stdout) as { text: string; pages: Array<{ num: number; text: string }>; info: string };
 }
 
 // ── DTO rate-freeness ───────────────────────────────────────────────────────
@@ -287,6 +287,7 @@ describe('closed-case discovery and client scoping', () => {
 
 const AMBIG_MARKER = 'BELSŐ-TITOK-AMBIG-7F3A';
 const EXCLUDED_MARKER = 'BELSŐ-TITOK-KIZÁRT-9C21';
+const INCLUDED_MARKER = 'BELSŐ-TITOK-INC-5E11';
 
 describe('rate-free work-report PDF', () => {
   async function sampleReport(): Promise<ClientWorkReport> {
@@ -321,13 +322,15 @@ describe('rate-free work-report PDF', () => {
     const parsed = await pdfText(pdf);
     const text = parsed.text.replace(/\s+/g, ' ');
     expect(text).toContain('ÜGYFÉL MUNKAJELENTÉS');
-    expect(text).toContain('Szerződés tervezet előkészítése');
+    expect(text).not.toContain('Szerződés tervezet előkészítése');
+    expect(text).toContain('Szerkesztés');
     expect(text).toContain('Nagy Réka');
     expect(text).toContain('HR');
     expect(text).toContain('ÜGYSZÁM');
     expect(text).toContain('1 ó 30 p');
     expect(text).toContain('ÜGYFÉLNEK KÖZZÉTETT TÁJÉKOZTATÁSOK');
     expect(text).toContain('nem számla');
+    expect(text).toContain('a belső munkaleírásokat nem tartalmazza');
     for (const forbidden of ['Óradíj', 'Nettó', 'ÁFA', 'Bruttó', 'Ft', 'HUF', 'óradíj', 'nettó']) {
       expect(text).not.toContain(forbidden);
     }
@@ -400,6 +403,7 @@ describe('client-export boundary (internal diagnostics never reach the client PD
       'responsibleLawyerName', 'requesterNames', 'organizationGroupNames', 'departmentNames',
       'recordedMinutes', 'recordedEntryCount',
     ]);
+    expect(Object.keys(exportReport.rows[0])).toEqual(['timeEntryId', 'workDate', 'workerName', 'workTypeLabel', 'minutes']);
     const serialized = JSON.stringify(exportReport);
     expect(serialized).not.toContain(AMBIG_MARKER);
     expect(serialized).not.toContain(EXCLUDED_MARKER);
@@ -459,5 +463,99 @@ describe('client-export boundary (internal diagnostics never reach the client PD
     expect(text).toContain('ÜGYFÉLNEK KÖZZÉTETT TÁJÉKOZTATÁSOK');
     expect(text).toContain('Állapotfrissítés');
     expect(text).toContain('Az ügy lezárult.');
+  });
+
+  it('keeps an included billable row description in the internal review, never in the client export', async () => {
+    const db = {
+      case: { findUnique: async () => caseRecord() },
+      timeEntry: { findMany: async () => [entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 60, description: `Szerződés tervezet előkészítése ${INCLUDED_MARKER}` })] },
+      clientSafeUpdate: { findMany: async () => [] },
+    } as any;
+    const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
+    expect(report!.rows).toHaveLength(1);
+    expect(report!.rows[0].description).toBe(`Szerződés tervezet előkészítése ${INCLUDED_MARKER}`);
+    expect(JSON.stringify(report)).toContain(INCLUDED_MARKER);
+
+    const exportReport = projectClientWorkReportExport(report!);
+    expect(JSON.stringify(exportReport)).not.toContain(INCLUDED_MARKER);
+
+    const pdf = await renderClientWorkReportPdf(exportReport);
+    const parsed = await pdfText(pdf);
+    const text = parsed.text.replace(/\s+/g, ' ');
+    expect(text).not.toContain(INCLUDED_MARKER);
+    expect(parsed.info ?? '').not.toContain(INCLUDED_MARKER);
+    expect(parsed.info ?? '').toContain('Ügyfél munkaóra-jelentés');
+
+    // Facts the client export must keep: category, date, worker, duration, total.
+    expect(text).toContain('Szerkesztés');
+    expect(text).toContain('2026.09.01.');
+    expect(text).toContain('Ügyvéd Éva');
+    expect(text).toContain('1 ó');
+    expect(text).toContain('ÖSSZES RÖGZÍTETT IDŐ');
+  });
+
+  it('gives an unknown work type the neutral truthful label in the export only', async () => {
+    const db = {
+      case: { findUnique: async () => caseRecord() },
+      timeEntry: { findMany: async () => [entry({ id: 'te-1', caseId: 'case-1', matterId: 'matter-1', matter: matterOf('matter-1', ['case-1']), minutes: 30, workType: 'EXOTIC_TYPE' })] },
+      clientSafeUpdate: { findMany: async () => [] },
+    } as any;
+    const report = await buildCaseReport(db, { caseId: 'case-1', period: PERIOD_ALL });
+    expect(report!.rows[0].workTypeLabel).toBe('EXOTIC_TYPE');
+    const exportReport = projectClientWorkReportExport(report!);
+    expect(exportReport.rows[0].workTypeLabel).toBe('Egyéb');
+    expect(JSON.stringify(exportReport)).not.toContain('EXOTIC_TYPE');
+  });
+
+  it('renders a multi-page synthetic export with long labels and Hungarian accents page by page', async () => {
+    const rows = Array.from({ length: 70 }, (_, index) => ({
+      timeEntryId: `te-${index + 1}`,
+      workDate: index < 62 ? `2026-09-${String((index % 28) + 1).padStart(2, '0')}` : `2026-10-${String((index % 28) + 1).padStart(2, '0')}`,
+      workerName: index % 2 === 0 ? 'Dr. Hosszú-Kovácsné Árvácska Űrhajós' : 'Dr. Tóth-Gyarmati Boglárka Réka',
+      workTypeLabel: 'Szerkesztés',
+      minutes: 60,
+    }));
+    const exportReport = {
+      kind: 'CLIENT_WORK_REPORT_V1' as const,
+      client: { id: 'client-1', name: 'Árvíztűrő Tükörfúrógép Kft.' },
+      period: { startDate: '2026-09-01', endDate: '2026-10-31' },
+      case: {
+        caseId: 'case-1',
+        caseNumber: 'U-2026/77',
+        caseTitle: 'Árvíztűrő tükörfúrógép üzemeltetési szerződés módosítása — hosszú megnevezésű ügy',
+        caseStatusLabel: 'Felülvizsgálat alatt',
+        completedAt: null,
+        matter: { id: 'matter-1', title: 'Közbeszerzési ügytárgy' },
+        responsibleLawyerName: 'Dr. Ötvös Ágota',
+        requesterNames: ['Nagy Réka'],
+        organizationGroupNames: ['Jogi Főosztály'],
+        departmentNames: ['Közbeszerzés'],
+        recordedMinutes: rows.reduce((sum, row) => sum + row.minutes, 0),
+        recordedEntryCount: rows.length,
+      },
+      rows,
+      safeUpdates: [
+        { title: 'Állapotfrissítés', body: 'Az árvíztűrő tükörfúrógép beszerzése a jóváhagyási szakaszba lépett.', category: 'STATUS', categoryLabel: 'Állapot', publishedAt: '2026-09-30' },
+      ],
+      generatedAt: '2026-09-30T20:00:00.000Z',
+    };
+    const pdf = await renderClientWorkReportPdf(exportReport);
+    expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+    const parsed = await pdfText(pdf);
+    expect(parsed.pages.length).toBeGreaterThanOrEqual(2);
+    for (const page of parsed.pages) {
+      expect(page.text.length).toBeGreaterThan(0);
+    }
+    const text = parsed.text.replace(/\s+/g, ' ');
+    expect(text).toContain('Árvíztűrő Tükörfúrógép Kft.');
+    expect(text).toContain('Dr. Hosszú-Kovácsné Árvácska Űrhajós');
+    expect(text).toContain('70 ó');
+    expect(text).toContain('RÖGZÍTETT BEJEGYZÉSEK 70');
+    expect(text).toContain('Szerkesztés');
+    expect(text).toContain('a belső munkaleírásokat nem tartalmazza');
+    expect(text).not.toContain('Munkavégzés leírása');
+    for (const forbidden of ['Óradíj', 'Nettó', 'ÁFA', 'Bruttó', 'Ft', 'HUF']) {
+      expect(text).not.toContain(forbidden);
+    }
   });
 });
