@@ -9,7 +9,7 @@ import {
   listDecisions,
   listPoints,
   listReviews,
-  nextActions,
+  permittedReviewActions,
   transitionReview,
   updatePoint,
 } from './reviewService';
@@ -48,7 +48,7 @@ export const reviewRouter = Router();
 reviewRouter.get('/:reviewId', authenticate, async (req, res) => {
   try {
     const review = await getReview(String(req.params.reviewId), actor(req));
-    res.json({ ...toReviewDto(review), permittedActions: nextActions(String(review.status)) });
+    res.json({ ...toReviewDto(review), permittedActions: permittedReviewActions(review, actor(req)) });
   } catch (error) { fail(res, error); }
 });
 

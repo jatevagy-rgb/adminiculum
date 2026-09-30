@@ -35,6 +35,7 @@ import {
   Textarea,
   EmptyState,
   Alert,
+  MetricTile,
   Modal,
   ConfirmationDialog,
   QuietLink,
@@ -831,22 +832,10 @@ export default function ShowroomClient() {
                     />
                     {/* Summary Metric Strip */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 py-2">
-                      <div className="rounded border border-[var(--adm-border-canonical)] p-3 bg-[var(--adm-canvas-subtle)]">
-                        <span className="text-[10px] uppercase font-bold text-neutral-500">Összes Kontroll</span>
-                        <div className="text-lg font-bold text-[#0F3D32]">24</div>
-                      </div>
-                      <div className="rounded border border-emerald-200 p-3 bg-emerald-50/40">
-                        <span className="text-[10px] uppercase font-bold text-emerald-800">Megfelelő</span>
-                        <div className="text-lg font-bold text-emerald-900">19</div>
-                      </div>
-                      <div className="rounded border border-amber-200 p-3 bg-amber-50/40">
-                        <span className="text-[10px] uppercase font-bold text-amber-800">Teendő szükséges</span>
-                        <div className="text-lg font-bold text-amber-900">4</div>
-                      </div>
-                      <div className="rounded border border-red-200 p-3 bg-red-50/40">
-                        <span className="text-[10px] uppercase font-bold text-red-800">Kritikus hiány</span>
-                        <div className="text-lg font-bold text-red-900">1</div>
-                      </div>
+                      <MetricTile label="Összes Kontroll" value="24" tone="primary" />
+                      <MetricTile label="Megfelelő" value="19" tone="success" />
+                      <MetricTile label="Teendő szükséges" value="4" tone="warning" />
+                      <MetricTile label="Kritikus hiány" value="1" tone="danger" />
                     </div>
                     {/* Clean Table */}
                     <DataTable>
