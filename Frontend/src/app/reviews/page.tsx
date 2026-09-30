@@ -37,7 +37,7 @@ function attentionTone(attention: string): "neutral" | "teal" {
 
 export default function ReviewsPage() {
   return (
-    <AuthenticatedApp section="reviews">
+    <AuthenticatedApp section="reviews" contentPadding="flush">
       <ReviewsPageContent />
     </AuthenticatedApp>
   );
@@ -99,8 +99,8 @@ function ReviewsPageContent() {
   const legacyCount = queue.length - activeSubmittedCount;
 
   return (
-    <div className="min-h-screen bg-white text-[#1F2937]">
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6">
+    <div className="min-h-screen adm-board-page text-[#1F2937]">
+      <main className="adm-board-container flex flex-col gap-4">
         <PageHeader
           title="Review"
           badge={<Badge tone="neutral">{activeSubmittedCount} beküldés</Badge>}

@@ -51,8 +51,8 @@ function WorkloadContent() {
   }, [data?.availability.teamScope, scope]);
 
   return (
-    <div className="min-h-screen bg-white text-[#1F2937]">
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-5 sm:px-6">
+    <div className="min-h-screen adm-board-page text-[#1F2937]">
+      <main className="adm-board-container flex flex-col gap-5">
         <PageHeader title="Munkaterhelés" actions={<>
           {scopeOptions.map((option) => (
             <Button key={option} size="sm" variant={scope === option ? "primary" : "neutral"} aria-pressed={scope === option} onClick={() => setScope(option)}>{SCOPE_LABELS[option]}</Button>
@@ -116,5 +116,5 @@ function SummaryCell({ label, value, overdue = false }: { label: string; value: 
 }
 
 export default function WorkloadPage() {
-  return <AuthenticatedApp section="tasks"><WorkloadContent /></AuthenticatedApp>;
+  return <AuthenticatedApp section="tasks" contentPadding="flush"><WorkloadContent /></AuthenticatedApp>;
 }
