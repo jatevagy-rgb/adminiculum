@@ -82,6 +82,7 @@ type AuthenticatedAppProps = {
     | "litigation-workspace"
     | "time-entries"
     | "timesheet-presets"
+    | "work-report"
     | "calendar"
     | "client-portal-admin"
     | "search"

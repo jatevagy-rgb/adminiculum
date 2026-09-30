@@ -7,6 +7,7 @@ export const navItems = [
   { id: "documents-compare", label: "Verzió-összevetés", icon: "file" },
   { id: "communications", label: "Kommunikáció", icon: "bell" },
   { id: "time-entries", label: "Munkaórák", icon: "clock" },
+  { id: "work-report", label: "Munkaóra-jelentés", icon: "file" },
   { id: "clients", label: "Ügyfelek", icon: "file" },
   { id: "compliance", label: "Megfelelőség", icon: "shield" },
   { id: "calendar", label: "Határidők", icon: "calendar" },

@@ -24,6 +24,7 @@ type AppShellProps = {
     | "litigation-workspace"
     | "time-entries"
     | "timesheet-presets"
+    | "work-report"
     | "calendar"
     | "client-portal-admin"
     | "search"
@@ -73,6 +74,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
     "litigation-workspace": "Peres stratégiai térkép",
     "time-entries": "Munkaórák",
     "timesheet-presets": "Presetek",
+    "work-report": "Munkaóra-jelentés",
     calendar: "Határidők és naptár",
     "client-portal-admin": "Ügyfélportál adminisztráció",
     search: "Keresés",
