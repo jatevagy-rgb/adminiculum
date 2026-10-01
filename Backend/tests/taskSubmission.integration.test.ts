@@ -19,6 +19,7 @@ const ids = {
   rollbackTask: '50000000-0000-4000-8000-000000000003',
   revisionTask: '50000000-0000-4000-8000-000000000004',
   document: '60000000-0000-4000-8000-000000000001',
+  documentVersion: '62000000-0000-4000-8000-000000000001',
   supportDocument: '60000000-0000-4000-8000-000000000002',
   crossDocument: '60000000-0000-4000-8000-000000000003',
   time: '70000000-0000-4000-8000-000000000001',
@@ -106,6 +107,22 @@ describeWithDatabase('TaskSubmissionService PostgreSQL lifecycle', () => {
         { id: ids.supportDocument, name: 'Synthetic support output', category: 'OTHER', caseId: ids.case, clientId: ids.client },
         { id: ids.crossDocument, name: 'Synthetic cross output', category: 'OTHER', caseId: ids.crossCase, clientId: ids.crossClient },
       ],
+    });
+    // Schema-valid current DocumentVersion for the primary output: the real
+    // submission contract binds every output to an exact version at attach
+    // time, so readiness requires a current version to bind.
+    await db.documentVersion.create({
+      data: {
+        id: ids.documentVersion,
+        documentId: ids.document,
+        version: 1,
+        name: 'Synthetic primary output v1',
+        originalFileName: 'synthetic-primary-output.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 1,
+        isCurrent: true,
+        uploadedById: ids.worker,
+      },
     });
     await db.timeEntry.createMany({
       data: [

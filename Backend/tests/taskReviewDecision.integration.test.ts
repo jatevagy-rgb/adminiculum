@@ -21,6 +21,7 @@ const ids = {
   rollbackReturnTask: '51000000-0000-4000-8000-000000000005',
   rollbackApprovalTask: '51000000-0000-4000-8000-000000000006',
   document: '61000000-0000-4000-8000-000000000001',
+  documentVersion: '62000000-0000-4000-8000-000000000001',
   time1: '71000000-0000-4000-8000-000000000001',
   time2: '71000000-0000-4000-8000-000000000002',
   lifecycleSubmission: '91000000-0000-4000-8000-000000000001',
@@ -29,6 +30,10 @@ const ids = {
   wrongReviewerSubmission: '91000000-0000-4000-8000-000000000004',
   rollbackReturnSubmission: '91000000-0000-4000-8000-000000000005',
   rollbackApprovalSubmission: '91000000-0000-4000-8000-000000000006',
+  unboundTask: '51000000-0000-4000-8000-000000000007',
+  unboundDocument: '61000000-0000-4000-8000-000000000002',
+  unboundTime: '71000000-0000-4000-8000-000000000003',
+  unboundSubmission: '91000000-0000-4000-8000-000000000007',
 };
 
 describeWithDatabase('TaskReviewDecisionService PostgreSQL lifecycle', () => {
@@ -92,10 +97,28 @@ describeWithDatabase('TaskReviewDecisionService PostgreSQL lifecycle', () => {
       })),
     });
     await db.document.create({ data: { id: ids.document, name: 'Synthetic review output', category: 'OTHER', caseId: ids.case, clientId: ids.client } });
+    // Schema-valid current DocumentVersion for the intended successful path:
+    // the real submission contract binds every output to an exact version at
+    // attach time, so the revised resubmission needs a current version to bind.
+    await db.documentVersion.create({
+      data: {
+        id: ids.documentVersion,
+        documentId: ids.document,
+        version: 1,
+        name: 'Synthetic review output v1',
+        originalFileName: 'synthetic-review-output.docx',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        size: 1,
+        isCurrent: true,
+        uploadedById: ids.worker,
+      },
+    });
     await db.timeEntry.createMany({
       data: [
         { id: ids.time1, workType: 'DRAFTING', description: 'Synthetic original work', minutes: 40, billable: true, matterId: ids.matter, taskId: ids.lifecycleTask, userId: ids.worker },
-        { id: ids.time2, workType: 'REVIEW', description: 'Synthetic revision work', minutes: 20, billable: false, matterId: ids.matter, userId: ids.worker },
+        // The revision time entry is bound to the same task and matter it
+        // evidences, matching the real Leadás scope contract.
+        { id: ids.time2, workType: 'REVIEW', description: 'Synthetic revision work', minutes: 20, billable: false, matterId: ids.matter, taskId: ids.lifecycleTask, userId: ids.worker },
       ],
     });
 
@@ -289,6 +312,53 @@ describeWithDatabase('TaskReviewDecisionService PostgreSQL lifecycle', () => {
     await submissionService.attachSubmissionDocument(ids.lifecycleTask, revisedSubmissionId, ids.worker, { documentId: ids.document, role: 'PRIMARY_OUTPUT' });
     await submissionService.attachSubmissionTimeEntry(ids.lifecycleTask, revisedSubmissionId, ids.worker, { timeEntryId: ids.time2 });
     expect((await submissionService.validateSubmissionReadiness(ids.lifecycleTask, revisedSubmissionId, ids.worker)).ready).toBe(true);
+  });
+
+  it('fails closed on a newly prepared submission whose output has no exact document version', async () => {
+    await db.task.create({
+      data: {
+        id: ids.unboundTask,
+        title: 'Unbound output task',
+        taskType: 'OTHER',
+        status: 'IN_PROGRESS',
+        priority: 'MEDIUM',
+        requiredSkills: [],
+        caseId: ids.case,
+        matterId: ids.matter,
+        assignedToId: ids.worker,
+        assignedById: ids.reviewer,
+      },
+    });
+    await db.document.create({ data: { id: ids.unboundDocument, name: 'Version-less output', category: 'OTHER', caseId: ids.case, clientId: ids.client } });
+    await db.timeEntry.create({
+      data: { id: ids.unboundTime, workType: 'REVIEW', description: 'Unbound draft work', minutes: 10, billable: false, matterId: ids.matter, taskId: ids.unboundTask, userId: ids.worker },
+    });
+    await db.taskSubmission.create({
+      data: {
+        id: ids.unboundSubmission,
+        taskId: ids.unboundTask,
+        revisionNumber: 1,
+        status: 'DRAFT',
+        createdById: ids.worker,
+        assignedReviewerId: ids.reviewer,
+        workSummary: 'Unbound draft summary',
+        requestedAttention: 'APPROVAL',
+      },
+    });
+
+    // Attaching a document with no DocumentVersion binds a null version; the
+    // new Leadás must still fail closed with EXACT_VERSION_REQUIRED instead of
+    // floating an unversioned output into review.
+    await submissionService.attachSubmissionDocument(ids.unboundTask, ids.unboundSubmission, ids.worker, { documentId: ids.unboundDocument, role: 'PRIMARY_OUTPUT' });
+    await submissionService.attachSubmissionTimeEntry(ids.unboundTask, ids.unboundSubmission, ids.worker, { timeEntryId: ids.unboundTime });
+
+    const link = await db.taskSubmissionDocument.findFirst({ where: { submissionId: ids.unboundSubmission } });
+    expect(link?.documentVersionId).toBeNull();
+    const readiness = await submissionService.validateSubmissionReadiness(ids.unboundTask, ids.unboundSubmission, ids.worker);
+    expect(readiness.ready).toBe(false);
+    expect(readiness.missingPrerequisites).toContain('EXACT_VERSION_REQUIRED');
+    await expect(submissionService.submitTaskSubmission(ids.unboundTask, ids.unboundSubmission, ids.worker, 'unbound-submit-key'))
+      .rejects.toMatchObject({ statusCode: 409, code: 'HANDOFF_NOT_READY' });
   });
 
   it('resubmits the corrected revision once and replaces the active queue item', async () => {
