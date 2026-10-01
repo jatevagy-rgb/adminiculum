@@ -27,6 +27,13 @@ import { clientOrganizationApi, type OrgPersonDTO } from "@/lib/clientOrganizati
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
 import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { taskWorkflowErrorMessage } from "@/lib/taskWorkflowPresentation";
+import {
+  DUE_PRESET_OPTIONS,
+  type DuePresetKey,
+  resolvePresetDueAt,
+  countdownFromIso,
+  presetOption,
+} from "@/lib/duePresets";
 import { AdminButton } from "@/components/adminiculum/ui";
 
 // Accepted upload types — the current safe allowlist (unchanged in this slice).
@@ -155,11 +162,32 @@ export function TaskFormModal({
   const [requestedByOrganizationPersonId, setRequestedByOrganizationPersonId] = useState<string>(task?.requestedByOrganizationPerson?.id ?? "");
   const [attentionCategory, setAttentionCategory] = useState<string>(task?.attentionCategory ?? "");
   const [estimatedMinutes, setEstimatedMinutes] = useState<string>(task?.estimatedMinutes != null ? String(task.estimatedMinutes) : "");
-  const [dueDate, setDueDate] = useState<string>(task?.dueDate ? task.dueDate.slice(0, 10) : "");
+  // The persisted due moment is kept verbatim (full ISO), so editing a task and
+  // saving untouched fields never shifts a preset-resolved deadline. The date
+  // input only reflects date-part edits; the preview shows the canonical moment.
+  const [dueDate, setDueDate] = useState<string>(task?.dueDate ?? "");
+  // Due preset mode (WORD_WF02 W04): a preset resolves ONCE into the canonical
+  // dueDate string (full ISO keeps hour precision through the task contract).
+  // The raw date input stays as the secondary custom-absolute option.
+  const [duePresetKey, setDuePresetKey] = useState<DuePresetKey | null>(null);
   const [taskPlanning, setTaskPlanning] = useState<TaskPlanningValue>(EMPTY_TASK_PLANNING);
   const [busy, setBusy] = useState(false);
   const [fieldErr, setFieldErr] = useState<Record<string, string>>({});
   const [serverErr, setServerErr] = useState<string | null>(null);
+
+  const pickPreset = (key: DuePresetKey) => {
+    setDuePresetKey(key);
+    setDueDate(resolvePresetDueAt(key).toISOString());
+  };
+  const pickCustom = () => {
+    setDuePresetKey(null);
+    setDueDate((current) => (current.length > 10 ? current.slice(0, 10) : current));
+  };
+  const clearDue = () => {
+    setDuePresetKey(null);
+    setDueDate("");
+  };
+  const dueCountdown = dueDate ? countdownFromIso(dueDate) : null;
 
   const submit = useCallback(async () => {
     if (busy) return; // double-submit guard
@@ -236,7 +264,59 @@ export function TaskFormModal({
           </div>
           <div>
             <label className={labelCls} htmlFor="cw-task-due">{deadlineMode ? "Feladathatáridő" : "Határidő"}{deadlineMode ? " *" : ""}</label>
-            <input id="cw-task-due" type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={busy} />
+            <div className="mt-1 flex flex-wrap gap-1.5" role="group" aria-label="Határidő-választás">
+              {DUE_PRESET_OPTIONS.map((option) => {
+                const active = duePresetKey === option.key;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    data-testid={`cw-due-preset-${option.key}`}
+                    aria-pressed={active}
+                    disabled={busy}
+                    onClick={() => pickPreset(option.key)}
+                    className={`inline-flex min-h-[40px] items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+                      active
+                        ? "border-[var(--adm-green-800)] bg-[var(--adm-green-800)] text-white"
+                        : "border-[var(--adm-border)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                data-testid="cw-due-custom"
+                aria-pressed={duePresetKey === null && Boolean(dueDate)}
+                disabled={busy}
+                onClick={pickCustom}
+                className="inline-flex min-h-[40px] items-center rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
+              >
+                Egyedi dátum
+              </button>
+              {dueDate ? (
+                <button
+                  type="button"
+                  data-testid="cw-due-clear"
+                  disabled={busy}
+                  onClick={clearDue}
+                  className="inline-flex min-h-[40px] items-center rounded-full border border-[var(--adm-border)] bg-white px-2.5 py-1 text-[11px] font-semibold text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
+                >
+                  Nincs határidő
+                </button>
+              ) : null}
+            </div>
+            <input id="cw-task-due" type="date" className={inputCls} value={dueDate} onChange={(e) => setDueDate(e.target.value)} disabled={busy || duePresetKey !== null} />
+            {dueDate ? (
+              <p
+                data-testid="cw-due-preview"
+                className={`mt-1 text-[11px] font-semibold ${dueCountdown && dueCountdown.expired ? "text-[var(--adm-terracotta-700)]" : "text-[var(--adm-green-800)]"}`}
+              >
+                {duePresetKey ? `${presetOption(duePresetKey).label} · ` : ""}
+                {dueCountdown ? `${dueCountdown.dateLabel} · ${dueCountdown.countdown}` : "Számított határidő: —"}
+              </p>
+            ) : null}
             <FieldError message={fieldErr.dueDate} />
           </div>
         </div>

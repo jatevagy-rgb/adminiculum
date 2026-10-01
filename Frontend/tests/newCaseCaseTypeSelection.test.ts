@@ -27,6 +27,7 @@ function harness({ role = 'ADMIN', options = [] as Option[], types = [] as any[]
     'next/navigation': { useRouter: () => ({ push: (href: string) => routerPushes.push(href) }) },
     'next/link': { default: 'a' },
     './intake/intakeStyles': { intake: {}, ACCENT_BG: {}, ACCENT_TEXT: {} },
+    './intake/TeamTaskPlanningSection': { TeamTaskPlanningSection: 'div', EMPTY_TEAM_TASK_PLAN: { collaboratorUserIds: [], tasks: [] }, teamPlanHasErrors: () => false },
     '@/lib/api': {
       getClientList: async () => [{ id: 'client-1', name: 'Demo Kft.' }],
       getCaseCreationOptions: async () => ({ items: options }),
