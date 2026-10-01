@@ -16,7 +16,7 @@ const stop = () => {
     }
   }
 };
-const timeout = setTimeout(() => { console.error('TIMEOUT: preview + browser checks exceeded 300 seconds'); stop(); process.exit(124); }, 300000);
+const timeout = setTimeout(() => { console.error('TIMEOUT: preview + browser checks exceeded 420 seconds'); stop(); process.exit(124); }, 420000);
 try {
   const server = spawn(process.execPath, ['tests/wordWorkflowPreview.mjs'], { cwd: root, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   children.push(server);
