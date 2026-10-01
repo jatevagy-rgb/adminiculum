@@ -51,6 +51,7 @@ test('real time facts require reviewed text and explicit time permission, with p
  await prisma.timeEntry.update({where:{id:entry.id},data:{minutes:38}});expect(JSON.stringify((await getPortalMatter(portal,publicationId,prisma)).history)).not.toContain('Reviewed time narrative');expect((await prisma.timeEntry.findUniqueOrThrow({where:{id:entry.id}})).description).toBe('RAW_PRIVATE_TIME_DESCRIPTION');await save(prior);await publish();
 });
 test('customer publication attempts and unknown excluded source references are rejected',async()=>{
+ expect((await call('/review','POST',{})).status).toBe(400);expect((await call('/publish','POST',{revision:0})).status).toBe(409);
  const response=await fetch(base+'/publish',{method:'POST',headers:{'content-type':'application/json','x-test-user':manager,'x-test-role':'CLIENT'},body:JSON.stringify({revision:policy.revision})});expect(response.status).toBe(403);
  expect((await call('','PUT',{revision:policy.revision,snapshot:{...snapshot,overlays:[{sourceKey:'timeline:unknown',sourceRevision:'a'.repeat(64),excluded:true,customerText:null,includeTime:false}]}})).status).toBe(400);
 });

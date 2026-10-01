@@ -143,6 +143,8 @@ export async function savePolicy(req: Request, caseId: string, input: any) {
     return { ...view, revision: input.revision + 1, draftNumber: (view.draftNumber ?? 0) + 1, snapshot, reviewed: false, sources: loaded.sources };
 }
 export async function transitionPolicy(req: Request, caseId: string, action: 'review' | 'publish' | 'withdraw', revision: number) {
+    if (!Number.isSafeInteger(revision) || revision < 0)
+        throw new WorkspaceError(400, 'INVALID_POLICY_REVISION');
     if (!isClientPublicationPublisherRole(req.user?.role))
         throw new WorkspaceError(403, 'HISTORY_PUBLISH_FORBIDDEN');
     const view = await readPolicy(req, caseId, undefined, undefined, true);
