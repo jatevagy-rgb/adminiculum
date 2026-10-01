@@ -1024,6 +1024,9 @@ class DocumentsService {
       // surfaced (with the transition engine's status/code), not swallowed.
       if (error instanceof DocumentReviewWorkflowError || error instanceof CaseMutationGuardError) throw error;
       console.error('Error approving document:', error);
+      // Inside the caller's case-locked transaction a side-effect failure must
+      // abort it, otherwise the canonical decision would commit partially.
+      if (caseLockHeld) throw error;
       return false;
     }
   }
@@ -1112,6 +1115,9 @@ class DocumentsService {
       // surfaced (with the transition engine's status/code), not swallowed.
       if (error instanceof DocumentReviewWorkflowError || error instanceof CaseMutationGuardError) throw error;
       console.error('Error rejecting document:', error);
+      // Inside the caller's case-locked transaction a side-effect failure must
+      // abort it, otherwise the canonical decision would commit partially.
+      if (caseLockHeld) throw error;
       return false;
     }
   }
