@@ -86,6 +86,7 @@ import { useDocumentWorkContext } from "@/components/documents/workContext/useDo
 import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
+import { DocumentWorkspaceHeader as WordDocumentWorkspaceHeader } from "@/components/cases/word-workflow/layout/DocumentWorkspaceHeader";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
 import { DocumentWorkspaceTabs, type WorkspaceMode } from "@/components/documents/workContext/DocumentWorkspaceTabs";
@@ -2279,6 +2280,13 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
               <div className="space-y-6">
+                <WordDocumentWorkspaceHeader
+                  key={`${canonicalCaseId}:${selectedUploadedDocument?.id || "none"}:${canonicalActiveVersion?.id || "none"}`}
+                  caseId={canonicalCaseId}
+                  documentId={selectedUploadedDocument?.id ?? null}
+                  versionId={canonicalActiveVersion?.id ?? null}
+                  versionNumber={canonicalActiveVersion?.versionNumber ?? null}
+                />
                 {/* 1. CANONICAL TOP REGION — advanced modes only. The default document
                     reader owns its own restrained header (READER-UI-CONVERGENCE). */}
                 {activeMode !== "document" ? (

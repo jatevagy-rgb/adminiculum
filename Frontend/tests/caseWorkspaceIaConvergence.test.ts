@@ -108,7 +108,7 @@ describe("Case Workspace IA convergence", () => {
     assert.match(source, /<CaseWorkspaceNotesSection/);
     assert.match(source, /id="ck-notes-primary"/);
     assert.ok(
-      source.indexOf("<CaseWorkspaceNotesSection") < source.indexOf("<details ref={secondaryDetailsRef}"),
+      source.indexOf("<CaseWorkspaceNotesSection") > source.indexOf("</details>", source.indexOf("<details ref={secondaryDetailsRef}")),
       "primary notes must not be pushed back into the collapsed details area",
     );
     assert.doesNotMatch(source, /Kommunikáció hozzáadása/);
