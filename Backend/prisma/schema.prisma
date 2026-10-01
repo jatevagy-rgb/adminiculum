@@ -26,6 +26,7 @@ datasource db {
 // ============================================================================
 
 model User {
+  workspaceLayouts CaseWorkspaceLayout[]
   createdHourlyRateVersions  HourlyRateVersion[]
   createdBillingPreparations BillingPreparation[] @relation("BillingPreparationCreatedBy")
   closedBillingPreparations  BillingPreparation[] @relation("BillingPreparationClosedBy")
@@ -169,6 +170,7 @@ enum ClientColorKey {
 }
 
 model Client {
+  anonymizedSourceBindings AnonymizedSourceBinding[]
   hourlyRateVersions        HourlyRateVersion[]
   billingPreparations       BillingPreparation[]
   id                        String                 @id @default(uuid())
@@ -785,6 +787,12 @@ enum AutomationSuppressionType {
 // ============================================================================
 
 model Case {
+  historyPolicy CaseHistoryPolicy?
+  anonymizedSourceBindings AnonymizedSourceBinding[]
+  clientOwner CaseClientOwner?
+  clientOwnerEvents CaseClientOwnerEvent[]
+  workspaceTiles CaseWorkspaceTile[]
+  workspaceLayouts CaseWorkspaceLayout[]
   hourlyRateVersions   HourlyRateVersion[]
   id                   String              @id @default(uuid())
   caseNumber           String              @unique
@@ -1386,6 +1394,7 @@ enum DocumentCategory {
 // ============================================================================
 
 model DocumentVersion {
+  anonymizedSourceBindings AnonymizedSourceBinding[]
   id                 String                           @id @default(uuid())
   version            Int
   securityScanStatus DocumentSecurityScanStatus       @default(CLEAN)
@@ -2380,6 +2389,7 @@ model ClientRedactionProfile {
 }
 
 model AnonymousDocument {
+  sourceBinding AnonymizedSourceBinding?
   id        String @id @default(uuid())
   name      String // Original document name with _anon suffix
   content   String // Anonymized content
@@ -5409,6 +5419,7 @@ enum OrganizationPersonStatus {
 }
 
 model OrganizationPerson {
+  caseOwnerAssignments CaseClientOwner[]
   id                      String                             @id @default(uuid())
   clientId                String
   client                  Client                             @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -6921,4 +6932,107 @@ model CaseContextSource {
   @@index([caseId, createdAt])
   @@index([sourceCommunicationId])
   @@map("case_context_sources")
+}
+model CaseWorkspaceTile {
+  id String @id @default(uuid())
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  title String @db.VarChar(120)
+  text String @db.VarChar(6000)
+  tone String @db.VarChar(16)
+  kind String @default("TEXT")
+  revision Int @default(1)
+  archived Boolean @default(false)
+  createdById String
+  updatedById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([caseId, archived])
+  @@map("case_workspace_tiles")
+}
+
+model CaseWorkspaceLayout {
+  id String @id @default(uuid())
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  revision Int @default(1)
+  placements Json
+  updatedAt DateTime @updatedAt
+  @@unique([caseId, userId])
+  @@map("case_workspace_layouts")
+}
+
+model CaseClientOwner {
+  caseId String @id
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  personId String?
+  person OrganizationPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  @@map("case_client_owners")
+}
+model CaseClientOwnerEvent {
+  id String @id @default(uuid())
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  personId String?
+  revision Int
+  actorId String?
+  reason String
+  createdAt DateTime @default(now())
+  @@unique([caseId, revision])
+  @@map("case_client_owner_events")
+}
+
+model AnonymizedSourceBinding {
+  artifactId String @id
+  artifact AnonymousDocument @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  sourceDocumentId String
+  sourceDocumentVersionId String
+  sourceVersion DocumentVersion @relation(fields: [sourceDocumentId, sourceDocumentVersionId], references: [documentId, id], onDelete: Restrict)
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  artifactRevision Int @default(1)
+  sourceDigest String
+  profileDigest String
+  artifactDigest String
+  rulesRevision String
+  scanProvider String
+  createdById String
+  createdAt DateTime @default(now())
+  @@map("anonymized_source_bindings")
+}
+
+model CaseHistoryPolicy {
+  caseId String @id
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  revision Int @default(1)
+  draftNumber Int
+  publishedNumber Int?
+  revisions CaseHistoryPolicyRevision[]
+  updatedAt DateTime @updatedAt
+  @@map("case_history_policies")
+}
+model CaseHistoryPolicyRevision {
+  id String @id @default(uuid())
+  caseId String
+  policy CaseHistoryPolicy @relation(fields: [caseId], references: [caseId], onDelete: Restrict)
+  number Int
+  snapshot Json
+  createdById String
+  reviewedById String?
+  reviewedAt DateTime?
+  publishedById String?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([caseId, number])
+  @@map("case_history_policy_revisions")
 }
