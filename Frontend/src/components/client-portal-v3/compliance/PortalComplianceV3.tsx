@@ -10,8 +10,6 @@ import {
   getPortalCompliance,
   getPortalComplianceRequests,
   portalDownloadUrl,
-  type PortalComplianceControlSummary,
-  type PortalComplianceDocument,
   type PortalComplianceMissingInfo,
   type PortalComplianceReadModel,
   type PortalComplianceRequest,
@@ -91,10 +89,20 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat("hu-HU", { year: "numeric", month: "short", day: "numeric" }).format(new Date(value));
 }
 
-/** Canonical customer request detail route, mirroring the shared legacy helper. */
-function requestDetailHref(caseId: string | null, requestId: string): string {
-  if (!caseId) return "/portal/ugyek";
-  return `/portal/matters/${encodeURIComponent(caseId)}/requests/${encodeURIComponent(requestId)}`;
+/**
+ * Canonical customer request detail route. The route segment is the published
+ * MATTER identity (matterPublicationId), never the internal Case id: the
+ * /portal/matters/:matterPublicationId route resolves against the published
+ * matter publication, and an internal caseId would fail closed there. The
+ * compliance requests projection is ORGANIZATION-only, so the internal-id
+ * form has no valid consumer. When the matter publication is unavailable, the
+ * truthful fallback is the matter list.
+ */
+function requestDetailHref(matterPublicationId: string | null, _caseId: string | null, requestId: string): string {
+  if (matterPublicationId) {
+    return `/portal/matters/${encodeURIComponent(matterPublicationId)}/requests/${encodeURIComponent(requestId)}`;
+  }
+  return "/portal/ugyek";
 }
 
 type WorklistItem = {
@@ -165,7 +173,7 @@ function RequestGroup({ title, items }: { title: string; items: PortalCompliance
                 {item.dueAt ? <p className={`mt-1 text-xs ${MUTED}`}>Határidő: {formatDate(item.dueAt)}</p> : null}
               </div>
               <Link
-                href={requestDetailHref(item.caseId, item.id)}
+                href={requestDetailHref(item.matterPublicationId ?? null, item.caseId, item.id)}
                 className="shrink-0 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-text-primary)] hover:bg-[var(--adm-canvas-subtle)]"
               >
                 Megnyitás
@@ -207,7 +215,7 @@ function RequestedDocumentsPanel({ requests }: { requests: PortalComplianceReque
                     </div>
                   </div>
                   <Link
-                    href={requestDetailHref(item.caseId, item.id)}
+                    href={requestDetailHref(item.matterPublicationId ?? null, item.caseId, item.id)}
                     className="shrink-0 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-text-primary)] hover:bg-[var(--adm-canvas-subtle)]"
                   >
                     {item.canUpload ? "Feltöltés" : "Megnyitás"}
@@ -225,27 +233,30 @@ function RequestedDocumentsPanel({ requests }: { requests: PortalComplianceReque
 }
 
 function PublishedDocumentsPanel({ topics }: { topics: PortalComplianceTopic[] }) {
-  const documents = topics.flatMap((topic) => topic.documents);
+  const entries = topics.flatMap((topic) =>
+    (topic.documents ?? []).map((doc) => ({ doc, topicLabel: topic.topicLabel })),
+  );
   return (
     <section className={CARD}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="font-serif text-xl font-semibold text-[var(--adm-text-primary)]">Már megadott / elérhető</h2>
-          <p className={`mt-1 text-sm ${MUTED}`}>Az iroda által közzétett, Önnek szánt dokumentumok.</p>
+          <p className={`mt-1 text-sm ${MUTED}`}>Az iroda által közzétett, Önnek szánt dokumentumok — mindegyik a hozzá tartozó megfelelési területtel.</p>
         </div>
         <AdminStatusPill tone="neutral" dot={false}>
-          {documents.length} dokumentum
+          {entries.length} dokumentum
         </AdminStatusPill>
       </div>
       <div className="mt-4">
-        {documents.length > 0 ? (
+        {entries.length > 0 ? (
           <ul className="space-y-2">
-            {documents.map((doc: PortalComplianceDocument) => (
+            {entries.map(({ doc, topicLabel }) => (
               <li key={doc.publicationId} className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-3">
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-[var(--adm-text-primary)]">{doc.title}</p>
                   <p className={`text-xs ${MUTED}`}>
-                    {doc.versionLabel}
+                    <span className="font-semibold text-[var(--adm-text-primary)]">{topicLabel}</span>
+                    {doc.versionLabel ? ` · ${doc.versionLabel}` : ""}
                     {doc.publishedAt ? ` · Közzétéve: ${formatDate(doc.publishedAt)}` : ""}
                   </p>
                 </div>
@@ -501,7 +512,7 @@ export function PortalComplianceV3() {
         stateLabel: requestStateLabel(request.state),
         tone: requestStateTone[request.state],
         dueAt: request.dueAt,
-        href: requestDetailHref(request.caseId, request.id),
+        href: requestDetailHref(request.matterPublicationId ?? null, request.caseId, request.id),
         ctaLabel: request.canUpload ? "Feltöltés" : "Megnyitás",
       });
     }
@@ -709,7 +720,7 @@ export function PortalComplianceV3() {
           <section className={CARD}>
             <h2 className="font-serif text-xl font-semibold text-[var(--adm-text-primary)]">Áttekintés</h2>
             <p className={`mt-1 text-sm ${MUTED}`}>Valós darabszámok. Nincs pontszám és nincs százalékos minősítés.</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <StatusCard
                 label="Öntől szükséges"
                 count={groups.customerAction + requestGroups.awaiting.length}
@@ -721,9 +732,14 @@ export function PortalComplianceV3() {
                 hint="Az iroda dolgozik rajta; most nincs azonnali ügyféllépés."
               />
               <StatusCard
+                label="Lezárt / elkészült"
+                count={requestGroups.closed.length}
+                hint="Az iroda lezárta; ehhez nincs további ügyféllépés."
+              />
+              <StatusCard
                 label="Jelenleg nincs ügyfélteendő"
-                count={groups.noAction + requestGroups.closed.length}
-                hint="Ezen a területen jelenleg nincs nyitott ügyféllépés."
+                count={groups.noAction}
+                hint="Nyitott terület, de jelenleg nincs Öntől várt lépés."
               />
             </div>
             <div className="mt-4 space-y-1 border-t border-[var(--adm-border-canonical)] pt-3 text-xs text-[var(--adm-text-secondary)]">

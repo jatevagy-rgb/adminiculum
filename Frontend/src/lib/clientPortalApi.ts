@@ -1028,6 +1028,8 @@ export type PortalComplianceRequestCategory = 'DOCUMENT' | 'QUESTION';
 export type PortalComplianceRequest = {
   id: string;
   caseId: string | null;
+  /** Canonical customer route identity (published matter publication id); absent for older backends. */
+  matterPublicationId?: string | null;
   type: string;
   title: string;
   instructions: string | null;

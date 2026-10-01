@@ -108,32 +108,30 @@ const CARD =
 const EYEBROW = "text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-secondary)]";
 const MUTED = "text-[var(--adm-text-secondary)]";
 
-function SummaryPanel({
-  eyebrow,
-  title,
-  value,
-  detail,
-  action,
-  testId,
-}: {
-  eyebrow: string;
-  title: string;
-  value?: number;
-  detail: string;
-  action?: React.ReactNode;
-  testId?: string;
-}) {
+/**
+ * F8 single-page information architecture: Fejlesztés is one vertically
+ * readable customer product with five numbered blocks, in the canonical order
+ * 1. Most Önre vár — 2. Amin érdemes dolgozni — 3. Folyamatban —
+ * 4. Az Ön működése — 5. Eredmények. Every legacy ?tab= value maps
+ * deterministically to one of these anchors (see resolveGrowTabV3); detail
+ * views (assessment runner/result, opportunity detail, initiative detail) keep
+ * their focused full-page rendering.
+ */
+const GROW_SECTION_ANCHORS: Record<GrowTab, string | null> = {
+  attekintes: null,
+  teendok: "grow-section-teendok",
+  "fejlesztesi-iranyok": "grow-section-fejlesztesi-iranyok",
+  kezdemenyezesek: "grow-section-kezdemenyezesek",
+  eredmenyek: "grow-section-eredmenyek",
+  mukodes: "grow-section-mukodes",
+};
+
+function GrowSectionHeader({ step, title, description }: { step: string; title: string; description: string }) {
   return (
-    <div className={CARD} data-testid={testId}>
-      <div className="flex items-baseline justify-between gap-3">
-        <p className={EYEBROW}>{eyebrow}</p>
-        {typeof value === "number" ? (
-          <span className="font-serif text-[26px] font-medium leading-none text-[var(--adm-text-primary)]">{value}</span>
-        ) : null}
-      </div>
-      <h3 className="mt-1 font-serif text-[19px] font-medium leading-tight text-[var(--adm-text-primary)]">{title}</h3>
-      <p className={`mt-1 text-xs leading-5 ${MUTED}`}>{detail}</p>
-      {action ? <div className="mt-3">{action}</div> : null}
+    <div>
+      <p className={EYEBROW}>{step}</p>
+      <h2 className="mt-1 font-serif text-[22px] font-medium leading-tight text-[var(--adm-text-primary)]">{title}</h2>
+      <p className={`mt-1 max-w-3xl text-sm leading-6 ${MUTED}`}>{description}</p>
     </div>
   );
 }
@@ -476,12 +474,6 @@ export function PortalGrowV3() {
 
   const uncompletedPacksCount = packs.filter((p) => p.status !== "COMPLETED").length;
   const completedPacksCount = packs.filter((p) => p.status === "COMPLETED").length;
-  const activeInitiativesCount = initiatives.filter(
-    (i) => i.statusLabel === "Folyamatban" || i.statusLabel.toLowerCase().includes("folyamat"),
-  ).length;
-  const plannedInitiativesCount = initiatives.filter(
-    (i) => i.statusLabel === "Tervezett" || i.statusLabel === "Tervezés alatt",
-  ).length;
   const publishedOpportunitiesCount = data?.opportunities?.length ?? 0;
 
   const activeOperatingProcess = selectedOperatingProcessId
@@ -513,6 +505,26 @@ export function PortalGrowV3() {
     ? initiatives.find((item) => item.id === selectedInitiativeId) ?? null
     : null;
 
+  // F8 focused rendering: exactly one focused view can take over the page,
+  // preserving the pre-F8 exclusivity of the detail/runner modes.
+  const focus: "assessment" | "opportunity" | "initiative" | null =
+    assessmentView.mode !== "catalogue" ? "assessment" : activeOpportunity ? "opportunity" : activeInitiative ? "initiative" : null;
+
+  // Deep-link / jump focus: when the page is unfocused, the active (canonically
+  // mapped) tab scrolls to its section anchor — never a silent first-item fallback.
+  useEffect(() => {
+    if (loading || error || focus !== null) return;
+    const targetId = GROW_SECTION_ANCHORS[activeTab];
+    if (!targetId) return;
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(targetId);
+      if (element && typeof element.scrollIntoView === "function") {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [loading, error, focus, activeTab]);
+
   if (loading) {
     return (
       <div aria-label="Működésfejlesztés betöltése" data-testid="portal-grow-loading" className="space-y-3">
@@ -531,13 +543,13 @@ export function PortalGrowV3() {
     );
   }
 
-  const TABS: Array<{ id: GrowTab; label: string; count?: number }> = [
+  const NAV_ITEMS: Array<{ id: GrowTab; label: string; count?: number }> = [
     { id: "attekintes", label: "Áttekintés" },
-    { id: "teendok", label: "Teendők" },
-    { id: "fejlesztesi-iranyok", label: "Fejlesztési irányok", count: publishedOpportunitiesCount },
-    { id: "kezdemenyezesek", label: "Kezdeményezések", count: initiatives.length },
+    { id: "teendok", label: "Most Önre vár", count: uncompletedPacksCount },
+    { id: "fejlesztesi-iranyok", label: "Amin érdemes dolgozni", count: publishedOpportunitiesCount },
+    { id: "kezdemenyezesek", label: "Folyamatban", count: initiatives.length },
+    { id: "mukodes", label: "Az Ön működése", count: processes.length },
     { id: "eredmenyek", label: "Eredmények", count: allOutcomes.length },
-    { id: "mukodes", label: "Működés", count: processes.length },
   ];
 
   return (
@@ -565,18 +577,16 @@ export function PortalGrowV3() {
 
       <nav
         className="flex flex-wrap items-center gap-1.5"
-        aria-label="Működésfejlesztési navigáció"
-        role="tablist"
+        aria-label="Működésfejlesztési szakaszok"
         data-testid="grow-sub-nav"
       >
-        {TABS.map((tab) => {
+        {NAV_ITEMS.map((tab) => {
           const active = activeTab === tab.id;
           return (
             <button
               key={tab.id}
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-current={active ? "true" : undefined}
               data-testid={`grow-tab-${tab.id}`}
               onClick={() => handleTabChange(tab.id)}
               className={`inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-1 ${
@@ -600,84 +610,14 @@ export function PortalGrowV3() {
         })}
       </nav>
 
-      {/* TAB 1: ÁTTEKINTÉS */}
-      {activeTab === "attekintes" ? (
-        <div className="grid gap-4 lg:grid-cols-2" data-testid="grow-overview-tab">
-          <SummaryPanel
-            testId="grow-overview-actions"
-            eyebrow="Adatmegadás"
-            title="Felmérések és jelzések"
-            value={uncompletedPacksCount}
-            detail={
-              uncompletedPacksCount > 0
-                ? `${uncompletedPacksCount} elérhető felmérés segíthet a működés pontosításában.`
-                : packs.length > 0
-                  ? "Minden elérhető felmérés kitöltve. Új működési jelzést továbbra is küldhet."
-                  : "Jelenleg nincs elérhető felmérés. Működési jelzést továbbra is küldhet."
-            }
-            action={
-              <Button variant="neutral" size="sm" onClick={() => handleTabChange("teendok")}>
-                Teendők megnyitása →
-              </Button>
-            }
+      {/* F8 block 1: Most Önre vár — only actual customer actions. */}
+      {(focus === null || focus === "assessment") ? (
+        <div id="grow-section-teendok" className="scroll-mt-24 space-y-4" data-testid="grow-section-teendok">
+          <GrowSectionHeader
+            step="1 · Most Önre vár"
+            title="Amit most érdemes elvégeznie"
+            description="Kizárólag valódi ügyfélteendők: a még nem kitöltött felmérések és az Ön által beküldhető működési visszajelzés."
           />
-          <SummaryPanel
-            testId="grow-overview-opportunities"
-            eyebrow="Közzétett irányok"
-            title="Fejlesztési irányok"
-            value={publishedOpportunitiesCount}
-            detail={
-              publishedOpportunitiesCount > 0
-                ? "Az iroda által Önnek közzétett fejlesztési irányok."
-                : data?.opportunitiesDeferredNotice ||
-                  "Jelenleg nincs ügyféloldalon közzétett fejlesztési irány."
-            }
-            action={
-              <Button variant="neutral" size="sm" onClick={() => handleTabChange("fejlesztesi-iranyok")}>
-                Irányok megtekintése →
-              </Button>
-            }
-          />
-          <SummaryPanel
-            testId="grow-overview-initiatives"
-            eyebrow="Irodai munkavégzés"
-            title="Aktív kezdeményezések"
-            value={activeInitiativesCount}
-            detail={
-              activeInitiativesCount > 0
-                ? `${activeInitiativesCount} jóváhagyott kezdeményezés megvalósítása van folyamatban.`
-                : plannedInitiativesCount > 0
-                  ? `${plannedInitiativesCount} kezdeményezés áll tervezés alatt.`
-                  : "Jelenleg nincs folyamatban lévő kezdeményezés."
-            }
-            action={
-              <Button variant="neutral" size="sm" onClick={() => handleTabChange("kezdemenyezesek")}>
-                Kezdeményezések →
-              </Button>
-            }
-          />
-          <SummaryPanel
-            testId="grow-overview-outcomes"
-            eyebrow="Hatás"
-            title="Rögzített eredmények"
-            value={allOutcomes.length}
-            detail={
-              allOutcomes.length > 0
-                ? `${measuredOutcomes.length} mért, ${estimatedOutcomes.length} számított / becsült eredmény.`
-                : "A kezdeményezések végrehajtását követően itt jelennek meg a rögzített hatások."
-            }
-            action={
-              <Button variant="neutral" size="sm" onClick={() => handleTabChange("eredmenyek")}>
-                Eredmények →
-              </Button>
-            }
-          />
-        </div>
-      ) : null}
-
-      {/* TAB 2: TEENDŐK — assessments and surveys are input channels */}
-      {activeTab === "teendok" ? (
-        <div className="space-y-4">
           <section className={CARD} data-testid="grow-assessments-section">
             {assessmentView.mode === "runner" && currentQuestion ? (
               <div data-testid="grow-assessment-runner">
@@ -1292,8 +1232,8 @@ export function PortalGrowV3() {
         </div>
       ) : null}
 
-      {/* TAB 3: FEJLESZTÉSI IRÁNYOK */}
-      {activeTab === "fejlesztesi-iranyok" ? (
+      {/* F8 block 2: Amin érdemes dolgozni — only approved/published directions. */}
+      {(focus === null || focus === "opportunity") ? (
         activeOpportunity ? (
           <section className={CARD} data-testid="grow-opportunity-detail">
             <div className="flex items-center justify-between gap-4 border-b border-[var(--adm-border-canonical)] pb-3">
@@ -1353,7 +1293,14 @@ export function PortalGrowV3() {
               </div>
             </div>
           </section>
-        ) : data?.opportunities && data.opportunities.length > 0 ? (
+        ) : (
+          <div id="grow-section-fejlesztesi-iranyok" className="scroll-mt-24 space-y-4" data-testid="grow-section-fejlesztesi-iranyok">
+            <GrowSectionHeader
+              step="2 · Amin érdemes dolgozni"
+              title="Jóváhagyott fejlesztési irányok"
+              description="Kizárólag az iroda által jóváhagyott és az Ön szervezetének közzétett fejlesztési irányok jelennek meg itt."
+            />
+          {data?.opportunities && data.opportunities.length > 0 ? (
           <section className={CARD} data-testid="grow-opportunities-section">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1436,11 +1383,13 @@ export function PortalGrowV3() {
               </div>
             </div>
           </section>
+        )}
+        </div>
         )
       ) : null}
 
-      {/* TAB 4: KEZDEMÉNYEZÉSEK */}
-      {activeTab === "kezdemenyezesek" ? (
+      {/* F8 block 3: Folyamatban — active initiatives, next milestone and one next step. */}
+      {(focus === null || focus === "initiative") ? (
         activeInitiative ? (
           (() => {
             const relatedOutcomes = allOutcomes.filter((outcome) => outcome.initiativeTitle === activeInitiative.title);
@@ -1548,6 +1497,12 @@ export function PortalGrowV3() {
             );
           })()
         ) : (
+          <div id="grow-section-kezdemenyezesek" className="scroll-mt-24 space-y-4" data-testid="grow-section-kezdemenyezesek">
+            <GrowSectionHeader
+              step="3 · Folyamatban"
+              title="Aktív fejlesztési kezdeményezések"
+              description="A jóváhagyott kezdeményezések, azok következő mérföldkövei és az aktuális állapotuk."
+            />
           <section className={CARD} data-testid="grow-initiatives-section">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1610,110 +1565,18 @@ export function PortalGrowV3() {
               )}
             </div>
           </section>
+          </div>
         )
       ) : null}
 
-      {/* TAB 5: EREDMÉNYEK */}
-      {activeTab === "eredmenyek" ? (
-        <section className={CARD}>
-          <p className={EYEBROW}>Eredmények és hatás</p>
-          <h2 className="mt-1 font-serif text-xl font-semibold text-[var(--adm-text-primary)]">Mit értünk el?</h2>
-          <p className={`mt-1 text-sm ${MUTED}`}>
-            Mérési alapon rögzített eredmények, felszabadított kapacitások és folyamathatások.
-          </p>
-
-          {measuredOutcomes.length > 0 ? (
-            <div className="mt-5">
-              <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--adm-brand-green)]">
-                Mért eredmények ({measuredOutcomes.length})
-              </h3>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {measuredOutcomes.map((item) => (
-                  <div key={item.id} className="rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-semantic-success-soft)] p-4">
-                    <AdminStatusPill tone="green">{item.basisLabel}</AdminStatusPill>
-                    {item.initiativeTitle ? (
-                      <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
-                        Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
-                      </p>
-                    ) : null}
-                    {item.processName ? <p className={`mt-1 text-xs ${MUTED}`}>Érintett folyamat: {item.processName}</p> : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          {estimatedOutcomes.length > 0 ? (
-            <div className="mt-6">
-              <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--adm-text-primary)]">
-                Számított / becsült eredmények ({estimatedOutcomes.length})
-              </h3>
-
-              {calculatedOutcomes.length > 0 ? (
-                <div className="mt-3">
-                  <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${MUTED}`}>
-                    Számított eredmények ({calculatedOutcomes.length})
-                  </p>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                    {calculatedOutcomes.map((item) => (
-                      <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
-                        <AdminStatusPill tone="gold">{item.basisLabel}</AdminStatusPill>
-                        {item.initiativeTitle ? (
-                          <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
-                            Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
-                          </p>
-                        ) : null}
-                        {item.processName ? <p className={`mt-1 text-xs ${MUTED}`}>Érintett folyamat: {item.processName}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {estimatedOnlyOutcomes.length > 0 ? (
-                <div className="mt-4">
-                  <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${MUTED}`}>
-                    Becsült eredmények ({estimatedOnlyOutcomes.length})
-                  </p>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
-                    {estimatedOnlyOutcomes.map((item) => (
-                      <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
-                        <AdminStatusPill tone="neutral">{item.basisLabel}</AdminStatusPill>
-                        {item.initiativeTitle ? (
-                          <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
-                            Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
-                          </p>
-                        ) : null}
-                        {item.processName ? <p className={`mt-1 text-xs ${MUTED}`}>Érintett folyamat: {item.processName}</p> : null}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {allOutcomes.length === 0 ? (
-            <div className="mt-5">
-              <PortalEmptyInline>
-                Még nincs rögzített eredmény. Az eredmények akkor jelennek meg, amikor egy fejlesztési kezdeményezéshez
-                mérési alap kerül rögzítésre.
-              </PortalEmptyInline>
-            </div>
-          ) : null}
-
-          <div className={`mt-5 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] p-3 text-xs leading-5 ${MUTED}`}>
-            <p className="font-semibold text-[var(--adm-text-primary)]">Módszertan és forrásmegjelölés</p>
-            <p className="mt-0.5">
-              Mért eredményként csak MEASURED alapú eredmény jelenik meg. Számított és becsült hatások külön
-              kategóriában szerepelnek.
-            </p>
-          </div>
-        </section>
-      ) : null}
-
-      {/* TAB 6: MŰKÖDÉS — the known operating context */}
-      {activeTab === "mukodes" ? (
+      {/* F8 block 4: Az Ön működése — actual process/system map and contextual inspector. */}
+      {focus === null ? (
+        <div id="grow-section-mukodes" className="scroll-mt-24 space-y-4" data-testid="grow-section-mukodes">
+          <GrowSectionHeader
+            step="4 · Az Ön működése"
+            title="A működés térképe"
+            description="A szervezet felmért folyamatai, végrehajtási lépései, jóváhagyási pontjai és kapcsolódó informatikai eszközei — a kiválasztott folyamat kontextus-nézetével együtt."
+          />
         <section className={CARD}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1887,6 +1750,113 @@ export function PortalGrowV3() {
             </div>
           ) : null}
         </section>
+        </div>
+      ) : null}
+
+      {/* F8 block 5: Eredmények — MEASURED distinct from CALCULATED/ESTIMATED. */}
+      {focus === null ? (
+        <div id="grow-section-eredmenyek" className="scroll-mt-24 space-y-4" data-testid="grow-section-eredmenyek">
+          <GrowSectionHeader
+            step="5 · Eredmények"
+            title="Rögzített eredmények és hatások"
+            description="Mért eredményként csak MEASURED alapú eredmény jelenik meg; a számított és becsült hatások külön kategóriában szerepelnek."
+          />
+        <section className={CARD}>
+          <p className={EYEBROW}>Eredmények és hatás</p>
+          <h2 className="mt-1 font-serif text-xl font-semibold text-[var(--adm-text-primary)]">Mit értünk el?</h2>
+          <p className={`mt-1 text-sm ${MUTED}`}>
+            Mérési alapon rögzített eredmények, felszabadított kapacitások és folyamathatások.
+          </p>
+
+          {measuredOutcomes.length > 0 ? (
+            <div className="mt-5">
+              <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--adm-brand-green)]">
+                Mért eredmények ({measuredOutcomes.length})
+              </h3>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {measuredOutcomes.map((item) => (
+                  <div key={item.id} className="rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-semantic-success-soft)] p-4">
+                    <AdminStatusPill tone="green">{item.basisLabel}</AdminStatusPill>
+                    {item.initiativeTitle ? (
+                      <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
+                        Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
+                      </p>
+                    ) : null}
+                    {item.processName ? <p className={`mt-1 text-xs ${MUTED}`}>Érintett folyamat: {item.processName}</p> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {estimatedOutcomes.length > 0 ? (
+            <div className="mt-6">
+              <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--adm-text-primary)]">
+                Számított / becsült eredmények ({estimatedOutcomes.length})
+              </h3>
+
+              {calculatedOutcomes.length > 0 ? (
+                <div className="mt-3">
+                  <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${MUTED}`}>
+                    Számított eredmények ({calculatedOutcomes.length})
+                  </p>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    {calculatedOutcomes.map((item) => (
+                      <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
+                        <AdminStatusPill tone="gold">{item.basisLabel}</AdminStatusPill>
+                        {item.initiativeTitle ? (
+                          <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
+                            Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
+                          </p>
+                        ) : null}
+                        {item.processName ? <p className={`mt-1 text-xs ${MUTED}`}>Érintett folyamat: {item.processName}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {estimatedOnlyOutcomes.length > 0 ? (
+                <div className="mt-4">
+                  <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${MUTED}`}>
+                    Becsült eredmények ({estimatedOnlyOutcomes.length})
+                  </p>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    {estimatedOnlyOutcomes.map((item) => (
+                      <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
+                        <AdminStatusPill tone="neutral">{item.basisLabel}</AdminStatusPill>
+                        {item.initiativeTitle ? (
+                          <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
+                            Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
+                          </p>
+                        ) : null}
+                        {item.processName ? <p className={`mt-1 text-xs ${MUTED}`}>Érintett folyamat: {item.processName}</p> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {allOutcomes.length === 0 ? (
+            <div className="mt-5">
+              <PortalEmptyInline>
+                Még nincs rögzített eredmény. Az eredmények akkor jelennek meg, amikor egy fejlesztési kezdeményezéshez
+                mérési alap kerül rögzítésre.
+              </PortalEmptyInline>
+            </div>
+          ) : null}
+
+          <div className={`mt-5 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] p-3 text-xs leading-5 ${MUTED}`}>
+            <p className="font-semibold text-[var(--adm-text-primary)]">Módszertan és forrásmegjelölés</p>
+            <p className="mt-0.5">
+              Mért eredményként csak MEASURED alapú eredmény jelenik meg. Számított és becsült hatások külön
+              kategóriában szerepelnek.
+            </p>
+          </div>
+        </section>
+        </div>
       ) : null}
     </div>
   );
