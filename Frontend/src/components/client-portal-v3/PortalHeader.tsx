@@ -17,7 +17,7 @@ type PortalHeaderProps = {
 };
 
 const menuItemClass =
-  "block w-full px-3 py-2 text-left text-sm font-medium text-[var(--adm-text-primary)] hover:bg-[var(--adm-canvas-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-brand-green)]";
+  "flex min-h-10 w-full items-center px-3 py-2 text-left text-sm font-medium text-[var(--adm-text-primary)] transition-colors hover:bg-[var(--adm-canvas-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--adm-brand-green)]";
 
 function AccountIcon() {
   return (
@@ -60,6 +60,21 @@ export function PortalHeader({ view, workspaceName, communicationEnabled, canSwi
       if (event.key === "Escape") {
         setMenuOpen(false);
         triggerRef.current?.focus();
+        return;
+      }
+      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const items = menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]');
+        if (!items || items.length === 0) return;
+        const current = document.activeElement as HTMLElement;
+        const index = Array.from(items).indexOf(current);
+        if (event.key === "ArrowDown") {
+          const next = index < items.length - 1 ? items[index + 1] : items[0];
+          next.focus();
+        } else {
+          const prev = index > 0 ? items[index - 1] : items[items.length - 1];
+          prev.focus();
+        }
       }
     };
     const onPointerDown = (event: MouseEvent) => {
@@ -80,7 +95,7 @@ export function PortalHeader({ view, workspaceName, communicationEnabled, canSwi
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3 sm:gap-3 sm:px-6">
         <Link
           href="/portal"
-          className="min-w-0 font-serif text-xl font-semibold tracking-tight text-[var(--adm-brand-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-2 sm:text-2xl"
+          className="min-w-0 font-serif text-xl font-bold tracking-tight text-[var(--adm-brand-deep)] transition-colors hover:text-[var(--adm-brand-green)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-2 sm:text-2xl"
         >
           Adminiculum
         </Link>
@@ -96,7 +111,7 @@ export function PortalHeader({ view, workspaceName, communicationEnabled, canSwi
               onClick={() => setMenuOpen((value) => !value)}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="max-w-[16rem]"
+              className="max-w-[16rem] min-h-10"
               data-testid="portal-account-menu-trigger"
             >
               <span className="hidden truncate md:inline">{workspaceName}</span>
@@ -143,7 +158,7 @@ export function PortalHeader({ view, workspaceName, communicationEnabled, canSwi
           <Link
             href={ORG_NEW_INTAKE_HREF}
             data-testid="portal-cta-new-intake"
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-brand-green)] px-3 text-sm font-medium text-[var(--adm-canvas-white)] transition-colors hover:border-[var(--adm-brand-deep)] hover:bg-[var(--adm-brand-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-2 motion-reduce:transition-none sm:px-4"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-brand-green)] px-3 text-sm font-medium text-[var(--adm-canvas-white)] transition-colors hover:border-[var(--adm-brand-deep)] hover:bg-[var(--adm-brand-deep)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-2 motion-reduce:transition-none sm:px-4 shadow-sm"
           >
             <span className="hidden sm:inline-flex">
               <PlusIcon />
