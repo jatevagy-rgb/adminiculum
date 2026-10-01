@@ -13,17 +13,21 @@ describe("Phase 5B organizational customer contract + company surface", () => {
   const shell = () => read("src/components/client-portal/ClientPortalShell.tsx");
 
   it("keeps the compact organization IA navigation labels in order", () => {
-    const src = shell();
-    const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
-    const orgBlock = src.slice(orgIdx, src.indexOf("if (workspace.mode === 'CASE_RELAY')"));
-    const order = ["Áttekintés", "Ügyek", "Teendők", "Dokumentumok", "Naptár", "Fejlesztés", "Megfelelés", "Kommunikáció", "Vállalat"];
+    // Client Portal 3.0 cutover: the ORGANIZATION primary navigation now lives in
+    // the V3 navigation module, not in the legacy shell.
+    const navSrc = read("src/components/client-portal-v3/navigation.ts");
+    const navBlock = navSrc.slice(navSrc.indexOf("ORG_PRIMARY_NAV"), navSrc.indexOf("ORG_MOBILE_PRIMARY_NAV"));
+    const order = ["Áttekintés", "Ügyek", "Teendők", "Dokumentumok", "Vállalat", "Fejlesztés", "Megfelelés"];
     let last = -1;
     for (const label of order) {
-      const idx = orgBlock.indexOf(`'${label}'`);
+      const idx = navBlock.indexOf(`label: "${label}"`);
       assert.ok(idx > -1, `org IA missing ${label}`);
       assert.ok(idx > last, `org IA order violated for ${label}`);
       last = idx;
     }
+    // Naptár and Kommunikáció are utilities, never primary destinations.
+    assert.doesNotMatch(navBlock, /label: "Naptár"/);
+    assert.doesNotMatch(navBlock, /label: "Kommunikáció"/);
   });
 
   it("Szerződések is functional (not a placeholder) and customer-readable", () => {

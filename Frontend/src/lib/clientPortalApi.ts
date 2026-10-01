@@ -507,6 +507,8 @@ export type PortalOrgHome = {
   customer: { name: string };
   currentMatter?: PortalOrgHomeMatter;
   matters: PortalOrgHomeRow[];
+  /** Canonical complete count of granted, published matters; optional for older backends. */
+  mattersTotal?: number;
   actions: PortalOrgHomeAction[];
   recentDocuments: PortalOrgHomeDocument[];
   contactSummary: { openCount: number; unreadCount: number; latestPreview: string | null; latestUpdatedAt: string | null };
@@ -517,6 +519,83 @@ export type PortalOrgHome = {
 
 export async function getPortalOrgHome() {
   return fetchApi<PortalOrgHome>('/client-portal/org/home', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
+export type PortalActionDomain = 'LEGAL' | 'COMPLIANCE' | 'GROW' | 'COMPANY' | 'INTAKE';
+
+export type PortalActionKind =
+  | 'UPLOAD'
+  | 'FORM'
+  | 'ANSWER'
+  | 'CORRECTION'
+  | 'CONFIRM'
+  | 'PROFILE_FACT'
+  | 'INTAKE_MORE_INFO'
+  | 'GROW_INPUT';
+
+export type PortalActionItem = {
+  id: string;
+  sourceType:
+    | 'CLIENT_ACTION_REQUEST'
+    | 'CLIENT_REQUEST'
+    | 'CLIENT_SUBMISSION'
+    | 'INTAKE'
+    | 'COMPLIANCE_MISSING_FACT'
+    | 'GROW_REQUEST';
+  sourceId: string;
+  domain: PortalActionDomain;
+  kind: PortalActionKind;
+  title: string;
+  contextLabel: string | null;
+  dueAt: string | null;
+  urgency: 'OVERDUE' | 'DUE_SOON' | 'NORMAL';
+  state: 'OPEN' | 'IN_PROGRESS' | 'CORRECTION_REQUIRED';
+  actionLabel: string;
+  href: string;
+  canCompleteInPortal: boolean;
+  /** Canonical matter publication id for matter-scoped sources; null for workspace-scoped sources. */
+  matterPublicationId: string | null;
+};
+
+export type PortalActionCenter = {
+  items: PortalActionItem[];
+  counts: { open: number; overdue: number; dueSoon: number };
+};
+
+export async function getPortalActionCenter() {
+  return fetchApi<PortalActionCenter>('/client-portal/org/action-center', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
+}
+
+export type OrgDocumentLibrarySubmissionStatus =
+  | 'SUBMITTED'
+  | 'CORRECTION_REQUESTED'
+  | 'ACCEPTED_INTO_MATTER'
+  | 'REJECTED';
+
+export type OrgDocumentLibraryDto = {
+  published: Array<{
+    publicationId: string;
+    title: string;
+    versionLabel: string;
+    publishedAt: string | null;
+    matterTitle: string | null;
+    tags: string[];
+    downloadAvailable: boolean;
+  }>;
+  submitted: Array<{
+    submissionId: string;
+    requestTitle: string;
+    files: Array<{ id: string; title: string; statusLabel: string }>;
+    submittedAt: string | null;
+    status: OrgDocumentLibrarySubmissionStatus;
+    matterTitle: string | null;
+    matterPublicationId: string | null;
+    requestId: string | null;
+  }>;
+};
+
+export async function getPortalOrganizationDocuments() {
+  return fetchApi<OrgDocumentLibraryDto>('/client-portal/org/documents', { authContext: 'customer', suppressErrorStatuses: [401, 403, 404, 503], suppressErrorLogging: true });
 }
 
 export async function getPortalUnitSummary(groupId: string) {
@@ -577,6 +656,43 @@ export type PortalOrgCompanyProcess = {
   frequency: string;
 };
 
+export type PortalOrgCompanyDataSummary = {
+  relevantQuestionCount: number;
+  answeredCount: number;
+  unknownCount: number;
+  unansweredCount: number;
+  needsCompletion: boolean;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyDocumentsSummary = {
+  visibleDocumentCount: number;
+  latestPublishedAt: string | null;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyComplianceSummary = {
+  topicCount: number;
+  moreInformationNeededCount: number;
+  lawyerReviewRequiredCount: number;
+  actionInProgressCount: number;
+  resolvedCount: number;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyDevelopmentSummary = {
+  initiativeCount: number;
+  activeInitiativeCount: number;
+  portalPath: string;
+};
+
+export type PortalOrgCompanyOutcomeSummary = {
+  measuredCount: number;
+  calculatedCount: number;
+  estimatedCount: number;
+  portalPath: string;
+};
+
 export type PortalOrgCompany = {
   companyName: string;
   profileHeadline: string | null;
@@ -588,6 +704,11 @@ export type PortalOrgCompany = {
   initiatives: Array<{ id: string; title: string; targetState: string | null; statusLabel: string; targetAt: string | null }>;
   systems?: PortalOrgCompanySystem[];
   processes?: PortalOrgCompanyProcess[];
+  dataSummary?: PortalOrgCompanyDataSummary | null;
+  documentsSummary?: PortalOrgCompanyDocumentsSummary | null;
+  complianceSummary?: PortalOrgCompanyComplianceSummary | null;
+  developmentSummary?: PortalOrgCompanyDevelopmentSummary | null;
+  outcomeSummary?: PortalOrgCompanyOutcomeSummary | null;
 };
 
 export async function getPortalOrganizationContracts() {
@@ -909,6 +1030,8 @@ export type PortalComplianceRequestCategory = 'DOCUMENT' | 'QUESTION';
 export type PortalComplianceRequest = {
   id: string;
   caseId: string | null;
+  /** Canonical customer route identity (published matter publication id); absent for older backends. */
+  matterPublicationId?: string | null;
   type: string;
   title: string;
   instructions: string | null;

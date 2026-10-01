@@ -41,6 +41,15 @@ export type CompanyRequestCounts = {
 export type CompanyClientRequest = {
   id: string;
   caseId: string | null;
+  /**
+   * Canonical customer route identity for the request's case: the published
+   * matter publication id (workspace-scoped preferred publication), resolved
+   * from the same chain the organizational case list uses. Null when the case
+   * has no published matter — the request row still needs the internal caseId
+   * for interaction APIs, but the customer route must fall back, never link
+   * with an internal id.
+   */
+  matterPublicationId: string | null;
   type: string;
   title: string;
   instructions: string | null;
@@ -105,6 +114,33 @@ export async function getCompanyClientRequestProjection(
     return { items: [], counts: empty, generatedAt };
   }
 
+  // Canonical matter route identity per granted case: the published matter
+  // publication (workspace-scoped publication preferred, legacy null-workspace
+  // publications accepted), exactly like the organizational case list and the
+  // org document library. Never used as an authorization input — only as the
+  // customer route identity derived from the granted rows above.
+  const publications = await prisma.clientMatterPublication.findMany({
+    where: {
+      caseId: { in: grantedCaseIds },
+      status: 'PUBLISHED',
+      currentRevisionId: { not: null },
+      OR: [{ workspaceId }, { workspaceId: null }],
+    },
+    select: { id: true, caseId: true, workspaceId: true },
+  });
+  const matterPublicationIdByCase = new Map<string, string>();
+  // Ascending sort puts workspace-scoped publications first; first-wins keeps
+  // the workspace-scoped publication as the canonical route identity even when
+  // a legacy null-workspace or other-workspace publication exists for the case.
+  const sortedPublications = [...publications].sort(
+    (left, right) => Number(right.workspaceId === workspaceId) - Number(left.workspaceId === workspaceId),
+  );
+  for (const publication of sortedPublications) {
+    if (!matterPublicationIdByCase.has(publication.caseId)) {
+      matterPublicationIdByCase.set(publication.caseId, publication.id);
+    }
+  }
+
   const rows = await prisma.clientRequest.findMany({
     where: {
       clientId,
@@ -129,6 +165,7 @@ export async function getCompanyClientRequestProjection(
     return {
       id: safe.id,
       caseId: safe.caseId ?? null,
+      matterPublicationId: safe.caseId ? matterPublicationIdByCase.get(safe.caseId) ?? null : null,
       type: safe.type,
       title: safe.title,
       instructions: safe.instructions ?? null,

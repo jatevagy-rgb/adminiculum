@@ -108,6 +108,8 @@ export interface OrgHomeDto {
   customer: { name: string };
   currentMatter?: OrgHomeCustomerMatter;
   matters: OrgHomeMatterRow[];
+  /** Complete count of granted, published matters (not the bounded preview length). */
+  mattersTotal: number;
   actions: OrgHomeAction[];
   recentDocuments: OrgHomeDocument[];
   contactSummary: OrgHomeContactSummary;
@@ -317,6 +319,7 @@ export async function getOrganizationalHome(
 
   const list = await listOrganizationalCases(identityId, workspaceId, { limit: 50 }, prisma);
   const caseRows = list.items as unknown as OrgHomeMatterRow[];
+  const mattersTotal = list.total;
 
   const isProduction = process.env.NODE_ENV === 'production';
   const demoEnabled = !isProduction && process.env.ADMINICULUM_DEMO_CONTENT_ENABLED === 'true';
@@ -478,6 +481,7 @@ export async function getOrganizationalHome(
     customer: { name: client.name },
     currentMatter,
     matters: caseRows,
+    mattersTotal,
     actions: [...legalActions, ...complianceActions],
     recentDocuments: (documents.items as unknown as OrgHomeDocument[]).map((d) => ({
       id: d.id,
