@@ -3,10 +3,11 @@ import { savedOwnerPersonId } from '../case-workspace/owner.service';
 // WORK REPORTS — rate-free client work-report routes.
 // ============================================================================
 
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseReadAccess } from '../cases/authorization';
+import { canReadClientIdentity } from '../clients/routes';
 import { prisma } from '../../prisma/prisma.service';
 import {
   buildCaseReport,
@@ -28,6 +29,27 @@ function safeFileStem(value: string): string {
 function ownerPersonIdOf(req: Request): string | null {
   const raw = String(req.query.ownerPersonId ?? '').trim();
   return raw || null;
+}
+
+// Same established client-read scope as the internal client identity API:
+// identity managers (ADMIN/PARTNER) or a workforce user with a related case on
+// the client. Workforce-role validation alone is not client access.
+async function requireWorkReportClientReadAccess(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const clientId = String(req.params.clientId ?? '').trim();
+  if (!clientId) {
+    res.status(400).json({ status: 400, code: 'WORK_REPORT_CLIENT_REQUIRED', message: 'clientId is required' });
+    return;
+  }
+  try {
+    const access = await canReadClientIdentity(req, clientId);
+    if (!access) {
+      res.status(403).json({ status: 403, code: 'CLIENT_IDENTITY_ACCESS_FORBIDDEN', message: 'You do not have access to client identity data.' });
+      return;
+    }
+    next();
+  } catch {
+    res.status(500).json({ status: 500, code: 'CLIENT_IDENTITY_AUTHORIZATION_ERROR', message: 'Client identity access could not be verified.' });
+  }
 }
 
 // GET /api/v1/work-reports/cases?clientId=&startDate=&endDate=
@@ -55,7 +77,7 @@ router.get('/cases', authenticate, requireWorkforceUser, async (req: Request, re
 // GET /api/v1/work-reports/clients/:clientId/owners
 // Report-level client-side owner candidates: people of one client. A selection
 // made from this list applies to the report only, never to the case.
-router.get('/clients/:clientId/owners', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
+router.get('/clients/:clientId/owners', authenticate, requireWorkforceUser, requireWorkReportClientReadAccess, async (req: Request, res: Response) => {
   try {
     const clientId = String(req.params.clientId ?? '').trim();
     if (!clientId) {
