@@ -1,4 +1,4 @@
-// Bounded, local-only preview owned by this test. No build and no backend.
+// Bounded local preview owned by this test. Optional prebuilt production mode; no backend.
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,7 +18,8 @@ const stop = () => {
 };
 const timeout = setTimeout(() => { console.error('TIMEOUT: preview + browser checks exceeded 420 seconds'); stop(); process.exit(124); }, 420000);
 try {
-  const server = spawn(process.execPath, ['tests/wordWorkflowPreview.mjs'], { cwd: root, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+  const serverArgs = process.env.WF10_PRODUCTION_PREVIEW === 'true' ? ['node_modules/next/dist/bin/next','start','-p','3137','--hostname','127.0.0.1'] : ['tests/wordWorkflowPreview.mjs'];
+  const server = spawn(process.execPath, serverArgs, { cwd: root, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
   children.push(server);
   server.stdout.pipe(fs.createWriteStream(path.join(logs, 'dev.stdout.log')));
   server.stderr.pipe(fs.createWriteStream(path.join(logs, 'dev.stderr.log')));
