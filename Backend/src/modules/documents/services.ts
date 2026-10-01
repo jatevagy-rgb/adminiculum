@@ -10,6 +10,7 @@ import { driveService } from '../sharepoint';
 import { isTextExtractable } from './comparison/versionText';
 import { hrConfidentialReadAllowed } from './authorization';
 import { transitionReview, DocumentReviewWorkflowError } from './review/reviewService';
+import { CaseMutationGuardError, lockCaseForMutation } from '../cases/caseMutationGuard';
 import { resolveVersionReviewStatus } from './review/reviewWorkflow';
 import { queueDocumentVersionScan, securityScanBlock } from './securityScan.service';
 import {
@@ -896,38 +897,36 @@ class DocumentsService {
         throw new Error('SharePoint item ID is missing for this document');
       }
 
-      // Update document folder to REVIEW
-      await prisma.document.update({
-        where: { id: documentId },
-        data: { folder: 'REVIEW' as any }
-      });
-
-      // Check out document in SharePoint
-      await driveService.checkoutDocument(document.spItemId, userId);
-
-      // Create TimelineEvent
-      await prisma.timelineEvent.create({
-        data: {
-          caseId: document.caseId,
-          userId: userId,
-          eventType: 'SENT_TO_REVIEW',
-          type: 'SENT_TO_REVIEW' as any,
-          payload: {
-            documentId,
-            fileName: document.fileName,
-            folder: 'Review'
-          }
-        } as any
-      });
-
-      // Update Case status to IN_REVIEW
-      await prisma.case.update({
-        where: { id: document.caseId },
-        data: { status: 'IN_REVIEW' as any }
-      });
-
-      return true;
+      return await prisma.$transaction(async (tx) => {
+        await lockCaseForMutation(tx, document.caseId);
+        // Keep the legacy folder, SharePoint and case-status sequence under the
+        // same case lock as ordinary closure.
+        await tx.document.update({
+          where: { id: documentId },
+          data: { folder: 'REVIEW' as any }
+        });
+        await driveService.checkoutDocument(document.spItemId, userId);
+        await tx.timelineEvent.create({
+          data: {
+            caseId: document.caseId,
+            userId: userId,
+            eventType: 'SENT_TO_REVIEW',
+            type: 'SENT_TO_REVIEW' as any,
+            payload: {
+              documentId,
+              fileName: document.fileName,
+              folder: 'Review'
+            }
+          } as any
+        });
+        await tx.case.update({
+          where: { id: document.caseId },
+          data: { status: 'IN_REVIEW' as any }
+        });
+        return true;
+      }, { timeout: 60000 });
     } catch (error) {
+      if (error instanceof CaseMutationGuardError) throw error;
       console.error('Error submitting for review:', error);
       return false;
     }
@@ -941,7 +940,8 @@ class DocumentsService {
     userId: string,
     comment?: string,
     role?: string,
-    db: Prisma.TransactionClient | typeof prisma = prisma
+    db: Prisma.TransactionClient | typeof prisma = prisma,
+    caseLockHeld = false,
   ): Promise<boolean> {
     try {
       const document = await db.document.findUnique({
@@ -954,6 +954,13 @@ class DocumentsService {
       if (!document.spItemId) {
         throw new Error('SharePoint item ID is missing for this document');
       }
+      if (!caseLockHeld && '$transaction' in db) {
+        return await db.$transaction(async (tx) => {
+          await lockCaseForMutation(tx, document.caseId);
+          return this.approveDocument(documentId, userId, comment, role, tx, true);
+        }, { timeout: 60000 });
+      }
+      if (!caseLockHeld) await lockCaseForMutation(db as Prisma.TransactionClient, document.caseId);
 
       // Delegate the review-state decision to the canonical DocumentReview state
       // machine FIRST. The legacy route remains a compatibility entry point but
@@ -1015,8 +1022,11 @@ class DocumentsService {
     } catch (error) {
       // Canonical transition failures must propagate so invalid approvals are
       // surfaced (with the transition engine's status/code), not swallowed.
-      if (error instanceof DocumentReviewWorkflowError) throw error;
+      if (error instanceof DocumentReviewWorkflowError || error instanceof CaseMutationGuardError) throw error;
       console.error('Error approving document:', error);
+      // Inside the caller's case-locked transaction a side-effect failure must
+      // abort it, otherwise the canonical decision would commit partially.
+      if (caseLockHeld) throw error;
       return false;
     }
   }
@@ -1029,7 +1039,8 @@ class DocumentsService {
     userId: string,
     reason: string,
     role?: string,
-    db: Prisma.TransactionClient | typeof prisma = prisma
+    db: Prisma.TransactionClient | typeof prisma = prisma,
+    caseLockHeld = false,
   ): Promise<boolean> {
     try {
       const document = await db.document.findUnique({
@@ -1039,6 +1050,13 @@ class DocumentsService {
       if (!document) {
         throw new Error('Document not found');
       }
+      if (!caseLockHeld && '$transaction' in db) {
+        return await db.$transaction(async (tx) => {
+          await lockCaseForMutation(tx, document.caseId);
+          return this.rejectDocument(documentId, userId, reason, role, tx, true);
+        }, { timeout: 60000 });
+      }
+      if (!caseLockHeld) await lockCaseForMutation(db as Prisma.TransactionClient, document.caseId);
 
       // Delegate the review-state decision to the canonical DocumentReview state
       // machine FIRST. The legacy route remains a compatibility entry point but
@@ -1095,8 +1113,11 @@ class DocumentsService {
     } catch (error) {
       // Canonical transition failures must propagate so invalid rejections are
       // surfaced (with the transition engine's status/code), not swallowed.
-      if (error instanceof DocumentReviewWorkflowError) throw error;
+      if (error instanceof DocumentReviewWorkflowError || error instanceof CaseMutationGuardError) throw error;
       console.error('Error rejecting document:', error);
+      // Inside the caller's case-locked transaction a side-effect failure must
+      // abort it, otherwise the canonical decision would commit partially.
+      if (caseLockHeld) throw error;
       return false;
     }
   }

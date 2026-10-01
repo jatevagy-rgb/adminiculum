@@ -1,3 +1,6 @@
+import { historyPolicyRouter } from './modules/case-history/policy.routes';
+import { verifiedContextRouter } from './modules/anonymize/verifiedContext.routes';
+import { caseWorkspaceRouter } from './modules/case-workspace/routes';
 /**
  * Adminiculum Backend V2 - Main Application Entry Point (minimal deployable)
  */
@@ -220,6 +223,12 @@ app.use('/api/v1/users', usersRoutes);
 import casesRoutes from './modules/cases/routes';
 app.use('/api/v1/cases', casesRoutes);
 
+import { caseHistoryReadRouter } from './modules/case-history/read.routes';
+app.use('/api/v1/case-history', caseHistoryReadRouter);
+app.use('/api/v1/case-history', historyPolicyRouter);
+app.use('/api/v1/case-workspace', caseWorkspaceRouter);
+app.use('/api/v1', verifiedContextRouter);
+
 import clientsRoutes from './modules/clients/routes';
 app.use('/api/v1/clients', clientsRoutes);
 
@@ -378,6 +387,9 @@ app.use('/api/v1/clause-library', clauseLibraryRoutes);
 
 import timesheetReportRoutes from './modules/timesheet-reports/routes';
 app.use('/api/v1/timesheet-reports', timesheetReportRoutes);
+
+import workReportRoutes from './modules/work-reports/routes';
+app.use('/api/v1/work-reports', workReportRoutes);
 
 import handoffPackagesRoutes from './modules/handoff-packages/routes';
 app.use('/api/v1', handoffPackagesRoutes);

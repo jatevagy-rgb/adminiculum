@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import prisma from '../../config/database';
 import { WorkflowTransitionError } from '../cases/workItems';
+import { lockTaskCaseForWork } from '../cases/caseMutationGuard';
 import { planCanonicalTaskTransition } from './taskLifecycle.service';
 import { ATTENTION_DURATION_BANDS, isAttentionCategory, type AttentionCategory } from './attentionCategory';
 import {
@@ -570,6 +571,7 @@ export class TaskReviewDecisionService {
 
     try {
       const result = await withSerializableRetry(this.db, async (tx) => {
+        await lockTaskCaseForWork(tx, taskId);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "tasks" WHERE "id" = ${taskId} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "task_submissions" WHERE "id" = ${submissionId} FOR UPDATE`);
         const context = await this.getContext(taskId, submissionId, actorId, tx);
@@ -651,6 +653,7 @@ export class TaskReviewDecisionService {
     const requestFingerprint = stableFingerprint({ operation: 'REVISE' });
     try {
       const result = await withSerializableRetry(this.db, async (tx) => {
+        await lockTaskCaseForWork(tx, taskId);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "tasks" WHERE "id" = ${taskId} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "task_submissions" WHERE "id" = ${submissionId} FOR UPDATE`);
         const context = await this.getContext(taskId, submissionId, actorId, tx);
@@ -744,6 +747,7 @@ export class TaskReviewDecisionService {
     const requestFingerprint = stableFingerprint({ note });
     try {
       const result = await withSerializableRetry(this.db, async (tx) => {
+        await lockTaskCaseForWork(tx, taskId);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "tasks" WHERE "id" = ${taskId} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "task_submissions" WHERE "id" = ${submissionId} FOR UPDATE`);
         const context = await this.getContext(taskId, submissionId, actorId, tx);
@@ -847,6 +851,7 @@ export class TaskReviewDecisionService {
     const requestFingerprint = stableFingerprint({ actionType, completedAt: input.completedAt ? completedAt.toISOString() : null });
     try {
       const result = await withSerializableRetry(this.db, async (tx) => {
+        await lockTaskCaseForWork(tx, taskId);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "tasks" WHERE "id" = ${taskId} FOR UPDATE`);
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "task_submissions" WHERE "id" = ${submissionId} FOR UPDATE`);
         const context = await this.getContext(taskId, submissionId, actorId, tx);

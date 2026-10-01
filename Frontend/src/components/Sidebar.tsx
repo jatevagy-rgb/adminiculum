@@ -93,6 +93,7 @@ const routeMap: Record<string, string> = {
   communications: "/communications",
   "time-entries": "/time-entries",
   "timesheet-presets": "/timesheet-presets",
+  "work-report": "/work-report",
   clients: "/clients",
   compliance: "/compliance",
   calendar: "/deadlines",
@@ -104,7 +105,7 @@ const navGroups: Array<{ id: string; label: string; items: string[] }> = [
   {
     id: "primary",
     label: "Fő navigáció",
-    items: ["dashboard", "cases", "clients", "compliance", "tasks", "communications", "settings"],
+    items: ["dashboard", "cases", "clients", "compliance", "tasks", "work-report", "communications", "settings"],
   },
 ];
 
@@ -120,6 +121,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
   const isCommunicationsActive = activeItem === "communications";
   const isTimeEntriesActive = activeItem === "time-entries";
   const isTimesheetPresetsActive = activeItem === "timesheet-presets";
+  const isWorkReportActive = activeItem === "work-report";
   const isCalendarActive = activeItem === "calendar";
   const isClientsActive = activeItem === "clients";
   const isComplianceActive = activeItem === "compliance";
@@ -136,6 +138,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
     compliance: "Megfelelőség",
     "documents-compare": "Verzió-összevetés",
     "time-entries": "Munkaórák",
+    "work-report": "Munkaóra-jelentés",
     calendar: "Határidők",
     "client-portal-admin": "Ügyfélportál",
     settings: "Beállítások",
@@ -224,6 +227,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                 || nav.id === "communications" && isCommunicationsActive
                 || nav.id === "time-entries" && isTimeEntriesActive
                 || nav.id === "timesheet-presets" && isTimesheetPresetsActive
+                || nav.id === "work-report" && isWorkReportActive
                 || nav.id === "calendar" && isCalendarActive
                 || nav.id === "clients" && isClientsActive
                 || nav.id === "compliance" && isComplianceActive

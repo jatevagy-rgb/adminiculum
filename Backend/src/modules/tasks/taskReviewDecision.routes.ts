@@ -1,6 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import taskReviewDecisionService, { TaskReviewDecisionServiceError } from './taskReviewDecision.service';
+import { CaseMutationGuardError } from '../cases/caseMutationGuard';
 import { requireCanonicalStringParams } from './canonicalStringId';
 
 const router = Router();
@@ -18,7 +19,7 @@ function assertFields(body: Record<string, unknown>, allowed: string[]): void {
 }
 
 function sendError(res: Response, error: unknown): void {
-  if (error instanceof TaskReviewDecisionServiceError) {
+  if (error instanceof TaskReviewDecisionServiceError || error instanceof CaseMutationGuardError) {
     res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
     return;
   }

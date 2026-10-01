@@ -67,6 +67,13 @@ router.post(
       });
 
       if (!result.success) {
+        if (result.scanBlocked) {
+          return res.status(409).json({
+            status: 409,
+            code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+            message: result.error || 'A dokumentum biztonsági ellenőrzése még nem engedélyezi a tartalom megnyitását.',
+          });
+        }
         return res.status(400).json({
           status: 400,
           code: 'ANONYMIZATION_FAILED',
@@ -99,6 +106,13 @@ router.get(
       const documentId = Array.isArray(documentIdParam) ? documentIdParam[0] : documentIdParam;
 
       const result = await anonymizeService.getAnonymizationSourceText(documentId);
+      if (result.scanBlocked) {
+        return res.status(409).json({
+          status: 409,
+          code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+          message: result.limitationMessage || 'A dokumentum biztonsági ellenőrzése még nem engedélyezi a tartalom megnyitását.',
+        });
+      }
       res.json(result);
     } catch (error) {
       console.error('Get anonymization source error:', error);

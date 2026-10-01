@@ -932,9 +932,25 @@ export interface CaseClosureBlocker {
     | 'OPEN_DEADLINES'
     | 'ACTIVE_HANDOFF'
     | 'UNRESOLVED_LITIGATION_ITEM'
-    | 'MISSING_RESPONSIBLE_LAWYER';
+    | 'MISSING_RESPONSIBLE_LAWYER'
+    | 'SUBMISSION_AWAITING_DECISION'
+    | 'SUBMISSION_RETURNED_PENDING_CORRECTION'
+    | 'ACTIVE_DOCUMENT_REVIEW'
+    | 'UNRESOLVED_BLOCKING_REVIEW_POINT'
+    | 'LEGAL_OUTPUT_EXACT_VERSION_UNAPPROVED'
+    | 'EXTERNAL_COMPLETION_PENDING';
   label: string;
   count?: number;
+  href?: string | null;
+}
+
+export interface CaseClosureWarning {
+  code:
+    | 'NO_RECORDED_TIME'
+    | 'BILLING_PREPARATION_NOT_CLOSED'
+    | 'INVOICE_NOT_DRAFTED'
+    | 'CLIENT_PUBLICATION_ABSENT';
+  label: string;
   href?: string | null;
 }
 
@@ -949,6 +965,7 @@ export interface CaseLifecycleResponse {
   updatedAt?: string | null;
   responsibleLawyer?: { id: string; displayName: string } | null;
   blockers: CaseClosureBlocker[];
+  warnings: CaseClosureWarning[];
   closureReadiness: { ready: boolean; reasons: string[] };
   capabilities: {
     canChangeStatus: boolean;

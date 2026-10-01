@@ -10,7 +10,7 @@ test("Case workspace keeps the primary cockpit order and one converged action su
   const source = overview();
   const hero = source.indexOf('data-testid="matter-hero"');
   const kpis = source.indexOf('data-testid="kpi-row"');
-  const insights = source.indexOf('<CaseInsightTiles workspace={ws} caseId={caseId} />');
+  const insights = source.indexOf('<CaseContextTiles caseRecord={c} />');
   const quickActions = source.indexOf('data-testid="case-workspace-quick-actions"');
   const primaryWork = source.indexOf('title="Aktív munka"');
   assert.ok(hero < kpis && kpis < insights && insights < quickActions && quickActions < primaryWork);

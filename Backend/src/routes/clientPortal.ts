@@ -344,7 +344,7 @@ router.get('/matters', async (req, res) => {
 router.get('/matters/:publicationId', async (req, res) => {
   try {
     if (!(await portalRead(req, res))) return;
-    res.json(await getPortalMatter(actor(req), String(req.params.publicationId)));
+    res.set('Cache-Control', 'no-store').json(await getPortalMatter(actor(req), String(req.params.publicationId)));
   } catch (error) {
     fail(res, error);
   }
