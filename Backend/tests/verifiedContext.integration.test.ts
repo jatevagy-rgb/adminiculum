@@ -48,3 +48,13 @@ test('source scope change during extraction does not certify a mismatched artifa
 test('rehydration uses the exact stored artifact mapping',async()=>{
  const {importAIResponse}=await import('../src/modules/anonymize/services');const restored=await importAIResponse({anonymousDocId:artifact.anonymizedArtifactId,aiResponseText:artifact.sanitizedText,userId:user});expect(restored.success).toBe(true);expect(restored.rehydratedContent).toContain('V1Secret');expect(restored.rehydratedContent).not.toContain('V2Secret');
 });
+
+test('empty source bytes, absent scanner and forged handoff fields cannot certify context',async()=>{
+ const before=await prisma.anonymizedSourceBinding.count({where:{caseId}});(driveService.downloadDocument as jest.Mock).mockResolvedValueOnce(Buffer.alloc(0));expect((await create(v2,{extraPhrases:['V2Secret']})).status).toBe(409);
+ setScanner({provider:'NONE',scan:async()=>({outcome:'CLEAN',provider:'NONE',codeSafe:'UNVERIFIED'})});expect((await create(v2,{extraPhrases:['V2Secret']})).status).toBe(409);setScanner({provider:'WF10_SYNTHETIC_TEST',scan:async()=>({outcome:'CLEAN',provider:'WF10_SYNTHETIC_TEST',codeSafe:'TEST'})});
+ expect((await handoff({sourceDocumentId:documentId,sourceDocumentVersionId:v1,artifactRevision:1,sanitizedText:'forged',verifiedBy:['server']})).status).toBe(400);expect(await prisma.anonymizedSourceBinding.count({where:{caseId}})).toBe(before);
+});
+test('HR classification remains a separate boundary even for a case manager',async()=>{
+ const original=await prisma.document.findUniqueOrThrow({where:{id:documentId}});await prisma.document.update({where:{id:documentId},data:{securityClassification:'HR_CONFIDENTIAL'}});
+ const response=await fetch(base+'/documents/'+documentId+'/versions/'+v2+'/anonymize-verified',{method:'POST',headers:{'content-type':'application/json','x-test-user':user,'x-test-role':'LAWYER'},body:JSON.stringify({})});expect(response.status).toBe(403);await prisma.document.update({where:{id:documentId},data:{securityClassification:original.securityClassification}});
+});
