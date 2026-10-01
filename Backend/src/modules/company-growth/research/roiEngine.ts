@@ -1,32 +1,58 @@
 /**
- * GROW — deterministic ROI engine.
+ * GROW — deterministic ROI engine (v2, provenance-aware).
  *
  * Produces an explicit low/base/high estimate range with full provenance.
  * Time saved and cash saved are deliberately separate numbers: time is the
  * measured/derived quantity, cash is an optional valuation on top of it, never
- * silently equated.
+ * silently equated. Waiting/elapsed time is reported separately from active
+ * work time and can never be monetized.
+ *
+ * Input-origin contract (G1):
+ *   Every before/after value may carry an explicit origin
+ *   (MEASURED | DECLARED | ESTIMATED | CALCULATED | UNKNOWN). A MEASURED basis
+ *   requires MEASURED origins on BOTH sides. An explicitly UNKNOWN origin is
+ *   rejected (fail closed) — it is never silently relabelled. Omitting the
+ *   origins keeps the legacy ladder so existing callers keep their contract.
  *
  * Basis ladder (highest applicable wins):
- *   MEASURED   — an after-snapshot with real metrics exists
- *   CALCULATED — derived from a measured before-snapshot + stated deltas
- *   ESTIMATED  — derived from process estimate fields (no measurement)
+ *   MEASURED   — both before and after values exist with MEASURED origins
+ *   CALCULATED — a stated delta over a measured/calculated before-basis
+ *   ESTIMATED  — derived from estimates/declarations (no measurement)
  *   ASSUMED    — generic defaults only; nothing measured or estimated
  */
 
-export const ROI_ENGINE_VERSION = 'grow-roi-v1';
+export const ROI_ENGINE_VERSION = 'grow-roi-v2';
+
+/** Canonical input-value origins. Array order is part of the public contract. */
+export const INPUT_VALUE_ORIGINS = ['MEASURED', 'DECLARED', 'ESTIMATED', 'CALCULATED', 'UNKNOWN'] as const;
+export type InputValueOrigin = (typeof INPUT_VALUE_ORIGINS)[number];
+
+const INPUT_VALUE_ORIGIN_SET = new Set<string>(INPUT_VALUE_ORIGINS);
+
+export interface RoiRange {
+  low: number;
+  base: number;
+  high: number;
+}
 
 export interface RoiInputs {
-  /** Monthly process frequency (runs per month). */
-  runsPerMonth: number;
-  /** Before-state cycle minutes per run (measured or estimated). */
+  /** Monthly process frequency (runs per month). Null = unknown. */
+  runsPerMonth: number | null;
+  /** Before-state cycle minutes per run. */
   beforeActiveMinutes: number | null;
-  beforeWaitingMinutes: number | null;
-  /** After-state cycle minutes per run, when actually measured. */
+  /** Optional before waiting minutes — omitted or null = unknown. */
+  beforeWaitingMinutes?: number | null;
+  /** After-state cycle minutes per run, when available. */
   afterActiveMinutes: number | null;
-  afterWaitingMinutes: number | null;
+  /** Optional after waiting minutes — omitted or null = unknown. */
+  afterWaitingMinutes?: number | null;
+  /** Declared origin of the before-side values. Omitted = legacy ladder. */
+  beforeOrigin?: InputValueOrigin | null;
+  /** Declared origin of the after-side values. Omitted = legacy ladder. */
+  afterOrigin?: InputValueOrigin | null;
   /**
    * Expected active-minute reduction per run in percent (0-100), used when no
-   * after measurement exists. Caller must mark the result synthetic/estimated.
+   * after measurement exists.
    */
   expectedActiveReductionPct?: number | null;
   /** Optional valuation: loaded hourly cost per person in HUF. */
@@ -34,8 +60,9 @@ export interface RoiInputs {
   /** Optional count of people whose time the process consumes per run. */
   peopleAffected?: number | null;
   /**
-   * Explicit provenance override for the estimate. When omitted it is derived
-   * from the computed basis. Never silently assumed.
+   * Explicit provenance override for the estimate. Must be consistent with the
+   * honest basis derived from the inputs — a caller-supplied label can never
+   * upgrade the basis.
    */
   provenanceType?: RoiProvenanceType | null;
 }
@@ -65,24 +92,34 @@ const BASIS_TO_PROVENANCE: Record<OutcomeBasis, RoiProvenanceType> = {
 export interface RoiEstimate {
   basis: OutcomeBasis;
   provenanceType: RoiProvenanceType;
-  timeSavedMinutesPerRun: { low: number; base: number; high: number };
-  timeSavedMinutesPerMonth: { low: number; base: number; high: number };
-  cashSavedHufPerMonth: { low: number; base: number; high: number } | null;
+  /** Active work-time saved per run. Null = no supported delta exists. */
+  timeSavedMinutesPerRun: RoiRange | null;
+  /** Active work-time saved per month (process minutes, headcount NOT included). Null = unknown frequency or no delta. */
+  timeSavedMinutesPerMonth: RoiRange | null;
+  /** Waiting/elapsed time saved per run — reported separately, never monetized. Null = waiting data absent. */
+  waitingTimeSavedMinutesPerRun: RoiRange | null;
+  /** Waiting/elapsed time saved per month. Null = waiting data or frequency absent. */
+  waitingTimeSavedMinutesPerMonth: RoiRange | null;
+  /** Cash valuation. Only derived from active-time savings x runs x people x rate. Null = not derivable. */
+  cashSavedHufPerMonth: RoiRange | null;
   provenance: {
     formulaVersion: string;
     computedAt: string;
     type: RoiProvenanceType;
     inputs: {
-      runsPerMonth: number;
+      runsPerMonth: number | null;
       beforeActiveMinutes: number | null;
       beforeWaitingMinutes: number | null;
       afterActiveMinutes: number | null;
       afterWaitingMinutes: number | null;
+      beforeOrigin: InputValueOrigin | null;
+      afterOrigin: InputValueOrigin | null;
       expectedActiveReductionPct: number | null;
       hourlyCostHuf: { low: number; base: number; high: number } | null;
       peopleAffected: number | null;
     };
     timeSavedIsNotCashSaved: true;
+    cashIsCapacityValuationNotRealizedSavings: true;
     explanationHu: string;
   };
 }
@@ -92,9 +129,19 @@ export interface RoiValidationIssue {
   message: string;
 }
 
+function n(value: unknown): number | null {
+  if (value == null) return null;
+  const v = Number(value);
+  return Number.isFinite(v) ? v : null;
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /**
- * Validates ROI inputs: finite, non-negative, correct ranges/units and a valid
- * provenance category. Low/base/high must be ordered low <= base <= high.
+ * Validates ROI inputs: finite, non-negative, correct ranges/units and valid
+ * origin/provenance categories. Low/base/high must be ordered low <= base <= high.
  */
 export function validateRoiInputs(inputs: RoiInputs): RoiValidationIssue[] {
   const issues: RoiValidationIssue[] = [];
@@ -134,6 +181,13 @@ export function validateRoiInputs(inputs: RoiInputs): RoiValidationIssue[] {
     }
   }
 
+  if (inputs.beforeOrigin != null && !INPUT_VALUE_ORIGIN_SET.has(String(inputs.beforeOrigin))) {
+    issues.push({ field: 'beforeOrigin', message: `must be one of ${INPUT_VALUE_ORIGINS.join(', ')}` });
+  }
+  if (inputs.afterOrigin != null && !INPUT_VALUE_ORIGIN_SET.has(String(inputs.afterOrigin))) {
+    issues.push({ field: 'afterOrigin', message: `must be one of ${INPUT_VALUE_ORIGINS.join(', ')}` });
+  }
+
   if (inputs.provenanceType != null && !ROI_PROVENANCE_SET.has(String(inputs.provenanceType))) {
     issues.push({ field: 'provenanceType', message: `must be one of ${ROI_PROVENANCE_TYPES.join(', ')}` });
   }
@@ -141,14 +195,22 @@ export function validateRoiInputs(inputs: RoiInputs): RoiValidationIssue[] {
   return issues;
 }
 
-function n(value: unknown): number | null {
-  if (value == null) return null;
-  const v = Number(value);
-  return Number.isFinite(v) ? v : null;
-}
-
-function round(value: number): number {
-  return Math.round(value * 100) / 100;
+/**
+ * Basis for a before+after comparison from the two declared origins.
+ * MEASURED requires MEASURED on both sides; a calculation from anything stays
+ * CALCULATED only when both sides are measured/calculated; any estimate or
+ * declaration downgrades to ESTIMATED. Both origins omitted = legacy ladder
+ * (MEASURED), preserving the pre-v2 contract for existing callers.
+ */
+function compareBasis(beforeOrigin: InputValueOrigin | null, afterOrigin: InputValueOrigin | null): OutcomeBasis {
+  if (beforeOrigin === 'MEASURED' && afterOrigin === 'MEASURED') return 'MEASURED';
+  if (beforeOrigin == null && afterOrigin == null) return 'MEASURED';
+  const strong = (o: InputValueOrigin | null): boolean => o === 'MEASURED' || o === 'CALCULATED' || o == null;
+  if (strong(beforeOrigin) && strong(afterOrigin)) {
+    const bothCalculated = beforeOrigin === 'CALCULATED' || afterOrigin === 'CALCULATED';
+    return bothCalculated ? 'CALCULATED' : 'MEASURED';
+  }
+  return 'ESTIMATED';
 }
 
 /**
@@ -160,97 +222,144 @@ export function computeRoiEstimate(inputs: RoiInputs): RoiEstimate {
   if (issues.length) {
     throw new Error(`ROI_INPUT_INVALID: ${issues.map((i) => `${i.field} ${i.message}`).join('; ')}`);
   }
-  const runsPerMonth = Math.max(0, n(inputs.runsPerMonth) ?? 0);
+
+  const runs = n(inputs.runsPerMonth);
   const beforeActive = n(inputs.beforeActiveMinutes);
   const beforeWaiting = n(inputs.beforeWaitingMinutes);
   const afterActive = n(inputs.afterActiveMinutes);
   const afterWaiting = n(inputs.afterWaitingMinutes);
   const expectedReductionPct = n(inputs.expectedActiveReductionPct);
-  const people = Math.max(1, n(inputs.peopleAffected) ?? 1);
+  const people = n(inputs.peopleAffected);
   const hourly = inputs.hourlyCostHuf
     ? { low: Math.max(0, n(inputs.hourlyCostHuf.low) ?? 0), base: Math.max(0, n(inputs.hourlyCostHuf.base) ?? 0), high: Math.max(0, n(inputs.hourlyCostHuf.high) ?? 0) }
     : null;
 
-  let basis: OutcomeBasis;
-  let perRunLow: number;
-  let perRunBase: number;
-  let perRunHigh: number;
+  const beforeOrigin: InputValueOrigin | null = (inputs.beforeOrigin ?? null) as InputValueOrigin | null;
+  const afterOrigin: InputValueOrigin | null = (inputs.afterOrigin ?? null) as InputValueOrigin | null;
 
-  if (afterActive != null && beforeActive != null) {
-    // Measured before+after: the saving is the observed active-time delta,
-    // plus the observed waiting-time delta (waiting is elapsed cost, not work
-    // time, so it is reported but not multiplied into cash valuation).
-    basis = 'MEASURED';
-    const activeDelta = beforeActive - afterActive;
-    const waitingDelta = (beforeWaiting ?? 0) - (afterWaiting ?? 0);
-    perRunBase = Math.max(0, activeDelta);
-    // Low/high spread: pessimistic = only active delta; optimistic = active +
-    // half the observed waiting reduction credited as freed capacity.
-    perRunLow = Math.max(0, activeDelta);
-    perRunHigh = Math.max(0, activeDelta + 0.5 * Math.max(0, waitingDelta));
-    if (perRunBase === 0 && waitingDelta > 0) {
-      // No work-time saved but elapsed time improved — still a real outcome.
-      perRunBase = round(0.5 * waitingDelta);
-      perRunHigh = round(0.75 * waitingDelta);
-    }
-  } else if (beforeActive != null && expectedReductionPct != null) {
-    basis = 'CALCULATED';
-    const pct = Math.min(100, Math.max(0, expectedReductionPct));
-    perRunLow = round(beforeActive * (pct / 100) * 0.5);
-    perRunBase = round(beforeActive * (pct / 100));
-    perRunHigh = round(beforeActive * (pct / 100) * 1.5);
-  } else if (beforeActive != null || beforeWaiting != null) {
-    basis = 'ESTIMATED';
-    const cycle = (beforeActive ?? 0) + (beforeWaiting ?? 0);
-    perRunLow = 0;
-    perRunBase = round(cycle * 0.1);
-    perRunHigh = round(cycle * 0.2);
-  } else {
-    basis = 'ASSUMED';
-    perRunLow = 0;
-    perRunBase = 0;
-    perRunHigh = 0;
+  // G1: an explicitly UNKNOWN origin is never silently relabelled — fail closed.
+  if (beforeOrigin === 'UNKNOWN' || afterOrigin === 'UNKNOWN') {
+    throw new Error('ROI_INPUT_INVALID: declared value origin UNKNOWN cannot support a measurement basis; provide a supported origin.');
   }
 
-  const monthly = {
-    low: round(perRunLow * runsPerMonth * people),
-    base: round(perRunBase * runsPerMonth * people),
-    high: round(perRunHigh * runsPerMonth * people),
-  };
+  const hasBefore = beforeActive != null || beforeWaiting != null;
+  const hasAfter = afterActive != null || afterWaiting != null;
 
-  const cash = hourly
-    ? {
-        low: round((monthly.low / 60) * hourly.low),
-        base: round((monthly.base / 60) * hourly.base),
-        high: round((monthly.high / 60) * hourly.high),
-      }
-    : null;
+  let basis: OutcomeBasis;
+  let timeSavedPerRun: RoiRange | null = null;
+  let waitingSavedPerRun: RoiRange | null = null;
 
-  const provenanceType: RoiProvenanceType = (inputs.provenanceType ?? BASIS_TO_PROVENANCE[basis]) as RoiProvenanceType;
+  if (hasBefore && hasAfter) {
+    // Before + after comparison: honest basis from the declared origins.
+    basis = compareBasis(beforeOrigin, afterOrigin);
+
+    // Active work-time delta. Waiting time is elapsed queue time and is never
+    // folded into the labour saving.
+    if (beforeActive != null && afterActive != null) {
+      const activeDelta = Math.max(0, beforeActive - afterActive);
+      timeSavedPerRun = { low: activeDelta, base: activeDelta, high: activeDelta };
+    }
+
+    // Waiting/cycle-time delta, reported separately, never monetized.
+    if (beforeWaiting != null && afterWaiting != null) {
+      const waitingDelta = Math.max(0, beforeWaiting - afterWaiting);
+      waitingSavedPerRun = { low: waitingDelta, base: waitingDelta, high: waitingDelta };
+    }
+  } else if (hasBefore && !hasAfter) {
+    if (expectedReductionPct != null) {
+      // Stated delta over a before-basis. A calculation from an estimate stays
+      // based on an estimate; a measured/calculated basis stays CALCULATED.
+      basis =
+        beforeOrigin === 'ESTIMATED' || beforeOrigin === 'DECLARED' ? 'ESTIMATED' : 'CALCULATED';
+      const pct = Math.min(100, Math.max(0, expectedReductionPct));
+      const base = round((beforeActive ?? 0) * (pct / 100));
+      timeSavedPerRun = { low: round(base * 0.5), base, high: round(base * 1.5) };
+    } else if (beforeOrigin != null) {
+      // Explicit origin without any delta: expose the honest basis and an
+      // actionable unavailable savings state — never a fabricated guess.
+      basis = beforeOrigin === 'MEASURED' || beforeOrigin === 'CALCULATED'
+        ? (beforeOrigin === 'MEASURED' ? 'MEASURED' : 'CALCULATED')
+        : 'ESTIMATED';
+      timeSavedPerRun = null;
+    } else {
+      // Legacy before-only ladder (no declared origin, no stated delta):
+      // explicitly labelled estimate. Preserved for existing callers.
+      basis = 'ESTIMATED';
+      const cycle = (beforeActive ?? 0) + (beforeWaiting ?? 0);
+      timeSavedPerRun = { low: 0, base: round(cycle * 0.1), high: round(cycle * 0.2) };
+    }
+  } else {
+    // Nothing to compare: generic assumptions only.
+    basis = 'ASSUMED';
+    timeSavedPerRun = { low: 0, base: 0, high: 0 };
+  }
+
+  const timeSavedMonthly: RoiRange | null =
+    timeSavedPerRun != null && runs != null
+      ? {
+          low: round(timeSavedPerRun.low * runs),
+          base: round(timeSavedPerRun.base * runs),
+          high: round(timeSavedPerRun.high * runs),
+        }
+      : null;
+
+  const waitingSavedMonthly: RoiRange | null =
+    waitingSavedPerRun != null && runs != null
+      ? {
+          low: round(waitingSavedPerRun.low * runs),
+          base: round(waitingSavedPerRun.base * runs),
+          high: round(waitingSavedPerRun.high * runs),
+        }
+      : null;
+
+  // G2: cash is derived ONLY from active-time savings x runs x people x rate.
+  // Unknown people/rate/frequency or a non-positive delta produce no cash
+  // figure (capacity valuation, never realized savings).
+  let cash: RoiRange | null = null;
+  if (timeSavedPerRun != null && runs != null && people != null && hourly != null && timeSavedPerRun.base > 0) {
+    const perRun = timeSavedPerRun;
+    cash = {
+      low: round(((perRun.low * runs * people) / 60) * hourly.low),
+      base: round(((perRun.base * runs * people) / 60) * hourly.base),
+      high: round(((perRun.high * runs * people) / 60) * hourly.high),
+    };
+  }
+
+  const provenanceType: RoiProvenanceType = BASIS_TO_PROVENANCE[basis];
+
+  // G1: a caller-supplied provenance label can never relabel the honest basis.
+  if (inputs.provenanceType != null && inputs.provenanceType !== provenanceType) {
+    throw new Error(`ROI_INPUT_INVALID: provenanceType ${inputs.provenanceType} contradicts the derived basis ${basis} (${provenanceType}).`);
+  }
 
   return {
     basis,
     provenanceType,
-    timeSavedMinutesPerRun: { low: perRunLow, base: perRunBase, high: perRunHigh },
-    timeSavedMinutesPerMonth: monthly,
+    timeSavedMinutesPerRun: timeSavedPerRun,
+    timeSavedMinutesPerMonth: timeSavedMonthly,
+    waitingTimeSavedMinutesPerRun: waitingSavedPerRun,
+    waitingTimeSavedMinutesPerMonth: waitingSavedMonthly,
     cashSavedHufPerMonth: cash,
     provenance: {
       formulaVersion: ROI_ENGINE_VERSION,
       computedAt: new Date().toISOString(),
       type: provenanceType,
       inputs: {
-        runsPerMonth,
+        runsPerMonth: runs,
         beforeActiveMinutes: beforeActive,
         beforeWaitingMinutes: beforeWaiting,
         afterActiveMinutes: afterActive,
         afterWaitingMinutes: afterWaiting,
+        beforeOrigin,
+        afterOrigin,
         expectedActiveReductionPct: expectedReductionPct ?? null,
         hourlyCostHuf: hourly,
-        peopleAffected: inputs.peopleAffected != null ? people : null,
+        peopleAffected: people,
       },
       timeSavedIsNotCashSaved: true,
+      cashIsCapacityValuationNotRealizedSavings: true,
       explanationHu:
-        'A megtakarított idő a mért vagy becsült aktív perc különbözete alkalmonként, szorozva a havi gyakorisággal és az érintett létszámmal. A pénzben kifejezett érték külön óradíj-becslésből származik, és nem azonos a megtakarított idővel.',
+        'A megtakarított idő a mért vagy becsült AKTÍV perc különbözete alkalmonként, szorozva a havi gyakorisággal (a várakozási idő külön szerepel, és soha nem számít bele a munkamegtakarításba). A pénzben kifejezett érték kizárólag aktív-idő megtakarításból, óradíj-becsléssel és érintett létszámmal készülő kapacitás-értékelés, nem azonos sem a megtakarított idővel, sem realizált pénzmegtakarítással.',
     },
   };
 }
