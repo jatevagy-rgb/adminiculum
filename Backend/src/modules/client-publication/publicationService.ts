@@ -1239,7 +1239,7 @@ export async function listPortalMatters(actor: Actor, db: PrismaClient = default
   return dto;
 }
 
-export async function getPortalMatter(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+export async function getPortalMatterBase(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
   const context = await resolvePortalContext(actor, db);
   const row = await one(db, `SELECT p.*, p.status::text, r.id AS "revisionId", r."clientSafeTitle", r."clientSafeStatus", r."clientSafeNextStep", r."clientSafeCurrentPosition", r."clientSafeWaitingOn", r."publicTargetDate", r."responsibleLawyerDisplay", r."publishedDeadlinesSnapshot", r."audienceSnapshot", r."milestonesSnapshot", r."progressPercentage"
     FROM client_matter_publications p JOIN client_matter_publication_revisions r ON r.id=p."currentRevisionId"
@@ -1373,4 +1373,12 @@ export async function getPortalSafeUpdate(actor: Actor, updateId: string, db: Pr
   const row = await one(db, 'SELECT *, category::text, status::text FROM client_safe_updates WHERE id=$1 AND status=$2::"ClientSafeUpdateStatus"', updateId, 'PUBLISHED');
   if (!row || !context.caseIds.includes(String(row.caseId)) || !audienceAllows(row, context.grants, 'UPDATE_READ')) throw new ClientPublicationError(404, 'PORTAL_RESOURCE_NOT_FOUND', 'Portal content is not available.');
   return toPortalUpdate(row, matterMap.get(String(row.caseId)));
+}
+
+export async function getPortalMatter(actor: Actor, publicationId: string, db: PrismaClient = defaultPrisma): Promise<Row> {
+ const matter=await getPortalMatterBase(actor,publicationId,db);
+ if(process.env.ENABLE_CUSTOMER_HISTORY_POLICY!=='true')return matter;
+ const {projectPublishedHistory}=await import('../case-history/policy.service');
+ const history=await projectPublishedHistory(actor,publicationId,{},db);
+ return {...matter,...(history.managed?{updates:[],milestones:[]}:{}),history};
 }

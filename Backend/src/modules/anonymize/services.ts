@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 // ============================================================================
 // ANONYMIZE SERVICE - Dokumentum anonimizálás AI feldolgozáshoz
 // ============================================================================
@@ -139,7 +140,7 @@ export async function anonymizeDocument(params: {
   sourceText?: string;
   /** Optional UI metadata context */
   metadata?: AnonymizationMetadataInput;
-}): Promise<{
+}, executionDb: Prisma.TransactionClient = prisma): Promise<{
   success: boolean;
   anonymizedDocumentId?: string;
   redactedText?: string;
@@ -151,7 +152,7 @@ export async function anonymizeDocument(params: {
     // 1. Get document — accept both Document (client upload) and ContractGeneration (generated contract)
     // Frontend AnonymizeModal is opened from Document Ledger with contract.id (ContractGeneration.id).
     // This previously only handled Document records, causing 'Dokumentum nem található' for generated contracts.
-    let document = await prisma.document.findUnique({
+    let document = await executionDb.document.findUnique({
       where: { id: params.documentId },
       include: { case: { include: { client: { include: { redactorProfile: true } } } } }
     });
@@ -161,7 +162,7 @@ export async function anonymizeDocument(params: {
 
     if (!document) {
       // Fallback: try ContractGeneration (generated contract from template)
-      contractGen = await prisma.contractGeneration.findUnique({
+      contractGen = await executionDb.contractGeneration.findUnique({
         where: { id: params.documentId },
         select: { filePath: true, fileName: true, caseId: true }
       });
@@ -181,7 +182,7 @@ export async function anonymizeDocument(params: {
     if (sourceType === 'document') {
       caseData = document.case;
     } else if (contractGen) {
-      caseData = await prisma.case.findUnique({
+      caseData = await executionDb.case.findUnique({
         where: { id: contractGen.caseId },
         include: { client: { include: { redactorProfile: true } } }
       });
@@ -193,7 +194,7 @@ export async function anonymizeDocument(params: {
     if (caseData?.client) {
       clientData = caseData.client;
     } else if (caseData?.clientId) {
-      clientData = await prisma.client.findUnique({
+      clientData = await executionDb.client.findUnique({
         where: { id: caseData.clientId },
         include: { redactorProfile: true }
       });
@@ -511,7 +512,7 @@ export async function anonymizeDocument(params: {
       }
     }
 
-    const anonymousDoc = await prisma.anonymousDocument.create({
+    const anonymousDoc = await executionDb.anonymousDocument.create({
       data: {
         sourceDocId: params.documentId,
         originalDocId: params.documentId,
@@ -526,7 +527,7 @@ export async function anonymizeDocument(params: {
     });
 
     // 7. Create timeline event
-    await prisma.timelineEvent.create({
+    await executionDb.timelineEvent.create({
       data: {
         caseId: sourceCaseId,
         userId: params.userId,

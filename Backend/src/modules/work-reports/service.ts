@@ -1,3 +1,4 @@
+import { reportHistory } from '../case-history/policy.service';
 // ============================================================================
 // WORK REPORTS — rate-free client work-report service.
 // ============================================================================
@@ -368,10 +369,11 @@ export async function resolveWorkReportOwner(
       clientId: true,
       name: true,
       jobTitle: true,
+      employmentStatus: true, startDate: true, endDate: true,
       organizationGroup: { select: { name: true } },
     },
   });
-  if (!person || person.clientId !== input.clientId) return { invalid: true };
+  if (!person || person.clientId !== input.clientId || (person.employmentStatus && person.employmentStatus !== 'ACTIVE') || (person.startDate && person.startDate > new Date()) || (person.endDate && person.endDate < new Date())) return { invalid: true };
   return {
     owner: {
       personId: person.id,
@@ -471,7 +473,8 @@ export async function buildCaseReport(
   });
 
   const buckets = bucketCaseEntries(caseRecord, entries);
-  const safeUpdates = await loadSafeUpdates(db, input.caseId);
+  const managedHistory = await reportHistory(input.caseId, caseRecord.client.id, input.period.dto, db);
+  const safeUpdates = managedHistory ? managedHistory.items.map(item=>({title:item.title,body:(item.body||'')+(item.minutes!==null?` · ${item.minutes} perc`:''),category:'HISTORY',categoryLabel:'Megosztott ügytörténet',publishedAt:item.occurredAt.slice(0,10)})) : await loadSafeUpdates(db, input.caseId);
 
   return {
     kind: CLIENT_WORK_REPORT_KIND,
@@ -482,6 +485,7 @@ export async function buildCaseReport(
     ambiguousRows: buckets.ambiguousRows,
     excludedRows: buckets.excludedRows,
     safeUpdates,
+    ...(managedHistory ? { historyProvenance: { policyRevision: managedHistory.policyRevision, sourceSetDigest: 'sourceSetDigest' in managedHistory ? managedHistory.sourceSetDigest ?? null : null } } : {}),
     generatedAt: new Date().toISOString(),
   };
 }
@@ -536,6 +540,7 @@ export function projectClientWorkReportExport(
       minutes: row.minutes,
     })),
     safeUpdates: report.safeUpdates,
+    ...(report.historyProvenance ? { historyProvenance: report.historyProvenance } : {}),
     generatedAt: report.generatedAt,
   };
 }

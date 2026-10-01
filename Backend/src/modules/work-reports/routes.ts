@@ -1,3 +1,4 @@
+import { savedOwnerPersonId } from '../case-workspace/owner.service';
 // ============================================================================
 // WORK REPORTS — rate-free client work-report routes.
 // ============================================================================
@@ -82,13 +83,13 @@ router.get('/cases/:caseId', authenticate, requireWorkforceUser, requireCaseRead
     if (!report) {
       return res.status(404).json({ status: 404, code: 'WORK_REPORT_CASE_NOT_FOUND', message: 'Case not found' });
     }
-    const ownerResolution = await resolveWorkReportOwner(prisma, { clientId: report.client.id, ownerPersonId: ownerPersonIdOf(req) });
+    const ownerResolution = await resolveWorkReportOwner(prisma, { clientId: report.client.id, ownerPersonId: ownerPersonIdOf(req) || await savedOwnerPersonId(prisma, String(req.params.caseId), report.client.id) });
     if ('invalid' in ownerResolution) {
       return res.status(422).json({ status: 422, code: 'WORK_REPORT_OWNER_NOT_IN_CLIENT', message: 'A kiválasztott ügygazda nem tartozik az ügy ügyfeléhez.' });
     }
     const issuerResolution = await resolveWorkReportIssuer(prisma);
     const exportPreview = projectClientWorkReportExport(report, { issuer: issuerResolution.issuer, owner: ownerResolution.owner });
-    res.json({
+    res.set('Cache-Control', 'no-store').json({
       ...report,
       owner: ownerResolution.owner,
       issuer: issuerResolution.issuer,
@@ -113,7 +114,7 @@ router.get('/cases/:caseId/pdf', authenticate, requireWorkforceUser, requireCase
     if (!report) {
       return res.status(404).json({ status: 404, code: 'WORK_REPORT_CASE_NOT_FOUND', message: 'Case not found' });
     }
-    const ownerResolution = await resolveWorkReportOwner(prisma, { clientId: report.client.id, ownerPersonId: ownerPersonIdOf(req) });
+    const ownerResolution = await resolveWorkReportOwner(prisma, { clientId: report.client.id, ownerPersonId: ownerPersonIdOf(req) || await savedOwnerPersonId(prisma, String(req.params.caseId), report.client.id) });
     if ('invalid' in ownerResolution) {
       return res.status(422).json({ status: 422, code: 'WORK_REPORT_OWNER_NOT_IN_CLIENT', message: 'A kiválasztott ügygazda nem tartozik az ügy ügyfeléhez.' });
     }
@@ -127,7 +128,7 @@ router.get('/cases/:caseId/pdf', authenticate, requireWorkforceUser, requireCase
       });
     }
     const pdf = await renderClientWorkReportPdf(projectClientWorkReportExport(report, { issuer: issuerResolution.issuer, owner: ownerResolution.owner }));
-    res.type('application/pdf');
+    res.set('Cache-Control', 'no-store').type('application/pdf');
     res.attachment(`munkaora-jelentes-${safeFileStem(report.case.caseNumber || report.case.caseId)}.pdf`);
     res.send(pdf);
   } catch (error) {
