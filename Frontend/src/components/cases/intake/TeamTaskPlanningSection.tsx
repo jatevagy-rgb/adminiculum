@@ -94,9 +94,9 @@ export function TeamTaskPlanningSection({
   return (
     <div data-testid="team-task-planning" className="space-y-4">
       {/* Responsible lawyer, distinct from the working team. */}
-      <div data-testid="responsible-lawyer-note" className="flex flex-wrap items-center gap-2 rounded-md border border-[rgba(31,90,102,0.28)] bg-[#EDF2F3] px-3 py-2">
+      <div data-testid="responsible-lawyer-note" className="flex flex-wrap items-center gap-2 rounded-md border border-[rgba(31,90,102,0.28)] bg-[var(--adm-surface)] px-3 py-2">
         <span className={labelCls}>Felelős ügyvéd</span>
-        <span className="text-[12.5px] font-semibold text-[#1F5A66]">{lawyer ? lawyer.name : "nincs kiválasztva"}</span>
+        <span className="text-[12.5px] font-semibold text-[var(--adm-blue-700)]">{lawyer ? lawyer.name : "nincs kiválasztva"}</span>
         <span className="w-full text-[11px] text-[var(--adm-text-muted)] sm:w-auto">
           A felelős ügyvéd nem szerepel a munkacsapat listáján; feladat-végrehajtóként később kijelölhető.
         </span>
@@ -204,7 +204,7 @@ export function TeamTaskPlanningSection({
                   ) : null}
 
                   <div className="mt-1 flex justify-end">
-                    <button type="button" data-testid="planned-task-remove" onClick={() => removeTask(task.key)} className="text-[10.5px] font-semibold text-[#A8442A] hover:underline">
+                    <button type="button" data-testid="planned-task-remove" onClick={() => removeTask(task.key)} className="text-[10.5px] font-semibold text-[var(--adm-terracotta-700)] hover:underline">
                       Eltávolítás
                     </button>
                   </div>

@@ -98,6 +98,7 @@ const CREATION_OPTION = {
 const caseWrites = [];
 const collaboratorWrites = [];
 const taskWrites = [];
+const saveWrites = [];
 let analysisSeq = 0;
 const analysesByDoc = new Map(); // docId -> [{ id, caseId, documentId, title, sourceType, status, analysisText }]
 let failSecondTask = false; // partial-success mode: the second task fails once
@@ -129,7 +130,10 @@ function mock(url, method) {
     { id: 'note-1', caseId: id, parentId: null, author: { id: 'worker', displayName: 'Teszt Munkatárs' }, content: 'Belső ügyjegyzet', status: 'OPEN', createdAt: '2026-10-01T10:00:00Z', updatedAt: null, capabilities: { canResolve: false, canReopen: false, canDelete: false } },
   ] });
   if (url.includes(`/cases/${id}/documents`) && id && method === "GET") {
-    const docs = id === CASE_ID ? [DOC1, DOC2] : id === NEW_CASE_ID ? [NEW_DOC] : [];
+    const docs = id === CASE_ID
+      ? [DOC1, DOC2, { id: "qa-doc-infected", caseId: CASE_ID, fileName: "fertőzött.docx", documentType: "CLIENT_INPUT", securityScanStatus: "INFECTED", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }, { id: "qa-doc-pending", caseId: CASE_ID, fileName: "folyamatban.docx", documentType: "CLIENT_INPUT", securityScanStatus: "PENDING_SCAN", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }, { id: "final-1", caseId: CASE_ID, fileName: "eredmeny.pdf", documentType: "AI_ANALYSIS", securityScanStatus: "CLEAN", mimeType: "application/pdf" }]
+      : id === NEW_CASE_ID ? [NEW_DOC]
+      : [];
     return ok(docs);
   }
   if (url.includes("/legal-analyses") && method === "POST") {
@@ -172,7 +176,16 @@ function mock(url, method) {
   if (url.includes("/contracts")) return ok([]);
   if (url.includes("/users")) return ok({ data: [USER_1, USER_2] });
   if (url.includes("/notifications/unread-count")) return ok({ unreadCount: 0 });
-  if (url.includes("/anonymous-documents")) return ok([]);
+  if (url.includes("/anonymous-documents/by-source/")) {
+    return ok([{ id: "anon-complete", name: "bérleti_szerzodes.docx_anon.txt", sourceDocId: "qa-doc-1", caseId: CASE_ID, aiTask: "REVIEW_RISKS", customPrompt: null, rehydrationStatus: "COMPLETE", rehydratedAt: "2026-09-29T10:00:00Z", createdAt: "2026-09-29T09:00:00Z", updatedAt: "2026-09-29T10:00:00Z", redactedText: "[ÜGYFÉL] szanitizált munkaszöveg." }]);
+  }
+  if (url.includes("/anonymous-documents") && method === "GET") {
+    const isMainCase = url.includes(`caseId=${CASE_ID}`);
+    return ok(isMainCase ? [
+      { id: "anon-complete", name: "bérleti_szerzodes.docx_anon.txt", sourceDocId: "qa-doc-1", caseId: CASE_ID, aiTask: "REVIEW_RISKS", customPrompt: null, rehydrationStatus: "COMPLETE", rehydratedAt: "2026-09-29T10:00:00Z", createdAt: "2026-09-29T09:00:00Z", updatedAt: "2026-09-29T10:00:00Z" },
+      { id: "anon-partial", name: "melleklet.docx_anon.txt", sourceDocId: "qa-doc-2", caseId: CASE_ID, aiTask: "SUMMARIZE", customPrompt: null, rehydrationStatus: "PARTIAL", rehydratedAt: "2026-09-29T11:00:00Z", createdAt: "2026-09-29T10:30:00Z", updatedAt: "2026-09-29T11:00:00Z" },
+    ] : []);
+  }
   if (url.includes("/work-package-admin/case-types/creation-options")) return ok({ items: [CREATION_OPTION] });
   if (url.includes("/work-package-admin/case-types")) return ok({ items: [CASE_TYPE] });
   if (url.includes("/clients?") || url.endsWith("/clients")) return ok({ data: [{ id: "client-1", name: CLIENT_NAME, colorKey: null, status: "ACTIVE" }] });
@@ -204,7 +217,7 @@ const browser = await chromium.launch({ headless: true, channel: "chrome" });
 try {
   for (const width of (process.env.WF09_WIDTHS ? process.env.WF09_WIDTHS.split(",").map(Number) : [390, 768, 1440])) {
     // Reset all write state per width.
-    caseWrites.length = 0; collaboratorWrites.length = 0; taskWrites.length = 0;
+    caseWrites.length = 0; collaboratorWrites.length = 0; taskWrites.length = 0; saveWrites.length = 0;
     analysesByDoc.clear(); analysisSeq = 0;
     failSecondTask = width === 768; // partial-success mode at exactly one width
     const context = await browser.newContext({ viewport: { width, height: 1000 }, locale: "hu-HU" });
@@ -251,6 +264,15 @@ try {
           const found = list.find((a) => a.id === analysisId);
           if (found) { Object.assign(found, body); return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(found) }); }
         }
+      }
+      // WF03: save-as-document and binary download (mock API evidence boundary:
+      // no real SharePoint/scanner involved).
+      if (url.includes("/save-as-document") && method === "POST") {
+        saveWrites.push(url);
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ success: true, documentId: "final-new", fileName: "eredmeny_ai_analysis.txt" }) });
+      }
+      if (url.includes("/download") && method === "GET") {
+        return route.fulfill({ status: 200, contentType: "application/pdf", body: "FAKE-PDF-BYTES" });
       }
       const r = mock(url, method);
       return route.fulfill({ status: r.status, contentType: "application/json", body: JSON.stringify(r.body) });
@@ -343,6 +365,44 @@ try {
     }
     assert.equal(caseWrites.length, 0, "a prompt copy must never write to the backend");
     assert.equal(analysesByDoc.get("qa-doc-1").length, 1, "a prompt copy must never publish an analysis");
+
+    // ---------- 1b. WF03 document AI flow (original -> anonymized -> saved) ---
+    const aiFlow = page.locator('section[aria-label="Dokumentum AI-munkafolyamat"]');
+    await aiFlow.waitFor();
+    await aiFlow.getByText("Eredeti dokumentumok", { exact: true }).waitFor();
+    await aiFlow.getByText("Anonimizált munkapéldányok", { exact: true }).waitFor();
+    await aiFlow.getByText("Végleges AI-elemzés", { exact: true }).waitFor();
+    // Scanner: INFECTED is quarantined; PENDING_SCAN is not claimed blocked
+    // (the canonical backend policy has no scan gate on the anonymize route).
+    const infectedRow = aiFlow.locator("li", { hasText: "fertőzött.docx" });
+    assert.equal(await infectedRow.getByRole("button", { name: "Anonimizálás" }).isDisabled(), true);
+    assert.match(await infectedRow.innerText(), /Karanténban lévő dokumentum nem anonimizálható/);
+    const pendingRow = aiFlow.locator("li", { hasText: "folyamatban.docx" });
+    assert.equal(await pendingRow.getByRole("button", { name: "Anonimizálás" }).isDisabled(), false);
+    assert.match(await pendingRow.innerText(), /Vizsgálat folyamatban/);
+    // Artifacts: COMPLETE and PARTIAL are visibly distinct; PARTIAL is not
+    // claimed approved or client-ready.
+    const completeRow = aiFlow.locator("div", { hasText: "bérleti_szerzodes.docx_anon.txt" }).last();
+    const partialRow = aiFlow.locator("div", { hasText: "melleklet.docx_anon.txt" }).last();
+    assert.match(await completeRow.innerText(), /Teljes/);
+    assert.match(await partialRow.innerText(), /Részleges/);
+    assert.match(await partialRow.innerText(), /részleges — ellenőrizze/i);
+    assert.doesNotMatch(await partialRow.innerText(), /Jóváhagyva|Ügyfélnek kész|Közzétéve/i);
+    // Sanitized export is UTF-8 TXT.
+    const txtDownload = page.waitForEvent("download", { timeout: 15000 });
+    await completeRow.getByRole("button", { name: "TXT letöltés" }).click();
+    const txtFile = await txtDownload;
+    assert.match(txtFile.suggestedFilename(), /\.txt$/);
+    // Final AI_ANALYSIS keeps its real extension (PDF bytes stay .pdf).
+    const finalRow = aiFlow.locator("li", { hasText: "eredmeny.pdf" });
+    const finalDownload = page.waitForEvent("download", { timeout: 15000 });
+    await finalRow.getByRole("button", { name: "Letöltés", exact: true }).click();
+    const finalFile = await finalDownload;
+    assert.equal(finalFile.suggestedFilename(), "eredmeny.pdf");
+    // Saving a COMPLETE artifact goes through the canonical endpoint once.
+    await completeRow.getByRole("button", { name: "Végleges mentés" }).click();
+    await page.waitForTimeout(1500);
+    assert.equal(saveWrites.filter((url) => url.includes("anon-complete/save-as-document")).length, 1);
 
     await page.screenshot({ path: path.join(SHOTS, `overview-journey-${width}.png`), fullPage: true });
     await noOverflow();
@@ -453,7 +513,7 @@ try {
     await createPage.screenshot({ path: path.join(SHOTS, `create-journey-${width}.png`), fullPage: true });
     assert.deepEqual(createErrors, [], `create page errors at ${width}`);
     await createContext.close();
-    console.log(`PASS ${width}: communication leaf, risk matrix identity+persistence, prompt boundary, intake plan validation, partial retry, resolved presets`);
+    console.log(`PASS ${width}: communication leaf, risk matrix identity+persistence, prompt boundary, document AI flow (scanner/partial/download/save), intake plan validation, partial retry, resolved presets`);
   }
 } finally {
   await browser.close();

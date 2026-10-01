@@ -69,9 +69,9 @@ export function resolvedDueCountdown(selection: DueSelection, now: Date = new Da
 
 const chipBase =
   "inline-flex min-h-[40px] items-center justify-center rounded-full border px-3 py-1.5 text-[12px] font-semibold transition-colors " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1F5A66] disabled:opacity-50";
-const chipActive = "border-[#1D5138] bg-[#1D5138] text-white";
-const chipIdle = "border-[rgba(16,22,19,0.22)] bg-white text-[#2C3A31] hover:bg-[#EDF2F3]";
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-blue-700)] disabled:opacity-50";
+const chipActive = "border-[var(--adm-green-700)] bg-[var(--adm-green-700)] text-white";
+const chipIdle = "border-[rgba(16,22,19,0.22)] bg-white text-[var(--adm-text)] hover:bg-[var(--adm-surface)]";
 
 export function DueDatePresetPicker({
   value,
@@ -172,7 +172,7 @@ export function DueDatePresetPicker({
 
       <p
         data-testid="due-resolved-preview"
-        className={`mt-1.5 text-[11.5px] font-semibold ${countdown ? (countdown.expired ? "text-[#A8442A]" : "text-[#1F5A66]") : "text-[var(--adm-text-muted)]"}`}
+        className={`mt-1.5 text-[11.5px] font-semibold ${countdown ? (countdown.expired ? "text-[var(--adm-terracotta-700)]" : "text-[var(--adm-blue-700)]") : "text-[var(--adm-text-muted)]"}`}
       >
         {countdown
           ? `${presetLabel ? `${presetLabel} · ` : ""}${countdown.dateLabel} · ${countdown.countdown}`

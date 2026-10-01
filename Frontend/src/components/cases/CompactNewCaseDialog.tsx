@@ -354,7 +354,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
           )}
 
           {partial && (
-            <div role="alert" data-testid="intake-partial" className="mb-3 rounded-md border border-[#E7D7A0] bg-[#FFF8E1] px-3 py-2 text-[12px] text-[#7a5f18]">
+            <div role="alert" data-testid="intake-partial" className="mb-3 rounded-md border border-[var(--adm-semantic-warning-border)] bg-[var(--adm-semantic-warning-soft)] px-3 py-2 text-[12px] text-[var(--adm-semantic-warning)]">
               Az ügy létrejött, de {partial.failed.length} tétel (munkatárs vagy feladat) hozzáadása nem sikerült.
               <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
                 Az újrapróbálkozás csak a sikertelen tételeket küldi el újra; az ügy és a már mentett elemek nem duplázódnak.
@@ -483,7 +483,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
               {/* Team + per-person task planning (WORD_WF02 W03-W04). */}
               <details className="mb-3" data-testid="intake-team-tasks" open={teamOpen}>
                 <summary
-                  className="cursor-pointer rounded-md border border-[rgba(31,90,102,0.28)] bg-[#EDF2F3] px-4 py-3 text-left text-[12.5px] font-semibold text-[#1F5A66] transition-colors hover:bg-[#E4EDEF]"
+                  className="cursor-pointer rounded-md border border-[rgba(31,90,102,0.28)] bg-[var(--adm-surface)] px-4 py-3 text-left text-[12.5px] font-semibold text-[#1F5A66] transition-colors hover:bg-[var(--adm-ivory-200)]"
                   onClick={(e) => { e.preventDefault(); setTeamOpen((open) => !open); }}
                 >
                   Csapat és feladatok (opcionális)

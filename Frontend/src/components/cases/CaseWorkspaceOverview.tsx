@@ -36,6 +36,7 @@ import { CaseHistoryPanel } from "@/components/cases/word-workflow/history/CaseH
 import { WordWideCommunicationLeaf } from "@/components/cases/word-workflow/tools/WordWideCommunicationLeaf";
 import { WordRiskMatrixPanel } from "@/components/cases/word-workflow/tools/WordRiskMatrixPanel";
 import { WordCompactPromptCollection } from "@/components/cases/word-workflow/tools/WordCompactPromptCollection";
+import { DocumentAIFlow } from "@/components/cases/word-workflow/documents/DocumentAIFlow";
 import { CaseInsightTiles } from "@/components/cases/CaseInsightTiles";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
@@ -462,6 +463,18 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         </div>
       </div>
 
+      {/* ---- 4b. Document AI workflow (WORD_WF03) --------------------------- */}
+      <section id="ck-ai-flow" className="scroll-mt-24 space-y-3">
+        <DocumentAIFlow
+          caseId={caseId}
+          clientId={c.client?.id ?? null}
+          clientName={c.client?.name ?? undefined}
+          clientRole={c.clientRole ?? undefined}
+          readOnly={false}
+          onChanged={() => void load({ background: true })}
+        />
+      </section>
+
       {/* ---- 5. Wide communication reader (WORD_WF04) ----------------------- */}
       <section id="ck-wide-comms" aria-label="Kommunikációs lánc" className="scroll-mt-24 space-y-3">
         <WordWideCommunicationLeaf caseId={caseId} clientId={c.client?.id ?? null} readOnly={false} onChanged={() => void load({ background: true })} />
@@ -522,6 +535,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
         <a href="#ck-wide-comms" className="hover:underline">Kommunikációs lánc</a>
         <a href="#ck-risk-matrix" className="hover:underline">Kockázati mátrix</a>
+        <a href="#ck-ai-flow" className="hover:underline">AI-dokumentumfolyam</a>
         <a href="#ck-notes-primary" className="hover:underline">Megjegyzések</a>
         <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
         <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>

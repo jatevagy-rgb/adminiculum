@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getCaseDocuments,
   getCaseAnonymousDocuments,
@@ -65,7 +65,10 @@ function sanitizeFileName(name: string | null | undefined): string {
   return base.endsWith(".txt") ? base : `${base}.txt`;
 }
 
-/** Canonical uploaded-Document -> AnonymizeModal contract adaptation. */
+/** Canonical uploaded-Document -> AnonymizeModal contract adaptation.
+ *  Presentation-only: the modal consumes `contract.id` as the source document
+ *  identity and displays the remaining fields; nothing here is persisted.
+ *  Unknown identity stays unknown: no invented v1 or created date. */
 function toAnonymizeContract(document: DocumentItem): CaseContractListItem {
   return {
     id: document.id,
@@ -75,11 +78,19 @@ function toAnonymizeContract(document: DocumentItem): CaseContractListItem {
     status: "Feltöltve",
     fileName: document.fileName || "document",
     fileSize: 0,
-    generatedAt: document.createdAt || new Date().toISOString(),
-    revisionNumber: Number(document.version) || 1,
+    generatedAt: document.createdAt ?? "",
+    revisionNumber: document.version != null ? Number(document.version) : undefined,
     isCurrentRevision: true,
     isFinalRevision: false,
   };
+}
+
+/** Keep the server-side file name for any downloaded binary; only remove
+ *  path-dangerous characters. The extension is preserved so a DOCX/PDF final
+ *  document is never renamed into .txt bytes. */
+function safeDownloadName(name: string | null | undefined): string {
+  const base = (name || "dokumentum").replace(/[\\/:*?"<>|]+/g, "_").trim();
+  return base || "dokumentum";
 }
 
 function rehydrationBadgeStatus(status: string | null): "active" | "warning" | "error" | "pending" {
@@ -121,7 +132,15 @@ export function DocumentAIFlow({
   const [saveBusyId, setSaveBusyId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Stale-response guard: every read/action completes only while its request
+  // generation is current. A delayed response from a previous case can never
+  // populate this case's lists, open a modal target or report a result.
+  const requestRef = useRef(0);
+  const scopeRef = useRef<string>(caseId);
+  scopeRef.current = caseId;
+
   const loadAll = useCallback(async () => {
+    const requestId = ++requestRef.current;
     setLoading(true);
     setDocumentsError(null);
     setAnonymousError(null);
@@ -130,6 +149,8 @@ export function DocumentAIFlow({
       getCaseDocuments(caseId),
       getCaseAnonymousDocuments(caseId),
     ]);
+
+    if (requestId !== requestRef.current) return;
 
     if (docsResult.status === "fulfilled") {
       setDocuments(docsResult.value);
@@ -152,6 +173,28 @@ export function DocumentAIFlow({
     void loadAll();
   }, [loadAll]);
 
+  // Case switch resets every per-case surface: modal targets and in-flight
+  // busy/error indicators must never carry over into the next case. The first
+  // mount is skipped. The loadAll effect invalidates stale reads through the
+  // requestRef generation guard; action handlers are scope-guarded by caseId.
+  const mountedCaseRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (mountedCaseRef.current === null) {
+      mountedCaseRef.current = caseId;
+      return;
+    }
+    if (mountedCaseRef.current === caseId) return;
+    mountedCaseRef.current = caseId;
+    setAnonymizeTarget(null);
+    setRehydrateTarget(null);
+    setDownloadBusyId(null);
+    setSaveBusyId(null);
+    setDownloadError(null);
+    setSaveError(null);
+    setDocuments(null);
+    setAnonymousList([]);
+  }, [caseId]);
+
   const originals = useMemo(
     () => (documents || []).filter((doc) => doc.documentType !== "AI_ANALYSIS"),
     [documents],
@@ -172,10 +215,12 @@ export function DocumentAIFlow({
   }, [anonymousList]);
 
   const handleDownloadTxt = async (artifact: AnonymousDocumentListItem) => {
+    const caseScope = caseId;
     setDownloadBusyId(artifact.id);
     setDownloadError(null);
     try {
       const bySource = await getAnonymousDocumentsBySource(artifact.sourceDocId);
+      if (scopeRef.current !== caseScope) return;
       const withText = bySource.find((item) => item.id === artifact.id);
       if (!withText?.redactedText) {
         throw new Error("A szanitizált szöveg nem érhető el.");
@@ -188,44 +233,50 @@ export function DocumentAIFlow({
       anchor.click();
       URL.revokeObjectURL(url);
     } catch {
-      setDownloadError("A szanitizált TXT letöltése nem sikerült.");
+      if (scopeRef.current === caseScope) setDownloadError("A szanitizált TXT letöltése nem sikerült.");
     } finally {
-      setDownloadBusyId(null);
+      if (scopeRef.current === caseScope) setDownloadBusyId(null);
     }
   };
 
   const handleDownloadFinal = async (doc: DocumentItem) => {
+    const caseScope = caseId;
     setDownloadBusyId(doc.id);
     setDownloadError(null);
     try {
       const blob = await downloadDocument(doc.id);
+      if (scopeRef.current !== caseScope) return;
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = sanitizeFileName(doc.fileName);
+      // The server-side file name (extension and all) is preserved; only
+      // path-dangerous characters are stripped.
+      anchor.download = safeDownloadName(doc.fileName);
       anchor.click();
       URL.revokeObjectURL(url);
     } catch {
-      setDownloadError("A végleges dokumentum letöltése nem sikerült.");
+      if (scopeRef.current === caseScope) setDownloadError("A végleges dokumentum letöltése nem sikerült.");
     } finally {
-      setDownloadBusyId(null);
+      if (scopeRef.current === caseScope) setDownloadBusyId(null);
     }
   };
 
   const handleSaveFinal = async (artifact: AnonymousDocumentListItem) => {
+    const caseScope = caseId;
     setSaveBusyId(artifact.id);
     setSaveError(null);
     try {
       const result = await saveRehydratedResultAsDocument(artifact.id);
+      if (scopeRef.current !== caseScope) return;
       if (!result.success) {
         throw new Error(result.error || "A mentés nem sikerült.");
       }
       await loadAll();
       onChanged?.();
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : "A mentés nem sikerült.");
+      if (scopeRef.current === caseScope) setSaveError(error instanceof Error ? error.message : "A mentés nem sikerült.");
     } finally {
-      setSaveBusyId(null);
+      if (scopeRef.current === caseScope) setSaveBusyId(null);
     }
   };
 
@@ -257,12 +308,12 @@ export function DocumentAIFlow({
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
         {/* Originals */}
-        <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4">
-          <h2 className="font-serif text-base font-semibold text-[#1F2937] mb-3">
+        <div className="rounded-[12px] border border-[var(--adm-border-canonical)] bg-white p-4">
+          <h2 className="font-serif text-base font-semibold text-[var(--adm-text-primary)] mb-3">
             Eredeti dokumentumok
           </h2>
           {loading && documents === null ? (
-            <p className="text-xs text-[#6B7280]">Betöltés…</p>
+            <p className="text-xs text-[var(--adm-text-secondary)]">Betöltés…</p>
           ) : originals.length === 0 ? (
             <EmptyState
               title="Nincs feltöltött dokumentum"
@@ -273,17 +324,17 @@ export function DocumentAIFlow({
               {originals.map((doc) => {
                 const infected = doc.securityScanStatus === "INFECTED";
                 return (
-                  <li key={doc.id} className="rounded-[8px] border border-[#E5E7E6] p-3 space-y-2">
-                    <p className="text-sm font-medium text-[#1F2937] break-words">{doc.fileName}</p>
+                  <li key={doc.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] p-3 space-y-2">
+                    <p className="text-sm font-medium text-[var(--adm-text-primary)] break-words">{doc.fileName}</p>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone="neutral">v{doc.version}</Badge>
+                      {doc.version ? <Badge tone="neutral">v{doc.version}</Badge> : null}
                       {doc.securityScanStatus && (
                         <Badge status={scanBadgeStatus(doc.securityScanStatus)}>
                           {SCAN_LABELS[doc.securityScanStatus] || doc.securityScanStatus}
                         </Badge>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#6B7280]">Feltöltve: {fmtDate(doc.createdAt)}</p>
+                    <p className="text-[11px] text-[var(--adm-text-secondary)]">Feltöltve: {fmtDate(doc.createdAt)}</p>
                     {!readOnly && (
                       <Button
                         size="sm"
@@ -295,7 +346,7 @@ export function DocumentAIFlow({
                       </Button>
                     )}
                     {infected && (
-                      <p className="text-[11px] text-[#991B1B]">
+                      <p className="text-[11px] text-[var(--adm-terracotta-700)]">
                         Karanténban lévő dokumentum nem anonimizálható.
                       </p>
                     )}
@@ -307,8 +358,8 @@ export function DocumentAIFlow({
         </div>
 
         {/* Anonymized work copies */}
-        <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4">
-          <h2 className="font-serif text-base font-semibold text-[#1F2937] mb-3">
+        <div className="rounded-[12px] border border-[var(--adm-border-canonical)] bg-white p-4">
+          <h2 className="font-serif text-base font-semibold text-[var(--adm-text-primary)] mb-3">
             Anonimizált munkapéldányok
           </h2>
           {anonymousList.length === 0 && !anonymousError ? (
@@ -323,24 +374,24 @@ export function DocumentAIFlow({
                 return (
                   <li key={sourceDocId} className="space-y-2">
                     {sourceDoc && (
-                      <p className="text-[11px] font-medium text-[#6B7280] truncate" title={sourceDoc.fileName}>
+                      <p className="text-[11px] font-medium text-[var(--adm-text-secondary)] truncate" title={sourceDoc.fileName}>
                         {sourceDoc.fileName}
                       </p>
                     )}
                     {artifacts.map((artifact) => {
                       const saveAllowed = canSaveFinal(artifact.rehydrationStatus);
                       return (
-                        <div key={artifact.id} className="rounded-[8px] border border-[#E5E7E6] p-3 space-y-2">
-                          <p className="text-sm font-medium text-[#1F2937] break-words">{artifact.name}</p>
+                        <div key={artifact.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] p-3 space-y-2">
+                          <p className="text-sm font-medium text-[var(--adm-text-primary)] break-words">{artifact.name}</p>
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Badge status={rehydrationBadgeStatus(artifact.rehydrationStatus)}>
                               {REHYDRATION_LABELS[artifact.rehydrationStatus || "PENDING"] || "Függőben"}
                             </Badge>
                             {artifact.aiTask && <Badge tone="teal">{artifact.aiTask}</Badge>}
                           </div>
-                          <p className="text-[11px] text-[#6B7280]">Készült: {fmtDate(artifact.createdAt)}</p>
+                          <p className="text-[11px] text-[var(--adm-text-secondary)]">Készült: {fmtDate(artifact.createdAt)}</p>
                           {artifact.rehydrationStatus === "PARTIAL" && (
-                            <p className="text-[11px] text-[#92400E]">
+                            <p className="text-[11px] text-[var(--adm-semantic-warning)]">
                               A visszaazonosítás részleges — ellenőrizze a megmaradt helyettesítőket.
                             </p>
                           )}
@@ -393,8 +444,8 @@ export function DocumentAIFlow({
         </div>
 
         {/* Final AI analysis */}
-        <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4">
-          <h2 className="font-serif text-base font-semibold text-[#1F2937] mb-3">
+        <div className="rounded-[12px] border border-[var(--adm-border-canonical)] bg-white p-4">
+          <h2 className="font-serif text-base font-semibold text-[var(--adm-text-primary)] mb-3">
             Végleges AI-elemzés
           </h2>
           {finals.length === 0 ? (
@@ -405,12 +456,12 @@ export function DocumentAIFlow({
           ) : (
             <ul className="space-y-3">
               {finals.map((doc) => (
-                <li key={doc.id} className="rounded-[8px] border border-[#E5E7E6] p-3 space-y-2">
-                  <p className="text-sm font-medium text-[#1F2937] break-words">{doc.fileName}</p>
+                <li key={doc.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] p-3 space-y-2">
+                  <p className="text-sm font-medium text-[var(--adm-text-primary)] break-words">{doc.fileName}</p>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <Badge tone="neutral">v{doc.version}</Badge>
+                    {doc.version ? <Badge tone="neutral">v{doc.version}</Badge> : null}
                   </div>
-                  <p className="text-[11px] text-[#6B7280]">Létrehozva: {fmtDate(doc.createdAt)}</p>
+                  <p className="text-[11px] text-[var(--adm-text-secondary)]">Létrehozva: {fmtDate(doc.createdAt)}</p>
                   {!readOnly && (
                     <Button
                       size="sm"
