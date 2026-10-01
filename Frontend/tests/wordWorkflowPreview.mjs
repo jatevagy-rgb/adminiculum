@@ -3,4 +3,5 @@
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { startServer } = require('next/dist/server/lib/start-server');
-await startServer({ dir: process.cwd(), isDev: true, port: 3111, hostname: '127.0.0.1', allowRetry: false });
+const port = Number(process.env.PREVIEW_PORT || 3111);
+await startServer({ dir: process.cwd(), isDev: true, port, hostname: '127.0.0.1', allowRetry: false });

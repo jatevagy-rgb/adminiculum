@@ -33,6 +33,9 @@ import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
 import { CaseContextTiles, PersistedDeadline } from "@/components/cases/word-workflow/layout/CaseContextTiles";
 import { CaseHistoryPanel } from "@/components/cases/word-workflow/history/CaseHistoryPanel";
+import { WordWideCommunicationLeaf } from "@/components/cases/word-workflow/tools/WordWideCommunicationLeaf";
+import { WordRiskMatrixPanel } from "@/components/cases/word-workflow/tools/WordRiskMatrixPanel";
+import { WordCompactPromptCollection } from "@/components/cases/word-workflow/tools/WordCompactPromptCollection";
 import { CaseInsightTiles } from "@/components/cases/CaseInsightTiles";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
@@ -86,6 +89,9 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   const [timeDialogResumeTask, setTimeDialogResumeTask] = useState<TaskLifecycleListItem | null>(null);
   const [timeRefreshKey, setTimeRefreshKey] = useState(0);
   const [notesRefreshKey, setNotesRefreshKey] = useState(0);
+  // Explicit risk-matrix target: the user selects a concrete document of THIS
+  // case before the matrix panel accepts a save. No first-document fallback.
+  const [riskDocId, setRiskDocId] = useState<string | null>(null);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
 
@@ -121,6 +127,14 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   }, [load]);
 
   useEffect(() => { void load(); }, [load]);
+
+  // The risk-matrix selection is always case-scoped: switching cases clears it,
+  // and a refreshed workspace that no longer contains the selected document
+  // clears it too, so a stale target can never receive a save.
+  useEffect(() => { setRiskDocId(null); }, [caseId]);
+  useEffect(() => {
+    setRiskDocId((current) => (current && ws && ws.documents.some((doc) => doc.id === current) ? current : null));
+  }, [ws]);
 
   useEffect(() => {
     const openSecondaryDetailsForHash = () => {
@@ -448,7 +462,47 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         </div>
       </div>
 
+      {/* ---- 5. Wide communication reader (WORD_WF04) ----------------------- */}
+      <section id="ck-wide-comms" aria-label="Kommunikációs lánc" className="scroll-mt-24 space-y-3">
+        <WordWideCommunicationLeaf caseId={caseId} clientId={c.client?.id ?? null} readOnly={false} onChanged={() => void load({ background: true })} />
+      </section>
+
+      {/* ---- 6. Explicit-document risk matrix (WORD_WF04) -------------------- */}
+      <section id="ck-risk-matrix" aria-label="Kockázati mátrix" data-testid="case-risk-matrix-section" className="scroll-mt-24 space-y-3 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-[var(--adm-text)]">Kockázati mátrix</h3>
+            <p className="mt-0.5 text-[11px] text-[var(--adm-text-muted)]">A mentéshez ki kell választani egy, ehhez az ügyhöz tartozó dokumentumot; a mátrix sosem ír más ügyre vagy dokumentumra.</p>
+          </div>
+          <label className="block min-w-[220px]">
+            <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)]">Céldokumentum</span>
+            <select
+              data-testid="risk-matrix-document-select"
+              className="mt-1 w-full rounded-md border border-[var(--adm-border)] bg-white px-3 py-2 text-[12.5px] text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none"
+              value={riskDocId ?? ""}
+              onChange={(event) => setRiskDocId(event.target.value || null)}
+            >
+              <option value="">Válasszon dokumentumot…</option>
+              {ws.documents.map((doc) => (
+                <option key={doc.id} value={doc.id}>{doc.fileName}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <WordRiskMatrixPanel
+          caseId={caseId}
+          clientId={c.client?.id ?? null}
+          documentId={riskDocId}
+          readOnly={false}
+          onChanged={() => void load({ background: true })}
+        />
+      </section>
+
       <section id="ck-prompts" aria-label="Prompteszközök" className="space-y-3">
+          <WordCompactPromptCollection caseId={caseId} clientId={c.client?.id ?? null} />
+          <p className="text-[11px] leading-relaxed text-[var(--adm-text-muted)]">
+            A vágólapra másolt prompt szerkezeti váz: anonimizált háttérszöveg csak igazolt ügykontextus-forrásból kerül bele. Ilyen forrás hiányában a prompt semleges sablonként másolódik, bizalmas ügyadat nélkül.
+          </p>
           <AIResultsTile
             caseId={caseId}
             documents={ws.documents}
@@ -466,6 +520,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         <a href="#ck-tasks" className="hover:underline">Aktív munka</a>
         <a href="#ck-deadlines" className="hover:underline">Határidők</a>
         <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
+        <a href="#ck-wide-comms" className="hover:underline">Kommunikációs lánc</a>
+        <a href="#ck-risk-matrix" className="hover:underline">Kockázati mátrix</a>
         <a href="#ck-notes-primary" className="hover:underline">Megjegyzések</a>
         <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
         <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>
