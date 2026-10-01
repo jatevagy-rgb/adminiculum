@@ -55,7 +55,10 @@ describe("CP3 Customer UX — Home & Deliberate Grouping", () => {
     assert.match(src, /data-testid="portal-home-v3"/);
     assert.match(src, /Szervezeti ügyfélfelület/);
     assert.match(src, /customerName/);
-    assert.match(src, /Aktív ügy/);
+    // The header stat is the canonical complete granted+published matter count,
+    // not the bounded preview length — labelled as the published sample.
+    assert.match(src, /Közzétett ügy/);
+    assert.match(src, /mattersTotalShown/);
     assert.match(src, /Teendő/);
   });
 
@@ -69,12 +72,24 @@ describe("CP3 Customer UX — Home & Deliberate Grouping", () => {
     assert.match(src, /testid="portal-home-v3-documents"/);
   });
 
-  it("PortalHomeV3 elevates primary matter with badge and next step callout", () => {
+  it("PortalHomeV3 elevates the server-resolved current matter with badge and next step callout", () => {
     const src = read(`${V3_DIR}/PortalHomeV3.tsx`);
     assert.match(src, /Kiemelt ügy/);
     assert.match(src, /Következő lépés:/);
     assert.match(src, /matter\.nextStep/);
     assert.match(src, /matter\.waitingOn/);
+    // The featured fact comes from the DTO's currentMatter publication id,
+    // never from card array order.
+    assert.match(src, /featuredMatterId/);
+    assert.match(src, /matter\.matterPublicationId === featuredMatterId/);
+  });
+
+  it("PortalHomeV3 never masks an action API failure as zero or stale success", () => {
+    const src = read(`${V3_DIR}/PortalHomeV3.tsx`);
+    assert.match(src, /actionsTrusted/);
+    assert.match(src, /data-testid="portal-home-v3-actions-unavailable"/);
+    assert.match(src, /setActions\(null\)/);
+    assert.match(src, /setHome\(null\)/);
   });
 
   it("PortalHomeV3 has zero occurrences of percent character and no fake metrics", () => {

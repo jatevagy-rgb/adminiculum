@@ -109,3 +109,83 @@ test("returns an empty list when no grants exist, without consulting publication
   assert.deepEqual(result.items, []);
   assert.equal(result.counts.awaitingCustomer, 0);
 });
+
+/**
+ * Query-predicate contract tests: the fake below captures the exact `where`
+ * arguments the projection hands to the data layer. These prove the fail-closed
+ * authorization predicates are ISSUED (status/validity/identity/workspace
+ * scoping); they do not claim live-database enforcement, which remains a
+ * separate real-DB concern.
+ */
+function capturingPrisma() {
+  const captured: Record<string, any> = {};
+  return {
+    captured,
+    clientPortalGrant: {
+      // One granted case so the projection proceeds past the empty-shortcut.
+      findMany: async (args: any) => {
+        captured.grantWhere = args?.where;
+        return [{ caseId: "case-granted" }];
+      },
+    },
+    clientMatterPublication: {
+      findMany: async (args: any) => {
+        captured.publicationWhere = args?.where;
+        return [];
+      },
+    },
+    clientRequest: {
+      findMany: async (args: any) => {
+        captured.requestWhere = args?.where;
+        return [];
+      },
+    },
+  };
+}
+
+test("issues fail-closed grant predicates: identity/workspace/client scoping plus ACTIVE and validity window", async () => {
+  const prisma = capturingPrisma();
+  const before = Date.now();
+  await getCompanyClientRequestProjection("client-1", "id-7", "ws-9", prisma as any);
+  const where = prisma.captured.grantWhere;
+  assert.equal(where.clientPortalIdentityId, "id-7");
+  assert.equal(where.workspaceId, "ws-9");
+  assert.equal(where.clientId, "client-1");
+  // Revoked or suspended grants (any status other than ACTIVE) are excluded.
+  assert.equal(where.status, "ACTIVE");
+  // Expired and future grants are excluded by the validity window.
+  assert.ok(where.validFrom.lte instanceof Date);
+  assert.ok(where.validFrom.lte.getTime() >= before);
+  assert.deepEqual(where.OR, [{ validUntil: null }, { validUntil: { gt: where.validFrom.lte } }]);
+});
+
+test("issues fail-closed publication predicates: only granted cases, PUBLISHED with a current revision, own or legacy workspace", async () => {
+  const prisma = capturingPrisma();
+  await getCompanyClientRequestProjection("client-1", "id-7", "ws-9", prisma as any);
+  const where = prisma.captured.publicationWhere;
+  assert.deepEqual(where.caseId.in, ["case-granted"]);
+  // Unpublished or withdrawn publications are excluded by the predicate.
+  assert.equal(where.status, "PUBLISHED");
+  assert.deepEqual(where.currentRevisionId, { not: null });
+  // Only the current workspace or legacy null-workspace publications may ever
+  // provide the route identity; another workspace's publication is excluded.
+  assert.deepEqual(where.OR, [{ workspaceId: "ws-9" }, { workspaceId: null }]);
+});
+
+test("issues fail-closed request predicates: client scoping, granted cases only, customer-visible statuses only", async () => {
+  const prisma = capturingPrisma();
+  await getCompanyClientRequestProjection("client-1", "id-7", "ws-9", prisma as any);
+  const where = prisma.captured.requestWhere;
+  assert.equal(where.clientId, "client-1");
+  assert.ok(Array.isArray(where.caseId.in));
+  assert.ok(where.caseId.in.includes("case-granted"));
+  // Non-customer-visible statuses (DRAFT/READY_TO_PUBLISH/CANCELLED/EXPIRED)
+  // are excluded by the predicate.
+  assert.ok(where.status.in.length > 0);
+  for (const status of ["DRAFT", "READY_TO_PUBLISH", "CANCELLED", "EXPIRED"]) {
+    assert.ok(!where.status.in.includes(status), `non-customer-visible status ${status} must not be requested`);
+  }
+  for (const status of ["PUBLISHED", "PARTIALLY_SUBMITTED", "CORRECTION_REQUESTED", "SUBMITTED", "UNDER_INTERNAL_REVIEW", "COMPLETED"]) {
+    assert.ok(where.status.in.includes(status), `customer-visible status ${status} must be requested`);
+  }
+});

@@ -507,6 +507,8 @@ export type PortalOrgHome = {
   customer: { name: string };
   currentMatter?: PortalOrgHomeMatter;
   matters: PortalOrgHomeRow[];
+  /** Canonical complete count of granted, published matters; optional for older backends. */
+  mattersTotal?: number;
   actions: PortalOrgHomeAction[];
   recentDocuments: PortalOrgHomeDocument[];
   contactSummary: { openCount: number; unreadCount: number; latestPreview: string | null; latestUpdatedAt: string | null };

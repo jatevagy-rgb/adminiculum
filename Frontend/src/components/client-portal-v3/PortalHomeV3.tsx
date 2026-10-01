@@ -97,8 +97,22 @@ export function PortalHomeV3({ identityName }: { identityName?: string | null })
     setHomeError(false);
     setActionError(false);
     Promise.all([
-      getPortalOrgHome().then((result) => setHome(result)).catch(() => setHomeError(true)),
-      getPortalActionCenter().then((result) => setActions(result)).catch(() => setActionError(true)),
+      getPortalOrgHome()
+        .then((result) => setHome(result))
+        .catch(() => {
+          // A failed refresh must never leave the previous identity's success
+          // on screen: clear and surface the error state instead.
+          setHome(null);
+          setHomeError(true);
+        }),
+      getPortalActionCenter()
+        .then((result) => setActions(result))
+        .catch(() => {
+          // Same for the independent action API: failure is unknown, never
+          // stale success or a fabricated zero.
+          setActions(null);
+          setActionError(true);
+        }),
     ]).finally(() => setLoading(false));
   }, []);
 
@@ -115,7 +129,15 @@ export function PortalHomeV3({ identityName }: { identityName?: string | null })
   const grow = home?.growSummary;
   const compliance = home?.complianceSummary;
   const customerName = home?.customer?.name || identityName || "Szervezeti ügyfélfelület";
-  const overdueCount = (actions?.items ?? []).filter((item) => item.urgency === "OVERDUE").length;
+  // The only authoritative "featured matter" fact is the server-resolved
+  // currentMatter (prefers OWN, then latest published update). Card order is
+  // presentation only and never implies priority.
+  const featuredMatterId = home?.currentMatter?.publicationId ?? null;
+  // The complete granted+published matter count is canonical; the preview
+  // array length is only used as a fallback for older backends.
+  const mattersTotalShown = home?.mattersTotal ?? matters.length;
+  const actionsTrusted = !actionError && actions !== null;
+  const overdueCount = actionsTrusted ? (actions?.items ?? []).filter((item) => item.urgency === "OVERDUE").length : 0;
 
   return (
     <div className="space-y-6" data-testid="portal-home-v3">
@@ -137,20 +159,34 @@ export function PortalHomeV3({ identityName }: { identityName?: string | null })
             </p>
           </div>
           {!loading && !homeError ? (
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2 sm:gap-3" data-testid="portal-home-v3-stats">
               <div className="flex min-w-[5.5rem] flex-col items-center justify-center rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-3 py-2 text-center">
-                <span className="text-lg font-bold text-[var(--adm-brand-deep)]">{matters.length}</span>
-                <span className="text-[11px] font-medium text-[var(--adm-text-secondary)]">Aktív ügy</span>
+                <span className="text-lg font-bold text-[var(--adm-brand-deep)]">{mattersTotalShown}</span>
+                <span className="text-[11px] font-medium text-[var(--adm-text-secondary)]">Közzétett ügy</span>
               </div>
-              <div className="flex min-w-[5.5rem] flex-col items-center justify-center rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-3 py-2 text-center">
-                <span className="text-lg font-bold text-[var(--adm-brand-green)]">{actions?.items.length ?? 0}</span>
-                <span className="text-[11px] font-medium text-[var(--adm-text-secondary)]">Teendő</span>
-              </div>
-              {overdueCount > 0 ? (
-                <div className="flex min-w-[5.5rem] flex-col items-center justify-center rounded-[8px] border border-[var(--adm-brand-terracotta)]/40 bg-[var(--adm-canvas-subtle)] px-3 py-2 text-center">
-                  <span className="text-lg font-bold text-[var(--adm-brand-terracotta)]">{overdueCount}</span>
-                  <span className="text-[11px] font-medium text-[var(--adm-brand-terracotta)]">Lejárt</span>
-                </div>
+              {actionsTrusted ? (
+                <>
+                  <div className="flex min-w-[5.5rem] flex-col items-center justify-center rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-3 py-2 text-center">
+                    <span className="text-lg font-bold text-[var(--adm-brand-green)]">{actions?.items.length ?? 0}</span>
+                    <span className="text-[11px] font-medium text-[var(--adm-text-secondary)]">Teendő</span>
+                  </div>
+                  {overdueCount > 0 ? (
+                    <div className="flex min-w-[5.5rem] flex-col items-center justify-center rounded-[8px] border border-[var(--adm-brand-terracotta)]/40 bg-[var(--adm-canvas-subtle)] px-3 py-2 text-center">
+                      <span className="text-lg font-bold text-[var(--adm-brand-terracotta)]">{overdueCount}</span>
+                      <span className="text-[11px] font-medium text-[var(--adm-brand-terracotta)]">Lejárt</span>
+                    </div>
+                  ) : null}
+                </>
+              ) : !loading ? (
+                <button
+                  type="button"
+                  onClick={() => setReloadNonce((value) => value + 1)}
+                  className="flex min-h-10 min-w-[5.5rem] flex-col items-center justify-center rounded-[8px] border border-dashed border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] px-3 py-2 text-center hover:bg-[var(--adm-canvas-subtle)]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)] focus-visible:ring-offset-2"
+                  data-testid="portal-home-v3-actions-unavailable"
+                >
+                  <span className="text-xs font-bold text-[var(--adm-text-secondary)]">Teendők nem érhetők el</span>
+                  <span className="text-[11px] font-semibold text-[var(--adm-brand-green)]">Újra</span>
+                </button>
               ) : null}
             </div>
           ) : null}
@@ -228,13 +264,14 @@ export function PortalHomeV3({ identityName }: { identityName?: string | null })
               </div>
             ) : (
               <ul className="divide-y divide-[var(--adm-border-canonical)]">
-                {matters.slice(0, 3).map((matter, index) => {
+                {matters.slice(0, 3).map((matter) => {
                   const targetDate = formatDate(matter.publicTargetDate);
+                  const isFeatured = featuredMatterId !== null && matter.matterPublicationId === featuredMatterId;
                   return (
                     <li
                       key={matter.matterPublicationId}
                       className={`p-4 transition-colors hover:bg-[var(--adm-canvas-subtle)]/40 sm:p-5 ${
-                        index === 0 ? "bg-[var(--adm-canvas-subtle)]/20" : ""
+                        isFeatured ? "bg-[var(--adm-canvas-subtle)]/20" : ""
                       }`}
                     >
                       <Link
@@ -243,14 +280,14 @@ export function PortalHomeV3({ identityName }: { identityName?: string | null })
                       >
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1.5">
                           <div className="flex items-center gap-2">
-                            {index === 0 ? (
+                            {isFeatured ? (
                               <span className="inline-flex items-center rounded-[6px] border border-[var(--adm-brand-green)]/30 bg-[var(--adm-canvas-subtle)] px-2 py-0.5 text-xs font-semibold text-[var(--adm-brand-green)]">
                                 Kiemelt ügy
                               </span>
                             ) : null}
                             <p
                               className={`font-semibold text-[var(--adm-text-primary)] hover:text-[var(--adm-brand-green)] transition-colors ${
-                                index === 0 ? "text-base sm:text-lg" : "text-sm"
+                                isFeatured ? "text-base sm:text-lg" : "text-sm"
                               }`}
                             >
                               {matter.publicTitle}
@@ -276,7 +313,7 @@ export function PortalHomeV3({ identityName }: { identityName?: string | null })
                             </span>
                           ) : null}
                         </div>
-                        {index === 0 && matter.nextStep ? (
+                        {isFeatured && matter.nextStep ? (
                           <div className="mt-3 flex items-start gap-2 rounded-[6px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)]/70 px-3 py-2">
                             <span className="shrink-0 text-xs font-bold text-[var(--adm-brand-green)]">
                               Következő lépés:
