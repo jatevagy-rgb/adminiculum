@@ -36,7 +36,7 @@ import {
   safeText,
 } from '../../client-interaction/base';
 import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
-import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
+import { computeRoiEstimate, InputValueOrigin, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
 import { deriveProcessSignals, selectInterventions } from './interventions';
 import {
   GROW_ASSESSMENT_SCHEMA,
@@ -197,6 +197,24 @@ function metricMap(metrics: unknown): Map<string, number | boolean | null> {
 function numMetric(map: Map<string, number | boolean | null>, code: string): number | null {
   const v = map.get(code);
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * Derives the honest value origin of a ProcessObservationSnapshot from its
+ * recorded provenance. The canonical T2B snapshot computes its metrics from
+ * estimated step fields (inputFieldInventory lists `steps.estimated*`), so it
+ * is ESTIMATED — never MEASURED. A snapshot whose provenance cannot establish
+ * an origin returns null (caller fails closed).
+ */
+function deriveSnapshotValueOrigin(provenance: unknown): InputValueOrigin | null {
+  if (!provenance || typeof provenance !== 'object') return null;
+  const inventory: string[] = Array.isArray((provenance as { inputFieldInventory?: unknown }).inputFieldInventory)
+    ? ((provenance as { inputFieldInventory: unknown[] }).inputFieldInventory.map((f) => String(f)))
+    : [];
+  if (inventory.length === 0) return null;
+  if (inventory.some((f) => f.includes('estimated'))) return 'ESTIMATED';
+  if (inventory.some((f) => f.includes('measured') || f.includes('observed'))) return 'MEASURED';
+  return null;
 }
 
 /** Estimated monthly run frequency from the process' declared frequency. */
@@ -939,31 +957,43 @@ export async function startInitiativeFromOpportunity(
   requireManager(actor);
   await assertClientReadAccess(actor, clientId, db as PrismaClient);
 
-  const opp = await db.improvementOpportunity.findFirst({
-    where: { id: opportunityId, clientId },
-    include: { recommendation: true },
+  // The whole handoff is ONE transaction: initiative create + opportunity link
+  // + INITIATIVE_STARTED transition commit together or roll back together.
+  // The conditional updateMany is the concurrency gate: only the first writer
+  // of the still-unlinked opportunity succeeds; a concurrent/retried handoff
+  // matches zero rows, throws and rolls back its own initiative.
+  const prisma = db as PrismaClient;
+  return prisma.$transaction(async (tx) => {
+    const opp = await tx.improvementOpportunity.findFirst({
+      where: { id: opportunityId, clientId },
+      include: { recommendation: true },
+    });
+    if (!opp) throw new InteractionError(404, 'OPPORTUNITY_NOT_FOUND', 'Opportunity not found for this client.');
+    if (opp.developmentInitiativeId) {
+      throw new InteractionError(409, 'OPPORTUNITY_ALREADY_LINKED', 'Opportunity already handed off to an initiative.');
+    }
+
+    const initiative = await createInitiative(actor, clientId, {
+      title: input.title ?? opp.title,
+      reason: input.reason ?? opp.problem,
+      currentState: input.currentState ?? opp.problem,
+      targetState: input.targetState ?? opp.direction,
+      priority: input.priority,
+      caseId: input.caseId,
+      status: 'PLANNED',
+    }, tx as unknown as PrismaClient);
+
+    const linked = await tx.improvementOpportunity.updateMany({
+      where: { id: opp.id, clientId, developmentInitiativeId: null },
+      data: { developmentInitiativeId: initiative.id, status: 'INITIATIVE_STARTED' as ImprovementOpportunityStatus },
+    });
+    if (linked.count !== 1) {
+      throw new InteractionError(409, 'OPPORTUNITY_ALREADY_LINKED', 'Opportunity already handed off to an initiative.');
+    }
+
+    const updated = await tx.improvementOpportunity.findUniqueOrThrow({ where: { id: opp.id } });
+    return { opportunity: updated, initiative };
   });
-  if (!opp) throw new InteractionError(404, 'OPPORTUNITY_NOT_FOUND', 'Opportunity not found for this client.');
-  if (opp.developmentInitiativeId) {
-    throw new InteractionError(409, 'OPPORTUNITY_ALREADY_LINKED', 'Opportunity already handed off to an initiative.');
-  }
-
-  const initiative = await createInitiative(actor, clientId, {
-    title: input.title ?? opp.title,
-    reason: input.reason ?? opp.problem,
-    currentState: input.currentState ?? opp.problem,
-    targetState: input.targetState ?? opp.direction,
-    priority: input.priority,
-    caseId: input.caseId,
-    status: 'PLANNED',
-  }, db as PrismaClient);
-
-  const updated = await db.improvementOpportunity.update({
-    where: { id: opp.id },
-    data: { developmentInitiativeId: initiative.id, status: 'INITIATIVE_STARTED' as ImprovementOpportunityStatus },
-  });
-
-  return { opportunity: updated, initiative };
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,6 +1042,24 @@ export async function recordOutcomeMeasurement(
     if (after.observedAt < before.observedAt) {
       throw new InteractionError(422, 'SNAPSHOT_ORDER_INVALID', 'After-snapshot must not precede the before-snapshot.');
     }
+    if (after.metricVersion !== before.metricVersion) {
+      throw new InteractionError(422, 'SNAPSHOT_SCOPE_INCOMPATIBLE', 'Before and after snapshots use incompatible metric versions and cannot be compared.');
+    }
+  }
+
+  // G1: never relabel an unknown-provenance snapshot. The measurement basis
+  // must be derivable from the recorded snapshot provenance, or recording is
+  // rejected with an actionable unavailable state.
+  const beforeOrigin = deriveSnapshotValueOrigin(before.provenance);
+  if (!beforeOrigin) {
+    throw new InteractionError(422, 'SNAPSHOT_PROVENANCE_UNKNOWN', 'Before-snapshot carries no value provenance; the measurement basis cannot be established.');
+  }
+  let afterOrigin: InputValueOrigin | null = null;
+  if (after) {
+    afterOrigin = deriveSnapshotValueOrigin(after.provenance);
+    if (!afterOrigin) {
+      throw new InteractionError(422, 'SNAPSHOT_PROVENANCE_UNKNOWN', 'After-snapshot carries no value provenance; the measurement basis cannot be established.');
+    }
   }
 
   const beforeM = metricMap(before.metrics);
@@ -1027,6 +1075,11 @@ export async function recordOutcomeMeasurement(
     hourlyCostHuf: input.hourlyCostHuf ?? null,
     peopleAffected: input.peopleAffected ?? null,
     provenanceType: input.provenanceType ?? null,
+    // Before/after comparison derives the basis from the snapshots' own
+    // provenance (canonical snapshots are estimate-based → ESTIMATED).
+    // A stated reduction over a calculated snapshot basis stays CALCULATED.
+    beforeOrigin: after ? beforeOrigin : (input.expectedActiveReductionPct != null ? 'CALCULATED' : beforeOrigin),
+    afterOrigin: after ? afterOrigin : null,
   });
 
   const metricsSummary = {
