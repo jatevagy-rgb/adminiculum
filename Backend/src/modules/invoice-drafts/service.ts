@@ -166,7 +166,9 @@ export function invoiceDraftMissing(draft: Pick<InvoiceDraft, 'issuerLegalName' 
   return missing;
 }
 
-async function readIssuerProfile(db: Db): Promise<IssuerProfile> {
+/** Shared server-side reader for the billing issuer profile. Work-report
+ * identity resolution reuses this single source instead of a second store. */
+export async function readIssuerProfile(db: Db): Promise<IssuerProfile> {
   const row = await db.systemSetting.findUnique({ where: { key: ISSUER_PROFILE_KEY } });
   if (!row || typeof row.value !== 'object' || row.value === null || Array.isArray(row.value)) return EMPTY_PROFILE;
   const raw = row.value as Record<string, unknown>;
