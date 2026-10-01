@@ -37,12 +37,36 @@ export type CaseClosureBlockerCode =
   | 'OPEN_DEADLINES'
   | 'ACTIVE_HANDOFF'
   | 'UNRESOLVED_LITIGATION_ITEM'
-  | 'MISSING_RESPONSIBLE_LAWYER';
+  | 'MISSING_RESPONSIBLE_LAWYER'
+  | 'SUBMISSION_AWAITING_DECISION'
+  | 'SUBMISSION_RETURNED_PENDING_CORRECTION'
+  | 'ACTIVE_DOCUMENT_REVIEW'
+  | 'UNRESOLVED_BLOCKING_REVIEW_POINT'
+  | 'LEGAL_OUTPUT_EXACT_VERSION_UNAPPROVED'
+  | 'EXTERNAL_COMPLETION_PENDING';
 
 export interface CaseClosureBlocker {
   code: CaseClosureBlockerCode;
   label: string;
   count?: number;
+  href?: string | null;
+}
+
+/**
+ * Closure warnings are explicit NON-BLOCKING operational signals. They never
+ * deny a close: they surface truthful persisted state (time, billing, invoice,
+ * client publication) that a manager may want to see before finalizing, but
+ * whose absence is NOT a closure requirement in the current product contract.
+ */
+export type CaseClosureWarningCode =
+  | 'NO_RECORDED_TIME'
+  | 'BILLING_PREPARATION_NOT_CLOSED'
+  | 'INVOICE_NOT_DRAFTED'
+  | 'CLIENT_PUBLICATION_ABSENT';
+
+export interface CaseClosureWarning {
+  code: CaseClosureWarningCode;
+  label: string;
   href?: string | null;
 }
 
@@ -76,6 +100,7 @@ export interface CaseLifecycleDto {
     displayName: string;
   } | null;
   blockers: CaseClosureBlocker[];
+  warnings: CaseClosureWarning[];
   closureReadiness: {
     ready: boolean;
     reasons: string[];
@@ -150,6 +175,12 @@ export interface ClosureBlockerInput {
   activeReviewCount: number;
   openDeadlineCount: number;
   activeHandoffCount: number;
+  submittedAwaitingDecisionCount?: number;
+  returnedPendingCorrectionCount?: number;
+  activeDocumentReviewCount?: number;
+  unresolvedBlockingPointCount?: number;
+  unapprovedRequiredOutputCount?: number;
+  externalCompletionPendingCount?: number;
 }
 
 /**
@@ -209,6 +240,54 @@ export function deriveClosureBlockers(input: ClosureBlockerInput): CaseClosureBl
       href: null,
     });
   }
+  if ((input.submittedAwaitingDecisionCount ?? 0) > 0) {
+    blockers.push({
+      code: 'SUBMISSION_AWAITING_DECISION',
+      label: 'Elbírálásra váró feladatleadás van.',
+      count: input.submittedAwaitingDecisionCount,
+      href: '/tasks',
+    });
+  }
+  if ((input.returnedPendingCorrectionCount ?? 0) > 0) {
+    blockers.push({
+      code: 'SUBMISSION_RETURNED_PENDING_CORRECTION',
+      label: 'Javításra visszaadott feladatleadás vár újbóli beküldésre.',
+      count: input.returnedPendingCorrectionCount,
+      href: '/tasks',
+    });
+  }
+  if ((input.activeDocumentReviewCount ?? 0) > 0) {
+    blockers.push({
+      code: 'ACTIVE_DOCUMENT_REVIEW',
+      label: 'Folyamatban lévő dokumentum-véleményezés van.',
+      count: input.activeDocumentReviewCount,
+      href: '/documents',
+    });
+  }
+  if ((input.unresolvedBlockingPointCount ?? 0) > 0) {
+    blockers.push({
+      code: 'UNRESOLVED_BLOCKING_REVIEW_POINT',
+      label: 'Folyamatban lévő véleményezésen feloldatlan blokkoló észrevétel van.',
+      count: input.unresolvedBlockingPointCount,
+      href: '/documents',
+    });
+  }
+  if ((input.unapprovedRequiredOutputCount ?? 0) > 0) {
+    blockers.push({
+      code: 'LEGAL_OUTPUT_EXACT_VERSION_UNAPPROVED',
+      label: 'Jóváhagyott jogi output verziója nem rendelkezik exakt verziós dokumentum-jóváhagyással.',
+      count: input.unapprovedRequiredOutputCount,
+      href: '/documents',
+    });
+  }
+  if ((input.externalCompletionPendingCount ?? 0) > 0) {
+    blockers.push({
+      code: 'EXTERNAL_COMPLETION_PENDING',
+      label: 'Jóváhagyott külső művelet teljesítésének rögzítése hátravan.',
+      count: input.externalCompletionPendingCount,
+      href: '/tasks',
+    });
+  }
 
   return blockers;
 }
@@ -228,6 +307,61 @@ export function deriveClosureReadiness(blockers: CaseClosureBlocker[]): {
       ...blockers.map((blocker) => blocker.label),
     ],
   };
+}
+
+export interface ClosureWarningInput {
+  recordedTimeCount: number;
+  billableTimeCount: number;
+  closedPreparationItemCount: number;
+  closedPreparationItemsWithoutInvoiceCount: number;
+  publishedDocumentCount: number;
+  approvedDocumentReviewCount: number;
+}
+
+/**
+ * Derives NON-BLOCKING closure warnings from persisted counts. A warning never
+ * makes `deriveClosureReadiness` report "not ready": time/billing/invoice/
+ * publication state is surfaced truthfully without becoming a hard closure
+ * requirement.
+ */
+export function deriveClosureWarnings(input: ClosureWarningInput): CaseClosureWarning[] {
+  const warnings: CaseClosureWarning[] = [];
+
+  if ((input.recordedTimeCount ?? 0) === 0) {
+    warnings.push({
+      code: 'NO_RECORDED_TIME',
+      label: 'Az ügyhöz nincs rögzített időráfordítás.',
+      href: null,
+    });
+  }
+
+  const billable = input.billableTimeCount ?? 0;
+  const closed = input.closedPreparationItemCount ?? 0;
+  if (billable > closed) {
+    warnings.push({
+      code: 'BILLING_PREPARATION_NOT_CLOSED',
+      label: 'Nem minden számlázható időráfordítás szerepel lezárt számlázási előkészítésben.',
+      href: null,
+    });
+  }
+
+  if (closed > 0 && (input.closedPreparationItemsWithoutInvoiceCount ?? 0) > 0) {
+    warnings.push({
+      code: 'INVOICE_NOT_DRAFTED',
+      label: 'Lezárt számlázási előkészítéshez még nem készült számlatervezet.',
+      href: null,
+    });
+  }
+
+  if ((input.approvedDocumentReviewCount ?? 0) > 0 && (input.publishedDocumentCount ?? 0) === 0) {
+    warnings.push({
+      code: 'CLIENT_PUBLICATION_ABSENT',
+      label: 'Jóváhagyott dokumentumok még nincsenek közzétéve az ügyfélnek.',
+      href: null,
+    });
+  }
+
+  return warnings;
 }
 
 export function deriveLifecycleCapabilities(params: {

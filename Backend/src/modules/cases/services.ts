@@ -7,6 +7,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { driveService } from '../sharepoint';
 import { workflowService } from '../workflow';
 import { instantiateCaseWorkflow } from './caseWorkflowOrchestration';
+import { withCaseWorkGuard } from './caseMutationGuard';
 import { createCaseWorkPackageSnapshot, CaseWorkPackageError } from './caseWorkPackage.service';
 import { buildCaseReadScope } from './authorization';
 import { isWorkforceRole } from '../../middleware/workforceAuthorization';
@@ -718,10 +719,9 @@ return {
       updateData.clientRole = clientRole;
     }
 
-    const updatedCase = await prisma.case.update({
-      where: { id: caseId },
-      data: updateData
-    });
+    const updatedCase = deadline
+      ? await withCaseWorkGuard(prisma, caseId, (tx) => tx.case.update({ where: { id: caseId }, data: updateData }))
+      : await prisma.case.update({ where: { id: caseId }, data: updateData });
 
     // Create timeline event if userId provided
     if (userId && (deadline !== undefined || priority !== undefined || description !== undefined || clientRole !== undefined)) {

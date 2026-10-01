@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../../prisma/prisma.service';
+import { lockCaseForMutation } from '../../cases/caseMutationGuard';
 import { evaluateTransition, candidateActions, versionReviewStatusFor, type ReviewAction, type ReviewStatus } from './reviewWorkflow';
 
 type ReviewAuthorityRecord = {
@@ -160,6 +161,7 @@ async function auditAndNotify(tx: Db, params: { action: string; actorId: string;
 export async function createReview(documentId: string, actor: Actor, input: { reviewVersionId?: string; ownerId?: string; reviewerId?: string; dueAt?: string; idempotencyKey?: string }, db: PrismaClient = defaultPrisma) {
   return db.$transaction(async (tx) => {
     const document = await documentFor(tx, documentId);
+    await lockCaseForMutation(tx, document.caseId);
     await assertActorAccess(tx, actor, document.caseId);
     const version = await versionFor(tx, documentId, input.reviewVersionId);
     const existing = await tx.documentReview.findFirst({ where: { documentId, status: { in: ACTIVE_REVIEW_STATUSES as any } }, include: includeReview() });
@@ -240,6 +242,7 @@ export function permittedReviewActions(
 export async function transitionReview(reviewId: string, action: ReviewAction, actor: Actor, input: { reviewerId?: string; versionId?: string; safeRationale?: string; expectedRevision?: number; idempotencyKey?: string } = {}, db: PrismaClient = defaultPrisma) {
   return db.$transaction(async (tx) => {
     const review = await loadReview(tx, reviewId);
+    await lockCaseForMutation(tx, review.document.caseId);
     await assertActorAccess(tx, actor, review.document.caseId);
     requireExpectedRevision(review.revision, input.expectedRevision);
     const actorAuthorized = actorOwnsReview(review, actor.userId);
@@ -351,6 +354,7 @@ export async function transitionReview(reviewId: string, action: ReviewAction, a
 export async function addPoint(reviewId: string, actor: Actor, input: any, db: PrismaClient = defaultPrisma) {
   return db.$transaction(async (tx) => {
     const review = await loadReview(tx, reviewId);
+    await lockCaseForMutation(tx, review.document.caseId);
     await assertActorAccess(tx, actor, review.document.caseId);
     const title = safeText(input.title, TITLE_LIMIT);
     if (!title) throw new DocumentReviewWorkflowError(400, 'TITLE_REQUIRED', 'title is required.');
@@ -380,6 +384,7 @@ export async function addPoint(reviewId: string, actor: Actor, input: any, db: P
 export async function updatePoint(reviewId: string, pointId: string, actor: Actor, input: any, db: PrismaClient = defaultPrisma) {
   return db.$transaction(async (tx) => {
     const review = await loadReview(tx, reviewId);
+    await lockCaseForMutation(tx, review.document.caseId);
     await assertActorAccess(tx, actor, review.document.caseId);
     const existing = await tx.reviewPoint.findFirst({ where: { id: pointId, reviewId } });
     if (!existing) throw new DocumentReviewWorkflowError(404, 'POINT_NOT_FOUND', 'Review point not found.');

@@ -4,6 +4,7 @@ import { InteractionError, InternalActor, assertClientReadAccess, assertInternal
 import { ACTION_INTENT_BY_KIND, COMPLIANCE_ACTION_INTENT_KEYS, COMPLIANCE_PROPOSAL_KINDS, isCompatibleActionIntent } from './complianceProposalRegistry';
 import casesService from '../cases/services';
 import { resolveComplianceCaseType } from './complianceCaseTypeResolver';
+import { lockCaseForMutation } from '../cases/caseMutationGuard';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = InternalActor;
@@ -224,6 +225,7 @@ export async function bindProposalToCase(actor: Actor, proposalId: string, caseI
  * not tied to a specific Work Package item, so no workPackageItemId is fabricated.
  */
 async function createComplianceTaskAndConfirm(actor: Actor, proposal: any, caseId: string, tx: Prisma.TransactionClient): Promise<any> {
+  await lockCaseForMutation(tx, caseId);
   await assertAssignee(proposal.assigneeId, tx);
   const task = await tx.task.create({
     data: {

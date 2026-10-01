@@ -4,6 +4,7 @@ import { parseCanonicalStringId } from '../tasks/canonicalStringId';
 import { canAssign, createTask } from '../tasks/services';
 import { isWorkforceRole } from '../../middleware/workforceAuthorization';
 import { CASE_WORK_PACKAGE_SNAPSHOT_KEY } from './caseWorkPackage.service';
+import { lockCaseForMutation } from './caseMutationGuard';
 
 const MAX_NOTE_LENGTH = 2_000;
 const MAX_TITLE_LENGTH = 300;
@@ -329,6 +330,7 @@ export async function createTaskFromCaseWorkPackageItem(caseIdInput: unknown, it
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       return await prisma.$transaction(async (tx) => {
+        await lockCaseForMutation(tx, caseId);
         const { workPackage, item } = await loadScopedItem(tx, caseId, itemId);
         if (item.status === 'DISABLED') throw new CaseWorkPackageOperationalError('ITEM_DISABLED', 'Disabled work package items cannot create tasks.', 409);
         if (item.status === 'COMPLETED') throw new CaseWorkPackageOperationalError('ITEM_COMPLETED', 'Completed work package items cannot create tasks.', 409);

@@ -1,6 +1,7 @@
 import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import taskSubmissionService, { TaskSubmissionServiceError } from './taskSubmission.service';
+import { CaseMutationGuardError } from '../cases/caseMutationGuard';
 import taskReviewDecisionRoutes from './taskReviewDecision.routes';
 import { parseCanonicalStringId, requireCanonicalStringParams } from './canonicalStringId';
 
@@ -11,7 +12,7 @@ function getActorId(req: Request): string {
 }
 
 function sendError(res: Response, error: unknown): void {
-  if (error instanceof TaskSubmissionServiceError) {
+  if (error instanceof TaskSubmissionServiceError || error instanceof CaseMutationGuardError) {
     res.status(error.statusCode).json({ status: error.statusCode, code: error.code, message: error.message });
     return;
   }
