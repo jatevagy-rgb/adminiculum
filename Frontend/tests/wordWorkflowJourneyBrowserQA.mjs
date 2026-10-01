@@ -179,6 +179,21 @@ function mock(url, method) {
   if (url.includes("/anonymous-documents/by-source/")) {
     return ok([{ id: "anon-complete", name: "bérleti_szerzodes.docx_anon.txt", sourceDocId: "qa-doc-1", caseId: CASE_ID, aiTask: "REVIEW_RISKS", customPrompt: null, rehydrationStatus: "COMPLETE", rehydratedAt: "2026-09-29T10:00:00Z", createdAt: "2026-09-29T09:00:00Z", updatedAt: "2026-09-29T10:00:00Z", redactedText: "[ÜGYFÉL] szanitizált munkaszöveg." }]);
   }
+  if (url.includes("/work-reports/cases") && url.includes("/owners")) return ok({ kind: "CLIENT_WORK_REPORT_OWNERS_V1", owners: [] });
+  if (url.includes("/work-reports/clients/")) return ok({ kind: "CLIENT_WORK_REPORT_OWNERS_V1", owners: [] });
+  if (url.includes("/work-reports/cases") && method === "GET") {
+    return ok({
+      kind: "CLIENT_WORK_REPORT_CASES_V1",
+      client: { id: "client-1", name: CLIENT_NAME },
+      period: { start: "2026-09-01", end: "2026-09-30", label: "2026. szeptember" },
+      cases: [{
+        caseId: CASE_ID, caseNumber: "QA-1", caseTitle: CASE_TITLE, caseStatus: "FINAL", caseStatusLabel: "Lezárt",
+        isClosed: true, recordedMinutes: 120, recordedEntryCount: 2, ambiguousMinutes: 0, ambiguousEntryCount: 0,
+        excludedMinutes: 0, excludedEntryCount: 0, zeroTime: false,
+      }],
+      generatedAt: "2026-10-01T10:00:00.000Z",
+    });
+  }
   if (url.includes("/anonymous-documents") && method === "GET") {
     const isMainCase = url.includes(`caseId=${CASE_ID}`);
     return ok(isMainCase ? [
@@ -404,6 +419,13 @@ try {
     await page.waitForTimeout(1500);
     assert.equal(saveWrites.filter((url) => url.includes("anon-complete/save-as-document")).length, 1);
 
+    // ---------- 1c. Work report route (rate-free report surface) -------------
+    await page.goto(`${BASE}/work-report`, { waitUntil: "domcontentloaded", timeout: 120000 });
+    await page.getByRole("heading", { name: "Munkaóra-jelentés" }).waitFor({ timeout: 60000 });
+    await page.getByLabel(/Ügyfél/).selectOption("client-1");
+    await page.getByText("Lezárt", { exact: true }).first().waitFor();
+    assert.match(await page.locator("body").innerText(), /QA ügy titka 2026/);
+
     await page.screenshot({ path: path.join(SHOTS, `overview-journey-${width}.png`), fullPage: true });
     await noOverflow();
     await context.close();
@@ -513,7 +535,7 @@ try {
     await createPage.screenshot({ path: path.join(SHOTS, `create-journey-${width}.png`), fullPage: true });
     assert.deepEqual(createErrors, [], `create page errors at ${width}`);
     await createContext.close();
-    console.log(`PASS ${width}: communication leaf, risk matrix identity+persistence, prompt boundary, document AI flow (scanner/partial/download/save), intake plan validation, partial retry, resolved presets`);
+    console.log(`PASS ${width}: communication leaf, risk matrix identity+persistence, prompt boundary, document AI flow (scanner/partial/download/save), report route, intake plan validation, partial retry, resolved presets`);
   }
 } finally {
   await browser.close();

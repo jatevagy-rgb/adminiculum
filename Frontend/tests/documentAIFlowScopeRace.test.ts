@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const { JSDOM } = require('jsdom') as { JSDOM: new (html?: string, options?: any) => any };
 
-function installGlobals(dom: import('jsdom').JSDOM) {
+function installGlobals(dom: { window: any }) {
   const globals = globalThis as any;
   const previous = new Map<string, PropertyDescriptor | undefined>();
   const setGlobal = (name: string, value: any) => {
@@ -125,7 +125,7 @@ test('final download preserves the server file extension; sanitized export stays
     await React.act(async () => { root!.render(React.createElement(DocumentAIFlow, { caseId: 'case-1', clientId: 'client-1' })); });
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    const buttons = Array.from(dom.window.document.querySelectorAll('button'));
+    const buttons = Array.from(dom.window.document.querySelectorAll('button')) as HTMLButtonElement[];
     const clickButton = async (label: string) => {
       const button = buttons.find((b) => (b.textContent || '').includes(label));
       assert.ok(button, `button not found: ${label}`);
@@ -189,7 +189,7 @@ test('partial rehydration is visibly partial and saving succeeds through the can
     assert.match(dom.window.document.body.textContent, /részleges — ellenőrizze/i);
     assert.doesNotMatch(dom.window.document.body.textContent, /Jóváhagyva|Ügyfélnek kész|közzé/i);
 
-    const buttons = Array.from(dom.window.document.querySelectorAll('button'));
+    const buttons = Array.from(dom.window.document.querySelectorAll('button')) as HTMLButtonElement[];
     const saveButton = buttons.find((b) => (b.textContent || '').includes('Végleges mentés'));
     assert.ok(saveButton, 'save button present for PARTIAL artifact');
     await React.act(async () => { (saveButton as HTMLButtonElement).click(); });
