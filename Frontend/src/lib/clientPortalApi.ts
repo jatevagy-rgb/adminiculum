@@ -1,6 +1,7 @@
 import { fetchApi } from './api';
 
 export type PortalMatter = {
+  history?: { policyRevision: string | null; items: { sourceKey: string; title: string; body: string | null; occurredAt: string; minutes: number | null }[] };
   id: string;
   caseId: string;
   title: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { CustomerHistoryPolicyEditor } from '@/components/cases/word-workflow/history/CustomerHistoryPolicyEditor';
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import {
@@ -368,7 +369,7 @@ function WorkReportPageContent() {
                       disabled={loadingReport}
                       className="h-9 rounded-[8px] border border-[var(--adm-border-canonical)] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[var(--adm-text-primary)]"
                     >
-                      <option value="">Nincs megadva</option>
+                      <option value="">Mentett ügygazda használata (ha van)</option>
                       {ownerPeople.map((person) => (
                         <option key={person.personId} value={person.personId}>
                           {person.name}
@@ -385,6 +386,7 @@ function WorkReportPageContent() {
               </CardContent>
             </Card>
 
+            {selectedCaseId && <CustomerHistoryPolicyEditor key={selectedCaseId} caseId={selectedCaseId}/> }
             {loadingReport ? (
               <p className="text-sm text-[var(--adm-text-secondary)]">A jelentés betöltése…</p>
             ) : report ? (

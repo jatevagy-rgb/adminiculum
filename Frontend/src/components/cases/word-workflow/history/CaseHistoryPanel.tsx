@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { CustomerHistoryPolicyEditor } from './CustomerHistoryPolicyEditor';
+import { CaseClientOwner } from '../layout/CaseClientOwner';
 import { AdminStatusPill } from "@/components/ui";
 
 type HistoryItem = {
@@ -63,6 +65,7 @@ export function CaseHistoryPanel({ caseId, clientId, readOnly = false, onChanged
 
   return (
     <section aria-label="Ügytörténet" className="rounded-xl border border-[var(--adm-border)] bg-white p-4 md:p-5">
+      <CaseClientOwner key={`${caseId}:owner`} caseId={caseId}/><CustomerHistoryPolicyEditor key={`${caseId}:policy`} caseId={caseId}/>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold text-[var(--adm-text)]">Ügytörténet</h2>

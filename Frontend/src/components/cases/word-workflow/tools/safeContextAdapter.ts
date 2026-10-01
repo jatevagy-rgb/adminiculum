@@ -2,10 +2,11 @@
 
 import { LEGAL_PROMPT_CATALOG, LegalPromptTemplate } from "@/components/documents/legalPromptCatalog";
 import { listCaseContextSources } from "@/lib/caseContextSources";
-import { getCaseWorkspace } from "@/lib/api";
+import { fetchApi, getCaseWorkspace } from "@/lib/api";
 
 export interface SanitizedContextSource {
   isReady: boolean;
+  versionBound?: boolean;
   sourceId?: string | null;
   caseId?: string | null;
   clientId?: string | null;
@@ -105,7 +106,7 @@ function promptContext(
 ): SanitizedContextSource | null {
   return validateSanitizedContext(context).valid && context && scope.caseId &&
     context.caseId === scope.caseId && context.clientId === scope.clientId &&
-    !scope.documentId && !context.documentId && !context.documentVersionId ? context : null;
+    ((!scope.documentId && !context.documentId && !context.documentVersionId) || (context.versionBound && scope.documentId === context.documentId && Boolean(context.documentVersionId))) ? context : null;
 }
 
 const GLOBAL_PROMPT_RULES = `Feladatod: ügyvédi munkairat előkészítése az alábbi ügyadatok és háttér alapján.
@@ -352,4 +353,15 @@ export function buildDirectCatalogPrompt(
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+export interface VerifiedDocumentContextDto {
+ kind:'VERSION_BOUND_ANONYMIZED_CONTEXT';sourceDocumentId:string;sourceDocumentVersionId:string;anonymizedArtifactId:string;artifactRevision:number;caseId:string;clientId:string;sourceVersionNumber:number;isCurrentVersion:boolean;outboundEligible:boolean;sanitizedText:string;notice:string;
+}
+/** Only the authenticated server handoff can supply document-bound prompt text. */
+export async function resolveVerifiedDocumentPrompt(reference:VerifiedDocumentContextDto,scope:{caseId:string;clientId:string|null;documentId:string}):Promise<SanitizedContextSource|null>{
+ const value=await fetchApi<VerifiedDocumentContextDto>(`/anonymous-documents/${encodeURIComponent(reference.anonymizedArtifactId)}/verified-context`,{method:'POST',body:JSON.stringify({sourceDocumentId:reference.sourceDocumentId,sourceDocumentVersionId:reference.sourceDocumentVersionId,artifactRevision:reference.artifactRevision})});
+ if(value.kind!=='VERSION_BOUND_ANONYMIZED_CONTEXT'||!value.outboundEligible||value.caseId!==scope.caseId||value.clientId!==scope.clientId||value.sourceDocumentId!==scope.documentId||value.sourceDocumentVersionId!==reference.sourceDocumentVersionId||value.anonymizedArtifactId!==reference.anonymizedArtifactId||value.artifactRevision!==reference.artifactRevision)return null;
+ const context:SanitizedContextSource={isReady:true,versionBound:true,sourceId:value.anonymizedArtifactId,caseId:value.caseId,clientId:value.clientId,documentId:value.sourceDocumentId,documentVersionId:value.sourceDocumentVersionId,documentVersionNumber:value.sourceVersionNumber,sanitizedText:value.sanitizedText};
+ verifiedContexts.add(context);return context;
 }
