@@ -8,7 +8,7 @@ import {
 import prisma from '../../config/database';
 import { canUserActOnTask } from './taskAuthorization';
 import { WorkflowTransitionError } from '../cases/workItems';
-import { lockTaskCaseForWork } from '../cases/caseMutationGuard';
+import { isRetryableCaseTransactionError, lockTaskCaseForWork } from '../cases/caseMutationGuard';
 import { planCanonicalTaskTransition } from './taskLifecycle.service';
 import { ATTENTION_DURATION_BANDS, isAttentionCategory, type AttentionCategory } from './attentionCategory';
 import {
@@ -232,7 +232,7 @@ function toSubmissionDto(submission: SubmissionRecord): TaskSubmissionDto {
 }
 
 function isRetryableTransactionError(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
+  return isRetryableCaseTransactionError(error);
 }
 
 async function withSerializableRetry<T>(

@@ -11,7 +11,7 @@
 
 import { prisma } from '../../prisma/prisma.service';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { lockCaseForMutation } from './caseMutationGuard';
+import { isRetryableCaseTransactionError, lockCaseForMutation } from './caseMutationGuard';
 import { CLOSED_TASK_STATUSES, REVIEW_TASK_STATUSES } from '../tasks/taskStatus';
 import {
   CaseClosureBlocker,
@@ -440,10 +440,19 @@ async function applyLifecycleAction(
   };
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      await prisma.$transaction(mutate, { isolationLevel: 'Serializable', timeout: 15000 });
+      // Closure holds the case lock through commit. Each blocker query must see
+      // work committed while that lock was waiting, including caller-owned
+      // Read Committed writes that only lock (do not update) the case row.
+      // A fixed Serializable snapshot can miss those writes after the wait.
+      // Later writers either see FINAL (Read Committed) or abort on the case
+      // row update (Repeatable Read/Serializable); their owners handle retry.
+      await prisma.$transaction(mutate, {
+        isolationLevel: action === 'CLOSE' ? 'ReadCommitted' : 'Serializable',
+        timeout: 15000,
+      });
       break;
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') || attempt === 2) throw error;
+      if (!isRetryableCaseTransactionError(error) || attempt === 2) throw error;
     }
   }
 

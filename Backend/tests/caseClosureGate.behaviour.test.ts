@@ -410,3 +410,19 @@ describe('case closure gate — close/review race', () => {
     expect(prismaDouble.case.update).not.toHaveBeenCalled();
   });
 });
+
+
+describe('closure transaction completion', () => {
+  it('rejects a failed commit rather than returning a success DTO', async () => {
+    const error = new Error('simulated commit failure');
+    prismaDouble.$transaction.mockImplementationOnce(async (operation: any) => {
+      const before = { ...caseRow };
+      await operation(prismaDouble);
+      Object.assign(caseRow, before); // Model database rollback at commit failure.
+      throw error;
+    });
+    await expect(closeCase('case-1', MANAGER)).rejects.toBe(error);
+    expect(prismaDouble.$transaction).toHaveBeenCalledTimes(1);
+    expect(prismaDouble.case.findUnique).toHaveBeenCalledTimes(2); // Precheck and locked recheck only.
+  });
+});

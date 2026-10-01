@@ -1,3 +1,5 @@
+import { prisma } from '../src/prisma/prisma.service';
+import { closureTrace, traceClosureTransactions } from './helpers/caseClosureTrace';
 import { randomUUID } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { closeCase } from '../src/modules/cases/lifecycleService';
@@ -15,6 +17,7 @@ describeWithDatabase('case closure coordination on dedicated PostgreSQL', () => 
   const userId = randomUUID();
   const actor = { userId, role: 'LAWYER' };
   let sequence = 0;
+  let caseIds: string[] = [];
 
   async function newCase() {
     const clientId = randomUUID();
@@ -25,6 +28,7 @@ describeWithDatabase('case closure coordination on dedicated PostgreSQL', () => 
       title: 'Closure concurrency test case', caseType: 'CONTRACT_REVIEW',
       clientId, createdById: userId, assignedLawyerId: userId,
     } });
+    caseIds.push(caseId);
     return { caseId, clientId };
   }
 
@@ -50,7 +54,10 @@ describeWithDatabase('case closure coordination on dedicated PostgreSQL', () => 
         WHERE datname = current_database() AND wait_event_type = 'Lock'
           AND query LIKE '%FROM "cases"%FOR UPDATE%'
       `;
-      if (rows[0].waiting > 0n) return;
+      if (rows[0].waiting > 0n) {
+        closureTrace('lock-wait', { connections: await observer.$queryRaw`SELECT pid, backend_xid::text AS xid, pg_blocking_pids(pid) AS blockers FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'` });
+        return;
+      }
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     throw new Error('Close did not reach the database case lock before the barrier deadline.');
@@ -69,6 +76,25 @@ describeWithDatabase('case closure coordination on dedicated PostgreSQL', () => 
       role: 'LAWYER', status: 'ACTIVE', isActive: true, skills: [],
     } });
   }, 30000);
+
+  beforeEach(() => {
+    caseIds = [];
+    traceClosureTransactions(prisma, 'lifecycle-or-default-writer');
+    traceClosureTransactions(writer, 'caller-writer');
+  });
+
+  afterEach(async () => {
+    try {
+      for (const caseId of caseIds) {
+        const row = await observer.case.findUniqueOrThrow({ where: { id: caseId }, select: { id: true, status: true, updatedAt: true } });
+        const tasks = await observer.task.findMany({ where: { caseId }, select: { id: true, status: true } });
+        const events = await observer.timelineEvent.findMany({ where: { caseId, eventType: 'CASE_STATUS_CHANGED' }, select: { id: true, metadata: true } });
+        closureTrace('persisted', { row, tasks, events });
+      }
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
 
   afterAll(async () => {
     await Promise.all([writer?.$disconnect(), observer?.$disconnect()]);
@@ -103,12 +129,14 @@ describeWithDatabase('case closure coordination on dedicated PostgreSQL', () => 
       await releaseBarrier;
       await createTask({ caseId, title: 'Overlapping work', assignedBy: userId }, tx);
     }, { timeout: 12000 });
-    await lockedBarrier;
-    const close = closeCase(caseId, actor).then(() => 'closed', (error: unknown) => error);
+    let close: Promise<unknown> | undefined;
     try {
+      await Promise.race([lockedBarrier, work]);
+      close = closeCase(caseId, actor).then(() => 'closed', (error: unknown) => error);
       await waitUntilCloseWaitsForCaseLock();
     } finally {
       release();
+      await Promise.allSettled([work, close]);
     }
     await work;
     await expect(close).resolves.toMatchObject({ code: 'CLOSURE_BLOCKED' });

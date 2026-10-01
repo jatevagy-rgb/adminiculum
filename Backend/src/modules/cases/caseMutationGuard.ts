@@ -32,6 +32,13 @@ export async function lockTaskCaseForWork(tx: Tx, taskId: string): Promise<strin
   return task.caseId;
 }
 
+/** Prisma wraps a PostgreSQL serialization failure from raw locks as P2010. */
+export function isRetryableCaseTransactionError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && (
+    error.code === 'P2034' || (error.code === 'P2010' && error.meta?.code === '40001')
+  );
+}
+
 export async function withCaseWorkGuard<T>(
   db: PrismaClient | Tx,
   caseId: string,
@@ -48,7 +55,7 @@ export async function withCaseWorkGuard<T>(
         return operation(tx);
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, timeout: 15000 });
     } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') || attempt === 2) throw error;
+      if (!isRetryableCaseTransactionError(error) || attempt === 2) throw error;
     }
   }
   throw new CaseMutationGuardError(409, 'CASE_WORK_CONFLICT', 'Case work changed concurrently.');

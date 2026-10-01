@@ -49,6 +49,7 @@ jest.mock('../src/prisma/prisma.service', () => {
     billingPreparationItem: { count: jest.fn() },
     clientDocumentPublication: { count: jest.fn() },
     timelineEvent: { create: jest.fn() },
+    $queryRaw: jest.fn(async () => { const row = await prisma.case.findUnique(); return row ? [{ status: row.status }] : []; }),
     $transaction: jest.fn(async (fn: any) => fn(prisma)),
   };
   return { prisma };
