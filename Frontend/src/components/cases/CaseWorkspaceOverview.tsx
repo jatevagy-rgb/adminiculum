@@ -31,6 +31,7 @@ import { CaseSubmissionHandoff } from "@/components/cases/CaseSubmissionHandoff"
 import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummary";
 import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
+import { CaseContextTiles, PersistedDeadline } from "@/components/cases/word-workflow/layout/CaseContextTiles";
 import { CaseInsightTiles } from "@/components/cases/CaseInsightTiles";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
@@ -209,6 +210,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         onEdit={() => setModal({ type: "task-edit", task: t })}
       />
       <div className="flex flex-wrap items-center gap-2 px-3 pb-2 pl-[26px]">
+        <span className="text-xs"><PersistedDeadline dueAt={t.dueDate} /></span>
         {t.status.toUpperCase() === "BLOCKED" ? (
           <span data-testid="task-blocked-hint" className="inline-flex items-center gap-1.5 rounded-full bg-[#FBF3E0] px-2 py-0.5 text-[10.5px] font-semibold text-[#8A6A2A]">
             Várakozik
@@ -250,7 +252,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="word-workflow-overview min-w-0 space-y-4 [&_button]:min-h-10 [&_button]:min-w-10 [&_a]:min-h-10 [&_a]:inline-flex [&_a]:items-center [&_h2]:font-sans [&_h3]:font-sans [overflow-wrap:anywhere]">
       {refreshing ? <div aria-live="polite" className="text-[11px] font-semibold text-[var(--adm-text-muted)]">Frissítés…</div> : null}
       {actionError ? (
         <div role="alert" className={`rounded-md px-3 py-2 text-[12px] font-semibold ${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}>{actionError}</div>
@@ -268,7 +270,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
                 {urgency.label}
               </span>
             </div>
-            <h2 className="mt-1 font-serif text-[27px] font-semibold leading-tight text-[var(--adm-text)]">{c.title}</h2>
+            <h2 title={c.title} className="mt-1 line-clamp-3 font-sans break-words text-[22px] font-semibold leading-tight text-[var(--adm-text)]">{c.title}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[var(--adm-text-muted)]">
               <span className="font-semibold text-[var(--adm-text)]">{c.client?.name || "Nincs ügyfél"}</span>
               <span aria-hidden="true">·</span><span>{c.matterType || "Ügytípus nincs"}</span>
@@ -301,7 +303,8 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       </section>
 
       {/* ---- 2. Functional KPI row ----------------------------------------- */}
-      <section aria-label="Operatív mutatók" data-testid="kpi-row" className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="rounded-lg bg-white p-3 text-sm"><span className="mr-2 font-semibold">Következő határidő</span><PersistedDeadline dueAt={cp.kpi.deadlines.nextDueAt || c.deadline} /></div>
+      <section aria-label="Operatív mutatók" data-testid="kpi-row" className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         <KpiCard targetId="ck-tasks" label="Nyitott feladatok" accent={cp.kpi.openTasks.urgentCount > 0 ? "terracotta" : "petrol"}
           emphasised={cp.kpi.openTasks.urgentCount > 0} value={cp.kpi.openTasks.count} secondary={cp.kpi.openTasks.secondary} />
         <KpiCard targetId="ck-deadlines" label="Közelgő határidők" accent="terracotta"
@@ -310,14 +313,9 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
           emphasised={cp.kpi.communication.replyNeededCount > 0} value={cp.kpi.communication.count} secondary={cp.kpi.communication.secondary} />
         <KpiCard targetId="ck-tasks" label="Review tételek" accent="navy"
           emphasised={cp.kpi.review.count > 0} value={cp.kpi.review.count} secondary={cp.kpi.review.secondary} />
-        <KpiCard targetId="ck-documents" label="Aktív dokumentumok" accent="ochre"
-          emphasised={cp.kpi.activeDocuments.count > 0} value={cp.kpi.activeDocuments.count} secondary={cp.kpi.activeDocuments.secondary} />
-        <KpiCard targetId="ck-tasks" label="Következő lépés" accent="petrol"
-          value={<span className="text-[14px] font-semibold leading-tight">{cp.nextStep ? "Kijelölve" : "Nincs"}</span>}
-          secondary={cp.nextStep ? cp.nextStep.label : "Jelölj ki teendőt"} />
       </section>
 
-      <CaseInsightTiles workspace={ws} caseId={caseId} />
+      <CaseContextTiles caseRecord={c} />
 
       <section aria-label="Műveletek" data-testid="case-workspace-quick-actions" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-2.5">
         <span className="mr-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--adm-text-muted)]">Műveletek</span>
@@ -328,26 +326,12 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         <AdminButton variant="neutral" size="xs" onClick={() => { setTimeDialogResumeTask(null); setTimeDialogInitialTaskId(undefined); setTimeDialogOpen(true); }}>Munkaidő rögzítése</AdminButton>
       </section>
 
-      {/* ---- 2b. Primary internal notes ------------------------------------ */}
-      <CaseWorkspaceNotesSection
-        caseId={caseId}
-        refreshKey={notesRefreshKey}
-        onCreateNote={() => setModal({ type: "case-comment" })}
-      />
 
-      <nav aria-label="Ügy munkatér szakaszai" data-testid="case-workspace-section-nav" className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] font-semibold text-[var(--adm-green-800)]">
-        <a href="#ck-tasks" className="hover:underline">Aktív munka</a>
-        <a href="#ck-deadlines" className="hover:underline">Határidők</a>
-        <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
-        <a href="#ck-notes-primary" className="hover:underline">Megjegyzések</a>
-        <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
-        <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>
-      </nav>
 
       {/* ---- 3. Two-column operational layout ------------------------------ */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      <div className="space-y-4">
         {/* -------- Left: work and time pressure -------- */}
-        <div className="min-w-0 space-y-4">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <CockpitSection id="ck-tasks" title="Aktív munka" accent="petrol" count={ws.tasks.length}>
             {warn("tasks") ? (
               <ActionableEmpty message="A feladatok most nem érhetők el." actionLabel="Újratöltés" onAction={() => void refresh()} />
@@ -436,13 +420,18 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             )}
           </CockpitSection>
 
-          <AIResultsTile
-            caseId={caseId}
-            documents={ws.documents}
-            refreshKey={aiResultsRefreshKey}
-            onOpen={(draftId) => { setAiPromptInitialDraftId(draftId); setAiPromptOpen(true); }}
-            onOpenPreparation={() => { setAiPromptInitialDraftId(null); setAiPromptOpen(true); }}
-          />
+      {/* ---- 4. Document preparation (full width, below the operational cockpit) ---- */}
+      <DocumentPreparationDashboard
+        caseId={caseId}
+        documents={ws.documents}
+        activeDocuments={cp.activeDocuments}
+        activity={ws.activity}
+        clientId={c.client?.id ?? null}
+        clientName={c.client?.name ?? null}
+        clientRole={c.clientRole}
+        onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
+        onRefresh={() => void refresh()}
+      />
 
           <CaseWorkspaceDocumentsSection
             documents={ws.documents}
@@ -458,23 +447,29 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
         </div>
       </div>
 
-      {/* ---- 4. Document preparation (full width, below the operational cockpit) ---- */}
-      <DocumentPreparationDashboard
-        caseId={caseId}
-        documents={ws.documents}
-        activeDocuments={cp.activeDocuments}
-        activity={ws.activity}
-        clientId={c.client?.id ?? null}
-        clientName={c.client?.name ?? null}
-        clientRole={c.clientRole}
-        onOpenDocument={(docId) => router.push(`/cases/${caseId}/documents?documentId=${encodeURIComponent(docId)}`)}
-        onRefresh={() => void refresh()}
-      />
+      <section id="ck-prompts" aria-label="Prompteszközök" className="space-y-3">
+          <AIResultsTile
+            caseId={caseId}
+            documents={ws.documents}
+            refreshKey={aiResultsRefreshKey}
+            onOpen={(draftId) => { setAiPromptInitialDraftId(draftId); setAiPromptOpen(true); }}
+            onOpenPreparation={() => { setAiPromptInitialDraftId(null); setAiPromptOpen(true); }}
+          />
 
+      </section>
       <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
         <summary className="cursor-pointer font-serif text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
         <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Kontekstus, munkacsomag, belső jegyzetek, aktivitás és munkaidő.</p>
         <div className="mt-4 space-y-4">
+      <nav aria-label="Ügy munkatér szakaszai" data-testid="case-workspace-section-nav" className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] font-semibold text-[var(--adm-green-800)]">
+        <a href="#ck-tasks" className="hover:underline">Aktív munka</a>
+        <a href="#ck-deadlines" className="hover:underline">Határidők</a>
+        <a href="#ck-comms" className="hover:underline">Kommunikáció</a>
+        <a href="#ck-notes-primary" className="hover:underline">Megjegyzések</a>
+        <a href="#ck-documents" className="hover:underline">Dokumentumok</a>
+        <a href="#case-secondary-details" onClick={() => secondaryDetailsRef.current?.setAttribute('open', '')} className="hover:underline">További részletek</a>
+      </nav>
+          <CaseInsightTiles workspace={ws} caseId={caseId} />
           <div id="ck-starting-context" className="scroll-mt-24">
             <StartingContextPanel
               context={c.startingContext}
@@ -490,7 +485,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <CockpitSection id="ck-notes" title="Jegyzetek" accent="green" count={ws.comments.length}
               action={<AdminButton variant="neutral" size="xs" onClick={() => setModal({ type: "case-comment" })}>+ Megjegyzés</AdminButton>}>
               {ws.comments.length === 0 ? (
@@ -506,6 +501,27 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
                 </ul>
               )}
             </CockpitSection>
+
+            <CockpitSection id="ck-time" title="Munkaidő" accent="neutral">
+              <CaseTimeBillingSummary
+                caseId={caseId}
+                refreshKey={timeRefreshKey}
+                onRecordTime={() => setTimeDialogOpen(true)}
+                onGenerateReport={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)}
+              />
+              {c.client && <HourlyRateCard clientId={c.client.id} caseId={caseId} />}
+            </CockpitSection>
+          </div>
+        </div>
+      </details>
+
+      <section aria-label="Ügytörténet" className="space-y-4">
+      {/* ---- 2b. Primary internal notes ------------------------------------ */}
+      <CaseWorkspaceNotesSection
+        caseId={caseId}
+        refreshKey={notesRefreshKey}
+        onCreateNote={() => setModal({ type: "case-comment" })}
+      />
 
             <CockpitSection id="ck-activity" title="Aktivitás" accent="petrol">
               {ws.activity.length === 0 ? (
@@ -526,18 +542,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
               )}
             </CockpitSection>
 
-            <CockpitSection id="ck-time" title="Munkaidő" accent="neutral">
-              <CaseTimeBillingSummary
-                caseId={caseId}
-                refreshKey={timeRefreshKey}
-                onRecordTime={() => setTimeDialogOpen(true)}
-                onGenerateReport={() => router.push(`/time-entries?caseId=${encodeURIComponent(caseId)}`)}
-              />
-              {c.client && <HourlyRateCard clientId={c.client.id} caseId={caseId} />}
-            </CockpitSection>
-          </div>
-        </div>
-      </details>
+      </section>
 
       {/* ---- inline action modals ------------------------------------------ */}
       {modal?.type === "task-create" ? <TaskFormModal caseId={caseId} clientId={c.client?.id ?? null} mode="create" onClose={() => setModal(null)} onSaved={() => void refresh()} /> : null}

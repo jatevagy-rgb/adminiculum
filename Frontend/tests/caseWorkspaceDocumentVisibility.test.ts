@@ -55,14 +55,15 @@ describe("Case Workspace Document Visibility", () => {
     // Kommentek button is rendered
     assert.match(markup, /Kommentek \(2\)/);
 
-    // Ensure overview source keeps active-document KPI linked to cp.kpi.activeDocuments
+    // WF01 removes the redundant active-document KPI; the full document list
+    // must still receive canonical active-document reasons for its badges.
     const overviewSrc = readFileSync(
       path.resolve(__dirname, "../src/components/cases/CaseWorkspaceOverview.tsx"),
       "utf8"
     );
     assert.match(
       overviewSrc,
-      /label="Aktív dokumentumok"[\s\S]*?value=\{cp\.kpi\.activeDocuments\.count\}/
+      /<CaseWorkspaceDocumentsSection[\s\S]*?documents=\{ws\.documents\}[\s\S]*?activeDocuments=\{cp\.activeDocuments\}/
     );
   });
 
