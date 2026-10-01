@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { JSDOM } = require('jsdom') as { JSDOM: new (html?: string, options?: any) => any };
+type TestDom = { window: Window & typeof globalThis };
+const { JSDOM } = require('jsdom') as { JSDOM: new (html?: string, options?: any) => TestDom };
 
-function installGlobals(dom: { window: any }) {
+function installGlobals(dom: TestDom) {
   const globals = globalThis as any;
   const previous = new Map<string, PropertyDescriptor | undefined>();
   const setGlobal = (name: string, value: any) => {
@@ -203,4 +204,30 @@ test('partial rehydration is visibly partial and saving succeeds through the can
     restoreGlobals(previous);
     dom.window.close();
   }
+});
+
+test('verified prompt recheck cannot copy after a case switch or unmount', async () => {
+  const dom = new JSDOM('<!doctype html><div id="root"></div>', {url:'http://localhost/cases/a',pretendToBeVisual:true});
+  const previous=installGlobals(dom);const oldFetch=globalThis.fetch;
+  const React=await import('react');(globalThis as any).React=React;
+  const {createRoot}=await import('react-dom/client');
+  const {VerifiedDocumentContext}=await import('../src/components/cases/word-workflow/documents/VerifiedDocumentContext');
+  let root:import('react-dom/client').Root|null=createRoot(dom.window.document.getElementById('root')!);
+  let release!:()=>void;let copies=0;
+  const dto={kind:'VERSION_BOUND_ANONYMIZED_CONTEXT',sourceDocumentId:'doc-a',sourceDocumentVersionId:'v-a',anonymizedArtifactId:'artifact-a',artifactRevision:1,caseId:'a',clientId:'client-a',sourceVersionNumber:1,isCurrentVersion:false,outboundEligible:true,sanitizedText:'SAFE PRIOR CASE',notice:'Review required'};
+  const response=(v:unknown)=>new Response(JSON.stringify(v),{status:200,headers:{'content-type':'application/json'}});
+  Object.defineProperty(dom.window.navigator,'clipboard',{value:{writeText:async()=>{copies++}},configurable:true});
+  globalThis.fetch=async(input:any)=>{
+    const url=String(input);
+    if(url.endsWith('/verified-context'))return new Promise<Response>(resolve=>{release=()=>resolve(response(dto))});
+    if(url.endsWith('/anonymize-verified'))return response(dto);
+    return response({documentId:'doc-a',versions:[{id:'v-a',versionNumber:1,isCurrent:false,securityScanStatus:'CLEAN'}]});
+  };
+  const render=async(caseId:string)=>React.act(async()=>{root!.render(React.createElement(VerifiedDocumentContext,{caseId,clientId:`client-${caseId}`,documents:[{id:`doc-${caseId}`,fileName:'Synthetic'}],readOnly:false}))});
+  const click=async(label:string)=>{const b=Array.from(dom.window.document.querySelectorAll('button')).find(x=>x.textContent===label);assert.ok(b,label);await React.act(async()=>b.click())};
+  const prepare=async()=>{await render('a');const selects=dom.window.document.querySelectorAll('select');await React.act(async()=>{selects[0].value='doc-a';selects[0].dispatchEvent(new dom.window.Event('change',{bubbles:true}))});await React.act(async()=>{selects[1].value='v-a';selects[1].dispatchEvent(new dom.window.Event('change',{bubbles:true}))});await click('Kiválasztott verzió anonimizálása');await click('Ellenőrzött kockázati prompt másolása');};
+  try{
+    await prepare();await render('b');await React.act(async()=>{release();await new Promise(r=>setTimeout(r,0))});assert.equal(copies,0);assert.doesNotMatch(dom.window.document.body.textContent||'',/SAFE PRIOR CASE/);
+    await prepare();await React.act(async()=>root!.unmount());root=null;await React.act(async()=>{release();await new Promise(r=>setTimeout(r,0))});assert.equal(copies,0);
+  }finally{if(root)await React.act(async()=>root!.unmount());globalThis.fetch=oldFetch;restoreGlobals(previous);dom.window.close()}
 });

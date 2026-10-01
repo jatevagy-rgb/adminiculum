@@ -145,6 +145,7 @@ export interface ClientWorkReport {
   ambiguousRows: WorkReportRow[];
   excludedRows: WorkReportRow[];
   safeUpdates: WorkReportSafeUpdate[];
+  historyProvenance?: { policyRevision: string | null; sourceSetDigest: string | null };
   generatedAt: string;
 }
 
@@ -246,5 +247,6 @@ export interface ClientWorkReportExport {
   issuer: ClientWorkReportIssuer | null;
   rows: ClientWorkReportExportRow[];
   safeUpdates: WorkReportSafeUpdate[];
+  historyProvenance?: { policyRevision: string | null; sourceSetDigest: string | null };
   generatedAt: string;
 }

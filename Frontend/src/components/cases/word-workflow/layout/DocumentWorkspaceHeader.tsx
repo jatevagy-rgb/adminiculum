@@ -101,7 +101,7 @@ export function DocumentWorkspaceHeader({ caseId, documentId, versionId, version
     </section> : null}
     {workspace ? <details className="rounded-lg bg-[var(--card-bg)] p-3" open>
       <summary className="flex min-h-10 cursor-pointer items-center text-sm font-semibold text-[var(--adm-green-800)]">Ügykontextus megjelenítése</summary>
-      <CaseContextTiles caseRecord={workspace.case} />
+      <CaseContextTiles caseRecord={workspace.case} surface="document" />
     </details> : null}
     {openedTask ? <TaskSubmissionWorkspace item={openedTask} onClose={() => {
       setOpenedTask(null);

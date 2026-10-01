@@ -252,6 +252,7 @@ export function MatterView({
         </div>
       ) : null}
 
+      {matter.history && <section className="cp-card space-y-3 p-5" aria-label="Megosztott ügytörténet"><h2 className="cp-title text-xl">Megosztott ügytörténet</h2>{matter.history.items.length ? matter.history.items.map(item=><article key={item.sourceKey}><h3 className="font-semibold">{item.title}</h3><p className="text-sm">{formatDate(item.occurredAt)}{item.minutes!==null?` · ${item.minutes} perc`:''}</p><p className="whitespace-pre-wrap break-words">{item.body}</p></article>):<p>Nincs megosztott ügytörténeti elem.</p>}</section>}
       <MatterProgressSection milestones={matter.milestones} progressPercentage={publishedProgressPercentage} />
       {showDocuments ? (
         <Card>

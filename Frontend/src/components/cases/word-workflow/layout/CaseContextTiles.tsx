@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { DurableCaseTiles } from "./DurableCaseTiles";
+import { CaseClientOwner } from "./CaseClientOwner";
 import type { CaseWorkspace } from "@/lib/api";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 
@@ -26,21 +28,9 @@ export function caseContextTiles(c: CaseWorkspace["case"]): CaseTileDescriptor[]
   ].map((tile, order) => ({ ...tile, id: `${c.id}:${tile.kind}`, order, placements: ["overview", "document"] })) as CaseTileDescriptor[];
 }
 
-const tones = {
-  info: "border-[var(--adm-blue-700)] bg-[var(--adm-blue-100)]",
-  teal: "border-[var(--adm-palette-teal)] bg-[var(--card-bg)]",
-  green: "border-[var(--adm-green-800)] bg-[var(--card-bg)]",
-};
-
-export function CaseContextTiles({ caseRecord }: { caseRecord: CaseWorkspace["case"] }) {
-  return <section aria-label="Ügykontextus" data-testid="word-case-context" className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
-    {caseContextTiles(caseRecord).map((tile) => <article key={tile.id} data-tile-id={tile.id} data-content-ref={tile.contentRef} className={`min-w-0 rounded-lg border-l-4 p-4 ${tones[tile.tone]}`}>
-      <h3 className="text-sm font-semibold text-[var(--adm-green-800)]">{tile.title}</h3>
-      <p className="mt-2 whitespace-pre-line break-words text-sm leading-6 text-[var(--adm-text)]">{tile.body}</p>
-    </article>)}
-  </section>;
+export function CaseContextTiles({ caseRecord, surface = "overview" }: { caseRecord: CaseWorkspace["case"]; surface?: "overview" | "document" }) {
+  return <div className="space-y-3"><CaseClientOwner key={`${caseRecord.id}:owner`} caseId={caseRecord.id}/><DurableCaseTiles key={caseRecord.id} caseId={caseRecord.id} surface={surface} builtin={caseContextTiles(caseRecord)} /></div>;
 }
-
 export function deadlineRemaining(dueAt: string, now: number): string {
   const due = Date.parse(dueAt);
   if (!Number.isFinite(due)) return "A határidő nem értelmezhető.";

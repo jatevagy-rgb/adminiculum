@@ -11,6 +11,7 @@ import {
   type CaseContractListItem,
   type AnonymousDocumentListItem,
 } from "@/lib/api";
+import { VerifiedDocumentContext } from './VerifiedDocumentContext';
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Alert } from "@/components/ui/Alert";
@@ -284,6 +285,7 @@ export function DocumentAIFlow({
 
   return (
     <section aria-label="Dokumentum AI-munkafolyamat" className="space-y-4">
+      <VerifiedDocumentContext key={`${caseId}:${clientId}`} caseId={caseId} clientId={clientId ?? null} documents={documents ?? []} readOnly={readOnly} onCreated={()=>void loadAll()}/>
       {(documentsError || anonymousError) && (
         <Alert
           variant="error"
