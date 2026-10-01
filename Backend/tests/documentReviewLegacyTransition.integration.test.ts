@@ -166,4 +166,87 @@ describeWithDatabase('Legacy approve/reject delegate to canonical DocumentReview
     // Reject must not publish to the client.
     expect(await db.clientDocumentPublication.count({ where: { documentId: rj.doc } })).toBe(0);
   });
+
+  it('7. rolls back the whole legacy approval atomically when a side effect fails', async () => {
+    const rx = {
+      case: 'e3000000-0000-4000-8000-000000000031',
+      doc: 'e4000000-0000-4000-8000-000000000031',
+      v1: 'e5000000-0000-4000-8000-000000000031',
+      v2: 'e5000000-0000-4000-8000-000000000032',
+      review: 'ef000000-0000-4000-8000-000000000031',
+      round: 'ef000000-0000-4000-8000-000000000032',
+    };
+    await db.case.create({ data: { id: rx.case, caseNumber: 'LREV-003', title: 'Rollback legacy review case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.owner, assignedLawyerId: ids.owner, status: 'IN_REVIEW' } });
+    await db.document.create({ data: { id: rx.doc, name: 'Rollback doc', fileName: 'rollback.txt', category: 'CONTRACT', documentType: 'CONTRACT', mimeType: 'text/plain', caseId: rx.case, clientId: ids.client, currentVersion: 2, currentVersionInt: 2, version: '2', spItemId: 'rollback-sp-1', folder: 'REVIEW' } });
+    await db.documentVersion.createMany({ data: [
+      { id: rx.v1, documentId: rx.doc, version: 1, name: 'rollback-v1.txt', originalFileName: 'rollback-v1.txt', mimeType: 'text/plain', size: 10, storageReference: 'rollback-v1-key', spItemId: 'rollback-v1', isCurrent: false, uploadedById: ids.owner, versionType: 'ORIGINAL' },
+      { id: rx.v2, documentId: rx.doc, version: 2, name: 'rollback-v2.txt', originalFileName: 'rollback-v2.txt', mimeType: 'text/plain', size: 10, storageReference: 'rollback-v2-key', spItemId: 'rollback-v2', isCurrent: true, uploadedById: ids.owner, previousVersionId: rx.v1 },
+    ] });
+    await db.documentReview.create({ data: { id: rx.review, documentId: rx.doc, documentVersionId: rx.v2, status: 'IN_REVIEW', ownerId: ids.owner, createdById: ids.owner, assignedReviewerId: ids.reviewer } });
+    await db.documentReviewRound.create({ data: { id: rx.round, reviewId: rx.review, roundNumber: 1, reviewVersionId: rx.v2, status: 'IN_REVIEW', submittedAt: new Date(), createdById: ids.owner } });
+    await db.documentReview.update({ where: { id: rx.review }, data: { currentRoundId: rx.round } });
+
+    const before = sharepointCheckins;
+    sharepointCheckinsSpy.mockImplementationOnce(async () => { throw new Error('forced checkin failure'); });
+    await expect(documentsService.approveDocument(rx.doc, ids.owner, 'will roll back', 'LAWYER', db)).resolves.toBe(false);
+
+    // The canonical decision and every legacy side effect were written inside
+    // ONE transaction: nothing may survive the forced failure.
+    const review = await db.documentReview.findUniqueOrThrow({ where: { id: rx.review } });
+    expect(review.status).toBe('IN_REVIEW');
+    expect(review.approvedVersionId).toBeNull();
+    expect(review.completedAt).toBeNull();
+    expect(await db.reviewDecision.count({ where: { reviewId: rx.review } })).toBe(0);
+    const doc = await db.document.findUniqueOrThrow({ where: { id: rx.doc } });
+    expect(doc.folder).toBe('REVIEW');
+    const caseRow = await db.case.findUniqueOrThrow({ where: { id: rx.case } });
+    expect(caseRow.status).toBe('IN_REVIEW');
+    expect(await db.timelineEvent.count({ where: { caseId: rx.case, eventType: 'DOCUMENT_APPROVED' } })).toBe(0);
+    expect(sharepointCheckins).toBe(before);
+  });
+
+  it('8. serializes concurrent legacy approvals into exactly one committed decision', async () => {
+    const cx = {
+      case: 'e3000000-0000-4000-8000-000000000041',
+      doc: 'e4000000-0000-4000-8000-000000000041',
+      v1: 'e5000000-0000-4000-8000-000000000041',
+      v2: 'e5000000-0000-4000-8000-000000000042',
+      review: 'ef000000-0000-4000-8000-000000000041',
+      round: 'ef000000-0000-4000-8000-000000000042',
+    };
+    await db.case.create({ data: { id: cx.case, caseNumber: 'LREV-004', title: 'Concurrent legacy review case', caseType: 'CONTRACT_REVIEW', clientId: ids.client, createdById: ids.owner, assignedLawyerId: ids.owner, status: 'IN_REVIEW' } });
+    await db.document.create({ data: { id: cx.doc, name: 'Concurrent doc', fileName: 'concurrent.txt', category: 'CONTRACT', documentType: 'CONTRACT', mimeType: 'text/plain', caseId: cx.case, clientId: ids.client, currentVersion: 2, currentVersionInt: 2, version: '2', spItemId: 'concurrent-sp-1', folder: 'REVIEW' } });
+    await db.documentVersion.createMany({ data: [
+      { id: cx.v1, documentId: cx.doc, version: 1, name: 'concurrent-v1.txt', originalFileName: 'concurrent-v1.txt', mimeType: 'text/plain', size: 10, storageReference: 'concurrent-v1-key', spItemId: 'concurrent-v1', isCurrent: false, uploadedById: ids.owner, versionType: 'ORIGINAL' },
+      { id: cx.v2, documentId: cx.doc, version: 2, name: 'concurrent-v2.txt', originalFileName: 'concurrent-v2.txt', mimeType: 'text/plain', size: 10, storageReference: 'concurrent-v2-key', spItemId: 'concurrent-v2', isCurrent: true, uploadedById: ids.owner, previousVersionId: cx.v1 },
+    ] });
+    await db.documentReview.create({ data: { id: cx.review, documentId: cx.doc, documentVersionId: cx.v2, status: 'IN_REVIEW', ownerId: ids.owner, createdById: ids.owner, assignedReviewerId: ids.reviewer } });
+    await db.documentReviewRound.create({ data: { id: cx.round, reviewId: cx.review, roundNumber: 1, reviewVersionId: cx.v2, status: 'IN_REVIEW', submittedAt: new Date(), createdById: ids.owner } });
+    await db.documentReview.update({ where: { id: cx.review }, data: { currentRoundId: cx.round } });
+
+    const before = sharepointCheckins;
+    const secondDb = new PrismaClient({ datasources: { db: { url: databaseUrl as string } } });
+    try {
+      await secondDb.$connect();
+      const results = await Promise.allSettled([
+        documentsService.approveDocument(cx.doc, ids.owner, 'first decision', 'LAWYER', db),
+        documentsService.approveDocument(cx.doc, ids.owner, 'second decision', 'LAWYER', secondDb),
+      ]);
+      const winners = results.filter((result) => result.status === 'fulfilled' && result.value === true);
+      const losers = results.filter((result) => result.status === 'rejected');
+      expect(winners).toHaveLength(1);
+      expect(losers).toHaveLength(1);
+      expect((losers[0] as PromiseRejectedResult).reason?.message).toContain('transition is not allowed');
+
+      const review = await db.documentReview.findUniqueOrThrow({ where: { id: cx.review } });
+      expect(review.status).toBe('APPROVED');
+      expect(await db.reviewDecision.count({ where: { reviewId: cx.review, action: 'APPROVED' } })).toBe(1);
+      const doc = await db.document.findUniqueOrThrow({ where: { id: cx.doc } });
+      expect(doc.folder).toBe('APPROVED');
+      expect(await db.timelineEvent.count({ where: { caseId: cx.case, eventType: 'DOCUMENT_APPROVED' } })).toBe(1);
+      expect(sharepointCheckins).toBe(before + 1);
+    } finally {
+      await secondDb.$disconnect();
+    }
+  }, 30_000);
 });
