@@ -32,6 +32,7 @@ import { CaseTimeBillingSummary } from "@/components/cases/CaseTimeBillingSummar
 import { HourlyRateCard } from "@/components/billing/HourlyRateCard";
 import { CaseTimeEntryDialog } from "@/components/cases/CaseTimeEntryDialog";
 import { CaseContextTiles, PersistedDeadline } from "@/components/cases/word-workflow/layout/CaseContextTiles";
+import { CaseHistoryPanel } from "@/components/cases/word-workflow/history/CaseHistoryPanel";
 import { CaseInsightTiles } from "@/components/cases/CaseInsightTiles";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
@@ -516,6 +517,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
       </details>
 
       <section aria-label="Ügytörténet" className="space-y-4">
+      <CaseHistoryPanel key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly />
       {/* ---- 2b. Primary internal notes ------------------------------------ */}
       <CaseWorkspaceNotesSection
         caseId={caseId}

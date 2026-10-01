@@ -150,7 +150,10 @@ function baseMock(url) {
     };
   }
   if (url.includes("/legal-analyses")) return { status: 200, body: [] };
-  if (url.includes(`/cases/${CASE_ID}/comments`)) return { status: 200, body: { comments: [] } };
+  if (url.includes(`/cases/${CASE_ID}/comments`)) return { status: 200, body: { comments: [
+    { id: 'note-1', caseId: CASE_ID, parentId: null, author: { id: 'worker', displayName: 'Teszt Munkatárs' }, content: 'Belső ügyjegyzet', status: 'OPEN', createdAt: '2026-10-01T10:00:00Z', updatedAt: null, capabilities: { canResolve: false, canReopen: false, canDelete: false } },
+    { id: 'reply-1', caseId: CASE_ID, parentId: 'note-1', author: { id: 'lawyer', displayName: 'QA Ügyvéd' }, content: 'Belső válasz', status: 'OPEN', createdAt: '2026-10-01T10:30:00Z', updatedAt: null, capabilities: { canResolve: false, canReopen: false, canDelete: false } },
+  ] } };
   if (url.includes(`/cases/${CASE_ID}/work-package`)) return { status: 200, body: null };
   if (url.includes(`/cases/${CASE_ID}/documents`)) return { status: 200, body: [{ id: "qa-doc-1", fileName: "bérleti_szerzodes.docx" }] };
   if (url.includes(`/cases/${CASE_ID}/timeline`)) return { status: 200, body: [] };
@@ -256,6 +259,8 @@ const VERSION_ID = 'qa-historical-version';
 const CASE_TITLE = 'Hosszú ügycím – szerződés előkészítése és felülvizsgálata '.repeat(4);
 const DUE = '2026-10-02T10:30:00.000Z';
 let readOnly = false, missingContext = false, failAttach = false;
+let historyErrorMode = false;
+const historyRequests = [];
 const writes = [];
 const TASK = { id: 'chosen-task', title: 'Szerződés ellenőrzése', status: 'IN_PROGRESS', priority: 'MEDIUM', case: { id: CASE_ID, caseNumber: 'QA-1', title: CASE_TITLE, clientName: 'Teszt ügyfél', matterType: 'CONTRACT' }, dueDate: DUE, nextActionCode: 'CONTINUE_SUBMISSION' };
 const DOC = { id: DOC_ID, caseId: CASE_ID, fileName: 'szerzodes.docx', documentType: 'UPLOADED', version: '2', currentVersion: 2, folder: 'Feltöltve', isLatest: true, createdAt: '2026-09-01T09:00:00Z', securityScanStatus: 'CLEAN', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
@@ -276,11 +281,21 @@ function workspace() {
  w.cockpit.deadlineGroups.tomorrow = [{ id: 'deadline-1', title: TASK.title, dueAt: DUE, source: 'TASK', deadlineType: 'TASK', assignee: { id: 'worker', name: 'Teszt Munkatárs' }, overdue: false }];
  w.communications = [{ id: 'mail-1', type: 'EMAIL', subject: 'Szerződéses feltételek egyeztetése', contentPreview: 'A felek a fizetési és teljesítési feltételek pontosítását kérték.', sender: 'teszt@example.test', timestamp: DUE, internal: false }];
  w.activity = [{ id: 'activity-1', actor: 'Teszt Munkatárs', actionLabel: 'feltöltötte', objectLabel: DOC.fileName, occurredAt: DUE, objectType: 'DOCUMENT', objectId: DOC_ID }];
+ w.comments = [{ id: 'note-1', content: 'Belső ügyjegyzet', author: { name: 'Teszt Munkatárs' }, createdAt: '2026-10-01T10:00:00Z' }];
  return w;
 }
 function mock(url, method, body) {
  const ok = body => ({ status: 200, body });
  if (url.includes('/auth/me')) return ok(AUTH_ME);
+ if (url.includes(`/case-history/cases/${CASE_ID}`)) {
+  historyRequests.push(url);
+  if (historyErrorMode) return { status: 503, body: { code: 'SYNTHETIC_HISTORY_ERROR' } };
+  const cursor = new URL(url).searchParams.get('cursor');
+  const item = cursor
+   ? { sourceKey: 'time:entry-1', kind: 'TIME', occurredAt: '2026-10-01T11:00:00Z', title: 'Munkaidő rögzítve', detail: 'Szerződés ellenőrzése', authorName: 'Teszt Munkatárs', minutes: 45 }
+   : { sourceKey: 'timeline:event-1', kind: 'AUDIT', occurredAt: '2026-10-01T10:00:00Z', title: 'Ügy létrehozva', detail: null, authorName: 'QA Ügyvéd', minutes: null };
+  return ok({ items: [item], nextCursor: cursor ? null : 'timeline:event-1', totalMinutes: 45 });
+ }
  if (url.includes('/client-publications/') && url.includes('/overview')) return ok({ documentPublications: [], matterPublications: [], grants: [], gates: {}, warnings: [], history: [], clientId: null });
  if (url.endsWith('/milestones/draft')) return ok({ publicationId: null, publicationStatus: null, draft: [], publishedMilestones: [], publishedProgress: null });
  if (url.endsWith('/review-projection')) return ok(null);
@@ -306,8 +321,9 @@ function mock(url, method, body) {
 }
 const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 try {
- for (const width of [390, 768, 1440]) {
-  attached = []; writes.length = 0; readOnly = false; missingContext = false;
+ for (const width of (process.env.WF09_WIDTHS ? process.env.WF09_WIDTHS.split(',').map(Number) : [390, 768, 1440])) {
+  attached = []; writes.length = 0; readOnly = false; missingContext = false; historyErrorMode = false;
+  const historyCount = historyRequests.length;
   const context = await browser.newContext({ viewport: { width, height: 1000 }, locale: 'hu-HU' });
   const page = await context.newPage(); page.setDefaultTimeout(20000);
   const errors = []; page.on('pageerror', e => { errors.push(e.stack || e.message); console.error('PAGE_ERROR', e.stack || e.message); });
@@ -320,11 +336,24 @@ try {
   const noOverflow = async () => assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `overflow at ${width}`);
   await page.goto(`${BASE}/cases/${CASE_ID}`, { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.locator('[data-testid="word-case-context"]').waitFor();
+  await page.locator('section[aria-label="Ügytörténet"] > ol').getByText('Ügy létrehozva', { exact: true }).waitFor();
+  assert.ok(historyRequests.length > historyCount, 'the case route must request the mounted history endpoint');
+  await page.getByRole('button', { name: 'További események' }).click();
+  await page.locator('section[aria-label="Ügytörténet"] > ol').getByText('Szerződés ellenőrzése', { exact: true }).waitFor();
+  await page.locator('[data-testid="case-notes-primary"]').waitFor();
+  await page.getByText('Belső válasz', { exact: true }).waitFor();
+  await page.locator('[data-testid="activity-feed"]').waitFor();
   await page.getByText('Teszt Munkatárs', { exact: true }).first().waitFor();
   assert.equal(await page.locator('[data-testid="persisted-deadline"] time').first().getAttribute('datetime'), DUE);
   await noOverflow();
   const ids = await page.locator('[data-tile-id]').evaluateAll(els => els.map(e => e.dataset.tileId));
   await page.screenshot({ path: path.join(SHOTS, `overview-${width}.png`), fullPage: true });
+  historyErrorMode = true;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByText('Az ügytörténet jelenleg nem tölthető be.', { exact: false }).waitFor();
+  historyErrorMode = false;
+  await page.getByRole('button', { name: 'Újrapróbálás' }).click();
+  await page.locator('section[aria-label="Ügytörténet"] > ol').getByText('Ügy létrehozva', { exact: true }).waitFor();
   const docUrl = `${BASE}/cases/${CASE_ID}/documents?documentId=${DOC_ID}&versionId=${VERSION_ID}`;
   await page.goto(docUrl, { waitUntil: 'domcontentloaded', timeout: 120000 });
   const header = page.locator('[data-testid="word-document-header"]');
@@ -360,8 +389,15 @@ try {
   assert.ok((await page.getByRole('link', { name: 'Beküldött verzió megnyitása' }).getAttribute('href')).includes(VERSION_ID));
   readOnly = true; missingContext = true;
   await page.goto(docUrl, { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-testid="document-submission-task"]').selectOption('');
   await page.locator('[data-testid="document-submission-task"]').selectOption(TASK.id);
-  await page.getByText('Ehhez a feladathoz most nem csatolható új leadási verzió.', { exact: false }).waitFor();
+  try {
+   await page.getByText('Ehhez a feladathoz most nem csatolható új leadási verzió.', { exact: false }).waitFor();
+  } catch (cause) {
+   await page.screenshot({ path: path.join(SHOTS, `readonly-failure-${width}.png`), fullPage: true });
+   console.error(JSON.stringify({ width, documentTask: await page.locator('[data-testid="document-submission-task"]').inputValue(), body: (await page.locator('body').innerText()).slice(0, 14000), recentRequests: requests.slice(-15) }, null, 2));
+   throw cause;
+  }
   assert.ok(await page.locator('[data-testid="document-top-submission"]').isDisabled());
   await page.getByText('Az ügy célja még nincs rögzítve.', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Lezárás ellenőrzése' }).click();

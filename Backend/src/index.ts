@@ -220,6 +220,9 @@ app.use('/api/v1/users', usersRoutes);
 import casesRoutes from './modules/cases/routes';
 app.use('/api/v1/cases', casesRoutes);
 
+import { caseHistoryReadRouter } from './modules/case-history/read.routes';
+app.use('/api/v1/case-history', caseHistoryReadRouter);
+
 import clientsRoutes from './modules/clients/routes';
 app.use('/api/v1/clients', clientsRoutes);
 
