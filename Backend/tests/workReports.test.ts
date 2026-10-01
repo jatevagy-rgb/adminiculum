@@ -376,6 +376,33 @@ describe('rate-free work-report PDF', () => {
     expect(second.pages.length).toBe(first.pages.length);
   });
 
+  it('keeps the last published update with the footer when content reaches the page boundary', async () => {
+    const report = project(await sampleReport(), OWNER_KISS_ILONA);
+    report.client.name = 'Árvíztűrő Tükörfúrógép Gyártó és Szolgáltató Korlátolt Felelősségű Társaság';
+    report.case.caseTitle = 'Üzemeltetési szerződés módosítása — az árvíztűrő tükörfúrógép-berendezések karbantartási feltételeinek felülvizsgálata';
+    report.case.requesterNames = ['Nagy Réka', 'Szabó-Kovács Gergely'];
+    report.case.organizationGroupNames = ['Jogi Főosztály', 'Üzemeltetési Igazgatóság'];
+    report.rows = Array.from({ length: 4 }, (_, index) => ({
+      timeEntryId: `boundary-${index}`,
+      workDate: `2026-09-0${index + 1}`,
+      workerName: 'Dr. Hosszú-Kovácsné Árvácska Űrhajós',
+      workTypeLabel: 'Szerkesztés',
+      minutes: 60,
+    }));
+    report.case.recordedMinutes = 240;
+    report.case.recordedEntryCount = 4;
+    report.safeUpdates = [{
+      ...report.safeUpdates[0],
+      title: 'Állapotfrissítés a karbantartási szerződés módosításáról',
+      body: 'A karbantartási feltételek felülvizsgálata a jóváhagyási szakaszba lépett. '.repeat(3),
+    }];
+    const parsed = await pdfText(await renderClientWorkReportPdf(report));
+    expect(parsed.pages.length).toBeGreaterThan(1);
+    const lastPage = parsed.pages.at(-1)!.text;
+    expect(lastPage).toContain(report.safeUpdates[0].title);
+    expect(lastPage).toContain('Készült az Adminiculum rendszerében');
+  });
+
   it('keeps the projection reproducible after source changes (snapshot semantics)', async () => {
     const db = {
       case: { findUnique: async () => caseRecord() },

@@ -81,6 +81,7 @@ function writeTableHeader(doc: PDFKit.PDFDocument, columns: typeof detailColumns
   // Subtle table-header fill: measured from the same font/size the labels use.
   const headerHeight = Math.max(...columns.map((column) => doc.heightOfString(column.label, { width: column.width })));
   doc.rect(margin, y - 3, pageWidth - margin * 2, headerHeight + 8).fill(tableHeaderFill);
+  doc.font('NotoSans').fontSize(7).fillColor(brandGreen);
   let x = margin;
   for (const column of columns) {
     doc.text(column.label, x, y, { width: column.width, align: column.align });
@@ -96,15 +97,18 @@ function writeTable(
   columns: typeof detailColumns,
   startY: number,
   pageFor: (y: number) => number,
+  finalRowReserve: number,
 ): number {
   let y = startY;
-  for (const row of rows) {
+  for (const [index, row] of rows.entries()) {
     const values = rowValues(row, columns);
     // Measure with the exact font and size used to draw the cells.
     doc.font('NotoSans').fontSize(7.5);
     const height = Math.max(16, ...values.map(({ column, value }) => doc.heightOfString(value, { width: column.width - 5, align: column.align }))) + 7;
-    if (y + height > pageHeight - margin - 60) {
+    const reserve = index === rows.length - 1 ? Math.max(60, finalRowReserve) : 60;
+    if (y + height > pageHeight - margin - reserve) {
       y = pageFor(y);
+      doc.font('NotoSans').fontSize(7.5);
     }
     let x = margin;
     doc.fillColor(textPrimary);
@@ -130,8 +134,8 @@ function sectionLabel(doc: PDFKit.PDFDocument, label: string, y: number): number
 
 /** Measures label/value heights with the exact fonts, sizes and widths used to
  * draw the row. Used by both the plain metadata rows and the summary panel. */
-function keyValueMetrics(doc: PDFKit.PDFDocument, label: string, value: string, x: number): { rowHeight: number } {
-  const valueWidth = pageWidth - margin - x - LABEL_GAP;
+function keyValueMetrics(doc: PDFKit.PDFDocument, label: string, value: string, x: number, right = pageWidth - margin): { rowHeight: number } {
+  const valueWidth = right - x - LABEL_GAP;
   doc.font('NotoSans').fontSize(7.5);
   const labelHeight = doc.heightOfString(label.toUpperCase(), { width: LABEL_WIDTH });
   doc.fontSize(8.5);
@@ -139,10 +143,10 @@ function keyValueMetrics(doc: PDFKit.PDFDocument, label: string, value: string, 
   return { rowHeight: Math.max(labelHeight, valueHeight) + 5 };
 }
 
-function drawKeyValue(doc: PDFKit.PDFDocument, label: string, value: string, y: number, x: number): number {
-  const { rowHeight } = keyValueMetrics(doc, label, value, x);
+function drawKeyValue(doc: PDFKit.PDFDocument, label: string, value: string, y: number, x: number, right = pageWidth - margin): number {
+  const { rowHeight } = keyValueMetrics(doc, label, value, x, right);
   doc.fillColor(textSecondary).fontSize(7.5).text(label.toUpperCase(), x, y, { width: LABEL_WIDTH });
-  doc.fillColor(textPrimary).fontSize(8.5).text(value || 'Nincs megadva', x + LABEL_GAP, y - 1, { width: pageWidth - margin - x - LABEL_GAP });
+  doc.fillColor(textPrimary).fontSize(8.5).text(value || 'Nincs megadva', x + LABEL_GAP, y - 1, { width: right - x - LABEL_GAP });
   return rowHeight;
 }
 
@@ -167,7 +171,10 @@ function drawTimeSummaryPanel(
   y: number,
 ): number {
   doc.font('NotoSans');
-  const metrics = rows.map(([label, value]) => keyValueMetrics(doc, label, value, margin));
+  const inset = 12; // Clears the 3pt stripe and leaves equal space at the right edge.
+  const contentX = margin + inset;
+  const contentRight = pageWidth - margin - inset;
+  const metrics = rows.map(([label, value]) => keyValueMetrics(doc, label, value, contentX, contentRight));
   const padTop = 8;
   const padBottom = 10;
   const panelHeight = metrics.reduce((sum, metric) => sum + metric.rowHeight, 0) + padTop + padBottom;
@@ -179,7 +186,7 @@ function drawTimeSummaryPanel(
   doc.rect(margin, y, 3, panelHeight).fill(terracotta);
   let rowY = y + padTop;
   rows.forEach(([label, value], index) => {
-    drawKeyValue(doc, label, value, rowY, margin);
+    drawKeyValue(doc, label, value, rowY, contentX, contentRight);
     rowY += metrics[index].rowHeight;
   });
   return y + panelHeight + 10;
@@ -207,6 +214,11 @@ export async function renderClientWorkReportPdf(report: ClientWorkReportExport):
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
   });
+  const footerSystemLine = `Készült az Adminiculum rendszerében · ${dateTime(report.generatedAt)}`;
+  doc.font('NotoSans').fontSize(7);
+  const disclaimerHeight = doc.heightOfString(FOOTER_DISCLAIMER, { width: pageWidth - margin * 2 });
+  const systemLineHeight = doc.heightOfString(footerSystemLine, { width: pageWidth - margin * 2 });
+  const footerHeight = 12 + disclaimerHeight + 4 + systemLineHeight;
 
   const caseSummary = report.case;
   const workDateMin = report.rows.length > 0 ? report.rows[0].workDate : null;
@@ -304,21 +316,33 @@ export async function renderClientWorkReportPdf(report: ClientWorkReportExport):
     doc.fillColor(textSecondary).fontSize(8.5).text('Ehhez az ügyhöz ebben az időszakban nincs rögzített, a jelentésbe sorolható munkaidő.', margin, y + 4, { width: pageWidth - margin * 2 });
     y += 22;
   } else {
-    y = writeTable(doc, report.rows, detailColumns, y, pageFor);
+    y = writeTable(doc, report.rows, detailColumns, y, pageFor, report.safeUpdates.length === 0 ? footerHeight : 0);
   }
 
   // ── OPTIONAL SAFE MATTER DETAIL ───────────────────────────────────────────
   if (report.safeUpdates.length > 0) {
     y += 8;
+    const firstUpdate = report.safeUpdates[0];
+    doc.font('NotoSans').fontSize(9);
+    const firstTitleHeight = doc.heightOfString(firstUpdate.title, { width: pageWidth - margin * 2 });
+    doc.fontSize(8);
+    const firstBodyHeight = doc.heightOfString(firstUpdate.body, { width: pageWidth - margin * 2 });
+    const firstBlockHeight = firstTitleHeight + 2 + 11 + firstBodyHeight + 14;
+    const firstFooter = report.safeUpdates.length === 1 ? footerHeight : 0;
+    if (y + 24 + firstBlockHeight + firstFooter > pageHeight - margin) {
+      doc.addPage();
+      y = margin;
+    }
     y = sectionLabel(doc, 'ÜGYFÉLNEK KÖZZÉTETT TÁJÉKOZTATÁSOK', y);
-    for (const update of report.safeUpdates) {
+    for (const [index, update] of report.safeUpdates.entries()) {
       // Measure the whole block with the fonts/sizes used to draw it.
       doc.font('NotoSans').fontSize(9);
       const titleHeight = doc.heightOfString(update.title, { width: pageWidth - margin * 2 });
       doc.fontSize(8);
       const bodyHeight = doc.heightOfString(update.body, { width: pageWidth - margin * 2 });
       const blockHeight = titleHeight + 2 + 11 + bodyHeight + 14;
-      if (y + blockHeight > pageHeight - margin && y > margin) {
+      const trailingFooter = index === report.safeUpdates.length - 1 ? footerHeight : 0;
+      if (y + blockHeight + trailingFooter > pageHeight - margin && y > margin) {
         doc.addPage();
         y = margin;
       }
@@ -333,14 +357,13 @@ export async function renderClientWorkReportPdf(report: ClientWorkReportExport):
 
   // ── FOOTER ────────────────────────────────────────────────────────────────
   doc.font('NotoSans').fontSize(7).fillColor(textSecondary);
-  const disclaimerHeight = doc.heightOfString(FOOTER_DISCLAIMER, { width: pageWidth - margin * 2 });
-  if (y + 12 + disclaimerHeight + 14 > pageHeight - margin) {
+  if (y + footerHeight > pageHeight - margin) {
     doc.addPage();
     y = margin;
   }
   doc.moveTo(margin, y + 6).lineTo(pageWidth - margin, y + 6).strokeColor(borderLight).stroke();
   doc.text(FOOTER_DISCLAIMER, margin, y + 12, { width: pageWidth - margin * 2 });
-  doc.text(`Készült az Adminiculum rendszerében · ${dateTime(report.generatedAt)}`, margin, y + 12 + disclaimerHeight + 4);
+  doc.text(footerSystemLine, margin, y + 12 + disclaimerHeight + 4, { width: pageWidth - margin * 2 });
 
   doc.end();
   return completed;
