@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   listDocumentLegalAnalyses,
   createDocumentLegalAnalysis,
   updateLegalAnalysis,
   getCaseDocuments,
-  getCaseWorkspace,
+  getLegalAnalysis,
   type DocumentItem,
   type LegalAnalysisRecord,
 } from "@/lib/api";
@@ -17,6 +17,7 @@ import {
 } from "./clipboard";
 import {
   buildDirectRiskMatrixPrompt,
+  resolveSafePromptContext,
   type SanitizedContextSource,
 } from "./safeContextAdapter";
 import {
@@ -36,8 +37,25 @@ export interface WordRiskMatrixPanelProps {
   sanitizedContext?: SanitizedContextSource;
 }
 
+export function isMatrixOnlyAnalysis(text: string): boolean {
+  if (!text.trim()) return true;
+  const parsed = parseRiskMatrixInput(text);
+  return parsed.rows.length > 0 && parsed.malformedLines.length === 0 &&
+    parsed.recognizedFormat === "markdown" &&
+    text.trim().replace(/\r\n/g, "\n") === serializeToMarkdownTable(parsed.rows);
+}
+
+export function isExplicitCaseDocument(
+  caseId: string,
+  documentId: string | null | undefined,
+  documents: readonly Pick<DocumentItem, "id" | "caseId">[],
+): boolean {
+  return Boolean(caseId && documentId && documents.some((doc) => doc.id === documentId && doc.caseId === caseId));
+}
+
 export function WordRiskMatrixPanel({
   caseId,
+  clientId,
   documentId: propDocumentId,
   readOnly = false,
   onChanged,
@@ -45,7 +63,18 @@ export function WordRiskMatrixPanel({
 }: WordRiskMatrixPanelProps) {
   const [rows, setRows] = useState<RiskMatrixRow[]>([]);
   const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null);
-  const [resolvedDocId, setResolvedDocId] = useState<string | null>(propDocumentId || null);
+  const [resolvedDocId, setResolvedDocId] = useState<string | null>(null);
+  const [targetScope, setTargetScope] = useState<string | null>(null);
+  const scope = `${caseId}\u0000${clientId ?? ""}\u0000${propDocumentId ?? ""}`;
+  const promptInputScope = `${scope}\u0000${sanitizedContext?.sourceId ?? ""}\u0000${sanitizedContext?.documentVersionId ?? ""}`;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  const currentPromptScope = useRef(promptInputScope);
+  currentPromptScope.current = promptInputScope;
+  const drafts = useRef(new Map<string, RiskMatrixRow[]>());
+  const previousScope = useRef(scope);
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -60,73 +89,97 @@ export function WordRiskMatrixPanel({
   // Direct prompt copy state
   const [promptCopied, setPromptCopied] = useState(false);
   const [fallbackPromptText, setFallbackPromptText] = useState<string | null>(null);
+  const [promptScope, setPromptScope] = useState<string | null>(null);
+  const promptTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load existing risk matrix analysis
   const loadExistingMatrix = useCallback(async () => {
+    const requestScope = scope;
     setLoading(true);
     setSaveError(null);
+    setActiveAnalysisId(null);
+    setResolvedDocId(null);
+    setTargetScope(null);
     try {
-      let targetDocId = propDocumentId;
-      if (!targetDocId && caseId) {
-        const docs = await getCaseDocuments(caseId).catch(() => []);
-        if (docs.length > 0) {
-          targetDocId = docs[0].id;
-          setResolvedDocId(targetDocId);
-        }
+      if (!propDocumentId) {
+        setSaveError("A mentéshez válasszon ki egy konkrét dokumentumot az ügyben.");
+        return;
       }
-
-      if (targetDocId) {
-        const analyses = await listDocumentLegalAnalyses(targetDocId, { caseId });
-        const matrixAnalysis = analyses.find((a) => a.riskMatrixDetected);
-        if (matrixAnalysis) {
-          setActiveAnalysisId(matrixAnalysis.id);
-          // If full record has analysisText, parse it
-          const { getLegalAnalysis } = await import("@/lib/api");
-          const full = await getLegalAnalysis(matrixAnalysis.id);
-          if (full.analysisText) {
-            const parsed = parseRiskMatrixInput(full.analysisText);
-            if (parsed.rows.length > 0) {
-              setRows(parsed.rows);
-            }
-          }
-        }
+      const docs = await getCaseDocuments(caseId);
+      if (currentScope.current !== requestScope) return;
+      if (!isExplicitCaseDocument(caseId, propDocumentId, docs)) {
+        throw new Error("A kiválasztott dokumentum nem tartozik ehhez az ügyhöz.");
       }
-    } catch {
-      // Graceful fallback: matrix remains editable locally
+      const analyses = await listDocumentLegalAnalyses(propDocumentId, { caseId });
+      if (currentScope.current !== requestScope) return;
+      const candidates = analyses.filter((a) => a.caseId === caseId && a.documentId === propDocumentId &&
+        (a.title === "Kockázati mátrix (Word-workflow)" || a.title === "Kockázati mátrix (Word-workflow; önálló)") && a.sourceType === "MANUAL");
+      const details = await Promise.all(candidates.map((candidate) => getLegalAnalysis(candidate.id)));
+      if (currentScope.current !== requestScope) return;
+      const compatible = details.filter((full) => full.caseId === caseId && full.documentId === propDocumentId &&
+        candidates.some((candidate) => candidate.id === full.id) && isMatrixOnlyAnalysis(full.analysisText));
+      if (compatible.length > 1) throw new Error("Több külön mátrix rekord található; válasszon egyet a dokumentum nézetben.");
+      if (compatible.length === 1) {
+        setActiveAnalysisId(compatible[0].id);
+        if (!drafts.current.has(requestScope)) setRows(parseRiskMatrixInput(compatible[0].analysisText).rows);
+      }
+      setResolvedDocId(propDocumentId);
+      setTargetScope(requestScope);
+    } catch (err) {
+      if (currentScope.current === requestScope) setSaveError(err instanceof Error ? err.message : "A mátrix betöltése sikertelen. A helyi módosítások megmaradtak.");
     } finally {
-      setLoading(false);
+      if (currentScope.current === requestScope) setLoading(false);
     }
-  }, [caseId, propDocumentId]);
+  }, [caseId, propDocumentId, scope]);
 
   useEffect(() => {
+    if (previousScope.current !== scope) {
+      drafts.current.set(previousScope.current, rowsRef.current);
+      previousScope.current = scope;
+      setRows(drafts.current.get(scope) ?? []);
+      setFallbackPromptText(null);
+      setPromptCopied(false);
+      setSaveSuccess(false);
+      setSaving(false);
+    }
     void loadExistingMatrix();
-  }, [loadExistingMatrix]);
+    return () => {
+      if (promptTimer.current) clearTimeout(promptTimer.current);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [loadExistingMatrix, scope]);
+
+  useEffect(() => {
+    setPromptCopied(false);
+    setFallbackPromptText(null);
+    return () => { if (promptTimer.current) clearTimeout(promptTimer.current); };
+  }, [promptInputScope]);
 
   // Handle direct prompt copy
   const handleCopyRiskPrompt = async () => {
+    const requestScope = promptInputScope;
     try {
-      let caseNumber: string | undefined;
-      let caseTitle: string | undefined;
-      if (caseId) {
-        const ws = await getCaseWorkspace(caseId).catch(() => null);
-        if (ws) {
-          caseNumber = ws.case.caseNumber;
-          caseTitle = ws.case.title;
-        }
-      }
-
+      if (currentPromptScope.current !== requestScope) return;
+      const safeContext = await resolveSafePromptContext(sanitizedContext, { caseId, clientId, documentId: propDocumentId });
+      if (currentPromptScope.current !== requestScope) return;
       const promptText = buildDirectRiskMatrixPrompt({
-        caseNumber,
-        caseTitle,
-        sanitizedContext,
+        caseId,
+        clientId,
+        documentId: propDocumentId,
+        sanitizedContext: safeContext,
       });
 
       const res = await copyDirectPromptToClipboard(promptText);
+      if (currentPromptScope.current !== requestScope) return;
       if (res.success) {
         setPromptCopied(true);
-        setTimeout(() => setPromptCopied(false), 2500);
+        setPromptScope(requestScope);
+        if (promptTimer.current) clearTimeout(promptTimer.current);
+        promptTimer.current = setTimeout(() => setPromptCopied(false), 2500);
       } else {
         setFallbackPromptText(promptText);
+        setPromptScope(requestScope);
       }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "A prompt generálása sikertelen.");
@@ -186,6 +239,11 @@ export function WordRiskMatrixPanel({
 
   // Save changes to backend
   const handleSave = async () => {
+    const requestScope = scope;
+    if (!resolvedDocId || targetScope !== requestScope || loading || saving) {
+      setSaveError("A mentéshez előbb egy ellenőrzött dokumentumot kell kiválasztani.");
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -194,17 +252,21 @@ export function WordRiskMatrixPanel({
       const markdown = serializeToMarkdownTable(rows);
 
       if (activeAnalysisId) {
+        const current = await getLegalAnalysis(activeAnalysisId);
+        if (currentScope.current !== requestScope || current.caseId !== caseId || current.documentId !== resolvedDocId || !isMatrixOnlyAnalysis(current.analysisText)) throw new Error("A mentési cél megváltozott; a helyi módosítások megmaradtak.");
         await updateLegalAnalysis(activeAnalysisId, {
           analysisText: markdown,
         });
       } else if (resolvedDocId) {
         const created = await createDocumentLegalAnalysis(resolvedDocId, {
           caseId,
-          title: "Kockázati mátrix (Word-workflow)",
+          title: "Kockázati mátrix (Word-workflow; önálló)",
           analysisText: markdown,
           sourceType: "MANUAL",
           status: "DRAFT",
         });
+        if (currentScope.current !== requestScope) return;
+        if (created.caseId !== caseId || created.documentId !== resolvedDocId) throw new Error("A létrehozott mátrix rekord azonosítója nem egyezik a kiválasztott dokumentummal.");
         setActiveAnalysisId(created.id);
       } else {
         // No document attached to case yet
@@ -213,18 +275,20 @@ export function WordRiskMatrixPanel({
         );
       }
 
+      if (currentScope.current !== requestScope) return;
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2500);
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => setSaveSuccess(false), 2500);
       onChanged?.();
     } catch (err) {
       // Preserve rows in UI! Do not discard!
-      setSaveError(
+      if (currentScope.current === requestScope) setSaveError(
         err instanceof Error
           ? err.message
           : "A mentés sikertelen volt. A beírt módosítások a felületen megmaradtak."
       );
     } finally {
-      setSaving(false);
+      if (currentScope.current === requestScope) setSaving(false);
     }
   };
 
@@ -244,7 +308,7 @@ export function WordRiskMatrixPanel({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
-            Kockázatelemzés és mátrix (W10)
+            Kockázatelemzés és mátrix
           </span>
           <h3 className="text-[16px] font-bold text-[var(--adm-text)]">
             Kockázati mátrix táblázat
@@ -278,7 +342,7 @@ export function WordRiskMatrixPanel({
                 variant="primary"
                 size="sm"
                 onClick={() => void handleSave()}
-                disabled={saving}
+                disabled={saving || loading || targetScope !== scope || !resolvedDocId}
                 className="min-h-[40px] px-4"
                 data-testid="save-risk-matrix-btn"
               >
@@ -289,7 +353,7 @@ export function WordRiskMatrixPanel({
         </div>
       </div>
 
-      {promptCopied ? (
+      {promptCopied && promptScope === promptInputScope ? (
         <div
           role="status"
           className="rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] font-medium text-emerald-800"
@@ -570,8 +634,8 @@ export function WordRiskMatrixPanel({
 
       {/* Fallback modal for prompt copy failure */}
       <ClipboardFallbackModal
-        open={Boolean(fallbackPromptText)}
-        text={fallbackPromptText || ""}
+        open={Boolean(fallbackPromptText && promptScope === promptInputScope)}
+        text={promptScope === promptInputScope ? fallbackPromptText || "" : ""}
         onClose={() => setFallbackPromptText(null)}
       />
     </div>

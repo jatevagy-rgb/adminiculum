@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { getCaseWorkspace, type CaseWorkspace } from "@/lib/api";
 import { getCaseStatusLabel } from "@/lib/caseLabels";
 import { AdminButton, AdminBadge } from "@/components/adminiculum/ui";
@@ -12,6 +12,7 @@ import {
   buildDirectCurrentStatePrompt,
   buildDirectCaseContextPrompt,
   buildDirectGoalActionPlanPrompt,
+  resolveSafePromptContext,
   type SanitizedContextSource,
 } from "./safeContextAdapter";
 
@@ -31,6 +32,7 @@ const urgencyLabels: Record<string, string> = {
 
 export function WordCurrentStateTile({
   caseId,
+  clientId,
   readOnly = false,
   sanitizedContext,
 }: WordCurrentStateTileProps) {
@@ -41,71 +43,76 @@ export function WordCurrentStateTile({
   // Direct copy state
   const [copiedAction, setCopiedAction] = useState<string | null>(null);
   const [fallbackText, setFallbackText] = useState<string | null>(null);
+  const [fallbackScope, setFallbackScope] = useState<string | null>(null);
+  const [copiedScope, setCopiedScope] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scope = `${caseId}\u0000${clientId ?? ""}\u0000${sanitizedContext?.documentId ?? ""}\u0000${sanitizedContext?.sourceId ?? ""}\u0000${sanitizedContext?.documentVersionId ?? ""}`;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
 
   const loadData = useCallback(async () => {
     if (!caseId) return;
+    const requestScope = scope;
     setLoading(true);
     setError(null);
+    setWorkspace(null);
     try {
       const data = await getCaseWorkspace(caseId);
-      setWorkspace(data);
+      if (currentScope.current === requestScope) setWorkspace(data);
     } catch {
-      setError("Az ügyadatok betöltése jelenleg sikertelen.");
+      if (currentScope.current === requestScope) setError("Az ügyadatok betöltése jelenleg sikertelen.");
     } finally {
-      setLoading(false);
+      if (currentScope.current === requestScope) setLoading(false);
     }
-  }, [caseId]);
+  }, [caseId, scope]);
 
   useEffect(() => {
+    setCopiedAction(null);
+    setFallbackText(null);
     void loadData();
+    return () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); };
   }, [loadData]);
 
   const handleCopyPrompt = async (
     actionKey: "current-state" | "case-context" | "goal-action-plan"
   ) => {
     if (!workspace) return;
-    const { case: caseRecord, cockpit } = workspace;
+    const requestScope = scope;
     let promptText = "";
 
     try {
+      const safeContext = await resolveSafePromptContext(sanitizedContext, { caseId, clientId, documentId: sanitizedContext?.documentId });
+      if (currentScope.current !== requestScope) return;
       if (actionKey === "current-state") {
         promptText = buildDirectCurrentStatePrompt({
-          caseNumber: caseRecord.caseNumber,
-          caseTitle: caseRecord.title,
-          statusLabel: getCaseStatusLabel(caseRecord.status),
-          urgencyLabel: urgencyLabels[cockpit.urgency] || "Normál",
-          deadline: caseRecord.deadline,
-          responsibleName: cockpit.responsible?.name,
-          nextStep: cockpit.nextStep?.label,
-          sanitizedContext,
+          caseId,
+          clientId,
+          sanitizedContext: safeContext,
         });
       } else if (actionKey === "case-context") {
         promptText = buildDirectCaseContextPrompt({
-          caseNumber: caseRecord.caseNumber,
-          caseTitle: caseRecord.title,
-          originReason: caseRecord.startingContext?.originReason,
-          currentSituation: caseRecord.startingContext?.currentSituation,
-          description: caseRecord.description,
-          sanitizedContext,
+          caseId,
+          clientId,
+          sanitizedContext: safeContext,
         });
       } else if (actionKey === "goal-action-plan") {
         promptText = buildDirectGoalActionPlanPrompt({
-          caseNumber: caseRecord.caseNumber,
-          caseTitle: caseRecord.title,
-          clientExpectation: caseRecord.startingContext?.clientExpectation,
-          urgentAction: caseRecord.startingContext?.urgentAction,
-          nextStep: cockpit.nextStep?.label || caseRecord.startingContext?.nextStep,
-          deadline: caseRecord.deadline,
-          sanitizedContext,
+          caseId,
+          clientId,
+          sanitizedContext: safeContext,
         });
       }
 
       const res = await copyDirectPromptToClipboard(promptText);
+      if (currentScope.current !== requestScope) return;
       if (res.success) {
         setCopiedAction(actionKey);
-        setTimeout(() => setCopiedAction(null), 2500);
+        setCopiedScope(requestScope);
+        if (copiedTimer.current) clearTimeout(copiedTimer.current);
+        copiedTimer.current = setTimeout(() => setCopiedAction(null), 2500);
       } else {
         setFallbackText(promptText);
+        setFallbackScope(requestScope);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "A prompt összeállítása sikertelen.");
@@ -152,15 +159,15 @@ export function WordCurrentStateTile({
 
   return (
     <div
-      className="space-y-4 rounded-lg border-2 border-[#2D4A7C] bg-white p-4 shadow-sm"
+      className="space-y-4 rounded-lg border-2 border-[var(--adm-blue-700)] bg-white p-4 shadow-sm"
       data-testid="word-current-state-tile"
     >
       {/* 1. Ügy aktuális állása */}
       <div className="border-b border-[var(--adm-border)] pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#2D4A7C]">
-              Ügy aktuális állása (W05)
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-blue-700)]">
+              Ügy aktuális állása
             </span>
             <h3 className="text-[16px] font-bold text-[var(--adm-text)]">
               {caseRecord.caseNumber} · {caseRecord.title}
@@ -215,7 +222,7 @@ export function WordCurrentStateTile({
           >
             📋 Aktuális állás prompt másolása
           </AdminButton>
-          {copiedAction === "current-state" ? (
+          {copiedAction === "current-state" && copiedScope === scope ? (
             <span
               role="status"
               className="text-[11px] font-semibold text-[var(--adm-green-800)]"
@@ -230,7 +237,7 @@ export function WordCurrentStateTile({
       {/* 2. Miről szól az ügy? (Ügykontextus) */}
       <div className="border-b border-[var(--adm-border)] pb-3">
         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
-          Miről szól az ügy? (W06)
+          Miről szól az ügy?
         </span>
         <div className="mt-2 space-y-2 text-[12px] text-[var(--adm-text)]">
           {starting.originReason ? (
@@ -267,7 +274,7 @@ export function WordCurrentStateTile({
           >
             📋 Ügykontextus prompt másolása
           </AdminButton>
-          {copiedAction === "case-context" ? (
+          {copiedAction === "case-context" && copiedScope === scope ? (
             <span
               role="status"
               className="text-[11px] font-semibold text-[var(--adm-green-800)]"
@@ -282,7 +289,7 @@ export function WordCurrentStateTile({
       {/* 3. Cél és teendők */}
       <div>
         <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
-          Cél és teendők (W07)
+          Cél és teendők
         </span>
         <div className="mt-2 space-y-2 text-[12px] text-[var(--adm-text)]">
           {starting.clientExpectation ? (
@@ -320,7 +327,7 @@ export function WordCurrentStateTile({
           >
             📋 Cél és teendők prompt másolása
           </AdminButton>
-          {copiedAction === "goal-action-plan" ? (
+          {copiedAction === "goal-action-plan" && copiedScope === scope ? (
             <span
               role="status"
               className="text-[11px] font-semibold text-[var(--adm-green-800)]"
@@ -334,8 +341,8 @@ export function WordCurrentStateTile({
 
       {/* Fallback modal if browser clipboard fails */}
       <ClipboardFallbackModal
-        open={Boolean(fallbackText)}
-        text={fallbackText || ""}
+        open={Boolean(fallbackText && fallbackScope === scope)}
+        text={fallbackScope === scope ? fallbackText || "" : ""}
         onClose={() => setFallbackText(null)}
       />
     </div>

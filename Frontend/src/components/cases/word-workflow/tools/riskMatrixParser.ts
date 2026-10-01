@@ -53,6 +53,26 @@ function generateId(): string {
   return "risk-" + Math.random().toString(36).substring(2, 9) + "-" + Date.now().toString(36);
 }
 
+function splitMarkdownRow(line: string): string[] {
+  const cells: string[] = [];
+  let cell = "";
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === "\\" && line[i + 1] === "|") {
+      cell += "|";
+      i++;
+    } else if (line[i] === "|") {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += line[i];
+    }
+  }
+  cells.push(cell.trim());
+  if (line.startsWith("|")) cells.shift();
+  if (line.endsWith("|")) cells.pop();
+  return cells;
+}
+
 /**
  * Safely parses TSV or Markdown table text into structured risk rows.
  * Preserves unrecognized lines in `malformedLines` so users do not lose data.
@@ -91,7 +111,7 @@ export function parseRiskMatrixInput(input: string): ParseResult {
   let startIndex = 0;
 
   const firstLineCells = isMarkdown
-    ? lines[0].split("|").map((c) => c.trim()).filter((_, idx, arr) => (idx > 0 && idx < arr.length - 1) || arr.length <= 2)
+    ? splitMarkdownRow(lines[0])
     : lines[0].split("\t").map((c) => c.trim());
 
   // Check if first row is a header
@@ -136,13 +156,7 @@ export function parseRiskMatrixInput(input: string): ParseResult {
 
     let cells: string[] = [];
     if (isMarkdown) {
-      // Split by pipe
-      const rawTokens = line.split("|");
-      // Remove leading and trailing empty items if line was wrapped in pipes
-      let tokens = rawTokens.map((t) => t.trim());
-      if (line.startsWith("|") && tokens.length > 1) tokens.shift();
-      if (line.endsWith("|") && tokens.length > 0) tokens.pop();
-      cells = tokens;
+      cells = splitMarkdownRow(line);
     } else {
       cells = line.split("\t").map((c) => c.trim());
     }

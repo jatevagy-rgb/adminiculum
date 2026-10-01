@@ -162,7 +162,7 @@ export function WordWideCommunicationLeaf({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--adm-border)] pb-3">
         <div>
           <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">
-            Kommunikációs lánc (W06)
+            Kommunikációs lánc
           </span>
           <h3 className="text-[18px] font-bold text-[var(--adm-text)]">
             Ügyhöz kapcsolt üzenetváltások és levelezés
@@ -232,7 +232,7 @@ export function WordWideCommunicationLeaf({
                     data-testid={`comm-thread-item-${item.id}`}
                     className={`w-full rounded border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] ${
                       isSelected
-                        ? "border-[#2D4A7C] bg-[#EAEFF6]"
+                        ? "border-[var(--adm-blue-700)] bg-[var(--adm-surface)]"
                         : "border-[var(--adm-border)] bg-[var(--adm-surface)] hover:bg-slate-100"
                     }`}
                   >

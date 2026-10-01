@@ -1,14 +1,57 @@
 "use client";
 
 import { LEGAL_PROMPT_CATALOG, LegalPromptTemplate } from "@/components/documents/legalPromptCatalog";
+import { listCaseContextSources } from "@/lib/caseContextSources";
+import { getCaseWorkspace } from "@/lib/api";
 
 export interface SanitizedContextSource {
   isReady: boolean;
+  sourceId?: string | null;
+  caseId?: string | null;
+  clientId?: string | null;
+  documentId?: string | null;
   sanitizedText?: string | null;
   documentTitle?: string | null;
   documentVersionId?: string | null;
   documentVersionNumber?: number | null;
   rejectionReason?: string | null;
+}
+
+const verifiedContexts = new WeakSet<object>();
+
+/** Resolve a selected, immutable Case Context V2 result from the case-scoped API. */
+export async function resolveSafePromptContext(
+  context: SanitizedContextSource | null | undefined,
+  scope: { caseId: string; clientId: string | null; documentId?: string | null },
+): Promise<SanitizedContextSource | null> {
+  if (!context?.isReady || context.rejectionReason || !context.sourceId ||
+      !scope.caseId || context.caseId !== scope.caseId ||
+      context.clientId !== scope.clientId ||
+      (scope.documentId && context.documentId !== scope.documentId)) return null;
+  // Case Context V2 sources carry no document/version provenance. A document-bound
+  // request cannot safely inherit a case-level result.
+  if (scope.documentId || context.documentId || context.documentVersionId) return null;
+  try {
+    const workspace = await getCaseWorkspace(scope.caseId);
+    if (workspace.case.id !== scope.caseId || (workspace.case.client?.id ?? null) !== scope.clientId) return null;
+    const sources = await listCaseContextSources(scope.caseId);
+    const source = sources.find((item) => item.id === context.sourceId);
+    if (!source?.anonymizedText?.trim() || !source.anonymizationSnapshot ||
+        source.anonymizationSnapshot.mappingLocation !== "in-memory-only" ||
+        source.anonymizedText !== context.sanitizedText ||
+        containsRawSensitiveMarker(source.anonymizedText)) return null;
+    const verified: SanitizedContextSource = {
+      isReady: true,
+      sourceId: source.id,
+      caseId: scope.caseId,
+      clientId: scope.clientId,
+      sanitizedText: source.anonymizedText,
+    };
+    verifiedContexts.add(verified);
+    return verified;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -35,7 +78,7 @@ export function validateSanitizedContext(
   context?: SanitizedContextSource | null
 ): { valid: boolean; reason?: string } {
   if (!context) {
-    return { valid: true };
+    return { valid: false, reason: "Nincs igazolt anonimizált háttérszöveg." };
   }
 
   if (context.sanitizedText && containsRawSensitiveMarker(context.sanitizedText)) {
@@ -53,7 +96,16 @@ export function validateSanitizedContext(
     };
   }
 
-  return { valid: true };
+  return { valid: Boolean(context.isReady && verifiedContexts.has(context)) };
+}
+
+function promptContext(
+  context: SanitizedContextSource | null | undefined,
+  scope: { caseId?: string; clientId?: string | null; documentId?: string | null },
+): SanitizedContextSource | null {
+  return validateSanitizedContext(context).valid && context && scope.caseId &&
+    context.caseId === scope.caseId && context.clientId === scope.clientId &&
+    !scope.documentId && !context.documentId && !context.documentVersionId ? context : null;
 }
 
 const GLOBAL_PROMPT_RULES = `Feladatod: ügyvédi munkairat előkészítése az alábbi ügyadatok és háttér alapján.
@@ -100,6 +152,9 @@ function buildContextSection(context?: SanitizedContextSource | null): string {
  * 1. Current State Summary Prompt ("Ügy aktuális állása összefoglaló")
  */
 export function buildDirectCurrentStatePrompt(params: {
+  caseId?: string;
+  clientId?: string | null;
+  documentId?: string | null;
   caseNumber?: string;
   caseTitle?: string;
   statusLabel?: string;
@@ -109,26 +164,19 @@ export function buildDirectCurrentStatePrompt(params: {
   nextStep?: string | null;
   sanitizedContext?: SanitizedContextSource | null;
 }): string {
-  const validation = validateSanitizedContext(params.sanitizedContext);
-  if (!validation.valid) {
-    throw new Error(validation.reason);
-  }
-
-  const caseLabel = [params.caseNumber, params.caseTitle].filter(Boolean).join(" · ") || "Névtelen ügy";
-  const docMeta = params.sanitizedContext?.documentTitle
-    ? `${params.sanitizedContext.documentTitle}${params.sanitizedContext.documentVersionNumber ? ` v${params.sanitizedContext.documentVersionNumber}` : ""}`
-    : null;
+  const caseLabel = "[ÜGYAZONOSÍTÓ]";
+  const docMeta = null;
 
   return [
     buildPromptHeader("Ügy aktuális állása – Vezetői összefoglaló", caseLabel, docMeta),
     GLOBAL_PROMPT_RULES,
     "",
     "RÖGZÍTETT ÜGYADATOK:",
-    `- Állapot: ${params.statusLabel || "Nincs megadva"}`,
-    `- Sürgősség: ${params.urgencyLabel || "Normál"}`,
-    params.deadline ? `- Határidő: ${params.deadline}` : null,
-    params.responsibleName ? `- Felelős ügyvéd/munkatárs: ${params.responsibleName}` : null,
-    params.nextStep ? `- Következő rögzített lépés: ${params.nextStep}` : null,
+    "- Állapot: [ANONIMIZÁLT ÁLLAPOT]",
+    "- Sürgősség: [ANONIMIZÁLT SÜRGŐSSÉG]",
+    "- Határidő: [ANONIMIZÁLT HATÁRIDŐ]",
+    "- Felelős: [SZEREP]",
+    "- Következő lépés: [ANONIMIZÁLT LÉPÉS]",
     "",
     "FELADAT:",
     "Készíts tömör, ügyvéd vagy partner számára áttekinthető helyzetértékelést:",
@@ -136,7 +184,7 @@ export function buildDirectCurrentStatePrompt(params: {
     "2. Kockázatos területek vagy határidős veszélyek azonosítása.",
     "3. Azonnali teendők javasolt sorrendje (bullet pointokban).",
     "",
-    buildContextSection(params.sanitizedContext),
+    buildContextSection(promptContext(params.sanitizedContext, params)),
   ]
     .filter(Boolean)
     .join("\n");
@@ -146,6 +194,9 @@ export function buildDirectCurrentStatePrompt(params: {
  * 2. Matter Context Summary Prompt ("Miről szól az ügy? – Ügykontextus")
  */
 export function buildDirectCaseContextPrompt(params: {
+  caseId?: string;
+  clientId?: string | null;
+  documentId?: string | null;
   caseNumber?: string;
   caseTitle?: string;
   originReason?: string | null;
@@ -153,21 +204,10 @@ export function buildDirectCaseContextPrompt(params: {
   description?: string | null;
   sanitizedContext?: SanitizedContextSource | null;
 }): string {
-  const validation = validateSanitizedContext(params.sanitizedContext);
-  if (!validation.valid) {
-    throw new Error(validation.reason);
-  }
+  const caseLabel = "[ÜGYAZONOSÍTÓ]";
+  const docMeta = null;
 
-  const caseLabel = [params.caseNumber, params.caseTitle].filter(Boolean).join(" · ") || "Névtelen ügy";
-  const docMeta = params.sanitizedContext?.documentTitle
-    ? `${params.sanitizedContext.documentTitle}${params.sanitizedContext.documentVersionNumber ? ` v${params.sanitizedContext.documentVersionNumber}` : ""}`
-    : null;
-
-  const facts = [
-    params.originReason ? `- Az ügy indoka: ${params.originReason}` : null,
-    params.currentSituation ? `- Jelenlegi helyzet: ${params.currentSituation}` : null,
-    params.description ? `- Ügyleírás: ${params.description}` : null,
-  ].filter(Boolean);
+  const facts = ["- Az ügy indoka: [ANONIMIZÁLT INDOK]", "- Jelenlegi helyzet: [ANONIMIZÁLT HELYZET]", "- Ügyleírás: [ANONIMIZÁLT LEÍRÁS]"];
 
   return [
     buildPromptHeader("Miről szól az ügy? – Ügykontextus elemzés", caseLabel, docMeta),
@@ -182,7 +222,7 @@ export function buildDirectCaseContextPrompt(params: {
     "2. A jogvita vagy tranzakció fókuszkérdései.",
     "3. Tisztázandó ténybeli ellentmondások és hiányzó információk.",
     "",
-    buildContextSection(params.sanitizedContext),
+    buildContextSection(promptContext(params.sanitizedContext, params)),
   ]
     .filter(Boolean)
     .join("\n");
@@ -192,6 +232,9 @@ export function buildDirectCaseContextPrompt(params: {
  * 3. Goal and Action Plan Prompt ("Cél és teendők – Akcióterv")
  */
 export function buildDirectGoalActionPlanPrompt(params: {
+  caseId?: string;
+  clientId?: string | null;
+  documentId?: string | null;
   caseNumber?: string;
   caseTitle?: string;
   clientExpectation?: string | null;
@@ -200,25 +243,18 @@ export function buildDirectGoalActionPlanPrompt(params: {
   deadline?: string | null;
   sanitizedContext?: SanitizedContextSource | null;
 }): string {
-  const validation = validateSanitizedContext(params.sanitizedContext);
-  if (!validation.valid) {
-    throw new Error(validation.reason);
-  }
-
-  const caseLabel = [params.caseNumber, params.caseTitle].filter(Boolean).join(" · ") || "Névtelen ügy";
-  const docMeta = params.sanitizedContext?.documentTitle
-    ? `${params.sanitizedContext.documentTitle}${params.sanitizedContext.documentVersionNumber ? ` v${params.sanitizedContext.documentVersionNumber}` : ""}`
-    : null;
+  const caseLabel = "[ÜGYAZONOSÍTÓ]";
+  const docMeta = null;
 
   return [
     buildPromptHeader("Cél és teendők – Ügyvédi akcióterv", caseLabel, docMeta),
     GLOBAL_PROMPT_RULES,
     "",
     "RÖGZÍTETT CÉLOK ÉS TEENDŐK:",
-    params.clientExpectation ? `- Ügyfél elvárása: ${params.clientExpectation}` : null,
-    params.urgentAction ? `- Sürgős teendő: ${params.urgentAction}` : null,
-    params.nextStep ? `- Következő lépés: ${params.nextStep}` : null,
-    params.deadline ? `- Határidő: ${params.deadline}` : null,
+    "- Ügyfél elvárása: [ANONIMIZÁLT CÉL]",
+    "- Sürgős teendő: [ANONIMIZÁLT TEENDŐ]",
+    "- Következő lépés: [ANONIMIZÁLT LÉPÉS]",
+    "- Határidő: [ANONIMIZÁLT HATÁRIDŐ]",
     "",
     "FELADAT:",
     "Készíts strukturált akciótervet az ügyfél elvárásainak teljesítéséhez:",
@@ -226,7 +262,7 @@ export function buildDirectGoalActionPlanPrompt(params: {
     "2. Javasolt lépések ütemterve felelősségi körökkel és határidőkkel.",
     "3. Kockázatmérséklő intézkedések a kritikus teendőknél.",
     "",
-    buildContextSection(params.sanitizedContext),
+    buildContextSection(promptContext(params.sanitizedContext, params)),
   ]
     .filter(Boolean)
     .join("\n");
@@ -237,19 +273,15 @@ export function buildDirectGoalActionPlanPrompt(params: {
  * Reuses the canonical risk matrix template from legalPromptCatalog.
  */
 export function buildDirectRiskMatrixPrompt(params: {
+  caseId?: string;
+  clientId?: string | null;
+  documentId?: string | null;
   caseNumber?: string;
   caseTitle?: string;
   sanitizedContext?: SanitizedContextSource | null;
 }): string {
-  const validation = validateSanitizedContext(params.sanitizedContext);
-  if (!validation.valid) {
-    throw new Error(validation.reason);
-  }
-
-  const caseLabel = [params.caseNumber, params.caseTitle].filter(Boolean).join(" · ") || "Névtelen ügy";
-  const docMeta = params.sanitizedContext?.documentTitle
-    ? `${params.sanitizedContext.documentTitle}${params.sanitizedContext.documentVersionNumber ? ` v${params.sanitizedContext.documentVersionNumber}` : ""}`
-    : null;
+  const caseLabel = "[ÜGYAZONOSÍTÓ]";
+  const docMeta = null;
 
   return [
     buildPromptHeader("Kockázati mátrix előkészítése", caseLabel, docMeta),
@@ -276,7 +308,7 @@ export function buildDirectRiskMatrixPrompt(params: {
     "- felelősségkorlátozás és kártérítés,",
     "- jogválasztás és hatáskör.",
     "",
-    buildContextSection(params.sanitizedContext),
+    buildContextSection(promptContext(params.sanitizedContext, params)),
   ]
     .filter(Boolean)
     .join("\n");
@@ -288,6 +320,9 @@ export function buildDirectRiskMatrixPrompt(params: {
 export function buildDirectCatalogPrompt(
   templateId: string,
   params: {
+    caseId?: string;
+    clientId?: string | null;
+    documentId?: string | null;
     caseNumber?: string;
     caseTitle?: string;
     sanitizedContext?: SanitizedContextSource | null;
@@ -298,15 +333,9 @@ export function buildDirectCatalogPrompt(
     throw new Error(`A megadott prompt sablon nem található: ${templateId}`);
   }
 
-  const validation = validateSanitizedContext(params.sanitizedContext);
-  if (!validation.valid) {
-    throw new Error(validation.reason);
-  }
-
-  const caseLabel = [params.caseNumber, params.caseTitle].filter(Boolean).join(" · ") || "Névtelen ügy";
-  const docMeta = params.sanitizedContext?.documentTitle
-    ? `${params.sanitizedContext.documentTitle}${params.sanitizedContext.documentVersionNumber ? ` v${params.sanitizedContext.documentVersionNumber}` : ""}`
-    : null;
+  const caseLabel = "[ÜGYAZONOSÍTÓ]";
+  const docMeta = null;
+  const safeContext = promptContext(params.sanitizedContext, params);
 
   return [
     buildPromptHeader(template.label, caseLabel, docMeta),
@@ -314,12 +343,12 @@ export function buildDirectCatalogPrompt(
     "",
     "FELADAT:",
     template.buildBody({
-      caseId: params.caseNumber,
-      documentTitle: params.sanitizedContext?.documentTitle ?? undefined,
-      anonymizedText: params.sanitizedContext?.sanitizedText ?? undefined,
+      caseId: undefined,
+      documentTitle: undefined,
+      anonymizedText: safeContext?.sanitizedText ?? undefined,
     }),
     "",
-    buildContextSection(params.sanitizedContext),
+    buildContextSection(safeContext),
   ]
     .filter(Boolean)
     .join("\n");

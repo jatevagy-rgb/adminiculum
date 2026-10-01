@@ -1,8 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
-import { getCaseWorkspace } from "@/lib/api";
-import { getCaseStatusLabel } from "@/lib/caseLabels";
+import React, { useEffect, useRef, useState } from "react";
 import { AdminButton } from "@/components/adminiculum/ui";
 import {
   copyDirectPromptToClipboard,
@@ -14,6 +12,7 @@ import {
   buildDirectGoalActionPlanPrompt,
   buildDirectRiskMatrixPrompt,
   buildDirectCatalogPrompt,
+  resolveSafePromptContext,
   type SanitizedContextSource,
 } from "./safeContextAdapter";
 
@@ -31,6 +30,9 @@ interface PromptActionItem {
   category: string;
   tooltip: string;
   buildPrompt: (params: {
+    caseId?: string;
+    clientId?: string | null;
+    documentId?: string | null;
     caseNumber?: string;
     caseTitle?: string;
     statusLabel?: string;
@@ -115,68 +117,49 @@ const PROMPT_ACTIONS: PromptActionItem[] = [
 
 export function WordCompactPromptCollection({
   caseId,
+  clientId,
   sanitizedContext,
 }: WordCompactPromptCollectionProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [fallbackText, setFallbackText] = useState<string | null>(null);
+  const [fallbackScope, setFallbackScope] = useState<string | null>(null);
+  const [copiedScope, setCopiedScope] = useState<string | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const scope = `${caseId}\u0000${clientId ?? ""}\u0000${sanitizedContext?.documentId ?? ""}\u0000${sanitizedContext?.sourceId ?? ""}\u0000${sanitizedContext?.documentVersionId ?? ""}`;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
+  useEffect(() => {
+    setCopiedId(null);
+    setFallbackText(null);
+    setError(null);
+    return () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); };
+  }, [scope]);
 
   const handleCopy = async (action: PromptActionItem) => {
+    const requestScope = scope;
     setError(null);
     try {
-      let caseNumber = "";
-      let caseTitle = "";
-      let statusLabel = "";
-      let urgencyLabel = "";
-      let deadline: string | null = null;
-      let responsibleName: string | null = null;
-      let nextStep: string | null = null;
-      let originReason: string | null = null;
-      let currentSituation: string | null = null;
-      let description: string | null = null;
-      let clientExpectation: string | null = null;
-      let urgentAction: string | null = null;
-
-      if (caseId) {
-        const ws = await getCaseWorkspace(caseId).catch(() => null);
-        if (ws) {
-          caseNumber = ws.case.caseNumber;
-          caseTitle = ws.case.title;
-          statusLabel = getCaseStatusLabel(ws.case.status);
-          urgencyLabel = ws.cockpit.urgency || "Normál";
-          deadline = ws.case.deadline;
-          responsibleName = ws.cockpit.responsible?.name || null;
-          nextStep = ws.cockpit.nextStep?.label || null;
-          originReason = ws.case.startingContext?.originReason || null;
-          currentSituation = ws.case.startingContext?.currentSituation || null;
-          description = ws.case.description || null;
-          clientExpectation = ws.case.startingContext?.clientExpectation || null;
-          urgentAction = ws.case.startingContext?.urgentAction || null;
-        }
-      }
+      const safeContext = await resolveSafePromptContext(sanitizedContext, { caseId, clientId, documentId: sanitizedContext?.documentId });
+      if (currentScope.current !== requestScope) return;
 
       const promptText = action.buildPrompt({
-        caseNumber,
-        caseTitle,
-        statusLabel,
-        urgencyLabel,
-        deadline,
-        responsibleName,
-        nextStep,
-        originReason,
-        currentSituation,
-        description,
-        clientExpectation,
-        urgentAction,
-        sanitizedContext,
+        caseId,
+        clientId,
+        documentId: sanitizedContext?.documentId,
+        sanitizedContext: safeContext,
       });
 
       const res = await copyDirectPromptToClipboard(promptText);
+      if (currentScope.current !== requestScope) return;
       if (res.success) {
         setCopiedId(action.id);
-        setTimeout(() => setCopiedId(null), 2500);
+        setCopiedScope(requestScope);
+        if (copiedTimer.current) clearTimeout(copiedTimer.current);
+        copiedTimer.current = setTimeout(() => setCopiedId(null), 2500);
       } else {
         setFallbackText(promptText);
+        setFallbackScope(requestScope);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "A prompt másolása sikertelen.");
@@ -214,7 +197,7 @@ export function WordCompactPromptCollection({
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3">
         {PROMPT_ACTIONS.map((action) => {
-          const isCopied = copiedId === action.id;
+          const isCopied = copiedId === action.id && copiedScope === scope;
           return (
             <button
               key={action.id}
@@ -225,7 +208,7 @@ export function WordCompactPromptCollection({
               className={`flex min-h-[44px] flex-col items-start justify-center rounded border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] ${
                 isCopied
                   ? "border-emerald-500 bg-emerald-50 text-emerald-900"
-                  : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)] hover:border-[#2D4A7C] hover:bg-[#EAEFF6]"
+                  : "border-[var(--adm-border)] bg-[var(--adm-surface)] text-[var(--adm-text)] hover:border-[var(--adm-blue-700)] hover:bg-[var(--adm-surface)]"
               }`}
             >
               <span className="text-[10px] font-semibold text-[var(--adm-text-muted)]">
@@ -240,8 +223,8 @@ export function WordCompactPromptCollection({
       </div>
 
       <ClipboardFallbackModal
-        open={Boolean(fallbackText)}
-        text={fallbackText || ""}
+        open={Boolean(fallbackText && fallbackScope === scope)}
+        text={fallbackScope === scope ? fallbackText || "" : ""}
         onClose={() => setFallbackText(null)}
       />
     </div>
