@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchApi } from "@/lib/api";
+import { AdminStatusPill } from "@/components/ui";
 
 type HistoryItem = {
   sourceKey: string;
@@ -67,7 +68,7 @@ export function CaseHistoryPanel({ caseId, clientId, readOnly = false, onChanged
           <h2 className="text-base font-semibold text-[var(--adm-text)]">Ügytörténet</h2>
           <p className="mt-1 text-sm text-[var(--adm-text-muted)]">Belső időrend · {Math.floor(totalMinutes / 60)} óra {totalMinutes % 60} perc rögzített munkaidő</p>
         </div>
-        <span className="rounded-full bg-[var(--adm-surface)] px-3 py-2 text-xs font-semibold text-[var(--adm-green-800)]">Csak belső nézet</span>
+        <AdminStatusPill tone="green">Csak belső nézet</AdminStatusPill>
       </div>
 
       {error ? <div role="alert" className="mt-4 text-sm text-[var(--adm-terracotta-700)]">{error} <button type="button" className="min-h-10 rounded px-2 underline" onClick={() => void load()} disabled={busy}>Újrapróbálás</button></div> : null}
