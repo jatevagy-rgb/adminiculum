@@ -5,6 +5,7 @@ import type { Prisma } from '@prisma/client';
 
 import prisma from '../../config/database.js';
 import { extractText } from '../documents/textExtractor.js';
+import { securityScanBlock } from '../documents/securityScan.service';
 import { default as driveService } from '../sharepoint/driveService.js';
 import { rehydrateDocument, type RehydrationWarning } from './rehydration.js';
 import { collectClientFieldCandidates } from './clientCandidates.js';
@@ -146,6 +147,8 @@ export async function anonymizeDocument(params: {
   redactedText?: string;
   redactedItems?: RedactionItem[];
   aiReadyPrompt?: string;
+  /** File-backed source blocked by the canonical security scan gate (409). */
+  scanBlocked?: boolean;
   error?: string;
 }> {
   try {
@@ -154,7 +157,10 @@ export async function anonymizeDocument(params: {
     // This previously only handled Document records, causing 'Dokumentum nem található' for generated contracts.
     let document = await executionDb.document.findUnique({
       where: { id: params.documentId },
-      include: { case: { include: { client: { include: { redactorProfile: true } } } } }
+      include: {
+        case: { include: { client: { include: { redactorProfile: true } } } },
+        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
+      },
     });
 
     let sourceType: 'document' | 'contract' = 'document';
@@ -419,6 +425,14 @@ export async function anonymizeDocument(params: {
         };
       }
     } else if (document.spItemId) {
+      // File-backed path: the canonical security scan gate applies before any
+      // download or extraction. Only a persisted CLEAN status (never caller-
+      // supplied) opens the file. Legacy rows without any DocumentVersion keep
+      // their existing behavior, matching the documents module's own gate.
+      const scanGate = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+      if (scanGate) {
+        return { success: false, scanBlocked: true, error: scanGate.error };
+      }
       // Document is stored in SharePoint, fetch and extract
       const fileBuffer = await driveService.downloadDocument(document.spItemId);
       
@@ -644,6 +658,8 @@ export async function getAnonymizationSourceText(documentId: string): Promise<{
   textAvailable: boolean;
   sourceText?: string;
   limitationMessage?: string;
+  /** File-backed source blocked by the canonical security scan gate (409). */
+  scanBlocked?: boolean;
   error?: string;
 }> {
   try {
@@ -654,10 +670,20 @@ export async function getAnonymizationSourceText(documentId: string): Promise<{
         fileName: true,
         mimeType: true,
         spItemId: true,
+        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
       },
     });
 
     if (document?.spItemId) {
+      const scanGate = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+      if (scanGate) {
+        return {
+          success: true,
+          textAvailable: false,
+          scanBlocked: true,
+          limitationMessage: scanGate.error,
+        };
+      }
       const fileBuffer = await driveService.downloadDocument(document.spItemId);
       if (fileBuffer) {
         const extracted = await extractText(
