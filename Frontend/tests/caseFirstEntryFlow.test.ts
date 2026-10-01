@@ -14,6 +14,7 @@ function dialog(role = 'ADMIN', fail = false, duplicates = false) {
   const h = componentHarness('src/components/cases/CompactNewCaseDialog.tsx', 'CompactNewCaseDialog', {
     'next/navigation': { useRouter: () => ({ push() {} }) },
     './intake/intakeStyles': { intake: {}, ACCENT_BG: {}, ACCENT_TEXT: {} },
+    './intake/TeamTaskPlanningSection': { TeamTaskPlanningSection: 'div', EMPTY_TEAM_TASK_PLAN: { collaboratorUserIds: [], tasks: [] }, teamPlanHasErrors: () => false },
     '@/lib/api': {
       getClientList: async () => [{ id: 'client-1', name: 'Ügyfél' }], getCaseCreationOptions: async () => ({ items: [...options] }),
       getUsers: async () => [], getCurrentUser: async () => ({ role }),

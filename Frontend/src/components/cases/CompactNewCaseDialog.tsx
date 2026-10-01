@@ -7,6 +7,8 @@ import Link from "next/link";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intake/intakeStyles";
 import {
   createCase,
+  addCaseCollaborator,
+  createTask,
   getCaseCreationOptions,
   getClientList,
   getUsers,
@@ -17,6 +19,12 @@ import {
   type Client,
   type User,
 } from "@/lib/api";
+import {
+  TeamTaskPlanningSection,
+  EMPTY_TEAM_TASK_PLAN,
+  teamPlanHasErrors,
+  type TeamTaskPlan,
+} from "./intake/TeamTaskPlanningSection";
 
 type Props = {
   open: boolean;
@@ -26,6 +34,51 @@ type Props = {
   initialTitle?: string;
   initialDescription?: string;
 };
+
+/** One failed post-create write. Retry targets only these; successes never re-send. */
+type WriteFailure = { key: string; kind: "collaborator" | "task" };
+
+/**
+ * Per-item team/task writes after the case exists. `only` (retry set) skips
+ * every already-succeeded item; the case itself is never re-created.
+ */
+async function runTeamWrites(
+  caseId: string,
+  plan: TeamTaskPlan,
+  only: WriteFailure[] | null,
+  clientId: string,
+): Promise<WriteFailure[]> {
+  const failed: WriteFailure[] = [];
+  const wantedCollaborators = only ? new Set(only.filter((f) => f.kind === "collaborator").map((f) => f.key)) : null;
+  for (const userId of plan.collaboratorUserIds) {
+    if (wantedCollaborators && !wantedCollaborators.has(userId)) continue;
+    try {
+      await addCaseCollaborator(caseId, userId);
+    } catch {
+      failed.push({ key: userId, kind: "collaborator" });
+    }
+  }
+  const wantedTasks = only ? new Set(only.filter((f) => f.kind === "task").map((f) => f.key)) : null;
+  for (const task of plan.tasks) {
+    if (wantedTasks && !wantedTasks.has(task.key)) continue;
+    try {
+      await createTask({
+        caseId,
+        title: task.title.trim(),
+        type: "OTHER",
+        priority: task.priority,
+        assignedTo: task.assignedToId || undefined,
+        dueDate: task.due.resolvedIso || undefined,
+        ...(task.saveToCatalogue
+          ? { taskTypeLabel: task.title.trim(), taskDefinitionClientId: clientId || null, saveToCatalogue: true }
+          : {}),
+      });
+    } catch {
+      failed.push({ key: task.key, kind: "task" });
+    }
+  }
+  return failed;
+}
 
 const ELIGIBLE_WORKFORCE_ROLES = new Set([
   "ADMIN",
@@ -72,6 +125,15 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
   const [assignedLawyerId, setAssignedLawyerId] = useState("");
   const [deadline, setDeadline] = useState("");
   const [selectedModuleKeys, setSelectedModuleKeys] = useState<Set<string>>(new Set());
+  // Team + per-person task planning (WORD_WF02 W03-W04). The case is created
+  // exactly once; collaborators and tasks are added afterwards through the
+  // canonical per-item endpoints, and a partial failure retries only the failed
+  // items — a successful case is never re-created and succeeded items are never
+  // re-sent.
+  const [plan, setPlan] = useState<TeamTaskPlan>(EMPTY_TEAM_TASK_PLAN);
+  const [planErrorsShown, setPlanErrorsShown] = useState(false);
+  const [teamOpen, setTeamOpen] = useState(false);
+  const [partial, setPartial] = useState<{ caseId: string; failed: WriteFailure[] } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -179,7 +241,14 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || submitting) return;
+    // Plan validation happens BEFORE any write, so a half-planned matter is
+    // never created. The collapsed section opens so the reason is visible.
+    if (teamPlanHasErrors(plan)) {
+      setPlanErrorsShown(true);
+      setTeamOpen(true);
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
@@ -196,6 +265,14 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
         deadline: deadline || undefined,
         sourceCommunicationId,
       });
+      // The case now exists durably. Team/task additions are per-item writes:
+      // each failure is recorded, nothing successful is re-sent on retry.
+      const failed = await runTeamWrites(result.id, plan, null, clientId);
+      if (failed.length > 0) {
+        setPartial({ caseId: result.id, failed });
+        setSubmitting(false);
+        return;
+      }
       onClose();
       router.push(`/cases/${result.id}`);
     } catch (err) {
@@ -208,6 +285,23 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
       else if (msg.includes("INVALID_RESPONSIBLE_LAWYER")) setError("A kiválasztott felelős nem jogosult ügyvédi feladatok ellátására.");
       else if (msg.includes("Client not found")) setError("A megadott ügyfél nem található.");
       else setError("Létrehozás sikertelen. Próbáld újra.");
+      setSubmitting(false);
+    }
+  }
+
+  async function retryPartial() {
+    if (!partial || submitting) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const stillFailed = await runTeamWrites(partial.caseId, plan, partial.failed, clientId);
+      if (stillFailed.length > 0) {
+        setPartial({ caseId: partial.caseId, failed: stillFailed });
+      } else {
+        setPartial(null);
+        onClose();
+        router.push(`/cases/${partial.caseId}`);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -256,6 +350,31 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
           {error && (
             <div className="mb-3 rounded-md border border-[#A8442A]/30 bg-[#FBF0EC] px-3 py-2 text-[12px] text-[#A8442A]">
               {error}
+            </div>
+          )}
+
+          {partial && (
+            <div role="alert" data-testid="intake-partial" className="mb-3 rounded-md border border-[#E7D7A0] bg-[#FFF8E1] px-3 py-2 text-[12px] text-[#7a5f18]">
+              Az ügy létrejött, de {partial.failed.length} tétel (munkatárs vagy feladat) hozzáadása nem sikerült.
+              <span className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
+                Az újrapróbálkozás csak a sikertelen tételeket küldi el újra; az ügy és a már mentett elemek nem duplázódnak.
+              </span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button type="button" data-testid="intake-partial-retry" className={intake.secondaryAction} disabled={submitting} onClick={() => void retryPartial()}>
+                  Sikertelenek újrapróbálása
+                </button>
+                <button
+                  type="button"
+                  className={intake.secondaryAction}
+                  disabled={submitting}
+                  onClick={() => {
+                    onClose();
+                    router.push(`/cases/${partial.caseId}`);
+                  }}
+                >
+                  Tovább az ügyhöz
+                </button>
+              </div>
             </div>
           )}
 
@@ -360,6 +479,25 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                   </label>
                 </div>
               </div>
+
+              {/* Team + per-person task planning (WORD_WF02 W03-W04). */}
+              <details className="mb-3" data-testid="intake-team-tasks" open={teamOpen}>
+                <summary
+                  className="cursor-pointer rounded-md border border-[rgba(31,90,102,0.28)] bg-[#EDF2F3] px-4 py-3 text-left text-[12.5px] font-semibold text-[#1F5A66] transition-colors hover:bg-[#E4EDEF]"
+                  onClick={(e) => { e.preventDefault(); setTeamOpen((open) => !open); }}
+                >
+                  Csapat és feladatok (opcionális)
+                </summary>
+                <div className={`${intake.area} mt-3`}>
+                  <TeamTaskPlanningSection
+                    users={users}
+                    responsibleLawyerId={assignedLawyerId || null}
+                    value={plan}
+                    onChange={setPlan}
+                    showErrors={planErrorsShown}
+                  />
+                </div>
+              </details>
 
               {/* Work Package Modules */}
               {selectedOption?.template && templateItems.length > 0 && (
