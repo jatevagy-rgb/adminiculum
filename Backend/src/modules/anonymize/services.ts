@@ -6,6 +6,7 @@ import prisma from '../../config/database.js';
 import { extractText } from '../documents/textExtractor.js';
 import { default as driveService } from '../sharepoint/driveService.js';
 import { rehydrateDocument, type RehydrationWarning } from './rehydration.js';
+import { collectClientFieldCandidates } from './clientCandidates.js';
 
 const TimelineType = {
   CASE_CREATED: 'CASE_CREATED',
@@ -274,27 +275,35 @@ export async function anonymizeDocument(params: {
       addClientCandidate(caseData.clientRole, 'case.clientRole', effectiveClientRole);
     }
 
-    // Add client details
+    // Add client details from the canonical Client record and its redaction
+    // profile. The canonical mapping lives in clientCandidates.ts so the exact
+    // field boundary (taxNumber/companyRegistrationNumber/vatNumber, not taxId)
+    // is unit-tested independently of the live service.
     if (clientData) {
-      addClientCandidate(clientData.name, 'client.name', effectiveClientRole);
-      addTypedCandidate(clientData.taxId, 'IDENTIFIER', 'client.taxId', 'AZONOSÍTÓ');
-      addTypedCandidate(clientData.personalId, 'IDENTIFIER', 'client.personalId', 'AZONOSÍTÓ');
-      addTypedCandidate(clientData.bankAccount, 'IDENTIFIER', 'client.bankAccount', 'AZONOSÍTÓ');
-      addTypedCandidate(clientData.email, 'EMAIL', 'client.email', 'EMAIL');
-      addTypedCandidate(clientData.phone, 'PHONE', 'client.phone', 'TELEFON');
-      addTypedCandidate(clientData.address, 'ADDRESS', 'client.address', 'CÍM');
-      
-      // Add from redactor profile
-      if (clientData.redactorProfile) {
-        const profile = clientData.redactorProfile;
-        addClientCandidate(profile.fullName, 'redactorProfile.fullName', effectiveClientRole);
-        profile.aliases?.forEach(a => addClientCandidate(a, 'redactorProfile.aliases', effectiveClientRole));
-        profile.addresses?.forEach(a => addTypedCandidate(a, 'ADDRESS', 'redactorProfile.addresses', 'CÍM'));
-        addTypedCandidate(profile.taxId, 'IDENTIFIER', 'redactorProfile.taxId', 'AZONOSÍTÓ');
-        addTypedCandidate(profile.personalId, 'IDENTIFIER', 'redactorProfile.personalId', 'AZONOSÍTÓ');
-        profile.bankAccounts?.forEach(a => addTypedCandidate(a, 'IDENTIFIER', 'redactorProfile.bankAccounts', 'AZONOSÍTÓ'));
-        profile.phones?.forEach(a => addTypedCandidate(a, 'PHONE', 'redactorProfile.phones', 'TELEFON'));
-        profile.emails?.forEach(a => addTypedCandidate(a, 'EMAIL', 'redactorProfile.emails', 'EMAIL'));
+      const clientRoleToken = normalizeRoleToken(effectiveClientRole);
+      const clientSpecs = collectClientFieldCandidates(
+        clientData,
+        clientData.redactorProfile || null,
+        clientRoleToken,
+      );
+
+      for (const spec of clientSpecs) {
+        if (spec.category === 'CLIENT') {
+          candidates.push({
+            value: spec.value,
+            token: spec.roleToken || clientRoleToken,
+            source: spec.source,
+            category: 'CLIENT',
+          });
+        } else {
+          counters[spec.category] += 1;
+          candidates.push({
+            value: spec.value,
+            token: `[${spec.tokenPrefix}_${counters[spec.category]}]`,
+            source: spec.source,
+            category: spec.category,
+          });
+        }
       }
     }
 
@@ -592,29 +601,26 @@ export async function upsertRedactionProfile(params: {
   phones?: string[];
   emails?: string[];
 }) {
+  // The persisted ClientRedactionProfile model exposes fullName/aliases/addresses/taxId
+  // plus rule JSON (patterns/personas). personalId/bankAccounts/phones/emails have no
+  // persisted columns: they are accepted by the API for forward compatibility but are
+  // not stored (durable storage would require an additive schema change).
+  const persisted = {
+    fullName: params.fullName,
+    aliases: params.aliases || [],
+    addresses: params.addresses || [],
+    taxId: params.taxId,
+  };
+
   return prisma.clientRedactionProfile.upsert({
     where: { clientId: params.clientId },
-    update: {
-      fullName: params.fullName,
-      aliases: params.aliases || [],
-      addresses: params.addresses || [],
-      taxId: params.taxId,
-      personalId: params.personalId,
-      bankAccounts: params.bankAccounts || [],
-      phones: params.phones || [],
-      emails: params.emails || []
-    } as any,
+    update: persisted,
     create: {
       clientId: params.clientId,
-      fullName: params.fullName,
-      aliases: params.aliases || [],
-      addresses: params.addresses || [],
-      taxId: params.taxId,
-      personalId: params.personalId,
-      bankAccounts: params.bankAccounts || [],
-      phones: params.phones || [],
-      emails: params.emails || []
-    } as any
+      ...persisted,
+      patterns: [],
+      personas: [],
+    },
   });
 }
 
