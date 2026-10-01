@@ -11,8 +11,9 @@
  *   Every before/after value may carry an explicit origin
  *   (MEASURED | DECLARED | ESTIMATED | CALCULATED | UNKNOWN). A MEASURED basis
  *   requires MEASURED origins on BOTH sides. An explicitly UNKNOWN origin is
- *   rejected (fail closed) — it is never silently relabelled. Omitting the
- *   origins keeps the legacy ladder so existing callers keep their contract.
+ *   rejected (fail closed) — it is never silently relabelled. Omitting an
+ *   origin is never evidence: a comparison with any missing origin falls back
+ *   to the truthful ASSUMED basis (no fabricated measurement claim).
  *
  * Basis ladder (highest applicable wins):
  *   MEASURED   — both before and after values exist with MEASURED origins
@@ -199,13 +200,14 @@ export function validateRoiInputs(inputs: RoiInputs): RoiValidationIssue[] {
  * Basis for a before+after comparison from the two declared origins.
  * MEASURED requires MEASURED on both sides; a calculation from anything stays
  * CALCULATED only when both sides are measured/calculated; any estimate or
- * declaration downgrades to ESTIMATED. Both origins omitted = legacy ladder
- * (MEASURED), preserving the pre-v2 contract for existing callers.
+ * declaration downgrades to ESTIMATED. A missing origin is not evidence:
+ * comparisons with any omitted/null origin fall back to the truthful ASSUMED
+ * basis instead of claiming a measurement that was never certified.
  */
 function compareBasis(beforeOrigin: InputValueOrigin | null, afterOrigin: InputValueOrigin | null): OutcomeBasis {
   if (beforeOrigin === 'MEASURED' && afterOrigin === 'MEASURED') return 'MEASURED';
-  if (beforeOrigin == null && afterOrigin == null) return 'MEASURED';
-  const strong = (o: InputValueOrigin | null): boolean => o === 'MEASURED' || o === 'CALCULATED' || o == null;
+  if (beforeOrigin == null || afterOrigin == null) return 'ASSUMED';
+  const strong = (o: InputValueOrigin): boolean => o === 'MEASURED' || o === 'CALCULATED';
   if (strong(beforeOrigin) && strong(afterOrigin)) {
     const bothCalculated = beforeOrigin === 'CALCULATED' || afterOrigin === 'CALCULATED';
     return bothCalculated ? 'CALCULATED' : 'MEASURED';
@@ -271,9 +273,15 @@ export function computeRoiEstimate(inputs: RoiInputs): RoiEstimate {
       // based on an estimate; a measured/calculated basis stays CALCULATED.
       basis =
         beforeOrigin === 'ESTIMATED' || beforeOrigin === 'DECLARED' ? 'ESTIMATED' : 'CALCULATED';
-      const pct = Math.min(100, Math.max(0, expectedReductionPct));
-      const base = round((beforeActive ?? 0) * (pct / 100));
-      timeSavedPerRun = { low: round(base * 0.5), base, high: round(base * 1.5) };
+      if (beforeActive == null) {
+        // Unknown active minutes stay unavailable — never presented as a
+        // measured zero savings.
+        timeSavedPerRun = null;
+      } else {
+        const pct = Math.min(100, Math.max(0, expectedReductionPct));
+        const base = round(beforeActive * (pct / 100));
+        timeSavedPerRun = { low: round(base * 0.5), base, high: round(base * 1.5) };
+      }
     } else if (beforeOrigin != null) {
       // Explicit origin without any delta: expose the honest basis and an
       // actionable unavailable savings state — never a fabricated guess.
@@ -283,10 +291,15 @@ export function computeRoiEstimate(inputs: RoiInputs): RoiEstimate {
       timeSavedPerRun = null;
     } else {
       // Legacy before-only ladder (no declared origin, no stated delta):
-      // explicitly labelled estimate. Preserved for existing callers.
+      // explicitly labelled estimate of ACTIVE minutes only. Waiting time is
+      // elapsed queue time and can never feed labour savings or cash. Unknown
+      // active minutes stay unavailable.
       basis = 'ESTIMATED';
-      const cycle = (beforeActive ?? 0) + (beforeWaiting ?? 0);
-      timeSavedPerRun = { low: 0, base: round(cycle * 0.1), high: round(cycle * 0.2) };
+      if (beforeActive == null) {
+        timeSavedPerRun = null;
+      } else {
+        timeSavedPerRun = { low: 0, base: round(beforeActive * 0.1), high: round(beforeActive * 0.2) };
+      }
     }
   } else {
     // Nothing to compare: generic assumptions only.
