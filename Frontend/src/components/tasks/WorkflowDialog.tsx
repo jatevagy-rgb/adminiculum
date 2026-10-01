@@ -14,6 +14,8 @@ type WorkflowDialogProps = {
   destructive?: boolean;
   onConfirm: () => void;
   onClose: () => void;
+  returnFocusRef?: { current: HTMLElement | null };
+  fallbackFocusTarget?: HTMLElement | null | string | (() => HTMLElement | null);
 };
 
 const FOCUSABLE_SELECTOR = [
@@ -36,20 +38,33 @@ export function WorkflowDialog({
   destructive = false,
   onConfirm,
   onClose,
+  returnFocusRef,
+  fallbackFocusTarget,
 }: WorkflowDialogProps) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const priorFocusRef = useRef<HTMLElement | null>(null);
   const busyRef = useRef(busy);
   const onCloseRef = useRef(onClose);
+  const returnFocusRefRef = useRef(returnFocusRef);
+  const fallbackFocusTargetRef = useRef(fallbackFocusTarget);
 
   useEffect(() => {
     busyRef.current = busy;
     onCloseRef.current = onClose;
-  }, [busy, onClose]);
+    returnFocusRefRef.current = returnFocusRef;
+    fallbackFocusTargetRef.current = fallbackFocusTarget;
+  });
 
   useEffect(() => {
     if (!open) return;
-    priorFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const activeEl = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const externalTrigger =
+      returnFocusRefRef.current?.current ??
+      (activeEl && !panelRef.current?.contains(activeEl) ? activeEl : null);
+
+    priorFocusRef.current = externalTrigger;
+
     const panel = panelRef.current;
     const focusable = panel?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
     const requestedInitialFocus = panel?.querySelector<HTMLElement>("[autofocus]");
@@ -75,10 +90,33 @@ export function WorkflowDialog({
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      priorFocusRef.current?.focus();
+      window.removeEventListener("keydown", handleKeyDown);
+      const opener = returnFocusRefRef.current?.current ?? priorFocusRef.current;
+      if (opener && document.contains(opener) && !opener.hasAttribute("disabled")) {
+        opener.focus();
+        return;
+      }
+
+      const fallback = fallbackFocusTargetRef.current;
+      if (fallback) {
+        let fallbackEl: HTMLElement | null = null;
+        if (typeof fallback === "string") {
+          fallbackEl = document.querySelector<HTMLElement>(fallback);
+        } else if (typeof fallback === "function") {
+          fallbackEl = fallback();
+        } else {
+          fallbackEl = fallback;
+        }
+
+        if (fallbackEl && document.contains(fallbackEl)) {
+          if (!fallbackEl.hasAttribute("tabindex") && fallbackEl.tagName.startsWith("H")) {
+            fallbackEl.setAttribute("tabindex", "-1");
+          }
+          fallbackEl.focus();
+        }
+      }
     };
   }, [open]);
 

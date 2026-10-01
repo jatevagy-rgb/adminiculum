@@ -71,6 +71,9 @@ export function TaskReviewWorkspace({
   const returnAttempt = useRef(new StableMutationAttempt("return"));
   const approveAttempt = useRef(new StableMutationAttempt("approve"));
   const externalAttempt = useRef(new StableMutationAttempt("external-completion"));
+  const returnActionRef = useRef<HTMLButtonElement | null>(null);
+  const approveActionRef = useRef<HTMLButtonElement | null>(null);
+  const externalActionRef = useRef<HTMLButtonElement | null>(null);
 
   const loadReview = useCallback(async (): Promise<TaskSubmissionReviewDetail | null> => {
     if (!item.submissionId) return null;
@@ -137,6 +140,15 @@ export function TaskReviewWorkspace({
       setReturnForm(EMPTY_RETURN_FORM);
       await onQueueChanged();
       onClose();
+      queueMicrotask(() => {
+        const queueHeading = document.getElementById("review-queue-title");
+        if (queueHeading) {
+          if (!queueHeading.hasAttribute("tabindex")) {
+            queueHeading.setAttribute("tabindex", "-1");
+          }
+          queueHeading.focus();
+        }
+      });
     } catch (actionError) {
       if (!(await handleStaleOrTimeout(actionError))) setError(taskWorkflowErrorMessage(actionError));
     } finally {
@@ -158,6 +170,15 @@ export function TaskReviewWorkspace({
       if (result.review.submission.externalActionRequired) return;
       await onQueueChanged();
       onClose();
+      queueMicrotask(() => {
+        const queueHeading = document.getElementById("review-queue-title");
+        if (queueHeading) {
+          if (!queueHeading.hasAttribute("tabindex")) {
+            queueHeading.setAttribute("tabindex", "-1");
+          }
+          queueHeading.focus();
+        }
+      });
     } catch (actionError) {
       if (!(await handleStaleOrTimeout(actionError))) setError(taskWorkflowErrorMessage(actionError));
     } finally {
@@ -311,7 +332,33 @@ export function TaskReviewWorkspace({
 
             <section className="rounded border border-[var(--adm-border)] bg-white p-4"><h3 className="font-serif text-[17px] text-[var(--adm-text)]">Revision történet</h3><ol className="mt-3 space-y-2">{[...review.history].sort((left, right) => right.revisionNumber - left.revisionNumber).map((revision) => { const full = workflow?.submissions.find((entry) => entry.id === revision.id); return <li key={revision.id} className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-[12px] font-semibold">{revision.revisionNumber}. verzió · {submissionStatusLabel(revision.status)}</span><span className="text-[10px] text-[var(--adm-text-muted)]">{formatDateTime(revision.submittedAt || revision.returnedAt || revision.approvedAt)}</span></div><p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">{full ? `${full.documentCount} dokumentum · ${formatMinutes(full.linkedTimeMinutes)} · reviewer: ${full.assignedReviewer.displayName}` : "A korábbi revision részletes kapcsolatai nem érhetők el."}</p>{revision.outputs && revision.outputs.length > 0 ? <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Beküldött pontos verziók: {revision.outputs.map((output) => `v${output.linkedVersion || "nincs verzió"}`).join(" · ")}</p> : null}{revision.decision ? <p className="mt-1 text-[10px] text-[var(--adm-text-muted)]">Döntés: {revision.decision.decision === "RETURNED" ? "Visszaküldve" : "Jóváhagyva"} · {revision.decision.reviewer.displayName}</p> : null}</li>; })}</ol></section>
 
-            {review.submission.status === "APPROVED" && review.submission.externalActionRequired && !review.submission.externalCompletedAt ? <CompactState title="Külső lépésre vár" detail={`A Leadás jóváhagyott, de a feladat még nincs lezárva. Rögzítendő: ${EXTERNAL_ACTION_LABELS[review.submission.externalActionType || ""] || "külső művelet"}.`} action={review.permittedActions.recordExternalCompletion ? <AdminButton variant="primary" onClick={() => { externalAttempt.current.begin(); setExternalDialogOpen(true); }}>Külső lépés teljesítésének rögzítése</AdminButton> : undefined} /> : null}
+            {review.submission.status === "APPROVED" && review.submission.externalActionRequired && !review.submission.externalCompletedAt ? (
+              <CompactState
+                title="Külső lépésre vár"
+                detail={`A Leadás jóváhagyott, de a feladat még nincs lezárva. Rögzítendő: ${EXTERNAL_ACTION_LABELS[review.submission.externalActionType || ""] || "külső művelet"}.`}
+                action={
+                  review.permittedActions.recordExternalCompletion ? (
+                    <span
+                      ref={(node) => {
+                        externalActionRef.current = node?.querySelector("button") ?? null;
+                      }}
+                      className="contents"
+                    >
+                      <AdminButton
+                        variant="primary"
+                        onClick={(e) => {
+                          externalActionRef.current = e.currentTarget;
+                          externalAttempt.current.begin();
+                          setExternalDialogOpen(true);
+                        }}
+                      >
+                        Külső lépés teljesítésének rögzítése
+                      </AdminButton>
+                    </span>
+                  ) : undefined
+                }
+              />
+            ) : null}
 
             {(review.permittedActions.return || review.permittedActions.approve) ? (
               <div className="sticky bottom-0 z-20 rounded-[8px] border border-[var(--adm-border)] bg-white/95 p-3 shadow-lg backdrop-blur">
@@ -341,32 +388,48 @@ export function TaskReviewWorkspace({
                   )}
                 </div>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-2.5">
-                  <AdminButton
-                    data-testid="task-review-action-return"
-                    variant="neutral"
-                    size="md"
-                    className="min-h-[44px] w-full sm:w-auto text-[var(--adm-terracotta-700)] hover:border-[var(--adm-terracotta-700)]"
-                    disabled={!review.permittedActions.return || busyAction !== null}
-                    onClick={() => {
-                      returnAttempt.current.begin();
-                      setReturnDialogOpen(true);
+                  <span
+                    ref={(node) => {
+                      returnActionRef.current = node?.querySelector("button") ?? null;
                     }}
+                    className="contents"
                   >
-                    Visszaküldés javításra
-                  </AdminButton>
-                  <AdminButton
-                    data-testid="task-review-action-approve"
-                    variant="primary"
-                    size="md"
-                    className="min-h-[44px] w-full sm:w-auto"
-                    disabled={!review.permittedActions.approve || busyAction !== null}
-                    onClick={() => {
-                      approveAttempt.current.begin();
-                      setApproveDialogOpen(true);
+                    <AdminButton
+                      data-testid="task-review-action-return"
+                      variant="neutral"
+                      size="md"
+                      className="min-h-[44px] w-full sm:w-auto text-[var(--adm-terracotta-700)] hover:border-[var(--adm-terracotta-700)]"
+                      disabled={!review.permittedActions.return || busyAction !== null}
+                      onClick={(e) => {
+                        returnActionRef.current = e.currentTarget;
+                        returnAttempt.current.begin();
+                        setReturnDialogOpen(true);
+                      }}
+                    >
+                      Visszaküldés javításra
+                    </AdminButton>
+                  </span>
+                  <span
+                    ref={(node) => {
+                      approveActionRef.current = node?.querySelector("button") ?? null;
                     }}
+                    className="contents"
                   >
-                    {busyAction === "approve" ? "Jóváhagyás folyamatban…" : "Leadás jóváhagyása"}
-                  </AdminButton>
+                    <AdminButton
+                      data-testid="task-review-action-approve"
+                      variant="primary"
+                      size="md"
+                      className="min-h-[44px] w-full sm:w-auto"
+                      disabled={!review.permittedActions.approve || busyAction !== null}
+                      onClick={(e) => {
+                        approveActionRef.current = e.currentTarget;
+                        approveAttempt.current.begin();
+                        setApproveDialogOpen(true);
+                      }}
+                    >
+                      {busyAction === "approve" ? "Jóváhagyás folyamatban…" : "Leadás jóváhagyása"}
+                    </AdminButton>
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -374,11 +437,11 @@ export function TaskReviewWorkspace({
         ) : null}
       </div>
 
-      <WorkflowDialog open={returnDialogOpen} title="Leadás visszaküldése" description="A döntés és a kért javítások változatlan review-előzményként maradnak meg." primaryLabel="Visszaküldés" primaryDisabled={returnInvalid} busy={busyAction === "return"} destructive onClose={() => { if (busyAction !== "return") setReturnDialogOpen(false); }} onConfirm={() => void returnForCorrection()}>
+      <WorkflowDialog open={returnDialogOpen} returnFocusRef={returnActionRef} fallbackFocusTarget="#review-queue-title" title="Leadás visszaküldése" description="A döntés és a kért javítások változatlan review-előzményként maradnak meg." primaryLabel="Visszaküldés" primaryDisabled={returnInvalid} busy={busyAction === "return"} destructive onClose={() => { if (busyAction !== "return") setReturnDialogOpen(false); }} onConfirm={() => void returnForCorrection()}>
         <div className="space-y-4"><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Review megjegyzés<textarea autoFocus maxLength={4000} rows={3} value={returnForm.note} onChange={(event) => setReturnForm((current) => ({ ...current, note: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-sm sm:text-xs min-h-[72px]" />{!returnForm.note.trim() ? <span className="mt-1 block text-[10px] text-[var(--adm-terracotta-700)]">A review megjegyzés kötelező.</span> : null}</label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Kért javítások<textarea maxLength={8000} rows={5} value={returnForm.requestedCorrections} onChange={(event) => setReturnForm((current) => ({ ...current, requestedCorrections: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-sm sm:text-xs min-h-[100px]" />{!returnForm.requestedCorrections.trim() ? <span className="mt-1 block text-[10px] text-[var(--adm-terracotta-700)]">A kért javítások megadása kötelező.</span> : null}</label><label className="flex items-center gap-2 text-[11px] font-semibold text-[var(--adm-text)] min-h-[36px]"><input type="checkbox" checked={returnForm.requiresFullReview} onChange={(event) => setReturnForm((current) => ({ ...current, requiresFullReview: event.target.checked }))} className="h-4 w-4" /> Teljes review szükséges az új revisionnél</label><label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">Javítási határidő (opcionális)<input type="date" value={returnForm.correctionDeadline} onChange={(event) => setReturnForm((current) => ({ ...current, correctionDeadline: event.target.value }))} className="adm-board-field mt-1 w-full px-3 py-2 text-sm sm:text-xs min-h-[40px]" /></label></div>
       </WorkflowDialog>
 
-      <WorkflowDialog open={approveDialogOpen} title="Leadás jóváhagyása" description="A jóváhagyás rendes esetben lezárja a feladatot. Külső lépésnél a feladat csak annak külön rögzítése után zárul le." primaryLabel="Jóváhagyás" busy={busyAction === "approve"} onClose={() => { if (busyAction !== "approve") setApproveDialogOpen(false); }} onConfirm={() => void approve()}>
+      <WorkflowDialog open={approveDialogOpen} returnFocusRef={approveActionRef} fallbackFocusTarget="#review-queue-title" title="Leadás jóváhagyása" description="A jóváhagyás rendes esetben lezárja a feladatot. Külső lépésnél a feladat csak annak külön rögzítése után zárul le." primaryLabel="Jóváhagyás" busy={busyAction === "approve"} onClose={() => { if (busyAction !== "approve") setApproveDialogOpen(false); }} onConfirm={() => void approve()}>
         {review ? (
           <div className="space-y-4">
             {/* Explicit document version confirmation */}
@@ -409,7 +472,7 @@ export function TaskReviewWorkspace({
         ) : null}
       </WorkflowDialog>
 
-      <WorkflowDialog open={externalDialogOpen} title="Külső lépés teljesítésének rögzítése" description="A rendszer csak a teljesítés metaadatát rögzíti; nem hajt végre küldést, aláírást vagy benyújtást." primaryLabel="Teljesítés rögzítése" busy={busyAction === "external-completion"} onClose={() => { if (busyAction !== "external-completion") setExternalDialogOpen(false); }} onConfirm={() => void completeExternalAction()}>
+      <WorkflowDialog open={externalDialogOpen} returnFocusRef={externalActionRef} fallbackFocusTarget="#review-queue-title" title="Külső lépés teljesítésének rögzítése" description="A rendszer csak a teljesítés metaadatát rögzíti; nem hajt végre küldést, aláírást vagy benyújtást." primaryLabel="Teljesítés rögzítése" busy={busyAction === "external-completion"} onClose={() => { if (busyAction !== "external-completion") setExternalDialogOpen(false); }} onConfirm={() => void completeExternalAction()}>
         <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[12px]"><p className="text-[var(--adm-text-muted)]">Megerősítendő külső lépés</p><p className="mt-1 font-semibold">{EXTERNAL_ACTION_LABELS[review?.submission.externalActionType || ""] || "Nincs típusadat"}</p></div>
       </WorkflowDialog>
     </section>
