@@ -382,6 +382,9 @@ app.use('/api/v1/clause-library', clauseLibraryRoutes);
 import timesheetReportRoutes from './modules/timesheet-reports/routes';
 app.use('/api/v1/timesheet-reports', timesheetReportRoutes);
 
+import workReportRoutes from './modules/work-reports/routes';
+app.use('/api/v1/work-reports', workReportRoutes);
+
 import handoffPackagesRoutes from './modules/handoff-packages/routes';
 app.use('/api/v1', handoffPackagesRoutes);
 
