@@ -159,7 +159,7 @@ function makeHarness(api: Record<string, any>) {
 
 function ownerSelectOf(tree: any) {
   const selects = flatten(tree).filter((node) => node?.type === 'select');
-  return selects.find((node) => textOf(node).includes('Nincs megadva')) ?? null;
+  return selects.find((node) => textOf(node).includes('Mentett ügygazda használata (ha van)')) ?? null;
 }
 
 function caseButtonsOf(tree: any) {
