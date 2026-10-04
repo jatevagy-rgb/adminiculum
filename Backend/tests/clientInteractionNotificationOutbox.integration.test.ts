@@ -159,7 +159,12 @@ d('BE_PORTAL_001 request/submission notification outbox (PostgreSQL)', () => {
   });
 
   it('a stale assigned reviewer can never fail the submission (intent skipped truthfully)', async () => {
-    const req = await requests.createRequestDraft(internalActor, { caseId: ids.case, type: 'DATA_FORM', clientSafeTitle: 'Stale assignee', assignedInternalUserId: crypto.randomUUID(), fields: [{ label: 'Név', type: 'SHORT_TEXT', required: true }] }, db);
+    // Canonical schema: assignedInternalUserId has FK ON DELETE SET NULL, so the
+    // schema-valid stale reviewer is a user deleted after assignment.
+    const staleReviewerId = crypto.randomUUID();
+    await db.user.create({ data: { id: staleReviewerId, email: `s-${staleReviewerId}@t.io`, name: 'Stale Reviewer', role: 'LAWYER', status: 'ACTIVE' } as any });
+    const req = await requests.createRequestDraft(internalActor, { caseId: ids.case, type: 'DATA_FORM', clientSafeTitle: 'Stale assignee', assignedInternalUserId: staleReviewerId, fields: [{ label: 'Név', type: 'SHORT_TEXT', required: true }] }, db);
+    await db.user.delete({ where: { id: staleReviewerId } });
     await requests.publishRequest(internalActor, req.id, req.revision, db);
     const sub = await submissions.createDraftSubmission(await ctx(), req.id, db);
     await submissions.addStructuredAnswers(await ctx(), sub.id, [{ label: 'Név', value: 'Kiadó' }], db);
