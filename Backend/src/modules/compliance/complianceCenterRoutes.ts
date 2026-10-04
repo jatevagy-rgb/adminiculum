@@ -1,5 +1,7 @@
 /**
- * C4D — office-wide Compliance Center routes (INTERNAL, read-only, derived).
+ * C4D office reads plus BE-COMP-003/004 client workbench and explicit impact decisions.
+ * Office routes remain read-only. Client decisions reuse canonical services and
+ * require authenticated workforce identity and exact client access.
  *
  * Mounted at /api/v1/compliance (Backend/src/index.ts).
  *
@@ -18,6 +20,9 @@ import { Request, Response, Router } from 'express';
 import { authenticate } from '../../middleware/auth';
 import { InteractionError, requireInternal } from '../client-interaction/base';
 import { getComplianceCenterOverview, getComplianceDocumentFamilies } from './complianceCenterService';
+
+import { getClientComplianceWorkbench } from './complianceWorkbenchService';
+import { decideClientImpact } from './complianceImpactDecisionService';
 
 const router = Router();
 
@@ -53,4 +58,16 @@ router.get('/office/document-families', async (req: Request, res: Response): Pro
   }
 });
 
+router.get('/clients/:clientId/workbench', async (req, res) => {
+  try { res.json(await getClientComplianceWorkbench(actor(req), String(req.params.clientId))); }
+  catch (error) { workbenchError(res, error); }
+});
+router.post('/clients/:clientId/source-impacts/:observationId/decision', async (req, res) => {
+  try { res.json(await decideClientImpact(actor(req), String(req.params.clientId), String(req.params.observationId), req.body || {})); }
+  catch (error) { workbenchError(res, error); }
+});
+function workbenchError(res: Response, error: unknown) {
+  if (error instanceof InteractionError) { res.status(error.status).json({ code: error.code, message: error.message }); return; }
+  res.status(500).json({ code: 'COMPLIANCE_WORKBENCH_FAILED', message: 'Compliance workbench request failed.' });
+}
 export default router;

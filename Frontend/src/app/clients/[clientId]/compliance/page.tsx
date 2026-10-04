@@ -14,6 +14,7 @@ import {
   complianceScopeLabels,
 } from "@/components/clients/compliance/ComplianceOverview";
 import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceControlsState } from "@/components/clients/compliance/ComplianceOverview";
+import { ComplianceWorkbench } from "@/components/clients/compliance/ComplianceWorkbench";
 import { ComplianceDocumentsSection } from "@/components/clients/compliance/ComplianceDocumentsSection";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
 import { complianceWorkspaceApi, type ComplianceReconcileResult, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
@@ -329,7 +330,7 @@ function WorkspaceAreaRow({ area, cases, clients }: { area: ComplianceWorkspaceA
   );
 }
 
-type ComplianceView = "status" | "requirements" | "documents" | "controls" | "findings";
+type ComplianceView = "status" | "requirements" | "documents" | "controls" | "findings" | "workbench";
 
 const complianceViewLabels: Record<ComplianceView, string> = {
   status: "Állapotkép",
@@ -337,6 +338,7 @@ const complianceViewLabels: Record<ComplianceView, string> = {
   documents: "Dokumentumok",
   controls: "Bizonyítékok és kontrollok",
   findings: "Megállapítások és intézkedések",
+  workbench: "Döntési munkalista",
 };
 
 export default function ClientCompliancePage() {
@@ -792,6 +794,8 @@ export default function ClientCompliancePage() {
                       </Section>
                     )
                   ) : null}
+
+                  {view === "workbench" ? <ComplianceWorkbench key={client.id} clientId={client.id} onNavigate={setView} onChanged={() => { void loadCompliance(); void loadWorkspace(); }} /> : null}
 
                   {view === "documents" ? (
                     <Section title="Compliance dokumentumok">

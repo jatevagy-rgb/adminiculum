@@ -26,6 +26,7 @@ datasource db {
 // ============================================================================
 
 model User {
+  impactWorkDecisions ComplianceImpactDecision[]
   workspaceLayouts CaseWorkspaceLayout[]
   createdHourlyRateVersions  HourlyRateVersion[]
   createdBillingPreparations BillingPreparation[] @relation("BillingPreparationCreatedBy")
@@ -170,6 +171,7 @@ enum ClientColorKey {
 }
 
 model Client {
+  impactWorkDecisions ComplianceImpactDecision[]
   anonymizedSourceBindings AnonymizedSourceBinding[]
   hourlyRateVersions        HourlyRateVersion[]
   billingPreparations       BillingPreparation[]
@@ -5695,6 +5697,7 @@ model LegalSource {
 }
 
 model LegalSourceVersion {
+  impactWorkDecisions ComplianceImpactDecision[]
   id                String                   @id @default(uuid())
   legalSourceId     String
   legalSource       LegalSource              @relation(fields: [legalSourceId], references: [id], onDelete: Cascade)
@@ -5785,6 +5788,7 @@ enum LegalSourceObservationReviewStatus {
 }
 
 model LegalSourceObservation {
+  impactWorkDecisions ComplianceImpactDecision[]
   id                   String                    @id @default(uuid())
   schemaVersion        Int                       @default(1)
   idempotencyKey       String                    @unique @db.VarChar(255)
@@ -7109,4 +7113,34 @@ model CaseHistoryPolicyRevision {
   createdAt DateTime @default(now())
   @@unique([caseId, number])
   @@map("case_history_policy_revisions")
+}
+
+
+/// Immutable operator choice, not a second work queue. Outputs refer to canonical work.
+enum ComplianceImpactDecisionKind {
+  NO_ACTION
+  REEVALUATE
+  REMEDIATION
+  RULE_REVIEW
+}
+model ComplianceImpactDecision {
+  id String @id @default(uuid())
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  observationId String
+  observation LegalSourceObservation @relation(fields: [observationId], references: [id], onDelete: Restrict)
+  legalSourceVersionId String
+  legalSourceVersion LegalSourceVersion @relation(fields: [legalSourceVersionId], references: [id], onDelete: Restrict)
+  sourceRevision String @db.VarChar(64)
+  requestDigest String @db.VarChar(64)
+  kind ComplianceImpactDecisionKind
+  note String @db.VarChar(2000)
+  decidedById String
+  decidedBy User @relation(fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt DateTime @default(now())
+  provenance Json
+  result Json
+  @@unique([clientId, observationId, sourceRevision], map: "impact_decision_client_observation_revision_key")
+  @@index([observationId])
+  @@map("compliance_impact_decisions")
 }
