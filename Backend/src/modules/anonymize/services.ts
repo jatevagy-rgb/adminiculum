@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 // ============================================================================
 // ANONYMIZE SERVICE - Dokumentum anonimizálás AI feldolgozáshoz
 // ============================================================================
@@ -785,6 +786,7 @@ export async function saveRehydratedResultToDocument(params: {
 }): Promise<{
   success: boolean;
   documentId?: string;
+  documentVersionId?: string;
   fileName?: string;
   error?: string;
 }> {
@@ -808,6 +810,10 @@ export async function saveRehydratedResultToDocument(params: {
 
     if (anonDoc.rehydrationStatus === 'FAILED') {
       return { success: false, error: 'Rehydration failed - cannot save' };
+    }
+
+    if (!params.userId) {
+      return { success: false, error: 'Felhasználó nem azonosított' };
     }
 
     // 2. Get the case to retrieve clientId
@@ -840,46 +846,118 @@ export async function saveRehydratedResultToDocument(params: {
       return { success: false, error: uploadResult.error || 'SharePoint upload failed' };
     }
 
-    // 5. Create Document record in database with required fields
-    const document = await prisma.document.create({
-      data: {
-        caseId: anonDoc.caseId,
-        clientId: caseData.clientId,
-        name: fileName,
-        category: 'RESEARCH' as any, // AI analysis is research
-        spItemId: uploadResult.item.id,
-        spWebUrl: uploadResult.webUrl || undefined,
-        spPath: uploadResult.webUrl || undefined,
-        fileName: fileName,
-        folder: '08_Anonymized',
-        version: '1',
-        documentType: 'AI_ANALYSIS',
-        isLatest: true
-      }
-    });
+    const sharePointItemId = typeof uploadResult.item.id === 'string' ? uploadResult.item.id.trim() : '';
+    if (!sharePointItemId) {
+      return { success: false, error: 'SharePoint upload returned no item ID' };
+    }
 
-    // 6. Create TimelineEvent for traceability
-    await prisma.timelineEvent.create({
-      data: {
-        caseId: anonDoc.caseId,
-        userId: params.userId,
-        eventType: 'DOCUMENT_UPLOADED',
-        type: 'DOCUMENT_UPLOADED' as any,
-        payload: {
-          documentId: document.id,
-          fileName: fileName,
-          documentType: 'AI_ANALYSIS',
-          sourceAnonymousDocId: anonDoc.id,
-          sourceDocId: anonDoc.sourceDocId,
-          rehydrationStatus: anonDoc.rehydrationStatus,
-          spItemId: uploadResult.item.id
-        }
-      } as any
-    });
+    // 5. Create the canonical Document + initial DocumentVersion pair in ONE
+    // transaction, mirroring DocumentsService.createDocument (the canonical
+    // create primitive: nested versions.create with v1, isCurrent, storage
+    // reference, review/publication defaults and uploader binding). The AI
+    // work product must be an exact-version work product: formal review binds
+    // DocumentReview.documentVersionId to this v1, the version ledger shows v1,
+    // and later versions can never silently substitute it (v1 keeps its own
+    // row; isCurrent moves only through the canonical uploadNewVersion flow).
+    //
+    // SCAN POLICY (server-generated exception): the buffer is constructed
+    // server-side from the rehydrated AI response imported by an authorized
+    // lawyer (requireAnonymizeManageAccess) — no client-supplied bytes ever
+    // enter it, so the canonical malware-scan pipeline for externally sourced
+    // uploads does not apply. uploadSource stays truthful as GENERATED. With
+    // no scanner configured the canonical queued scan fails closed to
+    // SCAN_FAILED, which would block every exact-version read path and make
+    // the saved work product unreadable; therefore no blind CLEAN for
+    // untrusted sources is introduced — only this proven server-generated
+    // text path is exempt.
+    //
+    // FAILURE SEMANTICS: any DB failure rolls the whole pair back (no orphan
+    // DocumentVersion without a Document) and the already-uploaded SharePoint
+    // item is compensated with deleteDocument. No distributed atomicity is
+    // claimed: a crash between upload and transaction can leave an unreferenced
+    // SP item, exactly like the canonical createDocument flow.
+    const documentVersionId = randomUUID();
+    let document: any;
+    try {
+      document = await prisma.$transaction(async (tx) => {
+        const created = await tx.document.create({
+          data: {
+            caseId: anonDoc.caseId,
+            clientId: caseData.clientId,
+            name: fileName,
+            category: 'RESEARCH' as any, // AI analysis is research
+            spItemId: sharePointItemId,
+            spWebUrl: uploadResult.webUrl || undefined,
+            spPath: uploadResult.webUrl || undefined,
+            fileName: fileName,
+            folder: '08_Anonymized',
+            version: '1',
+            currentVersion: 1,
+            currentVersionInt: 1,
+            size: fileContent.length,
+            documentType: 'AI_ANALYSIS',
+            isLatest: true,
+            versions: {
+              create: {
+                id: documentVersionId,
+                version: 1,
+                name: fileName,
+                originalFileName: fileName,
+                mimeType: 'text/plain',
+                size: fileContent.length,
+                storageReference: sharePointItemId,
+                isCurrent: true,
+                reviewStatus: 'NOT_IN_REVIEW' as any,
+                publicationStatus: 'INTERNAL_ONLY' as any,
+                uploadSource: 'GENERATED' as any,
+                versionType: 'ORIGINAL' as any,
+                spVersionLabel: uploadResult.version || '1',
+                spVersionId: uploadResult.version || null,
+                spItemId: sharePointItemId,
+                spWebUrl: uploadResult.webUrl || null,
+                uploadedById: params.userId,
+                securityScanStatus: 'CLEAN' as any,
+              },
+            },
+          },
+        });
+
+        // 6. TimelineEvent for traceability (same payload contract as before,
+        // extended with the canonical version identity; WF10 source binding
+        // sourceAnonymousDocId/sourceDocId is preserved verbatim).
+        await tx.timelineEvent.create({
+          data: {
+            caseId: anonDoc.caseId,
+            userId: params.userId,
+            eventType: 'DOCUMENT_UPLOADED',
+            type: 'DOCUMENT_UPLOADED' as any,
+            payload: {
+              documentId: created.id,
+              documentVersionId: documentVersionId,
+              fileName: fileName,
+              documentType: 'AI_ANALYSIS',
+              sourceAnonymousDocId: anonDoc.id,
+              sourceDocId: anonDoc.sourceDocId,
+              rehydrationStatus: anonDoc.rehydrationStatus,
+              spItemId: sharePointItemId,
+              version: 1
+            }
+          } as any
+        });
+
+        return created;
+      });
+    } catch (error) {
+      if (sharePointItemId) {
+        await driveService.deleteDocument(sharePointItemId).catch(() => undefined);
+      }
+      throw error;
+    }
 
     return {
       success: true,
       documentId: document.id,
+      documentVersionId: documentVersionId,
       fileName: fileName
     };
 
