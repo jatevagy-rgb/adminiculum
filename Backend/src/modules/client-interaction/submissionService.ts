@@ -10,6 +10,8 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import crypto from 'crypto';
+import { Prisma as PrismaTypes } from '@prisma/client';
+import { hrConfidentialReadAllowed } from '../documents/authorization';
 import {
   InteractionError, InternalActor, Prisma, CustomerContext,
   requireInternal, requireExpected, assertInternalCaseAccess, applyInternalQueueCaseScope, safeText, assertClientSafe,
@@ -412,52 +414,62 @@ export async function rejectSubmission(actor: InternalActor, submissionId: strin
  * configured this can never run in production). Customer can never invoke this.
  */
 export async function acceptFileIntoMatter(actor: InternalActor, submissionId: string, fileId: string, input: { documentId?: string; documentName?: string; expectedRevision?: unknown }, prisma: Prisma = defaultPrisma) {
+  return prisma.$transaction((tx) => acceptFileIntoMatterInTx(actor, submissionId, fileId, input, tx),
+    { isolationLevel: PrismaTypes.TransactionIsolationLevel.Serializable });
+}
+
+export async function acceptFileIntoMatterInTx(actor: InternalActor, submissionId: string, fileId: string,
+  input: { documentId?: string; documentName?: string; expectedRevision?: unknown }, tx: PrismaTypes.TransactionClient) {
+  const prisma = tx as Prisma;
   requireInternal(actor);
   const submission = await prisma.clientSubmission.findUnique({ where: { id: submissionId } });
   if (!submission) throw new InteractionError(404, 'SUBMISSION_NOT_FOUND', 'Submission not found.');
   const caseId = requireCaseSubmission(submission);
   const { clientId } = await assertInternalCaseAccess(actor, caseId, prisma);
+  if (clientId !== submission.clientId) throw new InteractionError(403, 'SUBMISSION_SCOPE_INVALID', 'Submission does not belong to this client.');
   requireExpected(submission, input.expectedRevision);
   const file = await prisma.clientSubmissionFile.findFirst({ where: { id: fileId, submissionId } });
   if (!file) throw new InteractionError(404, 'FILE_NOT_FOUND', 'File not found.');
   // The core safety gate: only a CLEAN file may enter the matter file.
   if (!isAcceptableFileStatus(file.status)) throw new InteractionError(409, 'FILE_NOT_CLEAN', 'Only a CLEAN, scanned file can be accepted into the matter.');
 
-  const result = await prisma.$transaction(async (tx) => {
-    let documentId = input.documentId || null;
-    if (documentId) {
-      const doc = await tx.document.findFirst({ where: { id: documentId, caseId } });
-      if (!doc) throw new InteractionError(404, 'DOCUMENT_NOT_FOUND', 'Destination document not found.');
-    } else {
-      const doc = await tx.document.create({
-        data: {
-          caseId,
-          clientId,
-          name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe,
-          fileName: file.originalFileNameSafe,
-          mimeType: file.detectedMimeType || 'application/octet-stream',
-          category: 'CLIENT_INPUT',
-          size: file.sizeBytes || undefined,
-        } as any,
-      });
-      documentId = doc.id;
+  let documentId = input.documentId || null;
+  if (documentId) {
+    const doc = await tx.document.findFirst({ where: { id: documentId, caseId, clientId } });
+    if (!doc) throw new InteractionError(404, 'DOCUMENT_NOT_FOUND', 'Destination document not found.');
+    const user = await tx.user.findUniqueOrThrow({ where: { id: actor.userId }, select: { role: true } });
+    if (doc.securityClassification === 'HR_CONFIDENTIAL' && !hrConfidentialReadAllowed(user.role)) {
+      throw new InteractionError(403, 'DOCUMENT_ACCESS_FORBIDDEN', 'Destination document is not accessible.');
     }
-    const maxVersion = await tx.documentVersion.aggregate({ where: { documentId }, _max: { version: true } });
-    const nextVersion = (maxVersion._max.version || 0) + 1;
-    const version = await tx.documentVersion.create({
+  } else {
+    const doc = await tx.document.create({
       data: {
-        documentId: documentId!, version: nextVersion, name: file.originalFileNameSafe,
-        originalFileName: file.originalFileNameSafe, mimeType: file.detectedMimeType, size: file.sizeBytes || undefined,
-        storageReference: file.quarantineStorageReference || undefined, isCurrent: true,
-        uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'ORIGINAL',
+        caseId,
+        clientId,
+        name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe,
+        fileName: file.originalFileNameSafe,
+        mimeType: file.detectedMimeType || 'application/octet-stream',
+        category: 'CLIENT_INPUT',
+        size: file.sizeBytes || undefined,
       } as any,
     });
-    await tx.documentVersion.updateMany({ where: { documentId, id: { not: version.id } }, data: { isCurrent: false } });
-    await tx.clientSubmissionFile.update({ where: { id: fileId }, data: { status: 'ACCEPTED' } });
-    await tx.clientSubmission.update({ where: { id: submissionId }, data: { status: 'ACCEPTED_INTO_MATTER', reviewedById: actor.userId, reviewedAt: new Date(), acceptedDocumentId: documentId, acceptedDocumentVersionId: version.id, revision: { increment: 1 } } });
-    return { documentId, documentVersionId: version.id };
+    documentId = doc.id;
+  }
+  const maxVersion = await tx.documentVersion.aggregate({ where: { documentId }, _max: { version: true } });
+  const nextVersion = (maxVersion._max.version || 0) + 1;
+  const version = await tx.documentVersion.create({
+    data: {
+      documentId: documentId!, version: nextVersion, name: file.originalFileNameSafe,
+      originalFileName: file.originalFileNameSafe, mimeType: file.detectedMimeType, size: file.sizeBytes || undefined,
+      storageReference: file.quarantineStorageReference || undefined, isCurrent: true,
+      uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'ORIGINAL',
+      securityScanStatus: 'CLEAN',
+    } as any,
   });
-  return result;
+  await tx.documentVersion.updateMany({ where: { documentId, id: { not: version.id } }, data: { isCurrent: false } });
+  await tx.clientSubmissionFile.update({ where: { id: fileId }, data: { status: 'ACCEPTED', acceptedDocumentVersionId: version.id } });
+  await tx.clientSubmission.update({ where: { id: submissionId }, data: { status: 'ACCEPTED_INTO_MATTER', reviewedById: actor.userId, reviewedAt: new Date(), acceptedDocumentId: documentId, acceptedDocumentVersionId: version.id, revision: { increment: 1 } } });
+  return { documentId, documentVersionId: version.id };
 }
 
 

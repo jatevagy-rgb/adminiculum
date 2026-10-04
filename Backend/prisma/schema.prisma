@@ -1452,6 +1452,7 @@ model DocumentVersion {
   obligationOccurrenceEvidence ClientObligationOccurrence[]
   personDocumentLinks     OrganizationPersonDocumentLink[]
   evidenceRecords         EvidenceRecord[]
+  acceptedSubmissionFiles ClientSubmissionFile[] @relation("SubmissionFileAcceptedVersion")
   complianceClauseAnchors ComplianceDocumentClauseAnchor[]
   modificationProposals   DocumentModificationProposal[]
   dateCandidates          ContractDateCandidate[]
@@ -4733,6 +4734,8 @@ model ClientSubmission {
   rejectionReasonSafe       String?
   acceptedDocumentId        String?
   acceptedDocumentVersionId String?
+  /// Internal, immutable Compliance decision receipt; never part of a customer DTO.
+  complianceAcceptance      Json?
   revision                  Int                    @default(0)
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
@@ -4776,6 +4779,8 @@ model ClientSubmissionFile {
   scanCodeSafe               String?
   uploadedAt                 DateTime?
   scannedAt                  DateTime?
+  acceptedDocumentVersionId  String?
+  acceptedDocumentVersion    DocumentVersion? @relation("SubmissionFileAcceptedVersion", fields: [acceptedDocumentVersionId], references: [id], onDelete: Restrict, map: "submission_file_accepted_version_fk")
   createdAt                  DateTime                   @default(now())
 
   @@index([submissionId, status])
