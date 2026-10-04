@@ -5,10 +5,15 @@
  * SAFETY INVARIANT: with no provider configured, send() throws a RETRYABLE
  * MailProviderError(MAIL_PROVIDER_NOT_CONFIGURED). The caller keeps the
  * ClientNotificationDelivery in PENDING/FAILED_RETRYABLE — the notification
- * intent is never discarded and never falsely marked SENT. Real providers
- * (SMTP/SendGrid/Graph Mail.Send) implement MailSender and are wired later.
- * This adapter never composes arbitrary mailbox mail or reads a mailbox.
+ * intent is never discarded and never falsely marked SENT.
+ *
+ * Provider wiring reuses the EXISTING server-only system SMTP configuration
+ * (the same MAILBOX_TRANSACTIONAL_SMTP_* credential set already used by the
+ * mailbox module's verification mail). Partial configuration fails closed to
+ * the unconfigured sender. This adapter never composes arbitrary mailbox mail
+ * and never reads a mailbox.
  */
+import nodemailer from 'nodemailer';
 
 export interface MailMessage {
   to: string;
@@ -49,10 +54,43 @@ class UnconfiguredMailSender implements MailSender {
   }
 }
 
+/** System SMTP sender backed by the existing server-only SMTP credential set. */
+class SmtpMailSender implements MailSender {
+  readonly provider = 'SMTP';
+  private readonly transport: nodemailer.Transporter;
+  private readonly from: string;
+
+  constructor(env: NodeJS.ProcessEnv) {
+    const host = String(env.MAILBOX_TRANSACTIONAL_SMTP_HOST || '').trim();
+    const user = String(env.MAILBOX_TRANSACTIONAL_SMTP_USER || '').trim();
+    const password = String(env.MAILBOX_TRANSACTIONAL_SMTP_PASSWORD || '');
+    this.from = String(env.MAILBOX_TRANSACTIONAL_SMTP_FROM || '').trim();
+    const port = Number(env.MAILBOX_TRANSACTIONAL_SMTP_PORT || 587);
+    const secure = port === 465;
+    this.transport = nodemailer.createTransport({ host, port, secure, requireTLS: port !== 465, auth: { user, pass: password } });
+  }
+
+  async send(message: MailMessage): Promise<MailSendResult> {
+    const info = await this.transport.sendMail({
+      from: this.from,
+      to: message.to,
+      subject: message.subjectSafe,
+      text: message.bodyTextSafe,
+      html: message.bodyHtmlSafe,
+      headers: { 'X-Idempotency-Key': message.idempotencyKey },
+    });
+    return { providerMessageId: info.messageId || '', provider: 'SMTP' };
+  }
+}
+
 let cached: MailSender | null = null;
 
-export function getMailSender(_env: NodeJS.ProcessEnv = process.env): MailSender {
-  if (!cached) cached = new UnconfiguredMailSender();
+export function getMailSender(env: NodeJS.ProcessEnv = process.env): MailSender {
+  if (!cached) {
+    const configured = ['MAILBOX_TRANSACTIONAL_SMTP_HOST', 'MAILBOX_TRANSACTIONAL_SMTP_USER', 'MAILBOX_TRANSACTIONAL_SMTP_PASSWORD', 'MAILBOX_TRANSACTIONAL_SMTP_FROM']
+      .every((key) => Boolean(String(env[key] || '').trim()));
+    cached = configured ? new SmtpMailSender(env) : new UnconfiguredMailSender();
+  }
   return cached;
 }
 
