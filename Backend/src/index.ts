@@ -403,6 +403,7 @@ app.use('/api/v1/sharepoint', sharepointRoutes);
 import { prisma } from './prisma/prisma.service';
 import { provisionComplianceModuleRules } from './modules/compliance/complianceModuleProvisioning';
 import { provisionCanonicalAiPromptTemplates } from './modules/ai-prompts/provisioning';
+import { recoverPendingAnalysisJobs } from './modules/compliance-doc-intelligence/analysisJobService';
 
 // Idempotent, additive baseline compliance provisioning. Runs on every boot so a
 // normal deploy surfaces the three representative verticals (GDPR /
@@ -436,6 +437,24 @@ provisionCanonicalAiPromptTemplates(prisma)
   .catch((error: unknown) => {
     console.error(
       `[Startup] AI prompt catalogue provisioning failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+
+// BE_COMP_006: restart-safe durable INTERNAL_ANALYSIS processing. Every boot
+// reclaims PENDING analysis jobs (upload/link succeeded, processing did not)
+// and stale RUNNING jobs whose lease expired in a previous process. Bounded per
+// sweep and non-fatal: failures are logged and self-heal on the next boot.
+recoverPendingAnalysisJobs()
+  .then((result) => {
+    if (result.recovered > 0) {
+      console.log(
+        `[Startup] compliance analysis recovery recovered=${result.recovered} pending=${result.pending} staleRunning=${result.staleRunning}`,
+      );
+    }
+  })
+  .catch((error: unknown) => {
+    console.error(
+      `[Startup] compliance analysis recovery failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   });
 

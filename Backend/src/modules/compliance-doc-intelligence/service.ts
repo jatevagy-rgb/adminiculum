@@ -22,6 +22,7 @@ import { resolveCelexBindings, type CelexBindingDecision } from './legalSourceBi
 import { canonicalReferenceFromAnchorKey } from './canonicalLegalReference';
 import { computeRowDigest, normalizeExtractedRow, type NormalizedClauseAnchorRow } from './normalize';
 import { MAX_WARNINGS_PER_RESULT, type IngestResult } from './types';
+import { enqueueAnalysisJobForCurrentVersion, kickAnalysisJobProcessing } from './analysisJobService';
 
 type Prisma = typeof defaultPrisma;
 
@@ -346,6 +347,13 @@ export async function ingestCurrentVersionForInternalAnalysisDocument(
  * Fire-and-forget trigger used by the upload and linkage paths. It never throws
  * and never rejects, so it cannot fail an upload, a version creation or a
  * compliance linkage.
+ *
+ * BE_COMP_006: scheduling is now DURABLE. A PENDING ComplianceAnalysisJob row
+ * is persisted for the exact current version (upload/link success stays
+ * separate from analysis success), then processing is kicked in-process with
+ * the request buffer when one is available. If the process dies first, the
+ * startup recovery sweep re-claims the PENDING job and re-loads the DOCX from
+ * the version's SharePoint reference — the source file is never re-uploaded.
  */
 export function scheduleInternalAnalysisIngestion(
   documentId: string,
@@ -353,21 +361,27 @@ export function scheduleInternalAnalysisIngestion(
 ): void {
   const deps = options.deps ?? {};
   Promise.resolve()
-    .then(() => ingestCurrentVersionForInternalAnalysisDocument(documentId, options))
-    .then((result) => {
-      if (result.status !== 'CREATED' && result.status !== 'UNCHANGED' && result.status !== 'SKIPPED_NOT_INTERNAL_ANALYSIS') {
-        logInternal(deps, 'ingestion finished without writes', {
-          documentId,
-          status: result.status,
-          code: result.code ?? null,
-        });
+    .then(() =>
+      enqueueAnalysisJobForCurrentVersion(
+        documentId,
+        { audienceConfirmedInternal: options.audienceConfirmedInternal },
+        deps,
+      ),
+    )
+    .then((enqueued) => {
+      if (!enqueued.jobId) {
+        if (enqueued.status !== 'SKIPPED_NOT_INTERNAL_ANALYSIS') {
+          logInternal(deps, 'ingestion scheduling produced no job', {
+            documentId,
+            status: enqueued.status,
+          });
+        }
+        return;
       }
-      if (result.warnings.length) {
-        logInternal(deps, 'ingestion warnings', { documentId, warnings: result.warnings.slice(0, 8) });
-      }
+      kickAnalysisJobProcessing(enqueued.jobId, { buffer: options.buffer ?? null }, deps);
     })
     .catch((error) => {
-      logInternal(deps, 'ingestion crashed', {
+      logInternal(deps, 'ingestion scheduling crashed', {
         documentId,
         message: error instanceof Error ? error.message.slice(0, 120) : 'unknown',
       });
