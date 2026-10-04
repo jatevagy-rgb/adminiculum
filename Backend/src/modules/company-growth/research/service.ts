@@ -47,6 +47,7 @@ import {
   type NormalizableObservation,
 } from './observationSignals';
 import { createInitiative } from '../../client-company/service';
+import { createRequestDraft } from '../../client-interaction/requestService';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -903,27 +904,48 @@ export async function reviewRecommendation(
   requireManager(actor);
   await assertClientReadAccess(actor, clientId, db as PrismaClient);
   const note = safeText(input.note, 'note', 2000, false) ?? null;
+  const decision = input.decision;
+  const status: RecommendationCandidateStatus =
+    decision === 'ACCEPT' ? 'ACCEPTED' : decision === 'DECLINE' ? 'DECLINED' : 'NEEDS_MORE_DATA';
 
-  const rec = await db.recommendationCandidate.findFirst({ where: { id: recommendationId, clientId } });
-  if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
-  if (rec.status !== 'PENDING_REVIEW') {
-    throw new InteractionError(409, 'RECOMMENDATION_ALREADY_REVIEWED', 'This recommendation was already reviewed.');
-  }
-  if (input.decision === 'ACCEPT' && rec.sufficiency !== 'SUPPORTED') {
-    throw new InteractionError(422, 'RECOMMENDATION_NOT_SUPPORTED', 'Only SUPPORTED recommendations can be accepted.');
-  }
-
+  // BE-GROW-004: the whole decision is ONE transaction with a conditional
+  // (compare-and-set) update on the recommendation state. The eligibility
+  // checks and the state claim happen inside the transaction, so concurrent
+  // ACCEPT vs DECLINE (or duplicate ACCEPT) produce exactly one canonical
+  // winner and can never leave a contradictory Opportunity/recommendation
+  // state. The run-validity check is evaluated on the same snapshot.
   const prisma = db as PrismaClient;
   return prisma.$transaction(async (tx) => {
-    const status: RecommendationCandidateStatus =
-      input.decision === 'ACCEPT' ? 'ACCEPTED' : input.decision === 'DECLINE' ? 'DECLINED' : 'NEEDS_MORE_DATA';
-    const updated = await tx.recommendationCandidate.update({
-      where: { id_clientId: { id: rec.id, clientId } },
+    const rec = await tx.recommendationCandidate.findFirst({
+      where: { id: recommendationId, clientId },
+      include: { run: { select: { status: true } } },
+    });
+    if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+    if (decision === 'ACCEPT' && rec.sufficiency !== 'SUPPORTED') {
+      throw new InteractionError(422, 'RECOMMENDATION_NOT_SUPPORTED', 'Only SUPPORTED recommendations can be accepted.');
+    }
+    // Only a recommendation from a COMPLETED run can receive a final human
+    // review decision. RUNNING and FAILED runs are not eligible; there is no
+    // other stale/supersession policy invented here.
+    if (rec.run.status !== 'COMPLETED') {
+      throw new InteractionError(409, 'RECOMMENDATION_RUN_NOT_COMPLETED', 'The recommendation run is not completed; it cannot be reviewed.');
+    }
+
+    // CAS: claim the pending row. A concurrent winner flips the status first,
+    // so the loser matches zero rows and must never overwrite the winner or
+    // create a contradictory opportunity.
+    const claimed = await tx.recommendationCandidate.updateMany({
+      where: { id: rec.id, clientId, status: 'PENDING_REVIEW' },
       data: { status, reviewedById: actor.userId, reviewedAt: new Date(), reviewNote: note },
     });
+    if (claimed.count !== 1) {
+      throw new InteractionError(409, 'RECOMMENDATION_ALREADY_REVIEWED', 'This recommendation was already reviewed.');
+    }
+
+    const updated = await tx.recommendationCandidate.findUniqueOrThrow({ where: { id: rec.id } });
 
     let opportunity = null;
-    if (input.decision === 'ACCEPT') {
+    if (decision === 'ACCEPT') {
       opportunity = await tx.improvementOpportunity.create({
         data: {
           clientId,
@@ -941,6 +963,131 @@ export async function reviewRecommendation(
 
     return { recommendation: updated, opportunity };
   });
+}
+
+// ---------------------------------------------------------------------------
+// BE-GROW-005 — REQUEST_MORE_INFO handoff to the canonical ClientRequest
+// draft/publish/submission lifecycle.
+//
+// A REQUEST_MORE_INFO review decision alone creates NOTHING customer-facing:
+// no published request, no email, no task. The manager then explicitly chooses
+// the information source. The customer-source choice creates (or idempotently
+// reuses) exactly one DRAFT ClientRequest linked to the originating
+// recommendation (and through it, the originating run). Publication stays the
+// existing explicit publishRequest step; the customer sees the request only
+// through the existing customer request projections after publication. The
+// customer response (submission) is traceable back to the recommendation and
+// never auto-accepts the recommendation; a rerun/review remains an explicit
+// operator action.
+// ---------------------------------------------------------------------------
+
+export async function createGrowInfoRequestDraft(
+  actor: InternalActor,
+  clientId: string,
+  recommendationId: string,
+  input: {
+    caseId?: unknown;
+    clientSafeTitle?: unknown;
+    clientSafeInstructions?: unknown;
+    dueAt?: unknown;
+    fields?: unknown;
+  } = {},
+  db: Db = defaultPrisma,
+) {
+  requireManager(actor);
+  await assertClientReadAccess(actor, clientId, db as PrismaClient);
+  const prisma = db as PrismaClient;
+
+  const rec = await prisma.recommendationCandidate.findFirst({ where: { id: recommendationId, clientId } });
+  if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+  // A customer information request may only originate from an explicit
+  // REQUEST_MORE_INFO review decision (status NEEDS_MORE_DATA).
+  if (rec.status !== 'NEEDS_MORE_DATA') {
+    throw new InteractionError(409, 'RECOMMENDATION_NOT_PENDING_INFO', 'Only a recommendation explicitly reviewed with REQUEST_MORE_INFO can request customer information.');
+  }
+
+  // Idempotent create-or-reuse: a repeated click/retry never creates a second
+  // request for the same recommendation.
+  const existing = await prisma.clientRequest.findFirst({
+    where: { recommendationId: rec.id },
+    include: { fields: true },
+  });
+  if (existing) return { request: existing, reused: true };
+
+  try {
+    const created = await createRequestDraft(actor, {
+      caseId: String(input.caseId || ''),
+      type: 'INFORMATION_REQUEST',
+      clientSafeTitle: input.clientSafeTitle ?? rec.title,
+      clientSafeInstructions: input.clientSafeInstructions,
+      dueAt: input.dueAt,
+      required: true,
+      fields: input.fields ?? [{ type: 'LONG_TEXT', label: 'Válasz', required: true, maxLength: 6000 }],
+      growContext: { recommendationId: rec.id },
+    }, prisma);
+    return { request: created, reused: false };
+  } catch (err) {
+    // Concurrent duplicate create: the unique [recommendationId] constraint
+    // admits exactly one canonical request; the loser reuses the winner.
+    if ((err as { code?: string })?.code === 'P2002') {
+      const winner = await prisma.clientRequest.findFirst({
+        where: { recommendationId: rec.id },
+        include: { fields: true },
+      });
+      if (winner) return { request: winner, reused: true };
+    }
+    throw err;
+  }
+}
+
+export async function getGrowInfoRequestReadback(
+  actor: InternalActor,
+  clientId: string,
+  recommendationId: string,
+  db: Db = defaultPrisma,
+) {
+  requireManager(actor);
+  await assertClientReadAccess(actor, clientId, db as PrismaClient);
+  const prisma = db as PrismaClient;
+
+  const rec = await prisma.recommendationCandidate.findFirst({ where: { id: recommendationId, clientId } });
+  if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+
+  const request = await prisma.clientRequest.findFirst({
+    where: { recommendationId: rec.id },
+    include: {
+      fields: { orderBy: { displayOrder: 'asc' } },
+      submissions: {
+        orderBy: { createdAt: 'desc' },
+        include: { fields: true, files: true },
+      },
+    },
+  });
+
+  return {
+    recommendation: { id: rec.id, status: rec.status, runId: rec.runId },
+    request: request
+      ? {
+          id: request.id,
+          caseId: request.caseId,
+          status: request.status,
+          clientSafeTitle: request.clientSafeTitle,
+          clientSafeInstructions: request.clientSafeInstructions,
+          dueAt: request.dueAt,
+          publishedAt: request.publishedAt,
+          revision: request.revision,
+          fields: request.fields.map((f) => ({ id: f.id, label: f.clientSafeLabel, type: f.type, required: f.required })),
+          submissions: request.submissions.map((s) => ({
+            id: s.id,
+            status: s.status,
+            submittedAt: s.submittedAt,
+            customerNote: s.customerNote,
+            answerCount: s.fields.length,
+            fileCount: s.files.length,
+          })),
+        }
+      : null,
+  };
 }
 
 // ---------------------------------------------------------------------------

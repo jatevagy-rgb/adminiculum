@@ -214,6 +214,23 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
   const clientSafeInstructions = safeText(input.clientSafeInstructions, 'clientSafeInstructions', 4000);
   const fields = normalizeFields(input.fields);
   const provenance = await normalizeComplianceContext(actor, clientId, input, prisma);
+  // C5D Grow provenance: an optional single-origin recommendation link. The
+  // recommendation must belong to the same client and must have been explicitly
+  // reviewed with REQUEST_MORE_INFO (status NEEDS_MORE_DATA) — a request can
+  // never attach itself to a recommendation that did not ask for information.
+  const growContext = input && typeof input === 'object' ? input.growContext : null;
+  let recommendationId: string | null = null;
+  if (growContext && typeof growContext === 'object' && growContext.recommendationId) {
+    recommendationId = String(growContext.recommendationId);
+    const recommendation = await prisma.recommendationCandidate.findFirst({
+      where: { id: recommendationId, clientId },
+      select: { id: true, status: true },
+    });
+    if (!recommendation) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+    if (recommendation.status !== 'NEEDS_MORE_DATA') {
+      throw new InteractionError(409, 'RECOMMENDATION_NOT_PENDING_INFO', 'Only a recommendation explicitly reviewed with REQUEST_MORE_INFO can request customer information.');
+    }
+  }
   const created = await prisma.clientRequest.create({
     data: {
       clientId, caseId, createdById: actor.userId,
@@ -228,6 +245,7 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
       requirementVersionId: provenance.requirementVersionId,
       clientControlId: provenance.clientControlId,
       findingId: provenance.findingId,
+      recommendationId,
       fields: fields.length ? {
           create: fields.map((f: any, i: number) => ({
           clientSafeLabel: f.label,

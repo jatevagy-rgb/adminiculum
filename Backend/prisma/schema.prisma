@@ -4540,6 +4540,15 @@ model ClientRequest {
   findingId            String?
   finding              AssessmentFinding?  @relation("ClientRequestFinding", fields: [findingId], references: [id], onDelete: SetNull)
 
+  // C5D — Grow provenance. A request MAY originate from exactly one Growth
+  // recommendation (an explicit REQUEST_MORE_INFO review decision) so the
+  // customer's response/submission returns to the exact source recommendation
+  // and, through it, the originating run. Nullable: non-Grow requests and
+  // legacy rows stay untouched. onDelete SetNull preserves customer-facing
+  // request history even if the source recommendation is later retired.
+  recommendationId String?
+  recommendation   RecommendationCandidate? @relation("ClientRequestGrowRecommendation", fields: [recommendationId], references: [id], onDelete: SetNull)
+
   @@index([caseId, status])
   @@index([intakeRequestId, status])
   @@index([clientId, status])
@@ -4547,6 +4556,9 @@ model ClientRequest {
   @@index([requirementVersionId])
   @@index([clientControlId])
   @@index([findingId])
+  // One canonical information request per recommendation: the create-or-reuse
+  // flow is idempotent and a repeated click/retry can never create duplicates.
+  @@unique([recommendationId])
   @@map("client_requests")
 }
 
@@ -6734,6 +6746,7 @@ model RecommendationCandidate {
 
   evidenceLinks          RecommendationEvidenceLink[]
   improvementOpportunity ImprovementOpportunity?
+  infoRequests           ClientRequest[] @relation("ClientRequestGrowRecommendation")
 
   @@unique([id, clientId])
   @@index([clientId, status])
