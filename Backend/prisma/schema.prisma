@@ -1296,6 +1296,7 @@ model Document {
   timelineEvents          TimelineEvent[]
   taskSubmissionDocuments TaskSubmissionDocument[]
   complianceDocuments     ComplianceDocument[]
+  analysisJobs            ComplianceAnalysisJob[]
   modificationProposals   DocumentModificationProposal[]
   dateCandidates          ContractDateCandidate[]
 
@@ -1453,6 +1454,7 @@ model DocumentVersion {
   personDocumentLinks     OrganizationPersonDocumentLink[]
   evidenceRecords         EvidenceRecord[]
   complianceClauseAnchors ComplianceDocumentClauseAnchor[]
+  analysisJobs            ComplianceAnalysisJob[]
   modificationProposals   DocumentModificationProposal[]
   dateCandidates          ContractDateCandidate[]
 
@@ -5999,6 +6001,60 @@ model ComplianceDocumentClauseAnchor {
   @@index([celex])
   @@index([ecli])
   @@map("compliance_document_clause_anchors")
+}
+
+// ============================================================================
+// COMPLIANCE DOCUMENT INTELLIGENCE — DURABLE INTERNAL ANALYSIS PROCESSING
+// (BE_COMP_006)
+//
+// Upload/link state stays separate from analysis state: a DocumentVersion row
+// (upload success) and a ComplianceDocument linkage commit independently of this
+// job row. One job exists per EXACT DocumentVersion that was eligible for
+// INTERNAL_ANALYSIS extraction. PENDING work survives a restart through the
+// startup recovery sweep; a retry re-runs the same version against the same
+// digest-idempotent ingest, and the atomic PENDING -> RUNNING claim (with lease
+// expiry for stale RUNNING rows) makes exactly one processor effective per job.
+// Processing never touches publications, findings or legal acceptance.
+//
+// CLIENT BOUNDARY: internal processing state. Never projected through any
+// customer DTO, and CLIENT_POLICY documents never enqueue a job.
+// ============================================================================
+
+enum ComplianceAnalysisJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model ComplianceAnalysisJob {
+  id                String                      @id @default(uuid())
+  documentId        String
+  document          Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  /// Exact version identity pinned at enqueue time. Processing never re-resolves
+  /// "current version" for this job, so a later upload can never redirect it.
+  documentVersionId String                      @unique
+  documentVersion   DocumentVersion             @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  status            ComplianceAnalysisJobStatus @default(PENDING)
+  attemptCount      Int                         @default(0)
+  /// Terminal ingest outcome of the last attempt, e.g. CREATED / UNCHANGED /
+  /// NO_ROWS / SKIPPED_NOT_INTERNAL_ANALYSIS. Bounded machine token only.
+  lastIngestStatus  String?
+  /// Bounded internal failure code, e.g. SCAN_GATE_BLOCKED, CONTENT_UNAVAILABLE,
+  /// DOCX_PACKAGE_UNREADABLE. Never document content, never library text.
+  lastErrorCode     String?
+  /// Bounded error detail for inspection. Never document content.
+  lastErrorDetail   String?                     @db.VarChar(300)
+  lockedAt          DateTime?
+  leaseExpiresAt    DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  enqueuedAt        DateTime                    @default(now())
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  @@index([status, enqueuedAt])
+  @@map("compliance_analysis_jobs")
 }
 
 model RequirementVersion {
