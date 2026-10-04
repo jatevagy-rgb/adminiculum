@@ -39,20 +39,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      postgres-wf10:
-        image: postgres:16
-        env:
-          POSTGRES_USER: wf10_pgtest
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: adminiculum_replay_wf10
-        ports:
-          - 55483:55483
-        options: >-
-          --health-cmd "pg_isready -p 55483 -U wf10_pgtest"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-          -c port=55483
 
     steps:
       - uses: actions/checkout@v4
@@ -954,6 +940,25 @@ jobs:
           sed -i "s/^compliance-workbench-impact=PENDING$/compliance-workbench-impact=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
+      - name: Start WF10 PostgreSQL on port 55483
+        run: |
+          docker run -d --name adminiculum-wf10-pg \
+            -e POSTGRES_USER=wf10_pgtest \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=adminiculum_replay_wf10 \
+            -p 55483:55483 \
+            postgres:16 -c port=55483
+          for i in $(seq 1 30); do
+            if docker exec adminiculum-wf10-pg pg_isready -p 55483 -U wf10_pgtest >/dev/null 2>&1; then
+              echo "WF10 PostgreSQL ready on port 55483"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "WF10 PostgreSQL failed to become ready"
+          docker logs adminiculum-wf10-pg
+          exit 1
+
       - name: Provision WF10 schema (canonical replay on dedicated WF10 PG)
         working-directory: Backend
         env:
@@ -968,6 +973,10 @@ jobs:
           if npx jest --runInBand tests/anonymizeSaveAsDocument.integration.test.ts tests/anonymizeScanGate.integration.test.ts tests/verifiedContext.integration.test.ts; then rc=0; else rc=$?; fi
           sed -i "s/^anonymize-save-as=PENDING$/anonymize-save-as=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
+
+      - name: Stop WF10 PostgreSQL
+        if: always()
+        run: docker rm -f adminiculum-wf10-pg || true
 
       - name: Backend PostgreSQL integration summary
         if: always()
