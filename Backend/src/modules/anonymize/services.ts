@@ -1,11 +1,15 @@
+import type { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
 // ============================================================================
 // ANONYMIZE SERVICE - Dokumentum anonimizálás AI feldolgozáshoz
 // ============================================================================
 
 import prisma from '../../config/database.js';
 import { extractText } from '../documents/textExtractor.js';
+import { securityScanBlock } from '../documents/securityScan.service';
 import { default as driveService } from '../sharepoint/driveService.js';
 import { rehydrateDocument, type RehydrationWarning } from './rehydration.js';
+import { collectClientFieldCandidates } from './clientCandidates.js';
 
 const TimelineType = {
   CASE_CREATED: 'CASE_CREATED',
@@ -138,21 +142,26 @@ export async function anonymizeDocument(params: {
   sourceText?: string;
   /** Optional UI metadata context */
   metadata?: AnonymizationMetadataInput;
-}): Promise<{
+}, executionDb: Prisma.TransactionClient = prisma): Promise<{
   success: boolean;
   anonymizedDocumentId?: string;
   redactedText?: string;
   redactedItems?: RedactionItem[];
   aiReadyPrompt?: string;
+  /** File-backed source blocked by the canonical security scan gate (409). */
+  scanBlocked?: boolean;
   error?: string;
 }> {
   try {
     // 1. Get document — accept both Document (client upload) and ContractGeneration (generated contract)
     // Frontend AnonymizeModal is opened from Document Ledger with contract.id (ContractGeneration.id).
     // This previously only handled Document records, causing 'Dokumentum nem található' for generated contracts.
-    let document = await prisma.document.findUnique({
+    let document = await executionDb.document.findUnique({
       where: { id: params.documentId },
-      include: { case: { include: { client: { include: { redactorProfile: true } } } } }
+      include: {
+        case: { include: { client: { include: { redactorProfile: true } } } },
+        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
+      },
     });
 
     let sourceType: 'document' | 'contract' = 'document';
@@ -160,7 +169,7 @@ export async function anonymizeDocument(params: {
 
     if (!document) {
       // Fallback: try ContractGeneration (generated contract from template)
-      contractGen = await prisma.contractGeneration.findUnique({
+      contractGen = await executionDb.contractGeneration.findUnique({
         where: { id: params.documentId },
         select: { filePath: true, fileName: true, caseId: true }
       });
@@ -180,7 +189,7 @@ export async function anonymizeDocument(params: {
     if (sourceType === 'document') {
       caseData = document.case;
     } else if (contractGen) {
-      caseData = await prisma.case.findUnique({
+      caseData = await executionDb.case.findUnique({
         where: { id: contractGen.caseId },
         include: { client: { include: { redactorProfile: true } } }
       });
@@ -192,7 +201,7 @@ export async function anonymizeDocument(params: {
     if (caseData?.client) {
       clientData = caseData.client;
     } else if (caseData?.clientId) {
-      clientData = await prisma.client.findUnique({
+      clientData = await executionDb.client.findUnique({
         where: { id: caseData.clientId },
         include: { redactorProfile: true }
       });
@@ -274,27 +283,35 @@ export async function anonymizeDocument(params: {
       addClientCandidate(caseData.clientRole, 'case.clientRole', effectiveClientRole);
     }
 
-    // Add client details
+    // Add client details from the canonical Client record and its redaction
+    // profile. The canonical mapping lives in clientCandidates.ts so the exact
+    // field boundary (taxNumber/companyRegistrationNumber/vatNumber, not taxId)
+    // is unit-tested independently of the live service.
     if (clientData) {
-      addClientCandidate(clientData.name, 'client.name', effectiveClientRole);
-      addTypedCandidate(clientData.taxId, 'IDENTIFIER', 'client.taxId', 'AZONOSÍTÓ');
-      addTypedCandidate(clientData.personalId, 'IDENTIFIER', 'client.personalId', 'AZONOSÍTÓ');
-      addTypedCandidate(clientData.bankAccount, 'IDENTIFIER', 'client.bankAccount', 'AZONOSÍTÓ');
-      addTypedCandidate(clientData.email, 'EMAIL', 'client.email', 'EMAIL');
-      addTypedCandidate(clientData.phone, 'PHONE', 'client.phone', 'TELEFON');
-      addTypedCandidate(clientData.address, 'ADDRESS', 'client.address', 'CÍM');
-      
-      // Add from redactor profile
-      if (clientData.redactorProfile) {
-        const profile = clientData.redactorProfile;
-        addClientCandidate(profile.fullName, 'redactorProfile.fullName', effectiveClientRole);
-        profile.aliases?.forEach(a => addClientCandidate(a, 'redactorProfile.aliases', effectiveClientRole));
-        profile.addresses?.forEach(a => addTypedCandidate(a, 'ADDRESS', 'redactorProfile.addresses', 'CÍM'));
-        addTypedCandidate(profile.taxId, 'IDENTIFIER', 'redactorProfile.taxId', 'AZONOSÍTÓ');
-        addTypedCandidate(profile.personalId, 'IDENTIFIER', 'redactorProfile.personalId', 'AZONOSÍTÓ');
-        profile.bankAccounts?.forEach(a => addTypedCandidate(a, 'IDENTIFIER', 'redactorProfile.bankAccounts', 'AZONOSÍTÓ'));
-        profile.phones?.forEach(a => addTypedCandidate(a, 'PHONE', 'redactorProfile.phones', 'TELEFON'));
-        profile.emails?.forEach(a => addTypedCandidate(a, 'EMAIL', 'redactorProfile.emails', 'EMAIL'));
+      const clientRoleToken = normalizeRoleToken(effectiveClientRole);
+      const clientSpecs = collectClientFieldCandidates(
+        clientData,
+        clientData.redactorProfile || null,
+        clientRoleToken,
+      );
+
+      for (const spec of clientSpecs) {
+        if (spec.category === 'CLIENT') {
+          candidates.push({
+            value: spec.value,
+            token: spec.roleToken || clientRoleToken,
+            source: spec.source,
+            category: 'CLIENT',
+          });
+        } else {
+          counters[spec.category] += 1;
+          candidates.push({
+            value: spec.value,
+            token: `[${spec.tokenPrefix}_${counters[spec.category]}]`,
+            source: spec.source,
+            category: spec.category,
+          });
+        }
       }
     }
 
@@ -409,6 +426,14 @@ export async function anonymizeDocument(params: {
         };
       }
     } else if (document.spItemId) {
+      // File-backed path: the canonical security scan gate applies before any
+      // download or extraction. Only a persisted CLEAN status (never caller-
+      // supplied) opens the file. Legacy rows without any DocumentVersion keep
+      // their existing behavior, matching the documents module's own gate.
+      const scanGate = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+      if (scanGate) {
+        return { success: false, scanBlocked: true, error: scanGate.error };
+      }
       // Document is stored in SharePoint, fetch and extract
       const fileBuffer = await driveService.downloadDocument(document.spItemId);
       
@@ -502,7 +527,7 @@ export async function anonymizeDocument(params: {
       }
     }
 
-    const anonymousDoc = await prisma.anonymousDocument.create({
+    const anonymousDoc = await executionDb.anonymousDocument.create({
       data: {
         sourceDocId: params.documentId,
         originalDocId: params.documentId,
@@ -517,7 +542,7 @@ export async function anonymizeDocument(params: {
     });
 
     // 7. Create timeline event
-    await prisma.timelineEvent.create({
+    await executionDb.timelineEvent.create({
       data: {
         caseId: sourceCaseId,
         userId: params.userId,
@@ -592,29 +617,26 @@ export async function upsertRedactionProfile(params: {
   phones?: string[];
   emails?: string[];
 }) {
+  // The persisted ClientRedactionProfile model exposes fullName/aliases/addresses/taxId
+  // plus rule JSON (patterns/personas). personalId/bankAccounts/phones/emails have no
+  // persisted columns: they are accepted by the API for forward compatibility but are
+  // not stored (durable storage would require an additive schema change).
+  const persisted = {
+    fullName: params.fullName,
+    aliases: params.aliases || [],
+    addresses: params.addresses || [],
+    taxId: params.taxId,
+  };
+
   return prisma.clientRedactionProfile.upsert({
     where: { clientId: params.clientId },
-    update: {
-      fullName: params.fullName,
-      aliases: params.aliases || [],
-      addresses: params.addresses || [],
-      taxId: params.taxId,
-      personalId: params.personalId,
-      bankAccounts: params.bankAccounts || [],
-      phones: params.phones || [],
-      emails: params.emails || []
-    } as any,
+    update: persisted,
     create: {
       clientId: params.clientId,
-      fullName: params.fullName,
-      aliases: params.aliases || [],
-      addresses: params.addresses || [],
-      taxId: params.taxId,
-      personalId: params.personalId,
-      bankAccounts: params.bankAccounts || [],
-      phones: params.phones || [],
-      emails: params.emails || []
-    } as any
+      ...persisted,
+      patterns: [],
+      personas: [],
+    },
   });
 }
 
@@ -637,6 +659,8 @@ export async function getAnonymizationSourceText(documentId: string): Promise<{
   textAvailable: boolean;
   sourceText?: string;
   limitationMessage?: string;
+  /** File-backed source blocked by the canonical security scan gate (409). */
+  scanBlocked?: boolean;
   error?: string;
 }> {
   try {
@@ -647,10 +671,20 @@ export async function getAnonymizationSourceText(documentId: string): Promise<{
         fileName: true,
         mimeType: true,
         spItemId: true,
+        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
       },
     });
 
     if (document?.spItemId) {
+      const scanGate = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
+      if (scanGate) {
+        return {
+          success: true,
+          textAvailable: false,
+          scanBlocked: true,
+          limitationMessage: scanGate.error,
+        };
+      }
       const fileBuffer = await driveService.downloadDocument(document.spItemId);
       if (fileBuffer) {
         const extracted = await extractText(
@@ -752,6 +786,7 @@ export async function saveRehydratedResultToDocument(params: {
 }): Promise<{
   success: boolean;
   documentId?: string;
+  documentVersionId?: string;
   fileName?: string;
   error?: string;
 }> {
@@ -775,6 +810,10 @@ export async function saveRehydratedResultToDocument(params: {
 
     if (anonDoc.rehydrationStatus === 'FAILED') {
       return { success: false, error: 'Rehydration failed - cannot save' };
+    }
+
+    if (!params.userId) {
+      return { success: false, error: 'Felhasználó nem azonosított' };
     }
 
     // 2. Get the case to retrieve clientId
@@ -807,46 +846,118 @@ export async function saveRehydratedResultToDocument(params: {
       return { success: false, error: uploadResult.error || 'SharePoint upload failed' };
     }
 
-    // 5. Create Document record in database with required fields
-    const document = await prisma.document.create({
-      data: {
-        caseId: anonDoc.caseId,
-        clientId: caseData.clientId,
-        name: fileName,
-        category: 'RESEARCH' as any, // AI analysis is research
-        spItemId: uploadResult.item.id,
-        spWebUrl: uploadResult.webUrl || undefined,
-        spPath: uploadResult.webUrl || undefined,
-        fileName: fileName,
-        folder: '08_Anonymized',
-        version: '1',
-        documentType: 'AI_ANALYSIS',
-        isLatest: true
-      }
-    });
+    const sharePointItemId = typeof uploadResult.item.id === 'string' ? uploadResult.item.id.trim() : '';
+    if (!sharePointItemId) {
+      return { success: false, error: 'SharePoint upload returned no item ID' };
+    }
 
-    // 6. Create TimelineEvent for traceability
-    await prisma.timelineEvent.create({
-      data: {
-        caseId: anonDoc.caseId,
-        userId: params.userId,
-        eventType: 'DOCUMENT_UPLOADED',
-        type: 'DOCUMENT_UPLOADED' as any,
-        payload: {
-          documentId: document.id,
-          fileName: fileName,
-          documentType: 'AI_ANALYSIS',
-          sourceAnonymousDocId: anonDoc.id,
-          sourceDocId: anonDoc.sourceDocId,
-          rehydrationStatus: anonDoc.rehydrationStatus,
-          spItemId: uploadResult.item.id
-        }
-      } as any
-    });
+    // 5. Create the canonical Document + initial DocumentVersion pair in ONE
+    // transaction, mirroring DocumentsService.createDocument (the canonical
+    // create primitive: nested versions.create with v1, isCurrent, storage
+    // reference, review/publication defaults and uploader binding). The AI
+    // work product must be an exact-version work product: formal review binds
+    // DocumentReview.documentVersionId to this v1, the version ledger shows v1,
+    // and later versions can never silently substitute it (v1 keeps its own
+    // row; isCurrent moves only through the canonical uploadNewVersion flow).
+    //
+    // SCAN POLICY (server-generated exception): the buffer is constructed
+    // server-side from the rehydrated AI response imported by an authorized
+    // lawyer (requireAnonymizeManageAccess) — no client-supplied bytes ever
+    // enter it, so the canonical malware-scan pipeline for externally sourced
+    // uploads does not apply. uploadSource stays truthful as GENERATED. With
+    // no scanner configured the canonical queued scan fails closed to
+    // SCAN_FAILED, which would block every exact-version read path and make
+    // the saved work product unreadable; therefore no blind CLEAN for
+    // untrusted sources is introduced — only this proven server-generated
+    // text path is exempt.
+    //
+    // FAILURE SEMANTICS: any DB failure rolls the whole pair back (no orphan
+    // DocumentVersion without a Document) and the already-uploaded SharePoint
+    // item is compensated with deleteDocument. No distributed atomicity is
+    // claimed: a crash between upload and transaction can leave an unreferenced
+    // SP item, exactly like the canonical createDocument flow.
+    const documentVersionId = randomUUID();
+    let document: any;
+    try {
+      document = await prisma.$transaction(async (tx) => {
+        const created = await tx.document.create({
+          data: {
+            caseId: anonDoc.caseId,
+            clientId: caseData.clientId,
+            name: fileName,
+            category: 'RESEARCH' as any, // AI analysis is research
+            spItemId: sharePointItemId,
+            spWebUrl: uploadResult.webUrl || undefined,
+            spPath: uploadResult.webUrl || undefined,
+            fileName: fileName,
+            folder: '08_Anonymized',
+            version: '1',
+            currentVersion: 1,
+            currentVersionInt: 1,
+            size: fileContent.length,
+            documentType: 'AI_ANALYSIS',
+            isLatest: true,
+            versions: {
+              create: {
+                id: documentVersionId,
+                version: 1,
+                name: fileName,
+                originalFileName: fileName,
+                mimeType: 'text/plain',
+                size: fileContent.length,
+                storageReference: sharePointItemId,
+                isCurrent: true,
+                reviewStatus: 'NOT_IN_REVIEW' as any,
+                publicationStatus: 'INTERNAL_ONLY' as any,
+                uploadSource: 'GENERATED' as any,
+                versionType: 'ORIGINAL' as any,
+                spVersionLabel: uploadResult.version || '1',
+                spVersionId: uploadResult.version || null,
+                spItemId: sharePointItemId,
+                spWebUrl: uploadResult.webUrl || null,
+                uploadedById: params.userId,
+                securityScanStatus: 'CLEAN' as any,
+              },
+            },
+          },
+        });
+
+        // 6. TimelineEvent for traceability (same payload contract as before,
+        // extended with the canonical version identity; WF10 source binding
+        // sourceAnonymousDocId/sourceDocId is preserved verbatim).
+        await tx.timelineEvent.create({
+          data: {
+            caseId: anonDoc.caseId,
+            userId: params.userId,
+            eventType: 'DOCUMENT_UPLOADED',
+            type: 'DOCUMENT_UPLOADED' as any,
+            payload: {
+              documentId: created.id,
+              documentVersionId: documentVersionId,
+              fileName: fileName,
+              documentType: 'AI_ANALYSIS',
+              sourceAnonymousDocId: anonDoc.id,
+              sourceDocId: anonDoc.sourceDocId,
+              rehydrationStatus: anonDoc.rehydrationStatus,
+              spItemId: sharePointItemId,
+              version: 1
+            }
+          } as any
+        });
+
+        return created;
+      });
+    } catch (error) {
+      if (sharePointItemId) {
+        await driveService.deleteDocument(sharePointItemId).catch(() => undefined);
+      }
+      throw error;
+    }
 
     return {
       success: true,
       documentId: document.id,
+      documentVersionId: documentVersionId,
       fileName: fileName
     };
 

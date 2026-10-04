@@ -12,21 +12,28 @@ describe('Frontend Portal Identity and Multi-Workspace Resolution (R0)', () => {
   const apiSrc = () => read('src/lib/clientPortalApi.ts');
 
   it('1. ORGANIZATION navigation uses the canonical customer domains', () => {
-    const src = shellSrc();
-    assert.ok(src.includes("workspace.mode === 'ORGANIZATION'"));
+    // Client Portal 3.0 cutover: the ORGANIZATION navigation is the V3 primary
+    // nav module; the shell keeps the auth/workspace state machine and delegates
+    // the ready ORGANIZATION render to PortalShellV3.
+    const shellSrcValue = shellSrc();
+    assert.ok(shellSrcValue.includes("state.context.selectedWorkspace?.mode === 'ORGANIZATION'"));
+    assert.match(shellSrcValue, /<PortalShellV3/);
+    const navSrc = read('src/components/client-portal-v3/navigation.ts');
+    const navBlock = navSrc.slice(navSrc.indexOf('ORG_PRIMARY_NAV'), navSrc.indexOf('ORG_MOBILE_PRIMARY_NAV'));
     for (const entry of [
-      "['Áttekintés', '/portal']",
-      "['Ügyek', '/portal/ugyek']",
-      "['Teendők', '/portal/teendoim']",
-      "['Dokumentumok', '/portal/dokumentumok']",
-      "['Naptár', '/portal/naptar']",
-      "['Fejlesztés', '/portal/fejlesztes']",
-      "['Megfelelés', '/portal/megfeleles']",
-      "['Kommunikáció', '/portal/uzenetek']",
-      "['Vállalat', '/portal/vallalat']",
+      'label: "Áttekintés", href: "/portal"',
+      'label: "Ügyek", href: "/portal/ugyek"',
+      'label: "Teendők", href: "/portal/teendoim"',
+      'label: "Dokumentumok", href: "/portal/dokumentumok"',
+      'label: "Vállalat", href: "/portal/vallalat"',
+      'label: "Fejlesztés", href: "/portal/fejlesztes"',
+      'label: "Megfelelés", href: "/portal/megfeleles"',
     ]) {
-      assert.ok(src.includes(entry), `canonical organization navigation is missing ${entry}`);
+      assert.ok(navBlock.includes(entry), `canonical organization navigation is missing ${entry}`);
     }
+    // Naptár and Kommunikáció are utilities, not primary destinations.
+    assert.ok(!navBlock.includes('label: "Naptár"'));
+    assert.ok(!navBlock.includes('label: "Kommunikáció"'));
   });
 
   it('2. INDIVIDUAL navigation uses "Ügyeim"', () => {

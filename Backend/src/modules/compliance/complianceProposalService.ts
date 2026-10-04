@@ -4,6 +4,7 @@ import { InteractionError, InternalActor, assertClientReadAccess, assertInternal
 import { ACTION_INTENT_BY_KIND, COMPLIANCE_ACTION_INTENT_KEYS, COMPLIANCE_PROPOSAL_KINDS, isCompatibleActionIntent } from './complianceProposalRegistry';
 import casesService from '../cases/services';
 import { resolveComplianceCaseType } from './complianceCaseTypeResolver';
+import { lockCaseForMutation } from '../cases/caseMutationGuard';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 type Actor = InternalActor;
@@ -224,6 +225,7 @@ export async function bindProposalToCase(actor: Actor, proposalId: string, caseI
  * not tied to a specific Work Package item, so no workPackageItemId is fabricated.
  */
 async function createComplianceTaskAndConfirm(actor: Actor, proposal: any, caseId: string, tx: Prisma.TransactionClient): Promise<any> {
+  await lockCaseForMutation(tx, caseId);
   await assertAssignee(proposal.assigneeId, tx);
   const task = await tx.task.create({
     data: {
@@ -291,12 +293,13 @@ export async function confirmProposal(actor: Actor, proposalId: string, db: Pris
   return result.task;
 }
 
-async function startCaseTransaction(
+export async function startCaseFromProposalInTx(
   actor: Actor,
   proposalId: string,
   input: { title?: unknown },
   tx: Prisma.TransactionClient,
 ): Promise<{ kind: 'CONFIRMED'; case: any; task: any } | { kind: 'STALE' }> {
+  requireMutationActor(actor);
   const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "compliance_proposals" WHERE "id" = ${proposalId} FOR UPDATE`;
   if (!locked.length) throw new InteractionError(404, 'PROPOSAL_NOT_FOUND', 'Compliance proposal not found.');
   const proposal = await loadProposal(proposalId, tx);
@@ -361,7 +364,7 @@ async function startCaseTransaction(
  */
 export async function startCaseFromProposal(actor: Actor, proposalId: string, input: { title?: unknown } = {}, db: PrismaClient = defaultPrisma): Promise<any> {
   requireMutationActor(actor);
-  const result = await withProposalConfirmationRetry(db, (tx) => startCaseTransaction(actor, proposalId, input, tx));
+  const result = await withProposalConfirmationRetry(db, (tx) => startCaseFromProposalInTx(actor, proposalId, input, tx));
   if (result.kind === 'STALE') throw new InteractionError(409, 'PROPOSAL_STALE', 'Finding evidence changed; create a new proposal.');
   return { case: result.case, task: result.task };
 }

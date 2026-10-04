@@ -108,3 +108,4 @@ To remove this pack cleanly:
 
 - **v1.0.0** — Initial active status
 - **Phase 4A** — Added this manifest
+- **WF03 repair** — Canonical client fact mapping via `clientCandidates.ts` (`Client.taxNumber`, `companyRegistrationNumber`, `vatNumber`, `authorizedRepresentative`, `contactPerson` are now redacted as typed placeholders; legacy non-canonical `taxId`/`personalId`/`bankAccount` reads removed). `upsertRedactionProfile` persists only schema-backed fields and initializes `patterns`/`personas` on create. New pure WF04 handoff adapter `safeContext.ts` (`buildSafeAnonymizationContext`) returns sanitized text, artifact identity, readiness and server-side association verification; it never carries the rehydration map. Route/DTO surfaces unchanged.

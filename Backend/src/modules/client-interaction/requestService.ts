@@ -9,7 +9,31 @@ import {
   InteractionError, InternalActor, Prisma, CustomerContext,
   requireInternal, requireExpected, assertInternalCaseAccess, applyInternalQueueCaseScope, safeText, assertClientSafe, audienceSnapshot,
 } from './base';
-import { requireCapability, ClientInteractionCapability } from './gates';
+import { requireCapability, isCapabilityEnabled, ClientInteractionCapability } from './gates';
+import { enqueueNotification } from './notificationService';
+
+/** Customer delivery intent for an explicitly published request. */
+export const REQUEST_PUBLISHED_SUBJECT = 'Új kérés érkezett az Adminiculum ügyfélportálra';
+
+/** Distinct recipient emails of the ACTIVE grants on (clientId, caseId). */
+async function activeGrantRecipients(clientId: string, caseId: string, prisma: Prisma): Promise<Array<{ email: string; name: string | null }>> {
+  const grants = await prisma.clientPortalGrant.findMany({
+    where: { clientId, caseId, status: 'ACTIVE' },
+    select: { clientPortalIdentityId: true },
+  });
+  const identityIds = Array.from(new Set(grants.map((grant) => grant.clientPortalIdentityId).filter((id): id is string => Boolean(id))));
+  if (!identityIds.length) return [];
+  const identities = await prisma.clientPortalIdentity.findMany({ where: { id: { in: identityIds } }, select: { normalizedEmail: true, displayName: true } });
+  const seen = new Set<string>();
+  const recipients: Array<{ email: string; name: string | null }> = [];
+  for (const identity of identities) {
+    const email = String(identity.normalizedEmail || '').trim();
+    if (!email || seen.has(email.toLowerCase())) continue;
+    seen.add(email.toLowerCase());
+    recipients.push({ email, name: identity.displayName });
+  }
+  return recipients;
+}
 
 const REQUEST_TYPES = new Set(['DOCUMENT_UPLOAD', 'INFORMATION_REQUEST', 'DATA_FORM', 'QUESTION_RESPONSE', 'CORRECTION_REQUEST', 'MISSING_DOCUMENT_REQUEST']);
 // Customer-facing requests must never use legal-approval concepts.
@@ -169,7 +193,7 @@ export async function createPublishedIntakeInformationRequestInTransaction(
   requireInternal(actor);
   requireCapability('DATA_REQUESTS');
   const fields = normalizeFields(input.fields || [{ type: 'LONG_TEXT', label: 'Válasz', required: true, maxLength: 6000 }]);
-  return tx.clientRequest.create({
+  const request = await tx.clientRequest.create({
     data: {
       clientId: input.clientId,
       caseId: null,
@@ -201,6 +225,26 @@ export async function createPublishedIntakeInformationRequestInTransaction(
     },
     include: { fields: true },
   });
+  // Explicit publish -> one customer delivery intent for the requester, in the
+  // same transaction as the PUBLISHED state transition. Provider failure can
+  // never roll back the publish (the outbox retries independently).
+  if (isCapabilityEnabled('EMAIL_NOTIFICATIONS')) {
+    const membership = await tx.clientPortalWorkspaceMembership.findUnique({ where: { id: input.requesterMembershipId }, select: { clientPortalIdentityId: true } });
+    const identity = membership ? await tx.clientPortalIdentity.findUnique({ where: { id: membership.clientPortalIdentityId }, select: { normalizedEmail: true, displayName: true } }) : null;
+    if (identity?.normalizedEmail) {
+      await enqueueNotification({
+        eventType: 'REQUEST_PUBLISHED',
+        clientId: input.clientId,
+        intakeRequestId: input.intakeRequestId,
+        recipientEmail: identity.normalizedEmail,
+        recipientName: identity.displayName,
+        subjectSafe: REQUEST_PUBLISHED_SUBJECT,
+        createdById: actor.userId,
+        idempotencyKey: `request-published:${request.id}`,
+      }, tx);
+    }
+  }
+  return request;
 }
 
 export async function createRequestDraft(actor: InternalActor, input: any, prisma: Prisma = defaultPrisma) {
@@ -214,6 +258,23 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
   const clientSafeInstructions = safeText(input.clientSafeInstructions, 'clientSafeInstructions', 4000);
   const fields = normalizeFields(input.fields);
   const provenance = await normalizeComplianceContext(actor, clientId, input, prisma);
+  // C5D Grow provenance: an optional single-origin recommendation link. The
+  // recommendation must belong to the same client and must have been explicitly
+  // reviewed with REQUEST_MORE_INFO (status NEEDS_MORE_DATA) — a request can
+  // never attach itself to a recommendation that did not ask for information.
+  const growContext = input && typeof input === 'object' ? input.growContext : null;
+  let recommendationId: string | null = null;
+  if (growContext && typeof growContext === 'object' && growContext.recommendationId) {
+    recommendationId = String(growContext.recommendationId);
+    const recommendation = await prisma.recommendationCandidate.findFirst({
+      where: { id: recommendationId, clientId },
+      select: { id: true, status: true },
+    });
+    if (!recommendation) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+    if (recommendation.status !== 'NEEDS_MORE_DATA') {
+      throw new InteractionError(409, 'RECOMMENDATION_NOT_PENDING_INFO', 'Only a recommendation explicitly reviewed with REQUEST_MORE_INFO can request customer information.');
+    }
+  }
   const created = await prisma.clientRequest.create({
     data: {
       clientId, caseId, createdById: actor.userId,
@@ -228,6 +289,7 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
       requirementVersionId: provenance.requirementVersionId,
       clientControlId: provenance.clientControlId,
       findingId: provenance.findingId,
+      recommendationId,
       fields: fields.length ? {
           create: fields.map((f: any, i: number) => ({
           clientSafeLabel: f.label,
@@ -276,7 +338,34 @@ export async function publishRequest(actor: InternalActor, requestId: string, ex
   const caseId = requireCaseRequest(row);
   const grant = await prisma.clientPortalGrant.findFirst({ where: { clientId: row.clientId, caseId, status: 'ACTIVE' }, select: { id: true } });
   const snapshot = audienceSnapshot({ clientId: row.clientId, caseId, grantId: grant?.id || 'none' });
-  return prisma.clientRequest.update({ where: { id: requestId }, data: { status: 'PUBLISHED', publishedAt: new Date(), audienceSnapshot: snapshot as any, revision: { increment: 1 } }, include: { fields: true } });
+  const recipients = await activeGrantRecipients(row.clientId, caseId, prisma);
+  const revision = Number(row.revision);
+  return prisma.$transaction(async (tx) => {
+    // Conditional update: a concurrent publish/change wins exactly once, so the
+    // publish and its notification intent are never duplicated.
+    const published = await tx.clientRequest.updateMany({
+      where: { id: requestId, status: { in: ['DRAFT', 'READY_TO_PUBLISH'] }, revision },
+      data: { status: 'PUBLISHED', publishedAt: new Date(), audienceSnapshot: snapshot as any, revision: { increment: 1 } },
+    });
+    if (published.count === 0) throw new InteractionError(409, 'REQUEST_NOT_PUBLISHABLE', 'Request cannot be published from its current state.');
+    // Explicit publish -> one customer delivery intent per ACTIVE grant
+    // identity, transactionally aligned with the state transition.
+    if (isCapabilityEnabled('EMAIL_NOTIFICATIONS')) {
+      for (const recipient of recipients) {
+        await enqueueNotification({
+          eventType: 'REQUEST_PUBLISHED',
+          clientId: row.clientId,
+          caseId,
+          recipientEmail: recipient.email,
+          recipientName: recipient.name,
+          subjectSafe: REQUEST_PUBLISHED_SUBJECT,
+          createdById: actor.userId,
+          idempotencyKey: `request-published:${requestId}`,
+        }, tx);
+      }
+    }
+    return tx.clientRequest.findUnique({ where: { id: requestId }, include: { fields: true } });
+  });
 }
 
 export async function cancelRequest(actor: InternalActor, requestId: string, expectedRevision: unknown, prisma: Prisma = defaultPrisma) {

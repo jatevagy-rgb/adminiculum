@@ -26,6 +26,8 @@ datasource db {
 // ============================================================================
 
 model User {
+  impactWorkDecisions ComplianceImpactDecision[]
+  workspaceLayouts CaseWorkspaceLayout[]
   createdHourlyRateVersions  HourlyRateVersion[]
   createdBillingPreparations BillingPreparation[] @relation("BillingPreparationCreatedBy")
   closedBillingPreparations  BillingPreparation[] @relation("BillingPreparationClosedBy")
@@ -169,6 +171,8 @@ enum ClientColorKey {
 }
 
 model Client {
+  impactWorkDecisions ComplianceImpactDecision[]
+  anonymizedSourceBindings AnonymizedSourceBinding[]
   hourlyRateVersions        HourlyRateVersion[]
   billingPreparations       BillingPreparation[]
   id                        String                 @id @default(uuid())
@@ -785,6 +789,12 @@ enum AutomationSuppressionType {
 // ============================================================================
 
 model Case {
+  historyPolicy CaseHistoryPolicy?
+  anonymizedSourceBindings AnonymizedSourceBinding[]
+  clientOwner CaseClientOwner?
+  clientOwnerEvents CaseClientOwnerEvent[]
+  workspaceTiles CaseWorkspaceTile[]
+  workspaceLayouts CaseWorkspaceLayout[]
   hourlyRateVersions   HourlyRateVersion[]
   id                   String              @id @default(uuid())
   caseNumber           String              @unique
@@ -1288,6 +1298,7 @@ model Document {
   timelineEvents          TimelineEvent[]
   taskSubmissionDocuments TaskSubmissionDocument[]
   complianceDocuments     ComplianceDocument[]
+  analysisJobs            ComplianceAnalysisJob[]
   modificationProposals   DocumentModificationProposal[]
   dateCandidates          ContractDateCandidate[]
 
@@ -1386,6 +1397,7 @@ enum DocumentCategory {
 // ============================================================================
 
 model DocumentVersion {
+  anonymizedSourceBindings AnonymizedSourceBinding[]
   id                 String                           @id @default(uuid())
   version            Int
   securityScanStatus DocumentSecurityScanStatus       @default(CLEAN)
@@ -1443,7 +1455,9 @@ model DocumentVersion {
   obligationOccurrenceEvidence ClientObligationOccurrence[]
   personDocumentLinks     OrganizationPersonDocumentLink[]
   evidenceRecords         EvidenceRecord[]
+  acceptedSubmissionFiles ClientSubmissionFile[] @relation("SubmissionFileAcceptedVersion")
   complianceClauseAnchors ComplianceDocumentClauseAnchor[]
+  analysisJobs            ComplianceAnalysisJob[]
   modificationProposals   DocumentModificationProposal[]
   dateCandidates          ContractDateCandidate[]
 
@@ -2380,6 +2394,7 @@ model ClientRedactionProfile {
 }
 
 model AnonymousDocument {
+  sourceBinding AnonymizedSourceBinding?
   id        String @id @default(uuid())
   name      String // Original document name with _anon suffix
   content   String // Anonymized content
@@ -4530,6 +4545,15 @@ model ClientRequest {
   findingId            String?
   finding              AssessmentFinding?  @relation("ClientRequestFinding", fields: [findingId], references: [id], onDelete: SetNull)
 
+  // C5D — Grow provenance. A request MAY originate from exactly one Growth
+  // recommendation (an explicit REQUEST_MORE_INFO review decision) so the
+  // customer's response/submission returns to the exact source recommendation
+  // and, through it, the originating run. Nullable: non-Grow requests and
+  // legacy rows stay untouched. onDelete SetNull preserves customer-facing
+  // request history even if the source recommendation is later retired.
+  recommendationId String?
+  recommendation   RecommendationCandidate? @relation("ClientRequestGrowRecommendation", fields: [recommendationId], references: [id], onDelete: SetNull)
+
   @@index([caseId, status])
   @@index([intakeRequestId, status])
   @@index([clientId, status])
@@ -4537,6 +4561,9 @@ model ClientRequest {
   @@index([requirementVersionId])
   @@index([clientControlId])
   @@index([findingId])
+  // One canonical information request per recommendation: the create-or-reuse
+  // flow is idempotent and a repeated click/retry can never create duplicates.
+  @@unique([recommendationId])
   @@map("client_requests")
 }
 
@@ -4711,6 +4738,8 @@ model ClientSubmission {
   rejectionReasonSafe       String?
   acceptedDocumentId        String?
   acceptedDocumentVersionId String?
+  /// Internal, immutable Compliance decision receipt; never part of a customer DTO.
+  complianceAcceptance      Json?
   revision                  Int                    @default(0)
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
@@ -4754,6 +4783,8 @@ model ClientSubmissionFile {
   scanCodeSafe               String?
   uploadedAt                 DateTime?
   scannedAt                  DateTime?
+  acceptedDocumentVersionId  String?
+  acceptedDocumentVersion    DocumentVersion? @relation("SubmissionFileAcceptedVersion", fields: [acceptedDocumentVersionId], references: [id], onDelete: Restrict, map: "submission_file_accepted_version_fk")
   createdAt                  DateTime                   @default(now())
 
   @@index([submissionId, status])
@@ -5409,6 +5440,7 @@ enum OrganizationPersonStatus {
 }
 
 model OrganizationPerson {
+  caseOwnerAssignments CaseClientOwner[]
   id                      String                             @id @default(uuid())
   clientId                String
   client                  Client                             @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -5665,6 +5697,7 @@ model LegalSource {
 }
 
 model LegalSourceVersion {
+  impactWorkDecisions ComplianceImpactDecision[]
   id                String                   @id @default(uuid())
   legalSourceId     String
   legalSource       LegalSource              @relation(fields: [legalSourceId], references: [id], onDelete: Cascade)
@@ -5755,6 +5788,7 @@ enum LegalSourceObservationReviewStatus {
 }
 
 model LegalSourceObservation {
+  impactWorkDecisions ComplianceImpactDecision[]
   id                   String                    @id @default(uuid())
   schemaVersion        Int                       @default(1)
   idempotencyKey       String                    @unique @db.VarChar(255)
@@ -5988,6 +6022,60 @@ model ComplianceDocumentClauseAnchor {
   @@index([celex])
   @@index([ecli])
   @@map("compliance_document_clause_anchors")
+}
+
+// ============================================================================
+// COMPLIANCE DOCUMENT INTELLIGENCE — DURABLE INTERNAL ANALYSIS PROCESSING
+// (BE_COMP_006)
+//
+// Upload/link state stays separate from analysis state: a DocumentVersion row
+// (upload success) and a ComplianceDocument linkage commit independently of this
+// job row. One job exists per EXACT DocumentVersion that was eligible for
+// INTERNAL_ANALYSIS extraction. PENDING work survives a restart through the
+// startup recovery sweep; a retry re-runs the same version against the same
+// digest-idempotent ingest, and the atomic PENDING -> RUNNING claim (with lease
+// expiry for stale RUNNING rows) makes exactly one processor effective per job.
+// Processing never touches publications, findings or legal acceptance.
+//
+// CLIENT BOUNDARY: internal processing state. Never projected through any
+// customer DTO, and CLIENT_POLICY documents never enqueue a job.
+// ============================================================================
+
+enum ComplianceAnalysisJobStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+model ComplianceAnalysisJob {
+  id                String                      @id @default(uuid())
+  documentId        String
+  document          Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  /// Exact version identity pinned at enqueue time. Processing never re-resolves
+  /// "current version" for this job, so a later upload can never redirect it.
+  documentVersionId String                      @unique
+  documentVersion   DocumentVersion             @relation(fields: [documentVersionId], references: [id], onDelete: Cascade)
+  status            ComplianceAnalysisJobStatus @default(PENDING)
+  attemptCount      Int                         @default(0)
+  /// Terminal ingest outcome of the last attempt, e.g. CREATED / UNCHANGED /
+  /// NO_ROWS / SKIPPED_NOT_INTERNAL_ANALYSIS. Bounded machine token only.
+  lastIngestStatus  String?
+  /// Bounded internal failure code, e.g. SCAN_GATE_BLOCKED, CONTENT_UNAVAILABLE,
+  /// DOCX_PACKAGE_UNREADABLE. Never document content, never library text.
+  lastErrorCode     String?
+  /// Bounded error detail for inspection. Never document content.
+  lastErrorDetail   String?                     @db.VarChar(300)
+  lockedAt          DateTime?
+  leaseExpiresAt    DateTime?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  enqueuedAt        DateTime                    @default(now())
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  @@index([status, enqueuedAt])
+  @@map("compliance_analysis_jobs")
 }
 
 model RequirementVersion {
@@ -6723,6 +6811,7 @@ model RecommendationCandidate {
 
   evidenceLinks          RecommendationEvidenceLink[]
   improvementOpportunity ImprovementOpportunity?
+  infoRequests           ClientRequest[] @relation("ClientRequestGrowRecommendation")
 
   @@unique([id, clientId])
   @@index([clientId, status])
@@ -6921,4 +7010,137 @@ model CaseContextSource {
   @@index([caseId, createdAt])
   @@index([sourceCommunicationId])
   @@map("case_context_sources")
+}
+model CaseWorkspaceTile {
+  id String @id @default(uuid())
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  title String @db.VarChar(120)
+  text String @db.VarChar(6000)
+  tone String @db.VarChar(16)
+  kind String @default("TEXT")
+  revision Int @default(1)
+  archived Boolean @default(false)
+  createdById String
+  updatedById String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([caseId, archived])
+  @@map("case_workspace_tiles")
+}
+
+model CaseWorkspaceLayout {
+  id String @id @default(uuid())
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  revision Int @default(1)
+  placements Json
+  updatedAt DateTime @updatedAt
+  @@unique([caseId, userId])
+  @@map("case_workspace_layouts")
+}
+
+model CaseClientOwner {
+  caseId String @id
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  personId String?
+  person OrganizationPerson? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  revision Int @default(1)
+  updatedById String
+  updatedAt DateTime @updatedAt
+  @@map("case_client_owners")
+}
+model CaseClientOwnerEvent {
+  id String @id @default(uuid())
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  personId String?
+  revision Int
+  actorId String?
+  reason String
+  createdAt DateTime @default(now())
+  @@unique([caseId, revision])
+  @@map("case_client_owner_events")
+}
+
+model AnonymizedSourceBinding {
+  artifactId String @id
+  artifact AnonymousDocument @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  sourceDocumentId String
+  sourceDocumentVersionId String
+  sourceVersion DocumentVersion @relation(fields: [sourceDocumentId, sourceDocumentVersionId], references: [documentId, id], onDelete: Restrict)
+  caseId String
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  artifactRevision Int @default(1)
+  sourceDigest String
+  profileDigest String
+  artifactDigest String
+  rulesRevision String
+  scanProvider String
+  createdById String
+  createdAt DateTime @default(now())
+  @@map("anonymized_source_bindings")
+}
+
+model CaseHistoryPolicy {
+  caseId String @id
+  case Case @relation(fields: [caseId], references: [id], onDelete: Restrict)
+  clientId String
+  revision Int @default(1)
+  draftNumber Int
+  publishedNumber Int?
+  revisions CaseHistoryPolicyRevision[]
+  updatedAt DateTime @updatedAt
+  @@map("case_history_policies")
+}
+model CaseHistoryPolicyRevision {
+  id String @id @default(uuid())
+  caseId String
+  policy CaseHistoryPolicy @relation(fields: [caseId], references: [caseId], onDelete: Restrict)
+  number Int
+  snapshot Json
+  createdById String
+  reviewedById String?
+  reviewedAt DateTime?
+  publishedById String?
+  publishedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([caseId, number])
+  @@map("case_history_policy_revisions")
+}
+
+
+/// Immutable operator choice, not a second work queue. Outputs refer to canonical work.
+enum ComplianceImpactDecisionKind {
+  NO_ACTION
+  REEVALUATE
+  REMEDIATION
+  RULE_REVIEW
+}
+model ComplianceImpactDecision {
+  id String @id @default(uuid())
+  clientId String
+  client Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  observationId String
+  observation LegalSourceObservation @relation(fields: [observationId], references: [id], onDelete: Restrict)
+  legalSourceVersionId String
+  legalSourceVersion LegalSourceVersion @relation(fields: [legalSourceVersionId], references: [id], onDelete: Restrict)
+  sourceRevision String @db.VarChar(64)
+  requestDigest String @db.VarChar(64)
+  kind ComplianceImpactDecisionKind
+  note String @db.VarChar(2000)
+  decidedById String
+  decidedBy User @relation(fields: [decidedById], references: [id], onDelete: Restrict)
+  decidedAt DateTime @default(now())
+  provenance Json
+  result Json
+  @@unique([clientId, observationId, sourceRevision], map: "impact_decision_client_observation_revision_key")
+  @@index([observationId])
+  @@map("compliance_impact_decisions")
 }

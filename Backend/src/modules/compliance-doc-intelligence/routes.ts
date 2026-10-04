@@ -22,6 +22,7 @@ import {
   listClauseAnchorsForDocumentWithBinding,
   summarizeClauseAnchorsForDocument,
 } from './service';
+import { listAnalysisJobsForDocument, retryAnalysisForDocument } from './analysisJobService';
 import { buildComplianceMonitoringManifest } from './monitoringManifest';
 import {
   buildDocumentReferenceImpactForCanonicalReference,
@@ -127,6 +128,46 @@ router.get('/clients/:clientId/documents/:documentId/clause-anchors/summary', as
     res.json(await summarizeClauseAnchorsForDocument(documentId));
   } catch (error) {
     respond(error, res, 'COMPLIANCE_INTELLIGENCE_SUMMARY_ERROR');
+  }
+});
+
+/**
+ * BE_COMP_006 — observable, retryable durable internal analysis processing.
+ * Read-only job status per document version. Internal only: workforce
+ * authenticate + requireInternal + client read access + document ownership.
+ */
+router.get('/clients/:clientId/documents/:documentId/analysis-status', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const internal = actor(req);
+    requireInternal(internal);
+    const clientId = String(req.params.clientId);
+    const documentId = String(req.params.documentId);
+    await assertClientReadAccess(internal, clientId);
+    await assertDocumentBelongsToClient(clientId, documentId);
+    res.json({ documentId, jobs: await listAnalysisJobsForDocument(documentId, clientId) });
+  } catch (error) {
+    respond(error, res, 'COMPLIANCE_INTELLIGENCE_ANALYSIS_STATUS_ERROR');
+  }
+});
+
+/**
+ * BE_COMP_006 — retry the analysis of a document's current-version job.
+ *
+ * SUCCEEDED retries are idempotent (nothing re-processes); a FAILED job is
+ * flipped back to PENDING and the atomic claim makes one processor effective.
+ * Never auto-accepts, never publishes, never creates findings.
+ */
+router.post('/clients/:clientId/documents/:documentId/analysis/retry', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const internal = actor(req);
+    requireInternal(internal);
+    const clientId = String(req.params.clientId);
+    const documentId = String(req.params.documentId);
+    await assertClientReadAccess(internal, clientId);
+    await assertDocumentBelongsToClient(clientId, documentId);
+    res.json(await retryAnalysisForDocument(documentId, clientId));
+  } catch (error) {
+    respond(error, res, 'COMPLIANCE_INTELLIGENCE_ANALYSIS_RETRY_ERROR');
   }
 });
 

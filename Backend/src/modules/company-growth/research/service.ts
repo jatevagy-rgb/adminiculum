@@ -36,7 +36,7 @@ import {
   safeText,
 } from '../../client-interaction/base';
 import { DOMAIN_KEYS, ensureCorpusSeeded, findCorpusEvidenceForDomains, registerInternalEvidence, toEvidenceDTO } from './corpus';
-import { computeRoiEstimate, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
+import { computeRoiEstimate, InputValueOrigin, RoiEstimate, RoiProvenanceType, ROI_ENGINE_VERSION } from './roiEngine';
 import { deriveProcessSignals, selectInterventions } from './interventions';
 import {
   GROW_ASSESSMENT_SCHEMA,
@@ -47,6 +47,7 @@ import {
   type NormalizableObservation,
 } from './observationSignals';
 import { createInitiative } from '../../client-company/service';
+import { createRequestDraft } from '../../client-interaction/requestService';
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -197,6 +198,24 @@ function metricMap(metrics: unknown): Map<string, number | boolean | null> {
 function numMetric(map: Map<string, number | boolean | null>, code: string): number | null {
   const v = map.get(code);
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/**
+ * Derives the honest value origin of a ProcessObservationSnapshot from its
+ * recorded provenance. The canonical T2B snapshot computes its metrics from
+ * estimated step fields (inputFieldInventory lists `steps.estimated*`), so it
+ * is ESTIMATED — never MEASURED. A snapshot whose provenance cannot establish
+ * an origin returns null (caller fails closed).
+ */
+function deriveSnapshotValueOrigin(provenance: unknown): InputValueOrigin | null {
+  if (!provenance || typeof provenance !== 'object') return null;
+  const inventory: string[] = Array.isArray((provenance as { inputFieldInventory?: unknown }).inputFieldInventory)
+    ? ((provenance as { inputFieldInventory: unknown[] }).inputFieldInventory.map((f) => String(f)))
+    : [];
+  if (inventory.length === 0) return null;
+  if (inventory.some((f) => f.includes('estimated'))) return 'ESTIMATED';
+  if (inventory.some((f) => f.includes('measured') || f.includes('observed'))) return 'MEASURED';
+  return null;
 }
 
 /** Estimated monthly run frequency from the process' declared frequency. */
@@ -885,27 +904,48 @@ export async function reviewRecommendation(
   requireManager(actor);
   await assertClientReadAccess(actor, clientId, db as PrismaClient);
   const note = safeText(input.note, 'note', 2000, false) ?? null;
+  const decision = input.decision;
+  const status: RecommendationCandidateStatus =
+    decision === 'ACCEPT' ? 'ACCEPTED' : decision === 'DECLINE' ? 'DECLINED' : 'NEEDS_MORE_DATA';
 
-  const rec = await db.recommendationCandidate.findFirst({ where: { id: recommendationId, clientId } });
-  if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
-  if (rec.status !== 'PENDING_REVIEW') {
-    throw new InteractionError(409, 'RECOMMENDATION_ALREADY_REVIEWED', 'This recommendation was already reviewed.');
-  }
-  if (input.decision === 'ACCEPT' && rec.sufficiency !== 'SUPPORTED') {
-    throw new InteractionError(422, 'RECOMMENDATION_NOT_SUPPORTED', 'Only SUPPORTED recommendations can be accepted.');
-  }
-
+  // BE-GROW-004: the whole decision is ONE transaction with a conditional
+  // (compare-and-set) update on the recommendation state. The eligibility
+  // checks and the state claim happen inside the transaction, so concurrent
+  // ACCEPT vs DECLINE (or duplicate ACCEPT) produce exactly one canonical
+  // winner and can never leave a contradictory Opportunity/recommendation
+  // state. The run-validity check is evaluated on the same snapshot.
   const prisma = db as PrismaClient;
   return prisma.$transaction(async (tx) => {
-    const status: RecommendationCandidateStatus =
-      input.decision === 'ACCEPT' ? 'ACCEPTED' : input.decision === 'DECLINE' ? 'DECLINED' : 'NEEDS_MORE_DATA';
-    const updated = await tx.recommendationCandidate.update({
-      where: { id_clientId: { id: rec.id, clientId } },
+    const rec = await tx.recommendationCandidate.findFirst({
+      where: { id: recommendationId, clientId },
+      include: { run: { select: { status: true } } },
+    });
+    if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+    if (decision === 'ACCEPT' && rec.sufficiency !== 'SUPPORTED') {
+      throw new InteractionError(422, 'RECOMMENDATION_NOT_SUPPORTED', 'Only SUPPORTED recommendations can be accepted.');
+    }
+    // Only a recommendation from a COMPLETED run can receive a final human
+    // review decision. RUNNING and FAILED runs are not eligible; there is no
+    // other stale/supersession policy invented here.
+    if (rec.run.status !== 'COMPLETED') {
+      throw new InteractionError(409, 'RECOMMENDATION_RUN_NOT_COMPLETED', 'The recommendation run is not completed; it cannot be reviewed.');
+    }
+
+    // CAS: claim the pending row. A concurrent winner flips the status first,
+    // so the loser matches zero rows and must never overwrite the winner or
+    // create a contradictory opportunity.
+    const claimed = await tx.recommendationCandidate.updateMany({
+      where: { id: rec.id, clientId, status: 'PENDING_REVIEW' },
       data: { status, reviewedById: actor.userId, reviewedAt: new Date(), reviewNote: note },
     });
+    if (claimed.count !== 1) {
+      throw new InteractionError(409, 'RECOMMENDATION_ALREADY_REVIEWED', 'This recommendation was already reviewed.');
+    }
+
+    const updated = await tx.recommendationCandidate.findUniqueOrThrow({ where: { id: rec.id } });
 
     let opportunity = null;
-    if (input.decision === 'ACCEPT') {
+    if (decision === 'ACCEPT') {
       opportunity = await tx.improvementOpportunity.create({
         data: {
           clientId,
@@ -926,6 +966,131 @@ export async function reviewRecommendation(
 }
 
 // ---------------------------------------------------------------------------
+// BE-GROW-005 — REQUEST_MORE_INFO handoff to the canonical ClientRequest
+// draft/publish/submission lifecycle.
+//
+// A REQUEST_MORE_INFO review decision alone creates NOTHING customer-facing:
+// no published request, no email, no task. The manager then explicitly chooses
+// the information source. The customer-source choice creates (or idempotently
+// reuses) exactly one DRAFT ClientRequest linked to the originating
+// recommendation (and through it, the originating run). Publication stays the
+// existing explicit publishRequest step; the customer sees the request only
+// through the existing customer request projections after publication. The
+// customer response (submission) is traceable back to the recommendation and
+// never auto-accepts the recommendation; a rerun/review remains an explicit
+// operator action.
+// ---------------------------------------------------------------------------
+
+export async function createGrowInfoRequestDraft(
+  actor: InternalActor,
+  clientId: string,
+  recommendationId: string,
+  input: {
+    caseId?: unknown;
+    clientSafeTitle?: unknown;
+    clientSafeInstructions?: unknown;
+    dueAt?: unknown;
+    fields?: unknown;
+  } = {},
+  db: Db = defaultPrisma,
+) {
+  requireManager(actor);
+  await assertClientReadAccess(actor, clientId, db as PrismaClient);
+  const prisma = db as PrismaClient;
+
+  const rec = await prisma.recommendationCandidate.findFirst({ where: { id: recommendationId, clientId } });
+  if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+  // A customer information request may only originate from an explicit
+  // REQUEST_MORE_INFO review decision (status NEEDS_MORE_DATA).
+  if (rec.status !== 'NEEDS_MORE_DATA') {
+    throw new InteractionError(409, 'RECOMMENDATION_NOT_PENDING_INFO', 'Only a recommendation explicitly reviewed with REQUEST_MORE_INFO can request customer information.');
+  }
+
+  // Idempotent create-or-reuse: a repeated click/retry never creates a second
+  // request for the same recommendation.
+  const existing = await prisma.clientRequest.findFirst({
+    where: { recommendationId: rec.id },
+    include: { fields: true },
+  });
+  if (existing) return { request: existing, reused: true };
+
+  try {
+    const created = await createRequestDraft(actor, {
+      caseId: String(input.caseId || ''),
+      type: 'INFORMATION_REQUEST',
+      clientSafeTitle: input.clientSafeTitle ?? rec.title,
+      clientSafeInstructions: input.clientSafeInstructions,
+      dueAt: input.dueAt,
+      required: true,
+      fields: input.fields ?? [{ type: 'LONG_TEXT', label: 'Válasz', required: true, maxLength: 6000 }],
+      growContext: { recommendationId: rec.id },
+    }, prisma);
+    return { request: created, reused: false };
+  } catch (err) {
+    // Concurrent duplicate create: the unique [recommendationId] constraint
+    // admits exactly one canonical request; the loser reuses the winner.
+    if ((err as { code?: string })?.code === 'P2002') {
+      const winner = await prisma.clientRequest.findFirst({
+        where: { recommendationId: rec.id },
+        include: { fields: true },
+      });
+      if (winner) return { request: winner, reused: true };
+    }
+    throw err;
+  }
+}
+
+export async function getGrowInfoRequestReadback(
+  actor: InternalActor,
+  clientId: string,
+  recommendationId: string,
+  db: Db = defaultPrisma,
+) {
+  requireManager(actor);
+  await assertClientReadAccess(actor, clientId, db as PrismaClient);
+  const prisma = db as PrismaClient;
+
+  const rec = await prisma.recommendationCandidate.findFirst({ where: { id: recommendationId, clientId } });
+  if (!rec) throw new InteractionError(404, 'RECOMMENDATION_NOT_FOUND', 'Recommendation not found for this client.');
+
+  const request = await prisma.clientRequest.findFirst({
+    where: { recommendationId: rec.id },
+    include: {
+      fields: { orderBy: { displayOrder: 'asc' } },
+      submissions: {
+        orderBy: { createdAt: 'desc' },
+        include: { fields: true, files: true },
+      },
+    },
+  });
+
+  return {
+    recommendation: { id: rec.id, status: rec.status, runId: rec.runId },
+    request: request
+      ? {
+          id: request.id,
+          caseId: request.caseId,
+          status: request.status,
+          clientSafeTitle: request.clientSafeTitle,
+          clientSafeInstructions: request.clientSafeInstructions,
+          dueAt: request.dueAt,
+          publishedAt: request.publishedAt,
+          revision: request.revision,
+          fields: request.fields.map((f) => ({ id: f.id, label: f.clientSafeLabel, type: f.type, required: f.required })),
+          submissions: request.submissions.map((s) => ({
+            id: s.id,
+            status: s.status,
+            submittedAt: s.submittedAt,
+            customerNote: s.customerNote,
+            answerCount: s.fields.length,
+            fileCount: s.files.length,
+          })),
+        }
+      : null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Separate initiative handoff — reuses the canonical createInitiative contract.
 // ---------------------------------------------------------------------------
 
@@ -939,31 +1104,43 @@ export async function startInitiativeFromOpportunity(
   requireManager(actor);
   await assertClientReadAccess(actor, clientId, db as PrismaClient);
 
-  const opp = await db.improvementOpportunity.findFirst({
-    where: { id: opportunityId, clientId },
-    include: { recommendation: true },
+  // The whole handoff is ONE transaction: initiative create + opportunity link
+  // + INITIATIVE_STARTED transition commit together or roll back together.
+  // The conditional updateMany is the concurrency gate: only the first writer
+  // of the still-unlinked opportunity succeeds; a concurrent/retried handoff
+  // matches zero rows, throws and rolls back its own initiative.
+  const prisma = db as PrismaClient;
+  return prisma.$transaction(async (tx) => {
+    const opp = await tx.improvementOpportunity.findFirst({
+      where: { id: opportunityId, clientId },
+      include: { recommendation: true },
+    });
+    if (!opp) throw new InteractionError(404, 'OPPORTUNITY_NOT_FOUND', 'Opportunity not found for this client.');
+    if (opp.developmentInitiativeId) {
+      throw new InteractionError(409, 'OPPORTUNITY_ALREADY_LINKED', 'Opportunity already handed off to an initiative.');
+    }
+
+    const initiative = await createInitiative(actor, clientId, {
+      title: input.title ?? opp.title,
+      reason: input.reason ?? opp.problem,
+      currentState: input.currentState ?? opp.problem,
+      targetState: input.targetState ?? opp.direction,
+      priority: input.priority,
+      caseId: input.caseId,
+      status: 'PLANNED',
+    }, tx as unknown as PrismaClient);
+
+    const linked = await tx.improvementOpportunity.updateMany({
+      where: { id: opp.id, clientId, developmentInitiativeId: null },
+      data: { developmentInitiativeId: initiative.id, status: 'INITIATIVE_STARTED' as ImprovementOpportunityStatus },
+    });
+    if (linked.count !== 1) {
+      throw new InteractionError(409, 'OPPORTUNITY_ALREADY_LINKED', 'Opportunity already handed off to an initiative.');
+    }
+
+    const updated = await tx.improvementOpportunity.findUniqueOrThrow({ where: { id: opp.id } });
+    return { opportunity: updated, initiative };
   });
-  if (!opp) throw new InteractionError(404, 'OPPORTUNITY_NOT_FOUND', 'Opportunity not found for this client.');
-  if (opp.developmentInitiativeId) {
-    throw new InteractionError(409, 'OPPORTUNITY_ALREADY_LINKED', 'Opportunity already handed off to an initiative.');
-  }
-
-  const initiative = await createInitiative(actor, clientId, {
-    title: input.title ?? opp.title,
-    reason: input.reason ?? opp.problem,
-    currentState: input.currentState ?? opp.problem,
-    targetState: input.targetState ?? opp.direction,
-    priority: input.priority,
-    caseId: input.caseId,
-    status: 'PLANNED',
-  }, db as PrismaClient);
-
-  const updated = await db.improvementOpportunity.update({
-    where: { id: opp.id },
-    data: { developmentInitiativeId: initiative.id, status: 'INITIATIVE_STARTED' as ImprovementOpportunityStatus },
-  });
-
-  return { opportunity: updated, initiative };
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,6 +1189,24 @@ export async function recordOutcomeMeasurement(
     if (after.observedAt < before.observedAt) {
       throw new InteractionError(422, 'SNAPSHOT_ORDER_INVALID', 'After-snapshot must not precede the before-snapshot.');
     }
+    if (after.metricVersion !== before.metricVersion) {
+      throw new InteractionError(422, 'SNAPSHOT_SCOPE_INCOMPATIBLE', 'Before and after snapshots use incompatible metric versions and cannot be compared.');
+    }
+  }
+
+  // G1: never relabel an unknown-provenance snapshot. The measurement basis
+  // must be derivable from the recorded snapshot provenance, or recording is
+  // rejected with an actionable unavailable state.
+  const beforeOrigin = deriveSnapshotValueOrigin(before.provenance);
+  if (!beforeOrigin) {
+    throw new InteractionError(422, 'SNAPSHOT_PROVENANCE_UNKNOWN', 'Before-snapshot carries no value provenance; the measurement basis cannot be established.');
+  }
+  let afterOrigin: InputValueOrigin | null = null;
+  if (after) {
+    afterOrigin = deriveSnapshotValueOrigin(after.provenance);
+    if (!afterOrigin) {
+      throw new InteractionError(422, 'SNAPSHOT_PROVENANCE_UNKNOWN', 'After-snapshot carries no value provenance; the measurement basis cannot be established.');
+    }
   }
 
   const beforeM = metricMap(before.metrics);
@@ -1027,6 +1222,11 @@ export async function recordOutcomeMeasurement(
     hourlyCostHuf: input.hourlyCostHuf ?? null,
     peopleAffected: input.peopleAffected ?? null,
     provenanceType: input.provenanceType ?? null,
+    // Before/after comparison derives the basis from the snapshots' own
+    // provenance (canonical snapshots are estimate-based → ESTIMATED).
+    // A stated reduction over a calculated snapshot basis stays CALCULATED.
+    beforeOrigin: after ? beforeOrigin : (input.expectedActiveReductionPct != null ? 'CALCULATED' : beforeOrigin),
+    afterOrigin: after ? afterOrigin : null,
   });
 
   const metricsSummary = {

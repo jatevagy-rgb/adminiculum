@@ -19,10 +19,17 @@ describe("CP1 organizational client portal UI", () => {
     assert.match(shell(), /selectedWorkspace\?\.mode === 'ORGANIZATION'/);
     assert.match(shell(), /selectedWorkspace\?\.mode === 'CASE_RELAY'/);
     assert.match(shell(), /OrganizationPortalViews/);
-    assert.match(shell(), /OrgHomeView/);
-    for (const label of ["'Főoldal', '\/portal'", "'Ügyek', '\/portal\/ugyek'", "'Teendőim', '\/portal\/teendoim'", "'Dokumentumok', '\/portal\/dokumentumok'", "'Üzenetek', '\/portal\/uzenetek'"]) {
+    // Client Portal 3.0: the ORGANIZATION home body is the V3 home; the legacy
+    // OrgHomeView remains in the repository for rollback only.
+    assert.match(shell(), /PortalHomeV3/);
+    assert.equal(existsSync(path.join(root, "src/components/client-portal/OrgHomeView.tsx")), true);
+    for (const label of ["'Főoldal', '\/portal'", "'Teendőim', '\/portal\/teendoim'", "'Dokumentumok', '\/portal\/dokumentumok'", "'Üzenetek', '\/portal\/uzenetek'"]) {
       assert.match(shell(), new RegExp(label));
     }
+    // Client Portal 3.0 cutover: Ügyek → /portal/ugyek is the ORGANIZATION primary
+    // destination and lives in the V3 navigation module.
+    const navSrc = read("src/components/client-portal-v3/navigation.ts");
+    assert.match(navSrc, /label: "Ügyek", href: "\/portal\/ugyek"/);
     assert.equal(existsSync(path.join(root, "src/app/portal/szervezeti-attekintes/page.tsx")), true);
     assert.equal(existsSync(path.join(root, "src/app/portal/szerzodesek/page.tsx")), true);
     assert.equal(existsSync(path.join(root, "src/app/portal/vallalat/page.tsx")), true);

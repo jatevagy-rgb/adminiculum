@@ -152,6 +152,7 @@ describe('DocumentReview authority stabilization', () => {
       update: jest.fn().mockResolvedValue({}),
     };
     (driveService.checkinDocument as jest.Mock).mockImplementation(async () => { checkins += 1; });
+    prismaMock.$queryRaw = jest.fn().mockResolvedValue([{ status: 'IN_REVIEW' }]);
     prismaMock.$transaction = jest.fn().mockImplementation(async (cb: any) => cb(prismaMock));
   }
 
@@ -307,7 +308,7 @@ describe('TaskReviewDecision authority stabilization', () => {
     submissionUpdates = [];
     taskMock = {
       $transaction: jest.fn().mockImplementation(async (cb: any) => cb(taskMock)),
-      $queryRaw: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([{ status: 'IN_REVIEW' }]),
       task: {
         findUnique: jest.fn().mockResolvedValue({ ...taskRecord }),
         update: jest.fn().mockImplementation(async ({ data }: any) => ({ ...taskRecord, ...data })),
@@ -453,7 +454,7 @@ describe('TaskSubmission exact-version binding', () => {
   it('binds an attached output to the document version current at attach time', async () => {
     const attachMock: any = {
       $transaction: jest.fn().mockImplementation(async (cb: any) => cb(attachMock)),
-      $queryRaw: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([{ status: 'IN_REVIEW' }]),
       task: {
         findUnique: jest.fn().mockResolvedValue({
           id: 'task-1',

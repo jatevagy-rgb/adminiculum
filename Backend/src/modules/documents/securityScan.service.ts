@@ -1,6 +1,7 @@
 import { prisma } from '../../prisma/prisma.service';
 import { getScanner } from '../upload-security/scannerAdapter';
 import { validateWorkforceUpload } from '../upload-security/uploadValidationCore';
+import { resumeAnalysisJobsBlockedByScan } from '../compliance-doc-intelligence/analysisJobService';
 
 export type DocumentSecurityScanStatus = 'PENDING_SCAN' | 'CLEAN' | 'SCAN_FAILED' | 'INFECTED';
 
@@ -26,6 +27,17 @@ export async function scanDocumentVersionInBackground(versionId: string, buffer:
     status = 'SCAN_FAILED';
   }
   await prisma.documentVersion.update({ where: { id: versionId }, data: { securityScanStatus: status } });
+  // BE_COMP_006: a CLEAN verdict unblocks durable INTERNAL_ANALYSIS jobs that
+  // failed on the mandatory scan gate. Non-fatal and fire-and-forget: the scan
+  // outcome itself is already persisted.
+  if (status === 'CLEAN') {
+    try {
+      const resumed = await resumeAnalysisJobsBlockedByScan(versionId);
+      if (resumed > 0) console.log(`[Scan] resumed ${resumed} internal analysis job(s) for version ${versionId}`);
+    } catch (error) {
+      console.error(`[Scan] internal analysis resume failed for version ${versionId}:`, error);
+    }
+  }
 }
 
 export function queueDocumentVersionScan(versionId: string, buffer: Buffer): void {

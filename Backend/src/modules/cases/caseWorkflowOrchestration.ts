@@ -1,7 +1,9 @@
 import { randomUUID } from 'crypto';
+import { Prisma as PrismaNamespace, PrismaClient } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
+import { lockCaseForMutation, withCaseWorkGuard } from './caseMutationGuard';
 
-type Prisma = typeof defaultPrisma;
+type Prisma = PrismaClient | PrismaNamespace.TransactionClient;
 type Actor = { userId: string };
 
 export class CaseWorkflowError extends Error {
@@ -95,6 +97,10 @@ export async function instantiateCaseWorkflow(input: {
   assigneesByStepKey?: Record<string, string | null | undefined>;
   fallbackAssigneeId?: string | null;
 }, db: Prisma = defaultPrisma) {
+  if ('$transaction' in db) {
+    return withCaseWorkGuard(db, input.caseId, (tx) => instantiateCaseWorkflow(input, tx as any));
+  }
+  await lockCaseForMutation(db as any, input.caseId);
   const templateKey = input.templateKey || 'SIMPLE';
   // DB-backed active template wins (latest ACTIVE version); otherwise the
   // built-in template. Resolved inline (no service import) to avoid a cycle.
@@ -166,6 +172,10 @@ export async function instantiateCaseWorkflow(input: {
 export async function activateReadyWorkflowSuccessors(completedTaskId: string, actor: Actor, db: Prisma = defaultPrisma) {
   const completed = await db.task.findUnique({ where: { id: completedTaskId } }) as any;
   if (!completed?.workflowInstanceId || !completed.workflowStepKey) return { activated: [] as string[] };
+  if ('$transaction' in db) {
+    return withCaseWorkGuard(db, completed.caseId, (tx) => activateReadyWorkflowSuccessors(completedTaskId, actor, tx as any));
+  }
+  await lockCaseForMutation(db as any, completed.caseId);
   const siblings = await db.task.findMany({ where: { caseId: completed.caseId, workflowInstanceId: completed.workflowInstanceId } as any }) as any[];
   const completedKeys = new Set(siblings.filter((task) => ['DONE'].includes(String(task.status))).map((task) => task.workflowStepKey).filter(Boolean) as string[]);
   const activated: string[] = [];

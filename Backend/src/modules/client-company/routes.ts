@@ -328,6 +328,27 @@ clientCompanyRouter.post('/clients/:clientId/grow/opportunities/:recommendationI
     }));
   } catch (e) { fail(res, e); }
 });
+// BE-GROW-005: REQUEST_MORE_INFO handoff to the canonical ClientRequest
+// lifecycle. The create/reuse endpoint only ever produces a DRAFT request
+// linked to the recommendation; publication remains the existing explicit
+// client-interaction publish step, and the readback returns the linked request
+// plus the customer submissions for internal review.
+clientCompanyRouter.post('/clients/:clientId/grow/opportunities/:recommendationId/info-requests', async (req, res) => {
+  try {
+    res.json(await research.createGrowInfoRequestDraft(actor(req), String(req.params.clientId), String(req.params.recommendationId), {
+      caseId: req.body?.caseId,
+      clientSafeTitle: req.body?.clientSafeTitle,
+      clientSafeInstructions: req.body?.clientSafeInstructions,
+      dueAt: req.body?.dueAt,
+      fields: req.body?.fields,
+    }));
+  } catch (e) { fail(res, e); }
+});
+clientCompanyRouter.get('/clients/:clientId/grow/opportunities/:recommendationId/info-requests', async (req, res) => {
+  try {
+    res.json(await research.getGrowInfoRequestReadback(actor(req), String(req.params.clientId), String(req.params.recommendationId)));
+  } catch (e) { fail(res, e); }
+});
 clientCompanyRouter.post('/clients/:clientId/grow/opportunities/:opportunityId/start-initiative', async (req, res) => {
   try {
     res.json(await research.startInitiativeFromOpportunity(actor(req), String(req.params.clientId), String(req.params.opportunityId), {

@@ -73,12 +73,19 @@ describe('roiEngine provenance + validation', () => {
   });
 
   it('derives MEASURED provenance from a real after-snapshot and keeps ordering', () => {
+    // NOTE: this expectation changed with the PR460 G1-L repair. The old test
+    // omitted both origins and the engine silently labelled the comparison
+    // MEASURED. Missing origins are not evidence: the MEASURED basis now
+    // requires explicit MEASURED origins on both sides (as the production
+    // recordOutcomeMeasurement path always provides from snapshot provenance).
     const result = computeRoiEstimate({
       runsPerMonth: 4,
       beforeActiveMinutes: 435,
       beforeWaitingMinutes: 8100,
       afterActiveMinutes: 200,
       afterWaitingMinutes: 3000,
+      beforeOrigin: 'MEASURED',
+      afterOrigin: 'MEASURED',
       hourlyCostHuf: { low: 8000, base: 12000, high: 16000 },
       peopleAffected: 3,
     });

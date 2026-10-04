@@ -59,7 +59,7 @@ function isRetryable(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034';
 }
 
-async function reconcileClientComplianceInTx(
+export async function reconcileClientComplianceInTx(
   clientId: string,
   actorUserId: string,
   tx: TransactionClient,

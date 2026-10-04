@@ -172,6 +172,8 @@ async function canReadClientIdentity(req: Request, clientId: string): Promise<bo
   return Boolean(relatedCase);
 }
 
+export { canReadClientIdentity };
+
 async function requireClientIdentityReadAccess(
   req: Request,
   res: Response,

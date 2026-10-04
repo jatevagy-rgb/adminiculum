@@ -9,6 +9,7 @@ import { authenticate } from '../../middleware/auth';
 import handoffPackagesService, {
   HandoffPackageServiceError,
 } from './service';
+import { CaseMutationGuardError } from '../cases/caseMutationGuard';
 import {
   isDatabaseFoundationEnabled,
   requireDatabaseFoundation,
@@ -47,7 +48,7 @@ function gateHandoffListRead(
 }
 
 function sendServiceError(res: Response, error: unknown): void {
-  if (error instanceof HandoffPackageServiceError) {
+  if (error instanceof HandoffPackageServiceError || error instanceof CaseMutationGuardError) {
     res.status(error.statusCode).json({
       status: error.statusCode,
       code: error.code,

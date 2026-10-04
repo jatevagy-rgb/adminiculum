@@ -10,6 +10,8 @@
  */
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import crypto from 'crypto';
+import { Prisma as PrismaTypes } from '@prisma/client';
+import { hrConfidentialReadAllowed } from '../documents/authorization';
 import {
   InteractionError, InternalActor, Prisma, CustomerContext,
   requireInternal, requireExpected, assertInternalCaseAccess, applyInternalQueueCaseScope, safeText, assertClientSafe,
@@ -18,6 +20,7 @@ import { requireCapability, isCapabilityEnabled } from './gates';
 import { validateUploadFile, DEFAULT_MAX_FILE_BYTES } from './fileValidation';
 import { getScanner, isAcceptableFileStatus } from '../upload-security/scannerAdapter';
 import { getQuarantineStore, QuarantineError } from './quarantineAdapter';
+import { enqueueNotification } from './notificationService';
 
 function toClientSafeSubmission(row: any) {
   const dto = {
@@ -70,6 +73,49 @@ async function loadPublishedRequest(ctx: CustomerContext, requestId: string, pri
   if (!req) throw new InteractionError(404, 'REQUEST_NOT_FOUND', 'Request is not available.');
   if (!['PUBLISHED', 'PARTIALLY_SUBMITTED', 'CORRECTION_REQUESTED'].includes(req.status)) throw new InteractionError(409, 'REQUEST_NOT_OPEN', 'Request is not open for submission.');
   return req;
+}
+
+/**
+ * Internal workforce intent for a completed customer submission: one in-app
+ * notification to the assigned internal reviewer (request assignee, else case
+ * responsible lawyer, else intake triage owner). Runs inside the caller's
+ * transaction so the intent is aligned with the SUBMITTED transition. Never
+ * includes customer content — title/message/link only.
+ */
+async function notifyInternalSubmissionReceived(
+  tx: any,
+  request: { caseId: string | null; intakeRequestId: string | null; assignedInternalUserId: string | null; clientSafeTitle: string },
+  submissionId: string,
+  submissionRevision: number,
+): Promise<void> {
+  let reviewerId: string | null = request.assignedInternalUserId;
+  if (!reviewerId && request.caseId) {
+    const caseRow = await tx.case.findUnique({ where: { id: request.caseId }, select: { assignedLawyerId: true } });
+    reviewerId = caseRow?.assignedLawyerId || null;
+  }
+  if (!reviewerId && request.intakeRequestId) {
+    const intake = await tx.clientPortalIntakeRequest.findUnique({ where: { id: request.intakeRequestId }, select: { triagedByInternalUserId: true } });
+    reviewerId = intake?.triagedByInternalUserId || null;
+  }
+  if (!reviewerId) return;
+  // The notification has a User FK: an unknown/stale assignee must never fail
+  // the customer's submission transition — skip the intent truthfully.
+  const reviewer = await tx.user.findUnique({ where: { id: reviewerId }, select: { id: true, isActive: true, status: true } });
+  if (!reviewer || reviewer.isActive === false || String(reviewer.status) !== 'ACTIVE') return;
+  const link = request.caseId
+    ? `/cases/${request.caseId}?submission=${submissionId}&revision=${submissionRevision}`
+    : request.intakeRequestId
+      ? `/client-portal-admin/megkeresesek/${request.intakeRequestId}?submission=${submissionId}`
+      : null;
+  await tx.notification.create({
+    data: {
+      type: 'REVIEW_REQUESTED',
+      title: 'Ügyfélbeküldés ellenőrzésre vár',
+      message: `Új beküldés érkezett: ${request.clientSafeTitle}`,
+      link: link ?? undefined,
+      userId: reviewerId,
+    },
+  });
 }
 
 function fieldOptions(field: any): string[] {
@@ -140,7 +186,8 @@ export async function submitIntakeInformationResponseInTransaction(
     },
     include: { fields: true, files: true },
   });
-  await tx.clientRequest.update({ where: { id: request.id }, data: { status: 'SUBMITTED', revision: { increment: 1 } } });
+  const updatedRequest = await tx.clientRequest.update({ where: { id: request.id }, data: { status: 'SUBMITTED', revision: { increment: 1 } } });
+  await notifyInternalSubmissionReceived(tx, updatedRequest, submission.id, Number(updatedRequest.revision));
   return toClientSafeSubmission(submission);
 }
 
@@ -270,7 +317,19 @@ export async function submitSubmission(ctx: CustomerContext, submissionId: strin
       if (value) validateStructuredAnswer(field, value);
     }
   }
-  return toClientSafeSubmission({ ...await prisma.clientSubmission.update({ where: { id: submissionId }, data: { status: 'SUBMITTED', submittedAt: new Date(), customerNote: safeText(input.customerNote, 'customerNote', 1000), customerUnavailableReasonSafe: null, customerUnavailableDeclaredAt: null, revision: { increment: 1 } } }), files: [], fields: [] });
+  const revision = Number(sub.revision);
+  const updated = await prisma.$transaction(async (tx) => {
+    // Conditional update: exactly one concurrent submit wins, so the internal
+    // review intent below is created exactly once.
+    const submitted = await tx.clientSubmission.updateMany({
+      where: { id: submissionId, status: { in: ['DRAFT', 'UPLOADING', 'CORRECTION_REQUESTED'] }, revision },
+      data: { status: 'SUBMITTED', submittedAt: new Date(), customerNote: safeText(input.customerNote, 'customerNote', 1000), customerUnavailableReasonSafe: null, customerUnavailableDeclaredAt: null, revision: { increment: 1 } },
+    });
+    if (submitted.count === 0) throw new InteractionError(409, 'SUBMISSION_NOT_SUBMITTABLE', 'Submission cannot be submitted.');
+    if (request) await notifyInternalSubmissionReceived(tx, request, submissionId, revision + 1);
+    return tx.clientSubmission.findUnique({ where: { id: submissionId } });
+  });
+  return toClientSafeSubmission({ ...updated, files: [], fields: [] });
 }
 
 /**
@@ -331,16 +390,22 @@ export async function declareUnavailable(ctx: CustomerContext, requestId: string
   const submission = existing ?? await prisma.clientSubmission.create({
     data: { clientRequestId: requestId, clientId: ctx.clientId, caseId: ctx.caseId, clientPortalIdentityId: ctx.clientPortalIdentityId, status: 'DRAFT' },
   });
-  const updated = await prisma.clientSubmission.update({
-    where: { id: submission.id },
-    data: {
-      status: 'SUBMITTED',
-      submittedAt: new Date(),
-      customerUnavailableDeclaredAt: new Date(),
-      customerUnavailableReasonSafe: reason,
-      revision: { increment: 1 },
-    },
-    include: { files: true, fields: true },
+  const revision = Number(submission.revision);
+  const updated = await prisma.$transaction(async (tx) => {
+    // Conditional update: a concurrent submit/declaration wins exactly once.
+    const declared = await tx.clientSubmission.updateMany({
+      where: { id: submission.id, revision },
+      data: {
+        status: 'SUBMITTED',
+        submittedAt: new Date(),
+        customerUnavailableDeclaredAt: new Date(),
+        customerUnavailableReasonSafe: reason,
+        revision: { increment: 1 },
+      },
+    });
+    if (declared.count === 0) throw new InteractionError(409, 'SUBMISSION_ALREADY_SUBMITTED', 'A submission has already been sent for this request.');
+    await notifyInternalSubmissionReceived(tx, req, submission.id, revision + 1);
+    return tx.clientSubmission.findUnique({ where: { id: submission.id }, include: { files: true, fields: true } });
   });
   return toClientSafeSubmission(updated);
 }
@@ -394,7 +459,34 @@ export async function requestCorrection(actor: InternalActor, submissionId: stri
   if (!row) throw new InteractionError(404, 'SUBMISSION_NOT_FOUND', 'Submission not found.');
   await assertInternalCaseAccess(actor, requireCaseSubmission(row), prisma);
   requireExpected(row, input.expectedRevision);
-  return prisma.clientSubmission.update({ where: { id: submissionId }, data: { status: 'CORRECTION_REQUESTED', reviewedById: actor.userId, reviewedAt: new Date(), correctionReasonSafe: safeText(input.reasonSafe, 'reasonSafe', 1000), revision: { increment: 1 } } });
+  const revision = Number(row.revision);
+  return prisma.$transaction(async (tx) => {
+    // Conditional update: exactly one concurrent correction wins, so the
+    // customer delivery intent below is created exactly once.
+    const corrected = await tx.clientSubmission.updateMany({
+      where: { id: submissionId, revision },
+      data: { status: 'CORRECTION_REQUESTED', reviewedById: actor.userId, reviewedAt: new Date(), correctionReasonSafe: safeText(input.reasonSafe, 'reasonSafe', 1000), revision: { increment: 1 } },
+    });
+    if (corrected.count === 0) throw new InteractionError(409, 'REVISION_CONFLICT', 'The record was modified by someone else. Reload and retry.');
+    // Correction -> one customer delivery intent to the submitting identity,
+    // transactionally aligned with the CORRECTION_REQUESTED transition.
+    if (isCapabilityEnabled('EMAIL_NOTIFICATIONS')) {
+      const identity = await tx.clientPortalIdentity.findUnique({ where: { id: row.clientPortalIdentityId }, select: { normalizedEmail: true, displayName: true } });
+      if (identity?.normalizedEmail) {
+        await enqueueNotification({
+          eventType: 'CORRECTION_REQUESTED',
+          clientId: row.clientId,
+          caseId: row.caseId,
+          recipientEmail: identity.normalizedEmail,
+          recipientName: identity.displayName,
+          subjectSafe: 'Hiánypótlás kérés az Adminiculum ügyfélportálon',
+          createdById: actor.userId,
+          idempotencyKey: `request-correction:${submissionId}:${revision + 1}`,
+        }, tx);
+      }
+    }
+    return tx.clientSubmission.findUnique({ where: { id: submissionId } });
+  });
 }
 
 export async function rejectSubmission(actor: InternalActor, submissionId: string, input: { reasonSafe?: unknown; expectedRevision?: unknown }, prisma: Prisma = defaultPrisma) {
@@ -412,52 +504,62 @@ export async function rejectSubmission(actor: InternalActor, submissionId: strin
  * configured this can never run in production). Customer can never invoke this.
  */
 export async function acceptFileIntoMatter(actor: InternalActor, submissionId: string, fileId: string, input: { documentId?: string; documentName?: string; expectedRevision?: unknown }, prisma: Prisma = defaultPrisma) {
+  return prisma.$transaction((tx) => acceptFileIntoMatterInTx(actor, submissionId, fileId, input, tx),
+    { isolationLevel: PrismaTypes.TransactionIsolationLevel.Serializable });
+}
+
+export async function acceptFileIntoMatterInTx(actor: InternalActor, submissionId: string, fileId: string,
+  input: { documentId?: string; documentName?: string; expectedRevision?: unknown }, tx: PrismaTypes.TransactionClient) {
+  const prisma = tx as Prisma;
   requireInternal(actor);
   const submission = await prisma.clientSubmission.findUnique({ where: { id: submissionId } });
   if (!submission) throw new InteractionError(404, 'SUBMISSION_NOT_FOUND', 'Submission not found.');
   const caseId = requireCaseSubmission(submission);
   const { clientId } = await assertInternalCaseAccess(actor, caseId, prisma);
+  if (clientId !== submission.clientId) throw new InteractionError(403, 'SUBMISSION_SCOPE_INVALID', 'Submission does not belong to this client.');
   requireExpected(submission, input.expectedRevision);
   const file = await prisma.clientSubmissionFile.findFirst({ where: { id: fileId, submissionId } });
   if (!file) throw new InteractionError(404, 'FILE_NOT_FOUND', 'File not found.');
   // The core safety gate: only a CLEAN file may enter the matter file.
   if (!isAcceptableFileStatus(file.status)) throw new InteractionError(409, 'FILE_NOT_CLEAN', 'Only a CLEAN, scanned file can be accepted into the matter.');
 
-  const result = await prisma.$transaction(async (tx) => {
-    let documentId = input.documentId || null;
-    if (documentId) {
-      const doc = await tx.document.findFirst({ where: { id: documentId, caseId } });
-      if (!doc) throw new InteractionError(404, 'DOCUMENT_NOT_FOUND', 'Destination document not found.');
-    } else {
-      const doc = await tx.document.create({
-        data: {
-          caseId,
-          clientId,
-          name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe,
-          fileName: file.originalFileNameSafe,
-          mimeType: file.detectedMimeType || 'application/octet-stream',
-          category: 'CLIENT_INPUT',
-          size: file.sizeBytes || undefined,
-        } as any,
-      });
-      documentId = doc.id;
+  let documentId = input.documentId || null;
+  if (documentId) {
+    const doc = await tx.document.findFirst({ where: { id: documentId, caseId, clientId } });
+    if (!doc) throw new InteractionError(404, 'DOCUMENT_NOT_FOUND', 'Destination document not found.');
+    const user = await tx.user.findUniqueOrThrow({ where: { id: actor.userId }, select: { role: true } });
+    if (doc.securityClassification === 'HR_CONFIDENTIAL' && !hrConfidentialReadAllowed(user.role)) {
+      throw new InteractionError(403, 'DOCUMENT_ACCESS_FORBIDDEN', 'Destination document is not accessible.');
     }
-    const maxVersion = await tx.documentVersion.aggregate({ where: { documentId }, _max: { version: true } });
-    const nextVersion = (maxVersion._max.version || 0) + 1;
-    const version = await tx.documentVersion.create({
+  } else {
+    const doc = await tx.document.create({
       data: {
-        documentId: documentId!, version: nextVersion, name: file.originalFileNameSafe,
-        originalFileName: file.originalFileNameSafe, mimeType: file.detectedMimeType, size: file.sizeBytes || undefined,
-        storageReference: file.quarantineStorageReference || undefined, isCurrent: true,
-        uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'ORIGINAL',
+        caseId,
+        clientId,
+        name: safeText(input.documentName, 'documentName', 200) || file.originalFileNameSafe,
+        fileName: file.originalFileNameSafe,
+        mimeType: file.detectedMimeType || 'application/octet-stream',
+        category: 'CLIENT_INPUT',
+        size: file.sizeBytes || undefined,
       } as any,
     });
-    await tx.documentVersion.updateMany({ where: { documentId, id: { not: version.id } }, data: { isCurrent: false } });
-    await tx.clientSubmissionFile.update({ where: { id: fileId }, data: { status: 'ACCEPTED' } });
-    await tx.clientSubmission.update({ where: { id: submissionId }, data: { status: 'ACCEPTED_INTO_MATTER', reviewedById: actor.userId, reviewedAt: new Date(), acceptedDocumentId: documentId, acceptedDocumentVersionId: version.id, revision: { increment: 1 } } });
-    return { documentId, documentVersionId: version.id };
+    documentId = doc.id;
+  }
+  const maxVersion = await tx.documentVersion.aggregate({ where: { documentId }, _max: { version: true } });
+  const nextVersion = (maxVersion._max.version || 0) + 1;
+  const version = await tx.documentVersion.create({
+    data: {
+      documentId: documentId!, version: nextVersion, name: file.originalFileNameSafe,
+      originalFileName: file.originalFileNameSafe, mimeType: file.detectedMimeType, size: file.sizeBytes || undefined,
+      storageReference: file.quarantineStorageReference || undefined, isCurrent: true,
+      uploadedById: actor.userId, uploadSource: 'CLIENT_PORTAL', versionType: 'ORIGINAL',
+      securityScanStatus: 'CLEAN',
+    } as any,
   });
-  return result;
+  await tx.documentVersion.updateMany({ where: { documentId, id: { not: version.id } }, data: { isCurrent: false } });
+  await tx.clientSubmissionFile.update({ where: { id: fileId }, data: { status: 'ACCEPTED', acceptedDocumentVersionId: version.id } });
+  await tx.clientSubmission.update({ where: { id: submissionId }, data: { status: 'ACCEPTED_INTO_MATTER', reviewedById: actor.userId, reviewedAt: new Date(), acceptedDocumentId: documentId, acceptedDocumentVersionId: version.id, revision: { increment: 1 } } });
+  return { documentId, documentVersionId: version.id };
 }
 
 

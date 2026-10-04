@@ -2,6 +2,10 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   testMatch: ['<rootDir>/tests/**/*.test.ts'],
+  // CP3 unit suite authored for node:test (`node --import tsx --test`); jest
+  // cannot collect it and would fail with "must contain at least one test".
+  // It runs in its own dedicated CI step instead.
+  testPathIgnorePatterns: ['<rootDir>/tests/cp3ContinuationMatterIdentity.unit.test.ts'],
   clearMocks: true,
   // Frontend-source interop tests (documentEditorDocxInterop, documentEditorReviewQuality)
   // import Frontend/src/lib/editor modules that `require('jszip')`. The backend job

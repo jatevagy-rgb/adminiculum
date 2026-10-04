@@ -1,3 +1,6 @@
+import { historyPolicyRouter } from './modules/case-history/policy.routes';
+import { verifiedContextRouter } from './modules/anonymize/verifiedContext.routes';
+import { caseWorkspaceRouter } from './modules/case-workspace/routes';
 /**
  * Adminiculum Backend V2 - Main Application Entry Point (minimal deployable)
  */
@@ -220,6 +223,12 @@ app.use('/api/v1/users', usersRoutes);
 import casesRoutes from './modules/cases/routes';
 app.use('/api/v1/cases', casesRoutes);
 
+import { caseHistoryReadRouter } from './modules/case-history/read.routes';
+app.use('/api/v1/case-history', caseHistoryReadRouter);
+app.use('/api/v1/case-history', historyPolicyRouter);
+app.use('/api/v1/case-workspace', caseWorkspaceRouter);
+app.use('/api/v1', verifiedContextRouter);
+
 import clientsRoutes from './modules/clients/routes';
 app.use('/api/v1/clients', clientsRoutes);
 
@@ -379,6 +388,9 @@ app.use('/api/v1/clause-library', clauseLibraryRoutes);
 import timesheetReportRoutes from './modules/timesheet-reports/routes';
 app.use('/api/v1/timesheet-reports', timesheetReportRoutes);
 
+import workReportRoutes from './modules/work-reports/routes';
+app.use('/api/v1/work-reports', workReportRoutes);
+
 import handoffPackagesRoutes from './modules/handoff-packages/routes';
 app.use('/api/v1', handoffPackagesRoutes);
 
@@ -391,6 +403,8 @@ app.use('/api/v1/sharepoint', sharepointRoutes);
 import { prisma } from './prisma/prisma.service';
 import { provisionComplianceModuleRules } from './modules/compliance/complianceModuleProvisioning';
 import { provisionCanonicalAiPromptTemplates } from './modules/ai-prompts/provisioning';
+import { recoverPendingAnalysisJobs } from './modules/compliance-doc-intelligence/analysisJobService';
+import { startNotificationDeliveryWorker } from './modules/client-interaction/notificationService';
 
 // Idempotent, additive baseline compliance provisioning. Runs on every boot so a
 // normal deploy surfaces the three representative verticals (GDPR /
@@ -427,6 +441,24 @@ provisionCanonicalAiPromptTemplates(prisma)
     );
   });
 
+// BE_COMP_006: restart-safe durable INTERNAL_ANALYSIS processing. Every boot
+// reclaims PENDING analysis jobs (upload/link succeeded, processing did not)
+// and stale RUNNING jobs whose lease expired in a previous process. Bounded per
+// sweep and non-fatal: failures are logged and self-heal on the next boot.
+recoverPendingAnalysisJobs()
+  .then((result) => {
+    if (result.recovered > 0) {
+      console.log(
+        `[Startup] compliance analysis recovery recovered=${result.recovered} pending=${result.pending} staleRunning=${result.staleRunning}`,
+      );
+    }
+  })
+  .catch((error: unknown) => {
+    console.error(
+      `[Startup] compliance analysis recovery failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+
 app.use((_req: Request, res: Response) => {
   res.status(404).json({ message: 'Endpoint not found' });
 });
@@ -442,6 +474,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(
     `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${PORT}`,
   );
+
+  // Restart-safe notification outbox worker: picks up PENDING/retryable
+  // ClientNotificationDelivery rows left over from previous runs and retries
+  // failed deliveries. Never discards an intent; without a configured mail
+  // provider rows stay truthfully retryable (never SENT).
+  startNotificationDeliveryWorker();
 
   startupConfigHealth = evaluateStartupConfigHealth();
   if (startupConfigHealth.status === 'healthy') {

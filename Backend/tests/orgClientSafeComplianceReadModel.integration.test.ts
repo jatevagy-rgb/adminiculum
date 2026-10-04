@@ -75,6 +75,14 @@ describeWithDatabase('Org client safe compliance read model (PostgreSQL)', () =>
   beforeAll(async () => {
     db = new PrismaClient({ datasources: { db: { url: databaseUrl } } });
     await db.complianceDomain.create({ data: { code: domainCode, label: 'Org Safe Test' } }).catch(() => {});
+    // Canonical migration replay intentionally does not run the runtime seed.
+    // Provision only this suite's required canonical definition when absent.
+    if (!(await db.factDefinition.findUnique({ where: { key: 'employee_count' } }))) {
+      const definition = await db.factDefinition.create({ data: { key: 'employee_count', questionKey: 'employee_count',
+        domainCode, valueType: 'NUMBER', allowedScopeTypes: ['COMPANY'], determinationMethod: 'USER_PROVIDED',
+        overlapPolicy: 'DISALLOW', temporalPolicy: 'OBSERVATION' } });
+      createdDefinitionIds.push(definition.id);
+    }
     await db.user.upsert({ where: { id: adminId }, create: { id: adminId, email: `orgsafe-admin-${suiteSuffix}@example.invalid`, name: 'OrgSafe Admin', role: 'ADMIN' }, update: {} });
 
     const shared = await ensureRequirementChain('GDPR_DATA_PROCESSING', 'INTERNAL WORKFORCE REQUIREMENT WORDING — MUST NOT LEAK', 'shared-rule');

@@ -5,7 +5,7 @@
  * somewhere), in line with the corrected test philosophy.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -143,11 +143,13 @@ test('Portal: recorded work is never presented as savings/outcome and only shows
   assert.doesNotMatch(src, /megtakar|hatékonyság|növekedés|ROI/i);
 });
 
-test('Portal: organization mode uses OrgHomeView while individual mode is preserved', () => {
+test('Portal: organization mode uses the V3 home while individual mode is preserved', () => {
   const src = read('Frontend/src/components/client-portal/ClientPortalShell.tsx');
-  assert.ok(src.includes('OrgHomeView'), 'OrgHomeView must be wired');
+  assert.ok(src.includes('PortalHomeV3'), 'PortalHomeV3 must be wired');
   assert.ok(src.includes("mode === 'ORGANIZATION'"), 'organization branch must exist');
   assert.ok(src.includes('INDIVIDUAL'), 'individual branch must remain');
+  // The legacy org home body is preserved for rollback, just not the runtime target.
+  assert.equal(existsSync(path.join(root, 'Frontend/src/components/client-portal/OrgHomeView.tsx')), true, 'OrgHomeView must remain in the repository');
 });
 
 test('Task planning candidates come from the authoritative case-scoped projection (not getUsers)', () => {

@@ -43,8 +43,8 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     await db.complianceDomain.create({ data: { code: domainCode, label: 'Controls' } });
     await db.requirement.create({ data: { id: requirementId, key: `CTRL_REQ_${suffix}`, jurisdictionCode: 'HU', domainCode } });
     await db.requirementVersion.create({ data: { id: versionId, requirementId, versionKey: 'V1', title: 'Control requirement', normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
-    await db.applicabilityRuleVersion.create({ data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'test', astJson: {}, canonicalDigest: 'a'.repeat(64), status: 'APPROVED' } });
-    await db.requirementApplicability.create({ data: { clientId, requirementVersionId: versionId, ruleVersionId: ruleId, ruleDigest: 'a'.repeat(64), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(), sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'test', snapshotJson: {}, snapshotDigest: 'b'.repeat(64) } });
+    await db.applicabilityRuleVersion.create({ data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: {}, canonicalDigest: 'a'.repeat(64), status: 'APPROVED' } });
+    await db.requirementApplicability.create({ data: { clientId, requirementVersionId: versionId, ruleVersionId: ruleId, ruleDigest: 'a'.repeat(64), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(), sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1', snapshotJson: {}, snapshotDigest: 'b'.repeat(64) } });
   });
 
   afterAll(async () => {
@@ -74,7 +74,7 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
 
   it('CONTROL_DEFINITION_REUSABLE and ONE_CONTROL_MULTIPLE_REQUIREMENTS', async () => {
     const definition = await createControlDefinition(actor, { key: `access_review_${suffix}`, title: 'Access review', type: 'TECHNICAL' }, db);
-    const secondRequirement = await db.requirementVersion.create({ data: { requirementId, versionKey: 'V2', title: 'Second requirement', normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
+    const secondRequirement = await db.requirementVersion.create({ data: { requirementId, versionKey: 'V2', title: 'Second requirement', normativeStatement: 'Test', effectiveFrom: new Date('2026-02-01'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
     await mapControlToRequirement(actor, { requirementVersionId: versionId, controlDefinitionId: definition.id }, db);
     await mapControlToRequirement(actor, { requirementVersionId: secondRequirement.id, controlDefinitionId: definition.id }, db);
     expect(await db.requirementControlMap.count({ where: { controlDefinitionId: definition.id } })).toBe(2);
@@ -122,6 +122,9 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
   it('DOCUMENT_VERSION_EVIDENCE, CLIENT_FACT_EVIDENCE, OBSERVATION_EVIDENCE, EXTERNAL_REFERENCE_EVIDENCE, ONE_EVIDENCE_MULTIPLE_CONTROLS, MULTIPLE_EVIDENCE_ONE_CONTROL, CROSS_CLIENT_EVIDENCE_CONTROL_LINK_DENIED, FOREIGN_DOCUMENT_VERSION_DENIED, FOREIGN_CLIENT_FACT_DENIED, FOREIGN_OBSERVATION_DENIED, EVIDENCE_FRESHNESS_STALE, STALE_EVIDENCE_NOT_DELETED, ZERO_AUTO_IMPLEMENTED_STATUS', async () => {
     const definition = await db.controlDefinition.findFirstOrThrow({ where: { key: `access_review_${suffix}` } });
     const first = await db.clientControl.findFirstOrThrow({ where: { clientId } });
+    // The status-persistence test above deliberately leaves this control PARTIAL.
+    // Establish this test's initial state before proving evidence cannot change it.
+    await updateClientControl(actor, clientId, first.id, { implementationStatus: 'NOT_ASSESSED' }, db);
     const second = await db.clientControl.create({ data: { clientId, controlDefinitionId: (await db.controlDefinition.create({ data: { key: `incident_${suffix}`, title: 'Incident procedure', type: 'PROCEDURAL' } })).id } });
     const stale = await createEvidenceRecord(actor, clientId, { sourceType: 'EXTERNAL_REFERENCE', title: 'Old review', externalReference: 'https://example.invalid/review', validUntil: new Date('2020-01-01') }, db);
     const current = await createEvidenceRecord(actor, clientId, { sourceType: 'EXTERNAL_REFERENCE', title: 'Current review', externalReference: 'https://example.invalid/current' }, db);
@@ -213,6 +216,8 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     }, db);
     await reviewEvidenceRecord(actor, clientId, future.id, { status: 'ACCEPTED' }, db);
     const control = await db.clientControl.findFirstOrThrow({ where: { clientId } });
+    // Isolate future-only coverage from the current evidence linked by the prior test.
+    await db.evidenceControlLink.deleteMany({ where: { clientId, clientControlId: control.id } });
     await linkEvidenceToControl(actor, clientId, control.id, future.id, db);
     const coverage = await getControlCoverage(actor, clientId, db);
     expect(coverage.requirements.flatMap((item) => item.controls).some((item) => item.evidenceSummary.acceptedCurrent > 0 && item.evidenceSummary.missing === false)).toBe(false);
@@ -234,7 +239,7 @@ describeWithDatabase('compliance controls and evidence (PostgreSQL)', () => {
     const snapshot = (outcome: 'DOES_NOT_APPLY' | 'INSUFFICIENT_FACTS' | 'APPLIES', evaluationAt: Date) => ({
       clientId, requirementVersionId: versionId, ruleVersionId: ruleId, ruleDigest: 'a'.repeat(64), outcome,
       scopeType: 'COMPANY' as const, evaluationAt, sourceSupportState: 'SUFFICIENT' as const,
-      specialistRequirement: 'NONE' as const, schemaVersion: 'test', snapshotJson: {}, snapshotDigest: crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
+      specialistRequirement: 'NONE' as const, schemaVersion: 'phase6-requirement-applicability/v1', snapshotJson: {}, snapshotDigest: crypto.randomUUID().replaceAll('-', '').padEnd(64, '0'),
     });
     await db.requirementApplicability.create({ data: snapshot('DOES_NOT_APPLY', nextEvaluation) });
     expect((await getControlCoverage(actor, clientId, db)).requirements).toHaveLength(0);

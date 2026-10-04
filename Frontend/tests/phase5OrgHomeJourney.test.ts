@@ -14,19 +14,20 @@ describe("Phase 5A organizational customer portal shell + home journey", () => {
   const api = () => read("src/lib/clientPortalApi.ts");
 
   it("organizational nav has the compact executive IA labels in order", () => {
-    const src = shell();
-    const orgIdx = src.indexOf("if (workspace.mode === 'ORGANIZATION')");
-    const orgBlock = src.slice(orgIdx, src.indexOf("if (workspace.mode === 'CASE_RELAY')"));
-    const order = ["Áttekintés", "Ügyek", "Teendők", "Dokumentumok", "Naptár", "Fejlesztés", "Megfelelés", "Kommunikáció", "Vállalat"];
+    // Client Portal 3.0 cutover: the ORGANIZATION primary navigation is defined in
+    // the V3 navigation module; Naptár and Kommunikáció are utilities only.
+    const navSrc = read("src/components/client-portal-v3/navigation.ts");
+    const navBlock = navSrc.slice(navSrc.indexOf("ORG_PRIMARY_NAV"), navSrc.indexOf("ORG_MOBILE_PRIMARY_NAV"));
+    const order = ["Áttekintés", "Ügyek", "Teendők", "Dokumentumok", "Vállalat", "Fejlesztés", "Megfelelés"];
     let last = -1;
     for (const label of order) {
-      const idx = orgBlock.indexOf(`'${label}'`);
+      const idx = navBlock.indexOf(`label: "${label}"`);
       assert.ok(idx > -1, `org IA missing ${label}`);
       assert.ok(idx > last, `org IA order violated for ${label}`);
       last = idx;
     }
     // No technical/legacy wording in the org nav.
-    assert.doesNotMatch(orgBlock, /Ügyeim|Jogi ügyek|Új megkeresés|Megkereséseim|Vezetői áttekintés|Együttműködési áttekintés/);
+    assert.doesNotMatch(navBlock, /Ügyeim|Jogi ügyek|Új megkeresés|Megkereséseim|Vezetői áttekintés|Együttműködési áttekintés/);
   });
 
   it("Főoldal renders Eddig / Most / Következőként journey", () => {
