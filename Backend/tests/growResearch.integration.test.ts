@@ -286,12 +286,17 @@ d('GROW research & recommendation pipeline (PostgreSQL)', () => {
     expect(assumed.basis).toBe('ASSUMED');
     expect(assumed.timeSavedMinutesPerMonth.base).toBe(0);
 
+    // PR460 G1-L: the MEASURED basis requires explicit MEASURED origins on
+    // both sides; the old test omitted them and relied on the false
+    // no-origin MEASURED ladder (the bug being fixed here).
     const measured = computeRoiEstimate({
       runsPerMonth: 4,
       beforeActiveMinutes: 100,
       beforeWaitingMinutes: 2000,
       afterActiveMinutes: 60,
       afterWaitingMinutes: 1000,
+      beforeOrigin: 'MEASURED',
+      afterOrigin: 'MEASURED',
       hourlyCostHuf: { low: 8000, base: 10000, high: 12000 },
       peopleAffected: 1,
     });
