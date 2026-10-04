@@ -403,6 +403,7 @@ app.use('/api/v1/sharepoint', sharepointRoutes);
 import { prisma } from './prisma/prisma.service';
 import { provisionComplianceModuleRules } from './modules/compliance/complianceModuleProvisioning';
 import { provisionCanonicalAiPromptTemplates } from './modules/ai-prompts/provisioning';
+import { startNotificationDeliveryWorker } from './modules/client-interaction/notificationService';
 
 // Idempotent, additive baseline compliance provisioning. Runs on every boot so a
 // normal deploy surfaces the three representative verticals (GDPR /
@@ -454,6 +455,12 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(
     `[Startup] NODE_ENV=${process.env.NODE_ENV || 'development'} PORT=${PORT}`,
   );
+
+  // Restart-safe notification outbox worker: picks up PENDING/retryable
+  // ClientNotificationDelivery rows left over from previous runs and retries
+  // failed deliveries. Never discards an intent; without a configured mail
+  // provider rows stay truthfully retryable (never SENT).
+  startNotificationDeliveryWorker();
 
   startupConfigHealth = evaluateStartupConfigHealth();
   if (startupConfigHealth.status === 'healthy') {
