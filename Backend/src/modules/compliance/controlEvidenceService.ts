@@ -1,6 +1,9 @@
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 import { assertClientReadAccess, InteractionError, InternalActor, requireInternal, safeText } from '../client-interaction/base';
 import { classifyControlEvidenceGap } from './controlEvidenceGap';
+import { Prisma as PrismaTypes } from '@prisma/client';
+import { assertEvidenceDocumentAuthority } from './evidenceDocumentAuthority';
+import { reconcileClientComplianceInTx } from './complianceReconcileService';
 
 export { classifyControlEvidenceGap } from './controlEvidenceGap';
 export type { ControlEvidenceGap } from './controlEvidenceGap';
@@ -157,7 +160,7 @@ export async function getClientControl(actor: InternalActor, clientId: string, c
   };
 }
 
-export async function createEvidenceRecord(
+export async function createEvidenceRecordInTx(
   actor: InternalActor,
   clientId: string,
   input: {
@@ -165,10 +168,11 @@ export async function createEvidenceRecord(
     reviewedByUserId?: unknown; validFrom?: unknown; validUntil?: unknown; documentVersionId?: unknown; clientFactId?: unknown;
     observationId?: unknown; externalReference?: unknown;
   },
-  prisma: Prisma = defaultPrisma,
+  prisma: PrismaTypes.TransactionClient,
 ) {
-  await assertClientReadAccess(actor, clientId, prisma);
+  await assertClientReadAccess(actor, clientId, prisma as Prisma);
   const sourceType = assertEnum(input.sourceType, sourceTypes, 'sourceType');
+  const status = input.status == null ? 'PROVIDED' : assertEnum(input.status, evidenceStatuses, 'status');
   const documentVersionIdValue = normalizeOptionalSource(input.documentVersionId);
   const clientFactIdValue = normalizeOptionalSource(input.clientFactId);
   const observationIdValue = normalizeOptionalSource(input.observationId);
@@ -185,12 +189,12 @@ export async function createEvidenceRecord(
   if (sourceType === 'EXTERNAL_REFERENCE' && !externalReference) throw new InteractionError(400, 'EVIDENCE_SOURCE_MISMATCH', 'External reference is required.');
 
   if (documentVersionId) {
-    const row = await prisma.documentVersion.findFirst({ where: { id: documentVersionId, document: { clientId } }, select: { id: true } });
-    if (!row) throw new InteractionError(403, 'EVIDENCE_ARTIFACT_FORBIDDEN', 'Document version is outside this client.');
+    await assertEvidenceDocumentAuthority(actor, clientId, documentVersionId, prisma, undefined, status === 'ACCEPTED');
   }
   if (clientFactId) {
-    const row = await prisma.clientFact.findFirst({ where: { id: clientFactId, clientId }, select: { id: true } });
+    const row = await prisma.clientFact.findFirst({ where: { id: clientFactId, clientId }, select: { id: true, sourceDocumentVersionId: true } });
     if (!row) throw new InteractionError(403, 'EVIDENCE_ARTIFACT_FORBIDDEN', 'Client fact is outside this client.');
+    if (row.sourceDocumentVersionId) await assertEvidenceDocumentAuthority(actor, clientId, row.sourceDocumentVersionId, prisma, undefined, status === 'ACCEPTED');
   }
   if (observationId) {
     const row = await prisma.observation.findFirst({ where: { id: observationId, clientId }, select: { id: true } });
@@ -201,22 +205,29 @@ export async function createEvidenceRecord(
   if (validFrom && validUntil && validUntil < validFrom) {
     throw new InteractionError(400, 'EVIDENCE_VALIDITY_INVALID', 'validUntil must be on or after validFrom.');
   }
-  const status = input.status == null ? 'PROVIDED' : assertEnum(input.status, evidenceStatuses, 'status');
-  if ((status === 'ACCEPTED' || status === 'REJECTED') && (!input.reviewedAt || !input.reviewedByUserId)) {
-    throw new InteractionError(400, 'EVIDENCE_REVIEW_REQUIRED', 'Accepted or rejected evidence requires review metadata.');
-  }
+  const reviewed = status === 'ACCEPTED' || status === 'REJECTED';
   return prisma.evidenceRecord.create({
     data: {
       clientId, sourceType: sourceType as never, status: status as never, title: requiredString(input.title, 'title'),
       description: safeText(input.description, 'description', 2000),
       providedAt: input.providedAt == null ? new Date() : optionalDate(input.providedAt, 'providedAt'),
-      reviewedAt: input.reviewedAt == null ? null : optionalDate(input.reviewedAt, 'reviewedAt'),
-      reviewedByUserId: input.reviewedByUserId == null ? null : requiredString(input.reviewedByUserId, 'reviewedByUserId'),
+      reviewedAt: reviewed ? new Date() : null,
+      reviewedByUserId: reviewed ? actor.userId : null,
       validFrom,
       validUntil,
       documentVersionId, clientFactId, observationId, externalReference,
     },
   });
+}
+
+export async function createEvidenceRecord(
+  actor: InternalActor, clientId: string, input: Parameters<typeof createEvidenceRecordInTx>[2], prisma: Prisma = defaultPrisma,
+) {
+  return prisma.$transaction(async (tx) => {
+    const evidence = await createEvidenceRecordInTx(actor, clientId, input, tx);
+    if (evidence.status === 'ACCEPTED') await reconcileClientComplianceInTx(clientId, actor.userId, tx);
+    return evidence;
+  }, { isolationLevel: PrismaTypes.TransactionIsolationLevel.Serializable });
 }
 
 export async function reviewEvidenceRecord(
@@ -226,19 +237,29 @@ export async function reviewEvidenceRecord(
   input: { status: unknown },
   prisma: Prisma = defaultPrisma,
 ) {
-  await assertClientReadAccess(actor, clientId, prisma);
-  const status = assertEnum(input.status, evidenceStatuses, 'status');
-  const evidence = await prisma.evidenceRecord.findFirst({ where: { id: evidenceRecordId, clientId } });
-  if (!evidence) throw new InteractionError(404, 'EVIDENCE_RECORD_NOT_FOUND', 'Evidence record not found.');
-  const reviewed = status === 'ACCEPTED' || status === 'REJECTED';
-  return prisma.evidenceRecord.update({
-    where: { id: evidence.id },
-    data: {
-      status: status as never,
-      reviewedAt: reviewed ? new Date() : null,
-      reviewedByUserId: reviewed ? actor.userId : null,
-    },
-  });
+  return prisma.$transaction(async (tx) => {
+    await assertClientReadAccess(actor, clientId, tx as Prisma);
+    const status = assertEnum(input.status, evidenceStatuses, 'status');
+    const evidence = await tx.evidenceRecord.findFirst({ where: { id: evidenceRecordId, clientId } });
+    if (!evidence) throw new InteractionError(404, 'EVIDENCE_RECORD_NOT_FOUND', 'Evidence record not found.');
+    if (evidence.documentVersionId) await assertEvidenceDocumentAuthority(actor, clientId, evidence.documentVersionId, tx, undefined, status === 'ACCEPTED');
+    if (evidence.clientFactId) {
+      const fact = await tx.clientFact.findFirst({ where: { id: evidence.clientFactId, clientId } });
+      if (!fact) throw new InteractionError(403, 'EVIDENCE_ARTIFACT_FORBIDDEN', 'Fact is outside this client.');
+      if (fact.sourceDocumentVersionId) await assertEvidenceDocumentAuthority(actor, clientId, fact.sourceDocumentVersionId, tx, undefined, status === 'ACCEPTED');
+    }
+    const reviewed = status === 'ACCEPTED' || status === 'REJECTED';
+    const updated = await tx.evidenceRecord.update({
+      where: { id: evidence.id },
+      data: {
+        status: status as never,
+        reviewedAt: reviewed ? new Date() : null,
+        reviewedByUserId: reviewed ? actor.userId : null,
+      },
+    });
+    if (status === 'ACCEPTED' || evidence.status === 'ACCEPTED') await reconcileClientComplianceInTx(clientId, actor.userId, tx);
+    return updated;
+  }, { isolationLevel: PrismaTypes.TransactionIsolationLevel.Serializable });
 }
 
 export async function linkEvidenceToControl(actor: InternalActor, clientId: string, clientControlId: string, evidenceRecordId: string, prisma: Prisma = defaultPrisma) {

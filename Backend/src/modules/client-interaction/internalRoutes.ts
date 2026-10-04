@@ -11,6 +11,7 @@ import * as requests from './requestService';
 import * as questions from './questionService';
 import * as submissions from './submissionService';
 import * as notifications from './notificationService';
+import { acceptSubmissionCompliance } from './complianceAcceptanceService';
 
 export const clientInteractionInternalRouter = Router();
 
@@ -92,6 +93,11 @@ clientInteractionInternalRouter.post('/submissions/:id/reject', async (req, res)
 });
 clientInteractionInternalRouter.post('/submissions/:id/files/:fileId/accept', async (req, res) => {
   try { res.json(await submissions.acceptFileIntoMatter(actor(req), String(req.params.id), String(req.params.fileId), req.body || {})); } catch (e) { fail(res, e); }
+});
+
+// Explicit internal Compliance acceptance; correction/reject commands stay above.
+clientInteractionInternalRouter.post('/submissions/:id/accept-compliance', async (req, res) => {
+  try { res.json(await acceptSubmissionCompliance(actor(req), String(req.params.id), req.body || {})); } catch (e) { fail(res, e); }
 });
 
 // Notification failure queue
