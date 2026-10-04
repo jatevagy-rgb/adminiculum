@@ -109,6 +109,9 @@ jobs:
         continue-on-error: true
         run: npx jest --runInBand
 
+      - name: CP3 node:test suites (matter identity contract)
+        run: node --import tsx --test tests/cp3ContinuationMatterIdentity.unit.test.ts
+
   # Dedicated REQUIRED gate for the DOCX/PDF text-comparison regression. Unlike
   # the aggregate non-PG job above (continue-on-error), a failure here fails
   # Preflight. Runs the focused Node 20 comparison suite that proves: PDF

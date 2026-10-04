@@ -255,6 +255,38 @@ export function PortalMatterWorkspaceV3({ matterPublicationId, requestId }: { ma
       </section>
 
       <PortalMatterUpdatesSection updates={(matter.updates ?? []) as PortalSafeUpdate[]} />
+
+      {matter.history ? (
+        <section
+          data-testid="portal-matter-history"
+          aria-label="Megosztott ügytörténet"
+          className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)]"
+        >
+          <h2 className="border-b border-[var(--adm-border-canonical)] px-4 py-3 font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Megosztott ügytörténet</h2>
+          {matter.history.items.length > 0 ? (
+            <ul className="divide-y divide-[var(--adm-border-canonical)]">
+              {matter.history.items.map((item) => (
+                <li key={item.sourceKey} className="px-4 py-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <h3 className="text-sm font-semibold text-[var(--adm-text-primary)]">{item.title}</h3>
+                    <p className="text-xs text-[var(--adm-text-secondary)]">
+                      {formatDate(item.occurredAt)}
+                      {item.minutes !== null ? ` · ${item.minutes} perc` : ""}
+                    </p>
+                  </div>
+                  {item.body !== null ? (
+                    <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--adm-text-secondary)]">{item.body}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="px-4 py-3">
+              <PortalEmptyInline>Nincs megosztott ügytörténeti elem.</PortalEmptyInline>
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

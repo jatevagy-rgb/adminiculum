@@ -965,12 +965,12 @@ jobs:
           MIGRATION_REPLAY_DATABASE_URL: postgresql://wf10_pgtest:postgres@127.0.0.1:55483/adminiculum_replay_wf10?schema=public
         run: npm run db:migrations:verify-replay
 
-      - name: Anonymize save-as / scan gate / verified context PG (WF10 replay DB)
+      - name: Anonymize save-as / scan gate / verified context / history policy PG (WF10 replay DB)
         working-directory: Backend
         env:
           DATABASE_URL: postgresql://wf10_pgtest:postgres@127.0.0.1:55483/adminiculum_replay_wf10?schema=public
         run: |
-          if npx jest --runInBand tests/anonymizeSaveAsDocument.integration.test.ts tests/anonymizeScanGate.integration.test.ts tests/verifiedContext.integration.test.ts; then rc=0; else rc=$?; fi
+          if npx jest --runInBand tests/anonymizeSaveAsDocument.integration.test.ts tests/anonymizeScanGate.integration.test.ts tests/verifiedContext.integration.test.ts tests/historyPolicy.integration.test.ts tests/workReportOwnersAccess.integration.test.ts; then rc=0; else rc=$?; fi
           sed -i "s/^anonymize-save-as=PENDING$/anonymize-save-as=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
@@ -1059,7 +1059,7 @@ jobs:
             [customer-portal-calendar]="Customer portal calendar (Grow target + compliance review)"
             [workgroup-client-authorization]="Workgroup + workload client authorization (IDOR)"
             [compliance-workbench-impact]="Compliance workbench impact decision (BE-COMP-003/004)"
-            [anonymize-save-as]="Anonymize save-as / scan gate / verified context (WF10 PG)"
+            [anonymize-save-as]="Anonymize save-as / scan gate / verified context / history policy (WF10 PG)"
           )
           {
             echo "### Backend PostgreSQL Integration"
