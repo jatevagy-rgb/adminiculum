@@ -39,6 +39,20 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      postgres-wf10:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wf10_pgtest
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: adminiculum_replay_wf10
+        ports:
+          - 55483:55483
+        options: >-
+          --health-cmd "pg_isready -p 55483 -U wf10_pgtest"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+          -c port=55483
 
     steps:
       - uses: actions/checkout@v4
@@ -940,13 +954,18 @@ jobs:
           sed -i "s/^compliance-workbench-impact=PENDING$/compliance-workbench-impact=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
-      - name: Anonymize save-as canonical DocumentVersion PG
+      - name: Provision WF10 schema (canonical replay on dedicated WF10 PG)
         working-directory: Backend
         env:
-          MIGRATION_REPLAY_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adminiculum_replay_ci?schema=public
+          MIGRATION_REPLAY_DATABASE_URL: postgresql://wf10_pgtest:postgres@127.0.0.1:55483/adminiculum_replay_wf10?schema=public
+        run: npm run db:migrations:verify-replay
+
+      - name: Anonymize save-as / scan gate / verified context PG (WF10 replay DB)
+        working-directory: Backend
+        env:
+          DATABASE_URL: postgresql://wf10_pgtest:postgres@127.0.0.1:55483/adminiculum_replay_wf10?schema=public
         run: |
-          if npx jest --runInBand tests/anonymizeSaveAsDocument.integration.test.ts; then rc=0; else rc=$?; fi
+          if npx jest --runInBand tests/anonymizeSaveAsDocument.integration.test.ts tests/anonymizeScanGate.integration.test.ts tests/verifiedContext.integration.test.ts; then rc=0; else rc=$?; fi
           sed -i "s/^anonymize-save-as=PENDING$/anonymize-save-as=$rc/" "$RUNNER_TEMP/ci-suite-results.txt"
           exit "$rc"
 
@@ -1031,7 +1050,7 @@ jobs:
             [customer-portal-calendar]="Customer portal calendar (Grow target + compliance review)"
             [workgroup-client-authorization]="Workgroup + workload client authorization (IDOR)"
             [compliance-workbench-impact]="Compliance workbench impact decision (BE-COMP-003/004)"
-            [anonymize-save-as]="Anonymize save-as canonical DocumentVersion (BE-DOC-004)"
+            [anonymize-save-as]="Anonymize save-as / scan gate / verified context (WF10 PG)"
           )
           {
             echo "### Backend PostgreSQL Integration"
