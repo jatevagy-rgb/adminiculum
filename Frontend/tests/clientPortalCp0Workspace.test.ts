@@ -28,7 +28,8 @@ describe('CP0 anonymous entry and authenticated workspace shell', () => {
     assert.match(shell, /capabilities\.tasks/);
     assert.match(shell, /capabilities\.documents/);
     assert.match(shell, /capabilities\.messages/);
-    assert.match(shell, /OrgHomeView/);
+    // Client Portal 3.0: the ORGANIZATION home body is the V3 home component.
+    assert.match(shell, /PortalHomeV3/);
     assert.match(shell, /setSelectedPortalWorkspace\(null\)/);
     assert.match(shell, /PortalWorkspaceSelector/);
     assert.match(shell, /Nincs aktív ügyfélfelülete/);
