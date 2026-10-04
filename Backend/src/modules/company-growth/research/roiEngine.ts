@@ -340,14 +340,32 @@ export function computeRoiEstimate(inputs: RoiInputs): RoiEstimate {
 
   const provenanceType: RoiProvenanceType = BASIS_TO_PROVENANCE[basis];
 
-  // G1: a caller-supplied provenance label can never relabel the honest basis.
-  if (inputs.provenanceType != null && inputs.provenanceType !== provenanceType) {
-    throw new Error(`ROI_INPUT_INVALID: provenanceType ${inputs.provenanceType} contradicts the derived basis ${basis} (${provenanceType}).`);
+  // G1: a caller-supplied provenance label can never UPGRADE the honest basis
+  // (e.g. MEASURED over an estimate). Honest refinements stay allowed: an
+  // estimate-family label (CLIENT/CONSULTANT_ESTIMATE, RESEARCH_BENCHMARK) may
+  // refine a CALCULATED or ESTIMATED basis, and a MEASURED basis accepts only
+  // the MEASURED label. This preserves the legacy explicit-override contract
+  // (e.g. a consultant's stated delta over a calculated baseline).
+  const PROVENANCE_LEVEL: Record<RoiProvenanceType, number> = {
+    MEASURED: 3,
+    CALCULATED: 2,
+    CLIENT_ESTIMATE: 1,
+    CONSULTANT_ESTIMATE: 1,
+    RESEARCH_BENCHMARK: 1,
+    GENERAL_ASSUMPTION: 0,
+  };
+  const BASIS_LEVEL: Record<OutcomeBasis, number> = { MEASURED: 3, CALCULATED: 2, ESTIMATED: 1, ASSUMED: 0 };
+  if (inputs.provenanceType != null) {
+    const overrideLevel = PROVENANCE_LEVEL[inputs.provenanceType];
+    if (overrideLevel > BASIS_LEVEL[basis] || (basis === 'MEASURED' && inputs.provenanceType !== 'MEASURED')) {
+      throw new Error(`ROI_INPUT_INVALID: provenanceType ${inputs.provenanceType} contradicts the derived basis ${basis} (${provenanceType}).`);
+    }
   }
+  const effectiveProvenanceType: RoiProvenanceType = inputs.provenanceType ?? provenanceType;
 
   return {
     basis,
-    provenanceType,
+    provenanceType: effectiveProvenanceType,
     timeSavedMinutesPerRun: timeSavedPerRun,
     timeSavedMinutesPerMonth: timeSavedMonthly,
     waitingTimeSavedMinutesPerRun: waitingSavedPerRun,
@@ -356,7 +374,7 @@ export function computeRoiEstimate(inputs: RoiInputs): RoiEstimate {
     provenance: {
       formulaVersion: ROI_ENGINE_VERSION,
       computedAt: new Date().toISOString(),
-      type: provenanceType,
+      type: effectiveProvenanceType,
       inputs: {
         runsPerMonth: runs,
         beforeActiveMinutes: beforeActive,
