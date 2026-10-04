@@ -54,6 +54,7 @@ d('BE_PORTAL_001 request/submission notification outbox (PostgreSQL)', () => {
     identity: crypto.randomUUID(), otherIdentity: crypto.randomUUID(),
     grant: crypto.randomUUID(), otherGrant: crypto.randomUUID(),
     workspace: crypto.randomUUID(), workspaceMembership: crypto.randomUUID(),
+    otherWorkspace: crypto.randomUUID(), otherWorkspaceMembership: crypto.randomUUID(),
   };
   const internalActor = { userId: ids.admin, role: 'ADMIN' };
   const sent: Array<{ to: string; idempotencyKey: string }> = [];
@@ -77,8 +78,10 @@ d('BE_PORTAL_001 request/submission notification outbox (PostgreSQL)', () => {
     await db.clientPortalIdentity.create({ data: { id: ids.otherIdentity, provider: 'ENTRA_EXTERNAL_ID', issuer: 'iss', subject: `sub-${ids.otherIdentity}`, normalizedEmail: `o-${ids.otherIdentity}@t.io`, emailVerifiedAt: new Date(), displayName: 'Other Customer', accountType: 'INDIVIDUAL', status: 'ACTIVE' } });
     await db.clientPortalWorkspace.create({ data: { id: ids.workspace, clientId: ids.client, name: 'Outbox workspace', mode: 'INDIVIDUAL', publicReference: `outbox-${ids.workspace}`, createdById: ids.admin } });
     await db.clientPortalWorkspaceMembership.create({ data: { id: ids.workspaceMembership, clientPortalIdentityId: ids.identity, workspaceId: ids.workspace, status: 'ACTIVE', approvedAt: new Date(), approvedById: ids.admin } });
+    await db.clientPortalWorkspace.create({ data: { id: ids.otherWorkspace, clientId: ids.otherClient, name: 'Other outbox workspace', mode: 'INDIVIDUAL', publicReference: `outbox-${ids.otherWorkspace}`, createdById: ids.admin } });
+    await db.clientPortalWorkspaceMembership.create({ data: { id: ids.otherWorkspaceMembership, clientPortalIdentityId: ids.otherIdentity, workspaceId: ids.otherWorkspace, status: 'ACTIVE', approvedAt: new Date(), approvedById: ids.admin } });
     await db.clientPortalGrant.create({ data: { id: ids.grant, clientPortalIdentityId: ids.identity, workspaceId: ids.workspace, clientId: ids.client, caseId: ids.case, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ', 'MESSAGE_READ', 'MESSAGE_SEND'], invitedById: ids.admin, activatedAt: new Date() } as any });
-    await db.clientPortalGrant.create({ data: { id: ids.otherGrant, clientPortalIdentityId: ids.otherIdentity, workspaceId: ids.workspace, clientId: ids.otherClient, caseId: ids.otherCase, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ', 'MESSAGE_READ', 'MESSAGE_SEND'], invitedById: ids.admin, activatedAt: new Date() } as any });
+    await db.clientPortalGrant.create({ data: { id: ids.otherGrant, clientPortalIdentityId: ids.otherIdentity, workspaceId: ids.otherWorkspace, clientId: ids.otherClient, caseId: ids.otherCase, status: 'ACTIVE', permissions: ['MATTER_READ', 'DOCUMENT_READ', 'MESSAGE_READ', 'MESSAGE_SEND'], invitedById: ids.admin, activatedAt: new Date() } as any });
   });
 
   afterAll(async () => { setMailSender(null); await db.$disconnect(); });
