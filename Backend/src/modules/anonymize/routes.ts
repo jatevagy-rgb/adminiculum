@@ -314,6 +314,7 @@ router.post(
       res.json({
         success: true,
         documentId: result.documentId,
+        documentVersionId: result.documentVersionId,
         fileName: result.fileName
       });
     } catch (error) {
