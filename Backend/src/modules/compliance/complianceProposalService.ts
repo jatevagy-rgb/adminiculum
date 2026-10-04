@@ -293,12 +293,13 @@ export async function confirmProposal(actor: Actor, proposalId: string, db: Pris
   return result.task;
 }
 
-async function startCaseTransaction(
+export async function startCaseFromProposalInTx(
   actor: Actor,
   proposalId: string,
   input: { title?: unknown },
   tx: Prisma.TransactionClient,
 ): Promise<{ kind: 'CONFIRMED'; case: any; task: any } | { kind: 'STALE' }> {
+  requireMutationActor(actor);
   const locked = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "compliance_proposals" WHERE "id" = ${proposalId} FOR UPDATE`;
   if (!locked.length) throw new InteractionError(404, 'PROPOSAL_NOT_FOUND', 'Compliance proposal not found.');
   const proposal = await loadProposal(proposalId, tx);
@@ -363,7 +364,7 @@ async function startCaseTransaction(
  */
 export async function startCaseFromProposal(actor: Actor, proposalId: string, input: { title?: unknown } = {}, db: PrismaClient = defaultPrisma): Promise<any> {
   requireMutationActor(actor);
-  const result = await withProposalConfirmationRetry(db, (tx) => startCaseTransaction(actor, proposalId, input, tx));
+  const result = await withProposalConfirmationRetry(db, (tx) => startCaseFromProposalInTx(actor, proposalId, input, tx));
   if (result.kind === 'STALE') throw new InteractionError(409, 'PROPOSAL_STALE', 'Finding evidence changed; create a new proposal.');
   return { case: result.case, task: result.task };
 }
