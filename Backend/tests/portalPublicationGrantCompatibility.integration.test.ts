@@ -9,16 +9,19 @@ import {
   InternalCasePortalPublicationError,
   listCasePortalPublicationTargets,
   publishInternalCaseToPortal,
+  type PortalPublicationReadiness,
 } from '../src/modules/client-publication/internalCasePortalPublication.service';
 
 const databaseUrl = process.env.PORTAL_PUBLICATION_TEST_DATABASE_URL;
 const d = databaseUrl ? describe : describe.skip;
 
 /**
- * PHASE 0 reproduction / PHASE 4 acceptance for the PARTICIPANT_GRANT_CONFLICT
- * publication defect (UX-01). Every case below publishes an internal Case to a
- * selected organization portal target and asserts the exact grant-compatibility
- * outcome. Fixtures run only against a real PostgreSQL database.
+ * PHASE 4 acceptance for the PARTICIPANT_GRANT_CONFLICT publication defect
+ * (UX-01): an existing ACTIVE grant for the same identity/client/case must be
+ * reused unchanged by publication when it belongs to the same workspace and
+ * already includes MATTER_READ — regardless of descriptive role or permission
+ * superset. Other-workspace and insufficient-permission grants stay fail-closed.
+ * Runs only against a real PostgreSQL database.
  */
 d('internal Case portal publication grant compatibility (PostgreSQL)', () => {
   let db: PrismaClient;
@@ -77,6 +80,11 @@ d('internal Case portal publication grant compatibility (PostgreSQL)', () => {
 
   const publicationRows = async (caseId: string) => db.clientMatterPublication.findMany({ where: { caseId } });
 
+  const readinessFor = async (caseId: string, membershipId: string): Promise<PortalPublicationReadiness | undefined> => {
+    const targets = await listCasePortalPublicationTargets(admin, caseId, db);
+    return targets.items.find((item) => item.workspaceMembershipId === membershipId)?.publicationReadiness;
+  };
+
   beforeAll(async () => {
     process.env.DATABASE_URL = databaseUrl;
     process.env.CLIENT_PORTAL_READ_ENABLED = 'true';
@@ -118,85 +126,119 @@ d('internal Case portal publication grant compatibility (PostgreSQL)', () => {
   it('A: publishes with a fresh target (no prior grant) and creates a PARTICIPANT/MATTER_READ grant', async () => {
     const caseId = await makeCase('A');
     try {
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_NEW');
       const result = await publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db);
       expect(result.grant.status).toBe('ACTIVE');
+      expect(result.grant.idempotent).toBe(false);
       const grant = await grantRow(caseId, ids.workspaceA);
       expect(grant).not.toBeNull();
       expect(grant?.participantRole).toBe('PARTICIPANT');
       expect([...(grant?.permissions ?? [])].sort()).toEqual(['MATTER_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_EXISTING_ACCESS');
     } finally {
       await cleanupCase(caseId);
     }
   });
 
-  it('A2: reuses an exact existing PARTICIPANT + MATTER_READ grant idempotently', async () => {
+  it('A2: reuses an exact existing PARTICIPANT + MATTER_READ grant idempotently and unchanged', async () => {
     const caseId = await makeCase('A2');
     try {
       const prior = await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['MATTER_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_EXISTING_ACCESS');
       const result = await publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db);
       expect(result.grant.idempotent).toBe(true);
       const grants = await db.clientPortalGrant.findMany({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId } });
       expect(grants).toHaveLength(1);
       expect(grants[0]?.id).toBe(prior.id);
+      expect(grants[0]?.participantRole).toBe('PARTICIPANT');
+      expect(JSON.stringify(grants[0]?.permissions)).toBe(JSON.stringify(['MATTER_READ']));
+      expect((await publicationRows(caseId))).toHaveLength(1);
+      expect((await listOrganizationalCases(ids.identity, ids.workspaceA, {}, db)).total).toBe(1);
+    } finally {
+      await cleanupCase(caseId);
+    }
+  });
+
+  it('B: same-workspace CLIENT_OWNER grant with MATTER_READ + extras is reused unchanged and publication succeeds', async () => {
+    const caseId = await makeCase('B');
+    try {
+      const prior = await existingGrant(caseId, ids.workspaceA, 'CLIENT_OWNER', ['MATTER_READ', 'DOCUMENT_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_EXISTING_ACCESS');
+      const result = await publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db);
+      expect(result.grant.status).toBe('ACTIVE');
+      expect(result.grant.idempotent).toBe(true);
+      const grants = await db.clientPortalGrant.findMany({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId } });
+      expect(grants).toHaveLength(1);
+      expect(grants[0]?.id).toBe(prior.id);
+      expect(grants[0]?.participantRole).toBe('CLIENT_OWNER');
+      expect(JSON.stringify(grants[0]?.permissions)).toBe(JSON.stringify(['MATTER_READ', 'DOCUMENT_READ']));
+      expect((await publicationRows(caseId))).toHaveLength(1);
+      const listed = await listOrganizationalCases(ids.identity, ids.workspaceA, {}, db);
+      expect(listed.items).toHaveLength(1);
+      expect(listed.items[0]?.publicTitle).toBe('Közzétételi kompatibilitási teszt');
+    } finally {
+      await cleanupCase(caseId);
+    }
+  });
+
+  it('C: same-workspace PARTICIPANT grant with a permission superset is reused unchanged and publication succeeds', async () => {
+    const caseId = await makeCase('C');
+    try {
+      const prior = await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['MATTER_READ', 'UPDATE_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_EXISTING_ACCESS');
+      const result = await publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db);
+      expect(result.grant.idempotent).toBe(true);
+      const grants = await db.clientPortalGrant.findMany({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId } });
+      expect(grants).toHaveLength(1);
+      expect(grants[0]?.id).toBe(prior.id);
+      expect(grants[0]?.participantRole).toBe('PARTICIPANT');
+      expect(JSON.stringify(grants[0]?.permissions)).toBe(JSON.stringify(['MATTER_READ', 'UPDATE_READ']));
       expect((await publicationRows(caseId))).toHaveLength(1);
     } finally {
       await cleanupCase(caseId);
     }
   });
 
-  it('B (REPRO): same-workspace CLIENT_OWNER grant with MATTER_READ + extras currently blocks publication', async () => {
-    const caseId = await makeCase('B');
-    try {
-      await existingGrant(caseId, ids.workspaceA, 'CLIENT_OWNER', ['MATTER_READ', 'DOCUMENT_READ']);
-      await expect(publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db))
-        .rejects.toMatchObject({ code: 'PARTICIPANT_GRANT_CONFLICT' } satisfies Partial<InternalCasePortalPublicationError>);
-      expect(await publicationRows(caseId)).toHaveLength(0);
-    } finally {
-      await cleanupCase(caseId);
-    }
-  });
-
-  it('C (REPRO): same-workspace PARTICIPANT grant with a permission superset currently blocks publication', async () => {
-    const caseId = await makeCase('C');
-    try {
-      await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['MATTER_READ', 'UPDATE_READ']);
-      await expect(publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db))
-        .rejects.toMatchObject({ code: 'PARTICIPANT_GRANT_CONFLICT' } satisfies Partial<InternalCasePortalPublicationError>);
-      expect(await publicationRows(caseId)).toHaveLength(0);
-    } finally {
-      await cleanupCase(caseId);
-    }
-  });
-
-  it('D: same-workspace grant WITHOUT MATTER_READ blocks publication', async () => {
+  it('D: same-workspace grant WITHOUT MATTER_READ stays fail-closed and blocks publication', async () => {
     const caseId = await makeCase('D');
     try {
-      await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['DOCUMENT_READ']);
+      const prior = await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['DOCUMENT_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
       await expect(publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db))
         .rejects.toMatchObject({ code: 'PARTICIPANT_GRANT_CONFLICT' } satisfies Partial<InternalCasePortalPublicationError>);
       expect(await publicationRows(caseId)).toHaveLength(0);
+      const grant = await grantRow(caseId, ids.workspaceA);
+      expect(grant?.id).toBe(prior.id);
+      expect(grant?.status).toBe('ACTIVE');
+      expect(grant?.participantRole).toBe('PARTICIPANT');
+      expect(JSON.stringify(grant?.permissions)).toBe(JSON.stringify(['DOCUMENT_READ']));
     } finally {
       await cleanupCase(caseId);
     }
   });
 
-  it('E: active grant for the same identity/case in ANOTHER workspace blocks publication', async () => {
+  it('E: active grant for the same identity/case in ANOTHER workspace stays fail-closed', async () => {
     const caseId = await makeCase('E');
     try {
-      await existingGrant(caseId, ids.workspaceB, 'PARTICIPANT', ['MATTER_READ']);
+      const prior = await existingGrant(caseId, ids.workspaceB, 'PARTICIPANT', ['MATTER_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
       await expect(publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db))
         .rejects.toMatchObject({ code: 'PARTICIPANT_GRANT_CONFLICT' } satisfies Partial<InternalCasePortalPublicationError>);
       expect(await publicationRows(caseId)).toHaveLength(0);
+      const grant = await db.clientPortalGrant.findUnique({ where: { id: prior.id } });
+      expect(grant?.workspaceId).toBe(ids.workspaceB);
+      expect(grant?.status).toBe('ACTIVE');
     } finally {
       await cleanupCase(caseId);
     }
   });
 
-  it('F: revoked previous grant in the SAME workspace is reactivated by publication (current behavior)', async () => {
+  it('F: revoked previous grant in the SAME workspace is reactivated by publication (preserved behavior)', async () => {
     const caseId = await makeCase('F');
     try {
       const prior = await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['MATTER_READ']);
       await revokeParticipant(admin, prior.id, db);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_NEW');
       const result = await publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db);
       expect(result.grant.status).toBe('ACTIVE');
       const grants = await db.clientPortalGrant.findMany({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId } });
@@ -211,6 +253,7 @@ d('internal Case portal publication grant compatibility (PostgreSQL)', () => {
     try {
       const prior = await existingGrant(caseId, ids.workspaceB, 'PARTICIPANT', ['MATTER_READ']);
       await revokeParticipant(admin, prior.id, db);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
       await expect(publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db))
         .rejects.toMatchObject({ code: 'PARTICIPANT_GRANT_CONFLICT' } satisfies Partial<InternalCasePortalPublicationError>);
       expect(await publicationRows(caseId)).toHaveLength(0);
@@ -234,15 +277,43 @@ d('internal Case portal publication grant compatibility (PostgreSQL)', () => {
     }
   });
 
-  it('readiness preflight (CURRENT): targets without grant are selectable and an internal Case stays private until publication', async () => {
+  it('retry keeps the same publication, never duplicates the grant, and never mutates the reused grant', async () => {
+    const caseId = await makeCase('RETRY');
+    try {
+      const prior = await existingGrant(caseId, ids.workspaceA, 'CLIENT_OWNER', ['MATTER_READ', 'DOCUMENT_READ']);
+      const first = await publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db);
+      const second = await publishInternalCaseToPortal(lawyer, caseId, publicationPayload(), db);
+      expect(second.publication.id).toBe(first.publication.id);
+      const grants = await db.clientPortalGrant.findMany({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId } });
+      expect(grants).toHaveLength(1);
+      expect(grants[0]?.id).toBe(prior.id);
+      expect(grants[0]?.participantRole).toBe('CLIENT_OWNER');
+      expect(JSON.stringify(grants[0]?.permissions)).toBe(JSON.stringify(['MATTER_READ', 'DOCUMENT_READ']));
+      expect((await publicationRows(caseId))).toHaveLength(1);
+    } finally {
+      await cleanupCase(caseId);
+    }
+  });
+
+  it('readiness preflight exposes every state server-side without leaking internal data', async () => {
     const caseId = await makeCase('PREFLIGHT');
     try {
       expect((await listOrganizationalCases(ids.identity, ids.workspaceA, {}, db)).total).toBe(0);
-      const targets = await listCasePortalPublicationTargets(admin, caseId, db);
-      expect(targets.items.length).toBeGreaterThanOrEqual(1);
-      const target = targets.items.find((item) => item.workspaceMembershipId === ids.membershipA);
-      expect(target).toBeDefined();
-      expect(target?.workspaceId).toBe(ids.workspaceA);
+      const fresh = await listCasePortalPublicationTargets(admin, caseId, db);
+      expect(fresh.items.find((item) => item.workspaceMembershipId === ids.membershipA)?.publicationReadiness).toBe('READY_NEW');
+      expect(JSON.stringify(fresh.items)).not.toContain('grantId');
+
+      const blocked = await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['DOCUMENT_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
+      await revokeParticipant(admin, blocked.id, db);
+
+      const otherWorkspace = await existingGrant(caseId, ids.workspaceB, 'PARTICIPANT', ['MATTER_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
+      await revokeParticipant(admin, otherWorkspace.id, db);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_NEW');
+
+      await existingGrant(caseId, ids.workspaceA, 'REQUESTER', ['MATTER_READ', 'ACTION_REQUEST_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_EXISTING_ACCESS');
     } finally {
       await cleanupCase(caseId);
     }

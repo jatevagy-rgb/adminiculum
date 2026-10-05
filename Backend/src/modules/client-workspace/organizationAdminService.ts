@@ -89,6 +89,10 @@ function samePermissions(left: unknown, right: unknown): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function includesPermission(left: unknown, permission: string): boolean {
+  return (Array.isArray(left) ? left : []).map(String).includes(permission);
+}
+
 async function createOrReactivateParticipant(actor: InternalActor, input: Record<string, unknown>, tx: any, publicationActor: boolean) {
   const workspaceId = String(input.workspaceId || '');
   const caseId = String(input.caseId || '');
@@ -117,6 +121,18 @@ async function createOrReactivateParticipant(actor: InternalActor, input: Record
     orderBy: { updatedAt: 'desc' },
   });
   if (existing?.status === 'ACTIVE') {
+    if (publicationActor) {
+      // Publication reuse: an existing ACTIVE grant for the same identity, Client
+      // and Case satisfies publication when it belongs to the SAME workspace and
+      // already includes MATTER_READ. The existing participantRole and permission
+      // array are never narrowed, downgraded or role-changed for publication; a
+      // broader safe permission superset is reused unchanged. A grant in another
+      // workspace or without MATTER_READ keeps the fail-closed conflict.
+      if (existing.workspaceId !== workspaceId || !includesPermission(existing.permissions, 'MATTER_READ')) {
+        throw new OrganizationAdminError(409, 'PARTICIPANT_GRANT_CONFLICT', 'An incompatible active participant grant already exists.');
+      }
+      return { row: existing, idempotent: true, reactivated: false };
+    }
     if (existing.workspaceId !== workspaceId || String(existing.participantRole || '') !== participantRole || !samePermissions(existing.permissions, permissions)) {
       throw new OrganizationAdminError(409, 'PARTICIPANT_GRANT_CONFLICT', 'An incompatible active participant grant already exists.');
     }

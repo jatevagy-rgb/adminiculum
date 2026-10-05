@@ -49,12 +49,15 @@ export interface ClientMatterPublicationDTO {
   } | null;
 }
 
+export type PortalPublicationReadiness = "READY_NEW" | "READY_EXISTING_ACCESS" | "BLOCKED_CONFLICT";
+
 export interface CasePortalPublicationTarget {
   workspaceId: string;
   workspaceMembershipId: string;
   workspaceName: string;
   memberName: string;
   memberRole: string;
+  publicationReadiness: PortalPublicationReadiness;
 }
 
 export interface ClientDocumentPublicationDTO {
