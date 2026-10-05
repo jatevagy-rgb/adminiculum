@@ -4,9 +4,13 @@ import { fetchApi } from '@/lib/api';
 import { complianceWorkbenchApi, type Workbench, type AcceptanceTarget, type WorkbenchRow, type ImpactDecisionInput } from '@/lib/complianceWorkbenchApi';
 import { complianceCenterApi, type LegalSourceObservationDetail } from '@/lib/complianceCenterApi';
 import { complianceOverviewApi } from '@/lib/complianceOverviewApi';
+import {
+  IMPACT_DECISION_LABELS,
+  impactDecisionLabel,
+  workbenchKindLabel,
+  workbenchStatusLabel,
+} from '@/lib/complianceWorkbenchPresentation';
 
-const labels = { MISSING_FACT: 'Hiányzó adat', SUBMISSION: 'Ügyfélbeküldés', STALE_EVIDENCE: 'Bizonyíték felülvizsgálata', PROPOSAL: 'Intézkedés', SOURCE_IMPACT: 'Jogforráshatás' };
-const choices = { NO_ACTION: 'Nincs további teendő', REEVALUATE: 'Meglévő szabályok újraértékelése', REMEDIATION: 'Meglévő javaslatból ügy / feladat', RULE_REVIEW: 'Követelmény felülvizsgálati tervezete' };
 const button = 'rounded border px-3 py-2 text-sm disabled:opacity-50';
 
 export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clientId: string; onNavigate: (view: 'requirements' | 'controls' | 'findings') => void; onChanged: () => void }) {
@@ -35,19 +39,19 @@ export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clien
     {data && Object.values(data.truncated).some(Boolean) && <p role="status">Forrásonként legfeljebb 50 sor látható. A teljes listát a kapcsolódó nyilvántartásban ellenőrizze.</p>}
     {data && !data.rows.length && <p>Nincs rögzített döntési teendő.</p>}
     {data?.clientId === clientId && data.rows.map(row => <article key={row.id} className="space-y-2 rounded border p-3">
-      <h3 className="font-medium">{labels[row.kind]} · {row.title}</h3>
-      <p className="text-sm">Állapot: {row.status}{row.subject ? ` · ${row.subject}` : ''}</p>
-      <p className="text-xs">{row.since ? `Rögzítve / értékelve: ${new Date(row.since).toLocaleString('hu-HU')}` : ''}{row.dueAt ? ` · Határidő / érvényesség: ${new Date(row.dueAt).toLocaleDateString('hu-HU')}` : ''}{row.ownerId ? ` · Felelős: ${row.ownerName || row.ownerId}` : ''}</p>
-      {row.caseId && <a className="underline" href={`/cases/${encodeURIComponent(row.caseId)}/client-portal`}>Kapcsolódó ügy megnyitása</a>}
+      <h3 className="font-medium">{workbenchKindLabel(row.kind)} · {row.title}</h3>
+      <p className="text-sm">Állapot: {workbenchStatusLabel(row)}{row.subject ? ` · ${row.subject}` : ''}</p>
+      <p className="text-xs">{row.since ? `Rögzítve / értékelve: ${new Date(row.since).toLocaleString('hu-HU')}` : ''}{row.dueAt ? ` · Határidő / érvényesség: ${new Date(row.dueAt).toLocaleDateString('hu-HU')}` : ''}{row.ownerName ? ` · Felelős: ${row.ownerName}` : row.ownerId ? ' · Felelős: nincs megjeleníthető név' : row.kind === 'PROPOSAL' ? ' · Felelős: nincs megadva' : ''}</p>
+      {row.caseId && <a className="underline" href={`/cases/${encodeURIComponent(row.caseId)}`}>Kapcsolódó ügy megnyitása</a>}
       {row.readOnly && <p>Csak olvasható: {row.reason === 'AWAITING_CUSTOMER_CORRECTION' ? 'Ügyféljavításra vár.' : 'A döntés már rögzítve van.'}</p>}
       {row.action === 'REQUIREMENTS' && <button className={button} onClick={() => onNavigate('requirements')}>Követelmény és adatbekérés megnyitása</button>}
       {row.action === 'PROPOSAL_REVIEW' && <button className={button} onClick={() => onNavigate('findings')}>Javaslat / intézkedés megnyitása</button>}
       {row.action === 'EVIDENCE_REVIEW' && <><button className={button} onClick={() => onNavigate('controls')}>Kontroll és bizonyíték megnyitása</button><button className={button} disabled={busy || row.readOnly} onClick={() => void run(() => complianceOverviewApi.reviewEvidenceRecord(clientId, row.sourceId, { status: 'UNDER_REVIEW' }))}>Felülvizsgálatra jelölés</button><button className={button} disabled={busy || row.readOnly} onClick={() => void run(() => complianceOverviewApi.reviewEvidenceRecord(clientId, row.sourceId, { status: 'REJECTED' }))}>Bizonyíték elutasítása</button></>}
       {row.action === 'SUBMISSION_REVIEW' && !row.readOnly && <SubmissionDecision row={row} busy={busy} run={run} targets={data.acceptanceTargets || []} />}
-      {row.source && <p className="text-xs">Forrás: {row.source.sourceKey} · Változat: {row.source.versionKey} · Azonosító: {row.source.legalSourceVersionId}</p>}
-      {row.source && <div className="text-sm"><p>Esemény: {row.source.event}</p><p>Forrásfelülvizsgálat: {row.source.reviewedNote || 'Még nincs rögzített indok.'}</p><ul>{row.source.requirementVersions.map(v => <li key={v.id}>{v.title}</li>)}</ul></div>}
+      {row.source && <details className="text-xs"><summary className="cursor-pointer">Forrás technikai adatai</summary><p className="mt-1">Forrás: {row.source.sourceKey} · Változat: {row.source.versionKey} · Azonosító: {row.source.legalSourceVersionId} · Esemény: {row.source.event}</p></details>}
+      {row.source && <div className="text-sm"><p>Forrásfelülvizsgálat: {row.source.reviewedNote || 'Még nincs rögzített indok.'}</p><ul>{row.source.requirementVersions.map(v => <li key={v.id}>{v.title}</li>)}</ul></div>}
       {row.action === 'SOURCE_REVIEW' && <SourceReview row={row} busy={busy} run={run} />}
-      {row.action === 'IMPACT_DECISION' && row.source && (row.source.decision ? <p>{choices[row.source.decision.kind as keyof typeof choices]} · {row.source.decision.note}{row.source.decision.result?.caseId && <a className="block underline" href={`/cases/${encodeURIComponent(row.source.decision.result.caseId)}`}>Létrehozott ügy és feladat megnyitása</a>}{row.source.decision.result?.requirementVersionId && <span className="block">Felülvizsgálati tervezet: {row.source.decision.result.requirementVersionId} (jóváhagyásra vár)</span>}</p> : <ImpactDecision row={row} busy={busy} run={run} />)}
+      {row.action === 'IMPACT_DECISION' && row.source && (row.source.decision ? <p>{impactDecisionLabel(row.source.decision.kind)} · {row.source.decision.note}{row.source.decision.result?.caseId && <a className="block underline" href={`/cases/${encodeURIComponent(row.source.decision.result.caseId)}`}>Létrehozott ügy megnyitása</a>}{row.source.decision.result?.taskId && <a className="block underline" href={`/tasks?taskId=${encodeURIComponent(row.source.decision.result.taskId)}`}>Létrehozott feladat megnyitása</a>}{row.source.decision.result?.requirementVersionId && <span className="block">Felülvizsgálati tervezet készült (jóváhagyásra vár).</span>}</p> : <ImpactDecision row={row} busy={busy} run={run} />)}
     </article>)}
   </section>;
 }
@@ -67,7 +71,7 @@ function ImpactDecision({ row, busy, run }: ActionProps) {
   const [draft, setDraft] = useState({ versionKey: '', title: '', normativeStatement: '', effectiveFrom: '' });
   const source = row.source!;
   return <form className="space-y-2" onSubmit={e => { e.preventDefault(); void run(() => complianceWorkbenchApi.decide(row.clientId, row.sourceId, { sourceRevision: source.revision, kind, note, ...(kind === 'REMEDIATION' ? { proposalId: target } : {}), ...(kind === 'RULE_REVIEW' ? { requirementVersionId: target, draft } : {}) })); }}>
-    <label className="block">Operátori döntés<select value={kind} onChange={e => { setKind(e.target.value as typeof kind); setTarget(''); }}>{Object.entries(choices).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+    <label className="block">Operátori döntés<select value={kind} onChange={e => { setKind(e.target.value as typeof kind); setTarget(''); }}>{Object.entries(IMPACT_DECISION_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
     {(kind === 'REMEDIATION' || kind === 'RULE_REVIEW') && <label className="block">Érintett meglévő tétel<select required value={target} onChange={e => setTarget(e.target.value)}><option value="">Válasszon…</option>{(kind === 'REMEDIATION' ? source.proposals : source.requirementVersions).map(p => <option key={p.id} value={p.id}>{p.title}</option>)}</select></label>}
     {kind === 'REMEDIATION' && !source.proposals.length && <p>Előbb hozzon létre javaslatot az érintett megállapítás meglévő intézkedési felületén.</p>}
     {kind === 'RULE_REVIEW' && <fieldset><legend>Új felülvizsgálati tervezet — nincs jóváhagyás</legend>{(['versionKey', 'title', 'normativeStatement', 'effectiveFrom'] as const).map(key => <label className="block" key={key}>{{ versionKey: 'Verzió neve', title: 'Cím', normativeStatement: 'Követelmény szövege', effectiveFrom: 'Tervezett hatálykezdet' }[key]}<input required type={key === 'effectiveFrom' ? 'date' : 'text'} value={draft[key]} onChange={e => setDraft({ ...draft, [key]: e.target.value })} /></label>)}</fieldset>}

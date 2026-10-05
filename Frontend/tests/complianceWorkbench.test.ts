@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRaceHarness, deferred, settle, flatten, textOf } from './helpers/asyncRaceHarness';
+import * as presentation from '../src/lib/complianceWorkbenchPresentation';
 const file = 'src/components/clients/compliance/ComplianceWorkbench.tsx';
 const source = { legalSourceVersionId: 'exact-v1', sourceKey: 'source', versionKey: 'V1', revision: 'a'.repeat(64), event: 'amendment', reviewedNote: 'Human reviewed', requirementVersions: [{ id: 'r1', title: 'Requirement' }], proposals: [{ id: 'p1', title: 'Remediation proposal' }], decision: null };
 const row = { id: 'SOURCE_IMPACT:o1', kind: 'SOURCE_IMPACT', sourceId: 'o1', clientId: 'A', title: 'Source title', status: 'IMPACT_CONFIRMED', action: 'IMPACT_DECISION', readOnly: false, source };
@@ -10,7 +11,7 @@ const nodes = (tree: any, type: string) => flatten(tree).filter(n => n.type === 
 
 test('client-scoped workbench discards late previous-client responses', async () => {
   const a = deferred<any>(), b = deferred<any>();
-  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: (id: string) => id === 'A' ? a.promise : b.promise } } });
+  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: (id: string) => id === 'A' ? a.promise : b.promise } } });
   const props = { onNavigate() {}, onChanged() {} };
   h.commit({ ...props, clientId: 'A' }); h.commit({ ...props, clientId: 'B' });
   b.resolve(model('B', [{ ...row, clientId: 'B', title: 'B source' }])); await settle();
@@ -21,7 +22,7 @@ test('client-scoped workbench discards late previous-client responses', async ()
 
 test('impact form requires reason and sends explicit choice with exact source revision', async () => {
   const calls: any[] = [];
-  const h = createRaceHarness(file, 'ImpactDecision', { '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { decide: async (...args: any[]) => calls.push(args) } } });
+  const h = createRaceHarness(file, 'ImpactDecision', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { decide: async (...args: any[]) => calls.push(args) } } });
   const props = { row, busy: false, run: async (fn: any) => fn() };
   let tree = h.commit(props);
   assert.equal(nodes(tree, 'button')[0].props.disabled, true);
@@ -34,7 +35,7 @@ test('impact form requires reason and sends explicit choice with exact source re
 
 test('remediation sends only an explicitly selected existing proposal', async () => {
   const calls: any[] = [];
-  const h = createRaceHarness(file, 'ImpactDecision', { '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { decide: async (...args: any[]) => calls.push(args) } } });
+  const h = createRaceHarness(file, 'ImpactDecision', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { decide: async (...args: any[]) => calls.push(args) } } });
   const props = { row, busy: false, run: async (fn: any) => fn() };
   nodes(h.commit(props), 'select')[0].props.onChange({ target: { value: 'REMEDIATION' } });
   let tree = h.commit(props);
@@ -45,7 +46,7 @@ test('remediation sends only an explicitly selected existing proposal', async ()
 });
 
 test('recorded decisions and pending customer correction are read-only', async () => {
-  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: async () => model('A', [{ ...row, readOnly: true, reason: 'DECISION_RECORDED', source: { ...source, decision: { kind: 'NO_ACTION', note: 'Done' } } }, { ...row, id: 's', kind: 'SUBMISSION', source: undefined, action: 'SUBMISSION_REVIEW', readOnly: true, reason: 'AWAITING_CUSTOMER_CORRECTION' }]) } } });
+  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: async () => model('A', [{ ...row, readOnly: true, reason: 'DECISION_RECORDED', source: { ...source, decision: { kind: 'NO_ACTION', note: 'Done' } } }, { ...row, id: 's', kind: 'SUBMISSION', source: undefined, action: 'SUBMISSION_REVIEW', readOnly: true, reason: 'AWAITING_CUSTOMER_CORRECTION' }]) } } });
   const props = { clientId: 'A', onNavigate() {}, onChanged() {} }; h.commit(props); await settle();
   const tree = h.commit(props);
   assert.match(textOf(tree), /Csak olvasható/); assert.match(textOf(tree), /Ügyféljavításra vár/);
@@ -53,7 +54,7 @@ test('recorded decisions and pending customer correction are read-only', async (
 });
 
 test('failed workbench request is not presented as an empty or successful list', async () => {
-  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: async () => { throw new Error('403'); } } } });
+  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: async () => { throw new Error('403'); } } } });
   const props = { clientId: 'A', onNavigate() {}, onChanged() {} }; h.commit(props); await settle();
   const tree = h.commit(props);
   assert.ok(flatten(tree).some(n => n.props?.role === 'alert'));
