@@ -14,6 +14,33 @@ export class InternalCasePortalPublicationError extends Error {
   }
 }
 
+export type PortalPublicationReadiness = 'READY_NEW' | 'READY_EXISTING_ACCESS' | 'BLOCKED_CONFLICT';
+
+/**
+ * Safe publication readiness derived server-side from the most recent grant for
+ * the same identity/client/case. Mirrors the publication transaction's
+ * fail-closed rules without exposing internal IDs or permission lists.
+ *
+ * READY_NEW            — no prior grant, or a non-active prior grant in the same
+ *                        workspace that publication reactivates.
+ * READY_EXISTING_ACCESS — an ACTIVE grant in the same workspace already includes
+ *                        MATTER_READ; publication reuses it unchanged.
+ * BLOCKED_CONFLICT      — an ACTIVE grant in another workspace, or an ACTIVE
+ *                        same-workspace grant without MATTER_READ, or a
+ *                        non-active prior grant in another workspace.
+ */
+export function derivePortalPublicationReadiness(
+  latest: { workspaceId: string | null; status: unknown; permissions: unknown } | null | undefined,
+  workspaceId: string,
+): PortalPublicationReadiness {
+  if (!latest) return 'READY_NEW';
+  const permissions = Array.isArray(latest.permissions) ? latest.permissions.map(String) : [];
+  if (String(latest.status) === 'ACTIVE') {
+    return latest.workspaceId === workspaceId && permissions.includes('MATTER_READ') ? 'READY_EXISTING_ACCESS' : 'BLOCKED_CONFLICT';
+  }
+  return latest.workspaceId && latest.workspaceId !== workspaceId ? 'BLOCKED_CONFLICT' : 'READY_NEW';
+}
+
 function requirePublisher(actor: Actor): void {
   if (!actor.userId || !PUBLISH_ROLES.has(String(actor.role || ''))) {
     throw new InternalCasePortalPublicationError(403, 'CASE_PORTAL_PUBLISH_FORBIDDEN', 'Case portal publication requires an authorized workforce publisher.');
@@ -60,6 +87,15 @@ export async function listCasePortalPublicationTargets(actor: Actor, caseId: str
     select: { id: true, displayName: true },
     orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
   });
+  const grants = await db.clientPortalGrant.findMany({
+    where: { clientId: caseRow.clientId, caseId, clientPortalIdentityId: { in: identities.map((identity) => identity.id) } },
+    orderBy: { updatedAt: 'desc' },
+    select: { id: true, clientPortalIdentityId: true, workspaceId: true, status: true, permissions: true },
+  });
+  const latestGrantByIdentity = new Map<string, (typeof grants)[number]>();
+  for (const grant of grants) {
+    if (!latestGrantByIdentity.has(grant.clientPortalIdentityId)) latestGrantByIdentity.set(grant.clientPortalIdentityId, grant);
+  }
   const workspaceById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
   const identityById = new Map(identities.map((identity) => [identity.id, identity]));
   return {
@@ -73,6 +109,7 @@ export async function listCasePortalPublicationTargets(actor: Actor, caseId: str
         workspaceName: workspace.name,
         memberName: identity.displayName,
         memberRole: String(membership.role),
+        publicationReadiness: derivePortalPublicationReadiness(latestGrantByIdentity.get(membership.clientPortalIdentityId), workspace.id),
       })),
   };
 }
