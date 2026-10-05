@@ -40,7 +40,7 @@ export function PortalActionRow({ item }: { item: PortalActionItem }) {
       className="flex flex-col gap-3 border-b border-[var(--adm-border-canonical)] px-4 py-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
     >
       <div className="min-w-0">
-        <p className="truncate text-sm font-semibold text-[var(--adm-text-primary)]">{item.title}</p>
+        <p className="break-words text-sm font-semibold text-[var(--adm-text-primary)]">{item.title}</p>
         <p className="mt-1 truncate text-xs text-[var(--adm-text-secondary)]">
           {item.contextLabel ? `${item.contextLabel}${dueLabel ? ` · Határidő: ${dueLabel}` : ""}` : dueLabel ? `Határidő: ${dueLabel}` : ""}
         </p>

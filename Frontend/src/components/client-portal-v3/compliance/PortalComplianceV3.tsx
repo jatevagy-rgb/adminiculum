@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SafePanelError } from "@/components/ui";
 import { AdminStatusPill } from "@/components/adminiculum/ui";
@@ -21,6 +22,7 @@ import { companyProfileCompletion } from "@/lib/companyProfileCompletion";
 import {
   buildAnswerPayload,
   classifyTopic,
+  complianceTargetHref,
   controlProgressFor,
   customerActionNote,
   filterTopics,
@@ -28,11 +30,14 @@ import {
   nextActionFor,
   officeProcessingNote,
   primaryBadgeLabel,
+  readQuestionParam,
   readTopicParam,
   refreshAfterProfileAnswer,
   requestStateLabel,
+  resolvePortalAnswerableQuestionKey,
   summaryGroups,
   TopicDetailView,
+  withComplianceTarget,
   withTopicParam,
 } from "@/components/client-portal/OrgComplianceView";
 import { PortalEmptyInline } from "../shared/PortalEmptyInline";
@@ -282,6 +287,7 @@ function PublishedDocumentsPanel({ topics }: { topics: PortalComplianceTopic[] }
 function TopicMissingInformation({
   topic,
   activeQuestionKey,
+  focusQuestionKey,
   answerInput,
   saving,
   actionError,
@@ -293,6 +299,8 @@ function TopicMissingInformation({
 }: {
   topic: PortalComplianceTopic;
   activeQuestionKey: string | null;
+  /** URL-targeted question whose control should receive focus when opened. */
+  focusQuestionKey?: string | null;
   answerInput: string;
   saving: boolean;
   actionError: string | null;
@@ -310,7 +318,7 @@ function TopicMissingInformation({
   const renderItem = (info: PortalComplianceMissingInfo, idx: number) => (
     <li key={`${info.questionKey ?? info.label}-${idx}`} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium text-[var(--adm-text-primary)]">{info.label}</span>
+        <span className="min-w-0 break-words font-medium text-[var(--adm-text-primary)]">{info.label}</span>
         {info.portalAnswerable && info.questionKey ? (
           activeQuestionKey === info.questionKey ? null : (
             <button
@@ -330,6 +338,9 @@ function TopicMissingInformation({
         <div className="mt-2 space-y-2">
           {info.valueType === "BOOLEAN" ? (
             <select
+              data-testid="portal-compliance-answer-control"
+              data-question-key={info.questionKey}
+              autoFocus={focusQuestionKey === info.questionKey}
               className="w-full rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-2 text-sm focus:border-[var(--adm-brand-green)] focus:outline-none"
               value={answerInput}
               onChange={(e) => onAnswerChange(e.target.value)}
@@ -341,6 +352,9 @@ function TopicMissingInformation({
             </select>
           ) : info.valueType === "ENUM" ? (
             <select
+              data-testid="portal-compliance-answer-control"
+              data-question-key={info.questionKey}
+              autoFocus={focusQuestionKey === info.questionKey}
               className="w-full rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-2 text-sm focus:border-[var(--adm-brand-green)] focus:outline-none"
               value={answerInput}
               onChange={(e) => onAnswerChange(e.target.value)}
@@ -355,6 +369,9 @@ function TopicMissingInformation({
             </select>
           ) : (
             <input
+              data-testid="portal-compliance-answer-control"
+              data-question-key={info.questionKey}
+              autoFocus={focusQuestionKey === info.questionKey}
               type={info.valueType === "NUMBER" ? "number" : info.valueType === "DATE" ? "date" : "text"}
               step={info.valueType === "NUMBER" ? (info.integerOnly ? 1 : "any") : undefined}
               className="w-full rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-2 text-sm focus:border-[var(--adm-brand-green)] focus:outline-none"
@@ -435,8 +452,17 @@ export function PortalComplianceV3() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<ComplianceBucket | "ALL">("ALL");
-  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [section, setSection] = useState<ComplianceSection>("ATTEKINTES");
+
+  // The framework router/search params are the single source of truth for the
+  // selected topic and exact question target. This keeps initial load, same-route
+  // link navigation, Back and Forward in sync without custom history drift.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const searchString = searchParams.toString();
+  const selectedTopicId = readTopicParam(searchString);
+  const requestedQuestionKey = readQuestionParam(searchString);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     if (!options?.silent) setLoading(true);
@@ -478,15 +504,6 @@ export function PortalComplianceV3() {
     void loadRequests();
   }, [load, loadProfile, loadRequests, reloadNonce]);
 
-  // URL-backed, refresh-safe topic selection. `popstate` keeps back/forward in sync.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setSelectedTopicId(readTopicParam(window.location.search));
-    const onPopState = () => setSelectedTopicId(readTopicParam(window.location.search));
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, []);
-
   const topics = useMemo(() => data?.topics || [], [data]);
 
   const bucketFor = useMemo(() => {
@@ -500,6 +517,38 @@ export function PortalComplianceV3() {
   const visibleTopics = useMemo(() => filterTopics(topics, search, statusFilter), [topics, search, statusFilter]);
 
   const requestGroups = useMemo(() => groupComplianceRequests(requests ?? []), [requests]);
+
+  const selectedTopic = useMemo(
+    () => (selectedTopicId ? topics.find((topic) => topic.topicId === selectedTopicId) ?? null : null),
+    [selectedTopicId, topics],
+  );
+  // The exact portal-answerable question the URL points at, or null when the
+  // URL carries no question / a question this topic cannot answer.
+  const matchedQuestionKey = selectedTopic
+    ? resolvePortalAnswerableQuestionKey(selectedTopic, requestedQuestionKey)
+    : null;
+  const requestedQuestionUnavailable = Boolean(selectedTopic && requestedQuestionKey && !matchedQuestionKey);
+
+  // Every URL-driven topic/question change starts from a clean answer state. The
+  // typed answer mechanism stays local and nothing is ever saved automatically.
+  useEffect(() => {
+    setActiveQuestionKey(null);
+    setAnswerInput("");
+    setActionError(null);
+  }, [selectedTopicId, requestedQuestionKey]);
+
+  // A topic change also dismisses the previous action confirmation.
+  useEffect(() => {
+    setActionSuccess(null);
+  }, [selectedTopicId]);
+
+  // A valid topic + question target from the URL opens the existing answer
+  // control for exactly that canonical question. A stale or unavailable
+  // question never falls back to a different question.
+  useEffect(() => {
+    if (!matchedQuestionKey) return;
+    setActiveQuestionKey((current) => (current === matchedQuestionKey ? current : matchedQuestionKey));
+  }, [matchedQuestionKey]);
 
   const worklist = useMemo<WorklistItem[]>(() => {
     const items: WorklistItem[] = [];
@@ -529,23 +578,28 @@ export function PortalComplianceV3() {
         stateLabel: "Adatra várunk Öntől",
         tone: "amber",
         dueAt: null,
-        href: withTopicParam("", topic.topicId),
+        href: complianceTargetHref(topic.topicId, answerable[0]?.questionKey),
         ctaLabel: "Adat megadása →",
       });
     }
     return items;
   }, [requestGroups, topics]);
 
-  // A stale or unknown ?topic= value safely falls back to the overview.
+  // A stale or unknown ?topic= value safely falls back to the overview. The
+  // browser URL is corrected through the framework router so Back/Forward stay
+  // consistent with what is rendered.
   useEffect(() => {
     if (!data || !selectedTopicId) return;
     if (topics.some((topic) => topic.topicId === selectedTopicId)) return;
-    setSelectedTopicId(null);
-    if (typeof window !== "undefined") {
-      const nextSearch = withTopicParam(window.location.search, null);
-      window.history.replaceState({}, "", `${window.location.pathname}${nextSearch}${window.location.hash}`);
-    }
-  }, [data, topics, selectedTopicId]);
+    router.replace(`${pathname}${withTopicParam(searchString, null)}`, { scroll: false });
+  }, [data, topics, selectedTopicId, router, pathname, searchString]);
+
+  // After a successful answer the URL must stop pointing at the answered
+  // question, so the resolved state stays truthful without a history entry.
+  const clearQuestionTarget = useCallback(() => {
+    if (!requestedQuestionKey) return;
+    router.replace(`${pathname}${withComplianceTarget(searchString, selectedTopicId, null)}`, { scroll: false });
+  }, [router, pathname, searchString, selectedTopicId, requestedQuestionKey]);
 
   const handleSaveAnswer = async (info: PortalComplianceMissingInfo) => {
     if (!info.questionKey) return;
@@ -559,6 +613,7 @@ export function PortalComplianceV3() {
       setActionSuccess("Adat sikeresen rögzítve.");
       setActiveQuestionKey(null);
       setAnswerInput("");
+      clearQuestionTarget();
       await refreshAfterProfileAnswer({
         refreshCompliance: () => load({ silent: true }),
         refreshProfileCompletion: loadProfile,
@@ -579,6 +634,7 @@ export function PortalComplianceV3() {
       setActionSuccess("Jelezve az iroda felé, hogy az adat nem ismert.");
       setActiveQuestionKey(null);
       setAnswerInput("");
+      clearQuestionTarget();
       await refreshAfterProfileAnswer({
         refreshCompliance: () => load({ silent: true }),
         refreshProfileCompletion: loadProfile,
@@ -590,18 +646,14 @@ export function PortalComplianceV3() {
     }
   };
 
+  // Topic detail selection is a real framework navigation: same-route links,
+  // Back and Forward all flow through the router and re-render from search params.
   const applyTopicSelection = useCallback((topicId: string | null) => {
-    setSelectedTopicId(topicId);
-    setActiveQuestionKey(null);
-    setAnswerInput("");
-    setActionError(null);
-    setActionSuccess(null);
-    if (typeof window === "undefined") return;
-    const nextSearch = withTopicParam(window.location.search, topicId);
-    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    const next = `${window.location.pathname}${nextSearch}${window.location.hash}`;
-    if (next !== current) window.history.pushState({}, "", next);
-  }, []);
+    const nextSearch = withComplianceTarget(searchString, topicId, null);
+    const next = `${pathname}${nextSearch}`;
+    const current = `${pathname}${searchString ? `?${searchString}` : ""}`;
+    if (next !== current) router.push(next, { scroll: false });
+  }, [pathname, router, searchString]);
 
   if (loading) {
     return (
@@ -621,8 +673,6 @@ export function PortalComplianceV3() {
     );
   }
 
-  const selectedTopic = selectedTopicId ? topics.find((topic) => topic.topicId === selectedTopicId) ?? null : null;
-
   if (selectedTopic) {
     const bucket = bucketFor.get(selectedTopic.topicId) ?? classifyTopic(selectedTopic);
     return (
@@ -630,6 +680,16 @@ export function PortalComplianceV3() {
         {actionSuccess ? (
           <div className="rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-semantic-success-soft)] p-3 text-sm font-medium text-[var(--adm-brand-green)]">
             {actionSuccess}
+          </div>
+        ) : null}
+        {requestedQuestionUnavailable ? (
+          <div
+            role="status"
+            data-testid="portal-compliance-question-unavailable"
+            className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] p-3 text-sm text-[var(--adm-text-secondary)]"
+          >
+            A hivatkozott kérdés ezen a területen jelenleg nem érhető el, vagy időközben megválaszolták. Válassza ki az
+            alábbi hiányzó adatok közül, amelyiket meg kívánja adni.
           </div>
         ) : null}
         <TopicDetailView
@@ -641,6 +701,7 @@ export function PortalComplianceV3() {
             <TopicMissingInformation
               topic={selectedTopic}
               activeQuestionKey={activeQuestionKey}
+              focusQuestionKey={requestedQuestionKey}
               answerInput={answerInput}
               saving={saving}
               actionError={actionError}

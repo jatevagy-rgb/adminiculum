@@ -123,10 +123,39 @@ const complianceRequests = (items: any[]) => ({
   generatedAt: new Date().toISOString(),
 });
 
+/**
+ * The V3 compliance surface reads the App Router search params and router, the
+ * canonical source of its topic/question target — the JSDOM harness provides
+ * the same contexts the real app router mounts.
+ */
+function withPortalRouter(node: any) {
+  const { AppRouterContext } = require("next/dist/shared/lib/app-router-context.shared-runtime");
+  const { PathnameContext, SearchParamsContext } = require("next/dist/shared/lib/hooks-client-context.shared-runtime");
+  const router = {
+    push: () => {},
+    replace: () => {},
+    back: () => {},
+    forward: () => {},
+    refresh: () => {},
+    prefetch: () => {},
+  };
+  return React.createElement(
+    AppRouterContext.Provider,
+    { value: router },
+    React.createElement(
+      PathnameContext.Provider,
+      { value: "/portal/megfeleles" },
+      React.createElement(SearchParamsContext.Provider, { value: new URLSearchParams("") }, node),
+    ),
+  );
+}
+
 async function mountCompliance() {
   route("GET", "/client-portal/org/company-profile", { questions: [], screens: [] });
   const { PortalComplianceV3 } = await import("../src/components/client-portal-v3/compliance/PortalComplianceV3");
-  await mount(PortalComplianceV3);
+  await mount(function ComplianceRouterHarness() {
+    return withPortalRouter(React.createElement(PortalComplianceV3));
+  });
 }
 
 test("D1 compliance request link uses the published matter identity, never the internal caseId", async () => {

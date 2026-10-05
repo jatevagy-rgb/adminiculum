@@ -722,6 +722,76 @@ export function withTopicParam(search: string, topicId: string | null): string {
   return next ? `?${next}` : "";
 }
 
+/** Customer-safe URL query parameter that selects one exact portal question. */
+export const COMPLIANCE_QUESTION_QUERY_PARAM = "question";
+
+/** Reads the selected customer-safe question key from a location search string. */
+export function readQuestionParam(search: string): string | null {
+  try {
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    const value = params.get(COMPLIANCE_QUESTION_QUERY_PARAM);
+    return value && value.trim() ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Canonical customer-safe link to a Compliance topic detail. When a canonical
+ * portal question key is supplied, the detail opens that exact existing answer
+ * control. Only safe product identifiers (registry topicId / canonical
+ * questionKey) ever appear in the URL — never internal fact, rule or finding ids.
+ */
+export function complianceTargetHref(topicId: string, questionKey?: string | null): string {
+  const params = new URLSearchParams();
+  if (topicId && topicId.trim()) params.set(COMPLIANCE_TOPIC_QUERY_PARAM, topicId);
+  const key = typeof questionKey === "string" ? questionKey.trim() : "";
+  if (key) params.set(COMPLIANCE_QUESTION_QUERY_PARAM, key);
+  const query = params.toString();
+  return `/portal/megfeleles${query ? `?${query}` : ""}`;
+}
+
+/**
+ * Returns a location search string with the Compliance topic/question target
+ * set. A different topic always clears any previous question target; a missing
+ * topic clears both. Other query parameters are preserved.
+ */
+export function withComplianceTarget(search: string, topicId: string | null, questionKey?: string | null): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  if (topicId && topicId.trim()) {
+    params.set(COMPLIANCE_TOPIC_QUERY_PARAM, topicId);
+    const key = typeof questionKey === "string" ? questionKey.trim() : "";
+    if (key) params.set(COMPLIANCE_QUESTION_QUERY_PARAM, key);
+    else params.delete(COMPLIANCE_QUESTION_QUERY_PARAM);
+  } else {
+    params.delete(COMPLIANCE_TOPIC_QUERY_PARAM);
+    params.delete(COMPLIANCE_QUESTION_QUERY_PARAM);
+  }
+  const next = params.toString();
+  return next ? `?${next}` : "";
+}
+
+/**
+ * Resolves a requested canonical question key against the portal-answerable
+ * missing information of one topic. Returns the exact key only when it is
+ * genuinely present and answerable; callers must never guess another question.
+ */
+export function resolvePortalAnswerableQuestionKey(
+  topic: PortalComplianceTopic,
+  requestedQuestionKey: string | null | undefined,
+): string | null {
+  const requested = typeof requestedQuestionKey === "string" ? requestedQuestionKey.trim() : "";
+  if (!requested) return null;
+  const match = topic.missingInformation.find(
+    (info) =>
+      info.portalAnswerable === true &&
+      typeof info.questionKey === "string" &&
+      info.questionKey.trim().length > 0 &&
+      info.questionKey === requested,
+  );
+  return match?.questionKey ?? null;
+}
+
 function PublishedDocumentsPanel({ topics }: { topics: PortalComplianceTopic[] }) {
   const documents = topics.flatMap((topic) => topic.documents);
   return (
