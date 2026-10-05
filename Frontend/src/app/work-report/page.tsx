@@ -115,6 +115,10 @@ function WorkReportPageContent() {
     }
     setLoadingCases(true);
     setError(null);
+    // Invalidate the previous client/period list for this new canonical request
+    // so a failed read can never keep rendering its stale success (either rows
+    // or a successful-empty assertion) beside the read error.
+    setCaseList(null);
     setSelectedCaseId(null);
     setReport(null);
     setOwnerPersonId("");
@@ -286,7 +290,11 @@ function WorkReportPageContent() {
               title="Válassz ügyfelet"
               description="A jelentés elkészítéséhez először válassz ki egy ügyfelet."
             />
-          ) : caseList && caseList.cases.length === 0 ? (
+          ) : !caseList ? (
+            loadingCases ? (
+              <p className="text-sm text-[var(--adm-text-secondary)]">Az ügylista betöltése…</p>
+            ) : null
+          ) : caseList.cases.length === 0 ? (
             <EmptyState
               title="Nincs megjeleníthető ügy"
               description="Ebben az időszakban nincs munkaidő, és nincs lezárt ügy sem."
