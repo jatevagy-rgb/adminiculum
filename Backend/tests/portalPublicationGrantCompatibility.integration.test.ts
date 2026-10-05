@@ -75,6 +75,20 @@ d('internal Case portal publication grant compatibility (PostgreSQL)', () => {
   const existingGrant = async (caseId: string, workspaceId: string, participantRole: string, permissions: string[]) =>
     createParticipant(admin, { workspaceId, caseId, clientPortalIdentityId: ids.identity, participantRole, permissions }, db);
 
+  const directGrant = async (caseId: string, workspaceId: string, participantRole: string, permissions: string[]) =>
+    db.clientPortalGrant.create({ data: {
+      clientPortalIdentityId: ids.identity,
+      workspaceId,
+      clientId: ids.client,
+      caseId,
+      participantRole: participantRole as never,
+      isRequester: participantRole === 'REQUESTER',
+      permissions: permissions as never,
+      status: 'ACTIVE',
+      invitedById: ids.admin,
+      activatedAt: new Date(),
+    } });
+
   const grantRow = (caseId: string, workspaceId: string) =>
     db.clientPortalGrant.findFirst({ where: { clientPortalIdentityId: ids.identity, clientId: ids.client, caseId, workspaceId } });
 
@@ -303,17 +317,25 @@ d('internal Case portal publication grant compatibility (PostgreSQL)', () => {
       expect(fresh.items.find((item) => item.workspaceMembershipId === ids.membershipA)?.publicationReadiness).toBe('READY_NEW');
       expect(JSON.stringify(fresh.items)).not.toContain('grantId');
 
-      const blocked = await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['DOCUMENT_READ']);
+      // ACTIVE same-workspace grant without MATTER_READ -> BLOCKED_CONFLICT.
+      const noMatter = await existingGrant(caseId, ids.workspaceA, 'PARTICIPANT', ['DOCUMENT_READ']);
       expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
-      await revokeParticipant(admin, blocked.id, db);
-
-      const otherWorkspace = await existingGrant(caseId, ids.workspaceB, 'PARTICIPANT', ['MATTER_READ']);
-      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
-      await revokeParticipant(admin, otherWorkspace.id, db);
+      await revokeParticipant(admin, noMatter.id, db);
+      // Revoked same-workspace grant -> publication would reactivate it: READY_NEW.
       expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_NEW');
 
+      // ACTIVE same-workspace REQUESTER grant with MATTER_READ superset -> READY_EXISTING_ACCESS.
       await existingGrant(caseId, ids.workspaceA, 'REQUESTER', ['MATTER_READ', 'ACTION_REQUEST_READ']);
       expect(await readinessFor(caseId, ids.membershipA)).toBe('READY_EXISTING_ACCESS');
+
+      // ACTIVE grant for the same identity/case in ANOTHER workspace -> BLOCKED_CONFLICT
+      // (the service-level admin flow correctly refuses to create it, so the fixture
+      // writes the row directly).
+      const otherWorkspace = await directGrant(caseId, ids.workspaceB, 'PARTICIPANT', ['MATTER_READ']);
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
+      await revokeParticipant(admin, otherWorkspace.id, db);
+      // Revoked other-workspace grant stays fail-closed for the wsA target.
+      expect(await readinessFor(caseId, ids.membershipA)).toBe('BLOCKED_CONFLICT');
     } finally {
       await cleanupCase(caseId);
     }
