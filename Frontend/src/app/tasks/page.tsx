@@ -23,6 +23,7 @@ import {
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { TaskPlanningFields, EMPTY_TASK_PLANNING, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { getCaseResponsibleCandidates, type CaseResponsibleCandidate } from "@/lib/api";
+import { resolveTaskSelection } from "@/lib/taskDeepLinkSelection";
 import { getClientAccentBorderClass } from "@/lib/clientColors";
 import {
   ATTENTION_PRESENTATIONS,
@@ -222,7 +223,8 @@ function TasksPageContent() {
   const [cases, setCases] = useState<CaseListItem[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<TaskLifecycleListItem[]>([]);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(deepLinkedTaskId);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [dismissedDeepLinkId, setDismissedDeepLinkId] = useState<string | null>(null);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [search, setSearch] = useState("");
   const [caseFilter, setCaseFilter] = useState(deepLinkedCaseId || "all");
@@ -283,23 +285,28 @@ function TasksPageContent() {
       setCases(caseResponse.data);
       setUsers(userResponse);
       setCurrentUser(me);
-      if (deepLinkedTaskId && taskRows.some((task) => task.id === deepLinkedTaskId)) setSelectedTaskId(deepLinkedTaskId);
     } catch (loadError) {
       setError(taskWorkflowErrorMessage(loadError));
     } finally {
       setIsLoading(false);
     }
-  }, [deepLinkedTaskId]);
+  }, []);
 
   useEffect(() => {
     void loadTasks();
   }, [loadTasks]);
 
   useEffect(() => {
+    setSelectedTaskId(null);
+    setDismissedDeepLinkId(null);
+  }, [deepLinkedTaskId]);
+
+  useEffect(() => {
     if (openCreateFromQuery) setShowCreateModal(true);
   }, [openCreateFromQuery]);
 
-  const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedTaskId) || null, [selectedTaskId, tasks]);
+  const resolvedSelectedTaskId = resolveTaskSelection(deepLinkedTaskId, tasks, selectedTaskId, dismissedDeepLinkId);
+  const selectedTask = useMemo(() => tasks.find((task) => task.id === resolvedSelectedTaskId) || null, [resolvedSelectedTaskId, tasks]);
 
   useEffect(() => {
     if (deepLinkedTaskId && selectedTask && focusedRowRef.current) focusedRowRef.current.scrollIntoView({ block: "center" });
@@ -416,6 +423,8 @@ function TasksPageContent() {
 
         {error ? <div role="alert"><CompactState tone="error" title="A feladatművelet nem fejeződött be." detail={error} action={<AdminButton size="sm" variant="neutral" onClick={() => void loadTasks()}>Adatok újratöltése</AdminButton>} /></div> : null}
 
+        {!isLoading && !error && deepLinkedTaskId && !tasks.some((task) => task.id === deepLinkedTaskId) ? <div role="status"><CompactState title="A feladat nem érhető el." detail="A hivatkozott feladat nem található, vagy nincs jogosultsága a megtekintéséhez." /></div> : null}
+
         <section>
           {isLoading ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><CompactState title="Feladatok betöltése…" /></div> : filteredTasks.length === 0 ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><EmptyState title={tasks.length === 0 ? "Nincs kijelölt feladat." : "Nincs találat a kiválasztott nézetben."} description={tasks.length === 0 ? "Új feladat egy meglévő ügyhöz hozható létre." : "Módosítsa a keresést vagy a szűrőket."} action={<Button size="sm" variant="secondary" onClick={() => setShowCreateModal(true)}>Új feladat</Button>} /></div> : (
             <DataTable minWidth={1180}>
@@ -424,7 +433,7 @@ function TasksPageContent() {
                   {filteredTasks.map((task) => {
                     const action = primaryAction(task);
                     return (
-                      <DataTableRow key={task.id} ref={task.id === deepLinkedTaskId ? focusedRowRef : undefined} selected={selectedTaskId === task.id}>
+                      <DataTableRow key={task.id} ref={task.id === deepLinkedTaskId ? focusedRowRef : undefined} selected={resolvedSelectedTaskId === task.id}>
                         <DataTableCell className={`border-l-[5px] ${getClientAccentBorderClass(task.case.clientColorKey)}`}>
                           <button type="button" onClick={() => setSelectedTaskId(task.id)} className="max-w-[290px] text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
                             <span className="block truncate font-semibold text-[#1F2937]">{task.title}</span>
@@ -459,7 +468,10 @@ function TasksPageContent() {
       </main>
 
       {selectedTask ? <TaskAttentionEditor task={selectedTask} onSaved={loadTasks} /> : null}
-      {selectedTask ? <TaskSubmissionWorkspace item={selectedTask} onClose={() => setSelectedTaskId(null)} onWorkflowChanged={loadTasks} /> : null}
+      {selectedTask ? <TaskSubmissionWorkspace item={selectedTask} onClose={() => {
+        if (deepLinkedTaskId) setDismissedDeepLinkId(deepLinkedTaskId);
+        else setSelectedTaskId(null);
+      }} onWorkflowChanged={loadTasks} /> : null}
 
       <WorkflowDialog open={showCreateModal} title="Új feladat" description="A feladat egy meglévő ügyhöz kapcsolódik." primaryLabel="Feladat létrehozása" primaryDisabled={!createData.caseId || !createData.title.trim() || !createData.type} busy={isSaving} onClose={() => setShowCreateModal(false)} onConfirm={() => void handleCreateTask()}>
         <div className="space-y-4">
