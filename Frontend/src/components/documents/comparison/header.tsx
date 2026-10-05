@@ -87,10 +87,15 @@ export function ComparisonHeader({
   documentTitle: string;
   comparison: ComparisonDto | null;
   base: { versionNumber: number | null } | null;
-  target: { versionNumber: number | null } | null;
+  target: { versionNumber: number | null; isCurrent?: boolean } | null;
   currentVersionNumber: number | null;
 }) {
-  const id = versionIdentity({ baseVersionNumber: base?.versionNumber ?? null, targetVersionNumber: target?.versionNumber ?? null, currentVersionNumber });
+  const id = versionIdentity({
+    baseVersionNumber: base?.versionNumber ?? null,
+    targetVersionNumber: target?.versionNumber ?? null,
+    currentVersionNumber,
+    targetIsCurrent: target && typeof target.isCurrent === "boolean" ? target.isCurrent : null,
+  });
   return (
     <div data-testid="cmp-header" className="min-w-0">
       <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Strukturált összehasonlítás</p>

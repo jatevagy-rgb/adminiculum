@@ -86,7 +86,7 @@ d('internal Case to explicit portal publication (PostgreSQL)', () => {
   it('keeps an internal Case private until an ADMIN explicitly targets an active organization membership', async () => {
     expect((await listOrganizationalCases(ids.identity, ids.workspace, {}, db)).total).toBe(0);
     const targets = await listCasePortalPublicationTargets(actor, ids.publishedCase, db);
-    expect(targets.items).toEqual([{ workspaceId: ids.workspace, workspaceMembershipId: ids.membership, workspaceName: 'Demo Kft portal', memberName: 'Kovács Éva', memberRole: 'MEMBER' }]);
+    expect(targets.items).toEqual([{ workspaceId: ids.workspace, workspaceMembershipId: ids.membership, workspaceName: 'Demo Kft portal', memberName: 'Kovács Éva', memberRole: 'MEMBER', publicationReadiness: 'READY_NEW' }]);
 
     const first = await publishInternalCaseToPortal(actor, ids.publishedCase, {
       workspaceId: ids.workspace,

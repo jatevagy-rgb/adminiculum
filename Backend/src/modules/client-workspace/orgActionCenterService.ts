@@ -174,6 +174,20 @@ function matterHref(matterPublicationId: string | null | undefined): string | nu
 }
 
 /**
+ * Canonical customer-safe Compliance target for one portal-answerable missing
+ * fact. Carries ONLY safe product identifiers — the registry topicKey and the
+ * canonical portal questionKey — so the Compliance surface can open the exact
+ * topic and the exact existing answer control. Never carries FactDefinition /
+ * requirement / control / finding ids.
+ */
+export function complianceMissingFactHref(topicId: string, questionKey: string): string {
+  const params = new URLSearchParams();
+  params.set('topic', String(topicId));
+  params.set('question', String(questionKey));
+  return `/portal/megfeleles?${params.toString()}`;
+}
+
+/**
  * Resolve the requirement key for a ClientRequest's compliance provenance
  * (requirement / control / finding) so a compliance topic can be superseded by
  * an explicit request with the same canonical provenance — never by title text.
@@ -480,7 +494,7 @@ export async function getOrganizationalActionCenter(
         urgency: 'NORMAL',
         state: 'OPEN',
         actionLabel: CUSTOMER_ACTION_LABELS.PROFILE_FACT,
-        href: '/portal/megfeleles',
+        href: complianceMissingFactHref(String(topic.topicId), String(missing.questionKey)),
         canCompleteInPortal: true,
         matterPublicationId: null,
       });

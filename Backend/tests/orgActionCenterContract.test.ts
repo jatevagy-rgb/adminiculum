@@ -5,6 +5,7 @@ import {
   actionItemId,
   actionRequestActionKind,
   assertActionCenterDtoSafe,
+  complianceMissingFactHref,
   computeUrgency,
   customerRequestActionKind,
   type PortalActionItem,
@@ -114,5 +115,59 @@ describe('Action Center read-model boundaries', () => {
     expect(src).toContain('requirementVersion');
     expect(src).toContain('portalVisibleKeys');
     expect(src).not.toMatch(/title\s*===\s*.*title/);
+  });
+});
+
+describe('Action Center compliance missing-fact navigation contract', () => {
+  const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+  it('points each missing fact at the exact customer-safe topic and question', () => {
+    const href = complianceMissingFactHref('portal/nis2-scope', 'company_employee_count');
+    expect(href.startsWith('/portal/megfeleles?')).toBe(true);
+    const params = new URLSearchParams(href.slice(href.indexOf('?') + 1));
+    expect(params.get('topic')).toBe('portal/nis2-scope');
+    expect(params.get('question')).toBe('company_employee_count');
+  });
+
+  it('produces distinct stable hrefs for two missing questions of the same topic', () => {
+    const first = complianceMissingFactHref('portal/nis2-scope', 'company_employee_count');
+    const second = complianceMissingFactHref('portal/nis2-scope', 'company_sites');
+    expect(first).not.toBe(second);
+    expect(second.startsWith('/portal/megfeleles?')).toBe(true);
+    expect(complianceMissingFactHref('portal/nis2-scope', 'company_employee_count')).toBe(first);
+  });
+
+  it('never carries internal fact, rule or finding identifiers', () => {
+    const href = complianceMissingFactHref('portal/nis2-scope', 'company_employee_count');
+    for (const forbidden of ['requirementVersionId', 'clientControlId', 'findingId', 'factDefinitionId', 'ruleId', 'applicabilityId']) {
+      expect(href.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
+    expect(href).not.toMatch(UUID_PATTERN);
+  });
+
+  it('keeps the missing-fact href inside the customer-safe DTO boundary', () => {
+    const item: PortalActionItem = {
+      id: 'compliance-portal/nis2-scope-company_employee_count',
+      sourceType: 'COMPLIANCE_MISSING_FACT',
+      sourceId: 'portal/nis2-scope',
+      domain: 'COMPLIANCE',
+      kind: 'PROFILE_FACT',
+      title: 'Munkavállalók száma',
+      contextLabel: 'Kiberbiztonsági (NIS2) hatály',
+      dueAt: null,
+      urgency: 'NORMAL',
+      state: 'OPEN',
+      actionLabel: 'Adat megadása',
+      href: complianceMissingFactHref('portal/nis2-scope', 'company_employee_count'),
+      canCompleteInPortal: true,
+      matterPublicationId: null,
+    };
+    expect(() => assertActionCenterDtoSafe({ items: [item], counts: { open: 1, overdue: 0, dueSoon: 0 } })).not.toThrow();
+  });
+
+  it('emits the canonical builder for portal-answerable missing facts, never the bare route', () => {
+    const src = serviceSource();
+    expect(src).toContain('complianceMissingFactHref(String(topic.topicId), String(missing.questionKey))');
+    expect(src).not.toMatch(/href:\s*'\/portal\/megfeleles'/);
   });
 });

@@ -22,6 +22,7 @@ import {
   transitionMatterPublication,
   type ClientPublicationOverviewDTO,
   type CasePortalPublicationTarget,
+  type PortalPublicationReadiness,
   type PublicationStatus,
 } from "@/lib/clientPublicationApi";
 import { workforceInteractionApi, type InternalInteractionRow } from "@/lib/clientInteractionApi";
@@ -61,6 +62,20 @@ const PERMISSION_LABELS: Record<string, string> = {
   ACTION_REQUEST_READ: "Ügyfélteendők megtekintése",
   UPDATE_READ: "Frissítések megtekintése",
 };
+
+const PUBLICATION_READINESS_LABELS: Record<PortalPublicationReadiness, string> = {
+  READY_NEW: "Ehhez az ügyhöz a közzététellel olvasási hozzáférés jön létre.",
+  READY_EXISTING_ACCESS: "A címzett már rendelkezik megfelelő hozzáféréssel ehhez az ügyhöz. A meglévő hozzáférés változatlan marad.",
+  BLOCKED_CONFLICT: "A címzett meglévő hozzáférése nem kompatibilis ezzel a közzététellel. Közzététel nem történt.",
+};
+
+const PUBLICATION_CONFLICT_TEXT = PUBLICATION_READINESS_LABELS.BLOCKED_CONFLICT;
+
+function publicationErrorText(caught: unknown): string {
+  const code = caught && typeof caught === "object" && "code" in caught ? String((caught as { code?: unknown }).code || "") : "";
+  if (code === "PARTICIPANT_GRANT_CONFLICT") return PUBLICATION_CONFLICT_TEXT;
+  return caught instanceof Error ? caught.message : "A publication művelet nem sikerült.";
+}
 
 function permissionList(permissions: string[]): string {
   return permissions.map((permission) => PERMISSION_LABELS[permission] || permission).join(", ") || "Nincs megadva";
@@ -166,7 +181,7 @@ export function ClientPublicationPanel({
       await operation();
       await load();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "A publication művelet nem sikerült.");
+      setError(publicationErrorText(caught));
     } finally {
       setBusy(false);
     }
@@ -307,20 +322,28 @@ export function ClientPublicationPanel({
                   <option value="">Válassz ügyfélportál-célt</option>
                   {portalTargets.map((target) => <option key={target.workspaceMembershipId} value={target.workspaceMembershipId}>{target.workspaceName} · {target.memberName}</option>)}
                 </select>
-                <AdminButton className="mt-2 min-w-0 whitespace-normal text-left" variant="primary" disabled={busy || !selectedTarget} onClick={() => run(async () => {
-                  await publishInternalCaseToPortal(caseId, {
-                    workspaceId: selectedTarget!.workspaceId,
-                    workspaceMembershipId: selectedTarget!.workspaceMembershipId,
-                    clientSafeTitle: matterTitle,
-                    clientSafeStatus: matterStatus,
-                    clientSafeCurrentPosition: matterStatus,
-                    clientSafeWaitingOn: matterWaitingOn,
-                    clientSafeNextStep: matterNextStep,
-                    publicTargetDate: matterTargetDate || null,
-                    responsibleLawyerDisplay: responsibleLawyer,
-                  });
-                  setPortalPublicationConfirmation("Az ügyfélbiztos ügyállapot közzététele megtörtént.");
-                })}>Megosztás az ügyfélportálon</AdminButton>
+                {selectedTarget ? (
+                  <p data-testid="portal-publication-readiness" data-readiness={selectedTarget.publicationReadiness} className="mt-2 text-xs font-semibold text-[#3D4842]">
+                    {PUBLICATION_READINESS_LABELS[selectedTarget.publicationReadiness]}
+                  </p>
+                ) : null}
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <AdminButton className="min-w-0 whitespace-normal text-left" variant="primary" disabled={busy || !selectedTarget || selectedTarget.publicationReadiness === "BLOCKED_CONFLICT"} onClick={() => run(async () => {
+                    await publishInternalCaseToPortal(caseId, {
+                      workspaceId: selectedTarget!.workspaceId,
+                      workspaceMembershipId: selectedTarget!.workspaceMembershipId,
+                      clientSafeTitle: matterTitle,
+                      clientSafeStatus: matterStatus,
+                      clientSafeCurrentPosition: matterStatus,
+                      clientSafeWaitingOn: matterWaitingOn,
+                      clientSafeNextStep: matterNextStep,
+                      publicTargetDate: matterTargetDate || null,
+                      responsibleLawyerDisplay: responsibleLawyer,
+                    });
+                    setPortalPublicationConfirmation("Az ügyfélbiztos ügyállapot közzététele megtörtént.");
+                  })}>Megosztás az ügyfélportálon</AdminButton>
+                  <a href="/client-portal-admin" className="text-xs font-semibold text-[var(--adm-text-muted)] underline decoration-[rgba(22,32,26,0.3)] underline-offset-2 hover:text-[var(--adm-text)]">Hozzáférések részletei</a>
+                </div>
                 {portalPublicationConfirmation ? <p className="mt-2 text-xs font-semibold text-emerald-700">{portalPublicationConfirmation}</p> : null}
               </div>
             ) : null}
