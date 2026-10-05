@@ -79,7 +79,7 @@ export function ComparisonWorkspace({
           <ComparisonHeader
             documentTitle={documentTitle} comparison={comparison}
             base={base ? { versionNumber: base.versionNumber } : null}
-            target={target ? { versionNumber: target.versionNumber } : null}
+            target={target ? { versionNumber: target.versionNumber, isCurrent: target.isCurrent } : null}
             currentVersionNumber={currentVersionNumber}
           />
           {ready ? <ComparisonToolbar mode={mode} onMode={setMode} /> : null}
