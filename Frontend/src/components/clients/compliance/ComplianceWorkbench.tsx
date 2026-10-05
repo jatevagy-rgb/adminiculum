@@ -12,8 +12,9 @@ import {
 } from '@/lib/complianceWorkbenchPresentation';
 
 const button = 'rounded border px-3 py-2 text-sm disabled:opacity-50';
+type RequirementTarget = { applicabilityId: string; factKey: string };
 
-export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clientId: string; onNavigate: (view: 'requirements' | 'controls' | 'findings') => void; onChanged: () => void }) {
+export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clientId: string; onNavigate: (view: 'requirements' | 'controls' | 'findings', target?: RequirementTarget) => void; onChanged: () => void }) {
   const [data, setData] = useState<Workbench | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,7 +45,10 @@ export function ComplianceWorkbench({ clientId, onNavigate, onChanged }: { clien
       <p className="text-xs">{row.since ? `Rögzítve / értékelve: ${new Date(row.since).toLocaleString('hu-HU')}` : ''}{row.dueAt ? ` · Határidő / érvényesség: ${new Date(row.dueAt).toLocaleDateString('hu-HU')}` : ''}{row.ownerName ? ` · Felelős: ${row.ownerName}` : row.ownerId ? ' · Felelős: nincs megjeleníthető név' : row.kind === 'PROPOSAL' ? ' · Felelős: nincs megadva' : ''}</p>
       {row.caseId && <a className="underline" href={`/cases/${encodeURIComponent(row.caseId)}`}>Kapcsolódó ügy megnyitása</a>}
       {row.readOnly && <p>Csak olvasható: {row.reason === 'AWAITING_CUSTOMER_CORRECTION' ? 'Ügyféljavításra vár.' : 'A döntés már rögzítve van.'}</p>}
-      {row.action === 'REQUIREMENTS' && <button className={button} onClick={() => onNavigate('requirements')}>Követelmény és adatbekérés megnyitása</button>}
+      {row.action === 'REQUIREMENTS' && <button className={button} onClick={() => {
+        if (!row.target || row.clientId !== clientId) { setError('A kijelölt követelmény nem érhető el ennél az ügyfélnél.'); return; }
+        onNavigate('requirements', row.target);
+      }}>Követelmény és adatbekérés megnyitása</button>}
       {row.action === 'PROPOSAL_REVIEW' && <button className={button} onClick={() => onNavigate('findings')}>Javaslat / intézkedés megnyitása</button>}
       {row.action === 'EVIDENCE_REVIEW' && <><button className={button} onClick={() => onNavigate('controls')}>Kontroll és bizonyíték megnyitása</button><button className={button} disabled={busy || row.readOnly} onClick={() => void run(() => complianceOverviewApi.reviewEvidenceRecord(clientId, row.sourceId, { status: 'UNDER_REVIEW' }))}>Felülvizsgálatra jelölés</button><button className={button} disabled={busy || row.readOnly} onClick={() => void run(() => complianceOverviewApi.reviewEvidenceRecord(clientId, row.sourceId, { status: 'REJECTED' }))}>Bizonyíték elutasítása</button></>}
       {row.action === 'SUBMISSION_REVIEW' && !row.readOnly && <SubmissionDecision row={row} busy={busy} run={run} targets={data.acceptanceTargets || []} />}

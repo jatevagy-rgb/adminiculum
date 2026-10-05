@@ -55,7 +55,9 @@ pg('BE-COMP-003/004 canonical workbench and impact decisions (real PG)', () => {
   }
   async function input(id: string, kind: any = 'NO_ACTION') { return { sourceRevision: (await clientImpactContext(admin, clientId, id, db)).sourceRevision, kind, note: 'Reviewed exact source and client impact.' }; }
   it('derives missing facts, then canonical submission acceptance removes the gap and pending row', async () => {
-    expect((await getClientComplianceWorkbench(lawyer, clientId, db)).rows.some(r => r.kind === 'MISSING_FACT' && r.sourceId.endsWith(factKey))).toBe(true);
+    const missingRow = (await getClientComplianceWorkbench(lawyer, clientId, db)).rows.find(r => r.kind === 'MISSING_FACT' && r.sourceId.endsWith(factKey));
+    expect(missingRow).toMatchObject({ target: { applicabilityId: expect.any(String), factKey }, title: 'Workbench requirement — További vállalati adat szükséges' });
+    expect(missingRow!.title).not.toContain(factKey);
     const request = await db.clientRequest.create({ data: { clientId, caseId, createdById: admin.userId, type: 'DATA_FORM', status: 'PUBLISHED', clientSafeTitle: 'Fact answer', audienceSnapshot: {} } });
     const sub = await db.clientSubmission.create({ data: { clientId, caseId, clientRequestId: request.id, clientPortalIdentityId: identityId, status: 'SUBMITTED' } });
     const field = await db.clientSubmissionField.create({ data: { submissionId: sub.id, labelSnapshot: 'Fixture answer', valueSafe: 'Yes' } });
