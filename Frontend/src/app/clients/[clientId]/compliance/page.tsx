@@ -17,7 +17,8 @@ import type { ComplianceFindingView, ComplianceApplicabilityStatus, ComplianceCo
 import { ComplianceWorkbench } from "@/components/clients/compliance/ComplianceWorkbench";
 import { ComplianceDocumentsSection } from "@/components/clients/compliance/ComplianceDocumentsSection";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
-import { complianceWorkspaceApi, type ComplianceReconcileResult, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
+import { complianceWorkspaceApi, resolveRequirementsTarget, type ComplianceReconcileResult, type ComplianceWorkspace, type ComplianceWorkspaceArea } from "@/lib/complianceWorkspaceApi";
+import type { WorkbenchRequirementsTarget } from "@/lib/complianceWorkbenchApi";
 import { ApiError, getClient, getCases, type Client, type CaseListItem } from "@/lib/api";
 import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
@@ -211,10 +212,19 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function WorkspaceAreaRow({ area, cases, clients }: { area: ComplianceWorkspaceArea; cases: CaseListItem[]; clients: Client[] }) {
+function WorkspaceAreaRow({ area, cases, clients, focusFactKey }: { area: ComplianceWorkspaceArea; cases: CaseListItem[]; clients: Client[]; focusFactKey?: string }) {
   const [open, setOpen] = useState(false);
+  const targetFactRef = useRef<HTMLLIElement | null>(null);
   const outcome = area.outcome as ComplianceApplicabilityStatus;
   const citations = area.citations;
+  useEffect(() => {
+    if (focusFactKey && area.missingFacts.some((fact) => fact.factKey === focusFactKey)) setOpen(true);
+  }, [area.applicabilityId, area.missingFacts, focusFactKey]);
+  useEffect(() => {
+    if (!open || !focusFactKey) return;
+    targetFactRef.current?.focus();
+    targetFactRef.current?.scrollIntoView({ block: "center" });
+  }, [open, focusFactKey]);
   const locatorText = (c: ComplianceWorkspaceArea["citations"][number]) =>
     [c.article, c.section, c.paragraph, c.locator, c.versionLabel].filter(Boolean).join(" · ");
   return (
@@ -276,7 +286,13 @@ function WorkspaceAreaRow({ area, cases, clients }: { area: ComplianceWorkspaceA
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Hiányzó adatok</p>
               <ul className="mt-1 space-y-1">
                 {area.missingFacts.map((fact) => (
-                  <li key={fact.factKey} className="text-xs text-[var(--adm-text)]">
+                  <li
+                    key={fact.factKey}
+                    ref={fact.factKey === focusFactKey ? targetFactRef : undefined}
+                    tabIndex={fact.factKey === focusFactKey ? 0 : undefined}
+                    aria-current={fact.factKey === focusFactKey ? "location" : undefined}
+                    className={`text-xs text-[var(--adm-text)] ${fact.factKey === focusFactKey ? "rounded bg-[#FFF9E9] p-2 outline outline-2 outline-[#735D16]" : ""}`}
+                  >
                     {fact.label || "További vállalati adat szükséges"}
                     {fact.profileAnswerable ? (
                       <span className="ml-1 text-[var(--adm-text-muted)]">— a meglévő vállalati profil felületen adható meg.</span>
@@ -351,6 +367,7 @@ export default function ClientCompliancePage() {
   const [modeError, setModeError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
   const [view, setView] = useState<ComplianceView>("status");
+  const [requirementsTarget, setRequirementsTarget] = useState<WorkbenchRequirementsTarget | null>(null);
   const [clientCases, setClientCases] = useState<CaseListItem[]>([]);
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
@@ -518,6 +535,17 @@ export default function ClientCompliancePage() {
     }
     return [...seen.entries()].map(([key, title]) => ({ key, title }));
   }, [workspace]);
+
+  const targetedRequirementArea = resolveRequirementsTarget(
+    workspaceError ? null : workspace,
+    clientId,
+    requirementsTarget,
+  );
+
+  const navigateFromWorkbench = useCallback((nextView: "requirements" | "controls" | "findings", target?: WorkbenchRequirementsTarget) => {
+    setRequirementsTarget(nextView === "requirements" ? target ?? null : null);
+    setView(nextView);
+  }, []);
 
   const attentionFindings = useMemo(
     () => complianceFindings.filter((finding) => finding.applicabilityStatus !== "DOES_NOT_APPLY"),
@@ -780,12 +808,22 @@ export default function ClientCompliancePage() {
                   {view === "requirements" ? (
                     !workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
                       <Section title="Megfelelőségi területek">
+                        {requirementsTarget && !targetedRequirementArea ? (
+                          <p role="alert" className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                            A kiválasztott hiányzó adat már nem érhető el ezen az ügyfélen. Válasszon egy elemet az alábbi listából.
+                          </p>
+                        ) : null}
                         <ul className="space-y-2">
-                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} cases={clientCases} clients={client ? [client] : []} />)}
+                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} cases={clientCases} clients={client ? [client] : []} focusFactKey={targetedRequirementArea?.applicabilityId === area.applicabilityId ? requirementsTarget?.factKey : undefined} />)}
                         </ul>
                       </Section>
                     ) : (
                       <Section title="Megfelelőségi területek">
+                        {requirementsTarget && !workspaceLoading ? (
+                          <p role="alert" className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                            A kiválasztott hiányzó adat már nem érhető el ezen az ügyfélen. Válasszon egy elemet az alábbi listából.
+                          </p>
+                        ) : null}
                         {workspaceLoading ? <p className="text-sm text-[var(--adm-text-muted)]">Megfelelőségi területek betöltése…</p> : null}
                         {!workspaceLoading && workspaceError ? <p role="alert" className="text-sm text-red-800">{workspaceError}</p> : null}
                         {!workspaceLoading && !workspaceError && (!workspace || !workspace.areas.length) ? (
@@ -795,7 +833,7 @@ export default function ClientCompliancePage() {
                     )
                   ) : null}
 
-                  {view === "workbench" ? <ComplianceWorkbench key={client.id} clientId={client.id} onNavigate={setView} onChanged={() => { void loadCompliance(); void loadWorkspace(); }} /> : null}
+                  {view === "workbench" ? <ComplianceWorkbench key={client.id} clientId={client.id} onNavigate={navigateFromWorkbench} onChanged={() => { void loadCompliance(); void loadWorkspace(); }} /> : null}
 
                   {view === "documents" ? (
                     <Section title="Compliance dokumentumok">

@@ -9,6 +9,7 @@ export interface WorkbenchRow {
   id: string;
   kind: 'MISSING_FACT' | 'SUBMISSION' | 'STALE_EVIDENCE' | 'PROPOSAL' | 'SOURCE_IMPACT';
   sourceId: string;
+  requirementsTarget?: { clientId: string; applicabilityId: string; factKey: string };
   clientId: string;
   caseId: string | null;
   subject: string | null;
@@ -23,6 +24,32 @@ export interface WorkbenchRow {
   source?: { observationId: string; legalSourceId: string; legalSourceVersionId: string; versionKey: string; sourceKey: string; event: string; reviewedNote: string | null; revision: string; requirementVersions: Array<{ id: string; title: string }>; proposals: Array<{ id: string; title: string }>; decision: { kind: string; note: string; decidedAt: string; result: { caseId?: string; taskId?: string; requirementVersionId?: string } } | null };
 }
 const LIMIT = 50;
+
+export function missingFactWorkbenchRow(
+  clientId: string,
+  area: { applicabilityId: string; title: string; outcome: string; subjectLabel: string | null; evaluationAt: string },
+  fact: { factKey: string; label: string | null },
+): WorkbenchRow {
+  const sourceId = `${area.applicabilityId}:${fact.factKey}`;
+  return {
+    id: `MISSING_FACT:${sourceId}`,
+    kind: 'MISSING_FACT',
+    sourceId,
+    requirementsTarget: { clientId, applicabilityId: area.applicabilityId, factKey: fact.factKey },
+    clientId,
+    caseId: null,
+    subject: area.subjectLabel,
+    title: `${area.title} — ${fact.label || 'Ügyvédi pontosítás szükséges.'}`,
+    status: area.outcome,
+    since: area.evaluationAt,
+    dueAt: null,
+    ownerId: null,
+    ownerName: null,
+    readOnly: false,
+    reason: null,
+    action: 'REQUIREMENTS',
+  };
+}
 
 /** Bounded display over canonical records. No writes, inferred owners or invented deadlines. */
 export async function getClientComplianceWorkbench(actor: InternalActor, clientId: string, db: PrismaClient = defaultPrisma) {
@@ -52,7 +79,7 @@ export async function getClientComplianceWorkbench(actor: InternalActor, clientI
   const rows: WorkbenchRow[] = [];
   const base = (kind: WorkbenchRow['kind'], sourceId: string, title: string, status: string, action: WorkbenchRow['action']): WorkbenchRow => ({ id: `${kind}:${sourceId}`, kind, sourceId, clientId, title, status, action, caseId: null, subject: null, since: null, dueAt: null, ownerId: null, readOnly: false, reason: null });
   const missing = workspace.areas.flatMap(area => area.missingFacts.map(fact => ({ area, fact })));
-  for (const { area, fact } of missing.slice(0, LIMIT)) rows.push({ ...base('MISSING_FACT', `${area.applicabilityId}:${fact.factKey}`, `${area.title} — ${fact.label || fact.factKey}`, area.outcome, 'REQUIREMENTS'), subject: area.subjectLabel, since: area.evaluationAt });
+  for (const { area, fact } of missing.slice(0, LIMIT)) rows.push(missingFactWorkbenchRow(clientId, area, fact));
   for (const s of submissions.slice(0, LIMIT)) rows.push({ ...base('SUBMISSION', s.id, s.request.clientSafeTitle, s.status, 'SUBMISSION_REVIEW'), caseId: s.caseId, since: (s.submittedAt ?? s.createdAt).toISOString(), dueAt: s.request.dueAt?.toISOString() ?? null, readOnly: s.status === 'CORRECTION_REQUESTED', reason: s.status === 'CORRECTION_REQUESTED' ? 'AWAITING_CUSTOMER_CORRECTION' : null });
   for (const e of evidence.slice(0, LIMIT)) {
     let caseId: string | null = null;

@@ -20,6 +20,24 @@ test('client-scoped workbench discards late previous-client responses', async ()
   assert.doesNotMatch(textOf(h.commit({ ...props, clientId: 'B' })), /A secret/);
 });
 
+test('missing-fact CTA forwards its exact client, applicability and fact identity without mutation', async () => {
+  const target = { clientId: 'A', applicabilityId: 'app-2', factKey: 'whistle_special_sector' };
+  const navigations: any[] = [];
+  const writes: any[] = [];
+  const h = createRaceHarness(file, 'ComplianceWorkbench', {
+    '@/lib/complianceWorkbenchPresentation': presentation,
+    '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: async () => model('A', [{ ...row, kind: 'MISSING_FACT', action: 'REQUIREMENTS', requirementsTarget: target }]), decide: async (...args: any[]) => writes.push(args) } },
+    '@/lib/complianceCenterApi': { complianceCenterApi: {} },
+    '@/lib/complianceOverviewApi': { complianceOverviewApi: {} },
+  });
+  const props = { clientId: 'A', onNavigate: (...args: any[]) => navigations.push(args), onChanged() {} };
+  h.commit(props); await settle();
+  const tree = h.commit(props);
+  nodes(tree, 'button').find(node => textOf(node) === 'Követelmény és adatbekérés megnyitása')!.props.onClick();
+  assert.deepEqual(navigations, [['requirements', target]]);
+  assert.deepEqual(writes, []);
+});
+
 test('impact form requires reason and sends explicit choice with exact source revision', async () => {
   const calls: any[] = [];
   const h = createRaceHarness(file, 'ImpactDecision', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { decide: async (...args: any[]) => calls.push(args) } } });
