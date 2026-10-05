@@ -107,13 +107,34 @@ export function formatComparisonDate(value: string | null | undefined): string {
 }
 
 /** Version identity for the header: selected (target) vs current, without conflation. */
-export function versionIdentity(opts: { baseVersionNumber: number | null; targetVersionNumber: number | null; currentVersionNumber: number | null }): {
+export function versionIdentity(opts: {
+  baseVersionNumber: number | null;
+  targetVersionNumber: number | null;
+  currentVersionNumber: number | null;
+  /**
+   * Canonical current identity of the target version, when known (the version
+   * list's `isCurrent`). Adminiculum supports explicitly promoting an older
+   * version as canonical current, so the numerically highest version is not
+   * necessarily current. When supplied this is authoritative; the numeric
+   * comparison remains only a legacy fallback for callers that cannot provide
+   * canonical identity.
+   */
+  targetIsCurrent?: boolean | null;
+}): {
   baseLabel: string; targetLabel: string; targetIsHistorical: boolean;
 } {
-  const { baseVersionNumber, targetVersionNumber, currentVersionNumber } = opts;
+  const { baseVersionNumber, targetVersionNumber, currentVersionNumber, targetIsCurrent } = opts;
+  const targetIsHistorical =
+    targetVersionNumber == null
+      ? false
+      : targetIsCurrent === true
+        ? false
+        : targetIsCurrent === false
+          ? true
+          : currentVersionNumber != null && targetVersionNumber < currentVersionNumber;
   return {
     baseLabel: baseVersionNumber != null ? `v${baseVersionNumber}` : "—",
     targetLabel: targetVersionNumber != null ? `v${targetVersionNumber}` : "—",
-    targetIsHistorical: targetVersionNumber != null && currentVersionNumber != null && targetVersionNumber < currentVersionNumber,
+    targetIsHistorical,
   };
 }
