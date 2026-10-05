@@ -66,6 +66,64 @@ export function notificationTypePresentation(type: unknown): NotificationTypePre
   return NOTIFICATION_TYPE_PRESENTATIONS[key] ?? FALLBACK_PRESENTATION;
 }
 
+/**
+ * Bounded FRONTEND presentation for review notification titles.
+ *
+ * The backend persists review action tokens verbatim in a subset of
+ * notification titles (`Review: POINT_ADDED`, `Review: APPROVED`, …). Those
+ * tokens are machine identifiers, not user-facing copy, and must never leak
+ * into the ordinary inbox presentation. This mapper rewrites only that bounded,
+ * known shape; every other notification title is returned unchanged so
+ * unrelated notifications keep their canonical wording.
+ *
+ * Persisted rows are never mutated — this is display-only translation.
+ */
+const REVIEW_TITLE_PREFIX = /^review:\s*/i;
+
+/** Neutral, token-free fallback for an unrecognized review action. */
+export const UNKNOWN_REVIEW_TITLE_LABEL = "Review frissítés";
+
+const REVIEW_ACTION_LABELS: Record<string, string> = {
+  ASSIGNED: "Review kijelölve",
+  CREATED: "Review létrehozva",
+  STARTED: "Review elkezdve",
+  POINT_ADDED: "Review pont hozzáadva",
+  POINT_UPDATED: "Review pont módosítva",
+  CHANGES_REQUESTED: "Review módosítás kérve",
+  RESUBMITTED: "Review újra beküldve",
+  APPROVED: "Review jóváhagyva",
+  CANCELLED: "Review visszavonva",
+  CLOSED: "Review lezárva",
+};
+
+/**
+ * Humanizes the bounded `Review: <ACTION>` notification title shape produced by
+ * the review pipeline. Non-review titles are returned verbatim; unknown review
+ * actions degrade to a neutral label instead of exposing the raw enum token.
+ */
+export function notificationTitlePresentation(title: unknown): string {
+  if (typeof title !== "string") {
+    return "";
+  }
+
+  const trimmed = title.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const prefix = trimmed.match(REVIEW_TITLE_PREFIX);
+  if (!prefix) {
+    return title;
+  }
+
+  const action = trimmed.slice(prefix[0].length).trim().toUpperCase();
+  if (!action || !/^[A-Z_]+$/.test(action)) {
+    return UNKNOWN_REVIEW_TITLE_LABEL;
+  }
+
+  return REVIEW_ACTION_LABELS[action] ?? UNKNOWN_REVIEW_TITLE_LABEL;
+}
+
 /** Fixed base used to resolve candidate links without touching `window`. */
 const INTERNAL_LINK_BASE = "https://adminiculum.internal.invalid";
 
