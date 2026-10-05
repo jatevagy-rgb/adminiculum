@@ -17,6 +17,12 @@ const PORT = Number(process.env.WORKFORCE_QA_PORT || 3098);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const SHOTS = path.join(ROOT, "qa-screenshots-workforce");
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 1100, height: 800 }, { width: 390, height: 844 }];
+const GROW_OPPORTUNITIES = [
+  { id: "qa-grow-pending", status: "PENDING_REVIEW", kind: "RECOMMENDATION", sufficiency: "SUPPORTED", actionable: true, interventionCodes: [], title: "QA pending opportunity", problemStatement: "Pending decision", direction: "Review the proposed direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "MODERATE", opportunity: null, createdAt: "2026-01-01T00:00:00.000Z" },
+  { id: "qa-grow-accepted", status: "ACCEPTED", kind: "RECOMMENDATION", sufficiency: "SUPPORTED", actionable: true, interventionCodes: [], title: "QA accepted opportunity", problemStatement: "Accepted decision", direction: "Accepted direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "MODERATE", opportunity: { id: "qa-improvement", status: "ACTIVE", developmentInitiativeId: null }, createdAt: "2026-01-02T00:00:00.000Z" },
+  { id: "qa-grow-declined", status: "DECLINED", kind: "RECOMMENDATION", sufficiency: "SUPPORTED", actionable: false, interventionCodes: [], title: "QA declined opportunity", problemStatement: "Declined decision", direction: "Declined direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "MODERATE", opportunity: null, createdAt: "2026-01-03T00:00:00.000Z" },
+  { id: "qa-grow-more-data", status: "NEEDS_MORE_DATA", kind: "RECOMMENDATION", sufficiency: "NEEDS_MORE_DATA", actionable: false, interventionCodes: [], title: "QA needs-more-data opportunity", problemStatement: "More information requested", direction: "More information direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "WEAK", opportunity: null, createdAt: "2026-01-04T00:00:00.000Z" },
+];
 
 let server;
 
@@ -91,6 +97,15 @@ function complianceFindings() {
 
 function responseFor(url, mode = "populated") {
   if (url.includes("/auth/me")) return { status: 200, body: AUTH_ME };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/grow/opportunities`)) {
+    if (mode === "grow-opportunities-unavailable") return { status: 503, body: { status: 503, code: "QA_UNAVAILABLE" } };
+    return { status: 200, body: { items: GROW_OPPORTUNITIES } };
+  }
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/grow/evidence`)) return { status: 200, body: { items: [] } };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/grow/outcomes`)) return { status: 200, body: { items: [] } };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/processes`)) return { status: 200, body: [] };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/observatory/sources`)) return { status: 200, body: { items: [] } };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/grow/diagnostic-workbench`)) return { status: 200, body: { problems: { diagnoses: [] }, proposed: { recommendations: [] }, missing: { unresolvedItems: [] } } };
   // Hourly rates are not part of the case-workspace IA fixture: return the
   // canonical "no rate" failure instead of leaking a wrong-shape /clients body.
   if (url.includes("/hourly-rates/")) return { status: 404, body: { status: 404, code: "QA_NO_HOURLY_RATE" } };
@@ -230,6 +245,8 @@ function responseFor(url, mode = "populated") {
   if (url.includes("/cases?")) return { status: 200, body: mode === "case-out-of-window" ? { data: [], page: 1, limit: 100, total: 0, totalPages: 1 } : { data: [WORKFORCE_FIXTURE.case], page: 1, limit: 100, total: 1, totalPages: 1 } };
   if (mode === "case-out-of-window" && url.endsWith(`/cases/${WORKFORCE_FIXTURE.case.id}`)) return { status: 200, body: WORKFORCE_FIXTURE.case };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/operating-profile`)) return { status: 200, body: null };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/initiatives`)) return { status: 200, body: { items: [] } };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/milestones`)) return { status: 200, body: { items: [] } };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/assessments`)) return {
     status: 200,
     body: { items: [{
@@ -455,6 +472,89 @@ async function assertCaseWorkspaceIa(browser) {
   await qa.context.close();
 }
 
+async function assertGrowOpportunityDeepLinks(browser) {
+  const qa = await newPage(browser, "populated", VIEWPORTS[0]);
+  const clientId = WORKFORCE_FIXTURE.client.id;
+  const target = `/clients/${clientId}/grow?tab=dontesek`;
+  const decisionPosts = [];
+  qa.page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/grow/opportunities/")) {
+      decisionPosts.push(request.url());
+    }
+  });
+  const open = async (id) => {
+    await qa.page.goto(`${BASE_URL}${target}&opportunity=${id}`, { waitUntil: "networkidle" });
+    const row = qa.page.locator(`#grow-opportunity-${encodeURIComponent(id)}`);
+    await row.waitFor({ state: "visible" });
+    await qa.page.waitForFunction((rowId) => document.activeElement?.id === rowId, `grow-opportunity-${encodeURIComponent(id)}`);
+    if (!await row.getByText("Kért lehetőség", { exact: true }).isVisible()) {
+      throw new Error(`Grow deep link did not mark the exact target ${id}`);
+    }
+    return row;
+  };
+
+  const pending = await open("qa-grow-pending");
+  if (!await pending.getByTestId("grow-decide-accept-qa-grow-pending").isVisible()) {
+    throw new Error("Pending target decision controls were not revealed");
+  }
+  if (decisionPosts.length) throw new Error("Opening the pending target submitted a decision automatically");
+
+  for (const id of ["qa-grow-accepted", "qa-grow-declined", "qa-grow-more-data"]) await open(id);
+
+  // Same-route query changes are URL-authoritative and participate in browser history.
+  await open("qa-grow-pending");
+  await qa.page.evaluate((url) => window.history.pushState(null, "", url), `${target}&opportunity=qa-grow-accepted`);
+  await qa.page.waitForFunction(() => document.activeElement?.id === "grow-opportunity-qa-grow-accepted");
+  await qa.page.goBack();
+  await qa.page.waitForFunction(() => document.activeElement?.id === "grow-opportunity-qa-grow-pending");
+  await qa.page.goForward();
+  await qa.page.waitForFunction(() => document.activeElement?.id === "grow-opportunity-qa-grow-accepted");
+  await qa.page.reload({ waitUntil: "networkidle" });
+  await qa.page.waitForFunction(() => document.activeElement?.id === "grow-opportunity-qa-grow-accepted");
+
+  for (const id of ["stale-grow-opportunity-id", "qa-grow-from-another-client"]) {
+    await qa.page.goto(`${BASE_URL}${target}&opportunity=${id}`, { waitUntil: "networkidle" });
+    if (!await qa.page.getByTestId("grow-opportunity-unavailable").isVisible()) {
+      throw new Error(`Unavailable Grow target ${id} did not show its unavailable state`);
+    }
+    if (await qa.page.locator('[data-testid^="grow-decision-"]').filter({ hasText: "Kért lehetőség" }).count()) {
+      throw new Error(`Unavailable Grow target ${id} was silently replaced with another opportunity`);
+    }
+  }
+
+  // No opportunity query preserves the ordinary list; other tabs remain usable.
+  await qa.page.goto(`${BASE_URL}${target}`, { waitUntil: "networkidle" });
+  if (!await qa.page.getByTestId("grow-decisions-tab").isVisible() || await qa.page.getByTestId("grow-opportunity-unavailable").count()) {
+    throw new Error("Ordinary Döntések tab changed without an opportunity query");
+  }
+  await qa.page.getByTestId("grow-subnav-attekintes").click();
+  await qa.page.waitForURL(`**/clients/${clientId}/grow?tab=attekintes`);
+  if (!await qa.page.getByTestId("grow-overview-tab").isVisible()) throw new Error("Other Grow tab stopped working");
+
+  for (const viewport of [VIEWPORTS[0], VIEWPORTS[2]]) {
+    await qa.page.setViewportSize(viewport);
+    await open("qa-grow-pending");
+    if (await qa.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) {
+      throw new Error(`Grow opportunity deep link has horizontal overflow at ${viewport.width}px`);
+    }
+    await qa.page.screenshot({ path: path.join(SHOTS, `grow-opportunity-deeplink-${viewport.width}.png`), fullPage: true });
+  }
+  if (decisionPosts.length) throw new Error("Deep-link navigation triggered an opportunity decision");
+  if (qa.hardErrors.length) throw new Error(`Grow opportunity browser errors: ${qa.hardErrors.join("; ")}`);
+  console.log("GROW_OPPORTUNITY_DEEPLINK_QA=PASSED");
+  await qa.context.close();
+
+  const failedQa = await newPage(browser, "grow-opportunities-unavailable", VIEWPORTS[0]);
+  await failedQa.page.goto(`${BASE_URL}${target}&opportunity=qa-grow-pending`, { waitUntil: "networkidle" });
+  if (!await failedQa.page.getByTestId("grow-opportunity-check-failed").isVisible()) {
+    throw new Error("Failed opportunity lookup was presented as a stale or unavailable target");
+  }
+  if (await failedQa.page.getByTestId("grow-opportunity-unavailable").count()) {
+    throw new Error("Failed opportunity lookup incorrectly claimed the target was unavailable");
+  }
+  await failedQa.context.close();
+}
+
 async function main() {
   assertFixtureContract();
   fs.mkdirSync(SHOTS, { recursive: true });
@@ -476,6 +576,7 @@ async function main() {
       if (qa.hardErrors.length) throw new Error(`${target.label} browser errors: ${qa.hardErrors.join("; ")}`);
       await qa.context.close();
     }
+    await assertGrowOpportunityDeepLinks(browser);
     await assertCaseWorkspaceIa(browser);
     for (const viewport of VIEWPORTS) {
       for (const mode of ["populated", "loading", "empty", "unavailable"]) {

@@ -33,6 +33,7 @@ function GrowPageContent() {
   const searchParams = useSearchParams();
   const view = searchParams.get("view");
   const tab = searchParams.get("tab");
+  const opportunityId = searchParams.get("opportunity");
   const clientId = String(params?.clientId || "");
   const route = useRouteGeneration(clientId);
   const [client, setClient] = useState<Client | null>(null);
@@ -138,6 +139,7 @@ function GrowPageContent() {
                       clientId={client.id}
                       clientName={client.name}
                       activeTab={activeTab}
+                      requestedOpportunityId={opportunityId}
                     />
                   )}
                 </>
