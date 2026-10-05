@@ -7,7 +7,7 @@ import { CompactState, SafePanelError } from "@/components/adminiculum/Operation
 import { ClientAccent } from "@/components/clients/ClientAccent";
 import { Badge, Button, PageHeader, QuietLink } from "@/components/ui";
 import { getNotifications, getUnreadNotificationsCount, markAllNotificationsRead, markNotificationRead, type NotificationItem } from "@/lib/api";
-import { NOTIFICATION_PAGE_SIZE, NOTIFICATIONS_CHANGED_EVENT, notificationHrefLabel, notificationTypePresentation, resolveNotificationHref } from "@/lib/notificationPresentation";
+import { NOTIFICATION_PAGE_SIZE, NOTIFICATIONS_CHANGED_EVENT, notificationHrefLabel, notificationTitlePresentation, notificationTypePresentation, resolveNotificationHref } from "@/lib/notificationPresentation";
 import { formatDateTime } from "@/lib/taskWorkflowPresentation";
 
 const LOAD_ERROR_DETAIL = "Az értesítések jelenleg nem érhetők el. Az adatok változatlanul a szerveren maradnak.";
@@ -155,7 +155,7 @@ function NotificationsInbox() {
                       {item.isRead ? <Badge tone="neutral" data-testid="notification-read-state">Olvasott</Badge> : <Badge tone="green" data-testid="notification-read-state">Olvasatlan</Badge>}
                       <span className="ml-auto text-xs text-[#6B7280]">{formatDateTime(item.createdAt)}</span>
                     </div>
-                    <h3 className="mt-2 text-sm font-semibold text-[#1F2937]">{item.title}</h3>
+                    <h3 className="mt-2 text-sm font-semibold text-[#1F2937]">{notificationTitlePresentation(item.title)}</h3>
                     <p className="mt-1 text-xs leading-5 text-[#6B7280]">{item.message}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       {href ? (
