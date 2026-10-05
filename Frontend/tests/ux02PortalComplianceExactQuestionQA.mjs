@@ -8,12 +8,14 @@
  *      portal-answerable question with its existing answer control visible.
  *   3. Same-route link navigation updates the rendered detail without a reload.
  *   4. Browser Back and Forward re-sync topic and question from the URL.
- *   5. A stale/unavailable question shows the topic plus a truthful notice and
+ *   5. Selecting a second portal-answerable question inside the same topic syncs
+ *      the canonical URL to it, and refresh / Back / Forward all resolve it.
+ *   6. A stale/unavailable question shows the topic plus a truthful notice and
  *      never opens or guesses another question.
- *   6. An unknown topic and a parameter-less load both fall back to the overview.
- *   7. The manual Állapotok topic detail keeps working.
- *   8. Long question text wraps instead of being single-line truncated.
- *   9. Nothing is submitted automatically (no answer request is issued) and no
+ *   7. An unknown topic and a parameter-less load both fall back to the overview.
+ *   8. The manual Állapotok topic detail keeps working.
+ *   9. Long question text wraps instead of being single-line truncated.
+ *  10. Nothing is submitted automatically (no answer request is issued) and no
  *      console/page errors occur.
  *
  * Requires a production build with a configured customer provider, e.g.:
@@ -329,6 +331,70 @@ async function assertExactQuestionOpen(page, tag, label) {
   check(`[${tag}] URL carries exact topic + question`, urlHasTarget(page), page.url());
 }
 
+function sameTopicUrlHas(page, questionKey) {
+  const url = new URL(page.url());
+  return url.searchParams.get("topic") === TOPIC_ID && url.searchParams.get("question") === questionKey;
+}
+
+async function assertQuestionKeyOpen(page, tag, questionKey, label) {
+  await page.waitForFunction(
+    (key) => {
+      const controls = document.querySelectorAll("[data-testid='portal-compliance-answer-control']");
+      return controls.length === 1 && controls[0].getAttribute("data-question-key") === key;
+    },
+    questionKey,
+    { timeout: 15000 },
+  );
+  const answerControl = page.locator("[data-testid='portal-compliance-answer-control']");
+  check(`[${tag}] topic detail rendered`, (await page.locator("[data-testid='org-compliance-topic-detail']").count()) === 1);
+  if (label) check(`[${tag}] question text visible`, (await page.locator("body").innerText()).includes(label));
+  check(`[${tag}] exact answer control visible`, (await answerControl.count()) === 1);
+  check(`[${tag}] answer control targets ${questionKey}`, (await answerControl.first().getAttribute("data-question-key")) === questionKey);
+  check(`[${tag}] answer control starts empty (nothing auto-answered)`, (await answerControl.first().inputValue()) === "");
+  check(`[${tag}] URL carries topic + ${questionKey}`, sameTopicUrlHas(page, questionKey), page.url());
+}
+
+async function runSameTopicQuestionSync(browser, viewport) {
+  const { context, page, hardErrors } = await createQaPage(browser, viewport);
+  const tag = `${viewport.name}-same-topic`;
+  try {
+    // Initial exact link opens question A.
+    await page.goto(`${BASE_URL}/portal/megfeleles?topic=${encodeURIComponent(TOPIC_ID)}&question=${QUESTION_KEY}`, { waitUntil: "networkidle" });
+    await waitForTopicDetail(page);
+    await assertQuestionKeyOpen(page, `${tag}-initial`, QUESTION_KEY, QUESTION_LABEL);
+
+    // Selecting question B inside the same topic must update the canonical URL.
+    const bButton = page.locator("button", { hasText: "Adat megadása →" }).first();
+    check(`[${tag}] same-topic selection control available`, (await bButton.count()) === 1);
+    await bButton.click();
+    await page.waitForFunction(
+      (key) => new URL(window.location.href).searchParams.get("question") === key,
+      SECOND_QUESTION_KEY,
+      { timeout: 15000 },
+    );
+    await assertQuestionKeyOpen(page, `${tag}-select-B`, SECOND_QUESTION_KEY, "Hatókörbe tartozó szolgáltatások listája");
+    check(`[${tag}] selecting B preserves the current topic`, new URL(page.url()).searchParams.get("topic") === TOPIC_ID, page.url());
+
+    // Refresh retains B.
+    await page.reload({ waitUntil: "networkidle" });
+    await waitForTopicDetail(page);
+    await assertQuestionKeyOpen(page, `${tag}-refresh`, SECOND_QUESTION_KEY, "Hatókörbe tartozó szolgáltatások listája");
+
+    // Back restores A, Forward restores B.
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await waitForTopicDetail(page);
+    await assertQuestionKeyOpen(page, `${tag}-back`, QUESTION_KEY, QUESTION_LABEL);
+    await page.goForward({ waitUntil: "domcontentloaded" });
+    await waitForTopicDetail(page);
+    await assertQuestionKeyOpen(page, `${tag}-forward`, SECOND_QUESTION_KEY, "Hatókörbe tartozó szolgáltatások listája");
+
+    check(`[${tag}] no console/page errors`, hardErrors.length === 0, hardErrors.slice(0, 2).join(" || "));
+    await page.screenshot({ path: path.join(SHOTS, `same-topic-sync-${viewport.name}.png`), fullPage: true });
+  } finally {
+    await context.close();
+  }
+}
+
 async function runMainJourney(browser, viewport) {
   const { context, page, hardErrors } = await createQaPage(browser, viewport);
   const tag = viewport.name;
@@ -441,6 +507,7 @@ async function run() {
   try {
     for (const viewport of VIEWPORTS) {
       await runMainJourney(browser, viewport);
+      await runSameTopicQuestionSync(browser, viewport);
     }
     await runSameRouteAndHistoryScenario(browser);
   } finally {
