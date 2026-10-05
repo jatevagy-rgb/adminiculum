@@ -91,7 +91,7 @@ export function CaseHistoryPanel({ caseId, clientId, readOnly = false, onChanged
 
       <div className="mt-6 rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4" aria-label="Ügyfélnek látható előnézet">
         <h3 className="text-sm font-semibold text-[var(--adm-text)]">Ügyfélnek látható előnézet</h3>
-        <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Ehhez az ügyhöz nincs mentett ügytörténet-megosztási szabály. A belső események itt nem jelennek meg az ügyfélnek.</p>
+        <p className="mt-2 text-sm text-[var(--adm-text-muted)]">Az ügyfélnek látható tartalmat az ügytörténet megosztási szabálya határozza meg. A belső események nem jelennek meg automatikusan.</p>
         <ul className="mt-3 grid gap-2 md:grid-cols-3">{LEVELS.map((level) => <li key={level.name} className="rounded border border-[var(--adm-border)] bg-white p-3"><strong className="text-sm text-[var(--adm-text)]">{level.name}</strong><p className="mt-1 text-xs text-[var(--adm-text-muted)]">{level.detail}</p></li>)}</ul>
         {!readOnly && clientId ? <p className="mt-3 text-xs text-[var(--adm-text-muted)]">A szint, az egyedi elrejtés és az ügyféloldali felelős mentése a tartós jogosultsági szabály bevezetése után lesz elérhető.</p> : null}
       </div>
