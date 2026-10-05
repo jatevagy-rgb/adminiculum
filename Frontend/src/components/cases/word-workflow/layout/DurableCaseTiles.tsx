@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from 'react';
-import { fetchApi } from '@/lib/api';
+import { ApiError, fetchApi } from '@/lib/api';
 import type { CaseTileDescriptor } from './CaseContextTiles';
 type Tile = {
     id: string;
@@ -19,12 +19,22 @@ type Snapshot = {
 };
 const toneClass = { info: 'border-[var(--adm-blue-700)] bg-[var(--adm-blue-100)]', teal: 'border-[var(--adm-palette-teal)] bg-white', green: 'border-[var(--adm-green-800)] bg-white' };
 const control = 'min-h-10 min-w-10 rounded border border-[var(--adm-border)] px-3 py-2 text-sm';
+function tileReadError(error: unknown) {
+    if (error instanceof ApiError) {
+        if (error.code === 'WORKSPACE_CAPABILITY_UNAVAILABLE')
+            return 'Az egyéni csempék funkció nem érhető el ebben a munkaterületen.';
+        if (error.status === 403)
+            return 'Nincs jogosultságod az ügy csempéinek megtekintéséhez.';
+    }
+    return 'Az egyéni csempék nem tölthetők be. A mentés nem elérhető.';
+}
 export function DurableCaseTiles({ caseId, surface, builtin }: {
     caseId: string;
     surface: Surface;
     builtin: CaseTileDescriptor[];
 }) {
     const [saved, setSaved] = useState<Snapshot | null>(null);
+    const [readState, setReadState] = useState<'loading' | 'error' | 'success'>('loading');
     const [draft, setDraft] = useState<Snapshot | null>(null);
     const [error, setError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -34,17 +44,22 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
     const url = `/case-workspace/cases/${encodeURIComponent(caseId)}/tiles`;
     useEffect(() => {
         const generation = ++epoch.current;
-        setSaved(null);
-        setDraft(null);
-        setBusy(false);
-        setError('');
         const load = () => {
+            setReadState('loading');
+            setSaved(null);
+            setDraft(null);
+            setBusy(false);
+            setError('');
             void fetchApi<Snapshot>(url).then(value => {
-                if (epoch.current === generation)
+                if (epoch.current === generation) {
                     setSaved(value);
-            }).catch(() => {
-                if (epoch.current === generation)
-                    setError('Az egyéni csempék nem tölthetők be. A mentés nem elérhető.');
+                    setReadState('success');
+                }
+            }).catch(error => {
+                if (epoch.current === generation) {
+                    setReadState('error');
+                    setError(tileReadError(error));
+                }
             });
         };
         load();
@@ -56,7 +71,7 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
         return () => { ++epoch.current; window.removeEventListener('case-tiles-saved', refresh); };
     }, [caseId, url]);
     const view = draft || saved;
-    const refs = view?.placements[surface] || builtin.map(t => t.kind);
+    const refs = view?.placements[surface] ?? [];
     const builtinById = new Map(builtin.map(t => [t.kind as string, t]));
     const mutateTile = (id: string, patch: Partial<Tile>) => setDraft(d => d && ({ ...d, tiles: d.tiles.map(t => t.id === id ? { ...t, ...patch } : t) }));
     function move(id: string, to: number) {
@@ -102,12 +117,13 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
         }
     }
     return <section aria-label="Ügykontextus" data-testid="word-case-context" className="space-y-3">
+    {readState === 'loading' && <p role="status">Az ügy csempéinek betöltése…</p>}
     <div className="flex flex-wrap items-center gap-2">
-      {!draft && saved && <button type="button" className={control} onClick={() => { setDraft(structuredClone(saved)); setError(''); setNotice(''); }}>Csempék szerkesztése</button>}
-      {draft && <><span className="text-sm">Nem mentett változat · közös tartalom, saját elrendezés</span><button type="button" className={control} disabled={busy} onClick={() => void save()}>{busy ? 'Mentés…' : 'Mentés'}</button><button type="button" className={control} disabled={busy} onClick={() => { setDraft(null); setError(''); }}>Mégse</button><button type="button" className={control} disabled={busy} onClick={() => setDraft(d => d && ({ ...d, placements: { overview: builtin.map(t => t.kind), document: builtin.map(t => t.kind) } }))}>Saját elrendezés alaphelyzetbe</button></>}
+      {readState === 'success' && !draft && saved && <button type="button" className={control} onClick={() => { setDraft(structuredClone(saved)); setError(''); setNotice(''); }}>Csempék szerkesztése</button>}
+      {readState === 'success' && draft && <><span className="text-sm">Nem mentett változat · közös tartalom, saját elrendezés</span><button type="button" className={control} disabled={busy} onClick={() => void save()}>{busy ? 'Mentés…' : 'Mentés'}</button><button type="button" className={control} disabled={busy} onClick={() => { setDraft(null); setError(''); }}>Mégse</button><button type="button" className={control} disabled={busy} onClick={() => setDraft(d => d && ({ ...d, placements: { overview: builtin.map(t => t.kind), document: builtin.map(t => t.kind) } }))}>Saját elrendezés alaphelyzetbe</button></>}
     </div>
     {error && <p role="alert" className="text-sm text-[var(--adm-text)]">{error}</p>}{notice && <p role="status">{notice}</p>}
-    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+    {readState === 'success' && <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
       {refs.map((id, index) => {
             const base = builtinById.get(id);
             const custom = view?.tiles.find(t => t.id === id);
@@ -128,7 +144,7 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
           {draft && <div className="mt-2">{(['overview', 'document'] as Surface[]).map(target => <label key={target} className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" disabled={busy} checked={draft.placements[target].includes(id)} onChange={e => place(id, target, e.target.checked)}/>{target === 'overview' ? 'Saját áttekintés' : 'Saját dokumentumfejléc'}</label>)}</div>}
         </article>;
         })}
-    </div>
-    {draft && <div className="space-y-2 rounded border p-3"><p className="text-sm">Elhelyezhető csempék (a tartalom közös; az elhelyezés csak Öné)</p>{[...builtin.map(t => ({ id: t.kind, title: t.title })), ...draft.tiles].filter(t => !refs.includes(t.id)).map(t => <button key={t.id} type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => place(t.id, surface, true)}>{t.title || 'Névtelen csempe'} hozzáadása ide</button>)}{draft.canManage && <button type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => { const id = crypto.randomUUID(); setDraft(d => d && ({ ...d, tiles: [...d.tiles, { id, revision: 0, title: 'Új csempe', text: '', tone: 'green', archived: false }], placements: { ...d.placements, [surface]: [...d.placements[surface], id] } })); }}>Új közös szöveges csempe</button>}</div>}
+    </div>}
+    {readState === 'success' && draft && <div className="space-y-2 rounded border p-3"><p className="text-sm">Elhelyezhető csempék (a tartalom közös; az elhelyezés csak Öné)</p>{[...builtin.map(t => ({ id: t.kind, title: t.title })), ...draft.tiles].filter(t => !refs.includes(t.id)).map(t => <button key={t.id} type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => place(t.id, surface, true)}>{t.title || 'Névtelen csempe'} hozzáadása ide</button>)}{draft.canManage && <button type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => { const id = crypto.randomUUID(); setDraft(d => d && ({ ...d, tiles: [...d.tiles, { id, revision: 0, title: 'Új csempe', text: '', tone: 'green', archived: false }], placements: { ...d.placements, [surface]: [...d.placements[surface], id] } })); }}>Új közös szöveges csempe</button>}</div>}
   </section>;
 }
