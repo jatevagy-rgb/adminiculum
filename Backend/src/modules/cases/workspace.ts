@@ -33,6 +33,31 @@ function preview(text?: string | null): string | null {
   return t.length > PREVIEW_LEN ? `${t.slice(0, PREVIEW_LEN)}…` : t;
 }
 
+/**
+ * Canonical current-version identity per document (batch). The version rows are
+ * authoritative; the parent `Document.currentVersion`/`version` are legacy mirrors
+ * that can drift (DOCUMENT-VERSION-INTEGRITY / UX-06).
+ */
+async function loadCanonicalCurrentVersions(documentIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (documentIds.length === 0) return map;
+  const rows = await prisma.documentVersion.findMany({
+    where: { documentId: { in: documentIds } },
+    select: { documentId: true, version: true, isCurrent: true },
+    orderBy: { version: 'desc' },
+  });
+  const highest = new Map<string, number>();
+  for (const row of rows) {
+    if (!highest.has(row.documentId)) highest.set(row.documentId, row.version);
+    if (row.isCurrent && !map.has(row.documentId)) map.set(row.documentId, row.version);
+  }
+  for (const id of documentIds) {
+    const fallback = highest.get(id);
+    if (!map.has(id) && fallback !== undefined) map.set(id, fallback);
+  }
+  return map;
+}
+
 export interface CaseWorkspaceWarning {
   section: string;
   code: string;
@@ -322,6 +347,16 @@ export async function getCaseWorkspace(
     warnings,
   );
 
+  // ---- canonical current version per document (version rows authoritative) ----
+  const canonicalCurrentVersions = await safe(
+    'documents',
+    'DOCUMENT_CURRENT_VERSION_UNAVAILABLE',
+    'A dokumentum aktuális verziója most nem érhető el.',
+    () => loadCanonicalCurrentVersions(docIds),
+    new Map<string, number>(),
+    warnings,
+  );
+
   // ---- case time: TimeEntry has no caseId (only matterId/taskId); not directly
   // attributable to a case. Never present Matter time as Case time. ----
   const time: CaseWorkspaceDto['time'] = { available: false, reason: 'CASE_TIME_NOT_ATTRIBUTABLE' };
@@ -400,7 +435,9 @@ export async function getCaseWorkspace(
     mimeType: d.mimeType ?? null,
     type: d.documentType ?? null,
     category: d.category ? String(d.category) : null,
-    version: d.version ?? (d.currentVersion != null ? `v${d.currentVersion}` : null),
+    version: canonicalCurrentVersions.has(d.id)
+      ? `v${canonicalCurrentVersions.get(d.id)}`
+      : (d.version ?? (d.currentVersion != null ? `v${d.currentVersion}` : null)),
     uploadedAt: iso(d.updatedAt || d.createdAt),
     uploadedBy: null,
     summary: null,

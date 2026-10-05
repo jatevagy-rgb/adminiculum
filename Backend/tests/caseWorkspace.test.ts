@@ -18,6 +18,7 @@ jest.mock('../src/prisma/prisma.service', () => ({
     caseCollaborator: { findFirst: jest.fn() },
     task: { findMany: jest.fn() },
     document: { findMany: jest.fn() },
+    documentVersion: { findMany: jest.fn() },
     communication: { findMany: jest.fn(), count: jest.fn() },
     comment: { findMany: jest.fn(), groupBy: jest.fn() },
   },
@@ -66,6 +67,7 @@ describe('GET /cases/:caseId/workspace', () => {
     (prisma.caseCollaborator.findFirst as jest.Mock).mockResolvedValue(null);
     (prisma.task.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.document.findMany as jest.Mock).mockResolvedValue([]);
+    (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.communication.findMany as jest.Mock).mockResolvedValue([]);
     (prisma.communication.count as jest.Mock).mockResolvedValue(0);
     (prisma.comment.findMany as jest.Mock).mockResolvedValue([]);
@@ -155,5 +157,28 @@ describe('GET /cases/:caseId/workspace', () => {
     const taskEvent = res.body.activity.find((a: any) => a.objectType === 'TASK');
     expect(taskEvent.actionLabel).toContain('feladat');
     expect(taskEvent.objectLabel).toBe('Szerződés ellenőrzése');
+  });
+
+  it('derives document version identity from canonical version rows (UX-06)', async () => {
+    (prisma.document.findMany as jest.Mock).mockResolvedValue([
+      { id: 'd1', name: 'szerzodes.pdf', fileName: 'szerzodes.pdf', mimeType: 'application/pdf', documentType: 'CONTRACT', category: 'CONTRACT', version: 'v1', currentVersion: 1, createdAt: new Date('2026-07-03'), updatedAt: new Date('2026-07-03') },
+    ]);
+    (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([
+      { documentId: 'd1', version: 2, isCurrent: true },
+      { documentId: 'd1', version: 1, isCurrent: false },
+    ]);
+    const res = await requestJson(createApp(), '/cases/case-1/workspace');
+    expect(res.status).toBe(200);
+    expect(res.body.documents[0].version).toBe('v2');
+  });
+
+  it('keeps the parent mirror when a document has no canonical version rows', async () => {
+    (prisma.document.findMany as jest.Mock).mockResolvedValue([
+      { id: 'd1', name: 'szerzodes.pdf', fileName: 'szerzodes.pdf', mimeType: 'application/pdf', documentType: 'CONTRACT', category: 'CONTRACT', version: 'v1', currentVersion: 1, createdAt: new Date('2026-07-03'), updatedAt: new Date('2026-07-03') },
+    ]);
+    (prisma.documentVersion.findMany as jest.Mock).mockResolvedValue([]);
+    const res = await requestJson(createApp(), '/cases/case-1/workspace');
+    expect(res.status).toBe(200);
+    expect(res.body.documents[0].version).toBe('v1');
   });
 });
