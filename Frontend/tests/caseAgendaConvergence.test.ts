@@ -20,6 +20,23 @@ describe('Case lifecycle -> deadline -> Agenda convergence (frontend structural)
     assert.match(src, /OVERDUE|TODAY|THIS_WEEK/);
   });
 
+  it('NEW-03: agenda CTA wording matches its destination and never duplicates the case link', () => {
+    const src = read('src/app/deadlines/page.tsx');
+    // CTA wording is derived from the canonical source/sourceType instead of a fixed task label.
+    assert.match(src, /function openCtaLabel\(item: WorkflowDeadlineItem, caseHref: string\)/);
+    assert.match(src, /item\.sourceType === "CASE_DEADLINE"\) return "Ügy megnyitása"/);
+    assert.match(src, /item\.sourceType === "TASK"\) return "Feladat megnyitása"/);
+    assert.match(src, /return "Megnyitás"/);
+    // A primary href that already is the canonical case href must not render a second case link.
+    assert.match(src, /const caseHref = `\/cases\/\$\{encodeURIComponent\(item\.caseId\)\}`/);
+    assert.match(src, /const primaryIsCaseHref = item\.href === caseHref/);
+    assert.match(src, /\{!primaryIsCaseHref && \(/);
+    assert.match(src, /<QuietLink href=\{item\.href\} size="sm">\{openCtaLabel\(item, caseHref\)\}<\/QuietLink>/);
+    // Existing completion/reschedule affordances stay scoped to TASK items.
+    assert.match(src, /item\.capabilities\.canComplete && item\.sourceType === "TASK"/);
+    assert.match(src, /item\.capabilities\.canReschedule && item\.sourceType === "TASK"/);
+  });
+
   it('Case Workspace overview answers responsible / deadline / next without extra tabs', () => {
     const src = read('src/components/cases/CaseWorkspaceOverview.tsx');
     assert.match(src, /Felelős/);   // responsible lawyer
