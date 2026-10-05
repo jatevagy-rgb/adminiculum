@@ -209,7 +209,7 @@ function resolveResponse(url) {
   if (pathname === "/client-portal/home") return { status: 200, body: MOCK_PORTAL_HOME };
   if (pathname === "/client-portal/workspace") return { status: 200, body: MOCK_PORTAL_WORKSPACE };
   if (pathname === "/client-portal/org/company") {
-    if (scenario === "denied") return { status: 403, body: { error: "CLIENT_SUMMARY_SCOPE_FORBIDDEN" } };
+    if (scenario === "denied") return { status: 403, body: { status: 403, code: "CLIENT_SUMMARY_SCOPE_FORBIDDEN", message: "An organization summary scope is required." } };
     return { status: 200, body: mockCompany() };
   }
   if (pathname === "/client-portal/org/contracts") return { status: 200, body: mockContracts() };
@@ -281,7 +281,18 @@ async function checkCompany(page) {
   await page.waitForSelector('[data-testid="client-portal-shell-v3"]', { timeout: 15000 });
 
   if (scenario === "denied") {
-    await page.waitForSelector('text=Ez a tartalom nem érhető el ezen az ügyfélfelületen.', { timeout: 15000 });
+    await page.waitForSelector('[data-testid="portal-company-restricted"]', { timeout: 15000 });
+    const deniedText = await page.locator('[data-testid="portal-company-restricted"]').innerText();
+    if (!deniedText.includes("A vállalati áttekintés a jelenlegi hozzáférésével nem érhető el.")) {
+      throw new Error("restricted-access copy missing");
+    }
+    const returnLink = await page.locator('[data-testid="portal-company-restricted"] a[href="/portal"]').count();
+    if (returnLink < 1) throw new Error("safe return destination missing");
+    // No organization data and no internal authorization identifiers may leak.
+    if (deniedText.includes("Demo Kft.")) throw new Error("organization data leaked in restricted state");
+    for (const leaked of ["CLIENT_SUMMARY_SCOPE_FORBIDDEN", "scope", "membership", "permission"]) {
+      if (deniedText.toLowerCase().includes(leaked.toLowerCase())) throw new Error(`internal identifier leaked: ${leaked}`);
+    }
     return;
   }
 
