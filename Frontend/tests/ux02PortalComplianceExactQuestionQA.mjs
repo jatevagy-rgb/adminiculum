@@ -324,6 +324,8 @@ async function assertExactQuestionOpen(page, tag, label) {
   check(`[${tag}] exact answer control visible`, (await answerControl.count()) === 1, label);
   check(`[${tag}] answer control targets the exact questionKey`, (await answerControl.first().getAttribute("data-question-key")) === QUESTION_KEY);
   check(`[${tag}] answer control starts empty (nothing auto-answered)`, (await answerControl.first().inputValue()) === "");
+  const focusedQuestionKey = await page.evaluate(() => document.activeElement?.getAttribute?.("data-question-key") ?? null);
+  check(`[${tag}] exact answer control receives focus`, focusedQuestionKey === QUESTION_KEY, `focused=${focusedQuestionKey}`);
   check(`[${tag}] URL carries exact topic + question`, urlHasTarget(page), page.url());
 }
 
