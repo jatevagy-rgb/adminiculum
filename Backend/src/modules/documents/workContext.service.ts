@@ -170,6 +170,50 @@ async function requireManage(req: Request, documentId: string) {
   return access;
 }
 
+/**
+ * Canonical current-version identity (DOCUMENT-VERSION-INTEGRITY / UX-06).
+ *
+ * The parent `Document.currentVersion` is a legacy mirror that can drift from the
+ * canonical `DocumentVersion.isCurrent` (for example a version uploaded or promoted
+ * without refreshing the parent). The version row is authoritative; the parent value
+ * is only a last-resort fallback for documents that have no version rows at all.
+ */
+async function loadCanonicalCurrentVersion(documentId: string): Promise<number | null> {
+  const current = await prisma.documentVersion.findFirst({
+    where: { documentId, isCurrent: true },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  });
+  if (current) return current.version;
+  const highest = await prisma.documentVersion.findFirst({
+    where: { documentId },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  });
+  return highest?.version ?? null;
+}
+
+/** Batch canonical current-version identity for many documents (single query). */
+async function loadCanonicalCurrentVersions(documentIds: string[]): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  if (documentIds.length === 0) return map;
+  const rows = await prisma.documentVersion.findMany({
+    where: { documentId: { in: documentIds } },
+    select: { documentId: true, version: true, isCurrent: true },
+    orderBy: { version: 'desc' },
+  });
+  const highest = new Map<string, number>();
+  for (const row of rows) {
+    if (!highest.has(row.documentId)) highest.set(row.documentId, row.version);
+    if (row.isCurrent && !map.has(row.documentId)) map.set(row.documentId, row.version);
+  }
+  for (const id of documentIds) {
+    const fallback = highest.get(id);
+    if (!map.has(id) && fallback !== undefined) map.set(id, fallback);
+  }
+  return map;
+}
+
 async function fetchCard(documentId: string): Promise<DocumentWorkCardDto> {
   const doc = await prisma.document.findUnique({ where: { id: documentId }, select: DOCUMENT_SELECT });
   if (!doc) throw new DocumentWorkContextError('DOCUMENT_NOT_FOUND', 'Document not found.', 404);
@@ -188,7 +232,10 @@ async function fetchCard(documentId: string): Promise<DocumentWorkCardDto> {
         select: { id: true, subject: true, senderName: true, createdAt: true },
       })
     : null;
-  return mapCard(doc as Record<string, any>, links, source);
+  const docRecord = doc as Record<string, any>;
+  const canonical = await loadCanonicalCurrentVersion(documentId);
+  if (canonical != null) docRecord.currentVersion = canonical;
+  return mapCard(docRecord, links, source);
 }
 
 export async function getDocumentWorkContext(req: Request, documentId: string): Promise<DocumentWorkCardDto> {
@@ -346,6 +393,8 @@ export async function listTaskDocuments(req: Request, taskId: string) {
     },
   });
 
+  const canonicalVersions = await loadCanonicalCurrentVersions(links.map((l) => l.document.id));
+
   return {
     taskId,
     documents: links.map((l) => ({
@@ -358,7 +407,7 @@ export async function listTaskDocuments(req: Request, taskId: string) {
       workStatus: String(l.document.workStatus),
       documentRole: l.document.documentRole ?? null,
       dueDate: iso(l.document.dueDate),
-      currentVersion: l.document.currentVersion ?? null,
+      currentVersion: canonicalVersions.get(l.document.id) ?? l.document.currentVersion ?? null,
       responsible: l.document.responsible,
       reviewer: l.document.reviewer,
     })),
