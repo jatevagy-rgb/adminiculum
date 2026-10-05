@@ -34,6 +34,7 @@ function makeComplianceHarness() {
       },
     },
     '@/lib/complianceWorkspaceApi': {
+      resolveRequirementsTarget: () => null,
       complianceWorkspaceApi: {
         getWorkspace: (id: string) => d[id].workspace.promise,
         reconcile: async () => ({}),

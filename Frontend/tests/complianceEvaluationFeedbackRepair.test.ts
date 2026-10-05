@@ -101,6 +101,7 @@ function makeHarness(options: HarnessOptions = {}) {
       },
     },
     '@/lib/complianceWorkspaceApi': {
+      resolveRequirementsTarget: () => null,
       complianceWorkspaceApi: {
         getWorkspace: async () => current,
         reconcile:

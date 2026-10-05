@@ -71,6 +71,16 @@ export type ComplianceWorkspace = {
   areas: ComplianceWorkspaceArea[];
 };
 
+export function resolveRequirementsTarget(
+  workspace: ComplianceWorkspace | null,
+  clientId: string,
+  target: { clientId: string; applicabilityId: string; factKey: string } | null,
+): ComplianceWorkspaceArea | null {
+  if (!workspace || !target || target.clientId !== clientId || !target.applicabilityId || !target.factKey) return null;
+  const area = workspace.areas.find((candidate) => candidate.applicabilityId === target.applicabilityId);
+  return area?.missingFacts.some((fact) => fact.factKey === target.factKey) ? area : null;
+}
+
 export type ComplianceReconcileResult = {
   enrolled: boolean;
   evaluated: number;

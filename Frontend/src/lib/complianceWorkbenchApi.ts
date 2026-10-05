@@ -1,6 +1,8 @@
 import { fetchApi } from './api';
+export type WorkbenchRequirementsTarget = { clientId: string; applicabilityId: string; factKey: string };
 export type WorkbenchRow = {
   id: string; kind: 'MISSING_FACT' | 'SUBMISSION' | 'STALE_EVIDENCE' | 'PROPOSAL' | 'SOURCE_IMPACT'; sourceId: string; clientId: string; caseId: string | null; subject: string | null;
+  requirementsTarget?: WorkbenchRequirementsTarget;
   title: string; status: string; since: string | null; dueAt: string | null; ownerId: string | null; ownerName?: string | null; readOnly: boolean; reason: string | null;
   action: 'REQUIREMENTS' | 'SUBMISSION_REVIEW' | 'EVIDENCE_REVIEW' | 'PROPOSAL_REVIEW' | 'SOURCE_REVIEW' | 'IMPACT_DECISION';
   source?: { observationId: string; legalSourceId: string; legalSourceVersionId: string; versionKey: string; sourceKey: string; event: string; reviewedNote: string | null; revision: string; requirementVersions: Array<{ id: string; title: string }>; proposals: Array<{ id: string; title: string }>; decision: { kind: string; note: string; decidedAt: string; result: { caseId?: string; taskId?: string; requirementVersionId?: string } } | null };
