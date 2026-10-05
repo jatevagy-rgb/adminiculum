@@ -34,6 +34,12 @@ const STATUS_LABELS: Record<string, string> = {
   SUPERSEDED: "Felülírva",
 };
 
+function openCtaLabel(item: WorkflowDeadlineItem, caseHref: string): string {
+  if (item.href === caseHref || item.sourceType === "CASE_DEADLINE") return "Ügy megnyitása";
+  if (item.sourceType === "TASK") return "Feladat megnyitása";
+  return "Megnyitás";
+}
+
 function formatDateTime(value: string, timezone: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -62,6 +68,8 @@ function AgendaItemCard({
 }) {
   const [draftDueAt, setDraftDueAt] = useState(inputDateTime(item.dueAt));
   const busy = busyId === item.id;
+  const caseHref = `/cases/${encodeURIComponent(item.caseId)}`;
+  const primaryIsCaseHref = item.href === caseHref;
 
   return (
     <article className="px-3 py-3">
@@ -84,9 +92,11 @@ function AgendaItemCard({
         </div>
         <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
           {item.href && (
-            <QuietLink href={item.href} size="sm">Feladat megnyitása</QuietLink>
+            <QuietLink href={item.href} size="sm">{openCtaLabel(item, caseHref)}</QuietLink>
           )}
-          <QuietLink href={`/cases/${encodeURIComponent(item.caseId)}`} size="sm">Ügy megnyitása</QuietLink>
+          {!primaryIsCaseHref && (
+            <QuietLink href={caseHref} size="sm">Ügy megnyitása</QuietLink>
+          )}
         </div>
       </div>
 
