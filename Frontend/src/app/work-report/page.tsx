@@ -226,6 +226,7 @@ function WorkReportPageContent() {
   }, [selectedCaseId, periodQuery, ownerPersonId]);
 
   const selectedSummary = report?.case ?? null;
+  const reportCaseRows = caseList?.cases ?? [];
 
   return (
     <div className="min-h-screen bg-white text-[var(--adm-text-primary)]">
@@ -303,7 +304,7 @@ function WorkReportPageContent() {
                 <DataTableHeaderCell align="right">Művelet</DataTableHeaderCell>
               </DataTableHead>
               <DataTableBody>
-                {(caseList?.cases ?? []).map((item: ClientWorkReportCaseListItem) => (
+                {reportCaseRows.map((item: ClientWorkReportCaseListItem) => (
                   <DataTableRow key={item.caseId} selected={item.caseId === selectedCaseId}>
                     <DataTableCell>{item.caseNumber}</DataTableCell>
                     <DataTableCell>{item.caseTitle}</DataTableCell>
@@ -328,9 +329,11 @@ function WorkReportPageContent() {
                   </DataTableRow>
                 ))}
               </DataTableBody>
-              <DataTableEmpty colSpan={8}>
-                <p>Nincs ügy.</p>
-              </DataTableEmpty>
+              {reportCaseRows.length === 0 ? (
+                <DataTableEmpty colSpan={8}>
+                  <p>Nincs ügy.</p>
+                </DataTableEmpty>
+              ) : null}
             </DataTable>
           )}
         </section>
