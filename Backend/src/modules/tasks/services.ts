@@ -156,6 +156,9 @@ const taskReadSelect = {
   updatedAt: true,
 } as const;
 
+// Presentation fields only: adding credentials to User must never expand task DTOs.
+const taskUserSelect = { id: true, name: true, role: true } as const;
+
 async function getTaskForTransition(taskId: string) {
   return prisma.task.findUnique({
     where: { id: taskId },
@@ -371,7 +374,7 @@ export async function createTask(data: {
     } as any,
     include: {
       case: true,
-      assignedTo: true
+      assignedTo: { select: taskUserSelect }
     }
   });
 
@@ -473,7 +476,7 @@ export async function getTask(taskId: string) {
     select: {
       ...taskReadSelect,
       case: true,
-      assignedTo: true,
+      assignedTo: { select: taskUserSelect },
       submissions: {
         orderBy: { revisionNumber: 'desc' },
         take: 1,
@@ -482,6 +485,15 @@ export async function getTask(taskId: string) {
     }
   });
   return task ? withTaskSubmissionProjection(task) : null;
+}
+
+/** Actor-guarded entry point for legacy task reads; internal projections stay reusable. */
+export async function getTaskForUser(taskId: string, userId: string) {
+  const task = await getTaskForTransition(taskId);
+  if (!task || !(await canUserActOnTask(task, userId)).allowed) {
+    throw new WorkflowTransitionError(404, 'TASK_NOT_FOUND', 'A feladat nem található vagy nem érhető el.');
+  }
+  return getTask(taskId);
 }
 
 export class TaskAttentionValidationError extends WorkflowTransitionError {
@@ -582,7 +594,7 @@ export async function updateTaskAttention(taskId: string, userId: string, body: 
     select: {
       ...taskReadSelect,
       case: true,
-      assignedTo: true,
+      assignedTo: { select: taskUserSelect },
       submissions: {
         orderBy: { revisionNumber: 'desc' },
         take: 1,
@@ -1645,6 +1657,7 @@ export default {
   createTask,
   getCaseTasks,
   getTask,
+  getTaskForUser,
   startTask,
   submitTask,
   completeTask,

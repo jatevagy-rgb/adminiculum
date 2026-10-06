@@ -1,5 +1,6 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import prisma from '../../config/database';
+import { isWorkforceRole } from '../../middleware/workforceAuthorization';
 
 type TaskAuthorizationClient = PrismaClient | Prisma.TransactionClient;
 
@@ -8,11 +9,12 @@ export async function canUserActOnTask(
   userId: string,
   db: TaskAuthorizationClient = prisma,
 ): Promise<{ allowed: boolean; role: string | null }> {
+  if (!userId) return { allowed: false, role: null };
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true },
   });
-  if (!user) return { allowed: false, role: null };
+  if (!user || !isWorkforceRole(user.role)) return { allowed: false, role: user?.role || null };
 
   if (['ADMIN', 'PARTNER'].includes(String(user.role))) {
     return { allowed: true, role: String(user.role) };

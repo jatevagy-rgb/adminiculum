@@ -218,7 +218,7 @@ router.get('/dashboard/operational-overview', authenticate, async (req: Request,
 // ============================================================================
 // GET /cases/:caseId/timeline
 // ============================================================================
-router.get('/:caseId/timeline', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/timeline', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const timeline = await casesService.getCaseTimeline(caseId);
@@ -232,7 +232,7 @@ router.get('/:caseId/timeline', authenticate, async (req: Request, res: Response
 // ============================================================================
 // GET /cases/:caseId/documents
 // ============================================================================
-router.get('/:caseId/documents', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/documents', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const documents = await casesService.getCaseDocuments(caseId);
@@ -263,7 +263,7 @@ router.get('/:caseId/workflow', authenticate, requireCaseReadAccess, async (req:
 // ============================================================================
 // GET /cases/:caseId/workflow-graph (NEW)
 // ============================================================================
-router.get('/:caseId/workflow-graph', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/workflow-graph', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const workflowGraph = await workflowService.getWorkflowGraph(caseId);
@@ -283,7 +283,7 @@ router.get('/:caseId/workflow-graph', authenticate, async (req: Request, res: Re
 // ============================================================================
 // GET /cases/:caseId/workflow-history
 // ============================================================================
-router.get('/:caseId/workflow-history', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/workflow-history', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const history = await workflowService.getWorkflowHistory(caseId);
@@ -658,7 +658,7 @@ router.post('/:caseId/archive', authenticate, requireCaseManageAccess, async (re
 // ============================================================================
 // GET /cases/:caseId/client-house-style
 // ============================================================================
-router.get('/:caseId/client-house-style', authenticate, async (req: Request, res: Response): Promise<void> => {
+router.get('/:caseId/client-house-style', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response): Promise<void> => {
   try {
     const { caseId } = req.params as { caseId: string };
     const profile = await casesService.getCaseClientHouseStyle(caseId);

@@ -5,6 +5,8 @@
 import { Router, Request, Response } from 'express';
 import taskService, { TaskValidationError } from './services';
 import { authenticate, requireRole } from '../../middleware/auth';
+import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
+import { requireCaseReadAccess, userCanReadCase } from '../cases/authorization';
 import { buildPrismaErrorResponse } from '../../utils/prismaError';
 import {
   ensureNoArbitraryTaskStatusPayload,
@@ -75,7 +77,7 @@ function mapFrontendTaskTypeToPrisma(rawType: string): string | null {
 // ============================================================================
 // GET /api/v1/tasks - Feladatok listázása (current user / case scope)
 // ============================================================================
-router.get('/', authenticate, async (req: Request, res: Response) => {
+router.get('/', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     if (!userId) {
@@ -85,6 +87,13 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     const { status, caseId, assignedTo } = req.query;
 
     if (caseId) {
+      const access = await userCanReadCase(req, String(caseId));
+      if (access !== true) {
+        return res.status(access === null ? 404 : 403).json({
+          code: access === null ? 'CASE_NOT_FOUND' : 'CASE_ACCESS_FORBIDDEN',
+          message: 'Az ügy nem található vagy nem érhető el.',
+        });
+      }
       const tasks = await taskService.getCaseTasks(String(caseId), {
         status: status as string | undefined,
         assignedTo: assignedTo as string | undefined,
@@ -103,7 +112,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
   }
 });
 
-router.get('/review-queue', authenticate, async (req: Request, res: Response) => {
+router.get('/review-queue', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.userId;
     if (!userId) {
@@ -377,7 +386,7 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
 // ============================================================================
 // GET /api/v1/cases/:caseId/tasks - Case-hez tartozó feladatok
 // ============================================================================
-router.get('/cases/:caseId/tasks', authenticate, async (req: Request, res: Response) => {
+router.get('/cases/:caseId/tasks', authenticate, requireWorkforceUser, requireCaseReadAccess, async (req: Request, res: Response) => {
   try {
     const caseIdParam = req.params.caseId;
     const caseId = Array.isArray(caseIdParam) ? caseIdParam[0] : caseIdParam;
@@ -398,12 +407,12 @@ router.get('/cases/:caseId/tasks', authenticate, async (req: Request, res: Respo
 // ============================================================================
 // GET /api/v1/tasks/:id - Egy feladat adatai
 // ============================================================================
-router.get('/:id', authenticate, async (req: Request, res: Response) => {
+router.get('/:id', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const idParam = req.params.id;
     const id = Array.isArray(idParam) ? idParam[0] : idParam;
     
-    const task = await taskService.getTask(id);
+    const task = await taskService.getTaskForUser(id, req.user!.userId);
     
     if (!task) {
       return res.status(404).json({ error: 'Feladat nem található' });
@@ -411,8 +420,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
 
     res.json(task);
   } catch (error) {
-    console.error('Error fetching task:', error);
-    res.status(500).json({ error: 'Hiba a feladat lekérésekor' });
+    sendTaskWorkflowError(res, error, 'Hiba a feladat lekérésekor');
   }
 });
 
@@ -604,7 +612,7 @@ router.get('/recommendations', authenticate, async (req: Request, res: Response)
 // ============================================================================
 // GET /api/v1/my/tasks - Bejelentkezett felhasználó feladatai
 // ============================================================================
-router.get('/my/tasks', authenticate, async (req: Request, res: Response) => {
+router.get('/my/tasks', authenticate, requireWorkforceUser, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     const { status, caseId } = req.query;

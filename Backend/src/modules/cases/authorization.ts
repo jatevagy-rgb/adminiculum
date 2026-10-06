@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { NextFunction, Request, Response } from 'express';
 import { prisma } from '../../prisma/prisma.service';
+import { isWorkforceRole } from '../../middleware/workforceAuthorization';
 
 const PRIVILEGED_ROLES = new Set(['ADMIN', 'PARTNER']);
 
@@ -9,7 +10,7 @@ export function buildCaseReadScope(
   userId: string | null | undefined,
   role: string | null | undefined
 ): Prisma.CaseWhereInput | null {
-  if (!userId) return { id: { in: [] } };
+  if (!userId || (role && !isWorkforceRole(role))) return { id: { in: [] } };
   if (PRIVILEGED_ROLES.has(String(role || ''))) return null;
   return {
     OR: [
@@ -77,7 +78,7 @@ function isCaseManager(
 
 export async function userCanReadCase(req: Request, caseId: string): Promise<boolean | null> {
   const user = req.user;
-  if (!user?.userId) {
+  if (!user?.userId || !isWorkforceRole(user.role)) {
     return false;
   }
 
