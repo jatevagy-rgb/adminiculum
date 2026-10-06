@@ -54,7 +54,8 @@ test("1. Default /clients/[id]/grow renders the operational Grow workbench", () 
   // The methodology-led GrowJourney is no longer the default landing; the
   // seven-tab operational workbench is. GrowJourney stays reachable through the
   // legacy `?view=journey` deep link.
-  assert.match(pageSrc, /<GrowWorkbench\s+clientId=\{client\.id\}\s+clientName=\{client\.name\}\s+activeTab=\{activeTab\}\s*\/>/);
+  assert.match(pageSrc, /<GrowWorkbench\s+clientId=\{client\.id\}\s+clientName=\{client\.name\}\s+activeTab=\{activeTab\}\s+requestedOpportunityId=\{opportunityId\}\s*\/>/);
+  assert.match(pageSrc, /searchParams\.get\("opportunity"\)/);
   assert.match(pageSrc, /<GrowJourney clientId=\{client\.id\} clientName=\{client\.name\} \/>/);
   assert.match(pageSrc, /return "attekintes"/);
 });

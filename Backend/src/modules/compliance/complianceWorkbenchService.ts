@@ -20,6 +20,7 @@ export interface WorkbenchRow {
   readOnly: boolean;
   reason: string | null;
   action: 'REQUIREMENTS' | 'SUBMISSION_REVIEW' | 'EVIDENCE_REVIEW' | 'PROPOSAL_REVIEW' | 'SOURCE_REVIEW' | 'IMPACT_DECISION';
+  target?: { applicabilityId: string; factKey: string };
   source?: { observationId: string; legalSourceId: string; legalSourceVersionId: string; versionKey: string; sourceKey: string; event: string; reviewedNote: string | null; revision: string; requirementVersions: Array<{ id: string; title: string }>; proposals: Array<{ id: string; title: string }>; decision: { kind: string; note: string; decidedAt: string; result: { caseId?: string; taskId?: string; requirementVersionId?: string } } | null };
 }
 const LIMIT = 50;
@@ -52,7 +53,7 @@ export async function getClientComplianceWorkbench(actor: InternalActor, clientI
   const rows: WorkbenchRow[] = [];
   const base = (kind: WorkbenchRow['kind'], sourceId: string, title: string, status: string, action: WorkbenchRow['action']): WorkbenchRow => ({ id: `${kind}:${sourceId}`, kind, sourceId, clientId, title, status, action, caseId: null, subject: null, since: null, dueAt: null, ownerId: null, readOnly: false, reason: null });
   const missing = workspace.areas.flatMap(area => area.missingFacts.map(fact => ({ area, fact })));
-  for (const { area, fact } of missing.slice(0, LIMIT)) rows.push({ ...base('MISSING_FACT', `${area.applicabilityId}:${fact.factKey}`, `${area.title} — ${fact.label || fact.factKey}`, area.outcome, 'REQUIREMENTS'), subject: area.subjectLabel, since: area.evaluationAt });
+  for (const { area, fact } of missing.slice(0, LIMIT)) rows.push({ ...base('MISSING_FACT', `${area.applicabilityId}:${fact.factKey}`, `${area.title} — ${fact.label || 'További vállalati adat szükséges'}`, area.outcome, 'REQUIREMENTS'), target: { applicabilityId: area.applicabilityId, factKey: fact.factKey }, subject: area.subjectLabel, since: area.evaluationAt });
   for (const s of submissions.slice(0, LIMIT)) rows.push({ ...base('SUBMISSION', s.id, s.request.clientSafeTitle, s.status, 'SUBMISSION_REVIEW'), caseId: s.caseId, since: (s.submittedAt ?? s.createdAt).toISOString(), dueAt: s.request.dueAt?.toISOString() ?? null, readOnly: s.status === 'CORRECTION_REQUESTED', reason: s.status === 'CORRECTION_REQUESTED' ? 'AWAITING_CUSTOMER_CORRECTION' : null });
   for (const e of evidence.slice(0, LIMIT)) {
     let caseId: string | null = null;

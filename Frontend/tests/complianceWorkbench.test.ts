@@ -61,6 +61,34 @@ test('failed workbench request is not presented as an empty or successful list',
   assert.doesNotMatch(textOf(tree), /Nincs rögzített döntési teendő/);
 });
 
+test('missing-fact CTA passes exact applicability and fact identity without mutating', async () => {
+  const navigations: any[] = [];
+  const target = { applicabilityId: 'app-a', factKey: 'fact-a' };
+  const missingRow = { ...row, id: 'missing-a', kind: 'MISSING_FACT', source: undefined, action: 'REQUIREMENTS', target, title: 'Requirement — További vállalati adat szükséges' };
+  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: async () => model('A', [missingRow]) } } });
+  const props = { clientId: 'A', onNavigate: (...args: any[]) => navigations.push(args), onChanged() {} };
+  h.commit(props); await settle();
+  const tree = h.commit(props);
+  nodes(tree, 'button').find(n => textOf(n) === 'Követelmény és adatbekérés megnyitása')!.props.onClick();
+  assert.deepEqual(navigations, [['requirements', target]]);
+  assert.doesNotMatch(textOf(tree), /fact-a|app-a/);
+});
+
+test('missing-fact CTA rejects a cross-client row and a targetless row', async () => {
+  const navigations: any[] = [];
+  const rows = [
+    { ...row, id: 'cross', kind: 'MISSING_FACT', source: undefined, action: 'REQUIREMENTS', target: { applicabilityId: 'other-app', factKey: 'secret-fact' }, clientId: 'B' },
+    { ...row, id: 'targetless', kind: 'MISSING_FACT', source: undefined, action: 'REQUIREMENTS', target: undefined },
+  ];
+  const h = createRaceHarness(file, 'ComplianceWorkbench', { '@/lib/complianceWorkbenchPresentation': presentation, '@/lib/complianceWorkbenchApi': { complianceWorkbenchApi: { get: async () => model('A', rows) } } });
+  const props = { clientId: 'A', onNavigate: (...args: any[]) => navigations.push(args), onChanged() {} };
+  h.commit(props); await settle();
+  const tree = h.commit(props);
+  for (const button of nodes(tree, 'button').filter(n => textOf(n) === 'Követelmény és adatbekérés megnyitása')) button.props.onClick();
+  assert.deepEqual(navigations, []);
+  assert.ok(flatten(h.commit(props)).some(n => n.props?.role === 'alert'));
+});
+
 test('internal client page mounts the workbench without changing customer Compliance', () => {
   const page = readFileSync('src/app/clients/[clientId]/compliance/page.tsx', 'utf8');
   assert.match(page, /ComplianceWorkbench key=\{client.id\}/);

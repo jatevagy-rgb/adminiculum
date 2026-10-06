@@ -39,12 +39,18 @@ describe("Checkpoint E1 — company runtime", () => {
     assert.doesNotMatch(src, /getPortalOrganizationCases|getPortalOrganizationSummary/);
   });
 
-  it("4. organization summary 403 remains fail-closed", () => {
+  it("4. organization summary 403 renders a truthful, recoverable restricted-access state", () => {
     const src = companyV3();
-    assert.match(src, /ApiError/);
-    assert.match(src, /\[401, 403, 404\]/);
-    assert.match(src, /setDenied\(true\)/);
-    assert.match(src, /Ez a tartalom nem érhető el ezen az ügyfélfelületen\./);
+    // The known organization summary-scope denial is classified by code, not by a blanket status list.
+    assert.match(src, /failure instanceof ApiError/);
+    assert.match(src, /failure\.status === 403 && failure\.code === RESTRICTED_SCOPE_CODE/);
+    assert.match(src, /RESTRICTED_SCOPE_CODE = "CLIENT_SUMMARY_SCOPE_FORBIDDEN"/);
+    assert.match(src, /testId="portal-company-restricted"/);
+    assert.match(src, /A vállalati áttekintés a jelenlegi hozzáférésével nem érhető el\./);
+    assert.match(src, /Vissza az áttekintéshez/);
+    assert.match(src, /href="\/portal"/);
+    // The old blanket 401/403/404 collapse is gone.
+    assert.doesNotMatch(src, /\[401, 403, 404\]/);
     // The backend gate is untouched: ORGANIZATION mode + summary scope.
     const backend = read("../Backend/src/modules/client-workspace/orgCompanyService.ts");
     assert.match(backend, /canViewOrganizationSummary/);

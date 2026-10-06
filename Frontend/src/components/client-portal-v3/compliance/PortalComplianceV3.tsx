@@ -655,6 +655,19 @@ export function PortalComplianceV3() {
     if (next !== current) router.push(next, { scroll: false });
   }, [pathname, router, searchString]);
 
+  // Selecting an existing portal-answerable question inside the current topic is
+  // a real framework navigation: the canonical `question` search param becomes
+  // the selected question while the current topic is preserved. The rendered
+  // question and the URL identity stay in sync, so refresh, Back and Forward all
+  // resolve the same question. Nothing is answered or submitted here.
+  const applyQuestionSelection = useCallback((questionKey: string) => {
+    if (!selectedTopicId) return;
+    const nextSearch = withComplianceTarget(searchString, selectedTopicId, questionKey);
+    const next = `${pathname}${nextSearch}`;
+    const current = `${pathname}${searchString ? `?${searchString}` : ""}`;
+    if (next !== current) router.push(next, { scroll: false });
+  }, [pathname, router, searchString, selectedTopicId]);
+
   if (loading) {
     return (
       <div aria-label="Megfelelés betöltése" data-testid="portal-compliance-loading" className="space-y-3">
@@ -709,6 +722,7 @@ export function PortalComplianceV3() {
                 setActiveQuestionKey(questionKey);
                 setAnswerInput("");
                 setActionError(null);
+                applyQuestionSelection(questionKey);
               }}
               onAnswerChange={setAnswerInput}
               onSave={handleSaveAnswer}

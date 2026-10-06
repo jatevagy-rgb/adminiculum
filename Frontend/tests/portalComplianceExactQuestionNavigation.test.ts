@@ -169,3 +169,79 @@ describe("PortalComplianceV3 follows the framework search params", () => {
     assert.doesNotMatch(src, /truncate text-sm font-semibold text-\[var\(--adm-text-primary\)\]/);
   });
 });
+
+describe("UX-02 same-topic question selection syncs the canonical URL", () => {
+  const syncTopic = topic({
+    topicId: "portal/nis2-scope",
+    missingInformation: [
+      missing({ questionKey: "company_employee_count" }),
+      missing({ label: "Hatókörbe tartozó szolgáltatások", questionKey: "company_services", valueType: "STRING" }),
+    ],
+  });
+  const INITIAL_A = "topic=portal%2Fnis2-scope&question=company_employee_count";
+
+  it("keeps the topic and replaces only the question when selecting A -> B", () => {
+    const next = withComplianceTarget(INITIAL_A, syncTopic.topicId, "company_services");
+    assert.equal(next, "?topic=portal%2Fnis2-scope&question=company_services");
+    assert.equal(readTopicParam(next), syncTopic.topicId);
+    assert.equal(readQuestionParam(next), "company_services");
+  });
+
+  it("resolves the selected same-topic question exactly and invents no fallback", () => {
+    assert.equal(resolvePortalAnswerableQuestionKey(syncTopic, "company_services"), "company_services");
+    assert.equal(resolvePortalAnswerableQuestionKey(syncTopic, "company_employee_count"), "company_employee_count");
+    assert.equal(resolvePortalAnswerableQuestionKey(syncTopic, "stale_question"), null);
+  });
+
+  it("retains B across a refresh and restores A/B across Back and Forward", () => {
+    const bSearch = withComplianceTarget(INITIAL_A, syncTopic.topicId, "company_services");
+    // Refresh parses the same search string it wrote.
+    assert.equal(readQuestionParam(bSearch), "company_services");
+    assert.equal(resolvePortalAnswerableQuestionKey(syncTopic, readQuestionParam(bSearch)), "company_services");
+    // Back restores the previous history entry, Forward re-applies B.
+    assert.equal(readQuestionParam(`?${INITIAL_A}`), "company_employee_count");
+    assert.equal(resolvePortalAnswerableQuestionKey(syncTopic, readQuestionParam(`?${INITIAL_A}`)), "company_employee_count");
+    assert.equal(readQuestionParam(bSearch), "company_services");
+  });
+
+  it("navigates the same-topic question selection through the canonical router builder", () => {
+    const src = v3Source();
+    assert.match(src, /const applyQuestionSelection = useCallback\(\(questionKey: string\) => \{/);
+    assert.match(src, /withComplianceTarget\(searchString, selectedTopicId, questionKey\)/);
+    assert.match(src, /applyQuestionSelection\(questionKey\)/);
+    // Same-topic selection must create a real history entry so Back/Forward work.
+    const helper = src.slice(src.indexOf("const applyQuestionSelection"));
+    const body = helper.slice(0, helper.indexOf("if (loading)"));
+    assert.match(body, /router\.push\(next, \{ scroll: false \}\)/);
+    assert.doesNotMatch(body, /router\.replace\(/);
+    assert.doesNotMatch(body, /window\.location/);
+  });
+
+  it("still clears the answered question with replace so Back/Forward are preserved", () => {
+    const src = v3Source();
+    assert.match(src, /const clearQuestionTarget = useCallback\(\(\) => \{/);
+    assert.match(src, /withComplianceTarget\(searchString, selectedTopicId, null\)/);
+    assert.match(src, /router\.replace\(`\$\{pathname\}\$\{withComplianceTarget\(searchString, selectedTopicId, null\)\}`, \{ scroll: false \}\)/);
+    const clears = src.match(/clearQuestionTarget\(\)/g) ?? [];
+    assert.equal(clears.length, 2, "both the save and mark-unknown handlers clear the target");
+  });
+
+  it("never submits or changes persistence when a question is selected", () => {
+    const src = v3Source();
+    const selectionStart = src.indexOf("const applyQuestionSelection");
+    const selectionBody = src.slice(selectionStart, src.indexOf("if (loading)", selectionStart));
+    assert.doesNotMatch(selectionBody, /answerPortalCompanyProfileQuestion/);
+    assert.doesNotMatch(selectionBody, /buildAnswerPayload/);
+    const answerCalls = src.match(/answerPortalCompanyProfileQuestion\(/g) ?? [];
+    assert.equal(answerCalls.length, 2, "selection adds no answer submission path");
+  });
+
+  it("leaves the existing Action Center href semantics unchanged", () => {
+    const src = v3Source();
+    assert.match(src, /href: complianceTargetHref\(topic\.topicId, answerable\[0\]\?\.questionKey\)/);
+    assert.equal(
+      complianceTargetHref("portal/nis2-scope", "company_employee_count"),
+      "/portal/megfeleles?topic=portal%2Fnis2-scope&question=company_employee_count",
+    );
+  });
+});

@@ -101,10 +101,12 @@ export function GrowWorkbench({
   clientId,
   clientName,
   activeTab,
+  requestedOpportunityId = null,
 }: {
   clientId: string;
   clientName: string;
   activeTab: GrowWorkbenchTab;
+  requestedOpportunityId?: string | null;
 }) {
   const [opportunities, setOpportunities] = useState<GrowOpportunityItem[]>([]);
   const [evidence, setEvidence] = useState<GrowEvidenceItem[]>([]);
@@ -112,6 +114,7 @@ export function GrowWorkbench({
   const [processes, setProcesses] = useState<BusinessProcessDTO[]>([]);
   const [initiatives, setInitiatives] = useState<DevelopmentInitiative[]>([]);
   const [milestones, setMilestones] = useState<CompanyMilestone[]>([]);
+  const [opportunitiesLoadFailed, setOpportunitiesLoadFailed] = useState(false);
   const [canRunResearch, setCanRunResearch] = useState(false);
   const [canRecordOutcome, setCanRecordOutcome] = useState(false);
   const [profileState, setProfileState] = useState<{
@@ -151,9 +154,12 @@ export function GrowWorkbench({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setOpportunitiesLoadFailed(false);
     try {
       const [oppRes, evRes, outRes, processRes, initRes, milestoneRes, profileRes] = await Promise.all([
-        growApi.listOpportunities(clientId).catch(() => ({ items: [] as GrowOpportunityItem[] })),
+        growApi.listOpportunities(clientId)
+          .then((result) => ({ result, failed: false }))
+          .catch(() => ({ result: { items: [] as GrowOpportunityItem[] }, failed: true })),
         growApi.listEvidence(clientId).catch(() => ({ items: [] as GrowEvidenceItem[] })),
         growApi.listOutcomes(clientId).catch(() => ({ items: [] as OutcomeMeasurementDTO[] })),
         growApi.listProcesses(clientId).catch(() => [] as BusinessProcessDTO[]),
@@ -161,7 +167,8 @@ export function GrowWorkbench({
         clientCompanyApi.listMilestones(clientId).catch(() => ({ items: [] as CompanyMilestone[] })),
         clientCompanyApi.getProfile(clientId).catch(() => null),
       ]);
-      setOpportunities(oppRes.items);
+      setOpportunities(oppRes.result.items);
+      setOpportunitiesLoadFailed(oppRes.failed);
       setEvidence(evRes.items);
       setOutcomes(outRes.items);
       setProcesses(processRes);
@@ -272,6 +279,8 @@ export function GrowWorkbench({
           clientId={clientId}
           opportunities={opportunities}
           recommendations={recommendations}
+          requestedOpportunityId={requestedOpportunityId}
+          opportunitiesLoadFailed={opportunitiesLoadFailed}
           onChanged={() => void load()}
         />
       ) : null}
@@ -748,16 +757,28 @@ function GrowDecisionsTab({
   clientId,
   opportunities,
   recommendations,
+  requestedOpportunityId,
+  opportunitiesLoadFailed,
   onChanged,
 }: {
   clientId: string;
   opportunities: GrowOpportunityItem[];
   recommendations: Array<{ id: string; title: string; direction: string; status: string; sufficiency: string; diagnosisId: string | null; domain: { key: string; name: string } | null; businessProcess: { id: string; name: string } | null }>;
+  requestedOpportunityId: string | null;
+  opportunitiesLoadFailed: boolean;
   onChanged: () => void;
 }) {
   const pending = opportunities.filter((o) => o.status === "PENDING_REVIEW");
   const accepted = opportunities.filter((o) => o.status === "ACCEPTED" || o.opportunity);
   const declined = opportunities.filter((o) => o.status === "DECLINED" || o.status === "NEEDS_MORE_DATA");
+  const requestedOpportunity = opportunities.find((o) => o.id === requestedOpportunityId);
+
+  useEffect(() => {
+    if (!requestedOpportunity) return;
+    const row = document.getElementById(`grow-opportunity-${encodeURIComponent(requestedOpportunity.id)}`);
+    row?.scrollIntoView({ block: "center", behavior: "smooth" });
+    row?.focus({ preventScroll: true });
+  }, [requestedOpportunity]);
 
   return (
     <div className="space-y-5" data-testid="grow-decisions-tab">
@@ -765,6 +786,16 @@ function GrowDecisionsTab({
         title="Döntések"
         subtitle="A rendszer javasol — az ember dönt. Elfogadás után jön létre a fejlesztési lehetőség, külön lépésben."
       />
+
+      {requestedOpportunityId && opportunitiesLoadFailed ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900" role="alert" data-testid="grow-opportunity-check-failed">
+          A kért lehetőség elérhetőségét most nem sikerült ellenőrizni. Próbálja újra később.
+        </p>
+      ) : requestedOpportunityId && !requestedOpportunity ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status" data-testid="grow-opportunity-unavailable">
+          A kért lehetőség nem érhető el ennél az ügyfélnél. Lehet, hogy már nem hozzáférhető vagy nem ehhez az ügyfélhez tartozik.
+        </p>
+      ) : null}
 
       <AdminPanel data-testid="grow-decisions-pending">
         <AdminSectionHeader
@@ -776,7 +807,7 @@ function GrowDecisionsTab({
         ) : (
           <ul className="divide-y divide-[var(--adm-border)]">
             {pending.map((o) => (
-              <GrowDecisionRow key={o.id} clientId={clientId} item={o} rec={recommendations.find((r) => r.id === o.id)} onChanged={onChanged} />
+              <GrowDecisionRow key={o.id} clientId={clientId} item={o} rec={recommendations.find((r) => r.id === o.id)} isDeepLinkTarget={o.id === requestedOpportunityId} onChanged={onChanged} />
             ))}
           </ul>
         )}
@@ -787,9 +818,10 @@ function GrowDecisionsTab({
           <AdminSectionHeader title="Elfogadott — fejlesztési lehetőség" subtitle="Emberi döntés után; a kezdeményezés külön lépés." />
           <ul className="divide-y divide-[var(--adm-border)]">
             {accepted.map((o) => (
-              <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+              <li key={o.id} id={`grow-opportunity-${encodeURIComponent(o.id)}`} tabIndex={-1} data-testid={`grow-decision-${o.id}`} className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 outline-none ${o.id === requestedOpportunityId ? "rounded-md ring-2 ring-[var(--adm-green-800)] ring-offset-2" : ""}`}>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-[var(--adm-text)]">{o.title}</p>
+                  {o.id === requestedOpportunityId ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]">Kért lehetőség</p> : null}
                   <p className="text-[11px] text-[var(--adm-text-muted)]">
                     {reviewDecisionLabelHu(o.status)}
                     {o.opportunity?.developmentInitiativeId ? " · kezdeményezés indítva" : " · kezdeményezés még nem indult"}
@@ -807,8 +839,11 @@ function GrowDecisionsTab({
           <AdminSectionHeader title="Elutasított / több adatot igénylő" subtitle="Korábbi döntések." />
           <ul className="divide-y divide-[var(--adm-border)]">
             {declined.map((o) => (
-              <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <p className="min-w-0 flex-1 text-[13px] text-[var(--adm-text)]">{o.title}</p>
+              <li key={o.id} id={`grow-opportunity-${encodeURIComponent(o.id)}`} tabIndex={-1} data-testid={`grow-decision-${o.id}`} className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 outline-none ${o.id === requestedOpportunityId ? "rounded-md ring-2 ring-[var(--adm-green-800)] ring-offset-2" : ""}`}>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] text-[var(--adm-text)]">{o.title}</p>
+                  {o.id === requestedOpportunityId ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]">Kért lehetőség</p> : null}
+                </div>
                 <AdminStatusPill tone={o.status === "DECLINED" ? "burgundy" : "amber"}>{reviewDecisionLabelHu(o.status)}</AdminStatusPill>
               </li>
             ))}
@@ -823,11 +858,13 @@ function GrowDecisionRow({
   clientId,
   item,
   rec,
+  isDeepLinkTarget,
   onChanged,
 }: {
   clientId: string;
   item: GrowOpportunityItem;
   rec: { id: string; title: string; direction: string; status: string; sufficiency: string; diagnosisId: string | null; domain: { key: string; name: string } | null; businessProcess: { id: string; name: string } | null } | undefined;
+  isDeepLinkTarget: boolean;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -858,10 +895,11 @@ function GrowDecisionRow({
   };
 
   return (
-    <li className="px-4 py-3">
+    <li id={`grow-opportunity-${encodeURIComponent(item.id)}`} tabIndex={-1} data-testid={`grow-decision-${item.id}`} className={`px-4 py-3 outline-none ${isDeepLinkTarget ? "rounded-md ring-2 ring-[var(--adm-green-800)] ring-offset-2" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-[var(--adm-text)]">{item.title}</p>
+          {isDeepLinkTarget ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]">Kért lehetőség</p> : null}
           <p className="text-[11px] text-[var(--adm-text-muted)]">
             {domainTitleHu(item.domainKey)}
             {item.businessProcess ? ` · ${item.businessProcess.name}` : ""}
@@ -880,7 +918,7 @@ function GrowDecisionRow({
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        {showControls ? (
+        {showControls || isDeepLinkTarget ? (
           <>
             <input
               value={note}

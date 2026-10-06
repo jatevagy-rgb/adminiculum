@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
@@ -211,10 +211,14 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function WorkspaceAreaRow({ area, cases, clients }: { area: ComplianceWorkspaceArea; cases: CaseListItem[]; clients: Client[] }) {
+function WorkspaceAreaRow({ area, cases, clients, focusedFactKey }: { area: ComplianceWorkspaceArea; cases: CaseListItem[]; clients: Client[]; focusedFactKey?: string }) {
   const [open, setOpen] = useState(false);
+  const factItemId = useId();
+  const focusedFactRef = useRef<HTMLLIElement>(null);
   const outcome = area.outcome as ComplianceApplicabilityStatus;
   const citations = area.citations;
+  useEffect(() => { setOpen(Boolean(focusedFactKey)); }, [focusedFactKey]);
+  useEffect(() => { if (open && focusedFactKey) focusedFactRef.current?.focus(); }, [open, focusedFactKey]);
   const locatorText = (c: ComplianceWorkspaceArea["citations"][number]) =>
     [c.article, c.section, c.paragraph, c.locator, c.versionLabel].filter(Boolean).join(" · ");
   return (
@@ -276,7 +280,7 @@ function WorkspaceAreaRow({ area, cases, clients }: { area: ComplianceWorkspaceA
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--adm-text-muted)]">Hiányzó adatok</p>
               <ul className="mt-1 space-y-1">
                 {area.missingFacts.map((fact) => (
-                  <li key={fact.factKey} className="text-xs text-[var(--adm-text)]">
+                  <li key={fact.factKey} ref={fact.factKey === focusedFactKey ? focusedFactRef : undefined} id={fact.factKey === focusedFactKey ? factItemId : undefined} tabIndex={fact.factKey === focusedFactKey ? -1 : undefined} className="text-xs text-[var(--adm-text)]">
                     {fact.label || "További vállalati adat szükséges"}
                     {fact.profileAnswerable ? (
                       <span className="ml-1 text-[var(--adm-text-muted)]">— a meglévő vállalati profil felületen adható meg.</span>
@@ -351,6 +355,7 @@ export default function ClientCompliancePage() {
   const [modeError, setModeError] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
   const [view, setView] = useState<ComplianceView>("status");
+  const [requirementsTarget, setRequirementsTarget] = useState<{ clientId: string; applicabilityId: string; factKey: string } | null>(null);
   const [clientCases, setClientCases] = useState<CaseListItem[]>([]);
   const [complianceFindings, setComplianceFindings] = useState<ComplianceFindingView[]>([]);
   const [complianceError, setComplianceError] = useState<string | null>(null);
@@ -366,6 +371,7 @@ export default function ClientCompliancePage() {
 
   useEffect(() => {
     if (!clientId) return;
+    setRequirementsTarget(null);
     const generation = route.generation;
     // Never let the previous client's identity/mode/cases survive into the new route.
     setError(false);
@@ -524,6 +530,12 @@ export default function ClientCompliancePage() {
     [complianceFindings],
   );
 
+  const targetClientMatches = requirementsTarget?.clientId === clientId;
+  const targetArea = targetClientMatches && workspace
+    ? workspace.areas.find((area) => area.applicabilityId === requirementsTarget.applicabilityId && area.missingFacts.some((fact) => fact.factKey === requirementsTarget.factKey))
+    : undefined;
+  const targetUnavailable = Boolean(requirementsTarget && !workspaceLoading && (!targetClientMatches || workspaceError || !targetArea));
+
   const tabClass = (active: boolean) =>
     `rounded-[var(--adm-radius-sm)] px-3 py-1.5 text-[12px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)] ${
       active ? "bg-[var(--adm-green-800)] text-white" : "text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
@@ -612,7 +624,7 @@ export default function ClientCompliancePage() {
                         role="tab"
                         aria-selected={view === key}
                         className={tabClass(view === key)}
-                        onClick={() => setView(key)}
+                        onClick={() => { setRequirementsTarget(null); setView(key); }}
                       >
                         {complianceViewLabels[key]}
                       </button>
@@ -778,10 +790,14 @@ export default function ClientCompliancePage() {
                   ) : null}
 
                   {view === "requirements" ? (
-                    !workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
+                    requirementsTarget && workspaceLoading ? (
+                      <Section title="Megfelelőségi területek"><p role="status" className="text-sm text-[var(--adm-text-muted)]">A kijelölt adat ellenőrzése…</p></Section>
+                    ) : targetUnavailable ? (
+                      <Section title="Megfelelőségi területek"><p role="alert" className="text-sm text-[var(--adm-text-muted)]">A kijelölt követelmény vagy hiányzó adat már nem érhető el ennél az ügyfélnél. Másik tétel nem lett kiválasztva.</p></Section>
+                    ) : !workspaceLoading && !workspaceError && workspace && workspace.areas.length ? (
                       <Section title="Megfelelőségi területek">
                         <ul className="space-y-2">
-                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} cases={clientCases} clients={client ? [client] : []} />)}
+                          {workspace.areas.map((area) => <WorkspaceAreaRow key={area.applicabilityId} area={area} cases={clientCases} clients={client ? [client] : []} focusedFactKey={area.applicabilityId === requirementsTarget?.applicabilityId && targetArea ? requirementsTarget.factKey : undefined} />)}
                         </ul>
                       </Section>
                     ) : (
@@ -795,7 +811,11 @@ export default function ClientCompliancePage() {
                     )
                   ) : null}
 
-                  {view === "workbench" ? <ComplianceWorkbench key={client.id} clientId={client.id} onNavigate={setView} onChanged={() => { void loadCompliance(); void loadWorkspace(); }} /> : null}
+                  {view === "workbench" ? <ComplianceWorkbench key={client.id} clientId={client.id} onNavigate={(nextView, target) => {
+                    if (nextView === "requirements" && target) setRequirementsTarget({ clientId, ...target });
+                    else setRequirementsTarget(null);
+                    setView(nextView);
+                  }} onChanged={() => { void loadCompliance(); void loadWorkspace(); }} /> : null}
 
                   {view === "documents" ? (
                     <Section title="Compliance dokumentumok">

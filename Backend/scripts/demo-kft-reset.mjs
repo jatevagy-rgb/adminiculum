@@ -540,7 +540,11 @@ async function seed(db) {
   // 13. Document metadata (NO live storage claim — storageReference/spItemId stay null).
   await db.document.upsert({
     where: { id: IDS.docEmploymentId },
-    update: {},
+    update: {
+      currentVersion: 2,
+      currentVersionInt: 2,
+      version: '2',
+    },
     create: {
       id: IDS.docEmploymentId,
       name: 'Munkaszerződés_minta.docx',
@@ -558,6 +562,9 @@ async function seed(db) {
       workInstruction: 'Első körös felülvizsgálat, problémás kikötések jelölése.',
       nextStep: 'Felelős ügyvédi jóváhagyás',
       isLatest: true,
+      currentVersion: 2,
+      currentVersionInt: 2,
+      version: '2',
     },
   });
   // Immutable metadata-only versions (no storage assertion).

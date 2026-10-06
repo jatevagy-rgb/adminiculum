@@ -6,7 +6,7 @@
 const prismaMock: any = {
   document: { findUnique: jest.fn(), update: jest.fn() },
   documentTaskLink: { findMany: jest.fn(), findFirst: jest.fn(), create: jest.fn(), delete: jest.fn() },
-  documentVersion: { update: jest.fn(), updateMany: jest.fn() },
+  documentVersion: { findFirst: jest.fn(), findMany: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
   task: { findUnique: jest.fn() },
   user: { findUnique: jest.fn() },
   case: { findUnique: jest.fn() },
@@ -55,6 +55,8 @@ beforeEach(() => {
   prismaMock.documentTaskLink.findMany.mockResolvedValue([]);
   prismaMock.documentTaskLink.findFirst.mockResolvedValue(null);
   prismaMock.communication.findUnique.mockResolvedValue(null);
+  prismaMock.documentVersion.findFirst.mockResolvedValue(null);
+  prismaMock.documentVersion.findMany.mockResolvedValue([]);
 });
 
 describe('authorization', () => {
@@ -274,5 +276,59 @@ describe('task -> documents (the reverse direction)', () => {
     prismaMock.task.findUnique.mockResolvedValue({ id: 't1', caseId: CASE });
     auth.read.mockResolvedValue(false);
     await expect(listTaskDocuments(req, 't1')).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe('canonical current version identity (UX-06)', () => {
+  it('reports the canonical isCurrent version over a stale parent mirror', async () => {
+    prismaMock.document.findUnique.mockResolvedValue(documentRow({ currentVersion: 1 }));
+    prismaMock.documentVersion.findFirst.mockResolvedValue({ version: 2 });
+    const card = await getDocumentWorkContext(req, DOC);
+    expect(card.currentVersion).toBe(2);
+  });
+
+  it('falls back to the highest version when no isCurrent row exists', async () => {
+    prismaMock.document.findUnique.mockResolvedValue(documentRow({ currentVersion: 1 }));
+    prismaMock.documentVersion.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ version: 2 });
+    const card = await getDocumentWorkContext(req, DOC);
+    expect(card.currentVersion).toBe(2);
+  });
+
+  it('reports the synchronized version when parent and canonical agree', async () => {
+    prismaMock.document.findUnique.mockResolvedValue(documentRow({ currentVersion: 1 }));
+    prismaMock.documentVersion.findFirst.mockResolvedValue({ version: 1 });
+    const card = await getDocumentWorkContext(req, DOC);
+    expect(card.currentVersion).toBe(1);
+  });
+
+  it('reports a promoted older version as the current version', async () => {
+    prismaMock.document.findUnique.mockResolvedValue(documentRow({ currentVersion: 2 }));
+    prismaMock.documentVersion.findFirst.mockResolvedValue({ version: 1 });
+    const card = await getDocumentWorkContext(req, DOC);
+    expect(card.currentVersion).toBe(1);
+  });
+
+  it('keeps the parent value for a document with no version rows', async () => {
+    prismaMock.document.findUnique.mockResolvedValue(documentRow({ currentVersion: 3 }));
+    prismaMock.documentVersion.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    const card = await getDocumentWorkContext(req, DOC);
+    expect(card.currentVersion).toBe(3);
+  });
+
+  it('uses canonical version rows over the parent mirror for task-linked documents', async () => {
+    prismaMock.task.findUnique.mockResolvedValue({ id: 't1', caseId: CASE });
+    prismaMock.documentTaskLink.findMany.mockResolvedValue([
+      { id: 'l1', note: null, createdAt: new Date(), document: {
+        id: DOC, name: 'a.docx', fileName: 'a.docx', title: 'Szerződés', workStatus: 'IN_PROGRESS',
+        documentRole: 'DRAFT_CONTRACT', dueDate: null, currentVersion: 1,
+        responsible: { id: 'u2', name: 'Nagy Anna' }, reviewer: null } },
+    ]);
+    prismaMock.documentVersion.findMany.mockResolvedValue([
+      { documentId: DOC, version: 2, isCurrent: true },
+    ]);
+    const res = await listTaskDocuments(req, 't1');
+    expect(res.documents[0].currentVersion).toBe(2);
   });
 });
