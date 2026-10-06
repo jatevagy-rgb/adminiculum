@@ -185,7 +185,7 @@ test("narrow viewport exposes the rail as a bounded drawer", () => {
   assert.match(source, /lg:hidden/);
   assert.match(source, /<DocumentReaderRailDrawer/);
   assert.match(drawerSource, /document-reader-rail-drawer/);
-  assert.match(drawerSource, /w-\[min\(92vw,380px\)\]/, "the drawer must be width-bounded to avoid horizontal overflow");
+  assert.match(drawerSource, /maxWidth="max-w-md"/, "the drawer must be width-bounded to avoid horizontal overflow");
   assert.match(source, /min-w-0/, "the reader columns must allow shrinking");
 });
 

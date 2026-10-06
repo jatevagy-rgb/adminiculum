@@ -1,9 +1,7 @@
 "use client";
-
-import React, { useId, useRef, type ReactNode, type RefObject } from "react";
-import { IconButton } from "./Button";
-import { useDialogAccessibility } from "./useDialogAccessibility";
-
+import React from "react";
+import type { ReactNode, RefObject } from "react";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
 export interface ModalProps {
   open: boolean;
   onClose: () => void;
@@ -24,87 +22,6 @@ const maxWidthClasses: Record<string, string> = {
   "2xl": "max-w-2xl",
 };
 
-export function Modal({
-  open,
-  onClose,
-  title,
-  description,
-  maxWidth = "xl",
-  children,
-  footer,
-  closeOnOverlayClick = false,
-  initialFocusRef,
-}: ModalProps) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleId = useId();
-  const descriptionId = useId();
-
-  useDialogAccessibility({ open, onClose, dialogRef, initialFocusRef });
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/40 backdrop-blur-sm p-4 animate-fade-in">
-      <div
-        className="fixed inset-0"
-        aria-hidden="true"
-        onClick={closeOnOverlayClick ? onClose : undefined}
-      />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={description ? descriptionId : undefined}
-        tabIndex={-1}
-        className={`relative z-10 w-full rounded-[12px] border border-[#E5E7E6] bg-white shadow-xl max-h-[90vh] flex flex-col outline-none ${maxWidthClasses[maxWidth]}`}
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-[#E5E7E6] px-6 py-4">
-          <div className="min-w-0">
-            <h2 id={titleId} className="font-serif text-xl font-semibold text-[#1F2937] leading-tight">
-              {title}
-            </h2>
-            {description && (
-              <p id={descriptionId} className="mt-1 text-xs text-[#6B7280]">
-                {description}
-              </p>
-            )}
-          </div>
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label="Bezárás"
-            onClick={onClose}
-            className="text-[#6B7280] hover:text-[#1F2937]"
-          >
-            <svg
-              className="h-4 w-4"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </IconButton>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          {children}
-        </div>
-
-        {footer && (
-          <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[#E5E7E6] bg-[#F8FAF9] px-6 py-4 rounded-b-[12px]">
-            {footer}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+export function Modal({ open, onClose, title, description, maxWidth = "xl", children, footer, closeOnOverlayClick = false, initialFocusRef }: ModalProps) {
+  return <ViewportDialog open={open} onClose={onClose} title={title} description={description} maxWidth={maxWidthClasses[maxWidth]} footer={footer} closeOnOverlayClick={closeOnOverlayClick} initialFocusRef={initialFocusRef}>{children}</ViewportDialog>;
 }

@@ -14,8 +14,8 @@ const documentPage = () => read("src/app/cases/[caseId]/documents/page.tsx");
 
 test("Canonical document route uses the normal application shell", () => {
   const source = documentPage();
-  assert.match(source, /<AuthenticatedApp section="case-detail">/);
-  assert.doesNotMatch(source, /<AuthenticatedApp section="case-detail" workspaceChrome="focused">/);
+  assert.match(source, /<AuthenticatedApp section="case-detail" workspaceChrome="focused">/);
+  assert.doesNotMatch(source, /<AuthenticatedApp[^>]*fullViewport/);
 });
 
 test("Canonical four-region workspace layout renders in page.tsx", () => {
@@ -156,7 +156,7 @@ test("Preserved extended tools section keeps all existing workspaces and actions
   assert.match(source, /HandoffPackagePanel/);
   assert.match(source, /AnonymizeModal/);
   assert.match(source, /RehydrateModal/);
-  assert.match(source, /id="ledger-delete-document-title"/);
+  assert.match(source, /<ViewportDialog title="Dokumentum törlése"/);
 });
 
 test("Document workspace presents backend enums with human-readable labels", () => {

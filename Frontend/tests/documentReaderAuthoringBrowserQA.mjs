@@ -26,7 +26,7 @@ import { AUTH_ME } from "./workforceBrowserFixtures.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASE_URL = process.env.QA_BASE_URL || "http://127.0.0.1:3098";
-const SHOTS = path.join(ROOT, "qa-screenshots-document-reader-authoring");
+const SHOTS = path.join(ROOT, "test-results/document-remediation");
 
 const CASE_ID = "qa-reader-case";
 const DOC_ID = "qa-reader-doc";
@@ -555,6 +555,7 @@ async function runCommentScenario(page, label) {
 }
 
 async function runProposalScenario(page, label) {
+  const expectedId = `qa-proposal-${state.proposalCounter + 1}`;
   const metricsBefore = await scrollMetrics(page);
   assert(metricsBefore.scrollTop > 1000, `${label}: precondition — document must be scrolled deeper than 1000px (was ${metricsBefore.scrollTop})`);
 
@@ -574,12 +575,12 @@ async function runProposalScenario(page, label) {
   const typingDrift = Math.abs(metricsAfterTyping.scrollTop - metricsAfterOpen.scrollTop);
 
   await page.locator('[data-testid="proposal-submit"]').click();
-  await page.locator('[data-testid="document-review-margin"] [data-testid="reader-rail-proposal"]').first().waitFor({ state: "visible", timeout: 8000 });
+  await page.locator(`[data-testid="document-review-margin"] [data-rail-item-id="${expectedId}"]`).waitFor({ state: "visible", timeout: 8000 });
   const metricsAfterSave = await scrollMetrics(page);
   const saveDrift = Math.abs(metricsAfterSave.scrollTop - metricsBefore.scrollTop);
 
-  const cardInfo = await page.evaluate(() => {
-    const card = document.querySelector('[data-testid="document-review-margin"] [data-testid="reader-rail-proposal"]');
+  const cardInfo = await page.evaluate((id) => {
+    const card = document.querySelector(`[data-testid="document-review-margin"] [data-rail-item-id="${id}"]`);
     const marginBody = document.querySelector('[data-testid="document-review-margin-body"]');
     if (!card || !marginBody) throw new Error("saved proposal card missing");
     const cardRect = card.getBoundingClientRect();
@@ -589,7 +590,7 @@ async function runProposalScenario(page, label) {
       top: cardRect.top,
       containerTop: cardRect.top - containerRect.top,
     };
-  });
+  }, expectedId);
   const cardProximity = Math.abs(cardInfo.top - selection.rect.top);
   assert(cardInfo.containerTop > 10, `${label}: saved card must not sit at the fallback top:0 (containerTop=${cardInfo.containerTop})`);
 
@@ -799,6 +800,33 @@ async function main() {
     // Scenario 4: full browser reload — every card must resolve to its own anchor.
     const reloaded = await runReloadScenario(page, "reload", state.offsetById);
     console.log(`[reload] ${reloaded.map((entry) => `${entry.id}@${Math.round(entry.cardTop)}~${Math.round(entry.anchorTop)}`).join(" ")}`);
+
+    // The actual reader and portaled rail remain usable on narrow viewports.
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const geometry = await page.locator('[data-testid="document-reader-surface"]').evaluate((node) => {
+        const r = node.getBoundingClientRect();
+        return { width: r.width, top: r.top, viewport: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth };
+      });
+      assert(!geometry.overflow, 'reader page overflows at ' + width);
+      assert(geometry.width >= (width === 390 ? 320 : width === 768 ? 600 : 700), 'reader too narrow: ' + JSON.stringify(geometry));
+      assert(geometry.top < (width === 390 ? 780 : 700), 'reader starts too late: ' + JSON.stringify(geometry));
+      if (width < 1024) {
+        const toggle = page.locator('[data-testid="document-reader-rail-toggle"]');
+        await toggle.click();
+        const drawer = page.locator('[data-testid="document-reader-rail-drawer"]');
+        await drawer.waitFor({ state: 'visible' });
+        const rect = await drawer.boundingBox();
+        assert(rect.y >= 0 && rect.y + rect.height <= (width === 390 ? 844 : 1000), 'rail exceeds viewport');
+        assert(await drawer.evaluate(n => !n.closest('.app-shell-content')), 'rail must be a body portal');
+        await page.keyboard.press('Escape');
+        await drawer.waitFor({ state: 'detached' });
+        assert(await toggle.evaluate(n => n === document.activeElement), 'rail focus must return');
+      }
+      console.log('[responsive-reader] ' + JSON.stringify(geometry));
+      await page.screenshot({ path: path.join(SHOTS, 'reader-' + width + '.png') });
+    }
 
     assert(consoleErrors.length === 0, `page errors: ${consoleErrors.join("; ")}`);
     await context.close();

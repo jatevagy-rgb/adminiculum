@@ -1,4 +1,6 @@
 "use client";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+
 
 /**
  * Leadás handoff (CASE-WORKSPACE-LEADAS-1).
@@ -22,15 +24,6 @@ import {
 } from "@/lib/taskLifecycleApi";
 import { leadasHandoffMode, taskWorkflowErrorMessage } from "@/lib/taskWorkflowPresentation";
 
-const FOCUSABLE_SELECTOR = [
-  "button:not([disabled])",
-  "a[href]",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
-
 export function CaseSubmissionHandoff({
   item,
   onClose,
@@ -46,59 +39,26 @@ export function CaseSubmissionHandoff({
   const [isLoading, setIsLoading] = useState(true);
   const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
-  const priorFocusRef = useRef<HTMLElement | null>(null);
-  const busyRef = useRef(false);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => { busyRef.current = skipping; }, [skipping]);
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
-
+  const generation = useRef(0);
   const load = useCallback(async () => {
+    const request = ++generation.current;
     setIsLoading(true);
     setError(null);
     try {
-      setWorkflow(await readTaskSubmissionWorkflow(item.id));
+      const next = await readTaskSubmissionWorkflow(item.id);
+      if (request === generation.current && next.task.id === item.id) setWorkflow(next);
     } catch (cause) {
-      setError(taskWorkflowErrorMessage(cause));
+      if (request === generation.current) setError(taskWorkflowErrorMessage(cause));
     } finally {
-      setIsLoading(false);
+      if (request === generation.current) setIsLoading(false);
     }
   }, [item.id]);
 
-  useEffect(() => { void load(); }, [load]);
-
-  useEffect(() => {
-    priorFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.querySelector<HTMLElement>(FOCUSABLE_SELECTOR)?.focus();
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busyRef.current) {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !panelRef.current) return;
-      const focusable = Array.from(panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      priorFocusRef.current?.focus();
-    };
-  }, []);
+  useEffect(() => { setWorkflow(null); void load(); return () => { ++generation.current; }; }, [load]);
 
   const skipTime = async () => {
     if (!workflow || skipping) return;
+    const request = generation.current;
     setSkipping(true);
     setError(null);
     try {
@@ -110,41 +70,18 @@ export function CaseSubmissionHandoff({
       if (draft && current.permittedActions.editDraft) {
         await updateTaskSubmissionDraft(item.id, draft.id, { zeroTimeConfirmed: true });
       }
-      onContinue();
+      if (request === generation.current) onContinue();
     } catch (cause) {
-      setError(taskWorkflowErrorMessage(cause));
+      if (request === generation.current) setError(taskWorkflowErrorMessage(cause));
     } finally {
-      setSkipping(false);
+      if (request === generation.current) setSkipping(false);
     }
   };
 
   const mode = leadasHandoffMode(workflow);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30 p-4" role="presentation">
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="case-submission-handoff-title"
-        className="w-full max-w-md rounded-[var(--adm-radius-lg)] border border-[var(--adm-border)] bg-white shadow-2xl"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Leadás</p>
-            <h2 id="case-submission-handoff-title" className="mt-1 truncate font-serif text-[20px] text-[var(--adm-text)]">{item.title}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={skipping}
-            aria-label="Leadás ablak bezárása"
-            className="rounded px-1 text-xl leading-none text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]"
-          >
-            ×
-          </button>
-        </div>
-
+    <ViewportDialog title={"Leadás · " + item.title} onClose={onClose} busy={skipping} maxWidth="max-w-md">
         <div className="space-y-3 px-5 py-4">
           {isLoading ? <CompactState title="A Leadás előkészítése…" /> : null}
 
@@ -191,7 +128,6 @@ export function CaseSubmissionHandoff({
             </>
           ) : null}
         </div>
-      </div>
-    </div>
+    </ViewportDialog>
   );
 }

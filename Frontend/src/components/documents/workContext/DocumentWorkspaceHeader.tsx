@@ -77,7 +77,11 @@ export function DocumentWorkspaceHeader({
         </div>
       </div>
 
-      {view.hasWorkContext ? (
+      {editing && canEdit ? (<DocumentWorkContextEditor
+          card={card}
+          onClose={() => setEditing(false)}
+          onSaved={(next) => { setCard(next); setEditing(false); }}
+        /> ) : view.hasWorkContext ? (
         <div className="mt-2 space-y-2">
           <DocumentWorkInstruction view={view} canEdit={canEdit} onEdit={() => setEditing(true)} />
           <DocumentResponsibilitySummary view={view} />
@@ -100,13 +104,6 @@ export function DocumentWorkspaceHeader({
         <DocumentTechnicalDetails view={view} />
       </div>
 
-      {editing && canEdit ? (
-        <DocumentWorkContextEditor
-          card={card}
-          onClose={() => setEditing(false)}
-          onSaved={(next) => { setCard(next); setEditing(false); }}
-        />
-      ) : null}
       {aiPromptOpen ? (
         <AIPromptPreparationModal
           caseId={caseId}

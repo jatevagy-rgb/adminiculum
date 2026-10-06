@@ -88,7 +88,8 @@ import { HandoffPackagePanel } from "@/components/handoff/HandoffPackagePanel";
 import { ClientHouseStylePanel } from "@/components/clients/ClientHouseStylePanel";
 import { AdminBadge, AdminButton, AdminDocumentRow, AdminPanel, AdminStatusPill } from "@/components/adminiculum/ui";
 import { DocumentWorkspaceHeader as WordDocumentWorkspaceHeader } from "@/components/cases/word-workflow/layout/DocumentWorkspaceHeader";
-import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+import { DocumentInstructionCard } from "@/components/documents/workContext/DocumentInstructionCard";
 import { DocumentWorkspaceHeader } from "@/components/documents/workContext/DocumentWorkspaceHeader";
 import { DocumentWorkspaceTabs, type WorkspaceMode } from "@/components/documents/workContext/DocumentWorkspaceTabs";
 import { DocumentReaderWorkspace } from "@/components/documents/reader/DocumentReaderWorkspace";
@@ -361,7 +362,7 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 export default function WrappedDocumentLedgerPage({ params }: DocumentLedgerPageProps) {
   return (
-    <AuthenticatedApp section="case-detail">
+    <AuthenticatedApp section="case-detail" workspaceChrome="focused">
       <DocumentLedgerContent params={params} />
     </AuthenticatedApp>
   );
@@ -2245,15 +2246,6 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col adm-shell-bg text-[var(--adm-text)] documents-surface">
-      <CaseWorkspaceNav
-        caseId={canonicalCaseId}
-        caseNumber={displayCaseId}
-        title={displayMatterName}
-        clientName={displayClient}
-        activeTab="documents"
-        status={caseRecord?.status}
-      />
-
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <main className="min-w-0 flex-1 overflow-y-auto adm-board-page p-3 sm:p-4 lg:p-5">
           <section className="mx-auto flex w-full max-w-[1540px] min-w-0 flex-col gap-4">
@@ -2273,7 +2265,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             ) : isInitialLoading ? (
               <AdminPanel className="p-10 text-center text-sm text-[var(--adm-text-muted)]">Dokumentumok betöltése...</AdminPanel>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-3">
                 <WordDocumentWorkspaceHeader
                   key={`${canonicalCaseId}:${selectedUploadedDocument?.id || "none"}:${canonicalActiveVersion?.id || "none"}`}
                   caseId={canonicalCaseId}
@@ -2281,6 +2273,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   versionId={canonicalActiveVersion?.id ?? null}
                   versionNumber={canonicalActiveVersion?.versionNumber ?? null}
                 />
+                {activeMode === "document" && selectedUploadedDocument ? <DocumentInstructionCard key={selectedUploadedDocument.id} documentId={selectedUploadedDocument.id} /> : null}
                 {/* 1. CANONICAL TOP REGION — advanced modes only. The default document
                     reader owns its own restrained header (READER-UI-CONVERGENCE). */}
                 {activeMode !== "document" ? (
@@ -2442,15 +2435,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 ) : null}
 
                 {segmentChangeRequest ? (
-                  <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4" role="presentation">
-                    <section role="dialog" aria-modal="true" aria-labelledby="segment-change-request-title" className="w-full max-w-xl rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] p-5 shadow-2xl">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Kanonikus review kérés</p>
-                          <h2 id="segment-change-request-title" className="font-serif text-xl font-semibold text-[var(--adm-text)]">Módosítást kérek</h2>
-                        </div>
-                        <AdminButton variant="neutral" size="xs" onClick={() => setSegmentChangeRequest(null)} disabled={segmentChangeBusy}>Bezárás</AdminButton>
-                      </div>
+                  <ViewportDialog title="Módosítást kérek" onClose={() => setSegmentChangeRequest(null)} busy={segmentChangeBusy} maxWidth="max-w-xl">
                       <div className="mt-3 space-y-3">
                         <div className="rounded border border-[rgba(22,32,26,0.10)] bg-white p-3 text-xs text-[#3D4842]">
                           <p><b>Változás:</b> {segmentChangeRequest.sequence + 1}. · {segmentChangeRequest.baseExcerpt || '—'} → {segmentChangeRequest.targetExcerpt || '—'}</p>
@@ -2470,8 +2455,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </AdminButton>
                         </div>
                       </div>
-                    </section>
-                  </div>
+                  </ViewportDialog>
                 ) : null}
 
                 {/* 2. MODE-DRIVEN WORKSPACE: the default document mode renders the converged
@@ -3895,12 +3879,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
       </div>
 
       {deleteCandidate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="ledger-delete-document-title">
-          <div className="w-full max-w-md rounded-[10px] border border-[var(--adm-border)] bg-white shadow-2xl">
-            <div className="rounded-t-[10px] border-b border-[var(--adm-border)] bg-[#8B2A2A] px-6 py-4">
-              <h2 id="ledger-delete-document-title" className="font-serif text-xl font-semibold text-white">Dokumentum törlése</h2>
-              <p className="mt-1 text-xs text-white/75">Ez a művelet nem vonható vissza.</p>
-            </div>
+        <ViewportDialog title="Dokumentum törlése" description="Ez a művelet nem vonható vissza." onClose={closeDeleteDocumentDialog} busy={isDeletingDocument} maxWidth="max-w-md">
             <div className="space-y-4 p-6">
               <div>
                 <p className="truncate text-sm font-semibold text-[var(--adm-text)]">{deleteCandidate.fileName || 'Névtelen dokumentum'}</p>
@@ -3929,8 +3908,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                 </AdminButton>
               </div>
             </div>
-          </div>
-        </div>
+        </ViewportDialog>
       )}
 
       {/* Anonymize Modal */}

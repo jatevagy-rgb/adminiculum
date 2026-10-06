@@ -18,7 +18,8 @@ describe("B2 modal accessibility closure", () => {
     const hook = read("src/components/ui/useDialogAccessibility.ts");
 
     // The canonical primitive adopts the shared hook instead of a private copy.
-    assert.match(modal, /useDialogAccessibility/);
+    assert.match(modal, /ViewportDialog/);
+    assert.match(read("src/components/ui/ViewportDialog.tsx"), /useDialogAccessibility/);
     assert.doesNotMatch(modal, /addEventListener\("keydown"/);
 
     // Shared semantics: remember opener, move focus in, trap Tab, Escape closes, restore focus.

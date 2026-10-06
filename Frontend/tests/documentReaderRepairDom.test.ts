@@ -218,9 +218,9 @@ test("drawer: focus enters the drawer, Tab stays contained and Escape closes wit
     await render(React.createElement(HarnessComponent));
     await flush();
 
-    const drawer = container.querySelector('[data-testid="document-reader-rail-drawer"]');
-    const closeButton = container.querySelector('[data-testid="document-reader-rail-drawer-close"]');
-    const inside = container.querySelector('[data-testid="inside"]');
+    const drawer = document.querySelector('[data-testid="document-reader-rail-drawer"]');
+    const closeButton = document.querySelector('[data-testid="document-reader-rail-drawer-close"]');
+    const inside = document.querySelector('[data-testid="inside"]');
     assert.ok(drawer && closeButton && inside);
 
     // FOCUS ENTERS the drawer.
@@ -236,7 +236,7 @@ test("drawer: focus enters the drawer, Tab stays contained and Escape closes wit
     await act(() => { window.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); });
     await flush();
     assert.equal(closeCalls, 1, "Escape closes the drawer");
-    assert.equal(container.querySelector('[data-testid="document-reader-rail-drawer"]'), null);
+    assert.equal(document.querySelector('[data-testid="document-reader-rail-drawer"]'), null);
     assert.equal(document.activeElement, container.querySelector('[data-testid="opener"]'), "focus returns to the opener");
   });
 });
@@ -315,15 +315,15 @@ test("reject dialog resets its reason on close and on target change", async () =
       });
 
     await render(view(true, "A"));
-    await act(() => { setTextareaValue(container.querySelector('[data-testid="proposal-reject-reason"]'), "Nem indokolt"); });
-    assert.equal(container.querySelector('[data-testid="proposal-reject-reason"]').value, "Nem indokolt");
+    await act(() => { setTextareaValue(document.querySelector('[data-testid="proposal-reject-reason"]'), "Nem indokolt"); });
+    assert.equal(document.querySelector<HTMLTextAreaElement>('[data-testid="proposal-reject-reason"]')!.value, "Nem indokolt");
 
     await render(view(true, "B"));
-    assert.equal(container.querySelector('[data-testid="proposal-reject-reason"]').value, "", "another proposal starts with an empty reason");
+    assert.equal(document.querySelector<HTMLTextAreaElement>('[data-testid="proposal-reject-reason"]')!.value, "", "another proposal starts with an empty reason");
 
-    await act(() => { setTextareaValue(container.querySelector('[data-testid="proposal-reject-reason"]'), "Új indok"); });
+    await act(() => { setTextareaValue(document.querySelector('[data-testid="proposal-reject-reason"]'), "Új indok"); });
     await render(view(false, "B"));
     await render(view(true, "B"));
-    assert.equal(container.querySelector('[data-testid="proposal-reject-reason"]').value, "", "close/reopen resets the reason");
+    assert.equal(document.querySelector<HTMLTextAreaElement>('[data-testid="proposal-reject-reason"]')!.value, "", "close/reopen resets the reason");
   });
 });

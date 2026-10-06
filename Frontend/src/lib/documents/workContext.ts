@@ -59,7 +59,7 @@ export interface WorkContextCardInput {
 /** Human Hungarian label for a logical work status; raw enums never reach the UI. */
 export function workStatusLabel(status: string | null | undefined): string {
   if (!status) return "—";
-  return DOCUMENT_WORK_STATUS_LABELS[status] || status;
+  return DOCUMENT_WORK_STATUS_LABELS[status] || "Ismeretlen állapot";
 }
 
 /**
@@ -85,7 +85,7 @@ export function documentRoleLabel(role: string | null | undefined): string | nul
   const mapped = DOCUMENT_ROLE_LABELS[trimmed.toUpperCase()];
   if (mapped) return mapped;
   if (/^[A-Z0-9_]+$/.test(trimmed)) return "Egyéb dokumentumszerep";
-  return trimmed;
+  return "Nem meghatározott";
 }
 
 /** Status → accent, so one colour carries one meaning across every surface. */

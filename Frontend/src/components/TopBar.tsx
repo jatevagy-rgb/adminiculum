@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { AdminButton } from "@/components/adminiculum/ui";
 import type { UiPackId } from "@/lib/uiPack";
 import { getUnreadNotificationsCount } from "@/lib/api";
 import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notificationPresentation";
@@ -11,9 +12,11 @@ type TopBarProps = {
   onSignOut: () => void;
   profileName: string;
   uiPack?: UiPackId;
+  onOpenNavigation?: () => void;
+  navigationOpen?: boolean;
 };
 
-export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atelier" }: TopBarProps) {
+export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atelier", onOpenNavigation, navigationOpen = false }: TopBarProps) {
   const isSignal = uiPack === "signal_tiles_console";
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
@@ -44,6 +47,7 @@ export function TopBar({ title, onSignOut, profileName, uiPack = "legal_ops_atel
   return (
     <header className={`${isSignal ? "bg-[#0F172A] border-[#1F2937]" : "adm-topbar"} border-b px-3 py-2.5 sm:px-5`}>
       <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-4">
+        {onOpenNavigation ? <AdminButton variant="neutral" data-testid="mobile-navigation-toggle" aria-label="Navigáció megnyitása" aria-expanded={navigationOpen} onClick={onOpenNavigation} className="min-h-10 min-w-10 md:hidden">☰</AdminButton> : null}
         <div className="min-w-0">
           <p className={`text-[9.5px] uppercase tracking-[0.2em] ${isSignal ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>Adminiculum</p>
           <p data-testid="shell-context" className={`truncate text-[11px] font-semibold uppercase tracking-[0.16em] ${isSignal ? "text-[#CBD5E1]" : "text-[var(--adm-text-muted)]"}`}>{title}</p>

@@ -11,7 +11,8 @@
  * Workspace; this surface only shows linked metadata and links into it.
  */
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { formatDeadline } from "@/lib/businessDateTime";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getCaseWorkspace, type CaseWorkspace } from "@/lib/api";
 import { AdminPanel, AdminSectionHeader, AdminStatusPill } from "@/components/adminiculum/ui";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
@@ -27,9 +28,7 @@ const CONTEXT_FIELDS: Array<{ key: ContextFieldKey; label: string }> = [
 ];
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("hu-HU");
+  return formatDeadline(value);
 }
 
 export function CaseContextView({ caseId }: { caseId: string }) {
@@ -37,19 +36,23 @@ export function CaseContextView({ caseId }: { caseId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const generation = useRef(0);
   const load = useCallback(async () => {
+    const request = ++generation.current;
+    setWorkspace(null);
     setLoading(true);
     setError(null);
     try {
-      setWorkspace(await getCaseWorkspace(caseId));
+      const next = await getCaseWorkspace(caseId);
+      if (request === generation.current && next.case.id === caseId) setWorkspace(next);
     } catch {
-      setError("Az ügy kontextusa most nem tölthető be.");
+      if (request === generation.current) setError("Az ügy kontextusa most nem tölthető be.");
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
   }, [caseId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); return () => { ++generation.current; }; }, [load]);
 
   if (loading) {
     return <CompactState title="A kontextus betöltés alatt…" detail="Az induló helyzet, az ügyleírás és a kapcsolt kommunikáció betöltése folyamatban." />;
@@ -68,9 +71,10 @@ export function CaseContextView({ caseId }: { caseId: string }) {
 
   return (
     <div className="space-y-5" data-testid="case-context-view">
+      <p className="text-sm text-[var(--adm-text-muted)]">Itt az ügy háttere és kiválasztott forrásai találhatók. A munkautasítást a dokumentumnál, a belső jegyzetet az ügy áttekintésén, a szöveghez kötött észrevételt az adott dokumentumverziónál kezelheted.</p>
       <AdminPanel data-testid="case-context-starting">
         <AdminSectionHeader
-          title="Induló helyzet és ügyvédi instrukció"
+          title="Induló ügyhelyzet"
           subtitle="Miért indult az ügy, hol tart, mit vár az ügyfél, mi sürgős és mi a következő lépés."
         />
         {contextEntries.length > 0 ? (
@@ -84,7 +88,7 @@ export function CaseContextView({ caseId }: { caseId: string }) {
           </dl>
         ) : (
           <p data-testid="case-context-empty" className="px-4 py-3 text-[12px] text-[var(--adm-text-muted)]">
-            Ehhez az ügyhöz még nincs rögzített induló helyzet vagy ügyvédi instrukció.
+            Ehhez az ügyhöz még nincs rögzített induló ügyhelyzet.
           </p>
         )}
       </AdminPanel>
@@ -106,7 +110,7 @@ export function CaseContextView({ caseId }: { caseId: string }) {
             </Link>
           }
         />
-        {communications.length === 0 ? (
+        {workspace.warnings?.some((warning) => warning.section === "communications") ? <SafePanelError detail="A kapcsolt kommunikáció most nem ellenőrizhető." onRetry={() => void load()} /> : communications.length === 0 ? (
           <p data-testid="case-context-communications-empty" className="px-4 py-3 text-[12px] text-[var(--adm-text-muted)]">
             Ehhez az ügyhöz még nincs kapcsolt kommunikáció.
           </p>
@@ -127,7 +131,7 @@ export function CaseContextView({ caseId }: { caseId: string }) {
                   <div className="flex shrink-0 flex-col items-end gap-1">
                     {communication.internal ? <AdminStatusPill tone="neutral">Belső</AdminStatusPill> : null}
                     <Link
-                      href={`/cases/${encodeURIComponent(caseId)}/communications`}
+                      href={`/communications?caseId=${encodeURIComponent(caseId)}&communicationId=${encodeURIComponent(communication.id)}`}
                       className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline"
                     >
                       Megnyitás →

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intake/intakeStyles";
@@ -362,20 +362,8 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
     </>
   );
 
-  return createPortal(
-    <div className={intake.overlay} onClick={onClose}>
-      <div
-        className={intake.shell}
-        style={{ maxWidth: 680 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={intake.header}>
-          <h2 className={intake.headerTitle}>Új ügy</h2>
-          <button type="button" onClick={onClose} className="text-[22px] leading-none text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">
-            &times;
-          </button>
-        </div>
-
+  return (
+    <ViewportDialog title="Új ügy" onClose={onClose} busy={submitting || savingType} maxWidth="max-w-2xl">
         <form className={intake.body} onSubmit={handleSubmit}>
           {loading && (
             <div className="flex items-center justify-center py-12">
@@ -611,8 +599,6 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
             </>
           )}
         </form>
-      </div>
-    </div>,
-    document.body,
+    </ViewportDialog>
   );
 }

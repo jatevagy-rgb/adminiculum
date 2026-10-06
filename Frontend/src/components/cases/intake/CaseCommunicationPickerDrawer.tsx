@@ -1,4 +1,6 @@
 "use client";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+
 
 /**
  * Communication picker drawer (CASE-INTAKE-VISUAL-CORRECTION-1).
@@ -60,13 +62,6 @@ export function CaseCommunicationPickerDrawer({
     return () => { active = false; };
   }, [open, clientId]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onCancel]);
-
   const { available, assigned } = useMemo(() => {
     const q = query.trim().toLowerCase();
     const match = (c: CommunicationItem) =>
@@ -94,25 +89,8 @@ export function CaseCommunicationPickerDrawer({
   };
 
   return (
-    <div className={intake.overlay} role="presentation" onMouseDown={onCancel}>
-      <div className="flex h-full items-end justify-center p-0 sm:items-center sm:p-6">
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Kommunikáció kiválasztása"
-          data-testid="comm-picker-drawer"
-          onMouseDown={(e) => e.stopPropagation()}
-          className="flex h-[92vh] w-full max-w-[760px] flex-col overflow-hidden rounded-t-xl bg-white shadow-[0_24px_70px_rgba(16,22,19,0.34)] sm:h-[80vh] sm:rounded-xl"
-        >
-          <header className="flex items-center justify-between gap-3 border-b border-[rgba(16,22,19,0.14)] px-4 py-3">
-            <div className="min-w-0">
-              <h3 className="font-serif text-[19px] font-semibold text-[#16201A]">Kommunikáció kiválasztása</h3>
-              <p data-testid="comm-picker-count" className={`text-[12px] font-semibold ${ACCENT_TEXT.terracotta}`}>
-                {staged.length === 0 ? "Nincs kiválasztva" : `${staged.length} beszélgetés kiválasztva`}
-              </p>
-            </div>
-            <button type="button" onClick={onCancel} aria-label="Bezárás" className="text-[13px] font-semibold text-[#7A8479] hover:text-[#16201A]">✕</button>
-          </header>
+    <ViewportDialog open={open} title="Kommunikáció kiválasztása" onClose={onCancel} busy={busy} testId="comm-picker-drawer" maxWidth="max-w-3xl">
+
 
           <div className="border-b border-[rgba(16,22,19,0.10)] px-4 py-2.5">
             <input
@@ -230,8 +208,6 @@ export function CaseCommunicationPickerDrawer({
             </button>
             </div>
           </footer>
-        </div>
-      </div>
-    </div>
+    </ViewportDialog>
   );
 }

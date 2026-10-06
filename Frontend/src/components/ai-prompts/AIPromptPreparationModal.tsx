@@ -1,4 +1,6 @@
 "use client";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+
 
 import { useEffect, useMemo, useState } from "react";
 import { AdminButton } from "@/components/adminiculum/ui";
@@ -237,16 +239,7 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
   const canReview = draft?.status === "AI_DRAFT" || draft?.status === "JUNIOR_VERIFIED";
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8" role="presentation">
-      <section className="w-full max-w-4xl rounded-xl border border-[var(--adm-border)] bg-[var(--adm-surface)] shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="ai-prompt-title">
-        <header className="flex items-start justify-between gap-4 border-b border-[var(--adm-border)] px-5 py-4">
-          <div>
-            <h2 id="ai-prompt-title" className="font-serif text-xl font-semibold text-[var(--adm-text)]">AI előkészítés</h2>
-            <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Adminiculum nem hív külső AI-t. Csak az általad kiválasztott, anonimizált szöveg hagyja el a rendszert.</p>
-          </div>
-          <AdminButton variant="neutral" size="xs" onClick={onClose} disabled={busy}>Bezárás</AdminButton>
-        </header>
-
+    <ViewportDialog title="AI előkészítés" description="Az általad kijelölt, anonimizált szöveget másolhatod saját AI-eszközödbe." onClose={onClose} busy={busy} maxWidth="max-w-4xl">
         <div className="grid gap-5 p-5 lg:grid-cols-2">
           <div className="space-y-4">
             <label className="block text-xs font-semibold text-[var(--adm-text)]">
@@ -306,7 +299,7 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
                       <button
                         type="button"
                         onClick={() => void openDraft(item.id)}
-                        className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs text-[var(--adm-text)] hover:bg-[var(--adm-ivory-100)]"
+                        className="flex w-full items-center justify-between gap-2 rounded px-2 py-1 text-left text-xs text-[var(--adm-text)] hover:bg-[var(--adm-surface)]"
                       >
                         <span className="truncate">{item.promptTemplateStableKey} · v{item.promptTemplateVersion}</span>
                         <span className="shrink-0 text-[10px] text-[var(--adm-text-muted)]">{statusLabel(item.status)}</span>
@@ -388,7 +381,7 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
                       }}>Exportálás</AdminButton>
                     </div>
                   </div>
-                  <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-[var(--adm-ivory-100)] p-2 text-xs leading-5 text-[var(--adm-text)]">{draft.externalPromptText}</pre>
+                  <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded bg-[var(--adm-surface)] p-2 text-xs leading-5 text-[var(--adm-text)]">{draft.externalPromptText}</pre>
                 </div>
 
                 {canImport ? (
@@ -404,7 +397,7 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
                 {canReview ? (
                   <div className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
                     <p className="text-xs font-semibold text-[var(--adm-text)]">Állapot: {statusLabel(draft.status)}</p>
-                    {draft.rehydratedResponse ? <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-[var(--adm-ivory-100)] p-2 text-xs leading-5">{draft.rehydratedResponse}</pre> : null}
+                    {draft.rehydratedResponse ? <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-[var(--adm-surface)] p-2 text-xs leading-5">{draft.rehydratedResponse}</pre> : null}
                     {draft.rehydrationWarnings && draft.rehydrationWarnings.length > 0 ? (
                       <ul className="mt-2 space-y-1 text-xs text-[var(--adm-terracotta-700)]">
                         {draft.rehydrationWarnings.map((warning, index) => <li key={index}>• {warning}</li>)}
@@ -423,14 +416,13 @@ export function AIPromptPreparationModal({ caseId, documentId, documentVersionId
                 {(draft.status === "LAWYER_APPROVED" || draft.status === "REJECTED") ? (
                   <div className="rounded-lg border border-[var(--adm-border)] bg-white p-3">
                     <p className="text-xs font-semibold text-[var(--adm-text)]">Állapot: {statusLabel(draft.status)}</p>
-                    {draft.rehydratedResponse ? <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-[var(--adm-ivory-100)] p-2 text-xs leading-5">{draft.rehydratedResponse}</pre> : null}
+                    {draft.rehydratedResponse ? <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap rounded bg-[var(--adm-surface)] p-2 text-xs leading-5">{draft.rehydratedResponse}</pre> : null}
                   </div>
                 ) : null}
               </>
             ) : <p className="text-sm text-[var(--adm-text-muted)]">Az előnézet az anonimizált csomag előkészítése után jelenik meg.</p>}
           </div>
         </div>
-      </section>
-    </div>
+    </ViewportDialog>
   );
 }

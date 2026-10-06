@@ -602,7 +602,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
           >
             ← Ügy áttekintése
           </button>
-          <h1 className="mt-1 truncate font-serif text-xl font-semibold text-[var(--adm-text-primary)]">
+          <h1 className="mt-1 break-words font-sans text-xl font-semibold text-[var(--adm-text-primary)]">
             {documentTitle}
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-[var(--adm-text-secondary)]">
@@ -751,7 +751,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--adm-canvas-subtle)]">
-          <div className="mx-auto flex w-full max-w-[1560px] items-stretch gap-6 px-4 py-6 sm:px-6">
+          <div className="mx-auto flex w-full max-w-[1560px] items-stretch gap-6 px-2 py-4 sm:px-6">
             {!hasDocument ? (
               <div data-testid="document-reader-no-document" className="mx-auto flex w-full max-w-[560px] flex-col items-center justify-center rounded-[4px] border border-dashed border-[var(--adm-border-canonical)] bg-white p-10 text-center">
                 <h2 className="font-serif text-lg font-semibold text-[var(--adm-text-primary)]">Nincs kiválasztott dokumentum</h2>
@@ -765,7 +765,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
                 data-testid="document-reader-surface"
                 onMouseUp={canAnchor ? captureSelection : undefined}
                 onKeyUp={canAnchor ? captureSelection : undefined}
-                className="min-w-0 flex-1 whitespace-pre-wrap rounded-[4px] border border-[var(--adm-border-canonical)] bg-white p-6 font-serif text-[16px] leading-7 text-[var(--adm-text-primary)] shadow-sm sm:p-8"
+                className="min-w-0 flex-1 whitespace-pre-wrap rounded-[4px] border border-[var(--adm-border-canonical)] bg-white p-4 font-serif text-[16px] leading-7 text-[var(--adm-text-primary)] shadow-sm sm:p-8"
               >
                 {segments.map((segment, index) =>
                   segment.range ? (
@@ -834,7 +834,7 @@ export function DocumentReaderWorkspace(props: DocumentReaderWorkspaceProps) {
         onConfirm={(reason) => { void confirmReject(reason); }}
       />
       {decisionError && !rejectTarget ? (
-        <p data-testid="document-reader-decision-error" role="alert" className="fixed bottom-4 right-4 z-50 rounded-[8px] bg-[var(--adm-brand-terracotta)] px-3 py-2 text-xs font-semibold text-white">
+        <p data-testid="document-reader-decision-error" role="alert" className="m-3 rounded-[8px] bg-[var(--adm-brand-terracotta)] px-3 py-2 text-xs font-semibold text-white">
           {decisionError}
         </p>
       ) : null}

@@ -6,7 +6,7 @@
  * workspace page: it only reads the work context and never mutates editor state,
  * so wiring the header cannot destabilise version-scoped annotations.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getDocumentWorkContext, type DocumentWorkCard } from "@/lib/api";
 import { toWorkContextView, type WorkContextView } from "@/lib/documents/workContext";
 
@@ -27,20 +27,24 @@ export function useDocumentWorkContext(
   const [loading, setLoading] = useState<boolean>(Boolean(documentId));
   const [error, setError] = useState<string | null>(null);
 
+  const generation = useRef(0);
   const load = useCallback(async () => {
+    const request = ++generation.current;
+    setCard(null);
     if (!documentId) { setCard(null); setLoading(false); return; }
     setLoading(true);
     setError(null);
     try {
-      setCard(await getDocumentWorkContext(documentId));
+      const next = await getDocumentWorkContext(documentId);
+      if (request === generation.current && next.id === documentId) setCard(next);
     } catch {
-      setError("A dokumentum munkakontextusa nem tölthető be.");
+      if (request === generation.current) setError("A dokumentum munkakontextusa nem tölthető be.");
     } finally {
-      setLoading(false);
+      if (request === generation.current) setLoading(false);
     }
   }, [documentId]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); return () => { ++generation.current; }; }, [load]);
 
   const view = useMemo(
     () => (card ? toWorkContextView(card, opts) : null),

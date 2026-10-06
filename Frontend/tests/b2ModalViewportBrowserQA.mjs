@@ -28,12 +28,14 @@ import { ViewportDialog } from "${path.join(ROOT, "src/components/ui/ViewportDia
 function Harness() {
   const [which, setWhich] = useState("");
   const [open, setOpen] = useState(false);
+  const [nested, setNested] = useState(false);
   const close = () => setOpen(false);
   const contract = { id: "qa-document", title: "Viewport QA", fileName: "qa.docx", templateName: "QA", revisionNumber: 1, status: "DRAFT" };
   return <><button id="trigger" onClick={() => { setWhich(window.qaNext); setOpen(true); }}>Open dialog</button>
     {open && which === "anon" && <AnonymizeModal isOpen onClose={close} contract={contract} />}
     {open && which === "time" && <CaseTimeEntryDialog caseId="qa-case" tasks={[]} onClose={close} onSaved={close} />}
-    {open && which === "shared" && <ViewportDialog title="Közös ablak" onClose={close} footer={<button onClick={close}>Kész</button>}><textarea aria-label="Hosszú szöveg" style={{height:1400}} defaultValue="Hosszú ügyadat" /></ViewportDialog>}
+    {open && which === "shared" && <ViewportDialog title="Közös ablak" onClose={close} footer={<button onClick={close}>Kész</button>}><button id="nested-trigger" onClick={() => setNested(true)}>Megerősítés</button><textarea aria-label="Hosszú szöveg" style={{height:1400}} defaultValue="Hosszú ügyadat" /></ViewportDialog>}
+    {nested && <ViewportDialog title="Megerősítés" onClose={() => setNested(false)}><button onClick={() => setNested(false)}>Mégse</button></ViewportDialog>}
   </>;
 }
 createRoot(document.getElementById("root")).render(<Harness />);`,
@@ -206,6 +208,16 @@ try {
       });
       check(`${tag} BACKGROUND_FOCUS_ISOLATED`, backgroundIsolated.inside, `active=${backgroundIsolated.tag}`);
 
+      if (which === "shared") {
+        await page.locator("#nested-trigger").click();
+        await page.getByRole("dialog", { name: "Megerősítés", exact: true }).waitFor();
+        check(`${tag} NESTED_PARENT_INERT`, await page.locator('[role="dialog"]').first().evaluate(el => !!el.closest('[inert]')));
+        await page.keyboard.press("Escape");
+        await page.getByRole("dialog", { name: "Megerősítés", exact: true }).waitFor({ state: "detached" });
+        check(`${tag} ESCAPE_ONLY_TOPMOST`, await page.getByRole("dialog", { name: "Közös ablak", exact: true }).isVisible());
+        await page.waitForFunction(() => document.activeElement?.id === "nested-trigger");
+        check(`${tag} NESTED_FOCUS_RETURN`, true);
+      }
       // --- ESCAPE closes + never mutates + restores focus ---------------------------
       const mutatedBeforeEscape = await page.evaluate(() => window.__b2Mutated || 0);
       await page.keyboard.press("Escape");

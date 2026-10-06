@@ -25,6 +25,7 @@ const CASE_STATUS_LABELS: Record<string, string> = {
   CANCELLED: "Törölve",
   ARCHIVED: "Archivált",
   OPEN: "Nyitott",
+  ACTIVE: "Aktív",
   CLOSED: "Lezárt",
   UNKNOWN: "Ismeretlen állapot",
 };
@@ -32,13 +33,13 @@ const CASE_STATUS_LABELS: Record<string, string> = {
 export function getCaseMatterTypeLabel(value?: string | null): string {
   const normalized = String(value || "").trim().toUpperCase();
   if (!normalized) return "Nincs megadva";
-  return CASE_MATTER_TYPE_LABELS[normalized] || normalized.replace(/_/g, " ").toLocaleLowerCase("hu-HU").replace(/^./, (character) => character.toLocaleUpperCase("hu-HU"));
+  return CASE_MATTER_TYPE_LABELS[normalized] || "Ismeretlen ügytípus";
 }
 
 export function getCaseStatusLabel(value?: string | null): string {
   const normalized = String(value || "").trim().toUpperCase();
   if (!normalized) return "Nincs állapotadat";
-  return CASE_STATUS_LABELS[normalized] || normalized.replace(/_/g, " ").toLocaleLowerCase("hu-HU").replace(/^./, (character) => character.toLocaleUpperCase("hu-HU"));
+  return CASE_STATUS_LABELS[normalized] || "Ismeretlen állapot";
 }
 
 export function getCaseDisplayTitle(input: {

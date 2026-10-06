@@ -275,6 +275,19 @@ async function runViewport(browser, viewport) {
   await page.waitForFunction(() => document.body.innerText.includes("tétel"), null, { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(600);
 
+  if (viewport.width === 390) {
+    const trigger = page.getByTestId('mobile-navigation-toggle');
+    await trigger.click();
+    const menu = page.getByTestId('mobile-navigation');
+    await menu.waitFor({state: 'visible'});
+    assert.equal(await menu.getByRole('button', {name: 'Ügyek', exact: true}).isVisible(), true);
+    assert.equal(await menu.evaluate(n => !n.closest('.app-shell-content')), true);
+    await page.keyboard.press('Escape');
+    await menu.waitFor({state: 'detached'});
+    assert.equal(await trigger.evaluate(n => n === document.activeElement), true);
+    const contentLeft = await page.locator('.app-shell-content').evaluate(n => n.getBoundingClientRect().left);
+    assert.equal(contentLeft, 0, 'mobile content must use the former sidebar width');
+  }
   const measurement = await measure(page);
   const issues = evaluateFits(measurement);
 

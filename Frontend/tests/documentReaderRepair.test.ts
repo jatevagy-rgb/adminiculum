@@ -123,16 +123,14 @@ test("DEFECT 3: a current version keeps its own URL or the canonical document fa
 // ---------------------------------------------------------------- DEFECT 4
 
 test("DEFECT 4: the drawer implements Escape, focus containment and focus restore", () => {
-  const code = stripComments(drawer());
-  assert.match(code, /event\.key === "Escape"/);
-  assert.match(code, /event\.key !== "Tab"/);
-  assert.match(code, /drawer\.contains\(active\)/);
-  assert.match(code, /returnFocusRefRef\.current\?\.current/);
-  assert.match(code, /role="dialog"/);
-  assert.match(code, /aria-modal="true"/);
-  assert.match(code, /tabIndex=\{-1\}/);
-  // Focus enters the drawer on open.
-  assert.match(code, /focusable\[0\] \?\? drawer/);
+  assert.match(drawer(), /ViewportDialog/);
+  assert.match(drawer(), /returnFocusRef=\{returnFocusRef\}/);
+  const host = read("src/components/ui/ViewportDialog.tsx");
+  assert.match(host, /createPortal/);
+  assert.match(host, /role="dialog"/);
+  assert.match(host, /max-h-\[calc\(100dvh-2rem\)\]/);
+  assert.match(host, /useDialogAccessibility/);
+
 });
 
 // ---------------------------------------------------------------- DEFECT 5

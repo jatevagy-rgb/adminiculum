@@ -1,4 +1,6 @@
 "use client";
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
+
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -87,14 +89,6 @@ const reviewerPreferenceLabels: Record<EligibleReviewer["preference"], string> =
   PRIVILEGED: "Kijelölt vezető reviewer",
 };
 
-const DRAWER_FOCUSABLE_SELECTOR = [
-  "button:not([disabled])",
-  "a[href]",
-  "input:not([disabled])",
-  "select:not([disabled])",
-  "textarea:not([disabled])",
-  "[tabindex]:not([tabindex='-1'])",
-].join(",");
 
 function formFromDraft(draft: TaskSubmission | null): DraftForm {
   if (!draft) return EMPTY_FORM;
@@ -156,8 +150,6 @@ function TaskSubmissionWorkspaceContent({
   const submitAttempt = useRef(new StableMutationAttempt("submit"));
   const reviseAttempt = useRef(new StableMutationAttempt("revise"));
   const externalAttempt = useRef(new StableMutationAttempt("external-completion"));
-  const drawerRef = useRef<HTMLElement | null>(null);
-  const priorFocusRef = useRef<HTMLElement | null>(null);
   const readGeneration = useRef(0);
 
   const applyWorkflow = useCallback((next: TaskSubmissionWorkflow) => {
@@ -213,38 +205,6 @@ function TaskSubmissionWorkspaceContent({
     void loadWorkflow();
     return () => { readGeneration.current += 1; };
   }, [loadWorkflow]);
-
-  useEffect(() => {
-    priorFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    drawerRef.current?.querySelector<HTMLElement>(DRAWER_FOCUSABLE_SELECTOR)?.focus();
-    return () => priorFocusRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (submitDialogOpen || externalDialogOpen) return;
-    const drawer = drawerRef.current;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !busyAction) {
-        event.preventDefault();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !drawer) return;
-      const focusable = Array.from(drawer.querySelectorAll<HTMLElement>(DRAWER_FOCUSABLE_SELECTOR));
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [busyAction, externalDialogOpen, onClose, submitDialogOpen]);
 
   const draft = workflow?.activeDraft || null;
   const displayedRevision = useMemo(
@@ -446,17 +406,8 @@ function TaskSubmissionWorkspaceContent({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/20" role="presentation">
-      <section ref={drawerRef} role="dialog" aria-modal="true" aria-labelledby="task-workspace-title" className="h-full w-full max-w-[860px] overflow-y-auto border-l border-[var(--adm-border)] bg-[var(--adm-surface)] shadow-2xl">
-        <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--adm-border)] bg-white px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Feladat és Leadás</p>
-            <h2 id="task-workspace-title" className="mt-1 truncate font-serif text-[24px] text-[var(--adm-text)]">{item.title}</h2>
-            <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">{item.case.caseNumber} · {item.case.clientName}</p>
-          </div>
-          <button type="button" onClick={onClose} className="rounded px-2 text-2xl text-[var(--adm-text-muted)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" aria-label="Feladat munkatér bezárása">×</button>
-        </header>
-
+    <>
+      <ViewportDialog drawer maxWidth="max-w-4xl" title={item.title} description={item.case.caseNumber + ' · ' + item.case.clientName} onClose={onClose} busy={Boolean(busyAction)}>
         <div className="space-y-4 p-4 sm:p-5">
           {error ? <div role="alert" aria-live="assertive"><CompactState tone="error" title="A művelet nem fejeződött be." detail={error} action={<AdminButton size="sm" variant="neutral" onClick={() => void loadWorkflow()}>Adatok újratöltése</AdminButton>} /></div> : null}
           {supportWarnings.length > 0 ? <div role="status" className="rounded border border-[var(--adm-ochre-500)]/40 bg-[var(--adm-sand-100)] px-3 py-2 text-[11px] text-[var(--adm-text)]"><ul className="list-disc space-y-1 pl-4">{supportWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul></div> : null}
@@ -592,7 +543,7 @@ function TaskSubmissionWorkspaceContent({
             </>
           ) : null}
         </div>
-      </section>
+      </ViewportDialog>
 
       <WorkflowDialog open={submitDialogOpen} title="Review-ra küldés" description="A beküldött revision változatlan lesz. Sikert csak a backend visszaigazolása után jelez a felület." primaryLabel="Review-ra küldés" primaryDisabled={!workflow?.permittedActions.submit || isDirty} busy={busyAction === "submit"} onClose={() => { if (busyAction !== "submit") setSubmitDialogOpen(false); }} onConfirm={() => void submitForReview()}>
         {draft ? <div className="space-y-4"><dl className="grid gap-3 text-[12px] sm:grid-cols-2"><div><dt className="text-[var(--adm-text-muted)]">Feladat</dt><dd className="font-semibold">{workflow?.task.title}</dd></div><div><dt className="text-[var(--adm-text-muted)]">Revision</dt><dd className="font-semibold">{draft.revisionNumber}. verzió</dd></div><div><dt className="text-[var(--adm-text-muted)]">Reviewer</dt><dd className="font-semibold">{draft.assignedReviewer.displayName}</dd></div><div><dt className="text-[var(--adm-text-muted)]">Review típusa</dt><dd className="font-semibold">{ATTENTION_LABELS[draft.requestedAttention || ""] || "Nincs megadva"}</dd></div><div><dt className="text-[var(--adm-text-muted)]">Eredmények</dt><dd className="font-semibold">{draft.documentCount} dokumentum</dd></div><div><dt className="text-[var(--adm-text-muted)]">Munkaidő</dt><dd className="font-semibold">{draft.zeroTimeConfirmed ? "Nulla idő megerősítve" : formatMinutes(draft.linkedTimeMinutes)}</dd></div><div className="sm:col-span-2"><dt className="text-[var(--adm-text-muted)]">Külső lépés</dt><dd className="font-semibold">{draft.externalActionRequired ? EXTERNAL_ACTION_LABELS[draft.externalActionType || ""] || "Szükséges" : "Nem szükséges"}</dd></div></dl><div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3"><p className="text-[11px] font-semibold">Beküldött pontos verziók</p><ul className="mt-2 space-y-1">{draft.documents.length === 0 ? <li className="text-[11px] text-[var(--adm-text-muted)]">Nincs kapcsolt dokumentum.</li> : draft.documents.map((entry) => <li key={entry.id} className="text-[11px] text-[var(--adm-text)]">{entry.document.name} · v{entry.linkedVersion || "nincs verzió"}{!entry.isCurrentVersion ? <span className="text-[var(--adm-ochre-700)]"> · aktuális: v{entry.document.currentVersion} (megerősítés szükséges)</span> : null}</li>)}</ul><p className="mt-2 text-[10px] text-[var(--adm-text-muted)]">A beküldés gomb kifejezetten megerősíti ezeket a pontos verziókat; újabb verzió megjelenése esetén a backend ezt ellenőrzi.</p></div></div> : null}
@@ -601,6 +552,6 @@ function TaskSubmissionWorkspaceContent({
       <WorkflowDialog open={externalDialogOpen} title="Külső lépés teljesítésének rögzítése" description="Ez csak a korábban jóváhagyott külső művelet teljesítésének metaadatát rögzíti. A rendszer nem küld e-mailt, nem ír alá és nem nyújt be dokumentumot." primaryLabel="Teljesítés rögzítése" busy={busyAction === "external-completion"} onClose={() => { if (busyAction !== "external-completion") setExternalDialogOpen(false); }} onConfirm={() => void recordExternalCompletion()}>
         <div className="rounded border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4 text-[12px]"><p className="text-[var(--adm-text-muted)]">Megerősítendő külső lépés</p><p className="mt-1 font-semibold">{EXTERNAL_ACTION_LABELS[latestApproved?.externalActionType || ""] || "Nincs típusadat"}</p></div>
       </WorkflowDialog>
-    </div>
+    </>
   );
 }
