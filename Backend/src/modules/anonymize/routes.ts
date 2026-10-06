@@ -29,6 +29,7 @@ function requireAnonymizeEnabled(req: Request, res: Response, next: () => void) 
   if (process.env.ENABLE_AI_ANONYMIZATION !== 'true') {
     return res.status(501).json({
       error: 'Not Implemented',
+      code: 'FEATURE_DISABLED',
       message: 'AI Anonymization feature is disabled. Set ENABLE_AI_ANONYMIZATION=true to enable.',
     });
   }
@@ -72,6 +73,13 @@ router.post(
             status: 409,
             code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
             message: result.error || 'A dokumentum biztonsági ellenőrzése még nem engedélyezi a tartalom megnyitását.',
+          });
+        }
+        if (result.code === 'SOURCE_NOT_AVAILABLE') {
+          return res.status(422).json({
+            status: 422,
+            code: 'SOURCE_NOT_AVAILABLE',
+            message: result.error || 'A dokumentum forrásszövege nem érhető el.',
           });
         }
         return res.status(400).json({
@@ -119,6 +127,7 @@ router.get(
       res.status(500).json({
         success: false,
         textAvailable: false,
+        code: 'PROCESSING_FAILURE',
         error: 'Hiba a forrásszöveg lekérésekor',
       });
     }
