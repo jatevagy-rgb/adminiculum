@@ -19,10 +19,31 @@ const SHOTS = path.join(ROOT, "qa-screenshots-workforce");
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 1100, height: 800 }, { width: 390, height: 844 }];
 const GROW_OPPORTUNITIES = [
   { id: "qa-grow-pending", status: "PENDING_REVIEW", kind: "RECOMMENDATION", sufficiency: "SUPPORTED", actionable: true, interventionCodes: [], title: "QA pending opportunity", problemStatement: "Pending decision", direction: "Review the proposed direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "MODERATE", opportunity: null, createdAt: "2026-01-01T00:00:00.000Z" },
+  { id: "qa-grow-pending-2", status: "PENDING_REVIEW", kind: "RECOMMENDATION", sufficiency: "SUPPORTED", actionable: true, interventionCodes: [], title: "QA pending opportunity 2", problemStatement: "Pending decision 2", direction: "Review the proposed direction 2", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "MODERATE", opportunity: null, createdAt: "2026-01-01T00:00:00.000Z" },
   { id: "qa-grow-accepted", status: "ACCEPTED", kind: "RECOMMENDATION", sufficiency: "SUPPORTED", actionable: true, interventionCodes: [], title: "QA accepted opportunity", problemStatement: "Accepted decision", direction: "Accepted direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "MODERATE", opportunity: { id: "qa-improvement", status: "ACTIVE", developmentInitiativeId: null }, createdAt: "2026-01-02T00:00:00.000Z" },
   { id: "qa-grow-declined", status: "DECLINED", kind: "RECOMMENDATION", sufficiency: "SUPPORTED", actionable: false, interventionCodes: [], title: "QA declined opportunity", problemStatement: "Declined decision", direction: "Declined direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "MODERATE", opportunity: null, createdAt: "2026-01-03T00:00:00.000Z" },
   { id: "qa-grow-more-data", status: "NEEDS_MORE_DATA", kind: "RECOMMENDATION", sufficiency: "NEEDS_MORE_DATA", actionable: false, interventionCodes: [], title: "QA needs-more-data opportunity", problemStatement: "More information requested", direction: "More information direction", impactTags: [], domainKey: "OPERATIONS", businessProcess: null, evidenceStrength: "WEAK", opportunity: null, createdAt: "2026-01-04T00:00:00.000Z" },
 ];
+
+// Diagnostic workbench read model: two derived diagnoses each mapped to a
+// PENDING_REVIEW recommendation (the canonical opportunity identity), plus one
+// diagnosis with no recommendation to prove no identity is invented.
+const GROW_DIAGNOSTIC_WORKBENCH = {
+  problems: {
+    diagnoses: [
+      { id: "qa-diagnosis-1", provenanceClass: "DERIVED_DIAGNOSIS", title: "QA diagnosis A", summary: null, status: "CONFIRMED", problemDomain: { id: "qa-domain", key: "OPERATIONS", name: "Operáció" }, businessProcess: null, evidence: [] },
+      { id: "qa-diagnosis-2", provenanceClass: "DERIVED_DIAGNOSIS", title: "QA diagnosis B", summary: null, status: "CONFIRMED", problemDomain: { id: "qa-domain", key: "OPERATIONS", name: "Operáció" }, businessProcess: null, evidence: [] },
+      { id: "qa-diagnosis-no-rec", provenanceClass: "DERIVED_DIAGNOSIS", title: "QA diagnosis without recommendation", summary: null, status: "OPEN", problemDomain: null, businessProcess: null, evidence: [] },
+    ],
+  },
+  proposed: {
+    recommendations: [
+      { id: "qa-grow-pending", provenanceClass: "RECOMMENDATION", title: "QA pending recommendation A", problemStatement: "Pending", direction: "Direction A", kind: "RECOMMENDATION", impactTags: [], interventionCodes: [], status: "PENDING_REVIEW", sufficiency: "SUPPORTED", diagnosisId: "qa-diagnosis-1", domain: { key: "OPERATIONS", name: "Operáció" }, businessProcess: null, evidence: [] },
+      { id: "qa-grow-pending-2", provenanceClass: "RECOMMENDATION", title: "QA pending recommendation B", problemStatement: "Pending", direction: "Direction B", kind: "RECOMMENDATION", impactTags: [], interventionCodes: [], status: "PENDING_REVIEW", sufficiency: "SUPPORTED", diagnosisId: "qa-diagnosis-2", domain: { key: "OPERATIONS", name: "Operáció" }, businessProcess: null, evidence: [] },
+    ],
+  },
+  missing: { unresolvedItems: [] },
+};
 
 let server;
 
@@ -105,7 +126,7 @@ function responseFor(url, mode = "populated") {
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/grow/outcomes`)) return { status: 200, body: { items: [] } };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/processes`)) return { status: 200, body: [] };
   if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/observatory/sources`)) return { status: 200, body: { items: [] } };
-  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/grow/diagnostic-workbench`)) return { status: 200, body: { problems: { diagnoses: [] }, proposed: { recommendations: [] }, missing: { unresolvedItems: [] } } };
+  if (url.includes(`/client-company/clients/${WORKFORCE_FIXTURE.client.id}/grow/diagnostic-workbench`)) return { status: 200, body: GROW_DIAGNOSTIC_WORKBENCH };
   // Hourly rates are not part of the case-workspace IA fixture: return the
   // canonical "no rate" failure instead of leaking a wrong-shape /clients body.
   if (url.includes("/hourly-rates/")) return { status: 404, body: { status: 404, code: "QA_NO_HOURLY_RATE" } };
@@ -555,6 +576,85 @@ async function assertGrowOpportunityDeepLinks(browser) {
   await failedQa.context.close();
 }
 
+async function assertDiagnosticExactOpportunity(browser) {
+  const qa = await newPage(browser, "populated", VIEWPORTS[0]);
+  const clientId = WORKFORCE_FIXTURE.client.id;
+  const overview = `/clients/${clientId}/grow?tab=attekintes`;
+  const decisionPosts = [];
+  qa.page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/grow/opportunities/")) {
+      decisionPosts.push(request.url());
+    }
+  });
+
+  const decisionLink = "Döntés megnyitása";
+  const gotoOverview = async () => {
+    await qa.page.goto(`${BASE_URL}${overview}`, { waitUntil: "networkidle" });
+    await qa.page.getByTestId("grow-diagnostic-worklist").waitFor({ state: "visible" });
+  };
+
+  await gotoOverview();
+  const worklist = qa.page.getByTestId("grow-diagnostic-worklist");
+
+  // 1. Each diagnostic row retains its own exact opportunity id.
+  const links = worklist.locator("a", { hasText: decisionLink });
+  if (await links.count() !== 2) throw new Error(`expected 2 diagnostic decision links, got ${await links.count()}`);
+  const hrefA = await links.nth(0).getAttribute("href");
+  const hrefB = await links.nth(1).getAttribute("href");
+  const expectedA = `/clients/${clientId}/grow?tab=dontesek&opportunity=qa-grow-pending`;
+  const expectedB = `/clients/${clientId}/grow?tab=dontesek&opportunity=qa-grow-pending-2`;
+  if (hrefA !== expectedA) throw new Error(`diagnostic row A href mismatch: ${hrefA}`);
+  if (hrefB !== expectedB) throw new Error(`diagnostic row B href mismatch: ${hrefB}`);
+
+  // 4. A diagnosis without a recommendation invents no target.
+  const noRecRow = worklist.locator("tr").filter({ hasText: "QA diagnosis without recommendation" });
+  if (await noRecRow.locator("a", { hasText: decisionLink }).count()) {
+    throw new Error("diagnosis without a recommendation invented a decision link");
+  }
+
+  // 3. Row A opens and focuses exact A, then row B opens and focuses exact B.
+  const openExact = async (rowText, id) => {
+    await worklist.locator("tr").filter({ hasText: rowText }).locator("a", { hasText: decisionLink }).click();
+    await qa.page.waitForURL(`**/grow?tab=dontesek&opportunity=${encodeURIComponent(id)}`);
+    const row = qa.page.locator(`#grow-opportunity-${encodeURIComponent(id)}`);
+    await row.waitFor({ state: "visible" });
+    await qa.page.waitForFunction((rowId) => document.activeElement?.id === rowId, `grow-opportunity-${encodeURIComponent(id)}`);
+    if (!await row.getByText("Kért lehetőség", { exact: true }).isVisible()) {
+      throw new Error(`Diagnostic link did not focus the exact target ${id}`);
+    }
+  };
+
+  await openExact("QA diagnosis A", "qa-grow-pending");
+  // 3b. Back returns to the overview, then row B still resolves its own exact id.
+  await qa.page.goBack();
+  await qa.page.waitForURL(`**/grow?tab=attekintes`);
+  await qa.page.getByTestId("grow-diagnostic-worklist").waitFor({ state: "visible" });
+  await openExact("QA diagnosis B", "qa-grow-pending-2");
+  // Refresh keeps the exact target and never mutates a decision.
+  await qa.page.reload({ waitUntil: "networkidle" });
+  await qa.page.waitForFunction((rowId) => document.activeElement?.id === rowId, "grow-opportunity-qa-grow-pending-2");
+
+  if (decisionPosts.length) throw new Error("Opening a diagnostic decision target submitted a decision");
+  if (qa.hardErrors.length) throw new Error(`Diagnostic exact-opportunity browser errors: ${qa.hardErrors.join("; ")}`);
+  await qa.context.close();
+
+  // 5. Bounded 390px pass: same exact link, no horizontal overflow.
+  const narrow = await newPage(browser, "populated", VIEWPORTS[2]);
+  await narrow.page.goto(`${BASE_URL}${overview}`, { waitUntil: "networkidle" });
+  await narrow.page.getByTestId("grow-diagnostic-worklist").waitFor({ state: "visible" });
+  if (await narrow.page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) {
+    throw new Error("Diagnostic exact-opportunity has horizontal overflow at 390px");
+  }
+  await narrow.page.getByTestId("grow-diagnostic-worklist").locator("tr").filter({ hasText: "QA diagnosis A" }).locator("a", { hasText: decisionLink }).click();
+  await narrow.page.waitForURL(`**/grow?tab=dontesek&opportunity=qa-grow-pending`);
+  await narrow.page.locator("#grow-opportunity-qa-grow-pending").waitFor({ state: "visible" });
+  await narrow.page.screenshot({ path: path.join(SHOTS, "grow-diagnostic-exact-opportunity-390.png"), fullPage: true });
+  if (narrow.hardErrors.length) throw new Error(`Diagnostic exact-opportunity 390px errors: ${narrow.hardErrors.join("; ")}`);
+  await narrow.context.close();
+
+  console.log("GROW_DIAGNOSTIC_EXACT_OPPORTUNITY_QA=PASSED");
+}
+
 async function main() {
   assertFixtureContract();
   fs.mkdirSync(SHOTS, { recursive: true });
@@ -577,6 +677,7 @@ async function main() {
       await qa.context.close();
     }
     await assertGrowOpportunityDeepLinks(browser);
+    await assertDiagnosticExactOpportunity(browser);
     await assertCaseWorkspaceIa(browser);
     for (const viewport of VIEWPORTS) {
       for (const mode of ["populated", "loading", "empty", "unavailable"]) {
