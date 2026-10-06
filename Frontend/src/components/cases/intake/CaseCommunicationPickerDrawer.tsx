@@ -129,7 +129,7 @@ export function CaseCommunicationPickerDrawer({
             {loading ? (
               <p className="text-[12.5px] text-[#7A8479]">Levelezés betöltése…</p>
             ) : loadError ? (
-              <p role="alert" data-testid="comm-picker-load-error" className="text-[12.5px] font-semibold text-[#A8442A]">
+              <p role="alert" data-testid="comm-picker-load-error" className={`text-[12.5px] font-semibold ${ACCENT_TEXT.terracotta}`}>
                 A levelezés betöltése nem sikerült. Próbáld újra.
               </p>
             ) : (
@@ -215,7 +215,7 @@ export function CaseCommunicationPickerDrawer({
               A hozzárendelt levelezés csatolmányaiból nem jön létre automatikusan dokumentum.
             </p>
             {error ? (
-              <p role="alert" data-testid="comm-picker-link-error" className="w-full text-[11.5px] font-semibold text-[#A8442A]">{error}</p>
+              <p role="alert" data-testid="comm-picker-link-error" className={`w-full text-[11.5px] font-semibold ${ACCENT_TEXT.terracotta}`}>{error}</p>
             ) : null}
             <div className="ml-auto flex items-center gap-2">
             <button type="button" data-testid="comm-picker-cancel" className={intake.secondaryAction} onClick={onCancel} disabled={busy}>Mégse</button>
