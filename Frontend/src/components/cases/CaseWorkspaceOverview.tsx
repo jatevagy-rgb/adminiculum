@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation";
 import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
 import { getCaseComments, createCaseComment, type CaseCommentDto } from "@/lib/api";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
-import { getCaseStatusLabel } from "@/lib/caseLabels";
+import { getCaseMatterTypeLabel, getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
 import { attentionPresentation, type AttentionCategory } from "@/lib/attentionCategory";
 import { CompactState, SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
@@ -289,7 +289,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             <h2 title={c.title} className="mt-1 line-clamp-3 font-sans break-words text-[22px] font-semibold leading-tight text-[var(--adm-text)]">{c.title}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11.5px] text-[var(--adm-text-muted)]">
               <span className="font-semibold text-[var(--adm-text)]">{c.client?.name || "Nincs ügyfél"}</span>
-              <span aria-hidden="true">·</span><span>{c.matterType || "Ügytípus nincs"}</span>
+              <span aria-hidden="true">·</span><span>{c.matterType ? getCaseMatterTypeLabel(c.matterType) : "Ügytípus nincs"}</span>
               <span aria-hidden="true">·</span><span>{getCaseStatusLabel(c.status)}</span>
             </p>
             <dl data-testid="case-summary-fields" className="mt-2.5 grid grid-cols-2 gap-x-5 gap-y-2 text-[11px] sm:grid-cols-3 xl:grid-cols-6">

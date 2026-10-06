@@ -3,6 +3,7 @@
 import type { DiagnosticWorkbenchDto } from "@/lib/diagnosticWorkbenchApi";
 import {
   PROVENANCE_LABELS_HU,
+  diagnosisStatusLabelHu,
   verificationStatusLabelHu,
 } from "@/lib/diagnosticWorkbenchApi";
 
@@ -106,7 +107,7 @@ export function DiagnosisPanel({ problems }: DiagnosisPanelProps) {
                   </div>
 
                   <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                    {diag.status}
+                    {diagnosisStatusLabelHu(diag.status)}
                   </span>
                 </div>
 

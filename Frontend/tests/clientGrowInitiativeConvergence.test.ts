@@ -102,7 +102,7 @@ test('OUTCOME_BASIS_DISTINCTION_PRESERVED=PASS', () => {
   const src = read(VIEW);
   assert.match(src, /Mért eredmények/);
   assert.match(src, /Számított \/ becsült eredmények/);
-  assert.match(src, /Mért eredményként csak MEASURED alapú eredmény jelenik meg/);
+  assert.match(src, /Mért eredményként csak mért alapú eredmény jelenik meg/);
 });
 
 test('milestone source reuses the existing CompanyMilestone relation only', () => {

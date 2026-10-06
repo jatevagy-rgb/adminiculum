@@ -97,6 +97,17 @@ const REVIEW_ACTION_LABELS: Record<string, string> = {
 };
 
 /**
+ * Humanizes a bare canonical review decision action token (as persisted on a
+ * document review's last decision). An unknown token degrades to a neutral
+ * label instead of exposing the raw enum.
+ */
+export function reviewActionLabel(action: unknown): string {
+  const key = String(action ?? "").trim().toUpperCase();
+  if (!key || !/^[A-Z_]+$/.test(key)) return UNKNOWN_REVIEW_TITLE_LABEL;
+  return REVIEW_ACTION_LABELS[key] ?? UNKNOWN_REVIEW_TITLE_LABEL;
+}
+
+/**
  * Humanizes the bounded `Review: <ACTION>` notification title shape produced by
  * the review pipeline. Non-review titles are returned verbatim; unknown review
  * actions degrade to a neutral label instead of exposing the raw enum token.

@@ -15,6 +15,7 @@ import { CaseIntakeReadinessPanel } from "@/components/intake/CaseIntakeReadines
 import { ClientRequestComposer } from "@/components/client-portal/ClientRequestComposer";
 import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { useRouteGeneration } from "@/lib/routeGeneration";
+import { getCaseMatterTypeLabel } from "@/lib/caseLabels";
 
 type CaseDocument = {
   id: string;
@@ -1290,7 +1291,7 @@ export function CaseDetail({ params }: CaseDetailProps) {
   const displayCaseNumber = caseRecord?.caseNumber || resolvedParams.caseId;
   const displayTitle = (caseRecord?.title && caseRecord.title !== 'null - null' && caseRecord.title !== 'null' && caseRecord.title !== 'undefined - undefined') ? caseRecord.title : 'Nincs megadott ügycím';
   const displayClient = caseRecord?.clientName && caseRecord.clientName !== 'null' && caseRecord.clientName !== 'undefined' ? caseRecord.clientName : 'Nincs megadott ügyfél';
-  const displayMatterType = caseRecord?.matterType || 'Nincs megadott ügytípus';
+  const displayMatterType = caseRecord?.matterType ? getCaseMatterTypeLabel(caseRecord.matterType) : 'Nincs megadott ügytípus';
   const displayRiskLevel = 'Nem elérhető';
 
   // Workflow context (truthful derivation from existing task/history data)

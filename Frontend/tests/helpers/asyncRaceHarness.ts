@@ -217,6 +217,11 @@ export function createRaceHarness(
       if (key === '@/lib/routeGeneration') {
         return imports[key] || loadModule('src/lib/routeGeneration.ts');
       }
+      // Dependency-free presentation mapping: load the real module so harness
+      // tests exercise the same human labels the production pages render.
+      if (key === '@/lib/caseLabels') {
+        return imports[key] || loadModule('src/lib/caseLabels.ts');
+      }
       return imports[key] || {};
     },
   });

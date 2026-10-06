@@ -68,6 +68,46 @@ export const IMPACT_DECISION_LABELS: Record<string, string> = {
 
 export const UNKNOWN_WORKBENCH_STATUS = "Ismeretlen állapot";
 
+/**
+ * Canonical AssessmentFinding operational statuses (the finding's own lifecycle,
+ * distinct from its applicability outcome). Ordinary presentation must not print
+ * the raw token (`OPEN`, `RESOLVED`, …).
+ */
+export const COMPLIANCE_FINDING_STATUS_LABELS: Record<string, string> = {
+  OPEN: "Nyitott",
+  ACKNOWLEDGED: "Tudomásul véve",
+  ACTION_PLANNED: "Intézkedés tervezve",
+  RESOLVED: "Megoldva",
+};
+
+export function complianceFindingStatusLabel(status: string | null | undefined): string {
+  const key = String(status || "").trim().toUpperCase();
+  if (!key) return UNKNOWN_WORKBENCH_STATUS;
+  return COMPLIANCE_FINDING_STATUS_LABELS[key] || UNKNOWN_WORKBENCH_STATUS;
+}
+
+/**
+ * The backend materializes a bounded English next-step instruction for each
+ * finding (`Review and address this applicable requirement.` / `Resolve the
+ * applicability evidence …`). Ordinary presentation shows a Hungarian equivalent
+ * instead of the persisted English text; any unrecognized value degrades to a
+ * neutral Hungarian instruction rather than leaking English or a raw token.
+ */
+const COMPLIANCE_RECOMMENDATION_LABELS: Record<string, string> = {
+  "Review and address this applicable requirement.":
+    "Tekintse át és kezelje ezt a releváns követelményt.",
+  "Resolve the applicability evidence before treating this requirement as determined.":
+    "A követelmény meghatározottként kezelése előtt tisztázni kell az alkalmazhatósági bizonyítékot.",
+};
+
+export const UNKNOWN_COMPLIANCE_RECOMMENDATION_LABEL = "Belső áttekintés szükséges.";
+
+export function complianceRecommendationLabel(recommendation: string | null | undefined): string | null {
+  const trimmed = String(recommendation || "").trim();
+  if (!trimmed) return null;
+  return COMPLIANCE_RECOMMENDATION_LABELS[trimmed] ?? UNKNOWN_COMPLIANCE_RECOMMENDATION_LABEL;
+}
+
 /** `STALE:<status>` composite emitted for expired evidence records. */
 const STALE_PREFIX = "STALE:";
 /** `DECIDED:<kind>` composite emitted for observations with a recorded decision. */

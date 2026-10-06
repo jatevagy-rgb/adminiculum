@@ -183,9 +183,9 @@ test("12. UNKNOWN remains explicit and truthful", () => {
   assert.equal(verificationStatusLabelHu("UNKNOWN"), "Ismeretlen");
 
   const evSrc = read(EVIDENCE_PANEL);
-  assert.match(evSrc, /Explicit ismeretlen tények \(UNKNOWN\):/);
+  assert.match(evSrc, /Kifejezetten ismeretlen tények:/);
   assert.match(evSrc, /Van explicit ismeretlenként jelölt tény\./);
-  assert.match(evSrc, /Nincs explicit UNKNOWN státuszú rögzített tény\./);
+  assert.match(evSrc, /Nincs explicit ismeretlen státuszú rögzített tény\./);
 });
 
 test("13. NEEDS_MORE_DATA displays honestly", () => {

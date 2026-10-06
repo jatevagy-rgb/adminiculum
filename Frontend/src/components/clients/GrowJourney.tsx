@@ -42,6 +42,7 @@ import { GrowIntake } from "@/components/clients/GrowIntake";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
 import {
   getDiagnosticWorkbench,
+  growthUnresolvedItemLabel,
   verificationStatusLabelHu,
   type DiagnosticWorkbenchDto,
 } from "@/lib/diagnosticWorkbenchApi";
@@ -826,7 +827,7 @@ function DiagnosticOverviewCard({
             <p className="font-semibold">További adat szükséges a döntéshozatalhoz:</p>
             <ul className="mt-1 list-disc pl-4 space-y-0.5 text-[11px]">
               {unresolved.map((u, i) => (
-                <li key={i}>{u.message}</li>
+                <li key={i}>{growthUnresolvedItemLabel(u)}</li>
               ))}
             </ul>
           </div>

@@ -1972,7 +1972,7 @@ export function OrgGrowView() {
           <div className={`mt-5 rounded-[var(--adm-radius-sm)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3 text-[11px] leading-5 ${MUTED}`}>
             <p className="font-semibold text-[var(--adm-text)]">Módszertan és forrásmegjelölés</p>
             <p className="mt-0.5">
-              Mért eredményként csak MEASURED alapú eredmény jelenik meg. Számított és becsült hatások külön
+              Mért eredményként csak mért alapú eredmény jelenik meg. Számított és becsült hatások külön
               kategóriában szerepelnek.
             </p>
           </div>
