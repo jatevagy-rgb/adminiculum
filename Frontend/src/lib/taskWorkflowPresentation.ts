@@ -1,4 +1,5 @@
 import { ApiError } from "./api";
+import { BUSINESS_TIME_ZONE, formatDeadline } from "./businessDateTime";
 import type {
   SubmissionReadinessCode,
   SubmissionWarningCode,
@@ -191,15 +192,11 @@ export function nextActorLabel(
 export function formatDate(value?: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("hu-HU");
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("hu-HU", { timeZone: BUSINESS_TIME_ZONE });
 }
 
 export function formatDateTime(value?: string | null): string {
-  if (!value) return "—";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? "—"
-    : date.toLocaleString("hu-HU", { dateStyle: "short", timeStyle: "short" });
+  return formatDeadline(value);
 }
 
 export function formatMinutes(minutes?: number | null): string {

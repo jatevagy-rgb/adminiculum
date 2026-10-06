@@ -201,6 +201,7 @@ export function createRaceHarness(
     process: { env: { NODE_ENV: 'test' } },
     window: fakeWindow,
     document: fakeDocument,
+    HTMLElement: class HTMLElement {},
     alert: (message: string) => {
       throw new Error(message);
     },
@@ -252,6 +253,10 @@ export function createRaceHarness(
     },
     pendingEffects() {
       return effects.length;
+    },
+    unmount() {
+      effects.splice(0);
+      for (const slot of slots) slot?.cleanup?.();
     },
     // Model an ABANDONED render: React rendered the component speculatively and
     // discarded it, so the effects it queued never run. Clears the pending effect

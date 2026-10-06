@@ -126,3 +126,16 @@ test("no URL target preserves manual selection without any guarded read", async 
   assert.equal(state.deepLinkedItem, null);
   assert.deepEqual(calls, []);
 });
+
+test("clearing the URL and unmounting invalidate late guarded reads", async () => {
+  for (const action of ["clear", "unmount"]) {
+    const { h, pending } = makeHarness();
+    h.commit({ deepLinkedTaskId: "A", tasks: [], isLoading: false });
+    if (action === "clear") h.commit({ deepLinkedTaskId: null, tasks: [], isLoading: false });
+    else h.unmount();
+    pending.A.resolve(makeWorkflow("A", "stale A"));
+    await settle();
+    const state = h.render({ deepLinkedTaskId: action === "clear" ? null : "A", tasks: [], isLoading: false });
+    assert.equal(state.deepLinkedItem, null);
+  }
+});

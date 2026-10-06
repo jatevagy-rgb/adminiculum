@@ -119,15 +119,22 @@ function submissionTone(status?: string | null): "green" | "gold" | "burgundy" |
   return "neutral";
 }
 
-export function TaskSubmissionWorkspace({
-  item,
-  onClose,
-  onWorkflowChanged,
-}: {
+type TaskSubmissionWorkspaceProps = {
   item: TaskLifecycleListItem;
   onClose: () => void;
   onWorkflowChanged: () => Promise<void> | void;
-}) {
+};
+
+export function TaskSubmissionWorkspace(props: TaskSubmissionWorkspaceProps) {
+  // All editable/submission state belongs to this exact task, including A → B → A.
+  return <TaskSubmissionWorkspaceContent key={props.item.id} {...props} />;
+}
+
+function TaskSubmissionWorkspaceContent({
+  item,
+  onClose,
+  onWorkflowChanged,
+}: TaskSubmissionWorkspaceProps) {
   const [workflow, setWorkflow] = useState<TaskSubmissionWorkflow | null>(null);
   const [reviewers, setReviewers] = useState<EligibleReviewer[]>([]);
   const [reviewerDirectoryAvailable, setReviewerDirectoryAvailable] = useState(true);
@@ -151,6 +158,7 @@ export function TaskSubmissionWorkspace({
   const externalAttempt = useRef(new StableMutationAttempt("external-completion"));
   const drawerRef = useRef<HTMLElement | null>(null);
   const priorFocusRef = useRef<HTMLElement | null>(null);
+  const readGeneration = useRef(0);
 
   const applyWorkflow = useCallback((next: TaskSubmissionWorkflow) => {
     setWorkflow(next);
@@ -161,16 +169,26 @@ export function TaskSubmissionWorkspace({
   }, []);
 
   const loadWorkflow = useCallback(async (): Promise<TaskSubmissionWorkflow | null> => {
+    const generation = ++readGeneration.current;
+    const isCurrent = () => generation === readGeneration.current;
     setIsLoading(true);
     setError(null);
+    setWorkflow(null);
+    setReviewers([]);
+    setDocuments([]);
+    setTimeEntries([]);
+    setSupportWarnings([]);
     try {
       const next = await readTaskSubmissionWorkflow(item.id);
+      if (!isCurrent()) return null;
+      if (next.task.id !== item.id) throw new Error("Task identity mismatch");
       applyWorkflow(next);
       const [reviewerResult, documentResult, timeResult] = await Promise.allSettled([
         listEligibleTaskReviewers(item.id),
         getCaseDocuments(next.task.caseId),
         next.task.matterId ? getTimeEntries({ matterId: next.task.matterId }) : Promise.resolve([] as TimeEntry[]),
       ]);
+      if (!isCurrent()) return null;
       const reviewerAvailable = reviewerResult.status === "fulfilled";
       setReviewerDirectoryAvailable(reviewerAvailable);
       setReviewers(reviewerAvailable ? reviewerResult.value : []);
@@ -183,16 +201,17 @@ export function TaskSubmissionWorkspace({
       ]);
       return next;
     } catch (loadError) {
-      setError(taskWorkflowErrorMessage(loadError));
+      if (isCurrent()) setError(taskWorkflowErrorMessage(loadError));
       return null;
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   }, [applyWorkflow, item.id]);
 
   useEffect(() => {
     setSelectedRevisionId(null);
     void loadWorkflow();
+    return () => { readGeneration.current += 1; };
   }, [loadWorkflow]);
 
   useEffect(() => {

@@ -80,7 +80,8 @@ function WorkReportPageContent() {
   const [period, setPeriod] = useState<string>(currentMonth());
   const [caseList, setCaseList] = useState<ClientWorkReportCasesResponse | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string | null>(null);
-  const [report, setReport] = useState<ClientWorkReportDetail | null>(null);
+  const [reportData, setReport] = useState<ClientWorkReportDetail | null>(null);
+  const [reportDataKey, setReportDataKey] = useState<string | null>(null);
   const [ownerPeople, setOwnerPeople] = useState<ClientWorkReportOwnerCandidate[]>([]);
   const [ownerPersonId, setOwnerPersonId] = useState<string>("");
   const [loadingCases, setLoadingCases] = useState(false);
@@ -92,6 +93,25 @@ function WorkReportPageContent() {
   const casesSeq = useRef(0);
   const reportSeq = useRef(0);
   const peopleSeq = useRef(0);
+  const reportRequestKey = useRef<string | null>(null);
+  const selectionKey = JSON.stringify([clientId, period, selectedCaseId, ownerPersonId]);
+  const report = reportDataKey === selectionKey ? reportData : null;
+
+  const invalidateReport = useCallback(() => {
+    reportSeq.current += 1;
+    reportRequestKey.current = null;
+    setReport(null);
+    setReportDataKey(null);
+    setLoadingReport(false);
+    setDownloading(false);
+  }, []);
+
+  useEffect(() => () => {
+    casesSeq.current += 1;
+    reportSeq.current += 1;
+    peopleSeq.current += 1;
+    reportRequestKey.current = null;
+  }, []);
 
   useEffect(() => {
     getClients()
@@ -106,7 +126,10 @@ function WorkReportPageContent() {
   const periodQuery = useMemo(() => monthRange(period), [period]);
 
   const loadCases = useCallback(() => {
+    const seq = ++casesSeq.current;
+    invalidateReport();
     if (!clientId || !periodQuery) {
+      setLoadingCases(false);
       setCaseList(null);
       setSelectedCaseId(null);
       setReport(null);
@@ -122,7 +145,6 @@ function WorkReportPageContent() {
     setSelectedCaseId(null);
     setReport(null);
     setOwnerPersonId("");
-    const seq = ++casesSeq.current;
     listWorkReportCases(clientId, periodQuery)
       .then((response) => {
         if (seq === casesSeq.current) setCaseList(response);
@@ -133,18 +155,18 @@ function WorkReportPageContent() {
       .finally(() => {
         if (seq === casesSeq.current) setLoadingCases(false);
       });
-  }, [clientId, periodQuery]);
+  }, [clientId, periodQuery, invalidateReport]);
 
   useEffect(() => {
     loadCases();
   }, [loadCases]);
 
   useEffect(() => {
+    const seq = ++peopleSeq.current;
+    setOwnerPeople([]);
     if (!clientId) {
-      setOwnerPeople([]);
       return;
     }
-    const seq = ++peopleSeq.current;
     listWorkReportOwnerCandidates(clientId)
       .then((response) => {
         if (seq === peopleSeq.current) setOwnerPeople(response.people ?? []);
@@ -152,17 +174,22 @@ function WorkReportPageContent() {
       .catch(() => {
         // Owner candidates are optional context; the report itself is unaffected.
       });
+    return () => { peopleSeq.current += 1; };
   }, [clientId]);
 
   const loadReport = useCallback(
     (caseId: string, ownerId: string | null) => {
+      invalidateReport();
       if (!periodQuery) return;
       setLoadingReport(true);
       setError(null);
       const seq = ++reportSeq.current;
+      const key = JSON.stringify([clientId, period, caseId, ownerId || ""]);
+      reportRequestKey.current = key;
       getWorkReportCase(caseId, periodQuery, ownerId)
         .then((loaded) => {
           if (seq !== reportSeq.current) return;
+          setReportDataKey(key);
           setReport(loaded);
         })
         .catch((caught) => {
@@ -171,11 +198,16 @@ function WorkReportPageContent() {
             // Cross-client or unknown owner: fail safely, clear the selection
             // and reload without an owner instead of keeping a wrong one.
             setOwnerPersonId("");
-            setError(caught.message || "A kiválasztott ügygazda nem tartozik az ügy ügyfeléhez.");
+            setError("A kiválasztott ügygazda nem tartozik az ügy ügyfeléhez.");
             const retrySeq = ++reportSeq.current;
+            const retryKey = JSON.stringify([clientId, period, caseId, ""]);
+            reportRequestKey.current = retryKey;
             getWorkReportCase(caseId, periodQuery, null)
               .then((reloaded) => {
-                if (retrySeq === reportSeq.current) setReport(reloaded);
+                if (retrySeq === reportSeq.current) {
+                  setReportDataKey(retryKey);
+                  setReport(reloaded);
+                }
               })
               .catch(() => {
                 if (retrySeq === reportSeq.current) setError("A jelentés nem tölthető be.");
@@ -191,7 +223,7 @@ function WorkReportPageContent() {
           if (seq === reportSeq.current) setLoadingReport(false);
         });
     },
-    [periodQuery],
+    [clientId, period, periodQuery, invalidateReport],
   );
 
   const openCase = useCallback(
@@ -212,10 +244,13 @@ function WorkReportPageContent() {
   );
 
   const downloadPdf = useCallback(() => {
-    if (!selectedCaseId || !periodQuery) return;
+    if (!selectedCaseId || !periodQuery || !report || loadingReport) return;
+    const seq = reportSeq.current;
+    const key = selectionKey;
     setDownloading(true);
     downloadWorkReportPdf(selectedCaseId, periodQuery, ownerPersonId || null)
       .then(({ blob, filename }) => {
+        if (seq !== reportSeq.current || reportRequestKey.current !== key) return;
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -225,9 +260,9 @@ function WorkReportPageContent() {
         link.remove();
         URL.revokeObjectURL(url);
       })
-      .catch(() => setError("A PDF letöltése nem sikerült."))
-      .finally(() => setDownloading(false));
-  }, [selectedCaseId, periodQuery, ownerPersonId]);
+      .catch(() => { if (seq === reportSeq.current) setError("A PDF letöltése nem sikerült."); })
+      .finally(() => { if (seq === reportSeq.current) setDownloading(false); });
+  }, [selectedCaseId, periodQuery, ownerPersonId, report, loadingReport, selectionKey]);
 
   const selectedSummary = report?.case ?? null;
   const reportCaseRows = caseList?.cases ?? [];
@@ -248,7 +283,7 @@ function WorkReportPageContent() {
                 Ügyfél
                 <select
                   value={clientId}
-                  onChange={(event) => setClientId(event.target.value)}
+                  onChange={(event) => { invalidateReport(); setClientId(event.target.value); }}
                   className="h-9 rounded-[8px] border border-[var(--adm-border-canonical)] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[var(--adm-text-primary)]"
                 >
                   <option value="">Válassz ügyfelet…</option>
@@ -264,7 +299,7 @@ function WorkReportPageContent() {
                 <input
                   type="month"
                   value={period}
-                  onChange={(event) => setPeriod(event.target.value)}
+                  onChange={(event) => { invalidateReport(); setPeriod(event.target.value); }}
                   className="h-9 rounded-[8px] border border-[var(--adm-border-canonical)] bg-white px-2.5 text-sm font-normal normal-case tracking-normal text-[var(--adm-text-primary)]"
                 />
               </label>

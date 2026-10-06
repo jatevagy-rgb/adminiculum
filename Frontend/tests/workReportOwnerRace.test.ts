@@ -177,6 +177,50 @@ function ownerDdValue(tree: any): string | null {
   return node ? (node.props.value ?? null) : null;
 }
 
+test('a failed switch immediately hides the old report and disables export', async () => {
+  const { api, ownerCalls } = makeApi();
+  let exports = 0;
+  api.downloadWorkReportPdf = async () => { exports += 1; return { blob: {}, filename: null }; };
+  const h = makeHarness(api);
+  const buttons = await openCaseB(h);
+  buttons[0].props.onClick();
+  ownerCalls[0].deferred.resolve(detailFor('case-a', 'A-001', 'Old report'));
+  await settle();
+  h.commit();
+  assert.match(textOf(h.render()), /A-001\s+—\s+Old report/);
+  buttons[1].props.onClick();
+  let tree = h.render();
+  assert.doesNotMatch(textOf(tree), /A-001\s+—\s+Old report/);
+  let pdf = flatten(tree).find((node) => typeof node.props?.onClick === 'function' && textOf(node).includes('PDF letöltése'));
+  assert.equal(pdf?.props.disabled, true);
+  ownerCalls[1].deferred.reject(new Error('synthetic failure'));
+  await settle();
+  h.commit();
+  tree = h.render();
+  assert.doesNotMatch(textOf(tree), /Old report/);
+  pdf = flatten(tree).find((node) => typeof node.props?.onClick === 'function' && textOf(node).includes('PDF letöltése'));
+  assert.equal(pdf?.props.disabled, true);
+  pdf.props.onClick();
+  assert.equal(exports, 0);
+});
+
+test('client or period changes invalidate an in-flight report even before another report is requested', async () => {
+  for (const kind of ['client', 'period']) {
+    const { api, ownerCalls } = makeApi();
+    const h = makeHarness(api);
+    const buttons = await openCaseB(h);
+    buttons[0].props.onClick();
+    const tree = h.render();
+    const control = flatten(tree).find((node) => kind === 'client' ? node.type === 'select' : node.type === 'input' && node.props.type === 'month');
+    control.props.onChange({ target: { value: kind === 'client' ? '' : '2026-12' } });
+    h.commit();
+    ownerCalls[0].deferred.resolve(detailFor('case-a', 'A-001', 'Stale report'));
+    await settle();
+    h.commit();
+    assert.doesNotMatch(textOf(h.render()), /Stale report/);
+  }
+});
+
 async function openCaseB(h: ReturnType<typeof createRaceHarness>) {
   h.commit();
   await settle();

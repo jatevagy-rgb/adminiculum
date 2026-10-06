@@ -1271,6 +1271,7 @@ export interface WorkflowDeadlineItem {
   startsAt?: string | null;
   dueAt: string;
   allDay: boolean;
+  temporalType?: 'DATE_ONLY' | 'TIMESTAMP';
   status: WorkflowDeadlineStatus;
   urgency: WorkflowDeadlineUrgency;
   importance: 'CRITICAL' | 'HIGH' | 'NORMAL' | 'LOW' | 'UNSPECIFIED';
@@ -1330,6 +1331,7 @@ export async function getWorkflowAgenda(params?: {
   caseId?: string;
   limit?: number;
   offset?: number;
+  queue?: 'CALENDAR' | 'OVERDUE';
 }): Promise<WorkflowAgendaResponse> {
   const query = new URLSearchParams();
   if (params?.from) query.set('from', params.from);
@@ -1339,6 +1341,7 @@ export async function getWorkflowAgenda(params?: {
   if (params?.caseId) query.set('caseId', params.caseId);
   if (params?.limit) query.set('limit', String(params.limit));
   if (params?.offset) query.set('offset', String(params.offset));
+  if (params?.queue) query.set('queue', params.queue);
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return fetchApi<WorkflowAgendaResponse>(`/agenda${suffix}`);
 }

@@ -9,6 +9,7 @@
  * This module is deliberately React-free and dependency-light so it can be unit
  * tested directly.
  */
+import { BUSINESS_TIME_ZONE } from "../businessDateTime";
 export type Accent = "petrol" | "terracotta" | "green" | "ochre" | "navy" | "neutral";
 
 /**
@@ -105,7 +106,7 @@ export function workStatusAccent(status: string | null | undefined): Accent {
 export function formatDocDate(value: string | null | undefined): string {
   if (!value) return "—";
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU");
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU", { timeZone: BUSINESS_TIME_ZONE });
 }
 
 export function priorityLabel(priority: string | null | undefined): string {

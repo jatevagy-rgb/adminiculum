@@ -3,6 +3,7 @@
 import { useState, use, useEffect, useCallback, useMemo, useReducer, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { formatDeadline } from "@/lib/businessDateTime";
 import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { resolveAnnotationCapabilities } from "@/lib/annotations/annotationCapabilities";
 import { resolveVersionTextPlan, isVersionScopedTextPlan } from "@/lib/documents/versionTextPlan";
@@ -1429,14 +1430,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
     }
   };
 
-  const formatDateTime = (value?: string | null) => {
-    if (!value) return 'Nincs megadva';
-    try {
-      return new Date(value).toLocaleString('hu-HU');
-    } catch {
-      return value;
-    }
-  };
+  const formatDateTime = (value?: string | null) => formatDeadline(value);
 
   const formatFileSize = (bytes?: number | null) => {
     if (!bytes || bytes < 0) return 'Ismeretlen méret';

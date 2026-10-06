@@ -17,6 +17,7 @@
  * back to a future state.
  */
 
+import { BUSINESS_TIME_ZONE, businessDateKey, businessDateTimeToIso } from "./businessDateTime";
 export type DuePresetKey = "1h" | "4h" | "8h" | "2d" | "5d";
 
 export interface DuePresetOption {
@@ -59,16 +60,13 @@ export function resolvePresetDueAt(key: DuePresetKey, now: Date = new Date()): D
  */
 export function resolveCustomDueAt(date: string, time?: string, now: Date = new Date()): Date | null {
   if (!date) return null;
-  const parsed = new Date(`${date}T${time || "09:00"}:00`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  try { return new Date(businessDateTimeToIso(`${date}T${time || "09:00"}`)); }
+  catch { return null; }
 }
 
 /** Local date part (YYYY-MM-DD) of a moment — used to seed the custom input. */
 export function toDatePart(moment: Date): string {
-  const y = moment.getFullYear();
-  const m = String(moment.getMonth() + 1).padStart(2, "0");
-  const d = String(moment.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  return businessDateKey(moment);
 }
 
 export interface DueCountdown {
@@ -92,7 +90,7 @@ function two(n: number): string {
  * value, never a future countdown.
  */
 export function formatDueCountdown(dueAt: Date, now: Date = new Date()): DueCountdown {
-  const dateLabel = dueAt.toLocaleString("hu-HU", { dateStyle: "long", timeStyle: "short" });
+  const dateLabel = dueAt.toLocaleString("hu-HU", { dateStyle: "long", timeStyle: "short", timeZone: BUSINESS_TIME_ZONE });
   const deltaMs = dueAt.getTime() - now.getTime();
 
   if (deltaMs < 0) {

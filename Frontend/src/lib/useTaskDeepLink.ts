@@ -41,6 +41,9 @@ export function useTaskDeepLink({
   const targetRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // Advance even when the URL is cleared, the task enters the personal list,
+    // or the list starts reloading: each transition invalidates older reads.
+    const requestId = ++requestRef.current;
     if (!deepLinkedTaskId) {
       targetRef.current = null;
       setDeepLinkedItem(null);
@@ -54,9 +57,6 @@ export function useTaskDeepLink({
       return;
     }
     if (isLoading) return;
-
-    const requestId = requestRef.current + 1;
-    requestRef.current = requestId;
 
     if (targetRef.current !== deepLinkedTaskId) {
       setDeepLinkedItem(null);
@@ -75,7 +75,11 @@ export function useTaskDeepLink({
         setDeepLinkedItem(null);
         setDeepLinkState("unavailable");
       });
+    return () => { requestRef.current += 1; };
   }, [deepLinkedTaskId, tasks, isLoading]);
 
-  return { deepLinkedItem, deepLinkState };
+  return {
+    deepLinkedItem: deepLinkedItem?.id === deepLinkedTaskId ? deepLinkedItem : null,
+    deepLinkState: targetRef.current === deepLinkedTaskId ? deepLinkState : "idle",
+  };
 }
