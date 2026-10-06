@@ -534,7 +534,7 @@ function GrowDiagnosticWorklist({
                     {d.status === "NEEDS_MORE_DATA" ? (
                       <span className="text-[11px] font-semibold text-[var(--adm-terracotta-700)]">Több adat szükséges</span>
                     ) : rec?.status === "PENDING_REVIEW" ? (
-                      <Link href={`/clients/${clientId}/grow?tab=dontesek`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
+                      <Link href={`/clients/${clientId}/grow?tab=dontesek&opportunity=${encodeURIComponent(rec.id)}`} className="text-[11px] font-semibold text-[var(--adm-green-800)] hover:underline">
                         Döntés megnyitása →
                       </Link>
                     ) : (
