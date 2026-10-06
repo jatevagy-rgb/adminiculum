@@ -37,6 +37,7 @@ function harness({ role = 'ADMIN', options = [] as Option[], types = [] as any[]
       createUsableCaseType: async (name: string) => { created.push(name); return withTemplate('saved-type', name); },
       createCase: async (data: any) => { cases.push(data); return { id: 'new-case' }; },
     },
+    '@/lib/clientOrganizationApi': { clientOrganizationApi: { listPersons: async () => ({ items: [] }) } },
   });
   return { h, created, cases, routerPushes };
 }

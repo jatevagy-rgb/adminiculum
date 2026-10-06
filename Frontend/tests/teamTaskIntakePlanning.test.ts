@@ -137,6 +137,7 @@ describe("CompactNewCaseDialog team/task multi-write", () => {
         teamPlanHasErrors,
       },
       "@/lib/api": api,
+      "@/lib/clientOrganizationApi": { clientOrganizationApi: { listPersons: async () => ({ items: [] }) } },
     });
     return { h, cases, collabCalls, taskCalls, pushes, failOnce, alwaysFail };
   }

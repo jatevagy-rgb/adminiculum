@@ -21,6 +21,7 @@ function dialog(role = 'ADMIN', fail = false, duplicates = false) {
       createUsableCaseType: async (name: string) => { calls.push(name); if (fail) throw new Error('failed'); const next = option('saved-type', name); options.push(next); return next; },
       createCase: async (data: any) => { cases.push(data); return { id: 'new-case' }; },
     },
+    '@/lib/clientOrganizationApi': { clientOrganizationApi: { listPersons: async () => ({ items: [] }) } },
   });
   return { h, calls, cases };
 }

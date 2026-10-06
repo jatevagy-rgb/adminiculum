@@ -766,6 +766,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
     let caseTypeDefinitionId = req.body?.caseTypeDefinitionId || req.body?.['caseTypeDefinitionId'];
     let selectedModuleKeys = req.body?.selectedModuleKeys ?? req.body?.['selectedModuleKeys'];
     let sourceCommunicationId = req.body?.sourceCommunicationId || req.body?.['sourceCommunicationId'];
+    let clientOwnerPersonId = req.body?.clientOwnerPersonId || req.body?.['clientOwnerPersonId'];
 
     if (!clientName && !clientId) {
       res.status(400).json({ status: 400, code: 'VALIDATION_ERROR', message: 'Missing required field: clientName or clientId' });
@@ -788,6 +789,7 @@ router.post('/', authenticate, async (req: Request, res: Response): Promise<void
       caseTypeDefinitionId: caseTypeDefinitionId || undefined,
       selectedModuleKeys,
       sourceCommunicationId: sourceCommunicationId || undefined,
+      clientOwnerPersonId: clientOwnerPersonId || undefined,
       createdById: userId
     });
 

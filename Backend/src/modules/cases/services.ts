@@ -122,6 +122,7 @@ interface CreateCaseInput {
   caseTypeDefinitionId?: string | null;
   selectedModuleKeys?: unknown;
   sourceCommunicationId?: string | null;
+  clientOwnerPersonId?: string | null;
 }
 
 interface CreateCaseOptions {
@@ -647,6 +648,38 @@ return {
         await tx.communication.update({
           where: { id: communication.id },
           data: { caseId: newCase.id },
+        });
+      }
+
+      // Optional customer-side case owner at creation. Persisted through the
+      // same canonical CaseClientOwner source as the case-workspace assignment,
+      // so the report derivation (savedOwnerPersonId) sees it unchanged. Gated
+      // by the same durable-workspace capability flag; free name/email is NOT
+      // accepted here — the owner must be an existing, eligible OrganizationPerson.
+      const ownerPersonId = (params.clientOwnerPersonId || '').trim() || null;
+      if (ownerPersonId && process.env.ENABLE_DURABLE_CASE_WORKSPACE === 'true') {
+        const ownerPerson = await tx.organizationPerson.findUnique({
+          where: { id: ownerPersonId },
+          select: { id: true, clientId: true, employmentStatus: true, startDate: true, endDate: true },
+        });
+        if (!ownerPerson) {
+          throw new CaseWorkPackageError('OWNER_PERSON_NOT_FOUND', 'The selected client-side owner does not exist.', 404);
+        }
+        if (ownerPerson.clientId !== clientId) {
+          throw new CaseWorkPackageError('OWNER_NOT_IN_CLIENT', 'The selected client-side owner belongs to a different client.', 403);
+        }
+        const ownerNow = new Date();
+        const ownerEligible = ownerPerson.employmentStatus === 'ACTIVE'
+          && (!ownerPerson.startDate || ownerPerson.startDate <= ownerNow)
+          && (!ownerPerson.endDate || ownerPerson.endDate >= ownerNow);
+        if (!ownerEligible) {
+          throw new CaseWorkPackageError('OWNER_NOT_ELIGIBLE', 'The selected client-side owner is not an eligible active person.', 422);
+        }
+        await tx.caseClientOwner.create({
+          data: { caseId: newCase.id, clientId, personId: ownerPersonId, revision: 1, updatedById: resolvedCreatedById },
+        });
+        await tx.caseClientOwnerEvent.create({
+          data: { caseId: newCase.id, clientId, personId: ownerPersonId, revision: 1, actorId: resolvedCreatedById, reason: 'CASE_CREATION_ASSIGNMENT' },
         });
       }
 

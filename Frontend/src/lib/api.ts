@@ -1459,6 +1459,7 @@ export interface CreateCaseData {
   caseTypeDefinitionId?: string;
   selectedModuleKeys?: string[];
   sourceCommunicationId?: string;
+  clientOwnerPersonId?: string | null;
 }
 
 export interface CreateCaseResponse {
@@ -1481,7 +1482,7 @@ export interface CreateCaseResponse {
 }
 
 export async function createCase(data: CreateCaseData): Promise<CreateCaseResponse> {
-  const { clientName, clientId, matterType, title, description, clientRole, deadline, assignedLawyerId, responsibleLawyerId, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys, sourceCommunicationId } = data;
+  const { clientName, clientId, matterType, title, description, clientRole, deadline, assignedLawyerId, responsibleLawyerId, workflowTemplateKey, workflowAssignees, caseTypeDefinitionId, selectedModuleKeys, sourceCommunicationId, clientOwnerPersonId } = data;
   const payload: Record<string, unknown> = { clientName, matterType };
   if (clientId) payload.clientId = clientId;
   if (title) payload.title = title;
@@ -1495,6 +1496,7 @@ export async function createCase(data: CreateCaseData): Promise<CreateCaseRespon
   if (caseTypeDefinitionId) payload.caseTypeDefinitionId = caseTypeDefinitionId;
   if (selectedModuleKeys !== undefined) payload.selectedModuleKeys = selectedModuleKeys;
   if (sourceCommunicationId) payload.sourceCommunicationId = sourceCommunicationId;
+  if (clientOwnerPersonId) payload.clientOwnerPersonId = clientOwnerPersonId;
   return fetchApi<CreateCaseResponse>('/cases', {
     method: 'POST',
     body: JSON.stringify(payload),
