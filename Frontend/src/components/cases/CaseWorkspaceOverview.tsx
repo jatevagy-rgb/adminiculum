@@ -14,6 +14,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation";
 import { getCaseResponsibility, getCaseWorkspace, startTask, type CaseResponsibilityResponse, type CaseWorkspace } from "@/lib/api";
 import { getCaseComments, createCaseComment, type CaseCommentDto } from "@/lib/api";
+import { ApiError, linkCommunicationToCase } from "@/lib/api";
+import { linkThreadErrorMessage } from "@/lib/communicationLinkErrors";
 import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLifecycleApi";
 import { getCaseMatterTypeLabel, getCaseStatusLabel } from "@/lib/caseLabels";
 import { taskStatusLabel } from "@/lib/taskWorkflowPresentation";
@@ -38,6 +40,7 @@ import { WordRiskMatrixPanel } from "@/components/cases/word-workflow/tools/Word
 import { WordCompactPromptCollection } from "@/components/cases/word-workflow/tools/WordCompactPromptCollection";
 import { DocumentAIFlow } from "@/components/cases/word-workflow/documents/DocumentAIFlow";
 import { CaseInsightTiles } from "@/components/cases/CaseInsightTiles";
+import { CaseCommunicationPickerDrawer } from "@/components/cases/intake/CaseCommunicationPickerDrawer";
 import {
   TaskFormModal, DocumentUploadModal, CaseCommentModal, DocumentCommentsModal,
 } from "@/components/cases/CaseWorkspaceActions";
@@ -93,6 +96,11 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
   // Explicit risk-matrix target: the user selects a concrete document of THIS
   // case before the matrix panel accepts a save. No first-document fallback.
   const [riskDocId, setRiskDocId] = useState<string | null>(null);
+  // Case-thread linking: reuses the existing intake communication picker in
+  // single-select mode. The link is staged and only committed on confirm.
+  const [commPickerOpen, setCommPickerOpen] = useState(false);
+  const [commLinkBusy, setCommLinkBusy] = useState(false);
+  const [commLinkError, setCommLinkError] = useState<string | null>(null);
   const secondaryDetailsRef = useRef<HTMLDetailsElement | null>(null);
 
 
@@ -126,6 +134,28 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
     }
     finally { setRefreshing(false); }
   }, [load]);
+
+  const confirmLinkThread = useCallback(async (ids: string[]) => {
+    if (ids.length !== 1) return;
+    const communicationId = ids[0];
+    setCommLinkBusy(true);
+    setCommLinkError(null);
+    try {
+      const result = await linkCommunicationToCase(communicationId, caseId);
+      if (result.success) {
+        setCommPickerOpen(false);
+        await refresh();
+      } else {
+        setCommLinkError("A beszélgetés hozzárendelése nem sikerült. Próbáld újra.");
+      }
+    } catch (e) {
+      const status = e instanceof ApiError ? e.status : undefined;
+      const code = e instanceof ApiError ? e.code : undefined;
+      setCommLinkError(linkThreadErrorMessage({ status, code }));
+    } finally {
+      setCommLinkBusy(false);
+    }
+  }, [caseId, refresh]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -407,7 +437,7 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             {warn("communications") ? (
               <ActionableEmpty message="A kommunikáció most nem érhető el." actionLabel="Újratöltés" onAction={() => void refresh()} />
             ) : ws.communications.length === 0 ? (
-              <ActionableEmpty message="Ehhez az ügyhöz még nincs kommunikáció." actionLabel="E-mail thread hozzárendelése" href={`/cases/${caseId}/communications`} />
+              <ActionableEmpty message="Ehhez az ügyhöz még nincs kommunikáció." actionLabel="E-mail thread hozzárendelése" onAction={() => setCommPickerOpen(true)} />
             ) : (
               <ul className="divide-y divide-[rgba(22,32,26,0.06)]">
                 {ws.communications.slice(0, 6).map((m) => {
@@ -651,6 +681,20 @@ export function CaseWorkspaceOverview({ caseId }: { caseId: string }) {
             setTimeDialogInitialTaskId(undefined);
             if (resume) setSelectedLifecycleTask(resume);
           }}
+        />
+      ) : null}
+
+      {commPickerOpen ? (
+        <CaseCommunicationPickerDrawer
+          open={commPickerOpen}
+          clientId={c.client?.id ?? ""}
+          selectedIds={[]}
+          primaryId=""
+          singleSelect
+          busy={commLinkBusy}
+          error={commLinkError}
+          onCancel={() => { if (!commLinkBusy) setCommPickerOpen(false); }}
+          onConfirm={(ids) => void confirmLinkThread(ids)}
         />
       ) : null}
 
