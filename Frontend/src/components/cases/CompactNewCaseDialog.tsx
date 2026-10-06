@@ -25,6 +25,7 @@ import {
   teamPlanHasErrors,
   type TeamTaskPlan,
 } from "./intake/TeamTaskPlanningSection";
+import { clientOrganizationApi } from "@/lib/clientOrganizationApi";
 
 type Props = {
   open: boolean;
@@ -135,6 +136,12 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
   const [teamOpen, setTeamOpen] = useState(false);
   const [partial, setPartial] = useState<{ caseId: string; failed: WriteFailure[] } | null>(null);
 
+  // Optional customer-side case owner (Ügygazda az ügyfélnél). Canonical identity
+  // only: existing, active OrganizationPerson of the selected client. Free
+  // name/email is intentionally NOT offered here (no safe dedup/upsert contract).
+  const [ownerPersonId, setOwnerPersonId] = useState("");
+  const [ownerCandidates, setOwnerCandidates] = useState<{ id: string; name: string }[]>([]);
+
   useEffect(() => {
     if (!open) return;
     const session = ++openSession.current;
@@ -160,6 +167,22 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
     if (initialTitle !== undefined) setTitle(initialTitle);
     if (initialDescription !== undefined) setDescription(initialDescription);
   }, [initialClientId, initialTitle, initialDescription]);
+
+  useEffect(() => {
+    if (!clientId) { setOwnerCandidates([]); setOwnerPersonId(""); return; }
+    const session = openSession.current;
+    clientOrganizationApi.listPersons(clientId)
+      .then((res) => {
+        if (session !== openSession.current) return;
+        const now = new Date();
+        const active = (res?.items || [])
+          .filter((p) => p.employmentStatus === "ACTIVE" && (!p.startDate || new Date(p.startDate) <= now) && (!p.endDate || new Date(p.endDate) >= now))
+          .map((p) => ({ id: p.id, name: p.name }));
+        setOwnerCandidates(active);
+        setOwnerPersonId((current) => (active.some((c) => c.id === current) ? current : ""));
+      })
+      .catch(() => { if (session === openSession.current) { setOwnerCandidates([]); setOwnerPersonId(""); } });
+  }, [clientId]);
 
   const selectedOption = useMemo(
     () => creationOptions.find((o) => o.caseTypeDefinition.id === caseTypeDefinitionId) || null,
@@ -264,6 +287,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
         assignedLawyerId: assignedLawyerId || undefined,
         deadline: deadline || undefined,
         sourceCommunicationId,
+        clientOwnerPersonId: ownerPersonId || undefined,
       });
       // The case now exists durably. Team/task additions are per-item writes:
       // each failure is recorded, nothing successful is re-sent on retry.
@@ -418,6 +442,26 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                 Leírás / utasítás
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} className={intake.field} rows={3} />
               </label>
+
+              {/* Optional customer-side case owner (canonical OrganizationPerson only). */}
+              <div className={`${intake.area} mb-3`}>
+                <div className={intake.grid}>
+                  <label className={intake.label}>
+                    Ügygazda az ügyfélnél (opcionális)
+                    <select value={ownerPersonId} onChange={(e) => setOwnerPersonId(e.target.value)} className={intake.field} disabled={!clientId || ownerCandidates.length === 0}>
+                      <option value="">Nincs kijelölve</option>
+                      {ownerCandidates.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {clientId && ownerCandidates.length === 0 && (
+                      <span role="note" className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
+                        Ehhez az ügyfélhez nincs választható aktív kapcsolattartó.
+                      </span>
+                    )}
+                  </label>
+                </div>
+              </div>
 
               {/* Case Type + Responsible Lawyer */}
               <div className={`${intake.area} mb-3`}>
