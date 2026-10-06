@@ -7,10 +7,15 @@ import {
   getAnonymizationSourceText,
   type AnonymizationMetadataInput,
   type CaseContractListItem,
+  type KnownPartyInput,
 } from "@/lib/api";
 import { AIPromptPanel } from "@/components/documents/AIPromptPanel";
 import { OrganizationPersonPicker } from "@/components/documents/OrganizationPersonPicker";
 import type { KnownPartyTransfer } from "@/lib/organizationPersonMapping";
+import {
+  resolveAnonymizeSourceOutcome,
+  SOURCE_TEXT_LIMITATION_MESSAGE,
+} from "@/lib/documents/anonymizeSourceOutcome";
 
 // Minimal structured counterparty input
 interface CounterpartyInput {
@@ -65,8 +70,6 @@ const redactionLevelOptions: { value: RedactionLevel; label: string }[] = [
 
 const legalRoleOptions = ["Ügyfél", "Megbízó", "Eladó", "Vevő", "Ellenérdekű fél", "Egyéb fél"];
 
-const SOURCE_TEXT_LIMITATION_MESSAGE = "A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.";
-
 const COPY_FAILURE_MESSAGE = "Nem sikerült a vágólapra másolni. Jelöld ki és másold kézzel.";
 
 const PSEUDONYMIZATION_NOTE = "Az Adminiculum az AI-átadáshoz pszeudonimizált munkapéldányt készít; az eredeti adatok visszaállíthatók az Adminiculumban.";
@@ -110,20 +113,31 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, cl
   const [contactEmail, setContactEmail] = useState("");
 const [phone, setPhone] = useState("");
   const [showPersonPicker, setShowPersonPicker] = useState(false);
+  // Additional complete known-party bundles beyond the primary party. Each entry
+  // is an independent identity bundle; adding/removing one never mutates another.
+  const [additionalKnownParties, setAdditionalKnownParties] = useState<Array<KnownPartyInput & { id: string }>>([]);
 
   const applyOrganizationPerson = (transfer: KnownPartyTransfer, legalRole: string) => {
-    setKnownPartyKind("PERSON");
-    if (transfer.name !== undefined) {
-      setKnownPartyName(transfer.name);
-      setMetadataClientName(transfer.name);
-    }
-    if (transfer.role !== undefined) setKnownPartyRole(transfer.role);
-    if (transfer.notes !== undefined) setKnownPartyNotes(transfer.notes);
-    if (transfer.contactEmail !== undefined) setContactEmail(transfer.contactEmail);
-    if (transfer.phone !== undefined) setPhone(transfer.phone);
-    setKnownPartyLegalRole(legalRole);
-    setMetadataClientRole(legalRole);
+    // Append a NEW known-party bundle rather than overwriting the primary party,
+    // so selecting a second person never erases the first.
+    setAdditionalKnownParties((prev) => [
+      ...prev,
+      {
+        id: `kp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        kind: "PERSON",
+        legalRole,
+        name: transfer.name,
+        role: transfer.role,
+        notes: transfer.notes,
+        contactEmail: transfer.contactEmail,
+        phone: transfer.phone,
+      },
+    ]);
     setShowPersonPicker(false);
+  };
+
+  const removeAdditionalParty = (id: string) => {
+    setAdditionalKnownParties((prev) => prev.filter((party) => party.id !== id));
   };
 
   const router = useRouter();
@@ -166,24 +180,25 @@ const [phone, setPhone] = useState("");
         const response = await getAnonymizationSourceText(contract.id);
         if (!active) return;
 
-        const text = (response.sourceText || "").trim();
-        if (response.success && response.textAvailable && text.length > 0) {
+        const outcome = resolveAnonymizeSourceOutcome(response);
+        if (outcome.available) {
+          const text = (response.sourceText || "").trim();
           setSourceTextAvailable(true);
           setSourceText(text);
           setWorkspaceText(text);
-          setSourceLimitationMessage(SOURCE_TEXT_LIMITATION_MESSAGE);
+          setSourceLimitationMessage(outcome.message);
         } else {
           setSourceTextAvailable(false);
           setSourceText("");
           setWorkspaceText("");
-          setSourceLimitationMessage(response.limitationMessage || SOURCE_TEXT_LIMITATION_MESSAGE);
+          setSourceLimitationMessage(outcome.message);
         }
       } catch {
         if (!active) return;
         setSourceTextAvailable(false);
         setSourceText("");
         setWorkspaceText("");
-        setSourceLimitationMessage(SOURCE_TEXT_LIMITATION_MESSAGE);
+        setSourceLimitationMessage(resolveAnonymizeSourceOutcome({ code: "PROCESSING_FAILURE" }).message);
       } finally {
         if (active) {
           setSourceTextLoading(false);
@@ -252,6 +267,9 @@ const [phone, setPhone] = useState("");
             contactEmail: contactEmail.trim() || undefined,
             phone: phone.trim() || undefined,
           },
+          knownParties: additionalKnownParties.length > 0
+            ? additionalKnownParties.map(({ id: _id, ...party }) => party)
+            : undefined,
         } as AnonymizationMetadataInput,
       }) as unknown as {
         success: boolean;
@@ -510,6 +528,38 @@ const [phone, setPhone] = useState("");
                   )}
                 </div>
               </div>
+
+              {/* Additional known-party bundles (person picker appends here) */}
+              {additionalKnownParties.length > 0 && (
+                <div className="mb-6 p-4 border border-[#c3c8c1]/20">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="material-symbols-outlined text-[#434843] text-base">group_add</span>
+                    <p className="text-xs font-bold text-[#06190d]">További ismert felek</p>
+                  </div>
+                  <div className="space-y-2">
+                    {additionalKnownParties.map((party) => (
+                      <div key={party.id} className="flex items-center justify-between px-3 py-2 bg-[#f5f3ee] border border-[#c3c8c1]/10">
+                        <div>
+                          <p className="text-xs font-bold text-[#06190d]">{party.name || "Ismert fél"}</p>
+                          <p className="text-[10px] text-[#434843]/70">
+                            {party.legalRole || "Szerep nélkül"}
+                            {party.role ? ` — ${party.role}` : ""}
+                            {party.contactEmail ? ` — ${party.contactEmail}` : ""}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAdditionalParty(party.id)}
+                          className="text-[#8b3a3a] hover:text-[#6b2020] text-xs font-bold"
+                          aria-label={`Eltávolítás: ${party.name || "Ismert fél"}`}
+                        >
+                          Eltávolítás
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Known Party Context — case client is already known, user only needs counterparty info */}
               {clientName && (

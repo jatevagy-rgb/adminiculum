@@ -2635,36 +2635,39 @@ interface CounterpartyInput {
   partyType?: 'PERSON' | 'COMPANY' | 'UNKNOWN';
 }
 
+export interface KnownPartyInput {
+  kind?: 'PERSON' | 'COMPANY';
+  legalRole?: string;
+  name?: string;
+  role?: string;
+  notes?: string;
+  birthName?: string;
+  birthPlace?: string;
+  birthDate?: string;
+  mothersName?: string;
+  address?: string;
+  taxId?: string;
+  personalId?: string;
+  personalIdentifierNumber?: string;
+  identityCardNumber?: string;
+  companyName?: string;
+  seat?: string;
+  companyTaxNumber?: string;
+  euVatNumber?: string;
+  companyRegistrationNumber?: string;
+  representativeName?: string;
+  representativeTitle?: string;
+  contactEmail?: string;
+  phone?: string;
+}
+
 export interface AnonymizationMetadataInput {
   clientName?: string;
   clientRole?: string;
   counterparty?: string;
   notes?: string;
-  knownParty?: {
-    kind?: 'PERSON' | 'COMPANY';
-    legalRole?: string;
-    name?: string;
-    role?: string;
-    notes?: string;
-    birthName?: string;
-    birthPlace?: string;
-    birthDate?: string;
-    mothersName?: string;
-    address?: string;
-    taxId?: string;
-    personalId?: string;
-    personalIdentifierNumber?: string;
-    identityCardNumber?: string;
-    companyName?: string;
-    seat?: string;
-    companyTaxNumber?: string;
-    euVatNumber?: string;
-    companyRegistrationNumber?: string;
-    representativeName?: string;
-    representativeTitle?: string;
-    contactEmail?: string;
-    phone?: string;
-  };
+  knownParty?: KnownPartyInput;
+  knownParties?: KnownPartyInput[];
 }
 
 export interface AnonymizationSourceTextResponse {
@@ -2672,6 +2675,7 @@ export interface AnonymizationSourceTextResponse {
   textAvailable: boolean;
   sourceText?: string;
   limitationMessage?: string;
+  code?: string;
   error?: string;
 }
 
@@ -2712,7 +2716,7 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
     const bodyText = await response.text();
     const parsed = bodyText ? (() => {
       try {
-        return JSON.parse(bodyText) as Partial<AnonymizationSourceTextResponse> & { message?: string; error?: string };
+        return JSON.parse(bodyText) as Partial<AnonymizationSourceTextResponse> & { message?: string; error?: string; code?: string };
       } catch {
         return null;
       }
@@ -2722,6 +2726,7 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
       return {
         success: false,
         textAvailable: false,
+        code: parsed?.code,
         limitationMessage: parsed?.limitationMessage,
         error: parsed?.error || parsed?.message || `HTTP ${response.status}`,
       };
@@ -2732,12 +2737,14 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
       textAvailable: Boolean(parsed?.textAvailable),
       sourceText: typeof parsed?.sourceText === 'string' ? parsed.sourceText : undefined,
       limitationMessage: typeof parsed?.limitationMessage === 'string' ? parsed.limitationMessage : undefined,
+      code: typeof parsed?.code === 'string' ? parsed.code : undefined,
       error: typeof parsed?.error === 'string' ? parsed.error : undefined,
     };
   } catch {
     return {
       success: false,
       textAvailable: false,
+      code: 'PROCESSING_FAILURE',
       error: 'Network error while loading anonymization source text',
     };
   }

@@ -6,10 +6,10 @@ import { randomUUID } from 'crypto';
 
 import prisma from '../../config/database.js';
 import { extractText } from '../documents/textExtractor.js';
-import { securityScanBlock } from '../documents/securityScan.service';
 import { default as driveService } from '../sharepoint/driveService.js';
 import { rehydrateDocument, type RehydrationWarning } from './rehydration.js';
 import { collectClientFieldCandidates } from './clientCandidates.js';
+import { resolveAnonymizeSourceText, SOURCE_TEXT_LIMITATION_MESSAGE } from './sourceText.js';
 
 const TimelineType = {
   CASE_CREATED: 'CASE_CREATED',
@@ -65,39 +65,43 @@ interface CounterpartyInput {
   partyType?: 'PERSON' | 'COMPANY' | 'UNKNOWN';
 }
 
+/** One complete known-party identity bundle (person or company). */
+interface KnownPartyInput {
+  kind?: 'PERSON' | 'COMPANY';
+  legalRole?: string;
+  name?: string;
+  role?: string;
+  notes?: string;
+  birthName?: string;
+  birthPlace?: string;
+  birthDate?: string;
+  mothersName?: string;
+  address?: string;
+  taxId?: string;
+  personalId?: string;
+  personalIdentifierNumber?: string;
+  identityCardNumber?: string;
+  companyName?: string;
+  seat?: string;
+  companyTaxNumber?: string;
+  euVatNumber?: string;
+  companyRegistrationNumber?: string;
+  representativeName?: string;
+  representativeTitle?: string;
+  contactEmail?: string;
+  phone?: string;
+}
+
 interface AnonymizationMetadataInput {
   clientName?: string;
   clientRole?: string;
   counterparty?: string;
   notes?: string;
-  knownParty?: {
-    kind?: 'PERSON' | 'COMPANY';
-    legalRole?: string;
-    name?: string;
-    role?: string;
-    notes?: string;
-    birthName?: string;
-    birthPlace?: string;
-    birthDate?: string;
-    mothersName?: string;
-    address?: string;
-    taxId?: string;
-    personalId?: string;
-    personalIdentifierNumber?: string;
-    identityCardNumber?: string;
-    companyName?: string;
-    seat?: string;
-    companyTaxNumber?: string;
-    euVatNumber?: string;
-    companyRegistrationNumber?: string;
-    representativeName?: string;
-    representativeTitle?: string;
-    contactEmail?: string;
-    phone?: string;
-  };
+  /** Single known-party bundle (backwards-compatible). */
+  knownParty?: KnownPartyInput;
+  /** Multiple complete known-party bundles — each retains its own identity/fields/role. */
+  knownParties?: KnownPartyInput[];
 }
-
-const SOURCE_TEXT_LIMITATION_MESSAGE = 'A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.';
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -150,6 +154,8 @@ export async function anonymizeDocument(params: {
   aiReadyPrompt?: string;
   /** File-backed source blocked by the canonical security scan gate (409). */
   scanBlocked?: boolean;
+  /** Machine-readable failure dimension (SOURCE_NOT_AVAILABLE, PROCESSING_FAILURE, ...). */
+  code?: string;
   error?: string;
 }> {
   try {
@@ -160,7 +166,22 @@ export async function anonymizeDocument(params: {
       where: { id: params.documentId },
       include: {
         case: { include: { client: { include: { redactorProfile: true } } } },
-        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
+        versions: {
+          where: { isCurrent: true },
+          select: {
+            id: true,
+            documentId: true,
+            version: true,
+            securityScanStatus: true,
+            originalFileName: true,
+            name: true,
+            mimeType: true,
+            size: true,
+            storageReference: true,
+            spItemId: true,
+          },
+          take: 1,
+        },
       },
     });
 
@@ -345,8 +366,11 @@ export async function anonymizeDocument(params: {
         addCounterpartyCandidate(params.metadata.counterparty.trim(), 'params.metadata.counterparty', '[ELLENÉRDEKŰ FÉL]');
       }
 
-      const knownParty = params.metadata.knownParty;
-      if (knownParty) {
+      // Each known party is an independent identity bundle. Its own legal role
+      // decides the replacement token, so adding/removing one party never
+      // overwrites another party's candidates.
+      const addKnownPartyCandidates = (knownParty: KnownPartyInput | undefined) => {
+        if (!knownParty) return;
         const knownRole = knownParty.legalRole || knownParty.role || effectiveClientRole;
         const isOpponent = isCounterpartyRole(knownRole);
         const addPartyName = (value?: string, source = 'params.metadata.knownParty.name') => {
@@ -376,6 +400,11 @@ export async function anonymizeDocument(params: {
         addTypedCandidate(knownParty.contactEmail, 'EMAIL', 'params.metadata.knownParty.contactEmail', 'EMAIL');
         addTypedCandidate(knownParty.phone, 'PHONE', 'params.metadata.knownParty.phone', 'TELEFON');
         addTypedCandidate(knownParty.representativeName, 'REPRESENTATIVE', 'params.metadata.knownParty.representativeName', 'KÉPVISELŐ');
+      };
+
+      addKnownPartyCandidates(params.metadata.knownParty);
+      for (const party of params.metadata.knownParties || []) {
+        addKnownPartyCandidates(party);
       }
     }
 
@@ -425,48 +454,45 @@ export async function anonymizeDocument(params: {
           error: `A dokumentum üres vagy nem tartalmaz olvasható szöveget (${extractionResult.format})` 
         };
       }
-    } else if (document.spItemId) {
-      // File-backed path: the canonical security scan gate applies before any
-      // download or extraction. Only a persisted CLEAN status (never caller-
-      // supplied) opens the file. Legacy rows without any DocumentVersion keep
-      // their existing behavior, matching the documents module's own gate.
-      const scanGate = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
-      if (scanGate) {
-        return { success: false, scanBlocked: true, error: scanGate.error };
-      }
-      // Document is stored in SharePoint, fetch and extract
-      const fileBuffer = await driveService.downloadDocument(document.spItemId);
-      
-      if (!fileBuffer) {
-        return { success: false, error: 'Nem sikerült letölteni a dokumentumot a SharePointból' };
-      }
-
-      const extractionResult = await extractText(
-        fileBuffer,
-        document.mimeType || 'application/octet-stream',
-        document.fileName || undefined
+    } else if (document) {
+      // File-backed path: reuse the SAME canonical immutable-version source the
+      // Document Reader uses (current version's own storage reference, document
+      // pointer only as legacy fallback). The security scan gate applies before
+      // any download. This closes the "reader shows text, anonymize says missing"
+      // divergence for documents whose current version carries the storage.
+      const resolution = await resolveAnonymizeSourceText(
+        {
+          spItemId: document.spItemId,
+          mimeType: document.mimeType,
+          fileName: document.fileName,
+          name: document.name,
+          currentVersion: document.versions?.[0] ?? null,
+        },
+        (storageId) => driveService.downloadDocument(storageId),
       );
 
-      if (!extractionResult.success) {
-        return { 
-          success: false, 
-          error: `Nem sikerült kiolvasni a dokumentum tartalmát: ${extractionResult.error}` 
+      if (resolution.scanBlocked) {
+        return {
+          success: false,
+          scanBlocked: true,
+          code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+          error: resolution.limitationMessage || undefined,
         };
       }
-
-      content = extractionResult.text || '';
-      
-      if (!content || content.trim().length === 0) {
-        return { 
-          success: false, 
-          error: `A dokumentum üres vagy nem tartalmaz olvasható szöveget (${extractionResult.format})` 
+      if (!resolution.available || !resolution.text?.trim()) {
+        return {
+          success: false,
+          code: 'SOURCE_NOT_AVAILABLE',
+          error: resolution.limitationMessage || 'A dokumentum nincs feltöltve a SharePointba, nem anonimizálható',
         };
       }
+      content = resolution.text;
     } else {
-      // Fallback: no SharePoint ID - document content not accessible
-      return { 
-        success: false, 
-        error: 'A dokumentum nincs feltöltve a SharePointba, nem anonimizálható' 
+      // Fallback: neither Document nor ContractGeneration resolved (no source).
+      return {
+        success: false,
+        code: 'SOURCE_NOT_AVAILABLE',
+        error: 'Dokumentum nem található',
       };
     }
 
@@ -661,6 +687,8 @@ export async function getAnonymizationSourceText(documentId: string): Promise<{
   limitationMessage?: string;
   /** File-backed source blocked by the canonical security scan gate (409). */
   scanBlocked?: boolean;
+  /** Machine-readable failure dimension (SOURCE_NOT_AVAILABLE, PROCESSING_FAILURE). */
+  code?: string;
   error?: string;
 }> {
   try {
@@ -669,38 +697,56 @@ export async function getAnonymizationSourceText(documentId: string): Promise<{
       select: {
         id: true,
         fileName: true,
+        name: true,
         mimeType: true,
         spItemId: true,
-        versions: { where: { isCurrent: true }, select: { securityScanStatus: true }, take: 1 },
+        versions: {
+          where: { isCurrent: true },
+          select: {
+            id: true,
+            documentId: true,
+            version: true,
+            securityScanStatus: true,
+            originalFileName: true,
+            mimeType: true,
+            size: true,
+            storageReference: true,
+            spItemId: true,
+          },
+          take: 1,
+        },
       },
     });
 
-    if (document?.spItemId) {
-      const scanGate = securityScanBlock(document.versions?.[0]?.securityScanStatus || 'CLEAN');
-      if (scanGate) {
+    if (document) {
+      // Reuse the canonical immutable-version source (reader-equivalent) so the
+      // anonymization source read resolves the SAME bytes as the Document Reader.
+      const resolution = await resolveAnonymizeSourceText(
+        {
+          spItemId: document.spItemId,
+          mimeType: document.mimeType,
+          fileName: document.fileName,
+          name: document.name,
+          currentVersion: document.versions?.[0] ?? null,
+        },
+        (storageId) => driveService.downloadDocument(storageId),
+      );
+
+      if (resolution.scanBlocked) {
         return {
           success: true,
           textAvailable: false,
           scanBlocked: true,
-          limitationMessage: scanGate.error,
+          code: resolution.code || 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+          limitationMessage: resolution.limitationMessage || undefined,
         };
       }
-      const fileBuffer = await driveService.downloadDocument(document.spItemId);
-      if (fileBuffer) {
-        const extracted = await extractText(
-          fileBuffer,
-          document.mimeType || 'application/octet-stream',
-          document.fileName || undefined
-        );
-
-        const text = extracted.success ? (extracted.text || '').trim() : '';
-        if (text.length > 0) {
-          return {
-            success: true,
-            textAvailable: true,
-            sourceText: text,
-          };
-        }
+      if (resolution.available && resolution.text?.trim()) {
+        return {
+          success: true,
+          textAvailable: true,
+          sourceText: resolution.text,
+        };
       }
     }
 
@@ -738,13 +784,15 @@ export async function getAnonymizationSourceText(documentId: string): Promise<{
     return {
       success: true,
       textAvailable: false,
+      code: 'SOURCE_NOT_AVAILABLE',
       limitationMessage: SOURCE_TEXT_LIMITATION_MESSAGE,
     };
   } catch (error) {
     console.error('Get anonymization source text error:', error);
     return {
-      success: true,
+      success: false,
       textAvailable: false,
+      code: 'PROCESSING_FAILURE',
       limitationMessage: SOURCE_TEXT_LIMITATION_MESSAGE,
     };
   }
