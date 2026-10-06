@@ -18,17 +18,24 @@ import { getCommunications, type CommunicationItem } from "@/lib/api";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intakeStyles";
 
 export function CaseCommunicationPickerDrawer({
-  open, clientId, selectedIds, primaryId, onCancel, onConfirm,
+  open, clientId, selectedIds, primaryId, singleSelect = false, busy = false, error = null, onCancel, onConfirm,
 }: {
   open: boolean;
   clientId: string;
   selectedIds: string[];
   primaryId: string;
+  /** Single-thread mode: exactly one thread is selected and linked. */
+  singleSelect?: boolean;
+  /** Link-in-progress flag: disables confirm and labels it accordingly. */
+  busy?: boolean;
+  /** Link failure surfaced truthfully inside the drawer. */
+  error?: string | null;
   onCancel: () => void;
   onConfirm: (ids: string[], primary: string) => void;
 }) {
   const [items, setItems] = useState<CommunicationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
   const [showAssigned, setShowAssigned] = useState(false);
   // Staged selection: cancelling must leave the form untouched.
@@ -45,9 +52,10 @@ export function CaseCommunicationPickerDrawer({
     if (!open) return;
     let active = true;
     setLoading(true);
+    setLoadError(false);
     getCommunications({ limit: 50, clientId: clientId || undefined })
       .then((r) => { if (active) setItems(r.communications || []); })
-      .catch(() => { if (active) setItems([]); })
+      .catch(() => { if (active) { setItems([]); setLoadError(true); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [open, clientId]);
@@ -73,6 +81,11 @@ export function CaseCommunicationPickerDrawer({
   if (!open) return null;
 
   const toggle = (id: string) => {
+    if (singleSelect) {
+      setStaged([id]);
+      setStagedPrimary(id);
+      return;
+    }
     setStaged((prev) => {
       const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
       setStagedPrimary((p) => (next.includes(p) ? p : next[0] || ""));
@@ -115,6 +128,10 @@ export function CaseCommunicationPickerDrawer({
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
             {loading ? (
               <p className="text-[12.5px] text-[#7A8479]">Levelezés betöltése…</p>
+            ) : loadError ? (
+              <p role="alert" data-testid="comm-picker-load-error" className="text-[12.5px] font-semibold text-[#A8442A]">
+                A levelezés betöltése nem sikerült. Próbáld újra.
+              </p>
             ) : (
               <>
                 {available.length === 0 ? (
@@ -147,7 +164,7 @@ export function CaseCommunicationPickerDrawer({
                                 {c.createdAt ? ` · ${new Date(c.createdAt).toLocaleDateString("hu-HU")}` : ""}
                               </p>
                             </div>
-                            {sel ? (
+                            {sel && !singleSelect ? (
                               <button
                                 type="button"
                                 data-testid="comm-picker-primary"
@@ -197,15 +214,19 @@ export function CaseCommunicationPickerDrawer({
             <p data-testid="comm-disclosure" className="text-[11px] leading-[15px] text-[#5C6660]">
               A hozzárendelt levelezés csatolmányaiból nem jön létre automatikusan dokumentum.
             </p>
+            {error ? (
+              <p role="alert" data-testid="comm-picker-link-error" className="w-full text-[11.5px] font-semibold text-[#A8442A]">{error}</p>
+            ) : null}
             <div className="ml-auto flex items-center gap-2">
-            <button type="button" data-testid="comm-picker-cancel" className={intake.secondaryAction} onClick={onCancel}>Mégse</button>
+            <button type="button" data-testid="comm-picker-cancel" className={intake.secondaryAction} onClick={onCancel} disabled={busy}>Mégse</button>
             <button
               type="button"
               data-testid="comm-picker-confirm"
               className={intake.primaryAction}
+              disabled={busy || (singleSelect && staged.length !== 1)}
               onClick={() => onConfirm(staged, stagedPrimary)}
             >
-              Kiválasztás megerősítése
+              {busy ? "Kapcsolás…" : "Kiválasztás megerősítése"}
             </button>
             </div>
           </footer>
