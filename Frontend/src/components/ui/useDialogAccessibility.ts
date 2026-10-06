@@ -90,6 +90,10 @@ export function useDialogAccessibility({
 
     const onKeyDown = (event: KeyboardEvent) => {
       const dialog = dialogRef.current;
+      // Nested portals share this lifecycle; only the top interactive dialog
+      // handles Escape and Tab, so closing a child never closes its parent.
+      const activeDialogs = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]')).filter((node) => !node.closest('[inert]'));
+      if (activeDialogs.length && activeDialogs[activeDialogs.length - 1] !== dialog) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         onCloseRef.current();

@@ -31,6 +31,7 @@ export function CaseClientOwner({ caseId }: {
     const [readState, setReadState] = useState<'loading' | 'error' | 'success'>('loading');
     const [draft, setDraft] = useState<string | null>(null);
     const [error, setError] = useState('');
+    const [editing, setEditing] = useState(false);
     const [busy, setBusy] = useState(false);
     const generation = useRef(0);
     const url = `/case-workspace/cases/${encodeURIComponent(caseId)}/owner`;
@@ -40,6 +41,7 @@ export function CaseClientOwner({ caseId }: {
             setReadState('loading');
             setValue(null);
             setDraft(null);
+            setEditing(false);
             setBusy(false);
             setError('');
             void fetchApi<Owner>(url).then(v => {
@@ -86,5 +88,16 @@ export function CaseClientOwner({ caseId }: {
         }
     }
     const cls = 'min-h-10 min-w-10 rounded border px-3 py-2';
-    return <section aria-label="Ügygazda az ügyfélnél" className="rounded-lg border border-[var(--adm-border)] bg-white p-3 text-sm"><strong>Ügygazda az ügyfélnél</strong>{readState === 'loading' ? <p role="status">Ügygazda betöltése…</p> : readState === 'success' ? <p>{value?.owner ? `${value.owner.name}${value.owner.organizationGroupName ? ' · ' + value.owner.organizationGroupName : ''}${value.owner.valid ? '' : ' · már nem választható; új kijelölés szükséges'}` : 'Nincs kijelölve'}</p> : null}{error && <p role="alert">{error}</p>}{readState === 'success' && value?.canManage && <div className="mt-2 flex flex-wrap gap-2"><label>Állandó ügygazda <select className={cls} value={draft ?? value.personId ?? ''} disabled={busy} onChange={e => setDraft(e.target.value)}><option value="">Nincs kijelölve</option>{value.candidates.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{draft !== null && <><button type="button" className={cls} disabled={busy} onClick={() => void save()}>{busy ? 'Mentés…' : 'Ügygazda mentése'}</button><button type="button" className={cls} disabled={busy} onClick={() => setDraft(null)}>Mégse</button></>}</div>}<p className="mt-1 text-xs">Az ügyhöz mentett kijelölés. Nem ad ügyfélportál-hozzáférést; a jelentésben külön felülírható.</p></section>;
+    return <section aria-label="Ügygazda az ügyfélnél" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-[var(--adm-border)] bg-white px-3 py-2 text-sm">
+      <strong className="text-xs text-[var(--adm-text-muted)]">Ügygazda az ügyfélnél</strong>
+      {readState === 'loading' ? <span role="status">Betöltés…</span> : readState === 'success' ? <span>{value?.owner ? `${value.owner.name}${value.owner.organizationGroupName ? ' · ' + value.owner.organizationGroupName : ''}${value.owner.valid ? '' : ' · új kijelölés szükséges'}` : 'Nincs kijelölve'}</span> : null}
+      {error && <span role="alert" className="text-xs">{error}</span>}
+      {readState === 'success' && value?.canManage && !editing && <button type="button" className={cls} onClick={() => setEditing(true)}>Módosítás</button>}
+      {readState === 'success' && value?.canManage && editing && <div className="flex w-full flex-wrap items-center gap-2">
+        <label className="min-w-0">Ügygazda <select className={cls + ' max-w-full'} value={draft ?? value.personId ?? ''} disabled={busy} onChange={e => setDraft(e.target.value)}><option value="">Nincs kijelölve</option>{value.candidates.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
+        <button type="button" className={cls} disabled={busy || draft === null} onClick={() => void save()}>{busy ? 'Mentés…' : 'Mentés'}</button>
+        <button type="button" className={cls} disabled={busy} onClick={() => { setDraft(null); setEditing(false); }}>Mégse</button>
+        <span className="text-xs text-[var(--adm-text-muted)]">A kijelölés nem ad ügyfélportál-hozzáférést.</span>
+      </div>}
+    </section>;
 }

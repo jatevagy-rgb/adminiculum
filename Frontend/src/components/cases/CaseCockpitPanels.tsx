@@ -9,6 +9,7 @@
  * internal workflow, ochre for documents in progress, navy for review/control.
  */
 import Link from "next/link";
+import { BUSINESS_TIME_ZONE } from "@/lib/businessDateTime";
 import type { CaseWorkspace, CockpitDeadline } from "@/lib/api";
 
 export type Accent = "petrol" | "terracotta" | "green" | "ochre" | "navy" | "neutral";
@@ -26,19 +27,19 @@ export const ACCENT: Record<Accent, { bar: string; text: string; soft: string; r
 export function fmtDate(v?: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU");
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("hu-HU", { timeZone: BUSINESS_TIME_ZONE });
 }
 export function fmtDateTime(v?: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
   return Number.isNaN(d.getTime())
     ? "—"
-    : d.toLocaleString("hu-HU", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+    : d.toLocaleString("hu-HU", { timeZone: BUSINESS_TIME_ZONE, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 export function fmtTime(v?: string | null): string {
   if (!v) return "";
   const d = new Date(v);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("hu-HU", { timeZone: BUSINESS_TIME_ZONE, hour: "2-digit", minute: "2-digit" });
 }
 
 /**
@@ -125,7 +126,7 @@ export function DeadlineRow({ d }: { d: CockpitDeadline }) {
       <span aria-hidden="true" className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${a.bar}`} />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-baseline gap-x-2">
-          <span className="truncate text-[12.5px] font-semibold text-[var(--adm-text)]">{d.title}</span>
+          <span className="break-words text-[12.5px] font-semibold text-[var(--adm-text)]">{d.title}</span>
           <span className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase tracking-wide ${a.soft} ${a.text}`}>
             {d.source === "MATTER" ? "Ügyhatáridő" : "Feladat"}
           </span>
@@ -158,7 +159,7 @@ export function TaskCard({
           </Link>
           {attentionLabel ? <span className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase ${ACCENT.navy.soft} ${ACCENT.navy.text}`}>{attentionLabel}</span> : null}
           {task.priority === "URGENT" || task.priority === "HIGH"
-            ? <span className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase ${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}>{task.priority}</span>
+            ? <span className={`rounded px-1 py-0.5 text-[9px] font-bold uppercase ${ACCENT.terracotta.soft} ${ACCENT.terracotta.text}`}>{task.priority === "URGENT" ? "Sürgős" : "Magas"}</span>
             : null}
         </div>
         <p className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-[var(--adm-text-muted)]">
@@ -183,7 +184,7 @@ export function TaskCard({
 }
 
 /**
- * Ügyvédi instrukció / Induló helyzet.
+ * Induló ügyhelyzet.
  *
  * The legal work context — why the matter started, where it stands, what the
  * client expects, what is urgent and the first next step. Restored after the
@@ -247,7 +248,7 @@ export function StartingContextPanel({
         </div>
       ) : (
         <ActionableEmpty
-          message="Nincs rögzített induló helyzet vagy ügyvédi instrukció."
+          message="Nincs rögzített induló ügyhelyzet."
           actionLabel="Induló helyzet rögzítése"
           onAction={onAddContext}
         />

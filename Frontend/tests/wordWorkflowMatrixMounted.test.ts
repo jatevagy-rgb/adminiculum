@@ -76,7 +76,8 @@ test("mounted matrix keeps scope identity through absent selection, late A respo
     assert.match(writes[0].path, /\/documents\/DB\/legal-analyses/);
     assert.equal(writes[0].body.caseId, "B");
     assert.match(writes[0].body.analysisText, /B ügy saját kockázata/);
-    assert.match(container.textContent || "", /save denied/);
+    assert.match(container.textContent || "", /A mentés sikertelen volt/);
+    assert.doesNotMatch(container.textContent || "", /save denied/);
     assert.equal(Boolean(container.querySelector('[data-testid="risk-save-success-toast"]')), false);
     assert.equal((container.querySelector<HTMLTextAreaElement>('textarea[aria-label="Kockázat leírása"]')?.value), "B ügy saját kockázata");
 

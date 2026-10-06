@@ -43,8 +43,8 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
     const drag = useRef<string | null>(null);
     const url = `/case-workspace/cases/${encodeURIComponent(caseId)}/tiles`;
     useEffect(() => {
-        const generation = ++epoch.current;
         const load = () => {
+            const generation = ++epoch.current;
             setReadState('loading');
             setSaved(null);
             setDraft(null);
@@ -71,7 +71,7 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
         return () => { ++epoch.current; window.removeEventListener('case-tiles-saved', refresh); };
     }, [caseId, url]);
     const view = draft || saved;
-    const refs = view?.placements[surface] ?? [];
+    const refs = view?.placements[surface] ?? builtin.map(t => t.kind);
     const builtinById = new Map(builtin.map(t => [t.kind as string, t]));
     const mutateTile = (id: string, patch: Partial<Tile>) => setDraft(d => d && ({ ...d, tiles: d.tiles.map(t => t.id === id ? { ...t, ...patch } : t) }));
     function move(id: string, to: number) {
@@ -123,7 +123,7 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
       {readState === 'success' && draft && <><span className="text-sm">Nem mentett változat · közös tartalom, saját elrendezés</span><button type="button" className={control} disabled={busy} onClick={() => void save()}>{busy ? 'Mentés…' : 'Mentés'}</button><button type="button" className={control} disabled={busy} onClick={() => { setDraft(null); setError(''); }}>Mégse</button><button type="button" className={control} disabled={busy} onClick={() => setDraft(d => d && ({ ...d, placements: { overview: builtin.map(t => t.kind), document: builtin.map(t => t.kind) } }))}>Saját elrendezés alaphelyzetbe</button></>}
     </div>
     {error && <p role="alert" className="text-sm text-[var(--adm-text)]">{error}</p>}{notice && <p role="status">{notice}</p>}
-    {readState === 'success' && <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-3">
       {refs.map((id, index) => {
             const base = builtinById.get(id);
             const custom = view?.tiles.find(t => t.id === id);
@@ -144,7 +144,7 @@ export function DurableCaseTiles({ caseId, surface, builtin }: {
           {draft && <div className="mt-2">{(['overview', 'document'] as Surface[]).map(target => <label key={target} className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" disabled={busy} checked={draft.placements[target].includes(id)} onChange={e => place(id, target, e.target.checked)}/>{target === 'overview' ? 'Saját áttekintés' : 'Saját dokumentumfejléc'}</label>)}</div>}
         </article>;
         })}
-    </div>}
+    </div>
     {readState === 'success' && draft && <div className="space-y-2 rounded border p-3"><p className="text-sm">Elhelyezhető csempék (a tartalom közös; az elhelyezés csak Öné)</p>{[...builtin.map(t => ({ id: t.kind, title: t.title })), ...draft.tiles].filter(t => !refs.includes(t.id)).map(t => <button key={t.id} type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => place(t.id, surface, true)}>{t.title || 'Névtelen csempe'} hozzáadása ide</button>)}{draft.canManage && <button type="button" className={control} disabled={busy || refs.length >= 32} onClick={() => { const id = crypto.randomUUID(); setDraft(d => d && ({ ...d, tiles: [...d.tiles, { id, revision: 0, title: 'Új csempe', text: '', tone: 'green', archived: false }], placements: { ...d.placements, [surface]: [...d.placements[surface], id] } })); }}>Új közös szöveges csempe</button>}</div>}
   </section>;
 }

@@ -28,7 +28,7 @@ describe("Case Workspace email-thread picker repair (B4)", () => {
     const src = overview();
     assert.match(
       src,
-      /E-mail thread hozzárendelése" onAction=\{\(\) => setCommPickerOpen\(true\)\}/,
+      /onAddThread=\{\(\) => setCommPickerOpen\(true\)\}/,
       "the empty state must open the picker instead of navigating away",
     );
     assert.doesNotMatch(src, /E-mail thread hozzárendelése" href=/, "the CTA must no longer be a link");

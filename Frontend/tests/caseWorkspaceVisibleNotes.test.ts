@@ -140,11 +140,11 @@ describe("Case Workspace visible notes", () => {
     assert.match(caseService, /COMMENT_PARENT_IS_DOCUMENT_COMMENT/);
   });
 
-  it("9. secondary notes and activity rendering remain available", () => {
+  it("9. notes and chronological history remain available without a duplicate notes list", () => {
     const src = overviewSrc();
-    assert.match(src, /title="Jegyzetek"/);
-    assert.match(src, /title="Aktivitás"/);
-    assert.match(src, /data-testid="activity-feed"/);
+    assert.match(src, /<CaseWorkspaceNotesSection/);
+    assert.match(src, /<CaseHistoryPanel/);
+    assert.match(src, /id="ck-activity"/);
     assert.match(src, /<details ref=\{secondaryDetailsRef\}/);
   });
 

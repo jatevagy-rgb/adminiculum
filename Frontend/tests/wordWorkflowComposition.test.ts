@@ -66,7 +66,7 @@ test("permitted draft creation uses canonical flow; attachment failure is not re
 });
 test("real hosts mount composition and preserve adjacent actions and exact version identity", () => {
   const overview = readFileSync("src/components/cases/CaseWorkspaceOverview.tsx", "utf8");
-  const ordered = ['<CaseContextTiles', 'title="Aktív munka"', 'id="ck-comms"', '<DocumentPreparationDashboard', '<CaseWorkspaceDocumentsSection', 'id="ck-prompts"', 'aria-label="Ügytörténet"'];
+  const ordered = ['<CaseContextTiles', 'title="Aktív munka"', 'id="ck-comms"', '<CaseWorkspaceDocumentsSection', 'id="ck-prompts"', '<DocumentPreparationDashboard', 'aria-label="Ügytörténet"'];
   const positions = ordered.map(marker => overview.indexOf(marker));
   assert.ok(positions.every((position, index) => position >= 0 && (!index || position > positions[index - 1])));
   for (const marker of ["CaseTimeBillingSummary", "HourlyRateCard", "CaseSubmissionHandoff", "CaseCommentModal", "DocumentUploadModal", "CaseWorkPackagePanel"]) assert.ok(overview.includes(marker));

@@ -155,7 +155,7 @@ describe("Case Workspace AI eredmények tile", () => {
     assert.equal(overview.split('aria-label="Műveletek"').length - 1, 1);
     assert.match(overview, /id="ck-notes-primary"/);
     assert.match(overview, /data-testid="task-submission-leadas"/);
-    assert.match(overview, /setAiPromptOpen\(true\)\}>\s*AI előkészítés<\/AdminButton>/);
+    assert.match(overview, /setAiPromptOpen\(true\); \}\}>Csoportos előkészítés és promptelőnézet<\/AdminButton>/);
     assert.match(overview, /id="ck-comms"/);
     assert.match(overview, /id="ck-documents"/);
   });

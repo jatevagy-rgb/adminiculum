@@ -24,6 +24,7 @@ await build({
 import { createRoot } from "react-dom/client";
 import { AnonymizeModal } from "${path.join(ROOT, "src/components/documents/AnonymizeModal.tsx").replace(/\\/g, "/")}";
 import { CaseTimeEntryDialog } from "${path.join(ROOT, "src/components/cases/CaseTimeEntryDialog.tsx").replace(/\\/g, "/")}";
+import { ViewportDialog } from "${path.join(ROOT, "src/components/ui/ViewportDialog.tsx").replace(/\\/g, "/")}";
 function Harness() {
   const [which, setWhich] = useState("");
   const [open, setOpen] = useState(false);
@@ -32,6 +33,7 @@ function Harness() {
   return <><button id="trigger" onClick={() => { setWhich(window.qaNext); setOpen(true); }}>Open dialog</button>
     {open && which === "anon" && <AnonymizeModal isOpen onClose={close} contract={contract} />}
     {open && which === "time" && <CaseTimeEntryDialog caseId="qa-case" tasks={[]} onClose={close} onSaved={close} />}
+    {open && which === "shared" && <ViewportDialog title="Közös ablak" onClose={close} footer={<button onClick={close}>Kész</button>}><textarea aria-label="Hosszú szöveg" style={{height:1400}} defaultValue="Hosszú ügyadat" /></ViewportDialog>}
   </>;
 }
 createRoot(document.getElementById("root")).render(<Harness />);`,
@@ -50,7 +52,7 @@ createRoot(document.getElementById("root")).render(<Harness />);`,
       build.onResolve({ filter: /^next\/navigation$/ }, () => ({ path: "navigation", namespace: "qa" }));
       build.onLoad({ filter: /.*/, namespace: "qa" }, (args) => ({
         loader: "tsx",
-        contents: args.path === "api" ? "export async function getAnonymizationSourceText(){return {success:false,textAvailable:false}}; export async function anonymizeDocument(){ window.__b2Mutated = (window.__b2Mutated||0)+1; return {success:false} }" :
+        contents: args.path === "api" ? "export class ApiError extends Error {}; export async function getAnonymizationSourceText(){return {success:false,textAvailable:false}}; export async function anonymizeDocument(){ window.__b2Mutated = (window.__b2Mutated||0)+1; return {success:false} }" :
           args.path === "time-api" ? "export async function recordCaseTime(){ window.__b2Mutated = (window.__b2Mutated||0)+1; }" :
           args.path === "navigation" ? "export function useRouter(){return {push(){}}}" :
           "import React from 'react'; export function AIPromptPanel(){return null}; export function OrganizationPersonPicker(){return null}",
@@ -97,7 +99,7 @@ try {
   await page.route("**/b2-harness", (route) => route.fulfill({ contentType: "text/html", body: html }));
   await page.goto("http://localhost/b2-harness");
 
-  for (const which of ["anon", "time"]) {
+  for (const which of ["anon", "time", "shared"]) {
     results[which] = {};
     for (const [width, height] of [[390, 844], [654, 654], [768, 1000], [1440, 1000]]) {
       const tag = `${which.toUpperCase()} ${width}x${height}`;
@@ -246,7 +248,7 @@ try {
       });
       if (overflow) {
         await page.locator('[role="dialog"] .overflow-y-auto').evaluate((el) => { el.scrollTop = el.scrollHeight; });
-        const actionName = which === "anon" ? "Anonimizált másolat készítése" : "Idő mentése";
+        const actionName = which === "anon" ? "Anonimizált másolat készítése" : which === "time" ? "Idő mentése" : "Kész";
         assert.ok(await page.getByRole("button", { name: actionName }).isVisible(), `${tag}: action inaccessible after internal scroll`);
       }
       // close for the next iteration (Escape is canonical close)

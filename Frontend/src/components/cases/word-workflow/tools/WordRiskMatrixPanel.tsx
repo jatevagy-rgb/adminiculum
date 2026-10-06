@@ -1,5 +1,6 @@
 "use client";
 
+import { ViewportDialog } from "@/components/ui/ViewportDialog";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   listDocumentLegalAnalyses,
@@ -27,6 +28,8 @@ import {
   PROBABILITY_OPTIONS,
   type RiskMatrixRow,
 } from "./riskMatrixParser";
+
+class MatrixTargetError extends Error {}
 
 export interface WordRiskMatrixPanelProps {
   caseId: string;
@@ -109,7 +112,7 @@ export function WordRiskMatrixPanel({
       const docs = await getCaseDocuments(caseId);
       if (currentScope.current !== requestScope) return;
       if (!isExplicitCaseDocument(caseId, propDocumentId, docs)) {
-        throw new Error("A kiválasztott dokumentum nem tartozik ehhez az ügyhöz.");
+        throw new MatrixTargetError("A kiválasztott dokumentum nem tartozik ehhez az ügyhöz.");
       }
       const analyses = await listDocumentLegalAnalyses(propDocumentId, { caseId });
       if (currentScope.current !== requestScope) return;
@@ -119,7 +122,7 @@ export function WordRiskMatrixPanel({
       if (currentScope.current !== requestScope) return;
       const compatible = details.filter((full) => full.caseId === caseId && full.documentId === propDocumentId &&
         candidates.some((candidate) => candidate.id === full.id) && isMatrixOnlyAnalysis(full.analysisText));
-      if (compatible.length > 1) throw new Error("Több külön mátrix rekord található; válasszon egyet a dokumentum nézetben.");
+      if (compatible.length > 1) throw new MatrixTargetError("Több külön mátrix rekord található; válasszon egyet a dokumentum nézetben.");
       if (compatible.length === 1) {
         setActiveAnalysisId(compatible[0].id);
         if (!drafts.current.has(requestScope)) setRows(parseRiskMatrixInput(compatible[0].analysisText).rows);
@@ -127,7 +130,7 @@ export function WordRiskMatrixPanel({
       setResolvedDocId(propDocumentId);
       setTargetScope(requestScope);
     } catch (err) {
-      if (currentScope.current === requestScope) setSaveError(err instanceof Error ? err.message : "A mátrix betöltése sikertelen. A helyi módosítások megmaradtak.");
+      if (currentScope.current === requestScope) setSaveError(err instanceof MatrixTargetError ? err.message : "A mátrix betöltése sikertelen. A helyi módosítások megmaradtak.");
     } finally {
       if (currentScope.current === requestScope) setLoading(false);
     }
@@ -182,7 +185,7 @@ export function WordRiskMatrixPanel({
         setPromptScope(requestScope);
       }
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "A prompt generálása sikertelen.");
+      setSaveError(err instanceof MatrixTargetError ? err.message : "A prompt generálása sikertelen.");
     }
   };
 
@@ -253,7 +256,7 @@ export function WordRiskMatrixPanel({
 
       if (activeAnalysisId) {
         const current = await getLegalAnalysis(activeAnalysisId);
-        if (currentScope.current !== requestScope || current.caseId !== caseId || current.documentId !== resolvedDocId || !isMatrixOnlyAnalysis(current.analysisText)) throw new Error("A mentési cél megváltozott; a helyi módosítások megmaradtak.");
+        if (currentScope.current !== requestScope || current.caseId !== caseId || current.documentId !== resolvedDocId || !isMatrixOnlyAnalysis(current.analysisText)) throw new MatrixTargetError("A mentési cél megváltozott; a helyi módosítások megmaradtak.");
         await updateLegalAnalysis(activeAnalysisId, {
           analysisText: markdown,
         });
@@ -266,11 +269,11 @@ export function WordRiskMatrixPanel({
           status: "DRAFT",
         });
         if (currentScope.current !== requestScope) return;
-        if (created.caseId !== caseId || created.documentId !== resolvedDocId) throw new Error("A létrehozott mátrix rekord azonosítója nem egyezik a kiválasztott dokumentummal.");
+        if (created.caseId !== caseId || created.documentId !== resolvedDocId) throw new MatrixTargetError("A létrehozott mátrix rekord azonosítója nem egyezik a kiválasztott dokumentummal.");
         setActiveAnalysisId(created.id);
       } else {
         // No document attached to case yet
-        throw new Error(
+        throw new MatrixTargetError(
           "A mentéshez legalább egy csatolt dokumentum szükséges az ügyben. Az adatok nem vesztek el, a felület megőrizte a módosításokat."
         );
       }
@@ -283,7 +286,7 @@ export function WordRiskMatrixPanel({
     } catch (err) {
       // Preserve rows in UI! Do not discard!
       if (currentScope.current === requestScope) setSaveError(
-        err instanceof Error
+        err instanceof MatrixTargetError
           ? err.message
           : "A mentés sikertelen volt. A beírt módosítások a felületen megmaradtak."
       );
@@ -401,18 +404,21 @@ export function WordRiskMatrixPanel({
         ℹ️ <strong>Munkairat tájékoztató:</strong> A táblázatban rögzített kockázatok és javaslatok ügyvédi munkairatként kezelendők; nem minősülnek végleges jogi tanácsnak vagy hatósági megállapításnak.
       </div>
 
-      {/* Editable Table */}
+      <p data-testid="risk-matrix-summary" data-analysis-id={activeAnalysisId || undefined} className="text-sm text-[var(--adm-text-muted)]">
+        {loading ? 'Mátrix betöltése…' : !propDocumentId ? 'Válassz dokumentumot a mátrix megtekintéséhez.' : saveError && targetScope !== scope ? 'A mentett mátrix most nem ellenőrizhető.' : activeAnalysisId ? `Mentett mátrix · ${rows.length} kockázati sor` : rows.length ? `Helyi vázlat · ${rows.length} sor, még nincs mentve` : 'Ehhez a dokumentumhoz még nincs mentett mátrix.'}
+      </p>
+      {/* Editable Table — summary and editor share activeAnalysisId and rows. */}
       {loading ? (
         <p className="py-6 text-center text-[12px] text-[var(--adm-text-muted)]">
           Kockázati mátrix betöltése…
         </p>
-      ) : rows.length === 0 ? (
+      ) : saveError && targetScope !== scope ? null : rows.length === 0 ? (
         <div
           className="rounded border border-dashed border-[var(--adm-border)] py-8 text-center"
           data-testid="risk-matrix-empty"
         >
           <p className="text-[12.5px] text-[var(--adm-text-muted)]">
-            Még nincs rögzített kockázati tétel ebben az ügyben.
+            A kiválasztott dokumentum mátrixában még nincs kockázati tétel.
           </p>
           {!readOnly ? (
             <div className="mt-3 flex justify-center gap-2">
@@ -463,7 +469,8 @@ export function WordRiskMatrixPanel({
                         value={row.risk}
                         onChange={(e) => handleCellChange(row.id, "risk", e.target.value)}
                         placeholder="Kockázat leírása..."
-                        rows={2}
+                        rows={5}
+                        ref={(node) => { if (node) { node.style.height = "auto"; node.style.height = `${Math.max(120, node.scrollHeight)}px`; } }}
                         className="w-full rounded border border-[var(--adm-border)] p-1.5 text-[11.5px] text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none"
                         aria-label="Kockázat leírása"
                       />
@@ -529,7 +536,8 @@ export function WordRiskMatrixPanel({
                         value={row.mitigation}
                         onChange={(e) => handleCellChange(row.id, "mitigation", e.target.value)}
                         placeholder="Javasolt ügyvédi teendő vagy módosítás..."
-                        rows={2}
+                        rows={5}
+                        ref={(node) => { if (node) { node.style.height = "auto"; node.style.height = `${Math.max(120, node.scrollHeight)}px`; } }}
                         className="w-full rounded border border-[var(--adm-border)] p-1.5 text-[11.5px] text-[var(--adm-text)] focus:border-[var(--adm-green-800)] focus:outline-none"
                         aria-label="Javasolt kezelés"
                       />
@@ -542,7 +550,7 @@ export function WordRiskMatrixPanel({
                         onClick={() => handleDeleteRow(row.id)}
                         title="Sor törlése"
                         aria-label={`Sor törlése: ${row.risk || "kockázat"}`}
-                        className="inline-flex h-9 w-9 items-center justify-center rounded text-[16px] text-red-600 hover:bg-red-50 hover:text-red-800"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded text-[16px] text-red-600 hover:bg-red-50 hover:text-red-800"
                       >
                         ✕
                       </button>
@@ -574,27 +582,7 @@ export function WordRiskMatrixPanel({
 
       {/* Paste Modal */}
       {pasteDialogOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="paste-dialog-title"
-        >
-          <div className="w-full max-w-2xl rounded-lg border border-[var(--adm-border)] bg-white p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--adm-border)] pb-3">
-              <h2 id="paste-dialog-title" className="text-[15px] font-bold text-[var(--adm-text)]">
-                Kockázati táblázat beillesztése (TSV / Markdown)
-              </h2>
-              <button
-                type="button"
-                onClick={() => setPasteDialogOpen(false)}
-                aria-label="Bezárás"
-                className="flex h-10 w-10 items-center justify-center rounded text-[18px] text-[var(--adm-text-muted)] hover:bg-[var(--adm-surface)]"
-              >
-                ×
-              </button>
-            </div>
-
+        <ViewportDialog title="Kockázati táblázat beillesztése (TSV / Markdown)" onClose={() => setPasteDialogOpen(false)}>
             <p className="mt-3 text-[12px] leading-relaxed text-[var(--adm-text-muted)]">
               Másolja be az AI chatből vagy Excelből a kockázati táblázatot. A rendszer automatikusan felismeri a Markdown (|) és a tabulátorral (TSV) tagolt formátumokat.
             </p>
@@ -628,8 +616,7 @@ export function WordRiskMatrixPanel({
                 Táblázat beillesztése és feldolgozása
               </AdminButton>
             </div>
-          </div>
-        </div>
+        </ViewportDialog>
       ) : null}
 
       {/* Fallback modal for prompt copy failure */}
