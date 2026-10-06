@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { GrowAdaptiveJourney } from "@/components/client-portal/GrowAdaptiveJourney";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getPortalOrgGrow,
@@ -152,6 +153,8 @@ function SummaryPanel({
 export function OrgGrowView() {
   const [data, setData] = useState<PortalOrgGrow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [adaptiveFocused, setAdaptiveFocused] = useState(false);
+  const [detailedOpen, setDetailedOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Active navigation tab
@@ -622,6 +625,9 @@ export function OrgGrowView() {
         }
       />
 
+      {(activeTab === "attekintes" || activeTab === "teendok") ? <GrowAdaptiveJourney processes={processes} onFocusChange={setAdaptiveFocused} onDetailed={() => { setDetailedOpen(true); handleTabChange("teendok"); }} onNext={() => handleTabChange("fejlesztesi-iranyok")} /> : null}
+      <div hidden={adaptiveFocused} className="space-y-5">
+
       {/* Canonical 6-tab operational navigation */}
       <div className="border-b border-[var(--adm-border)] pb-2">
         <nav
@@ -732,6 +738,8 @@ export function OrgGrowView() {
       {/* TAB 2: TEENDŐK — assessments and survey are input channels */}
       {activeTab === "teendok" ? (
         <div className="space-y-4">
+          <details open={detailedOpen || assessmentView.mode !== "catalogue"} data-testid="grow-detailed-assessments">
+            <summary className="min-h-10 cursor-pointer py-2 font-semibold" onClick={(event) => { event.preventDefault(); setDetailedOpen(value => !value); }}>Részletes felmérések · korábbi V1-kitöltések</summary>
           <AdminPanel className={PANEL} data-testid="grow-assessments-section">
             {assessmentView.mode === "runner" && currentQuestion ? (
               <div data-testid="grow-assessment-runner">
@@ -1232,6 +1240,8 @@ export function OrgGrowView() {
               </div>
             )}
           </AdminPanel>
+
+          </details>
 
           {/* Secondary cross-pack summary of assessment findings */}
           <AdminPanel className={PANEL} data-testid="grow-aggregated-findings">
@@ -2168,6 +2178,7 @@ export function OrgGrowView() {
           ) : null}
         </AdminPanel>
       ) : null}
+      </div>
     </div>
   );
 }

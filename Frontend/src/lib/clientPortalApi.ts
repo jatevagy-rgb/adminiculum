@@ -862,6 +862,8 @@ export type PortalGrowAssessmentCatalogueItem = {
 export type PortalGrowAssessmentFinding = {
   titleHu: string;
   summaryHu: string;
+  nextCheckHu?: string;
+  evidence?: PortalGrowAssessmentEvidence[];
 };
 
 export type PortalGrowAssessmentDirection = {
@@ -891,6 +893,7 @@ export type PortalGrowAssessmentResult = {
   unknownAreaCount: number;
   summaryHu: string;
   noticeHu: string;
+  routingOptions?: Array<{ packKey: string; titleHu: string }>;
 };
 
 export type PortalGrowAssessmentCatalogue = {
@@ -906,6 +909,7 @@ export type PortalGrowAssessmentQuestion = {
   promptHu: string;
   helpTextHu: string | null;
   options: Array<{ value: string; labelHu: string }>;
+  when?: { mode: 'ALL' | 'ANY'; triggers: Array<{ questionKey: string; answers: string[] }> };
 };
 
 export type PortalGrowAssessmentDetail = {
@@ -959,7 +963,7 @@ export async function getPortalGrowAssessment(packKey: string, processId?: strin
 
 export async function submitPortalGrowAssessment(
   packKey: string,
-  payload: { answers: Array<{ questionKey: string; answer: string }>; idempotencyKey: string; processId?: string },
+  payload: { answers: Array<{ questionKey: string; answer: string }>; idempotencyKey: string; processId?: string; packVersion?: number },
 ) {
   return fetchApi<PortalGrowAssessmentSubmissionResult>(
     `/client-portal/org/grow-assessments/${encodeURIComponent(packKey)}/submissions`,
@@ -971,6 +975,22 @@ export async function submitPortalGrowAssessment(
       suppressErrorLogging: true,
     },
   );
+}
+
+export type PortalGrowJourney = {
+  resumeScope: string;
+  categories: Array<{ value: string; labelHu: string }>;
+  branches: Array<{ packKey: string; titleHu: string }>;
+  history: Array<{ processId: string | null; processName: string | null; result: PortalGrowAssessmentResult | null }>;
+  noticeHu: string;
+};
+
+export function getPortalGrowJourney() {
+  return fetchApi<PortalGrowJourney>('/client-portal/org/grow-assessments/journey', { authContext: 'customer', suppressErrorLogging: true });
+}
+
+export function submitPortalGrowPain(payload: { categories: string[]; freeText?: string; idempotencyKey: string }) {
+  return fetchApi<{ routes: Array<{ packKey: string; titleHu: string }>; message: string }>('/client-portal/org/grow-assessments/journey/pain', { authContext: 'customer', method: 'POST', body: JSON.stringify(payload), suppressErrorLogging: true });
 }
 
 export type PortalComplianceMissingInfo = {

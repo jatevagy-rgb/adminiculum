@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { GrowAdaptiveJourney } from "@/components/client-portal/GrowAdaptiveJourney";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, SafePanelError } from "@/components/ui";
 import { AdminBadge, AdminStatusPill } from "@/components/adminiculum/ui";
@@ -139,6 +140,8 @@ function GrowSectionHeader({ step, title, description }: { step: string; title: 
 export function PortalGrowV3() {
   const [data, setData] = useState<PortalOrgGrow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [adaptiveFocused, setAdaptiveFocused] = useState(false);
+  const [detailedOpen, setDetailedOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
 
@@ -563,9 +566,7 @@ export function PortalGrowV3() {
           kezdeményezésekről és azok eredményeiről.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button variant="primary" size="sm" onClick={() => handleTabChange("teendok")}>
-            Felmérések megnyitása
-          </Button>
+          <a className="inline-flex min-h-10 items-center text-sm font-semibold underline" href="#grow-adaptive-journey">Rövid működési visszajelzés</a>
           <Link
             href="/portal/megkeresesek"
             className="inline-flex items-center rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-1.5 text-xs font-semibold text-[var(--adm-text-primary)] hover:bg-[var(--adm-canvas-subtle)]"
@@ -574,6 +575,9 @@ export function PortalGrowV3() {
           </Link>
         </div>
       </header>
+
+      {(focus === null) ? <GrowAdaptiveJourney processes={processes} onFocusChange={setAdaptiveFocused} onDetailed={() => { setDetailedOpen(true); handleTabChange("teendok"); }} onNext={() => handleTabChange("fejlesztesi-iranyok")} /> : null}
+      <div hidden={adaptiveFocused} className="space-y-5">
 
       <nav
         className="flex flex-wrap items-center gap-1.5"
@@ -619,6 +623,8 @@ export function PortalGrowV3() {
             description="Ezek a felmérések választhatók. A kötelező ügyfélkéréseket és határidejüket a Teendők között találja."
           />
           <Link href="/portal/megkeresesek" className="inline-flex min-h-10 items-center text-sm font-semibold text-[var(--adm-brand-green)] underline">Kötelező teendők és határidők megnyitása</Link>
+          <details open={detailedOpen || assessmentView.mode !== "catalogue"} data-testid="grow-detailed-assessments">
+            <summary className="min-h-10 cursor-pointer py-2 font-semibold" onClick={(event) => { event.preventDefault(); setDetailedOpen(value => !value); }}>Részletes felmérések · korábbi V1-kitöltések</summary>
             <section className={CARD} data-testid="grow-assessments-section">
             {assessmentView.mode === "runner" && currentQuestion ? (
               <div data-testid="grow-assessment-runner">
@@ -1053,6 +1059,8 @@ export function PortalGrowV3() {
               </div>
             )}
           </section>
+
+          </details>
 
           {/* Secondary cross-pack summary of assessment findings */}
           <section className={CARD} data-testid="grow-aggregated-findings">
@@ -1859,6 +1867,7 @@ export function PortalGrowV3() {
         </section>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
