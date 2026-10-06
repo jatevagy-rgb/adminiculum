@@ -18,6 +18,8 @@ export interface WordWideCommunicationLeafProps {
   onChanged?: () => void;
   onAddThread?: () => void;
   refreshKey?: number;
+  replyNeededIds?: readonly string[];
+  communicationSignals?: ReadonlyArray<{ id: string; internal: boolean }>;
 }
 
 const typeLabels: Record<string, string> = {
@@ -72,6 +74,8 @@ export function WordWideCommunicationLeaf({
   readOnly = false,
   onAddThread,
   refreshKey = 0,
+  replyNeededIds = [],
+  communicationSignals = [],
 }: WordWideCommunicationLeafProps) {
   const [items, setItems] = useState<CommunicationItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -228,6 +232,8 @@ export function WordWideCommunicationLeaf({
               {filteredItems.map((item) => {
                 const isSelected = item.id === selectedId;
                 const isIncoming = item.direction === "INBOUND";
+                const signal = communicationSignals.find((entry) => entry.id === item.id);
+                const replyNeeded = replyNeededIds.includes(item.id);
                 return (
                   <button
                     key={item.id}
@@ -249,6 +255,10 @@ export function WordWideCommunicationLeaf({
                       </span>
                     </div>
 
+                    {signal || replyNeeded ? <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                      {replyNeeded ? <span data-testid="reply-needed" className="font-semibold text-[var(--adm-terracotta-700)]">Válaszra vár</span> : null}
+                      {signal ? <span className="text-[var(--adm-text-muted)]">{signal.internal ? "Belső" : "Külső"}</span> : null}
+                    </div> : null}
                     <h4 className="mt-1 text-[12.5px] font-bold text-[var(--adm-text)] line-clamp-1">
                       {item.subject || "Nincs tárgy"}
                     </h4>

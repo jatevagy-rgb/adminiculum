@@ -440,7 +440,7 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
       {/* ---- 5. Wide communication reader (WORD_WF04) ----------------------- */}
       <section id="ck-comms" aria-label="Kommunikációs lánc" className="scroll-mt-24 space-y-3">
         <span id="ck-wide-comms" />
-        <WordWideCommunicationLeaf key={caseId} caseId={caseId} clientId={c.client?.id ?? null} readOnly={false} refreshKey={notesRefreshKey} onAddThread={() => setCommPickerOpen(true)} />
+        <WordWideCommunicationLeaf key={caseId} caseId={caseId} replyNeededIds={cp.replyNeeded} communicationSignals={ws.communications} clientId={c.client?.id ?? null} readOnly={false} refreshKey={notesRefreshKey} onAddThread={() => setCommPickerOpen(true)} />
       </section>
 
         {/* -------- Right: correspondence and documents -------- */}

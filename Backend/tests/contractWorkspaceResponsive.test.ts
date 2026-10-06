@@ -20,16 +20,16 @@ const workspace = read('Frontend/src/app/cases/[caseId]/documents/page.tsx');
 const header = read('Frontend/src/components/documents/workContext/DocumentWorkspaceHeader.tsx');
 
 describe('app shell collapses instead of forcing overflow', () => {
-  it('shrinks the sidebar to an icon rail below the md breakpoint', () => {
-    // Not a fixed 260px at every width — narrow rail on small screens, full on md+.
-    expect(sidebar).toContain('w-20 md:w-[260px]');
+  it('shrinks the sidebar to an icon rail below the xl breakpoint', () => {
+    // Not a fixed 260px at every width — narrow rail on small screens, full on xl+.
+    expect(sidebar).toContain('w-20 xl:w-[260px]');
     expect(sidebar).toContain('shrink-0');
   });
 
   it('hides sidebar labels/headers/profile text on small screens, keeping icons', () => {
-    expect(sidebar).toContain('hidden md:block');
-    expect(sidebar).toContain('hidden md:inline');
-    expect(sidebar).toContain('justify-center md:justify-start');
+    expect(sidebar).toContain('hidden xl:block');
+    expect(sidebar).toContain('hidden xl:inline');
+    expect(sidebar).toContain('justify-center xl:justify-start');
   });
 
   it('keeps the top bar from overflowing: truncation, min-w-0 and wrapping', () => {
@@ -41,8 +41,9 @@ describe('app shell collapses instead of forcing overflow', () => {
 
 describe('workspace grid can shrink rather than overflow', () => {
   it('makes every fixed-width grid track shrinkable with minmax(0, …)', () => {
-    expect(workspace).toContain('minmax(0,320px)');
-    expect(workspace).toContain('minmax(0,300px)');
+    expect(workspace).toContain('<DocumentReaderWorkspace');
+    const reader = read('Frontend/src/components/documents/reader/DocumentReaderWorkspace.tsx');
+    expect(reader).toContain('min-h-0 min-w-0 flex-1');
     expect(workspace).toContain('minmax(0,360px)');
     // No bare fixed track that cannot shrink below its content.
     expect(workspace).not.toContain('lg:grid-cols-[minmax(0,1fr)_300px]');

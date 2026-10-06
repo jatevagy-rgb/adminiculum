@@ -10,9 +10,10 @@ suite('bounded organization provisioning on local PostgreSQL', () => {
   const actorId = crypto.randomUUID();
   const actorEmail = `provisioning-${actorId}@example.invalid`;
   const targets = [0, 1].map(i => ({ id: crypto.randomUUID(), name: `Provisioning fixture ${actorId}-${i}` }));
-  const db = new PrismaClient({ datasources: { db: { url } } });
+  let db: PrismaClient;
   const services = { createWorkspace, upsertOperatingProfile };
   beforeAll(async () => {
+    db = new PrismaClient({ datasources: { db: { url } } });
     await db.user.create({ data: { id: actorId, email: actorEmail, name: 'Provisioning fixture', role: 'ADMIN' } });
     await db.client.createMany({ data: targets });
     await db.case.create({ data: { caseNumber: `PROV-${actorId}`, title: 'Must stay attached', clientId: targets[0].id, caseType: 'OTHER', createdById: actorId } });

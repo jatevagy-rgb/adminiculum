@@ -5,13 +5,14 @@ import { linkCommunicationToCase } from '../src/modules/communications/linkCase.
 const url = process.env.COMMUNICATION_TASK_TEST_DATABASE_URL || process.env.MIGRATION_REPLAY_DATABASE_URL;
 const suite = url ? describe : describe.skip;
 suite('atomic communication case link (PostgreSQL)', () => {
-  const db = new PrismaClient({ datasources: { db: { url } } });
+  let db: PrismaClient;
   const actor = { userId: randomUUID(), role: 'ADMIN' };
   const outsider = { userId: randomUUID(), role: 'LAWYER' };
   const clients = [randomUUID(), randomUUID()];
   const cases = [randomUUID(), randomUUID(), randomUUID()];
   const communications: string[] = [];
   beforeAll(async () => {
+    db = new PrismaClient({ datasources: { db: { url } } });
     await db.user.createMany({ data: [actor, outsider].map((a) => ({ id: a.userId, role: a.role as 'ADMIN' | 'LAWYER', name: 'Link fixture', email: `${a.userId}@test.invalid` })) });
     await db.client.createMany({ data: clients.map((id) => ({ id, name: 'Link fixture' })) });
     await db.case.createMany({ data: cases.map((id, i) => ({ id, caseNumber: id, title: 'Link fixture', caseType: 'OTHER', clientId: clients[i === 2 ? 1 : 0], createdById: actor.userId })) });

@@ -32,7 +32,9 @@ describe('compliance workspace read model (static)', () => {
     // snapshotJson is read internally only as the authoritative source of
     // missingFactKeys — it is never returned in the projected DTO.
     expect(service).toContain('snapshotMissingFactKeys(row.snapshotJson)');
-    expect(service).not.toMatch(/snapshotJson\s*[,}]|snapshotJson:\s*row\./);
+    const projection = service.slice(service.indexOf('const areas:'));
+    expect(projection).not.toMatch(/^\s*(snapshotJson|ruleAst|astJson|snapshotDigest|ruleDigest)\s*[:,]/m);
+    expect(projection).not.toMatch(/\.\.\.row\b/);
   });
 
   it('projects missing information only from the persisted snapshot missingFactKeys', () => {

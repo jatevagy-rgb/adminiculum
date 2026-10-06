@@ -423,8 +423,8 @@ describe('visual correction: the communication list is not on the default surfac
     expect(sections).toContain('data-testid="comm-open-picker"');
     expect(sections).toContain('Kommunikáció kiválasztása');
     expect(dialog).toContain('onOpenPicker={() => setPickerOpen(true)}');
-    expect(drawer).toContain('data-testid="comm-picker-drawer"');
-    expect(drawer).toContain('aria-modal="true"');
+    expect(drawer).toContain('testId="comm-picker-drawer"');
+    expect(drawer).toContain('<ViewportDialog');
   });
 
   it('changes nothing when the picker is cancelled', () => {
@@ -532,8 +532,10 @@ describe('visual correction: detailed settings accordion', () => {
 describe('visual correction: mobile behaves as a full-height sheet', () => {
   it('fills the viewport on small screens and pads only from sm up', () => {
     expect(dialog).toContain('p-0 sm:p-6');
-    expect(drawer).toContain('items-end justify-center p-0 sm:items-center sm:p-6');
-    expect(drawer).toContain('h-[92vh]');
+    const viewportDialog = fs.readFileSync(path.join(repoRoot, 'Frontend/src/components/ui/ViewportDialog.tsx'), 'utf8');
+    expect(drawer).toContain('<ViewportDialog');
+    expect(viewportDialog).toContain('fixed inset-0');
+    expect(viewportDialog).toContain('max-h-[calc(100dvh-2rem)]');
   });
 
   it('collapses to one column and never overflows horizontally', () => {

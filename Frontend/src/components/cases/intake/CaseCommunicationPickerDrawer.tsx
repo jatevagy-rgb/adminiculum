@@ -93,6 +93,7 @@ export function CaseCommunicationPickerDrawer({
 
 
           <div className="border-b border-[rgba(16,22,19,0.10)] px-4 py-2.5">
+            <p data-testid="comm-picker-count" role="status" className="mb-2 text-sm text-[var(--adm-text-muted)]">{`${staged.length} beszélgetés kiválasztva`}</p>
             <input
               data-testid="comm-picker-search"
               className={`${intake.field} mt-0`}

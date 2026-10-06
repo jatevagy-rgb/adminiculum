@@ -315,7 +315,7 @@ describe('SEC-0B1: Cross-client isolation', () => {
       expect(response.status).toBe(403);
       expect(response.body).toMatchObject({
         status: 403,
-        code: 'CASE_ACCESS_FORBIDDEN',
+        code: 'AUTHORIZATION_DENIED',
       });
     });
 
@@ -745,7 +745,7 @@ describe('SEC-0B1: Role matrix tests', () => {
     expect(response.status).toBe(403);
     expect(response.body).toMatchObject({
       status: 403,
-      code: 'CASE_ACCESS_FORBIDDEN',
+      code: 'AUTHORIZATION_DENIED',
     });
   });
 });
