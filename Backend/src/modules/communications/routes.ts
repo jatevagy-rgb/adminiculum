@@ -29,6 +29,7 @@ import { readOutlookSyncConfig, isOutlookSyncConfigured } from './outlookGraphLi
 import { canUserActOnTask, createCanonicalTaskFromCommunication, SourceLinkedTaskError } from '../tasks/services';
 import casesService from '../cases/services';
 import { userCanManageCase as canonicalUserCanManageCase } from '../cases/authorization';
+import { CommunicationLinkError, linkCommunicationToCase } from './linkCase.service';
 import { InteractionError, type InternalActor } from '../client-interaction/base';
 import { listClientCommunicationSummary } from './clientSummary.service';
 import {
@@ -429,10 +430,12 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
         ORDER BY COALESCE(CASE WHEN direction = 'OUTBOUND' THEN "sentAt" ELSE "receivedAt" END, "receivedAt", "sentAt", "createdAt") DESC, id DESC
         LIMIT ${take}::int OFFSET ${skip}::int
       `);
-      rows = Array.isArray(rawRows) ? rawRows : [];
+      if (!Array.isArray(rawRows)) throw new Error('Communication list result unavailable');
+      rows = rawRows;
     } catch (error) {
       logPrismaRouteError('GET /communications effective-time-list-query', error);
-      rows = [];
+      res.status(503).json({ code: 'COMMUNICATION_READ_FAILED', message: 'A kommunikációs lista most nem érhető el. Próbálja újra.' });
+      return;
     }
 
     const rowIds = rows.map((row) => row.id);
@@ -497,12 +500,7 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
     });
   } catch (error) {
     logPrismaRouteError('GET /communications final', error);
-    const prismaErr = buildPrismaErrorResponse(error);
-    if (prismaErr) {
-      res.status(prismaErr.status).json(prismaErr.body);
-    } else {
-      res.status(500).json({ error: 'Error listing communications' });
-    }
+    res.status(503).json({ code: 'COMMUNICATION_READ_FAILED', message: 'A kommunikációs lista most nem érhető el. Próbálja újra.' });
   }
 });
 
@@ -655,85 +653,17 @@ router.post('/', authenticate, requireCommunicationsFoundation, async (req: Requ
 // ============================================================================
 
 router.post('/:id/link-case', authenticate, requireCommunicationsFoundation, async (req: Request, res: Response) => {
+  const caseId = typeof req.body?.caseId === 'string' ? req.body.caseId.trim() : '';
+  if (!caseId) { res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Válasszon ügyet.' }); return; }
   try {
-    const userId = (req as any).user?.userId;
-    const { id } = req.params;
-    const { caseId } = req.body;
-
-    if (!caseId) {
-      res.status(400).json({ error: 'Missing caseId' });
-      return;
-    }
-
-    // Verify case exists
-    const caseData = await prisma.case.findUnique({
-      where: { id: caseId },
-      select: { id: true, caseNumber: true, clientId: true },
-    });
-
-    if (!caseData) {
-      res.status(404).json({ error: 'Case not found' });
-      return;
-    }
-
-    if (!req.user?.userId || !(await userCanReadCase(String(caseId), req.user.userId, req.user.role))) {
-      res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });
-      return;
-    }
-
-    const current = await prisma.communication.findUnique({
-      where: { id: String(id) },
-      select: { id: true, clientId: true, caseId: true },
-    });
-    if (!current) {
-      res.status(404).json({ status: 404, code: 'COMMUNICATION_NOT_FOUND', message: 'Communication not found.' });
-      return;
-    }
-    if (current.clientId && current.clientId !== caseData.clientId) {
-      res.status(409).json({ status: 409, code: 'CLIENT_CASE_MISMATCH', message: 'Communication client and case client must match.' });
-      return;
-    }
-    if (current.caseId && current.caseId !== caseData.id && !(await userCanReadCase(current.caseId, req.user.userId, req.user.role))) {
-      res.status(403).json({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to the currently linked case.' });
-      return;
-    }
-    if (current.caseId && current.caseId !== caseData.id) {
-      const conflictingTask = await prisma.task.findFirst({
-        where: { sourceCommunicationId: current.id, caseId: { not: caseData.id } },
-        select: { id: true },
-      });
-      if (conflictingTask) {
-        res.status(409).json({ status: 409, code: 'COMMUNICATION_TASK_CASE_MISMATCH', message: 'A linked task belongs to the current case; move the task relationship before changing the communication case.' });
-        return;
-      }
-    }
-
-    const communication = await prisma.communication.update({
-      where: { id: String(id) },
-      data: { caseId, clientId: caseData.clientId }
-    });
-
-    // Create timeline event
-    await createTimelineEvent({
-      caseId,
-      userId,
-      eventType: 'CLIENT_CONTACT',
-      payload: {
-        communicationId: communication.id,
-        subject: communication.subject,
-        action: 'linked_to_case',
-        previousCaseId: current.caseId
-      }
-    });
-
-    res.json({ 
-      success: true, 
-      communication,
-      message: `Communication linked to case ${caseData.caseNumber}`
-    });
+    res.json(await linkCommunicationToCase(String(req.params.id), caseId, req.user!));
   } catch (error) {
-    console.error('Error linking communication to case:', error);
-    res.status(500).json({ error: 'Error linking communication to case' });
+    if (error instanceof CommunicationLinkError) {
+      res.status(error.status).json({ status: error.status, code: error.code, message: error.message });
+      return;
+    }
+    logPrismaRouteError('POST /communications/:id/link-case', error);
+    res.status(503).json({ code: 'COMMUNICATION_LINK_FAILED', message: 'Az üzenet kapcsolása nem sikerült. Frissítse a listát, majd próbálja újra.' });
   }
 });
 
@@ -918,10 +848,11 @@ router.post('/:id/create-case', authenticate, requireCommunicationsFoundation, a
         createdById: userId,
       }, tx, { withinTransaction: true, provisionCaseFolders: false });
 
-      await tx.communication.update({
-        where: { id: String(id) },
+      const linked = await tx.communication.updateMany({
+        where: { id: String(id), caseId: null, clientId: resolvedClientId },
         data: { caseId: newCase.id },
       });
+      if (linked.count !== 1) throw new CreateCaseFromCommunicationError(409, 'COMMUNICATION_ALREADY_LINKED', 'Az üzenetet időközben másik ügyhöz kapcsolták.');
 
       await tx.timelineEvent.create({
         data: {

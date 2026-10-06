@@ -54,7 +54,8 @@ export async function settle(rounds = 8): Promise<void> {
 }
 
 const fakeWindow = {
-  location: { hash: '' },
+  location: { hash: '', search: '' },
+  history: { replaceState() {} },
   innerHeight: 800,
   addEventListener() {},
   removeEventListener() {},

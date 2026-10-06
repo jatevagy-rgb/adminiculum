@@ -35,6 +35,7 @@ import {
 } from "@/lib/api";
 import { classifyAudience, toCommunicationSignal } from "@/lib/communicationIntake";
 import { taskWorkflowErrorMessage } from "@/lib/taskWorkflowPresentation";
+import { linkThreadErrorMessage } from "@/lib/communicationLinkErrors";
 import { TaskPlanningFields, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { ATTENTION_CATEGORY_ORDER, attentionPresentation } from "@/lib/attentionCategory";
 import { buildForwardBody, buildReplyAllRecipients } from "@/lib/mailboxMessageRecipients";
@@ -204,6 +205,8 @@ export default function CommunicationWorkspace() {
         console.error("Communications load failed:", error);
         if (!mounted) return;
         setCommunications([]);
+        setSelectedId(null);
+        setTotal(0);
         setLoadError("A kommunikációs lista most nem érhető el.");
       })
       .finally(() => {
@@ -446,7 +449,7 @@ export default function CommunicationWorkspace() {
       updateCommunication(assignTarget.id, { caseId: result.communication.caseId, clientId: result.communication.clientId });
       setAssignFeedback({ tone: "success", message: result.message || "A kommunikáció ügyhöz rendelve." });
     } catch (error) {
-      setAssignFeedback(apiFeedback(error, "Nem sikerült ügyhöz rendelni."));
+      setAssignFeedback({ tone: "error", message: linkThreadErrorMessage(error instanceof ApiError ? error : null) });
     } finally {
       setAssignBusy(false);
     }
@@ -596,7 +599,7 @@ export default function CommunicationWorkspace() {
           ) : null}
         </section>
 
-        {loadError ? <div className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{loadError}</div> : null}
+        {loadError ? <div role="alert" className="border border-[var(--adm-border)] bg-white px-3 py-2 text-[11px] font-semibold text-[var(--adm-text-muted)]">{loadError} <button type="button" onClick={() => setReloadToken((value) => value + 1)} className="min-h-10 underline">Újrapróbálás</button></div> : null}
 
         <div className="grid min-h-[520px] gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="adm-panel min-w-0 overflow-hidden bg-white">
@@ -607,7 +610,7 @@ export default function CommunicationWorkspace() {
             <div className="hidden grid-cols-[1.05fr_1.45fr_0.9fr_0.75fr_0.6fr] border-b border-[var(--adm-border)] bg-[var(--adm-surface)] px-3 py-2 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--adm-text-muted)] md:grid">
               <span>Feladó / forrás</span><span>Tárgy / jelzés</span><span>Ügyfél / ügy</span><span>Státusz</span><span>Idő</span>
             </div>
-            {loading ? <EmptyState title="Kommunikáció betöltése…" /> : filtered.length === 0 ? <EmptyState title="Nincs találat." detail="Módosítsd a szűrőket." /> : (
+            {loading ? <EmptyState title="Kommunikáció betöltése…" /> : loadError ? null : filtered.length === 0 ? <EmptyState title="Nincs találat." detail="Módosítsd a szűrőket." /> : (
               <div className="divide-y divide-[var(--adm-border)]">
                 {filtered.map((item) => {
                   const signal = toCommunicationSignal(item);

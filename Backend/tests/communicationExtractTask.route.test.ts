@@ -44,13 +44,13 @@ jest.mock('../src/modules/tasks/services', () => {
   return {
     __esModule: true,
     canUserActOnTask: jest.fn(),
-    createTaskFromCommunicationSource: jest.fn(),
+    createCanonicalTaskFromCommunication: jest.fn(),
     SourceLinkedTaskError: MockSourceLinkedTaskError,
   };
 });
 
 import communicationsRoutes from '../src/modules/communications/routes';
-import { createTaskFromCommunicationSource, SourceLinkedTaskError } from '../src/modules/tasks/services';
+import { createCanonicalTaskFromCommunication, SourceLinkedTaskError } from '../src/modules/tasks/services';
 
 type TestResponse = { status: number; body: any };
 
@@ -102,7 +102,7 @@ describe('POST /communications/:id/extract-task', () => {
   });
 
   it('delegates and returns the canonical source-linked task response', async () => {
-    (createTaskFromCommunicationSource as jest.Mock).mockResolvedValue({
+    (createCanonicalTaskFromCommunication as jest.Mock).mockResolvedValue({
       success: true,
       task: { id: 'task-1', caseId: 'case-1', sourceCommunicationId: 'comm-1', status: 'TODO' },
       source: { type: 'COMMUNICATION', id: 'comm-1', caseId: 'case-1' },
@@ -112,17 +112,15 @@ describe('POST /communications/:id/extract-task', () => {
 
     expect(response.status).toBe(201);
     expect(response.body).toMatchObject({ success: true, task: { caseId: 'case-1', sourceCommunicationId: 'comm-1' } });
-    expect(createTaskFromCommunicationSource).toHaveBeenCalledWith('comm-1', 'user-1', {
-      title: 'Follow up',
-      kind: 'FOLLOW_UP',
-      dueAt: '2026-09-01T00:00:00.000Z',
-      assigneeId: undefined,
+    expect(createCanonicalTaskFromCommunication).toHaveBeenCalledWith('comm-1', 'user-1', 'LAWYER', {
+      title: 'Follow up', dueDate: '2026-09-01T00:00:00.000Z', caseId: 'case-2',
     });
-    expect(JSON.stringify((createTaskFromCommunicationSource as jest.Mock).mock.calls[0][2])).not.toContain('case-2');
+    // Canonical service validates the requested case and planning fields;
+    // the route forwards them intact rather than silently discarding them.
   });
 
   it('returns the canonical safe error for an unlinked communication', async () => {
-    (createTaskFromCommunicationSource as jest.Mock).mockRejectedValue(new SourceLinkedTaskError(409, 'COMMUNICATION_NOT_LINKED_TO_CASE', 'Communication must be linked to a case before creating a task.'));
+    (createCanonicalTaskFromCommunication as jest.Mock).mockRejectedValue(new SourceLinkedTaskError(409, 'COMMUNICATION_NOT_LINKED_TO_CASE', 'Communication must be linked to a case before creating a task.'));
     const response = await requestJson(createApp());
     expect(response.status).toBe(409);
     expect(response.body).toEqual(expect.objectContaining({ code: 'COMMUNICATION_NOT_LINKED_TO_CASE' }));
@@ -134,14 +132,14 @@ describe('POST /communications/:id/extract-task', () => {
     const response = await requestJson(createApp());
     expect(response.status).toBe(403);
     expect(response.body.code).toBe('COMMUNICATION_ACCESS_FORBIDDEN');
-    expect(createTaskFromCommunicationSource).not.toHaveBeenCalled();
+    expect(createCanonicalTaskFromCommunication).not.toHaveBeenCalled();
   });
 
   it('preserves authentication and canonical service failures as safe responses', async () => {
     const unauthenticated = await requestJson(createApp(), {}, false);
     expect(unauthenticated.status).toBe(401);
 
-    (createTaskFromCommunicationSource as jest.Mock).mockRejectedValue(new SourceLinkedTaskError(403, 'CASE_ACCESS_FORBIDDEN', 'You do not have access to this case.'));
+    (createCanonicalTaskFromCommunication as jest.Mock).mockRejectedValue(new SourceLinkedTaskError(403, 'CASE_ACCESS_FORBIDDEN', 'You do not have access to this case.'));
     const denied = await requestJson(createApp());
     expect(denied.status).toBe(403);
     expect(denied.body).toEqual({ status: 403, code: 'CASE_ACCESS_FORBIDDEN', message: 'You do not have access to this case.' });

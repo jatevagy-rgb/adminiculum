@@ -29,7 +29,7 @@
 import { Prisma } from '@prisma/client';
 import { prisma as defaultPrisma } from '../../prisma/prisma.service';
 
-export type CommunicationPrivacyDb = typeof defaultPrisma;
+export type CommunicationPrivacyDb = Pick<typeof defaultPrisma, 'user' | 'communication'>;
 
 export type CommunicationPrivacyScope = {
   userId: string;

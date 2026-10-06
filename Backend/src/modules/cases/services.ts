@@ -650,10 +650,11 @@ return {
         if (communication.clientId && communication.clientId !== clientId) {
           throw new CaseWorkPackageError('COMMUNICATION_CLIENT_MISMATCH', 'The source communication belongs to a different client.', 403);
         }
-        await tx.communication.update({
-          where: { id: communication.id },
-          data: { caseId: newCase.id },
+        const linked = await tx.communication.updateMany({
+          where: { id: communication.id, caseId: null, clientId: communication.clientId },
+          data: { caseId: newCase.id, clientId },
         });
+        if (linked.count !== 1) throw new CaseWorkPackageError('COMMUNICATION_ALREADY_LINKED', 'Az üzenetet időközben másik ügyhöz kapcsolták.', 409);
       }
 
       // Optional customer-side case owner at creation. Persisted through the
