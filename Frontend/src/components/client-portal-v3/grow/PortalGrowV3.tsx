@@ -130,7 +130,7 @@ function GrowSectionHeader({ step, title, description }: { step: string; title: 
   return (
     <div>
       <p className={EYEBROW}>{step}</p>
-      <h2 className="mt-1 font-serif text-[22px] font-medium leading-tight text-[var(--adm-text-primary)]">{title}</h2>
+      <h2 className="mt-1 font-sans text-[22px] font-medium leading-tight text-[var(--adm-text-primary)]">{title}</h2>
       <p className={`mt-1 max-w-3xl text-sm leading-6 ${MUTED}`}>{description}</p>
     </div>
   );
@@ -545,7 +545,7 @@ export function PortalGrowV3() {
 
   const NAV_ITEMS: Array<{ id: GrowTab; label: string; count?: number }> = [
     { id: "attekintes", label: "Áttekintés" },
-    { id: "teendok", label: "Most Önre vár", count: uncompletedPacksCount },
+    { id: "teendok", label: "Választható felmérések" },
     { id: "fejlesztesi-iranyok", label: "Amin érdemes dolgozni", count: publishedOpportunitiesCount },
     { id: "kezdemenyezesek", label: "Folyamatban", count: initiatives.length },
     { id: "mukodes", label: "Az Ön működése", count: processes.length },
@@ -564,7 +564,7 @@ export function PortalGrowV3() {
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button variant="primary" size="sm" onClick={() => handleTabChange("teendok")}>
-            Teendők megnyitása
+            Felmérések megnyitása
           </Button>
           <Link
             href="/portal/megkeresesek"
@@ -614,11 +614,12 @@ export function PortalGrowV3() {
       {(focus === null || focus === "assessment") ? (
         <div id="grow-section-teendok" className="scroll-mt-24 space-y-4" data-testid="grow-section-teendok">
           <GrowSectionHeader
-            step="1 · Most Önre vár"
-            title="Amit most érdemes elvégeznie"
-            description="Kizárólag valódi ügyfélteendők: a még nem kitöltött felmérések és az Ön által beküldhető működési visszajelzés."
+            step="1 · Választható felmérések"
+            title="Önkéntes működési visszajelzés"
+            description="Ezek a felmérések választhatók. A kötelező ügyfélkéréseket és határidejüket a Teendők között találja."
           />
-          <section className={CARD} data-testid="grow-assessments-section">
+          <Link href="/portal/megkeresesek" className="inline-flex min-h-10 items-center text-sm font-semibold text-[var(--adm-brand-green)] underline">Kötelező teendők és határidők megnyitása</Link>
+            <section className={CARD} data-testid="grow-assessments-section">
             {assessmentView.mode === "runner" && currentQuestion ? (
               <div data-testid="grow-assessment-runner">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1483,7 +1484,7 @@ export function PortalGrowV3() {
                             key={outcome.id}
                             className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] p-3 text-sm"
                           >
-                            <AdminStatusPill tone={outcomeTone(outcome.basis)}>{outcome.basisLabel}</AdminStatusPill>
+                            <AdminStatusPill tone={outcomeTone(outcome.basis)}>{portalOutcomeBasisLabel(outcome.basis)}</AdminStatusPill>
                             {outcome.processName ? (
                               <span className={`ml-2 text-xs ${MUTED}`}>Érintett folyamat: {outcome.processName}</span>
                             ) : null}
@@ -1776,7 +1777,7 @@ export function PortalGrowV3() {
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {measuredOutcomes.map((item) => (
                   <div key={item.id} className="rounded-[8px] border border-[var(--adm-brand-green)] bg-[var(--adm-semantic-success-soft)] p-4">
-                    <AdminStatusPill tone="green">{item.basisLabel}</AdminStatusPill>
+                    <AdminStatusPill tone="green">{portalOutcomeBasisLabel(item.basis)}</AdminStatusPill>
                     {item.initiativeTitle ? (
                       <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
                         Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
@@ -1803,7 +1804,7 @@ export function PortalGrowV3() {
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     {calculatedOutcomes.map((item) => (
                       <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
-                        <AdminStatusPill tone="gold">{item.basisLabel}</AdminStatusPill>
+                        <AdminStatusPill tone="gold">{portalOutcomeBasisLabel(item.basis)}</AdminStatusPill>
                         {item.initiativeTitle ? (
                           <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
                             Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
@@ -1824,7 +1825,7 @@ export function PortalGrowV3() {
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     {estimatedOnlyOutcomes.map((item) => (
                       <div key={item.id} className="rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4">
-                        <AdminStatusPill tone="neutral">{item.basisLabel}</AdminStatusPill>
+                        <AdminStatusPill tone="neutral">{portalOutcomeBasisLabel(item.basis)}</AdminStatusPill>
                         {item.initiativeTitle ? (
                           <p className="mt-2 text-sm font-medium text-[var(--adm-text-primary)]">
                             Kezdeményezés: <span className="font-semibold">{item.initiativeTitle}</span>
@@ -1861,3 +1862,5 @@ export function PortalGrowV3() {
     </div>
   );
 }
+
+function portalOutcomeBasisLabel(basis: string): string { return ({ MEASURED: "Mért eredmény", CALCULATED: "Számított eredmény", ESTIMATED: "Becsült eredmény" } as Record<string, string>)[basis] || "Nem meghatározott eredmény"; }

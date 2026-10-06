@@ -18,7 +18,7 @@ test('stale targets fail truthfully without substituting another item', () => {
 });
 
 test('manual Requirements navigation clears the targeted selection and UX-02 portal is untouched', () => {
-  assert.match(page, /setRequirementsTarget\(null\); setView\(key\)/);
+  assert.match(page, /setRequirementsTarget\(null\); setFindingTarget\(null\); setView\(key\)/);
   const portal = readFileSync('src/components/client-portal-v3/compliance/PortalComplianceV3.tsx', 'utf8');
   assert.doesNotMatch(portal, /requirementsTarget|applicabilityId.*factKey/);
   assert.match(workbench, /row\.clientId !== clientId/);

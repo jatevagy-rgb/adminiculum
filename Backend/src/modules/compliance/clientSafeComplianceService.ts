@@ -1,3 +1,4 @@
+import { latestRelevantFactChange, snapshotMissingFactKeys, snapshotFreshness, complianceFactLabel } from "./snapshotPresentation";
 /**
  * Client-safe compliance read model for the organizational portal.
  *
@@ -67,6 +68,8 @@ export interface ClientSafeComplianceTopicDto {
     | 'RESOLVED';
   /** Short neutral explanation of the compliance state. */
   shortExplanation: string;
+  evaluatedAt: string | null;
+  evaluationFreshness: "RECORDED" | "STALE" | "UNAVAILABLE";
   /** Missing information items (empty array when complete). */
   missingInformation: MissingInformationItem[];
   /** Recommended next action for the client. */
@@ -269,18 +272,16 @@ async function batchLoadDependencyData(
 function computeMissingInformation(
   applicabilityId: string,
   allDependencies: BatchedDependency[],
-  allConsumedFacts: BatchedConsumedFact[],
+  persistedMissingKeys: string[],
 ): MissingInformationItem[] {
   const deps = allDependencies.filter((d) => d.applicabilityId === applicabilityId);
   if (deps.length === 0) return [];
 
-  const consumedKeys = new Set(
-    allConsumedFacts.filter((f) => f.applicabilityId === applicabilityId).map((f) => f.factKey),
-  );
+  const missingKeys = new Set(persistedMissingKeys);
 
   const missing: MissingInformationItem[] = [];
   for (const dep of deps) {
-    if (consumedKeys.has(dep.factKey)) continue;
+    if (!missingKeys.has(dep.factKey)) continue;
     const canonicalQuestion = dep.resolvedFactDefinition
       ? getCompanyProfileQuestionForDefinition(dep.resolvedFactDefinition)
       : null;
@@ -293,7 +294,7 @@ function computeMissingInformation(
           : [])
       : undefined;
     missing.push({
-      label: safeQuestionLabel(dep.resolvedFactDefinition?.questionKey, canonicalQuestion),
+      label: complianceFactLabel(dep.factKey, canonicalQuestion?.label) || safeQuestionLabel(dep.resolvedFactDefinition?.questionKey, canonicalQuestion),
       portalAnswerable,
       questionKey: canonicalQuestion?.questionKey ?? null,
       ...(canonicalQuestion ? {
@@ -396,6 +397,7 @@ export async function getClientSafeComplianceReadModel(
   prisma: Prisma = defaultPrisma,
 ): Promise<ClientSafeComplianceReadModel> {
   const visibleKeys = portalVisibleKeys(isProduction, demoEnabled);
+  const factChange = await prisma.clientFact.findMany({ where: { clientId }, select: { updatedAt: true, scopeType: true, factSubjectId: true, factDefinition: { select: { key: true } } } });
 
   const findings = await prisma.assessmentFinding.findMany({
     where: { clientId, scopeType: 'COMPANY' },
@@ -407,6 +409,8 @@ export async function getClientSafeComplianceReadModel(
         select: {
           id: true,
           outcome: true,
+          snapshotJson: true,
+          evaluationAt: true,
           requirementVersion: {
             select: {
               title: true,
@@ -426,11 +430,36 @@ export async function getClientSafeComplianceReadModel(
 
   const { dependencies, consumedFacts } = await batchLoadDependencyData(applicabilityIds, prisma);
 
+  const now = new Date();
+  const [applicable, clientControls] = await Promise.all([
+    prisma.requirementApplicability.findMany({
+      where: {
+        clientId,
+        scopeType: 'COMPANY',
+        requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
+        ruleVersion: { status: 'APPROVED', supersededById: null },
+      },
+      orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true, evaluationAt: true, createdAt: true, requirementVersion: { select: { title: true, requirement: { select: { key: true } }, controlMaps: { include: { controlDefinition: true } } } } },
+    }),
+    prisma.clientControl.findMany({
+      where: { clientId },
+      include: { controlDefinition: true, evidenceLinks: { include: { evidenceRecord: true } } },
+    }),
+  ]);
+  const latest = new Map<string, (typeof applicable)[number]>();
+  for (const row of applicable) {
+    const key = [row.requirementVersionId, row.ruleVersionId, row.scopeType, row.factSubjectId || ''].join(':');
+    if (!latest.has(key)) latest.set(key, row);
+  }
+  const currentApplicabilityIds = new Set([...latest.values()].map(row => row.id));
+
   const topics: ClientSafeComplianceTopicDto[] = [];
   const topicIdByRequirementKey = new Map<string, string>();
 
   for (const finding of findings) {
     const applicability = finding.requirementApplicability;
+    if (!applicability || !currentApplicabilityIds.has(applicability.id)) continue;
     const requirementKey = applicability?.requirementVersion?.requirement?.key || null;
 
     // Guard: manual findings (no requirementKey) are never portal content.
@@ -447,18 +476,21 @@ export async function getClientSafeComplianceReadModel(
 
     const state = mapClientState(applicabilityOutcome, finding.status ? String(finding.status) : null);
 
-    const missingInformation = applicability?.id
-      ? computeMissingInformation(applicability.id, dependencies, consumedFacts)
+    const evaluationFreshness = snapshotFreshness(applicability?.snapshotJson, applicability?.evaluationAt, latestRelevantFactChange(factChange, dependencies.filter(d => d.applicabilityId === applicability?.id).map(d => d.factKey), 'COMPANY', null));
+    const missingInformation = applicability?.id && evaluationFreshness === 'RECORDED'
+      ? computeMissingInformation(applicability.id, dependencies, snapshotMissingFactKeys(applicability.snapshotJson) || [])
       : [];
 
     const shortExplanation = buildShortExplanation(state, topic);
-    const nextAction = buildNextAction(state, missingInformation);
+    const nextAction = evaluationFreshness === 'RECORDED' ? buildNextAction(state, missingInformation) : 'Az értékelés belső frissítésre vár. A korábban megadott adatokat nem kell újra beküldeni.';
 
     topics.push({
       topicId: topic.topicKey,
       topicLabel: topic.portalLabel,
       state,
       shortExplanation,
+      evaluatedAt: applicability?.evaluationAt?.toISOString() ?? null,
+      evaluationFreshness,
       missingInformation,
       nextAction,
       documents: [],
@@ -466,28 +498,6 @@ export async function getClientSafeComplianceReadModel(
     topicIdByRequirementKey.set(requirementKey, topic.topicKey);
   }
 
-  const now = new Date();
-  const [applicable, clientControls] = await Promise.all([
-    prisma.requirementApplicability.findMany({
-      where: {
-        clientId,
-        scopeType: 'COMPANY',
-        requirementVersion: { status: 'APPROVED', effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }] },
-        ruleVersion: { status: 'APPROVED', supersededById: null },
-      },
-      orderBy: [{ evaluationAt: 'desc' }, { createdAt: 'desc' }],
-      select: { requirementVersionId: true, ruleVersionId: true, scopeType: true, factSubjectId: true, outcome: true, evaluationAt: true, createdAt: true, requirementVersion: { select: { title: true, requirement: { select: { key: true } }, controlMaps: { include: { controlDefinition: true } } } } },
-    }),
-    prisma.clientControl.findMany({
-      where: { clientId },
-      include: { controlDefinition: true, evidenceLinks: { include: { evidenceRecord: true } } },
-    }),
-  ]);
-  const latest = new Map<string, (typeof applicable)[number]>();
-  for (const row of applicable) {
-    const key = [row.requirementVersionId, row.ruleVersionId, row.scopeType, row.factSubjectId || ''].join(':');
-    if (!latest.has(key)) latest.set(key, row);
-  }
   const controlByDefinition = new Map(clientControls.map((control) => [control.controlDefinitionId, control]));
   const controlsSummary = [...latest.values()]
     .filter((row) => row.outcome === 'APPLIES' && visibleKeys.has(row.requirementVersion.requirement.key))

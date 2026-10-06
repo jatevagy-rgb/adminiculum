@@ -34,6 +34,7 @@ d('customer request Compliance provenance (PostgreSQL)', () => {
   const requirementId = crypto.randomUUID();
   const versionId = crypto.randomUUID();
   const ruleId = crypto.randomUUID();
+  const originDefinitionId = crypto.randomUUID();
   const actor = { userId: adminId, role: 'ADMIN' };
 
   beforeAll(async () => {
@@ -50,8 +51,8 @@ d('customer request Compliance provenance (PostgreSQL)', () => {
     await db.complianceDomain.create({ data: { code: domainCode, label: 'Provenance' } });
     await db.requirement.create({ data: { id: requirementId, key: `PROV_REQ_${suffix}`, jurisdictionCode: 'HU', domainCode } });
     await db.requirementVersion.create({ data: { id: versionId, requirementId, versionKey: 'V1', title: 'Home office szabályzat', normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
-    await db.applicabilityRuleVersion.create({ data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'test', astJson: {}, canonicalDigest: 'a'.repeat(64), status: 'APPROVED' } });
-    await db.requirementApplicability.create({ data: { clientId, requirementVersionId: versionId, ruleVersionId: ruleId, ruleDigest: 'a'.repeat(64), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(), sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'test', snapshotJson: {}, snapshotDigest: 'b'.repeat(64) } });
+    await db.applicabilityRuleVersion.create({ data: { id: ruleId, requirementVersionId: versionId, ruleVersionKey: 'R1', schemaVersion: 'rule-ast/v1', astJson: {}, canonicalDigest: 'a'.repeat(64), status: 'APPROVED' } });
+    await db.requirementApplicability.create({ data: { clientId, requirementVersionId: versionId, ruleVersionId: ruleId, ruleDigest: 'a'.repeat(64), outcome: 'APPLIES', scopeType: 'COMPANY', evaluationAt: new Date(), sourceSupportState: 'SUFFICIENT', specialistRequirement: 'NONE', schemaVersion: 'phase6-requirement-applicability/v1', snapshotJson: {}, snapshotDigest: 'b'.repeat(64) } });
   });
 
   afterAll(async () => {
@@ -65,11 +66,14 @@ d('customer request Compliance provenance (PostgreSQL)', () => {
     await db.controlDefinition.deleteMany({ where: { key: { startsWith: `PROV_CTRL_${suffix}` } } });
     await db.assessmentFinding.deleteMany({ where: { clientId: { in: [clientId, otherClientId] } } });
     await db.requirementApplicability.deleteMany({ where: { clientId } });
-    await db.applicabilityRuleVersion.delete({ where: { id: ruleId } });
-    await db.requirementVersion.delete({ where: { id: versionId } });
+    await db.applicabilityRuleFactDependency.deleteMany({ where: { applicabilityRuleVersionId: ruleId } });
+    await db.applicabilityRuleVersion.deleteMany({ where: { id: ruleId } });
+    await db.requirementVersion.deleteMany({ where: { requirementId } });
     await db.requirement.delete({ where: { id: requirementId } });
+    await db.clientFact.deleteMany({ where: { clientId } });
+    await db.factDefinition.deleteMany({ where: { id: originDefinitionId } });
     await db.complianceDomain.delete({ where: { code: domainCode } });
-    await db.case.deleteMany({ where: { id: caseId } });
+    await db.case.deleteMany({ where: { clientId: { in: [clientId, otherClientId] } } });
     await db.client.deleteMany({ where: { id: { in: [clientId, otherClientId] } } });
     await db.user.delete({ where: { id: adminId } });
     await db.$disconnect();
@@ -118,7 +122,7 @@ d('customer request Compliance provenance (PostgreSQL)', () => {
   });
 
   it('persists a finding-origin request', async () => {
-    const finding = await db.assessmentFinding.create({ data: { clientId, title: 'Hiányzó home office intézkedés', severity: 'HIGH', status: 'OPEN', requirementId, createdByUserId: adminId } as any });
+    const finding = await db.assessmentFinding.create({ data: { clientId, title: 'Hiányzó home office intézkedés', severity: 'HIGH', status: 'OPEN', requirementId, scopeType: 'COMPANY', createdByUserId: adminId } as any });
     const draft = await requests.createRequestDraft(actor, {
       caseId, type: 'QUESTION_RESPONSE', clientSafeTitle: 'Intézkedés egyeztetése',
       complianceContext: { findingId: finding.id },
@@ -128,7 +132,7 @@ d('customer request Compliance provenance (PostgreSQL)', () => {
   });
 
   it('rejects a requirement version not applicable to the client', async () => {
-    const foreignVersion = await db.requirementVersion.create({ data: { requirementId, versionKey: 'V2-FOREIGN', title: 'Foreign requirement', normativeStatement: 'Test', effectiveFrom: new Date('2026-01-01'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
+    const foreignVersion = await db.requirementVersion.create({ data: { requirementId, versionKey: 'V2-FOREIGN', title: 'Foreign requirement', normativeStatement: 'Test', effectiveFrom: new Date('2026-02-01'), status: 'APPROVED', sourceSupportState: 'SUFFICIENT' } });
     await expect(requests.createRequestDraft(actor, {
       caseId, type: 'INFORMATION_REQUEST', clientSafeTitle: 'x',
       complianceContext: { requirementVersionId: foreignVersion.id },
@@ -145,4 +149,24 @@ d('customer request Compliance provenance (PostgreSQL)', () => {
     expect(legacy.complianceContext).toBeNull();
     expect(legacy.contextLabel).toBeNull();
   });
+  it('retains exact missing-fact provenance and blocks a stale request before publication', async () => {
+    const key='prov_fact_'+suffix;
+    const snapshot=await db.requirementApplicability.create({data:{clientId,requirementVersionId:versionId,ruleVersionId:ruleId,ruleDigest:'a'.repeat(64),outcome:'INSUFFICIENT_FACTS',scopeType:'COMPANY',evaluationAt:new Date(),sourceSupportState:'SUFFICIENT',specialistRequirement:'NONE',schemaVersion:'phase6-requirement-applicability/v1',snapshotJson:{missingFactKeys:[key]},snapshotDigest:'c'.repeat(64)}});
+    await db.factDefinition.create({data:{id:originDefinitionId,key,domainCode,valueType:'BOOLEAN',allowedScopeTypes:['COMPANY'],determinationMethod:'USER_PROVIDED',overlapPolicy:'ALLOW',temporalPolicy:'VALIDITY_INTERVAL'}});
+    await db.applicabilityRuleFactDependency.create({data:{applicabilityRuleVersionId:ruleId,factKey:key,resolvedFactDefinitionId:originDefinitionId}});
+    const context={requirementVersionId:versionId,applicabilityId:snapshot.id,factKey:key};
+    const input={caseId,type:'QUESTION_RESPONSE',clientSafeTitle:'Tisztázandó adat',clientSafeInstructions:'Kérjük, pontosítsa az adatot.',complianceContext:context};
+    await expect(requests.createRequestDraft(actor,{...input,complianceContext:{...context,factKey:'other'}},db)).rejects.toMatchObject({status:409});
+    const first=await requests.createRequestDraft(actor,input,db);
+    expect(first.complianceContext).toMatchObject(context);
+    await requests.publishRequest(actor,first.id,first.revision,db);
+    const stored=await db.clientRequest.findUniqueOrThrow({where:{id:first.id}});
+    expect((stored.audienceSnapshot as any).complianceOrigin).toEqual({applicabilityId:snapshot.id,factKey:key});
+    const second=await requests.createRequestDraft(actor,input,db);
+    await db.clientFact.create({data:{clientId,type:'typed',value:'true',scopeType:'COMPANY',validFrom:new Date(),factDefinitionId:originDefinitionId,booleanValue:true}});
+    await expect(requests.publishRequest(actor,second.id,second.revision,db)).rejects.toMatchObject({status:409});
+    expect((await db.clientRequest.findUniqueOrThrow({where:{id:second.id}})).status).toBe('DRAFT');
+    await db.applicabilityRuleFactDependency.deleteMany({where:{resolvedFactDefinitionId:originDefinitionId}});
+  });
+
 });

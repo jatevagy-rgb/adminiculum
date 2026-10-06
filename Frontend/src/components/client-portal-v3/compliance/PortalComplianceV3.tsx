@@ -980,6 +980,7 @@ export function PortalComplianceV3() {
                         <div className="min-w-0 max-w-2xl">
                           <h3 className="text-sm font-semibold text-[var(--adm-text-primary)]">{topic.topicLabel}</h3>
                           <p className={`mt-1 text-xs ${MUTED}`}>{topic.shortExplanation}</p>
+                          <p className={`mt-1 text-xs ${MUTED}`}>Értékelve: {topic.evaluatedAt ? new Date(topic.evaluatedAt).toLocaleString("hu-HU", { timeZone: "Europe/Budapest" }) : "Nincs ellenőrizhető dátum"}{topic.evaluationFreshness && topic.evaluationFreshness !== "RECORDED" ? " · Belső frissítésre vár" : ""}</p>
                           <div className="mt-1.5 flex flex-wrap items-center gap-2">
                             <AdminStatusPill tone={bucketTone[bucket]}>{primaryBadgeLabel(topic, bucket)}</AdminStatusPill>
                             <span className="text-xs font-semibold text-[var(--adm-text-primary)]">

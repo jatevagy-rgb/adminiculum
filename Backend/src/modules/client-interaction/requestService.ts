@@ -1,3 +1,4 @@
+import { getComplianceWorkspace } from "../compliance/complianceWorkspaceService";
 /**
  * ClientRequest lifecycle (Phase 3-4, 11). Internal users draft/publish/cancel/
  * complete/expire; customers read only PUBLISHED requests for their granted case.
@@ -118,7 +119,7 @@ async function normalizeComplianceContext(
   clientId: string,
   input: any,
   prisma: Prisma,
-): Promise<{ requirementVersionId: string | null; clientControlId: string | null; findingId: string | null; contextLabel: string | null }> {
+): Promise<{ requirementVersionId: string | null; clientControlId: string | null; findingId: string | null; contextLabel: string | null; origin?: { applicabilityId: string; factKey: string } }> {
   const context = (input && typeof input === 'object' ? input.complianceContext : null) || null;
   if (!context || typeof context !== 'object') {
     return { requirementVersionId: null, clientControlId: null, findingId: null, contextLabel: null };
@@ -151,12 +152,21 @@ async function normalizeComplianceContext(
     if (!finding) throw new InteractionError(403, 'COMPLIANCE_CONTEXT_FORBIDDEN', 'Finding does not belong to this client.');
     label = finding.title;
   }
-  return { requirementVersionId, clientControlId, findingId, contextLabel: label };
+  let origin: { applicabilityId: string; factKey: string } | undefined;
+  if (context.applicabilityId || context.factKey) {
+    if (!requirementVersionId || !context.applicabilityId || !context.factKey) throw new InteractionError(400, 'COMPLIANCE_FACT_CONTEXT_INCOMPLETE', 'Exact missing fact context is required.');
+    const workspace = await getComplianceWorkspace(actor, clientId, prisma);
+    const area = workspace.areas.find(item => item.applicabilityId === context.applicabilityId && item.requirementVersionId === requirementVersionId);
+    if (!area || area.evaluationFreshness !== 'RECORDED' || !area.missingFacts.some(fact => fact.factKey === context.factKey)) throw new InteractionError(409, 'COMPLIANCE_FACT_CONTEXT_STALE', 'Refresh the evaluation before requesting this fact.');
+    origin = { applicabilityId: String(context.applicabilityId), factKey: String(context.factKey) };
+  }
+  return { requirementVersionId, clientControlId, findingId, contextLabel: label, origin };
 }
 
 function toInternalComplianceContext(row: any) {
   if (!row.requirementVersionId && !row.clientControlId && !row.findingId) return null;
   return {
+    ...(row.audienceSnapshot?.complianceOrigin || {}),
     requirementVersionId: row.requirementVersionId ?? null,
     clientControlId: row.clientControlId ?? null,
     findingId: row.findingId ?? null,
@@ -285,7 +295,7 @@ export async function createRequestDraft(actor: InternalActor, input: any, prism
       dueAt: input.dueAt ? new Date(input.dueAt) : null,
       required: input.required !== false,
       documentSpec: normalizeDocumentSpec(input.documentSpec) as any,
-      audienceSnapshot: {},
+      audienceSnapshot: provenance.origin ? { complianceOrigin: provenance.origin } : {},
       requirementVersionId: provenance.requirementVersionId,
       clientControlId: provenance.clientControlId,
       findingId: provenance.findingId,
@@ -337,7 +347,9 @@ export async function publishRequest(actor: InternalActor, requestId: string, ex
   // does not retroactively rewrite the published record.
   const caseId = requireCaseRequest(row);
   const grant = await prisma.clientPortalGrant.findFirst({ where: { clientId: row.clientId, caseId, status: 'ACTIVE' }, select: { id: true } });
-  const snapshot = audienceSnapshot({ clientId: row.clientId, caseId, grantId: grant?.id || 'none' });
+  const origin = (row.audienceSnapshot as any)?.complianceOrigin;
+  if (origin) await normalizeComplianceContext(actor, row.clientId, { complianceContext: { requirementVersionId: row.requirementVersionId, ...origin } }, prisma);
+  const snapshot = { ...audienceSnapshot({ clientId: row.clientId, caseId, grantId: grant?.id || 'none' }), ...(origin ? { complianceOrigin: origin } : {}) };
   const recipients = await activeGrantRecipients(row.clientId, caseId, prisma);
   const revision = Number(row.revision);
   return prisma.$transaction(async (tx) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AdminButton,
@@ -158,7 +158,9 @@ export function GrowWorkbench({
   const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<Array<{ id: string; sourceType: string; name: string; status: string; createdAt: string }>>([]);
 
+  const loadGeneration = useRef(0);
   const load = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);
     setOpportunitiesLoadFailed(false);
@@ -174,6 +176,7 @@ export function GrowWorkbench({
         clientCompanyApi.listMilestones(clientId).catch(() => ({ items: [] as CompanyMilestone[] })),
         clientCompanyApi.getProfile(clientId).catch(() => null),
       ]);
+      if (generation !== loadGeneration.current) return;
       setOpportunities(oppRes.result.items);
       setOpportunitiesLoadFailed(oppRes.failed);
       setEvidence(evRes.items);
@@ -197,10 +200,12 @@ export function GrowWorkbench({
       try {
         const { getDiagnosticWorkbench } = await import("@/lib/diagnosticWorkbenchApi");
         const wb = await getDiagnosticWorkbench(clientId);
+        if (generation !== loadGeneration.current) return;
         setDiagnoses(wb.problems.diagnoses);
         setRecommendations(wb.proposed.recommendations);
         setMissingItems(wb.missing.unresolvedItems);
       } catch {
+        if (generation !== loadGeneration.current) return;
         // Diagnostics are secondary to the overview; fail open to the other
         // canonical data rather than blocking the whole workbench.
         setDiagnoses([]);
@@ -210,17 +215,19 @@ export function GrowWorkbench({
 
       growApi
         .listSources(clientId)
-        .then((res) => setSources(res.items))
-        .catch(() => setSources([]));
+        .then((res) => { if (generation === loadGeneration.current) setSources(res.items); })
+        .catch(() => { if (generation === loadGeneration.current) setSources([]); });
     } catch {
+      if (generation !== loadGeneration.current) return;
       setError("A Grow felület adatai jelenleg nem tölthetők be.");
     } finally {
-      setLoading(false);
+      if (generation === loadGeneration.current) setLoading(false);
     }
   }, [clientId]);
 
   useEffect(() => {
     void load();
+    return () => { ++loadGeneration.current; };
   }, [load]);
 
   useEffect(() => {
@@ -273,7 +280,7 @@ export function GrowWorkbench({
           missingItems={missingItems}
           evidence={evidence}
           canRunResearch={canRunResearch}
-          onRunResearch={() => void load()}
+          opportunitiesLoadFailed={opportunitiesLoadFailed}
         />
       ) : null}
 
@@ -288,6 +295,7 @@ export function GrowWorkbench({
           recommendations={recommendations}
           requestedOpportunityId={requestedOpportunityId}
           opportunitiesLoadFailed={opportunitiesLoadFailed}
+          canStartInitiative={canRecordOutcome}
           onChanged={() => void load()}
         />
       ) : null}
@@ -333,7 +341,7 @@ function GrowOverviewTab({
   missingItems,
   evidence,
   canRunResearch,
-  onRunResearch,
+  opportunitiesLoadFailed,
 }: {
   clientId: string;
   clientName: string;
@@ -347,7 +355,7 @@ function GrowOverviewTab({
   missingItems: Array<{ code: string; message: string }>;
   evidence: GrowEvidenceItem[];
   canRunResearch: boolean;
-  onRunResearch: () => void;
+  opportunitiesLoadFailed: boolean;
 }) {
   const pendingReview = opportunities.filter((o) => o.status === "PENDING_REVIEW");
   const needsMoreDataDiagnoses = diagnoses.filter((d) => d.status === "NEEDS_MORE_DATA").length;
@@ -385,15 +393,9 @@ function GrowOverviewTab({
           "Működési fejlesztési áttekintés — diagnosztika, döntés és végrehajtás."
         }
         primaryAction={
-          canRunResearch ? (
-            <AdminButton size="sm" variant="primary" onClick={onRunResearch} data-testid="grow-run-research">
-              Új kutatási futás
-            </AdminButton>
-          ) : (
-            <Link href={`/clients/${clientId}/grow?tab=diagnosztika`}>
-              <AdminButton size="sm" variant="neutral">Diagnosztika megnyitása</AdminButton>
-            </Link>
-          )
+          <Link href={`/clients/${clientId}/grow?tab=${pendingReview.length > 0 ? "dontesek" : "diagnosztika"}`}>
+            <AdminButton size="sm" variant="primary">{pendingReview.length > 0 ? `Döntések megnyitása (${pendingReview.length})` : "Diagnosztika megnyitása"}</AdminButton>
+          </Link>
         }
       />
 
@@ -430,14 +432,13 @@ function GrowOverviewTab({
         />
       ) : null}
 
-      <GrowDiagnosticWorklist
-        diagnoses={diagnoses}
-        recommendations={recommendations}
-        opportunities={opportunities}
-        initiatives={initiatives}
-        clientId={clientId}
-      />
-      <GrowDecisionQueue clientId={clientId} pending={pendingReview} recommendations={recommendations} />
+      <p className="text-sm text-[var(--adm-text-muted)]">Megfigyelés: amit láttunk · Diagnózis: amit a bizonyíték jelez · Lehetőség: javítható terület · Döntés: emberi jóváhagyás · Kezdeményezés: végrehajtás · Eredmény: mért vagy becsült változás.</p>
+      {opportunitiesLoadFailed ? <SafePanelError detail="A döntések száma jelenleg nem ellenőrizhető." /> : <GrowDecisionQueue clientId={clientId} pending={pendingReview} recommendations={recommendations} />}
+      <details className="rounded-lg border border-[var(--adm-border)] p-3">
+        <summary className="cursor-pointer font-semibold">Diagnosztikai részletek és előzmények</summary>
+        <GrowDiagnosticWorklist diagnoses={diagnoses} recommendations={recommendations} opportunities={opportunities} initiatives={initiatives} clientId={clientId} />
+        {canRunResearch ? <Link href={`/clients/${clientId}/grow?tab=diagnosztika`} className="inline-flex min-h-10 items-center text-sm underline">Új kutatási futás előkészítése</Link> : null}
+      </details>
       <GrowActiveInitiatives initiatives={inFlightInitiatives} milestones={milestones} />
       <GrowRecentResults outcomes={outcomes} />
     </div>
@@ -587,6 +588,7 @@ function GrowDecisionQueue({
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-[var(--adm-text)]">{o.title}</p>
+                  <OpportunityOrigin item={o} />
                   <p className="text-[11px] text-[var(--adm-text-muted)]">
                     {domainTitleHu(o.domainKey)}
                     {o.businessProcess ? ` · ${o.businessProcess.name}` : ""}
@@ -766,6 +768,7 @@ function GrowDecisionsTab({
   recommendations,
   requestedOpportunityId,
   opportunitiesLoadFailed,
+  canStartInitiative,
   onChanged,
 }: {
   clientId: string;
@@ -773,6 +776,7 @@ function GrowDecisionsTab({
   recommendations: Array<{ id: string; title: string; direction: string; status: string; sufficiency: string; diagnosisId: string | null; domain: { key: string; name: string } | null; businessProcess: { id: string; name: string } | null }>;
   requestedOpportunityId: string | null;
   opportunitiesLoadFailed: boolean;
+  canStartInitiative: boolean;
   onChanged: () => void;
 }) {
   const pending = opportunities.filter((o) => o.status === "PENDING_REVIEW");
@@ -828,12 +832,14 @@ function GrowDecisionsTab({
               <li key={o.id} id={`grow-opportunity-${encodeURIComponent(o.id)}`} tabIndex={-1} data-testid={`grow-decision-${o.id}`} className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 outline-none ${o.id === requestedOpportunityId ? "rounded-md ring-2 ring-[var(--adm-green-800)] ring-offset-2" : ""}`}>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-semibold text-[var(--adm-text)]">{o.title}</p>
+                  <OpportunityOrigin item={o} />
                   {o.id === requestedOpportunityId ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]">Kért lehetőség</p> : null}
                   <p className="text-[11px] text-[var(--adm-text-muted)]">
                     {reviewDecisionLabelHu(o.status)}
                     {o.opportunity?.developmentInitiativeId ? " · kezdeményezés indítva" : " · kezdeményezés még nem indult"}
                   </p>
                 </div>
+                <GrowInitiativeAction clientId={clientId} item={o} canStart={canStartInitiative} onChanged={onChanged} />
                 <AdminStatusPill tone="green">{reviewDecisionLabelHu(o.status)}</AdminStatusPill>
               </li>
             ))}
@@ -849,6 +855,7 @@ function GrowDecisionsTab({
               <li key={o.id} id={`grow-opportunity-${encodeURIComponent(o.id)}`} tabIndex={-1} data-testid={`grow-decision-${o.id}`} className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 outline-none ${o.id === requestedOpportunityId ? "rounded-md ring-2 ring-[var(--adm-green-800)] ring-offset-2" : ""}`}>
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] text-[var(--adm-text)]">{o.title}</p>
+                  <OpportunityOrigin item={o} />
                   {o.id === requestedOpportunityId ? <p className="text-[11px] font-semibold text-[var(--adm-green-800)]">Kért lehetőség</p> : null}
                 </div>
                 <AdminStatusPill tone={o.status === "DECLINED" ? "burgundy" : "amber"}>{reviewDecisionLabelHu(o.status)}</AdminStatusPill>
@@ -986,7 +993,7 @@ function GrowInitiativesTab({
             const linkedOpportunity = opportunities.find((o) => o.opportunity?.developmentInitiativeId === i.id);
             const ownOutcomes = outcomes.filter((o) => o.initiative?.id === i.id);
             return (
-              <AdminPanel key={i.id} className="p-4" data-testid={`grow-initiative-${i.id}`}>
+              <AdminPanel key={i.id} id={`grow-initiative-${encodeURIComponent(i.id)}`} className="scroll-mt-24 p-4" data-testid={`grow-initiative-${i.id}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-[14px] font-semibold text-[var(--adm-text)]">{i.title}</p>
@@ -1466,4 +1473,24 @@ function GrowDataSourcesTab({
       </p>
     </div>
   );
+}
+
+function OpportunityOrigin({ item }: { item: GrowOpportunityItem }) {
+  return <p className="text-xs text-[var(--adm-text-muted)]">{formatDate(item.createdAt)} · Kutatási kör: <span title={item.runId}>{item.runId.slice(0, 8)}</span> · {item.businessProcess?.name || domainTitleHu(item.domainKey)}</p>;
+}
+
+function GrowInitiativeAction({ clientId, item, canStart, onChanged }: { clientId: string; item: GrowOpportunityItem; canStart: boolean; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const linkedId = item.opportunity?.developmentInitiativeId;
+  if (linkedId) return <Link className="inline-flex min-h-10 items-center text-sm underline" href={`/clients/${clientId}/grow?tab=kezdemenyezesek#grow-initiative-${encodeURIComponent(linkedId)}`}>Kezdeményezés megnyitása</Link>;
+  if (!item.opportunity?.id || !canStart) return <span className="text-xs text-[var(--adm-text-muted)]">A kezdeményezést vezető indíthatja.</span>;
+  const start = async () => {
+    if (busy) return;
+    setBusy(true); setError(null);
+    try { await growApi.startInitiative(clientId, item.opportunity!.id); onChanged(); }
+    catch { setError("Az indítás nem sikerült. Frissítse a döntéseket a jelenlegi állapot ellenőrzéséhez."); }
+    finally { setBusy(false); }
+  };
+  return <div><AdminButton size="sm" variant="primary" disabled={busy} onClick={() => void start()}>{busy ? "Indítás…" : "Kezdeményezés indítása"}</AdminButton>{error ? <p role="alert" className="text-sm text-[var(--adm-terracotta-700)]">{error}</p> : null}</div>;
 }

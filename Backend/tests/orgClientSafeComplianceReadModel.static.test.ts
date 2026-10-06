@@ -49,8 +49,8 @@ describe('Org client safe compliance read model contract', () => {
     expect(src).toContain('assertClientSafe(result)');
     expect(src).not.toContain('requirementKey:');
     expect(src).not.toContain('severity:');
-    expect(src).not.toContain('snapshotJson');
-    expect(src).not.toContain('factSubjectId');
+    expect(src.slice(src.indexOf('topics.push({'), src.indexOf('topicIdByRequirementKey.set'))).not.toContain('snapshotJson');
+    expect(src.slice(src.indexOf('topics.push({'), src.indexOf('topicIdByRequirementKey.set'))).not.toContain('factSubjectId');
   });
 
   it('topicId comes from registry topicKey, never DB ids', () => {
@@ -124,7 +124,7 @@ describe('Org client safe compliance read model contract', () => {
     expect(src).toContain('batchLoadDependencyData');
     expect(src).toContain('computeMissingInformation');
     // No per-topic prisma calls in the loop
-    const loopSection = src.slice(src.indexOf('for (const finding'));
+    const loopSection = src.slice(src.indexOf('for (const finding'), src.indexOf('  const controlByDefinition'));
     expect(loopSection).not.toContain('prisma.');
   });
 

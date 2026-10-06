@@ -991,6 +991,8 @@ export type PortalComplianceDocument = {
 };
 
 export type PortalComplianceTopic = {
+  evaluatedAt?: string | null;
+  evaluationFreshness?: "RECORDED" | "STALE" | "UNAVAILABLE";
   topicId: string;
   topicLabel: string;
   state: 'REVIEW_RECOMMENDED' | 'MORE_INFORMATION_NEEDED' | 'LAWYER_REVIEW_REQUIRED' | 'ACTION_IN_PROGRESS' | 'RESOLVED';

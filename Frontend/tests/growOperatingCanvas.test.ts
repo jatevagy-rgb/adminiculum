@@ -183,7 +183,7 @@ test('existing opportunity and initiative URL state remains intact', () => {
 
 test('switching away from Működés clears the process query parameter', () => {
   const src = read(VIEW);
-  assert.match(src, /if \(tab !== "mukodes"\) \{\n\s*url\.searchParams\.delete\("processId"\);/);
+  assert.match(src, /if \(tab !== "mukodes"\) \{\r?\n\s*url\.searchParams\.delete\("processId"\);/);
 });
 
 // ---------------------------------------------------------------------------
