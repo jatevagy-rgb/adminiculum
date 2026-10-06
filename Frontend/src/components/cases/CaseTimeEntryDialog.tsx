@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { recordCaseTime } from "@/lib/caseTimeBillingApi";
 import type { CaseWorkspace } from "@/lib/api";
 
@@ -30,6 +31,7 @@ export function CaseTimeEntryDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const [mounted, setMounted] = useState(false);
   const [minutes, setMinutes] = useState(30);
   const [description, setDescription] = useState("");
   const [workType, setWorkType] = useState(WORK_TYPES[0].value);
@@ -37,6 +39,8 @@ export function CaseTimeEntryDialog({
   const [workDate, setWorkDate] = useState(today);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => setMounted(true), []);
 
   async function save() {
     if (!description.trim() || minutes <= 0 || saving) return;
@@ -59,17 +63,19 @@ export function CaseTimeEntryDialog({
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4" role="dialog" aria-modal="true" aria-labelledby="case-time-entry-title">
-      <div className="w-full max-w-lg border border-[var(--adm-border)] bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--adm-border)] px-5 py-4">
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4">
+      <div role="dialog" aria-modal="true" aria-labelledby="case-time-entry-title" className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden border border-[var(--adm-border)] bg-white shadow-2xl">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--adm-border)] px-5 py-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügy</p>
             <h2 id="case-time-entry-title" className="mt-1 font-serif text-xl font-semibold text-[var(--adm-text)]">Idő rögzítése</h2>
           </div>
           <button type="button" onClick={onClose} disabled={saving} aria-label="Bezárás" className="text-xl leading-none text-[var(--adm-text-muted)] hover:text-[var(--adm-text)]">×</button>
         </div>
-        <div className="space-y-4 p-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-[11px] font-semibold text-[var(--adm-text)]">
               Időtartam (perc)
@@ -104,7 +110,8 @@ export function CaseTimeEntryDialog({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
