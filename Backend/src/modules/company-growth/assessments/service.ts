@@ -22,7 +22,11 @@ import {
   getAssessmentPackVersion,
   listAssessmentPacks,
   validateAssessmentSubmission,
+  type AssessmentCondition,
 } from './registry';
+import { V2_ASSESSMENT_PACKS, V2_PAIN_ROUTES, quickScanRoutes } from './v2Definitions';
+import { SURVEY_CATEGORY_LABELS_HU, submitPortalSurveyIntake } from '../../company-observatory/intake';
+import { canonicalDigest } from '../../compliance/canonicalDigest';
 import { resolveCustomerEvidence } from './evidence';
 import {
   listPortalGrowAssessments,
@@ -38,6 +42,8 @@ export const ASSESSMENT_CUSTOMER_NOTICE_HU =
 export interface AssessmentResultFindingDto {
   titleHu: string;
   summaryHu: string;
+  nextCheckHu?: string;
+  evidence?: AssessmentEvidenceDto[];
 }
 
 export interface AssessmentResultDirectionDto {
@@ -67,6 +73,7 @@ export interface AssessmentResultDto {
   unknownAreaCount: number;
   summaryHu: string;
   noticeHu: string;
+  routingOptions?: Array<{ packKey: string; titleHu: string }>;
 }
 
 export interface AssessmentResultScopeDto {
@@ -122,6 +129,7 @@ export interface AssessmentDetailDto {
       promptHu: string;
       helpTextHu: string | null;
       options: Array<{ value: string; labelHu: string }>;
+      when?: AssessmentCondition;
     }>;
   };
   latestResult: AssessmentResultDto | null;
@@ -162,9 +170,12 @@ function buildResultDto(
     throw new InteractionError(400, 'ASSESSMENT_INVALID_RESULT', 'A felmérés eredménye nem állítható elő.');
   }
 
-  const findings: AssessmentResultFindingDto[] = evaluation.findings.map((f) => ({
+  const findingRows = pack.version >= 2 ? evaluation.findings.slice(0, 4) : evaluation.findings;
+  const safeEvidence = (keys: readonly string[]): AssessmentEvidenceDto[] => resolveCustomerEvidence(keys).map(({ corpusKey: _key, strength: _strength, ...safe }) => safe);
+  const findings: AssessmentResultFindingDto[] = findingRows.map((f) => ({
     titleHu: f.titleHu,
     summaryHu: f.summaryHu,
+    ...(f.nextCheckHu ? { nextCheckHu: f.nextCheckHu, evidence: safeEvidence(f.supportingCorpusKeys) } : {}),
   }));
   const directions: AssessmentResultDirectionDto[] = evaluation.directions.map((d) => ({ labelHu: d.labelHu }));
 
@@ -198,6 +209,10 @@ function buildResultDto(
     unknownAreaCount: evaluation.unknownDimensions.length,
     summaryHu: summaryStatement(findings.length, evaluation.unknownDimensions.length),
     noticeHu: ASSESSMENT_CUSTOMER_NOTICE_HU,
+    ...(pack.packKey === 'QUICK_SCAN_V2' ? {
+      summaryHu: 'A rövid válaszok a következő kérdések kiválasztását segítik. Nem jelentenek minősítést vagy diagnózist.',
+      routingOptions: quickScanRoutes(answers).map(key => ({ packKey: key, titleHu: getAssessmentPack(key)!.titleHu })),
+    } : {}),
   };
 }
 
@@ -372,6 +387,7 @@ export async function getGrowAssessmentDetail(
         promptHu: q.promptHu,
         helpTextHu: q.helpTextHu ?? null,
         options: q.options.map((o) => ({ value: o.value, labelHu: o.labelHu })),
+        ...(q.when ? { when: q.when } : {}),
       })),
     },
     latestResult,
@@ -398,7 +414,7 @@ export async function submitGrowAssessment(
   identityId: string,
   workspaceId: string,
   packKey: string,
-  input: { answers: unknown; idempotencyKey: string; processId?: string },
+  input: { answers: unknown; idempotencyKey: string; processId?: string; packVersion?: number },
   db: Db = defaultPrisma,
 ): Promise<SubmitGrowAssessmentResponse> {
   // Validate up-front so an unknown pack / bad answer set is rejected before any
@@ -407,13 +423,13 @@ export async function submitGrowAssessment(
   // hard-coded 1 would reject every submission once a pack advances.
   // Exact validation is enforced again at the intake boundary (defense-in-depth).
   const packDefinition = getAssessmentPack(packKey);
-  const validated = validateAssessmentSubmission(packKey, packDefinition?.version ?? 1, input.answers);
+  const validated = validateAssessmentSubmission(packKey, input.packVersion ?? (packDefinition?.version === 1 ? 1 : undefined), input.answers);
 
   const submission = await submitPortalGrowAssessment(
     identityId,
     workspaceId,
     validated.pack.packKey,
-    { answers: validated.answers, idempotencyKey: input.idempotencyKey, processId: input.processId },
+    { answers: validated.answers, idempotencyKey: input.idempotencyKey, processId: input.processId, packVersion: validated.pack.version },
     db,
   );
 
@@ -425,4 +441,30 @@ export async function submitGrowAssessment(
   );
   assertClientSafe(result);
   return { submission, result };
+}
+
+export async function getGrowAdaptiveJourney(identityId: string, workspaceId: string, db: Db = defaultPrisma) {
+  const { items } = await listPortalGrowAssessments(identityId, workspaceId, db);
+  const dto = {
+    resumeScope: canonicalDigest({ identityId, workspaceId, journey: 'GROW_V2' }),
+    categories: Object.entries(SURVEY_CATEGORY_LABELS_HU).map(([value, labelHu]) => ({ value, labelHu })),
+    branches: V2_ASSESSMENT_PACKS.filter(p => p.packKey !== 'QUICK_SCAN_V2' && p.packKey !== 'PROCESS_STABILITY_REWORK_V2').map(p => ({ packKey: p.packKey, titleHu: p.titleHu })),
+    history: items.filter(i => i.packVersion >= 2).map(i => ({ processId: i.processId, processName: i.processName, result: tryBuildResultDto(i.packKey, i.packVersion, i.answers, i.completedAt) })),
+    noticeHu: ASSESSMENT_CUSTOMER_NOTICE_HU,
+  };
+  assertClientSafe(dto);
+  return dto;
+}
+
+export async function submitGrowAdaptivePain(identityId: string, workspaceId: string, input: { categories: unknown; freeText?: string; idempotencyKey: string }, db: Db = defaultPrisma) {
+  const categories = input.categories;
+  if (!Array.isArray(categories) || categories.length < 1 || categories.length > 3 || new Set(categories).size !== categories.length || categories.some(c => typeof c !== 'string' || !Object.hasOwn(V2_PAIN_ROUTES, c))) {
+    throw new InteractionError(400, 'GROW_V2_INVALID_CATEGORIES', 'Válasszon egy–három különböző témát.');
+  }
+  // Reuse the canonical declared-survey producer; no process is required at entry.
+  const submission = await submitPortalSurveyIntake(identityId, workspaceId, { categories, freeText: input.freeText, idempotencyKey: input.idempotencyKey }, db);
+  const keys = [...new Set(categories.map(c => V2_PAIN_ROUTES[c]))];
+  // Multiple signals ask the customer to choose ONE next branch, never all of them.
+  const routes = keys.map(key => ({ packKey: key, titleHu: getAssessmentPack(key)!.titleHu }));
+  return { routes, message: submission.message };
 }

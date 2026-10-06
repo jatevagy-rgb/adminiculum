@@ -394,7 +394,7 @@ async function loadLatestAssessmentObservations(
     FROM "observations"
     WHERE "clientId" = ${clientId}
       AND "observationType"::text = 'DECLARED_SURVEY'
-      AND "rawPayload"->>'schema' = ${GROW_ASSESSMENT_SCHEMA}
+      AND "rawPayload"->>'schema' IN (${GROW_ASSESSMENT_SCHEMA}, 'GROW_ASSESSMENT_V2')
     ORDER BY
       "rawPayload"->>'packKey',
       COALESCE("rawPayload"->'provenance'->>'workspaceId', ''),
@@ -672,6 +672,11 @@ async function executeRun(
       measured: outcome.measured,
       declared: outcome.declared,
     });
+    // A V2 deferral stays attached to its exact observations/process. It must
+    // survive normalization before the canonical intervention selector runs.
+    if (declaredSignals.some(s => s.provenance.defersAutomation && outcome.sourceRefs.observationIds.includes(s.observationId))) {
+      signals.push('PROCESS_VARIABILITY');
+    }
     const interventionCodes = selectInterventions({
       domainKey: outcome.domainKey,
       signals,

@@ -1,4 +1,4 @@
-import { GROW_ASSESSMENT_SCHEMA, evaluateAssessmentAnswers } from '../assessments/registry';
+import { GROW_ASSESSMENT_SCHEMA, GROW_ASSESSMENT_V2_SCHEMA, isAssessmentSchema, evaluateAssessmentAnswers } from '../assessments/registry';
 
 /**
  * GROW — fail-closed Observation → GrowSignal normalization boundary.
@@ -93,6 +93,7 @@ export interface GrowSignalProvenance {
   channel?: string | null;
   /** Canonical source record reference, when present. */
   sourceRecordId?: string | null;
+  defersAutomation?: boolean;
 }
 
 /**
@@ -148,6 +149,7 @@ function assessmentObservationToGrowSignals(
   const packKey = typeof record.packKey === 'string' ? record.packKey : '';
   const packVersion =
     typeof record.packVersion === 'number' ? record.packVersion : Number(record.packVersion);
+  if ((packVersion === 1 && record.schema !== GROW_ASSESSMENT_SCHEMA) || (packVersion >= 2 && record.schema !== GROW_ASSESSMENT_V2_SCHEMA)) return [];
   const rawAnswers = record.answers;
   if (!packKey || !Number.isFinite(packVersion) || !Array.isArray(rawAnswers)) return [];
 
@@ -184,6 +186,7 @@ function assessmentObservationToGrowSignals(
         categoryKey,
         channel,
         sourceRecordId: observation.sourceRecordId ?? null,
+        ...(evaluation.findings.some(f => f.defersAutomation) ? { defersAutomation: true } : {}),
       },
     });
   }
@@ -212,7 +215,7 @@ export function observationToGrowSignals(observation: NormalizableObservation): 
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return [];
   const record = payload as Record<string, unknown>;
 
-  if (record.schema === GROW_ASSESSMENT_SCHEMA) {
+  if (isAssessmentSchema(record.schema)) {
     return assessmentObservationToGrowSignals(observation, record);
   }
 
@@ -293,7 +296,7 @@ function assessmentSupersedeScopeKey(observation: NormalizableObservation): stri
   const payload = observation.rawPayload;
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null;
   const record = payload as Record<string, unknown>;
-  if (record.schema !== GROW_ASSESSMENT_SCHEMA) return null;
+  if (!isAssessmentSchema(record.schema)) return null;
   const packKey = typeof record.packKey === 'string' ? record.packKey.trim() : '';
   if (!packKey) return null;
   const processId =
