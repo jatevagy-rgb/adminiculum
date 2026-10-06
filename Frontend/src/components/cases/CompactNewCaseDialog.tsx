@@ -7,6 +7,8 @@ import Link from "next/link";
 import { intake, ACCENT_BG, ACCENT_TEXT } from "./intake/intakeStyles";
 import {
   createCase,
+  ApiError,
+  caseIntakeErrorMessage,
   addCaseCollaborator,
   createTask,
   getCaseCreationOptions,
@@ -141,6 +143,9 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
   // name/email is intentionally NOT offered here (no safe dedup/upsert contract).
   const [ownerPersonId, setOwnerPersonId] = useState("");
   const [ownerCandidates, setOwnerCandidates] = useState<{ id: string; name: string }[]>([]);
+  const [ownerCapability, setOwnerCapability] = useState(false);
+  const [ownerReadState, setOwnerReadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const ownerGeneration = useRef(0);
 
   useEffect(() => {
     if (!open) return;
@@ -148,11 +153,13 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
     setLoading(true);
     setError(null);
     setSavingType(false);
+    setOwnerCapability(false);
     Promise.all([getClientList(), getCaseCreationOptions(), getUsers().catch(() => []), getCurrentUser().catch(() => null), loadCatalogueTypeFacts()])
       .then(([c, o, u, actor, catalogue]) => {
         if (session !== openSession.current) return;
         setClients(c);
         setCreationOptions(o.items || []);
+        setOwnerCapability(o.capabilities?.clientOwner === true);
         setCatalogueTypes(catalogue);
         setCanManageTypes(actor?.role === "ADMIN" || actor?.role === "PARTNER");
         setUsers(u.filter((user) => ELIGIBLE_WORKFORCE_ROLES.has(String(user.role || "").toUpperCase()) && user.status !== "INACTIVE"));
@@ -169,20 +176,24 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
   }, [initialClientId, initialTitle, initialDescription]);
 
   useEffect(() => {
-    if (!clientId) { setOwnerCandidates([]); setOwnerPersonId(""); return; }
-    const session = openSession.current;
+    const request = ++ownerGeneration.current;
+    setOwnerCandidates([]);
+    setOwnerPersonId("");
+    setOwnerReadState('loading');
+    if (!clientId || !open || !ownerCapability) return;
     clientOrganizationApi.listPersons(clientId)
       .then((res) => {
-        if (session !== openSession.current) return;
+        if (request !== ownerGeneration.current) return;
         const now = new Date();
         const active = (res?.items || [])
           .filter((p) => p.employmentStatus === "ACTIVE" && (!p.startDate || new Date(p.startDate) <= now) && (!p.endDate || new Date(p.endDate) >= now))
           .map((p) => ({ id: p.id, name: p.name }));
         setOwnerCandidates(active);
-        setOwnerPersonId((current) => (active.some((c) => c.id === current) ? current : ""));
+        setOwnerReadState('ready');
       })
-      .catch(() => { if (session === openSession.current) { setOwnerCandidates([]); setOwnerPersonId(""); } });
-  }, [clientId]);
+      .catch(() => { if (request === ownerGeneration.current) setOwnerReadState('error'); });
+    return () => { ownerGeneration.current += 1; };
+  }, [clientId, open, ownerCapability]);
 
   const selectedOption = useMemo(
     () => creationOptions.find((o) => o.caseTypeDefinition.id === caseTypeDefinitionId) || null,
@@ -287,7 +298,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
         assignedLawyerId: assignedLawyerId || undefined,
         deadline: deadline || undefined,
         sourceCommunicationId,
-        clientOwnerPersonId: ownerPersonId || undefined,
+        clientOwnerPersonId: ownerCapability && ownerCandidates.some((person) => person.id === ownerPersonId) ? ownerPersonId : undefined,
       });
       // The case now exists durably. Team/task additions are per-item writes:
       // each failure is recorded, nothing successful is re-sent on retry.
@@ -301,7 +312,8 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
       router.push(`/cases/${result.id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("CASE_TYPE_NOT_FOUND")) setError("A kiválasztott ügytípus nem található.");
+      if (err instanceof ApiError && err.code?.startsWith('OWNER_')) setError(caseIntakeErrorMessage(err));
+      else if (msg.includes("CASE_TYPE_NOT_FOUND")) setError("A kiválasztott ügytípus nem található.");
       else if (msg.includes("CASE_TYPE_INACTIVE")) setError("A kiválasztott ügytípus inaktív.");
       else if (msg.includes("ACTIVE_WORK_PACKAGE_NOT_FOUND")) setError("Nem található aktív munkacsomag sablon az ügytípushoz.");
       else if (msg.includes("REQUIRED_MODULE_NOT_SELECTED")) setError("Kötelező modul nem hagyható ki.");
@@ -424,7 +436,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                 <div className={intake.grid}>
                   <label className={intake.label}>
                     Ügyfél <span className={intake.required}>*</span>
-                    <select value={clientId} onChange={(e) => setClientId(e.target.value)} className={intake.field} required>
+                    <select value={clientId} onChange={(e) => { ownerGeneration.current += 1; setOwnerCandidates([]); setOwnerPersonId(''); setClientId(e.target.value); }} className={intake.field} required>
                       <option value="">Válassz ügyfelet…</option>
                       {clients.map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
@@ -444,7 +456,7 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
               </label>
 
               {/* Optional customer-side case owner (canonical OrganizationPerson only). */}
-              <div className={`${intake.area} mb-3`}>
+              {ownerCapability && <div className={`${intake.area} mb-3`}>
                 <div className={intake.grid}>
                   <label className={intake.label}>
                     Ügygazda az ügyfélnél (opcionális)
@@ -456,12 +468,12 @@ export function CompactNewCaseDialog({ open, onClose, initialClientId, sourceCom
                     </select>
                     {clientId && ownerCandidates.length === 0 && (
                       <span role="note" className="mt-1 block text-[11px] text-[var(--adm-text-muted)]">
-                        Ehhez az ügyfélhez nincs választható aktív kapcsolattartó.
+                        {ownerReadState === 'loading' ? 'Ügygazdák betöltése…' : ownerReadState === 'error' ? 'Az ügygazdák nem tölthetők be.' : 'Ehhez az ügyfélhez nincs választható aktív kapcsolattartó.'}
                       </span>
                     )}
                   </label>
                 </div>
-              </div>
+              </div>}
 
               {/* Case Type + Responsible Lawyer */}
               <div className={`${intake.area} mb-3`}>

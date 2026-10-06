@@ -37,7 +37,8 @@ beforeAll(async () => {
   if (url.hostname !== '127.0.0.1' || url.port !== '55483' || url.pathname !== '/adminiculum_replay_wf10') throw Error('Unsafe test DB');
   const identity = await prisma.$queryRaw<any[]>`SELECT current_database() db, current_user usr, inet_server_port() port`;
   expect(identity[0]).toMatchObject({ db: 'adminiculum_replay_wf10', usr: 'wf10_pgtest', port: 55483 });
-  process.env.ENABLE_DURABLE_CASE_WORKSPACE = 'true';
+  process.env.ENABLE_DURABLE_CASE_WORKSPACE = 'false';
+  process.env.ENABLE_CASE_CLIENT_OWNER = 'true';
   await prisma.user.create({ data: { id: ids.user, email: `${ids.user}@wf10.invalid`, name: 'Synthetic creator', role: 'LAWYER', status: 'ACTIVE', isActive: true, skills: [] } });
   await prisma.client.create({ data: { id: ids.clientA, name: 'Synthetic client A' } });
   await prisma.client.create({ data: { id: ids.clientB, name: 'Synthetic client B' } });
@@ -61,21 +62,25 @@ test('creation with owner persists canonical CaseClientOwner and derives in repo
 });
 
 test('cross-client owner is denied and the case transaction rolls back', async () => {
-  await expect(createCaseWith(ids.personB)).rejects.toThrow('OWNER_NOT_IN_CLIENT');
+  await expect(createCaseWith(ids.personB)).rejects.toMatchObject({ code: 'OWNER_NOT_IN_CLIENT' });
   expect(await prisma.case.count({ where: { clientId: ids.clientA, title: { contains: 'Owner-at-creation' } } })).toBe(1);
 });
 
 test('inactive person is denied as owner', async () => {
-  await expect(createCaseWith(ids.inactivePersonA)).rejects.toThrow('OWNER_NOT_ELIGIBLE');
+  await expect(createCaseWith(ids.inactivePersonA)).rejects.toMatchObject({ code: 'OWNER_NOT_ELIGIBLE' });
 });
 
 test('unknown person is denied as owner', async () => {
-  await expect(createCaseWith(randomUUID())).rejects.toThrow('OWNER_PERSON_NOT_FOUND');
+  await expect(createCaseWith(randomUUID())).rejects.toMatchObject({ code: 'OWNER_PERSON_NOT_FOUND' });
 });
 
-test('capability flag off leaves owner unpersisted', async () => {
-  process.env.ENABLE_DURABLE_CASE_WORKSPACE = 'false';
-  const created = await createCaseWith(ids.personA);
-  expect(await prisma.caseClientOwner.findUnique({ where: { caseId: created.id } })).toBeNull();
+test('owner capability off rejects the request before creation even when durable tiles are enabled', async () => {
+  process.env.ENABLE_CASE_CLIENT_OWNER = 'false';
   process.env.ENABLE_DURABLE_CASE_WORKSPACE = 'true';
+  const before = await prisma.case.count({ where: { clientId: ids.clientA } });
+  await expect(createCaseWith(ids.personA)).rejects.toMatchObject({ code: 'OWNER_CAPABILITY_UNAVAILABLE', status: 503 });
+  expect(await prisma.case.count({ where: { clientId: ids.clientA } })).toBe(before);
+  const created = await createCaseWith(null);
+  expect(await prisma.caseClientOwner.findUnique({ where: { caseId: created.id } })).toBeNull();
+  process.env.ENABLE_CASE_CLIENT_OWNER = 'true';
 });

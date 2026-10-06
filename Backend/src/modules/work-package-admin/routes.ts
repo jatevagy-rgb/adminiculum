@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Prisma } from '@prisma/client';
 import { authenticate } from '../../middleware/auth';
+import { isCaseClientOwnerEnabled } from '../case-workspace/capabilities';
 import {
   WorkPackageAdminError, listCaseTypes, createCaseType, updateCaseType, setCaseTypeActive,
   listTemplates, listCaseCreationOptions, getTemplate, createTemplate, updateTemplate, activateTemplate, createUsableCaseType,
@@ -31,7 +32,7 @@ function handle(res: Response, error: unknown): void {
 }
 
 router.get('/case-types', async (req, res) => { try { res.json({ items: await listCaseTypes(actor(req)) }); } catch (e) { handle(res, e); } });
-router.get('/case-types/creation-options', async (req, res) => { try { res.json({ items: await listCaseCreationOptions(actor(req)) }); } catch (e) { handle(res, e); } });
+router.get('/case-types/creation-options', async (req, res) => { try { res.json({ items: await listCaseCreationOptions(actor(req)), capabilities: { clientOwner: isCaseClientOwnerEnabled() } }); } catch (e) { handle(res, e); } });
 router.post('/case-types', async (req, res) => { try { res.status(201).json(await createCaseType(actor(req), req.body || {})); } catch (e) { handle(res, e); } });
 router.post('/case-types/usable', async (req, res) => { try { res.status(201).json(await createUsableCaseType(actor(req), req.body || {})); } catch (e) { handle(res, e); } });
 router.patch('/case-types/:id', async (req, res) => { try { res.json(await updateCaseType(actor(req), String(req.params.id), req.body || {})); } catch (e) { handle(res, e); } });

@@ -4,6 +4,7 @@ import { authenticate } from '../../middleware/auth';
 import { requireWorkforceUser } from '../../middleware/workforceAuthorization';
 import { requireCaseReadAccess } from '../cases/authorization';
 import { readTiles, saveTiles, WorkspaceError } from './tiles.service';
+import { isCaseClientOwnerEnabled } from './capabilities';
 export const caseWorkspaceRouter = Router();
 export function requireDurableWorkspace(_req: Request, res: Response, next: NextFunction) {
     if (process.env.ENABLE_DURABLE_CASE_WORKSPACE !== 'true') {
@@ -24,8 +25,15 @@ export function workspaceFailure(error: unknown, res: Response) {
         return res.status(503).json({ code: 'WORKSPACE_CAPABILITY_UNAVAILABLE' });
     return res.status(500).json({ code: 'WORKSPACE_OPERATION_FAILED' });
 }
-caseWorkspaceRouter.use(authenticate, requireWorkforceUser, requireDurableWorkspace);
-caseWorkspaceRouter.get('/cases/:caseId/tiles', requireCaseReadAccess, async (req, res) => {
+export function requireCaseClientOwner(_req: Request, res: Response, next: NextFunction) {
+    if (!isCaseClientOwnerEnabled()) {
+        res.status(503).json({ code: 'OWNER_CAPABILITY_UNAVAILABLE', message: 'Az ügyfélnél kijelölt ügygazda funkció jelenleg nem érhető el.' });
+        return;
+    }
+    next();
+}
+caseWorkspaceRouter.use(authenticate, requireWorkforceUser);
+caseWorkspaceRouter.get('/cases/:caseId/tiles', requireDurableWorkspace, requireCaseReadAccess, async (req, res) => {
     try {
         res.set('Cache-Control', 'no-store').json(await readTiles(req, String(req.params.caseId)));
     }
@@ -33,7 +41,7 @@ caseWorkspaceRouter.get('/cases/:caseId/tiles', requireCaseReadAccess, async (re
         workspaceFailure(error, res);
     }
 });
-caseWorkspaceRouter.put('/cases/:caseId/tiles', requireCaseReadAccess, async (req, res) => {
+caseWorkspaceRouter.put('/cases/:caseId/tiles', requireDurableWorkspace, requireCaseReadAccess, async (req, res) => {
     try {
         res.json(await saveTiles(req, String(req.params.caseId), req.body));
     }
@@ -41,7 +49,7 @@ caseWorkspaceRouter.put('/cases/:caseId/tiles', requireCaseReadAccess, async (re
         workspaceFailure(error, res);
     }
 });
-caseWorkspaceRouter.get('/cases/:caseId/owner', requireCaseReadAccess, async (req, res) => {
+caseWorkspaceRouter.get('/cases/:caseId/owner', requireCaseClientOwner, requireCaseReadAccess, async (req, res) => {
     try {
         res.set('Cache-Control', 'no-store').json(await readOwner(req, String(req.params.caseId)));
     }
@@ -49,7 +57,7 @@ caseWorkspaceRouter.get('/cases/:caseId/owner', requireCaseReadAccess, async (re
         workspaceFailure(e, res);
     }
 });
-caseWorkspaceRouter.put('/cases/:caseId/owner', requireCaseReadAccess, async (req, res) => {
+caseWorkspaceRouter.put('/cases/:caseId/owner', requireCaseClientOwner, requireCaseReadAccess, async (req, res) => {
     try {
         res.json(await saveOwner(req, String(req.params.caseId), req.body));
     }

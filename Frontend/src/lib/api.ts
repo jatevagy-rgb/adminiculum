@@ -6145,6 +6145,10 @@ export async function createCaseIntake(payload: CaseIntakePayload): Promise<Case
 
 /** Server error codes mapped to the message the lawyer should actually read. */
 export const CASE_INTAKE_ERROR_MESSAGES: Record<string, string> = {
+  OWNER_CAPABILITY_UNAVAILABLE: 'Az ügygazda funkció jelenleg nem érhető el. Az ügy nem jött létre.',
+  OWNER_NOT_IN_CLIENT: 'A kiválasztott ügygazda másik ügyfélhez tartozik.',
+  OWNER_NOT_ELIGIBLE: 'A kiválasztott ügygazda már nem választható.',
+  OWNER_PERSON_NOT_FOUND: 'A kiválasztott ügygazda nem található.',
   FIELD_REQUIRED: 'Hiányzik egy kötelező mező.',
   FIELD_TOO_LONG: 'Az egyik megadott érték túl hosszú.',
   CLIENT_NOT_FOUND: 'A kiválasztott ügyfél nem található.',
@@ -6162,6 +6166,7 @@ export const CASE_INTAKE_ERROR_MESSAGES: Record<string, string> = {
   TOO_MANY_ITEMS: 'Túl sok elemet adtál hozzá.',
 };
 export function caseIntakeErrorMessage(error: unknown): string {
+  if (error instanceof ApiError && error.code && CASE_INTAKE_ERROR_MESSAGES[error.code]) return CASE_INTAKE_ERROR_MESSAGES[error.code];
   const raw = error instanceof Error ? error.message : String(error || '');
   for (const [code, message] of Object.entries(CASE_INTAKE_ERROR_MESSAGES)) {
     if (raw.includes(code)) return message;
@@ -6217,7 +6222,7 @@ export type CaseCreationOption = {
     items: Array<{ id: string; moduleType: string; moduleLabel?: string; moduleKey: string; label: string; description: string | null; order: number; isOptional: boolean; config: Record<string, unknown> }>;
   } | null;
 };
-export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[] }>('/work-package-admin/case-types/creation-options'); }
+export async function getCaseCreationOptions() { return fetchApi<{ items: CaseCreationOption[]; capabilities?: { clientOwner: boolean } }>('/work-package-admin/case-types/creation-options'); }
 export async function createUsableCaseType(name: string) { return fetchApi<CaseCreationOption>('/work-package-admin/case-types/usable', { method: 'POST', body: JSON.stringify({ name }) }); }
 
 export interface CaseWorkPackageOperationalItem {

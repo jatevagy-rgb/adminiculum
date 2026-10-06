@@ -16,7 +16,7 @@ test("new-case dialog offers an optional canonical customer-side owner", () => {
 });
 
 test("new-case dialog forwards the owner id through case creation", () => {
-  assert.match(dialog, /clientOwnerPersonId: ownerPersonId \|\| undefined/);
+  assert.match(dialog, /clientOwnerPersonId: ownerCapability && ownerCandidates\.some/);
 });
 
 test("createCase API carries clientOwnerPersonId", () => {

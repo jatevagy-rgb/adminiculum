@@ -11,6 +11,7 @@ import { withCaseWorkGuard } from './caseMutationGuard';
 import { createCaseWorkPackageSnapshot, CaseWorkPackageError } from './caseWorkPackage.service';
 import { buildCaseReadScope } from './authorization';
 import { isWorkforceRole } from '../../middleware/workforceAuthorization';
+import { isCaseClientOwnerEnabled } from '../case-workspace/capabilities';
 
 // Prisma schema enum values
 const VALID_MATTER_TYPES = ['REAL_ESTATE_SALE', 'LEASE', 'EMPLOYMENT', 'CORPORATE', 'LITIGATION', 'OTHER'];
@@ -472,6 +473,10 @@ return {
     db: any = prisma,
     options: CreateCaseOptions = {},
   ): Promise<{ id: string; caseNumber: string; title: string; status: string; createdAt: Date; workPackage?: unknown }> {
+    const ownerPersonId = (params.clientOwnerPersonId || '').trim() || null;
+    if (ownerPersonId && !isCaseClientOwnerEnabled()) {
+      throw new CaseWorkPackageError('OWNER_CAPABILITY_UNAVAILABLE', 'Az ügygazda funkció jelenleg nem érhető el. Az ügy nem jött létre.', 503);
+    }
     const year = new Date().getFullYear();
     const count = await db.case.count({ where: { caseNumber: { startsWith: `CASE-${year}-` } } });
     const caseNumber = `CASE-${year}-${String(count + 1).padStart(3, '0')}`;
@@ -654,10 +659,10 @@ return {
       // Optional customer-side case owner at creation. Persisted through the
       // same canonical CaseClientOwner source as the case-workspace assignment,
       // so the report derivation (savedOwnerPersonId) sees it unchanged. Gated
-      // by the same durable-workspace capability flag; free name/email is NOT
+      // by the independent case-owner capability; free name/email is NOT
       // accepted here — the owner must be an existing, eligible OrganizationPerson.
-      const ownerPersonId = (params.clientOwnerPersonId || '').trim() || null;
-      if (ownerPersonId && process.env.ENABLE_DURABLE_CASE_WORKSPACE === 'true') {
+      if (ownerPersonId) {
+        await tx.$queryRaw`SELECT id FROM organization_persons WHERE id=${ownerPersonId} FOR UPDATE`;
         const ownerPerson = await tx.organizationPerson.findUnique({
           where: { id: ownerPersonId },
           select: { id: true, clientId: true, employmentStatus: true, startDate: true, endDate: true },

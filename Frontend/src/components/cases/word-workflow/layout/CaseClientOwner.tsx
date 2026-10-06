@@ -17,7 +17,7 @@ type Owner = {
 };
 function ownerReadError(error: unknown) {
     if (error instanceof ApiError) {
-        if (error.code === 'WORKSPACE_CAPABILITY_UNAVAILABLE')
+        if (error.code === 'OWNER_CAPABILITY_UNAVAILABLE' || error.code === 'WORKSPACE_CAPABILITY_UNAVAILABLE')
             return 'A funkció nem érhető el ebben a munkaterületen.';
         if (error.status === 403)
             return 'Nincs jogosultságod az ügygazda megtekintéséhez.';
@@ -35,8 +35,8 @@ export function CaseClientOwner({ caseId }: {
     const generation = useRef(0);
     const url = `/case-workspace/cases/${encodeURIComponent(caseId)}/owner`;
     useEffect(() => {
-        const current = ++generation.current;
         const load = () => {
+            const current = ++generation.current;
             setReadState('loading');
             setValue(null);
             setDraft(null);
