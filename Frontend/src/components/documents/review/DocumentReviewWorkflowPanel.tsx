@@ -178,7 +178,7 @@ export function DocumentReviewWorkflowPanel({
               <textarea data-testid="review-change-reason" value={changeReason} onChange={(event) => setChangeReason(event.target.value)} rows={2} placeholder="Miért kéred a módosítást?" className="mt-2 w-full rounded border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1.5 text-xs" />
               <textarea data-testid="review-requested-change" value={requestedChange} onChange={(event) => setRequestedChange(event.target.value)} rows={2} placeholder="Mit kell módosítani?" className="mt-2 w-full rounded border border-[rgba(22,32,26,0.16)] bg-white px-2 py-1.5 text-xs" />
               <AdminButton
-                className="mt-2"
+                className="mt-2 min-h-[40px]"
                 variant="gold"
                 disabled={busy || !canAction("REQUEST_CHANGES") || !["IN_REVIEW", "RESUBMITTED"].includes(String(review.status)) || !changeReason.trim() || !requestedChange.trim()}
                 onClick={() => run(() => transitionDocumentReview(review.id, "request-changes", {
@@ -189,10 +189,10 @@ export function DocumentReviewWorkflowPanel({
                 Változtatás kérése
               </AdminButton>
             </div>
-            <AdminButton variant="neutral" disabled={busy || !canAction("RESUBMIT") || review.status !== "CHANGES_REQUESTED" || !latestVersion} onClick={() => run(() => transitionDocumentReview(review.id, "resubmit", { versionId: latestVersion?.id, expectedRevision: review.revision }))}>Új verzió review-ra küldése</AdminButton>
-            <AdminButton variant="primary" disabled={busy || !canAction("APPROVE") || review.counts.blocking > 0 || !canAttemptApproval || mismatch} onClick={() => run(() => transitionDocumentReview(review.id, "approve", { versionId: review.reviewVersionId, expectedRevision: review.revision }))}>Jóváhagyás</AdminButton>
-            <AdminButton variant="neutral" disabled={busy || !canAction("CLOSE") || !["APPROVED", "IN_REVIEW", "CHANGES_REQUESTED", "RESUBMITTED", "ASSIGNED", "DRAFT"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "close", { expectedRevision: review.revision }))}>Review lezárása</AdminButton>
-            <AdminButton variant="muted" disabled={busy || !canAction("CANCEL") || ["APPROVED", "CLOSED", "CANCELLED"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "cancel", { expectedRevision: review.revision }))}>Review megszakítása</AdminButton>
+            <AdminButton className="min-h-[40px]" variant="neutral" disabled={busy || !canAction("RESUBMIT") || review.status !== "CHANGES_REQUESTED" || !latestVersion} onClick={() => run(() => transitionDocumentReview(review.id, "resubmit", { versionId: latestVersion?.id, expectedRevision: review.revision }))}>Új verzió review-ra küldése</AdminButton>
+            <AdminButton className="min-h-[40px]" variant="primary" disabled={busy || !canAction("APPROVE") || review.counts.blocking > 0 || !canAttemptApproval || mismatch} onClick={() => run(() => transitionDocumentReview(review.id, "approve", { versionId: review.reviewVersionId, expectedRevision: review.revision }))}>Jóváhagyás</AdminButton>
+            <AdminButton className="min-h-[40px]" variant="neutral" disabled={busy || !canAction("CLOSE") || !["APPROVED", "IN_REVIEW", "CHANGES_REQUESTED", "RESUBMITTED", "ASSIGNED", "DRAFT"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "close", { expectedRevision: review.revision }))}>Review lezárása</AdminButton>
+            <AdminButton className="min-h-[40px]" variant="muted" disabled={busy || !canAction("CANCEL") || ["APPROVED", "CLOSED", "CANCELLED"].includes(String(review.status))} onClick={() => run(() => transitionDocumentReview(review.id, "cancel", { expectedRevision: review.revision }))}>Review megszakítása</AdminButton>
           </div>
           {canAttemptApproval && review.counts.blocking > 0 ? <p data-testid="approval-blocked" className="text-xs font-semibold text-[var(--adm-terracotta-700)]">Jóváhagyás blokkolva: van nyitott blokkoló review pont.</p> : null}
 
@@ -200,7 +200,7 @@ export function DocumentReviewWorkflowPanel({
             <div className="min-w-0 space-y-3">
               <div data-testid="review-point-filters" className="flex flex-wrap gap-2">
                 {[['all','Mind'],['open','Nyitott'],['blocking','Blokkoló'],['resolved','Megoldott'],['annotation','Annotáció'],['comparison','Összehasonlítás'],['whole','Teljes dokumentum'],['task','Feladat']].map(([value,label]) => (
-                  <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded px-2 py-1 text-xs font-semibold ${filter === value ? 'bg-[var(--adm-green-800)] text-white' : 'bg-[var(--adm-surface)] text-[#3D4842]'}`}>{label}</button>
+                  <button key={value} type="button" onClick={() => setFilter(value)} className={`min-h-[40px] flex items-center rounded px-3 py-1.5 text-xs font-semibold ${filter === value ? 'bg-[var(--adm-green-800)] text-white' : 'bg-[var(--adm-surface)] text-[#3D4842]'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-green-800)]`}>{label}</button>
                 ))}
               </div>
               <div data-testid="review-point-list" className="space-y-2">
@@ -216,7 +216,7 @@ export function DocumentReviewWorkflowPanel({
                       {point.comparisonSegmentId ? <a href={`#comparison-segment-${point.comparisonSegmentId}`}>Összehasonlítási szegmens</a> : null}
                       {point.linkedTaskId ? <Link href={`/tasks?taskId=${encodeURIComponent(point.linkedTaskId)}`} className="font-semibold text-[var(--adm-blue-700)] hover:underline">Kapcsolt feladat megnyitása</Link> : null}
                     </div>
-                    {!closedPointStatuses.has(point.status) ? <AdminButton className="mt-2" size="xs" variant="neutral" disabled={busy} onClick={() => run(() => updateReviewPoint(review.id, point.id, { status: "RESOLVED", expectedRevision: point.revision }))}>Pont lezárása</AdminButton> : null}
+                    {!closedPointStatuses.has(point.status) ? <AdminButton className="mt-2 min-h-[40px] px-3 py-2" size="xs" variant="neutral" disabled={busy} onClick={() => run(() => updateReviewPoint(review.id, point.id, { status: "RESOLVED", expectedRevision: point.revision }))}>Pont lezárása</AdminButton> : null}
                   </div>
                 ))}
               </div>

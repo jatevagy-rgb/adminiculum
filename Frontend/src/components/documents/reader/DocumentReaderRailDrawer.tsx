@@ -105,7 +105,7 @@ export function DocumentReaderRailDrawer({
             type="button"
             data-testid="document-reader-rail-drawer-close"
             onClick={() => onCloseRef.current()}
-            className="rounded-[6px] px-2 py-1 text-xs font-semibold text-[var(--adm-text-secondary)]"
+            className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-[6px] px-3 py-2 text-xs font-semibold text-[var(--adm-text-secondary)] hover:text-[var(--adm-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--adm-brand-green)]"
           >
             {readerCopy.railCloseLabel}
           </button>
