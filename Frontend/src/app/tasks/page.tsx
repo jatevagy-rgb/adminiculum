@@ -24,6 +24,7 @@ import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLi
 import { TaskPlanningFields, EMPTY_TASK_PLANNING, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { getCaseResponsibleCandidates, type CaseResponsibleCandidate } from "@/lib/api";
 import { resolveTaskSelection } from "@/lib/taskDeepLinkSelection";
+import { useTaskDeepLink } from "@/lib/useTaskDeepLink";
 import { getClientAccentBorderClass } from "@/lib/clientColors";
 import {
   ATTENTION_PRESENTATIONS,
@@ -305,8 +306,16 @@ function TasksPageContent() {
     if (openCreateFromQuery) setShowCreateModal(true);
   }, [openCreateFromQuery]);
 
-  const resolvedSelectedTaskId = resolveTaskSelection(deepLinkedTaskId, tasks, selectedTaskId, dismissedDeepLinkId);
-  const selectedTask = useMemo(() => tasks.find((task) => task.id === resolvedSelectedTaskId) || null, [resolvedSelectedTaskId, tasks]);
+  const { deepLinkedItem, deepLinkState } = useTaskDeepLink({ deepLinkedTaskId, tasks, isLoading });
+
+  const effectiveTasks = useMemo(() => {
+    if (!deepLinkedItem || !deepLinkedTaskId) return tasks;
+    if (tasks.some((task) => task.id === deepLinkedTaskId)) return tasks;
+    return [...tasks, deepLinkedItem];
+  }, [tasks, deepLinkedItem, deepLinkedTaskId]);
+
+  const resolvedSelectedTaskId = resolveTaskSelection(deepLinkedTaskId, effectiveTasks, selectedTaskId, dismissedDeepLinkId);
+  const selectedTask = useMemo(() => effectiveTasks.find((task) => task.id === resolvedSelectedTaskId) || null, [resolvedSelectedTaskId, effectiveTasks]);
 
   useEffect(() => {
     if (deepLinkedTaskId && selectedTask && focusedRowRef.current) focusedRowRef.current.scrollIntoView({ block: "center" });
@@ -423,7 +432,7 @@ function TasksPageContent() {
 
         {error ? <div role="alert"><CompactState tone="error" title="A feladatművelet nem fejeződött be." detail={error} action={<AdminButton size="sm" variant="neutral" onClick={() => void loadTasks()}>Adatok újratöltése</AdminButton>} /></div> : null}
 
-        {!isLoading && !error && deepLinkedTaskId && !tasks.some((task) => task.id === deepLinkedTaskId) ? <div role="status"><CompactState title="A feladat nem érhető el." detail="A hivatkozott feladat nem található, vagy nincs jogosultsága a megtekintéséhez." /></div> : null}
+        {!isLoading && !error && deepLinkedTaskId && !tasks.some((task) => task.id === deepLinkedTaskId) && deepLinkState === "unavailable" ? <div role="status"><CompactState title="A feladat nem érhető el." detail="A hivatkozott feladat nem található, vagy nincs jogosultsága a megtekintéséhez." /></div> : null}
 
         <section>
           {isLoading ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><CompactState title="Feladatok betöltése…" /></div> : filteredTasks.length === 0 ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><EmptyState title={tasks.length === 0 ? "Nincs kijelölt feladat." : "Nincs találat a kiválasztott nézetben."} description={tasks.length === 0 ? "Új feladat egy meglévő ügyhöz hozható létre." : "Módosítsa a keresést vagy a szűrőket."} action={<Button size="sm" variant="secondary" onClick={() => setShowCreateModal(true)}>Új feladat</Button>} /></div> : (
