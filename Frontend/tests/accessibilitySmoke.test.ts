@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { renderPortalMarkup } from './helpers/renderPortalMarkup';
 import {
   AdminButton,
   AdminBadge,
@@ -74,8 +75,8 @@ test('A11Y: Interactive buttons and quiet links include visible focus rings', ()
   assert.ok(btn.includes('focus-visible:ring'), 'Button must declare focus-visible:ring');
 });
 
-test('A11Y: Modal renders accessible dialog role, aria-modal, and labelledby', () => {
-  const modalHtml = renderToStaticMarkup(
+test('A11Y: Modal renders accessible dialog role, aria-modal, and labelledby', async () => {
+  const modalHtml = await renderPortalMarkup(
     React.createElement(
       Modal,
       { open: true, onClose: () => {}, title: 'Ügyfél adatok', children: React.createElement('p', null, 'Tartalom') }
@@ -87,8 +88,8 @@ test('A11Y: Modal renders accessible dialog role, aria-modal, and labelledby', (
   assert.ok(modalHtml.includes('aria-label="Bezárás"'), 'Modal close button must have accessible aria-label');
 });
 
-test('A11Y: ConfirmationDialog renders accessible dialog attributes and explicit buttons', () => {
-  const dialogHtml = renderToStaticMarkup(
+test('A11Y: ConfirmationDialog renders accessible dialog attributes and explicit buttons', async () => {
+  const dialogHtml = await renderPortalMarkup(
     React.createElement(ConfirmationDialog, {
       open: true,
       title: 'Törlés megerősítése',

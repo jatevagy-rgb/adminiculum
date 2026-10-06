@@ -278,10 +278,11 @@ describeWithDatabase('Agenda deadline recovery PostgreSQL integration test (serv
     const dSecond = extractDeadlines(agendaSecond);
     // order must be stable across calls
     expect(dFirst.map((it:any)=>it.id)).toEqual(dSecond.map((it:any)=>it.id));
+    // Equal timestamps use the stable source-qualified ID used by pagination.
     expect(dFirst.map((it: any) => it.id)).toEqual([
+      `CASE_DEADLINE:${ids.caseA}`,
       `CASE_INTAKE_DEADLINE:${ids.intake1}`,
       `CASE_INTAKE_DEADLINE:${ids.intake2}`,
-      `CASE_DEADLINE:${ids.caseA}`,
     ]);
   });
 

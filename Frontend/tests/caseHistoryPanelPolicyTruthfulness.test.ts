@@ -81,7 +81,7 @@ async function withPanel(
     await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
     await run({
       text: () => dom.window.document.body.textContent ?? '',
-      previewText: () => dom.window.document.querySelector('[aria-label="Ügyfélnek látható előnézet"]')?.textContent ?? '',
+      previewText: () => dom.window.document.querySelector('details[aria-label="Ügytörténet megosztása"]')?.textContent ?? '',
     });
   } finally {
     if (root) {

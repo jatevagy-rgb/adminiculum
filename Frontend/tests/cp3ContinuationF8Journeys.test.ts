@@ -250,7 +250,7 @@ test("D2 Grow single page renders the five numbered blocks in canonical order", 
     .filter((id: string) => ids.includes(id));
   assert.deepEqual(order, ids, `section order mismatch: ${JSON.stringify(order)}`);
   const body = text();
-  assert.match(body, /1 · Most Önre vár/);
+  assert.match(body, /1 · Választható felmérések/);
   assert.match(body, /2 · Amin érdemes dolgozni/);
   assert.match(body, /3 · Folyamatban/);
   assert.match(body, /4 · Az Ön működése/);

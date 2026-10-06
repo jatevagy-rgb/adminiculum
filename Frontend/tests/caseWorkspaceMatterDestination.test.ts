@@ -22,7 +22,9 @@ test("case matter cell renders the stored matter identity as non-clickable metad
 
 test("case workspace keeps its supported routes and matter-conditional rendering", () => {
   const source = overview();
-  assert.match(source, /href=\{`\/cases\/\$\{caseId\}\/communications`\}/);
+  assert.match(source, /<WordWideCommunicationLeaf key=\{caseId\} caseId=\{caseId\}/);
+  const communicationLeaf = read("src/components/cases/word-workflow/tools/WordWideCommunicationLeaf.tsx");
+  assert.ok(communicationLeaf.includes("href={`/communications?caseId=${encodeURIComponent(caseId)}&communicationId=${encodeURIComponent(selectedItem.id)}`}"));
   assert.match(source, /router\.push\(`\/cases\/\$\{caseId\}\/documents\?documentId=\$\{encodeURIComponent\(docId\)\}`\)/);
   assert.match(source, /c\.matterId \?/);
 });

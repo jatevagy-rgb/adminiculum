@@ -194,7 +194,7 @@ describe('Client-level module information architecture convergence (structural)'
     assert.ok(tabsIndex >= 0 && heroIndex >= 0);
     assert.ok(tabsIndex < heroIndex, 'ClientWorkspaceTabs must precede the compliance hero');
     // Restrained, shared module hero treatment.
-    assert.match(src, /rounded-3xl border border-\[#DCCCA6\] bg-\[#fbf9f4\]/);
+    assert.match(src, /rounded-xl border border-\[var\(--adm-border\)\] bg-white/);
     assert.doesNotMatch(src, /rounded-\[var\(--adm-radius-md\)\] border border-\[#DCCCA6\]/);
   });
 

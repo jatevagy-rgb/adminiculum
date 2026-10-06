@@ -74,9 +74,9 @@ describe('Document role presentation', () => {
     assert.equal(documentRoleLabel('WORKING_COPY'), 'Munkapéldány');
   });
 
-  it('never prints an unrecognized all-caps token and preserves human text', () => {
+  it('uses neutral labels for unrecognized roles instead of echoing source values', () => {
     assert.equal(documentRoleLabel('SOME_NEW_TOKEN'), 'Egyéb dokumentumszerep');
-    assert.equal(documentRoleLabel('Egyedi szerep'), 'Egyedi szerep');
+    assert.equal(documentRoleLabel('Egyedi szerep'), 'Nem meghatározott');
     assert.equal(documentRoleLabel(null), null);
   });
 });
