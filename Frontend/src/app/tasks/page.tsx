@@ -24,6 +24,7 @@ import { listTaskLifecycleItems, type TaskLifecycleListItem } from "@/lib/taskLi
 import { TaskPlanningFields, EMPTY_TASK_PLANNING, type TaskPlanningValue } from "@/components/tasks/TaskPlanningFields";
 import { getCaseResponsibleCandidates, type CaseResponsibleCandidate } from "@/lib/api";
 import { resolveTaskSelection } from "@/lib/taskDeepLinkSelection";
+import { useTaskDeepLink } from "@/lib/useTaskDeepLink";
 import { getClientAccentBorderClass } from "@/lib/clientColors";
 import {
   ATTENTION_PRESENTATIONS,
@@ -306,8 +307,16 @@ function TasksPageContent() {
     if (openCreateFromQuery) setShowCreateModal(true);
   }, [openCreateFromQuery]);
 
-  const resolvedSelectedTaskId = resolveTaskSelection(deepLinkedTaskId, tasks, selectedTaskId, dismissedDeepLinkId);
-  const selectedTask = useMemo(() => tasks.find((task) => task.id === resolvedSelectedTaskId) || null, [resolvedSelectedTaskId, tasks]);
+  const { deepLinkedItem, deepLinkState } = useTaskDeepLink({ deepLinkedTaskId, tasks, isLoading });
+
+  const effectiveTasks = useMemo(() => {
+    if (!deepLinkedItem || !deepLinkedTaskId) return tasks;
+    if (tasks.some((task) => task.id === deepLinkedTaskId)) return tasks;
+    return [...tasks, deepLinkedItem];
+  }, [tasks, deepLinkedItem, deepLinkedTaskId]);
+
+  const resolvedSelectedTaskId = resolveTaskSelection(deepLinkedTaskId, effectiveTasks, selectedTaskId, dismissedDeepLinkId);
+  const selectedTask = useMemo(() => effectiveTasks.find((task) => task.id === resolvedSelectedTaskId) || null, [resolvedSelectedTaskId, effectiveTasks]);
 
   useEffect(() => {
     if (deepLinkedTaskId && selectedTask && focusedRowRef.current) focusedRowRef.current.scrollIntoView({ block: "center" });
@@ -413,18 +422,18 @@ function TasksPageContent() {
 
         <section className="rounded-[12px] border border-[#E5E7E6] bg-white p-3">
           <div className="flex flex-wrap items-center gap-2">{quickFilters.map((filter) => <Button key={filter.id} size="sm" variant={quickFilter === filter.id ? "primary" : "neutral"} aria-pressed={quickFilter === filter.id} onClick={() => setQuickFilter(filter.id)}>{filter.label} <span className="ml-1 opacity-70">{filter.count}</span></Button>)}</div>
-          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-[minmax(220px,2fr)_minmax(180px,1fr)_minmax(150px,1fr)_minmax(150px,1fr)_minmax(170px,1fr)]">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
             <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Keresés feladat, ügy vagy ügyfél szerint" aria-label="Feladatok keresése" className="h-10 w-full min-w-0 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]" />
             <select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)} aria-label="Ügy szűrő" className="h-10 w-full min-w-0 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="all">Minden ügy</option>{cases.map((caseItem) => <option key={caseItem.id} value={caseItem.id}>{caseItem.caseNumber} · {caseItem.clientName}</option>)}</select>
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Feladatállapot szűrő" className="h-10 w-full min-w-0 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="open">Nyitott feladatok</option><option value="all">Minden állapot</option><option value="PENDING">Teendő</option><option value="IN_PROGRESS">Folyamatban</option><option value="IN_REVIEW">Review alatt</option><option value="DONE">Lezárva</option></select>
             <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value)} aria-label="Prioritás szűrő" className="h-10 w-full min-w-0 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="all">Minden prioritás</option><option value="URGENT">Magas</option><option value="HIGH">Magas</option><option value="MEDIUM">Közepes</option><option value="LOW">Alacsony</option></select>
-            <select value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as AttentionFilter)} aria-label="Figyelmi kategória szűrő" className="h-10 w-full min-w-0 sm:col-span-2 md:col-span-1 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="all">Minden figyelmi kategória</option>{ATTENTION_PRESENTATIONS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}<option value="UNCLASSIFIED">{UNCLASSIFIED_LABEL}</option></select>
+            <select value={attentionFilter} onChange={(event) => setAttentionFilter(event.target.value as AttentionFilter)} aria-label="Figyelmi kategória szűrő" className="h-10 w-full min-w-0 sm:col-span-2 xl:col-span-1 rounded-[8px] border border-[#E5E7E6] bg-white px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F3D32]"><option value="all">Minden figyelmi kategória</option>{ATTENTION_PRESENTATIONS.map((entry) => <option key={entry.value} value={entry.value}>{entry.label}</option>)}<option value="UNCLASSIFIED">{UNCLASSIFIED_LABEL}</option></select>
           </div>
         </section>
 
         {error ? <div role="alert"><CompactState tone="error" title="A feladatművelet nem fejeződött be." detail={error} action={<AdminButton size="sm" variant="neutral" onClick={() => void loadTasks()}>Adatok újratöltése</AdminButton>} /></div> : null}
 
-        {!isLoading && !error && deepLinkedTaskId && !tasks.some((task) => task.id === deepLinkedTaskId) ? <div role="status"><CompactState title="A feladat nem érhető el." detail="A hivatkozott feladat nem található, vagy nincs jogosultsága a megtekintéséhez." /></div> : null}
+        {!isLoading && !error && deepLinkedTaskId && !tasks.some((task) => task.id === deepLinkedTaskId) && deepLinkState === "unavailable" ? <div role="status"><CompactState title="A feladat nem érhető el." detail="A hivatkozott feladat nem található, vagy nincs jogosultsága a megtekintéséhez." /></div> : null}
 
         <section>
           {isLoading ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><CompactState title="Feladatok betöltése…" /></div> : filteredTasks.length === 0 ? <div className="rounded-[12px] border border-[#E5E7E6] bg-white p-4"><EmptyState title={tasks.length === 0 ? "Nincs kijelölt feladat." : "Nincs találat a kiválasztott nézetben."} description={tasks.length === 0 ? "Új feladat egy meglévő ügyhöz hozható létre." : "Módosítsa a keresést vagy a szűrőket."} action={<Button size="sm" variant="secondary" onClick={() => setShowCreateModal(true)}>Új feladat</Button>} /></div> : (

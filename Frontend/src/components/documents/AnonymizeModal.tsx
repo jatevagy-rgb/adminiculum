@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useDialogAccessibility } from "@/components/ui/useDialogAccessibility";
 import {
   anonymizeDocument,
   getAnonymizationSourceText,
@@ -75,6 +77,10 @@ const COPY_FAILURE_MESSAGE = "Nem sikerült a vágólapra másolni. Jelöld ki �
 const PSEUDONYMIZATION_NOTE = "Az Adminiculum az AI-átadáshoz pszeudonimizált munkapéldányt készít; az eredeti adatok visszaállíthatók az Adminiculumban.";
 
 export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, clientName, clientRole, onSuccess }: AnonymizeModalProps) {
+  const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  useDialogAccessibility({ open: isOpen && mounted, onClose, dialogRef });
   const [aiTask, setAiTask] = useState<AITask>("REVIEW_RISKS");
   const [redactionLevel, setRedactionLevel] = useState<RedactionLevel>("FULL");
   const [customPrompt, setCustomPrompt] = useState("");
@@ -141,6 +147,8 @@ const [phone, setPhone] = useState("");
   };
 
   const router = useRouter();
+
+  useEffect(() => setMounted(true), []);
 
   // Structured counterparty (extra-party) input
   const [counterparties, setCounterparties] = useState<CounterpartyInput[]>([]);
@@ -358,15 +366,15 @@ const [phone, setPhone] = useState("");
     setCustomPrompt("");
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl border border-[#e4e2dd]">
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 px-4 py-4 backdrop-blur-sm">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="anonymize-modal-title" tabIndex={-1} className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden border border-[#e4e2dd] bg-white shadow-2xl outline-none">
         {/* Header */}
-        <div className="bg-[#06190d] px-6 py-4 flex justify-between items-center">
+        <div className="flex shrink-0 items-center justify-between bg-[#06190d] px-6 py-4">
           <div>
-            <h2 className="text-lg font-['Newsreader'] font-bold text-white">
+            <h2 id="anonymize-modal-title" className="text-lg font-['Newsreader'] font-bold text-white">
               AI-előkészítés / Anonimizálás
             </h2>
             <p className="text-xs text-white/60 mt-1">
@@ -382,7 +390,7 @@ const [phone, setPhone] = useState("");
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {!result ? (
             <>
               {/* Source Document Info */}
@@ -821,7 +829,7 @@ const [phone, setPhone] = useState("");
 
         {/* Footer */}
         {!result && (
-          <div className="px-6 py-4 border-t border-[#e4e2dd] flex justify-end gap-3">
+          <div className="flex shrink-0 justify-end gap-3 border-t border-[#e4e2dd] px-6 py-4">
             <button
               onClick={onClose}
               className="px-4 py-2 text-xs font-bold uppercase tracking-widest border border-[#c3c8c1]/20 text-[#434843] hover:bg-[#f5f3ee]"
@@ -838,6 +846,7 @@ const [phone, setPhone] = useState("");
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
