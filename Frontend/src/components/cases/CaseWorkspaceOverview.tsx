@@ -521,7 +521,7 @@ function CaseWorkspaceOverviewContent({ caseId }: { caseId: string }) {
 
       </section>
       <details ref={secondaryDetailsRef} id="case-secondary-details" data-testid="case-secondary-details" className="rounded-lg border border-[var(--adm-border)] bg-[var(--adm-surface)] p-3">
-        <summary className="cursor-pointer font-serif text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
+        <summary className="cursor-pointer font-sans text-lg font-semibold text-[var(--adm-text)]">Ügy részletei és további eszközök</summary>
         <p className="mt-1 text-[11px] text-[var(--adm-text-muted)]">Induló helyzet, munkacsomag, speciális előkészítés és munkaidő.</p>
         <div className="mt-4 space-y-4">
           <details className="rounded-lg border border-[var(--adm-border)] bg-white p-3"><summary className="min-h-10 cursor-pointer font-semibold">Speciális dokumentum-előkészítés</summary>

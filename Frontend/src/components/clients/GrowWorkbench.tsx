@@ -159,7 +159,11 @@ export function GrowWorkbench({
   const [sources, setSources] = useState<Array<{ id: string; sourceType: string; name: string; status: string; createdAt: string }>>([]);
 
   const loadGeneration = useRef(0);
+  const activeClient = useRef(clientId);
+  activeClient.current = clientId;
   const load = useCallback(async () => {
+    // A completed mutation from a previous client cannot start a fresh old-client read.
+    if (activeClient.current !== clientId) return;
     const generation = ++loadGeneration.current;
     setLoading(true);
     setError(null);

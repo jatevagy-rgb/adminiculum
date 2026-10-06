@@ -264,7 +264,7 @@ export const DOMAIN_LABELS_HU: Record<string, { title: string }> = {
 
 export function domainTitleHu(domainKey: string | null | undefined): string {
   if (!domainKey) return "Általános folyamat";
-  return DOMAIN_LABELS_HU[domainKey]?.title ?? domainKey;
+  return DOMAIN_LABELS_HU[domainKey]?.title ?? "Nem meghatározott terület";
 }
 
 function url(clientId: string, path: string): string {

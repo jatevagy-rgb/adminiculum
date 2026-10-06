@@ -243,12 +243,12 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
                   onClick={() => { onNavigate?.(); router.push(routeMap[nav.id] || "/"); }}
                   className={`relative min-h-10 w-full flex items-center ${mobile ? "justify-start gap-2.5" : collapsed ? "justify-center" : "justify-center xl:justify-start xl:gap-2.5"} rounded-[var(--adm-radius-sm)] px-3 py-2 text-[12.5px] font-medium transition-colors duration-150 ${
                     isActive
-                      ? `${isSignal ? "text-white bg-[#0B1220]" : "text-[var(--adm-ivory-50)] bg-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] before:absolute before:left-[-5px] before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r before:bg-[var(--adm-ochre-500)]"}`
+                      ? `${isSignal ? "text-white bg-[#0B1220]" : "text-[var(--adm-ivory-50)] bg-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] before:absolute before:left-[-5px] before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r before:bg-white"}`
                       : `${isSignal ? "text-[#9CA3AF] hover:text-white hover:bg-[#0B1220]" : "text-[var(--adm-ivory-50)]/76 hover:text-[var(--adm-ivory-50)] hover:bg-white/6"}`
                   }`}
                   title={nav.label}
                 >
-                  <span className={isActive ? (isSignal ? 'text-[#22D3EE]' : 'text-[var(--adm-ochre-500)]') : 'text-inherit'}>{iconFor(nav.icon)}</span>
+                  <span className={isActive ? (isSignal ? 'text-[#22D3EE]' : 'text-white') : 'text-inherit'}>{iconFor(nav.icon)}</span>
                   {!collapsed && (
                     <>
                       <span className={mobile ? "inline" : "hidden xl:inline"}>{navLabelMap[nav.id] || nav.label}</span>
@@ -264,7 +264,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
       <div className={`${collapsed ? "px-2" : "px-2 md:px-3"} py-4 border-t ${isSignal ? "border-[#1F2937]" : "border-white/10"}`}>
         {profileName && !collapsed && (
           <div className={mobile ? "mb-4 flex items-center gap-3" : "mb-4 hidden items-center gap-3 xl:flex"}>
-            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-[var(--adm-sand-300)] text-[var(--adm-green-950)]"}`}>
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold ${isSignal ? "bg-[#22D3EE] text-[#0B1220]" : "bg-white/15 text-white"}`}>
               {initials}
             </div>
             <div>
@@ -275,7 +275,7 @@ export function Sidebar({ activeItem, profileName, profileRole, uiPack = "legal_
         )}
         <button
           onClick={() => { onNavigate?.(); router.push("/cases?newCase=1"); }}
-          className={`w-full rounded-[var(--adm-radius-sm)] text-xs font-semibold uppercase ${collapsed ? "tracking-normal" : "tracking-[0.16em]"} py-2.5 transition-colors ${isSignal ? "bg-[#22D3EE] text-[#0B1220] hover:bg-[#06B6D4]" : "bg-[var(--adm-ochre-500)] text-[var(--adm-green-950)] hover:bg-[var(--adm-sand-300)]"}`}
+          className={`w-full rounded-[var(--adm-radius-sm)] text-xs font-semibold uppercase ${collapsed ? "tracking-normal" : "tracking-[0.16em]"} py-2.5 transition-colors ${isSignal ? "bg-[#22D3EE] text-[#0B1220] hover:bg-[#06B6D4]" : "border border-white/30 text-white hover:bg-white/10"}`}
           type="button"
           title="Új ügy"
         >

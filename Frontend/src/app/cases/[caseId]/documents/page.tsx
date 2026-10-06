@@ -2316,7 +2316,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           </AdminBadge>
                         ) : null}
                       </div>
-                      <h2 className="mt-1.5 truncate font-serif text-[22px] font-semibold text-[var(--adm-text)]">
+                      <h2 className="mt-1.5 truncate font-sans text-[22px] font-semibold text-[var(--adm-text)]">
                         {activeTitle || "Nincs még workspace dokumentum"}
                       </h2>
                       <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#3D4842]">
@@ -2732,7 +2732,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     <div className="min-h-[560px] flex-1">
                       {!activeDocument ? (
                         <div className="adm-board-empty flex min-h-[560px] flex-col items-center justify-center p-8 text-center">
-                          <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">Nincs kiválasztott dokumentum</h3>
+                          <h3 className="font-sans text-2xl font-semibold text-[var(--adm-text)]">Nincs kiválasztott dokumentum</h3>
                           <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Tölts fel egy dokumentumot, vagy válassz az iratlistából a bal oldali panelen.</p>
                         </div>
                       ) : (
@@ -2741,7 +2741,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             versionTextUnavailable && !isLoadingVersionText ? (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
-                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
+                                <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
                               </div>
                             ) : (
@@ -2760,7 +2760,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             isLoadingDocumentText ? (
                               <div className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
-                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
+                                <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be csak olvasható előnézetként.</p>
                               </div>
                             ) : documentTextPreview ? (
@@ -2772,26 +2772,26 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             ) : documentTextFailed ? (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
-                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
+                                <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
                               </div>
                             ) : (
                               <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                                 <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
-                                <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg nem érhető el</h5>
+                                <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg nem érhető el</h5>
                                 <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{documentTextUnavailableReason || 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg.'}</p>
                               </div>
                             )
                           ) : isLoadingVersions ? (
                             <div className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Verziók betöltése</p>
-                              <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Dokumentum verziók betöltése...</h5>
+                              <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Dokumentum verziók betöltése...</h5>
                               <p className="mt-2 max-w-lg text-sm text-[#3D4842]">Az aktív irat verzióinak és szöveges előnézetének betöltése folyamatban van.</p>
                             </div>
                           ) : (
                             <div data-testid="version-preview-unavailable" className="flex min-h-[460px] flex-col items-center justify-center p-8 text-center">
                               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{canonicalShellFileType} előnézet</p>
-                              <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Stabil szövegkijelölés még nincs ehhez a formátumhoz</h5>
+                              <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Stabil szövegkijelölés még nincs ehhez a formátumhoz</h5>
                               <p className="mt-2 max-w-lg text-sm text-[#3D4842]">
                                 A megváltoztathatatlan verzió tartalma letöltéssel és Microsoft Wordben érhető el teljes pontossággal. A korábbi nem-szöveges verziókhoz a rendszer szándékosan nem helyettesíti az aktuális szöveget.
                               </p>
@@ -2808,7 +2808,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className={activeMode === 'document' ? 'space-y-4' : 'hidden'} data-testid="document-mode-overview">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Dokumentum áttekintése</p>
-                          <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">{activeTitle || "Nincs kiválasztott dokumentum"}</h4>
+                          <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">{activeTitle || "Nincs kiválasztott dokumentum"}</h4>
                         </div>
                         {activeDocument ? (
                           <div className="space-y-1.5 rounded-[10px] border border-[rgba(22,32,26,0.10)] bg-[var(--adm-surface)] p-3 text-xs text-[#3D4842]">
@@ -2845,7 +2845,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className={activeMode === 'review' ? 'space-y-4' : 'hidden'} data-testid="review-mode-panel">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Felülvizsgálat & Jóváhagyás</p>
-                          <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                          <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">
                             {isReviewLoading
                               ? "Verzióadatok betöltése..."
                               : projectionMatchesSelectedVersion && reviewProjection?.review?.status
@@ -2896,7 +2896,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <div className={activeMode === 'changes' ? 'space-y-4' : 'hidden'} data-testid="changes-mode-panel">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-brand-green)]">Változások</p>
-                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Változások</h4>
+                            <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">Változások</h4>
                             <p className="mt-1 text-xs text-[#3D4842]">Az előző → aktuális verziópár kanonikus változásjegyzéke.</p>
                           </div>
                           {selectedUploadedDocument ? (
@@ -2927,7 +2927,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <div className={activeMode === 'document' ? 'space-y-4' : 'hidden'} data-testid="document-mode-comments">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Verzióhoz kötött megjegyzések</p>
-                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Megjegyzések</h4>
+                            <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">Megjegyzések</h4>
                             <p className="mt-1 text-xs text-[#3D4842]">A kiválasztott verzió DocumentAnnotation elemei és kommentfolyamai.</p>
                           </div>
                           {selectedUploadedDocument && canonicalActiveVersion ? (
@@ -3069,7 +3069,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div className="mt-3 space-y-4">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Jogi elemzés</p>
-                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                            <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">
                               {activeTitle || "Nincs kiválasztott dokumentum"}
                             </h4>
                           </div>
@@ -3104,7 +3104,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div className="mt-3 space-y-4">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyfélkapcsolat & Portál</p>
-                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                            <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">
                               {publicationStatusLabel}
                             </h4>
                           </div>
@@ -3142,7 +3142,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div className="mt-3 space-y-4">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügyvédi leadás</p>
-                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">
+                            <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">
                               Leadási csomag
                             </h4>
                           </div>
@@ -3170,7 +3170,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         <div className={activeMode === 'versions' ? 'space-y-4' : 'hidden'} data-testid="versions-mode-panel">
                           <div>
                             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-brand-green)]">Verziók</p>
-                            <h4 className="mt-1 font-serif text-lg font-semibold text-[var(--adm-text)]">Verziók</h4>
+                            <h4 className="mt-1 font-sans text-lg font-semibold text-[var(--adm-text)]">Verziók</h4>
                             <p className="mt-1 text-xs text-[#3D4842]">A dokumentum változtathatatlan verzióinak időrendi áttekintése.</p>
                           </div>
                           {selectedUploadedDocument && selectedUploadedDocument.documentType !== 'MODIFIED_WORKING_COPY' ? (
@@ -3247,7 +3247,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                         </div>
                       ) : (
                         <>
-                          <h2 className="mt-1 truncate font-serif text-[28px] font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még workspace dokumentum"}</h2>
+                          <h2 className="mt-1 truncate font-sans text-[28px] font-semibold leading-tight text-[var(--adm-text)]">{activeTitle || "Nincs még workspace dokumentum"}</h2>
                           <div className="mt-3 flex flex-wrap gap-2">
                             <AdminBadge tone={activeDocument ? "gold" : "neutral"}>{selectedDocumentTypeLabel}</AdminBadge>
                             <AdminBadge tone={activeDocument ? "green" : "neutral"}>{selectedStatusLabel}</AdminBadge>
@@ -3265,7 +3265,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <div className="space-y-4 p-5">
                     {!activeDocument ? (
                       <div className="adm-board-empty p-8 text-center">
-                        <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">Nincs kiválasztott dokumentum</h3>
+                        <h3 className="font-sans text-2xl font-semibold text-[var(--adm-text)]">Nincs kiválasztott dokumentum</h3>
                         <p className="mx-auto mt-2 max-w-md text-sm text-[#3D4842]">Tölts fel egy dokumentumot, vagy válassz az iratlistából.</p>
                         <div className="mt-5 flex flex-wrap justify-center gap-2">
                           <AdminButton variant="primary" onClick={() => fileInputRef.current?.click()} disabled={!caseRecord?.id || isUploading}>Dokumentum hozzáadása</AdminButton>
@@ -3274,7 +3274,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                     ) : (
                       <>
                         <div className="rounded-[var(--adm-radius-md)] border border-[rgba(22,32,26,0.12)] bg-[var(--adm-surface)] p-4">
-                          <h3 className="font-serif text-xl font-semibold text-[var(--adm-text)]">
+                          <h3 className="font-sans text-xl font-semibold text-[var(--adm-text)]">
                             {selectedUploadedDocument?.documentType === 'MODIFIED_WORKING_COPY' ? 'Munkapéldány' : selectedGeneratedContract ? 'Generált dokumentum' : 'Kiválasztott dokumentum'}
                           </h3>
                           <p className="mt-1 text-sm text-[#3D4842]">
@@ -3290,7 +3290,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                           <div className="flex flex-col gap-3">
                             <div>
                               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Dokumentum összefoglaló</p>
-                              <h3 className="font-serif text-2xl font-semibold text-[var(--adm-text)]">{activeTitle}</h3>
+                              <h3 className="font-sans text-2xl font-semibold text-[var(--adm-text)]">{activeTitle}</h3>
                             </div>
                           </div>
 
@@ -3301,7 +3301,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <div>
                                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Jogi elemzés integráció</p>
-                                <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Kontextuális elemzési munkafelület</h4>
+                                <h4 className="font-sans text-lg font-semibold text-[var(--adm-text)]">Kontextuális elemzési munkafelület</h4>
                                 <p className="mt-1 text-sm text-[#3D4842]">
                                   A jogi elemzés beillesztése és szerkesztése a Jóváhagyás munkamód másodlagos AI-eszközei között érhető el. A felület szándékosan egyetlen aktív szerkesztőt tart fenn.
                                 </p>
@@ -3366,7 +3366,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                   <div>
                                     <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Belső felülvizsgálat</p>
-                                    <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Review munkafolyamat</h4>
+                                    <h4 className="font-sans text-lg font-semibold text-[var(--adm-text)]">Review munkafolyamat</h4>
                                     <p className="mt-1 text-sm text-[#3D4842]">
                                       A felülvizsgálati állapot és az annotációk kezelése közvetlenül a fenti jobb oldali Jóváhagyás munkamódban érhető el.
                                     </p>
@@ -3409,7 +3409,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                     <div>
                                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Változáskövetés & Annotációk</p>
-                                      <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Szövegannotációs felület</h4>
+                                      <h4 className="font-sans text-lg font-semibold text-[var(--adm-text)]">Szövegannotációs felület</h4>
                                       <p className="mt-1 text-sm text-[#3D4842]">
                                         Az annotációk és megjegyzések rögzítése közvetlenül a fenti kanonikus olvasófelületen és a jobb oldali Megjegyzések munkamódban történik.
                                       </p>
@@ -3425,7 +3425,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                 </div>
 
                                 <details className="mt-3 rounded-[12px] border border-[rgba(22,32,26,0.12)] bg-white p-4">
-                                  <summary className="cursor-pointer font-serif text-base font-semibold text-[var(--adm-text)]">
+                                  <summary className="cursor-pointer font-sans text-base font-semibold text-[var(--adm-text)]">
                                     Részletes vizuális annotációk és alakzathorgonyok
                                   </summary>
                                   <div className="mt-4 grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
@@ -3433,7 +3433,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                         <div className="min-w-0">
                                           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Horgonyzott annotációk · v{selectedVersion.versionNumber}</p>
-                                          <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">Csak olvasható felület</h4>
+                                          <h4 className="font-sans text-xl font-semibold text-[var(--adm-text)]">Csak olvasható felület</h4>
                                           <p className="mt-1 text-xs text-[#3D4842]">
                                             Az annotációk ehhez az immutable verzióhoz kötődnek. Nincs szerkesztés, nincs automatikus migráció verziók között.
                                           </p>
@@ -3460,7 +3460,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       versionTextUnavailable && !isLoadingVersionText ? (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">Előnézet</p>
-                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
+                                          <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Az előnézet jelenleg nem érhető el</h5>
                                           <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{versionTextUnavailableReason || 'Ehhez a verzióhoz nem sikerült betölteni a tárolt tartalmat. A dokumentum és a verziók továbbra is elérhetők; próbáld letölteni a verziót.'}</p>
                                         </div>
                                       ) : (
@@ -3472,7 +3472,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       isLoadingDocumentText ? (
                                         <div className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
-                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
+                                          <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Kinyert szöveg betöltése...</h5>
                                           <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A dokumentum kinyerhető szövegét töltjük be csak olvasható előnézetként.</p>
                                         </div>
                                       ) : documentTextPreview ? (
@@ -3482,20 +3482,20 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                       ) : documentTextFailed ? (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
-                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
+                                          <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg betöltése nem sikerült</h5>
                                           <p className="mt-2 max-w-lg text-sm text-[#3D4842]">A szöveges előnézet jelenleg nem tölthető be. A dokumentum és a verzió letöltése továbbra is elérhető.</p>
                                         </div>
                                       ) : (
                                         <div data-testid="version-preview-unavailable" className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
-                                          <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg nem érhető el</h5>
+                                          <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">A kinyert szöveg nem érhető el</h5>
                                           <p className="mt-2 max-w-lg text-sm text-[#3D4842]">{documentTextUnavailableReason || 'Ehhez a dokumentumhoz nem érhető el kinyerhető szöveg.'}</p>
                                         </div>
                                       )
                                     ) : (
                                       <div className="flex min-h-[420px] flex-col items-center justify-center p-8 text-center">
                                         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--adm-green-800)]">{selectedVersionFileType} előnézet</p>
-                                        <h5 className="mt-2 font-serif text-2xl font-semibold text-[var(--adm-text)]">Stabil szövegkijelölés még nincs ehhez a formátumhoz</h5>
+                                        <h5 className="mt-2 font-sans text-2xl font-semibold text-[var(--adm-text)]">Stabil szövegkijelölés még nincs ehhez a formátumhoz</h5>
                                         <p className="mt-2 max-w-lg text-sm text-[#3D4842]">
                                           PDF/DOCX annotációhoz most normalizált vizuális horgonyt lehet rögzíteni ezen a csak olvasható felületen. A letöltött fájl változatlan marad.
                                         </p>
@@ -3559,7 +3559,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                   <div className="flex items-start justify-between gap-3">
                                     <div>
                                       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Annotációk</p>
-                                      <h4 className="font-serif text-xl font-semibold text-[var(--adm-text)]">{openAnnotationCount} nyitott</h4>
+                                      <h4 className="font-sans text-xl font-semibold text-[var(--adm-text)]">{openAnnotationCount} nyitott</h4>
                                     </div>
                                     <AdminBadge tone={annotations.length ? 'gold' : 'neutral'}>{annotations.length} összes</AdminBadge>
                                   </div>
@@ -3646,7 +3646,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                                     <div className="mt-4 space-y-3 border-t border-[rgba(22,32,26,0.12)] pt-4">
                                       <div>
                                         <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Kontextus panel</p>
-                                        <h5 className="font-serif text-lg font-semibold text-[var(--adm-text)]">{selectedAnnotation.headline || ANNOTATION_TYPE_LABELS[selectedAnnotation.annotationType]}</h5>
+                                        <h5 className="font-sans text-lg font-semibold text-[var(--adm-text)]">{selectedAnnotation.headline || ANNOTATION_TYPE_LABELS[selectedAnnotation.annotationType]}</h5>
                                         {isClientExplanationDraft(selectedAnnotation.annotationType) ? <NotPublishedBadge className="mt-1" /> : null}
                                       </div>
                                       {selectedAnnotation.selectedText ? <p className="rounded bg-[var(--adm-surface)] p-2 text-xs text-[#3D4842]">“{selectedAnnotation.selectedText}”</p> : null}
@@ -3728,7 +3728,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                   <AdminPanel className="overflow-hidden border-[rgba(22,32,26,0.14)] bg-[var(--adm-surface)]">
                     <div className="bg-[var(--adm-green-800)] p-4 text-white">
                       <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#D8C58E]">Akciók</p>
-                      <h2 className="mt-1 font-serif text-2xl font-semibold">Dokumentum műveletek</h2>
+                      <h2 className="mt-1 font-sans text-2xl font-semibold">Dokumentum műveletek</h2>
                     </div>
                     <div className="space-y-2 p-4">
                       {!activeDocument ? (
@@ -3839,7 +3839,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--adm-text-muted)]">Ügyvédi leadás</p>
-                          <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Leadási csomagok felülete</h4>
+                          <h4 className="font-sans text-lg font-semibold text-[var(--adm-text)]">Leadási csomagok felülete</h4>
                           <p className="mt-1 text-sm text-[#3D4842]">
                             A leadási csomagok kezelése, előkészítése és ügyvédi beküldése közvetlenül a fenti jobb oldali Jóváhagyás munkamód másodlagos átadási eszközei között érhető el.
                           </p>
@@ -3863,7 +3863,7 @@ function DocumentLedgerContent({ params }: DocumentLedgerPageProps) {
             )}
 
             <details className="rounded-[var(--adm-radius-md)] border border-[var(--adm-border)] bg-[var(--adm-surface)] p-4">
-              <summary className="cursor-pointer font-serif text-lg font-medium text-[var(--adm-text)]">Legutóbbi ügyesemények</summary>
+              <summary className="cursor-pointer font-sans text-lg font-medium text-[var(--adm-text)]">Legutóbbi ügyesemények</summary>
               <div className="mt-3 space-y-3">
                 {timeline.length > 0 ? timeline.slice(0, 5).map((event) => (
                   <div key={event.id} className="border-l-2 border-[var(--adm-ochre-500)] pl-3">

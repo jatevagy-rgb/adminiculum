@@ -109,6 +109,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
   return (
     <div
       data-ui-pack={uiPack}
+      data-workspace-surface={!isSignalOps && ["cases", "case-detail", "clients", "tasks", "compliance", "communications", "work-report", "calendar"].includes(section) ? "clean" : undefined}
       data-shell-viewport={fullViewport ? "fixed" : "page"}
       data-shell-chrome={isFocused ? "focused" : "default"}
       className={`${rootHeightClass} app-shell flex ${isFocused ? "flex-col" : ""} ${isSignalOps ? "bg-[#0B1220] text-[#D6E2F2] ui-pack-signal-ops" : "adm-shell-bg text-[var(--adm-text)] ui-pack-insight-analytics"}`}
@@ -175,7 +176,7 @@ export function AppShell({ onSignOut, userProfile, section = "dashboard", childr
 
         {!fullViewport ? (
           <footer className={`app-shell-footer border-t px-5 py-2 flex items-center justify-between gap-3 ${isSignalOps ? "border-[#1E293B] bg-[#0F172A]" : "border-[var(--adm-border)] bg-[rgba(255,253,247,0.72)]"}`}>
-            <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`} style={{ fontFamily: 'var(--font-newsreader)' }}>
+            <p className={`text-xs ${isSignalOps ? "text-[#94A3B8]" : "text-[var(--adm-text-muted)]"}`}>
               Adminiculum · Jogi munkapad
             </p>
             <div className={`text-[10px] uppercase tracking-[0.2em] ${isSignalOps ? "text-[#64748B]" : "text-[var(--adm-text-soft)]"}`}>

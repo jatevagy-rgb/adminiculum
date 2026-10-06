@@ -62,7 +62,7 @@ const humanEnumLabel = (value?: string | null): string => {
   if (!value) return "Nincs adat";
   const normalized = value.toUpperCase();
   return documentWorkStatusLabels[normalized]
-    || normalized.replace(/_/g, " ").toLocaleLowerCase("hu-HU").replace(/^./, (character) => character.toLocaleUpperCase("hu-HU"));
+    || "Ismeretlen állapot";
 };
 
 const reviewStatusLabel = (value?: string | null): string => {

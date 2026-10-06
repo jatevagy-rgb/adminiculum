@@ -33,7 +33,7 @@ const LEGAL_WORK_CATEGORY_LABELS: Record<string, string> = {
 
 function categoryLabel(value: string | null | undefined): string | null {
   if (!value) return null;
-  return LEGAL_WORK_CATEGORY_LABELS[value] ?? value;
+  return LEGAL_WORK_CATEGORY_LABELS[value] ?? "Egyéb jogi munka";
 }
 
 /** A canonical AI result exists only when an AI response was imported. */

@@ -1,3 +1,4 @@
+import { renderPortalMarkup } from './helpers/renderPortalMarkup';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
@@ -94,8 +95,8 @@ test("ConfirmationDialog stays closed when requested", () => {
   assert.equal(html, "");
 });
 
-test("ConfirmationDialog renders cancel before confirm and marks danger", () => {
-  const html = renderToStaticMarkup(
+test("ConfirmationDialog renders cancel before confirm and marks danger", async () => {
+  const html = await renderPortalMarkup(
     React.createElement(
       ConfirmationDialog,
       {
@@ -117,8 +118,8 @@ test("ConfirmationDialog renders cancel before confirm and marks danger", () => 
   assert.ok(html.indexOf(">Mégse<") < html.indexOf(">Törlés<"));
 });
 
-test("ConfirmationDialog busy disables both actions and uses busy label", () => {
-  const html = renderToStaticMarkup(
+test("ConfirmationDialog busy disables both actions and uses busy label", async () => {
+  const html = await renderPortalMarkup(
     React.createElement(ConfirmationDialog, {
       open: true,
       title: "Mentés",
@@ -129,6 +130,6 @@ test("ConfirmationDialog busy disables both actions and uses busy label", () => 
       onCancel: () => undefined,
     }),
   );
-  assert.equal((html.match(/disabled=""/g) ?? []).length, 2);
+  assert.equal((html.match(/disabled=""/g) ?? []).length, 3);
   assert.match(html, /Mentés…/);
 });

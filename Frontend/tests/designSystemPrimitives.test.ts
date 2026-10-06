@@ -1,3 +1,4 @@
+import { renderPortalMarkup } from './helpers/renderPortalMarkup';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
@@ -87,8 +88,8 @@ test('Card and Panel render clean surfaces with 1px border and 12px radius', () 
   assert.ok(cardHtml.includes('bg-white'));
 });
 
-test('Modal renders dialog role and accessible close label', () => {
-  const html = renderToStaticMarkup(
+test('Modal renders dialog role and accessible close label', async () => {
+  const html = await renderPortalMarkup(
     React.createElement(Modal, {
       open: true,
       onClose: () => {},

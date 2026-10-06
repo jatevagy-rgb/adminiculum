@@ -4,6 +4,7 @@ import type { ReactNode, RefObject } from "react";
 import { ViewportDialog } from "@/components/ui/ViewportDialog";
 export interface ModalProps {
   open: boolean;
+  busy?: boolean;
   onClose: () => void;
   title: string;
   description?: string;
@@ -22,6 +23,6 @@ const maxWidthClasses: Record<string, string> = {
   "2xl": "max-w-2xl",
 };
 
-export function Modal({ open, onClose, title, description, maxWidth = "xl", children, footer, closeOnOverlayClick = false, initialFocusRef }: ModalProps) {
-  return <ViewportDialog open={open} onClose={onClose} title={title} description={description} maxWidth={maxWidthClasses[maxWidth]} footer={footer} closeOnOverlayClick={closeOnOverlayClick} initialFocusRef={initialFocusRef}>{children}</ViewportDialog>;
+export function Modal({ open, busy = false, onClose, title, description, maxWidth = "xl", children, footer, closeOnOverlayClick = false, initialFocusRef }: ModalProps) {
+  return <ViewportDialog busy={busy} open={open} onClose={onClose} title={title} description={description} maxWidth={maxWidthClasses[maxWidth]} footer={footer} closeOnOverlayClick={closeOnOverlayClick} initialFocusRef={initialFocusRef}>{children}</ViewportDialog>;
 }

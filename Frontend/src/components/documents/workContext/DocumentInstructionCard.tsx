@@ -15,7 +15,7 @@ export function DocumentInstructionCard({ documentId }: { documentId: string }) 
       {editing ? <DocumentWorkContextEditor card={card} onClose={() => setEditing(false)} onSaved={(next) => { setCard(next); setEditing(false); }} /> : <>
         <DocumentWorkInstruction view={view} canEdit onEdit={() => setEditing(true)} />
         <p className="mt-2 text-sm">Felelős: {view.owner?.name || 'Nincs kijelölve'} · Határidő: {view.dueDateLabel || 'Nincs megadva'}</p>
-        <AdminButton className="mt-2" variant="neutral" onClick={() => setEditing(true)}>Munkautasítás szerkesztése</AdminButton>
+        {view.hasWorkInstruction ? <AdminButton className="mt-2" variant="neutral" onClick={() => setEditing(true)}>Munkautasítás szerkesztése</AdminButton> : null}
       </>}
     </> : null}
   </details>;

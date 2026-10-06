@@ -37,6 +37,7 @@ export function ConfirmationDialog({
   return (
     <Modal
       open={open}
+      busy={busy}
       onClose={onCancel}
       title={title}
       description={description}

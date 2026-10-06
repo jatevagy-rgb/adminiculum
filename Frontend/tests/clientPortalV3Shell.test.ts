@@ -130,7 +130,8 @@ describe("Checkpoint A — mobile navigation", () => {
     // through the shared dialog accessibility hook.
     const modal = read("src/components/ui/Modal.tsx");
     const dialogA11y = read("src/components/ui/useDialogAccessibility.ts");
-    assert.match(modal, /useDialogAccessibility/);
+    assert.match(modal, /<ViewportDialog/);
+    assert.match(read("src/components/ui/ViewportDialog.tsx"), /useDialogAccessibility/);
     assert.match(dialogA11y, /event\.key === "Escape"/);
     assert.match(dialogA11y, /previousFocusRef/);
   });

@@ -63,6 +63,39 @@ function makeGrowHarness() {
 
 const orgWorkspace = { id: 'ws', status: 'ACTIVE', mode: 'ORGANIZATION' };
 
+test('Grow decision completion for A cannot reload A after navigation to B', async () => {
+  const reads: string[] = [];
+  const mutation = deferred<void>();
+  const h = createRaceHarness('src/components/clients/GrowWorkbench.tsx', 'GrowWorkbench', {
+    '@/components/adminiculum/OperationalPrimitives': { CompactState: 'div', SafePanelError: 'div' },
+    '@/lib/api': { getCurrentUser: async () => ({ role: 'ADMIN' }) },
+    '@/lib/growApi': { growApi: {
+      listOpportunities: async (id: string) => { reads.push(id); return { items: [{ id: id + '-recommendation' }] }; },
+      listEvidence: async () => ({ items: [] }), listOutcomes: async () => ({ items: [] }),
+      listProcesses: async () => [], listSources: async () => ({ items: [] }),
+    } },
+    '@/lib/clientCompanyApi': { clientCompanyApi: {
+      listInitiatives: async () => ({ items: [] }), listMilestones: async () => ({ items: [] }),
+      getProfile: async () => null,
+    } },
+    '@/lib/diagnosticWorkbenchApi': { getDiagnosticWorkbench: async () => ({
+      problems: { diagnoses: [] }, proposed: { recommendations: [] }, missing: { unresolvedItems: [] },
+    }) },
+  });
+  const props = (id: string) => ({ clientId: id, clientName: id, activeTab: 'dontesek' });
+  h.commit(props('A')); await settle();
+  const decisionA = flatten(h.render(props('A'))).find(node => node?.props?.onChanged);
+  assert.ok(decisionA, 'A decision action is available');
+  const completion = mutation.promise.then(() => decisionA.props.onChanged());
+  h.commit(props('B')); await settle();
+  mutation.resolve(); await completion; await settle();
+  const decisionB = flatten(h.render(props('B'))).find(node => node?.props?.onChanged);
+  assert.deepEqual(reads, ['A', 'B'], 'the completed A mutation must not start an old-client refresh');
+  assert.equal(decisionB.props.clientId, 'B');
+  assert.equal(decisionB.props.opportunities[0].id, 'B-recommendation');
+  h.unmount();
+});
+
 test('CF-004 grow: late client A cannot overwrite route B', async () => {
   const ctx = makeGrowHarness();
 
