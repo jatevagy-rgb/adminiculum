@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useDialogAccessibility } from "@/components/ui/useDialogAccessibility";
 import { recordCaseTime } from "@/lib/caseTimeBillingApi";
 import type { CaseWorkspace } from "@/lib/api";
 
@@ -32,6 +33,10 @@ export function CaseTimeEntryDialog({
   onSaved: () => void;
 }) {
   const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  useDialogAccessibility({ open: mounted, onClose, dialogRef });
+
   const [minutes, setMinutes] = useState(30);
   const [description, setDescription] = useState("");
   const [workType, setWorkType] = useState(WORK_TYPES[0].value);
@@ -67,7 +72,7 @@ export function CaseTimeEntryDialog({
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4">
-      <div role="dialog" aria-modal="true" aria-labelledby="case-time-entry-title" className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden border border-[var(--adm-border)] bg-white shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="case-time-entry-title" tabIndex={-1} className="my-auto flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden border border-[var(--adm-border)] bg-white shadow-2xl outline-none">
         <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--adm-border)] px-5 py-4">
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--adm-green-800)]">Ügy</p>

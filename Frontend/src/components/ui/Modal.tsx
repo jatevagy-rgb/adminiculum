@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useId, useRef, type ReactNode, type RefObject } from "react";
+import React, { useId, useRef, type ReactNode, type RefObject } from "react";
 import { IconButton } from "./Button";
+import { useDialogAccessibility } from "./useDialogAccessibility";
 
 export interface ModalProps {
   open: boolean;
@@ -23,29 +24,6 @@ const maxWidthClasses: Record<string, string> = {
   "2xl": "max-w-2xl",
 };
 
-const FOCUSABLE_SELECTOR =
-  'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])';
-
-const DESTRUCTIVE_HINT = /delete|remove|destroy|törlés|töröl/i;
-
-function getFocusableElements(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter((el) => {
-    if (el.tabIndex < 0) return false;
-    let node: HTMLElement | null = el;
-    while (node) {
-      if (node.hidden || node.getAttribute("aria-hidden") === "true") return false;
-      if (node.style.display === "none") return false;
-      node = node.parentElement;
-    }
-    return true;
-  });
-}
-
-function isProbablyDestructive(el: HTMLElement): boolean {
-  const label = `${el.textContent ?? ""} ${el.getAttribute("aria-label") ?? ""} ${el.getAttribute("data-variant") ?? ""}`;
-  return DESTRUCTIVE_HINT.test(label);
-}
-
 export function Modal({
   open,
   onClose,
@@ -58,80 +36,10 @@ export function Modal({
   initialFocusRef,
 }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const onCloseRef = useRef(onClose);
-  const initialFocusRefRef = useRef(initialFocusRef);
   const titleId = useId();
   const descriptionId = useId();
 
-  useEffect(() => {
-    onCloseRef.current = onClose;
-    initialFocusRefRef.current = initialFocusRef;
-  });
-
-  useEffect(() => {
-    if (!open) return;
-
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    const dialog = dialogRef.current;
-
-    const raf = requestAnimationFrame(() => {
-      if (!dialog) return;
-      const preferred = initialFocusRefRef.current?.current;
-      if (preferred && dialog.contains(preferred) && !isProbablyDestructive(preferred)) {
-        preferred.focus();
-        return;
-      }
-      const firstSafe = getFocusableElements(dialog).find((el) => !isProbablyDestructive(el));
-      (firstSafe ?? dialog).focus();
-    });
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onCloseRef.current();
-        return;
-      }
-      if (event.key !== "Tab" || !dialog) return;
-
-      const focusable = getFocusableElements(dialog);
-      if (focusable.length === 0) {
-        event.preventDefault();
-        dialog.focus();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-
-      if (event.shiftKey) {
-        if (active === first || active === dialog || !dialog.contains(active)) {
-          event.preventDefault();
-          last.focus();
-        }
-      } else {
-        if (active === last || !dialog.contains(active)) {
-          event.preventDefault();
-          first.focus();
-        }
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("keydown", onKeyDown);
-      const previous = previousFocusRef.current;
-      if (previous && document.contains(previous)) {
-        previous.focus();
-      }
-      previousFocusRef.current = null;
-    };
-  }, [open]);
+  useDialogAccessibility({ open, onClose, dialogRef, initialFocusRef });
 
   if (!open) return null;
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { useDialogAccessibility } from "@/components/ui/useDialogAccessibility";
 import {
   anonymizeDocument,
   getAnonymizationSourceText,
@@ -74,6 +75,9 @@ const PSEUDONYMIZATION_NOTE = "Az Adminiculum az AI-átadáshoz pszeudonimizált
 
 export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, clientName, clientRole, onSuccess }: AnonymizeModalProps) {
   const [mounted, setMounted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+
+  useDialogAccessibility({ open: isOpen && mounted, onClose, dialogRef });
   const [aiTask, setAiTask] = useState<AITask>("REVIEW_RISKS");
   const [redactionLevel, setRedactionLevel] = useState<RedactionLevel>("FULL");
   const [customPrompt, setCustomPrompt] = useState("");
@@ -348,7 +352,7 @@ const [phone, setPhone] = useState("");
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 px-4 py-4 backdrop-blur-sm">
-      <div role="dialog" aria-modal="true" aria-labelledby="anonymize-modal-title" className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden border border-[#e4e2dd] bg-white shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="anonymize-modal-title" tabIndex={-1} className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col overflow-hidden border border-[#e4e2dd] bg-white shadow-2xl outline-none">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between bg-[#06190d] px-6 py-4">
           <div>
