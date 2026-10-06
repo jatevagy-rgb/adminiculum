@@ -27,6 +27,7 @@ import { AuthenticatedApp } from "@/components/AuthenticatedApp";
 import { listAdminWorkspaces, type AdminWorkspaceDTO } from "@/lib/clientPortalAdminApi";
 import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { useRouteGeneration } from "@/lib/routeGeneration";
+import { getCaseMatterTypeLabel } from "@/lib/caseLabels";
 
 type DossierDocument = DocumentItem & { caseNumber: string; caseId: string };
 
@@ -456,7 +457,7 @@ function ClientDetailContent() {
                       <td className="p-3 font-mono text-[var(--adm-text-muted)]">{item.caseNumber}</td>
                       <td className="p-3 text-[var(--adm-text)]">
                         <p className="font-semibold">{item.title}</p>
-                        <p className="text-[10px] text-[var(--adm-text-muted)] mt-0.5">{item.matterType}</p>
+                        <p className="text-[10px] text-[var(--adm-text-muted)] mt-0.5">{getCaseMatterTypeLabel(item.matterType)}</p>
                       </td>
                       <td className="p-3">{statusLabel(item.status)}</td>
                       <td className="p-3">{item.assignedLawyer?.name || "Nincs kijelölve"}</td>

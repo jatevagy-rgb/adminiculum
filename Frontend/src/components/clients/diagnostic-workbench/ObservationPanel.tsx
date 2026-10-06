@@ -5,6 +5,7 @@ import type { DiagnosticWorkbenchDto, ProcessMetricCode } from "@/lib/diagnostic
 import {
   PROVENANCE_LABELS_HU,
   PROCESS_METRIC_LABELS_HU,
+  discoveryRunStatusLabelHu,
   formatProcessMetricValue,
 } from "@/lib/diagnosticWorkbenchApi";
 
@@ -121,7 +122,7 @@ export function ObservationPanel({ observed }: ObservationPanelProps) {
                       <div className="flex justify-between">
                         <span>Kutatási futás:</span>
                         <span className="font-medium text-[var(--adm-text)]">
-                          {obs.discoveryRun.status} ({new Date(obs.discoveryRun.startedAt).toLocaleDateString("hu-HU")})
+                          {discoveryRunStatusLabelHu(obs.discoveryRun.status)} ({new Date(obs.discoveryRun.startedAt).toLocaleDateString("hu-HU")})
                         </span>
                       </div>
                     ) : null}

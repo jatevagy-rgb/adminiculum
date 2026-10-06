@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getCases, type CaseListItem } from "@/lib/api";
 import { bindComplianceProposal, confirmComplianceProposal, createComplianceProposal, listComplianceProposals, proposalKinds, rejectComplianceProposal, startCaseFromComplianceProposal, updateComplianceProposal, type ComplianceProposal } from "@/lib/complianceProposalApi";
 import { complianceOverviewApi } from "@/lib/complianceOverviewApi";
+import { complianceFindingStatusLabel, complianceRecommendationLabel } from "@/lib/complianceWorkbenchPresentation";
 
 export type ComplianceEvidenceFreshness = "CURRENT" | "STALE";
 export type ComplianceEvidenceSourceType = "DOCUMENT_VERSION" | "CLIENT_FACT" | "OBSERVATION" | "EXTERNAL_REFERENCE";
@@ -512,8 +513,8 @@ export function ComplianceFindingRow({ finding }: { finding: ComplianceFindingVi
         {status ? <span className={`rounded border px-2 py-1 text-xs ${complianceOutcomeClass[status]}`}>{complianceOutcomeLabels[status]}</span> : null}
       </div>
       {finding.description ? <p className="mt-2 text-sm text-[var(--adm-text)]">{finding.description}</p> : null}
-      {finding.operationalStatus ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Belső állapot: {finding.operationalStatus}</p> : null}
-      {finding.recommendation ? <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Következő áttekintés: {finding.recommendation}</p> : null}
+      {finding.operationalStatus ? <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Belső állapot: {complianceFindingStatusLabel(finding.operationalStatus)}</p> : null}
+      {finding.recommendation ? <p className="mt-2 text-xs text-[var(--adm-text-muted)]">Következő áttekintés: {complianceRecommendationLabel(finding.recommendation)}</p> : null}
     </li>
   );
 }

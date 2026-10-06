@@ -4,6 +4,9 @@ import { useMemo } from "react";
 import type { DiagnosticWorkbenchDto } from "@/lib/diagnosticWorkbenchApi";
 import {
   PROVENANCE_LABELS_HU,
+  businessProcessStatusLabelHu,
+  complianceEnrollmentStatusLabelHu,
+  operatingProfileStatusLabelHu,
   verificationStatusLabelHu,
 } from "@/lib/diagnosticWorkbenchApi";
 import { GrowProcessMap } from "@/components/clients/GrowProcessMap";
@@ -61,13 +64,13 @@ export function CanonicalStatePanel({ client, known }: CanonicalStatePanelProps)
                 <div>
                   <span className="text-[var(--adm-text-muted)]">Státusz:</span>
                   <p className="font-medium text-[var(--adm-text)]">
-                    {client.operatingProfile.status || "—"}
+                    {operatingProfileStatusLabelHu(client.operatingProfile.status)}
                   </p>
                 </div>
                 <div>
                   <span className="text-[var(--adm-text-muted)]">Megfelelőségi státusz:</span>
                   <p className="font-medium text-[var(--adm-text)]">
-                    {client.operatingProfile.complianceEnrollmentStatus || "—"}
+                    {complianceEnrollmentStatusLabelHu(client.operatingProfile.complianceEnrollmentStatus)}
                   </p>
                 </div>
                 <div>
@@ -214,7 +217,7 @@ export function CanonicalStatePanel({ client, known }: CanonicalStatePanelProps)
                     ) : null}
                     <div className="pt-1 flex items-center justify-between text-[10px] text-[var(--adm-text-muted)] border-t border-slate-100">
                       <span>Felelős: {sys.owner?.name || "—"}</span>
-                      <span>Státusz: {sys.status}</span>
+                      <span>Státusz: {businessProcessStatusLabelHu(sys.status)}</span>
                     </div>
                   </div>
                 ))}
@@ -273,7 +276,7 @@ export function CanonicalStatePanel({ client, known }: CanonicalStatePanelProps)
                           </div>
                         </div>
                         <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700">
-                          {proc.status}
+                          {businessProcessStatusLabelHu(proc.status)}
                         </span>
                       </div>
 

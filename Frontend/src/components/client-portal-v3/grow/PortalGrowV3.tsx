@@ -1759,7 +1759,7 @@ export function PortalGrowV3() {
           <GrowSectionHeader
             step="5 · Eredmények"
             title="Rögzített eredmények és hatások"
-            description="Mért eredményként csak MEASURED alapú eredmény jelenik meg; a számított és becsült hatások külön kategóriában szerepelnek."
+            description="Mért eredményként csak mért alapú eredmény jelenik meg; a számított és becsült hatások külön kategóriában szerepelnek."
           />
         <section className={CARD}>
           <p className={EYEBROW}>Eredmények és hatás</p>
@@ -1851,7 +1851,7 @@ export function PortalGrowV3() {
           <div className={`mt-5 rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-subtle)] p-3 text-xs leading-5 ${MUTED}`}>
             <p className="font-semibold text-[var(--adm-text-primary)]">Módszertan és forrásmegjelölés</p>
             <p className="mt-0.5">
-              Mért eredményként csak MEASURED alapú eredmény jelenik meg. Számított és becsült hatások külön
+              Mért eredményként csak mért alapú eredmény jelenik meg. Számított és becsült hatások külön
               kategóriában szerepelnek.
             </p>
           </div>

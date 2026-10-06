@@ -19,7 +19,7 @@ import {
 import { AdminButton } from "@/components/adminiculum/ui";
 import { ConfirmationDialog } from "@/components/ui";
 import { ACCENT } from "@/components/cases/CaseCockpitPanels";
-import { workStatusAccent, workStatusLabel, formatDocDate } from "@/lib/documents/workContext";
+import { workStatusAccent, workStatusLabel, formatDocDate, documentRoleLabel } from "@/lib/documents/workContext";
 import { documentDeleteErrorMessage } from "@/lib/documents/documentPreparation";
 
 // One mapping source for the whole app: the card, the workspace header and the
@@ -117,7 +117,7 @@ export function DocumentWorkCard({
             <p data-testid="doc-card-filename" className="mt-0.5 truncate text-[10.5px] text-[var(--adm-text-muted)]">
               {card.fileName || "Nincs eredeti fájlnév"}
               {card.currentVersion ? ` · v${card.currentVersion}` : ""}
-              {card.documentRole ? ` · ${card.documentRole}` : ""}
+              {documentRoleLabel(card.documentRole) ? ` · ${documentRoleLabel(card.documentRole)}` : ""}
             </p>
           </div>
           <DocumentWorkStatusBadge status={card.workStatus} />

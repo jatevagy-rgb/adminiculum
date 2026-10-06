@@ -39,6 +39,12 @@ import {
   type DevelopmentInitiative,
 } from "@/lib/clientCompanyApi";
 import { getCurrentUser } from "@/lib/api";
+import {
+  diagnosisStatusLabelHu,
+  externalSourceStatusLabelHu,
+  growthUnresolvedItemLabel,
+  operatingProfileStatusLabelHu,
+} from "@/lib/diagnosticWorkbenchApi";
 
 export type GrowWorkbenchTab =
   | "attekintes"
@@ -88,7 +94,8 @@ function formatObservedAt(value: string | null | undefined): string {
 }
 
 function diagnosisStatusPill(status: string): { label: string; tone: "green" | "amber" | "burgundy" | "neutral" } {
-  return DIAGNOSIS_STATUS_LABELS[status] ?? { label: status || "—", tone: "neutral" };
+  const tone = DIAGNOSIS_STATUS_LABELS[status]?.tone ?? "neutral";
+  return { label: diagnosisStatusLabelHu(status), tone };
 }
 
 /**
@@ -392,7 +399,7 @@ function GrowOverviewTab({
 
       {profileState?.lastReviewedAt || profileState?.status ? (
         <p className="text-[11px] text-[var(--adm-text-muted)]" data-testid="grow-profile-state">
-          Működési profil állapota: {profileState.status ?? "nincs beállítva"}
+          Működési profil állapota: {profileState.status ? operatingProfileStatusLabelHu(profileState.status) : "nincs beállítva"}
           {profileState.lastReviewedAt ? ` · utolsó felülvizsgálat: ${formatDate(profileState.lastReviewedAt)}` : ""}
           {profileState.nextReviewAt ? ` · következő esedékes: ${formatDate(profileState.nextReviewAt)}` : ""}
         </p>
@@ -414,7 +421,7 @@ function GrowOverviewTab({
           detail={
             [
               unverifiedEvidence > 0 ? `${unverifiedEvidence} nem hitelesített bizonyíték` : null,
-              ...missingItems.map((m) => m.message),
+              ...missingItems.map((m) => growthUnresolvedItemLabel(m)),
             ]
               .filter(Boolean)
               .slice(0, 4)
@@ -1444,7 +1451,7 @@ function GrowDataSourcesTab({
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-[12px]">
                 <span className="font-semibold text-[var(--adm-text)]">{s.name}</span>
                 <span className="text-[var(--adm-text-muted)]">
-                  {s.sourceType} · {s.status} · {formatDate(s.createdAt)}
+                  {s.sourceType} · {externalSourceStatusLabelHu(s.status)} · {formatDate(s.createdAt)}
                 </span>
               </li>
             ))}

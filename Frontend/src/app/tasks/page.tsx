@@ -40,6 +40,7 @@ import {
   taskStatusLabel,
   taskWorkflowErrorMessage,
 } from "@/lib/taskWorkflowPresentation";
+import { getCaseMatterTypeLabel } from "@/lib/caseLabels";
 
 type QuickFilter = "all" | "overdue" | "review" | "returned";
 type AttentionFilter = "all" | AttentionCategory | "UNCLASSIFIED";
@@ -442,7 +443,7 @@ function TasksPageContent() {
                         </DataTableCell>
                         <DataTableCell>
                           <QuietLink href={`/cases/${task.case.id}`} size="sm">{task.case.caseNumber}</QuietLink>
-                          <span className="mt-1 block max-w-[180px] truncate text-xs text-[#6B7280]">{task.case.clientName} · {task.case.matterType}</span>
+                          <span className="mt-1 block max-w-[180px] truncate text-xs text-[#6B7280]">{task.case.clientName} · {getCaseMatterTypeLabel(task.case.matterType)}</span>
                         </DataTableCell>
                         <DataTableCell muted>{task.assignedToId === currentUser?.id ? currentUser.name || "Én" : task.assignedToId ? "Kijelölt felelős" : "Nincs felelős"}</DataTableCell>
                         <DataTableCell>

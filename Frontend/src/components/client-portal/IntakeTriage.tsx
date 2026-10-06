@@ -20,6 +20,7 @@ import {
   startTriage,
 } from '@/lib/clientIntakeAdminApi';
 import { intakeErrorMessage } from '@/lib/clientIntakeShared';
+import { getCaseMatterTypeLabel } from '@/lib/caseLabels';
 
 const REQUESTER_PERMISSIONS = [
   'MATTER_READ', 'DOCUMENT_READ', 'DOCUMENT_DOWNLOAD', 'UPDATE_READ',
@@ -240,7 +241,7 @@ function LinkPanel({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () =
 function ConvertPanel({ busy, onCancel, onSubmit }: { busy: boolean; onCancel: () => void; onSubmit: (n: Record<string, unknown>) => void }) {
   const [title, setTitle] = useState('');
   const [matterType, setMatterType] = useState('EMPLOYMENT');
-  return <Panel title="Új ügy létrehozása"><p className="text-sm text-stone-700">Új belső ügy jön létre. A kérelmezői hozzáférés és a közzététel külön, kifejezett lépés.</p><label className="block text-sm"><span className="font-medium">Ügy címe *</span><input value={title} onChange={(e) => setTitle(e.target.value)} className={input} /></label><label className="block text-sm"><span className="font-medium">Ügytípus</span><select value={matterType} onChange={(e) => setMatterType(e.target.value)} className={input}>{['EMPLOYMENT', 'CONTRACT', 'LITIGATION', 'COMPLIANCE', 'CORPORATE', 'REAL_ESTATE', 'IP', 'OTHER'].map((t) => <option key={t} value={t}>{t}</option>)}</select></label><Actions busy={busy} disabled={!title.trim()} onCancel={onCancel} onConfirm={() => onSubmit({ title: title.trim(), matterType })} label="Ügy létrehozása" /></Panel>;
+  return <Panel title="Új ügy létrehozása"><p className="text-sm text-stone-700">Új belső ügy jön létre. A kérelmezői hozzáférés és a közzététel külön, kifejezett lépés.</p><label className="block text-sm"><span className="font-medium">Ügy címe *</span><input value={title} onChange={(e) => setTitle(e.target.value)} className={input} /></label><label className="block text-sm"><span className="font-medium">Ügytípus</span><select value={matterType} onChange={(e) => setMatterType(e.target.value)} className={input}>{['EMPLOYMENT', 'CONTRACT', 'LITIGATION', 'COMPLIANCE', 'CORPORATE', 'REAL_ESTATE', 'IP', 'OTHER'].map((t) => <option key={t} value={t}>{getCaseMatterTypeLabel(t)}</option>)}</select></label><Actions busy={busy} disabled={!title.trim()} onCancel={onCancel} onConfirm={() => onSubmit({ title: title.trim(), matterType })} label="Ügy létrehozása" /></Panel>;
 }
 function PermissionPicker({ selected, onChange }: { selected: string[]; onChange: (p: string[]) => void }) {
   const toggle = (perm: string) => onChange(selected.includes(perm) ? selected.filter((p) => p !== perm) : [...selected, perm]);

@@ -22,6 +22,7 @@ import {
   type CaseCollaborator,
 } from "@/lib/api";
 import { CaseWorkspaceNav } from "@/components/cases/CaseWorkspaceNav";
+import { getCaseMatterTypeLabel } from "@/lib/caseLabels";
 
 type CommunicationsPageProps = {
   params: Promise<{ caseId: string }>;
@@ -848,7 +849,7 @@ export default function CommunicationsPageContent({ params }: CommunicationsPage
                 </div>
                 <div className="flex justify-between text-[10px] mt-1">
                   <span className="text-[#7B776D]">Ügytípus</span>
-                  <span className="text-[#1F2821]">{caseRecord?.matterType || 'Nem elérhető'}</span>
+                  <span className="text-[#1F2821]">{caseRecord?.matterType ? getCaseMatterTypeLabel(caseRecord.matterType) : 'Nem elérhető'}</span>
                 </div>
                 <div className="flex justify-between text-[10px] mt-1">
                   <span className="text-[#7B776D]">Státusz</span>

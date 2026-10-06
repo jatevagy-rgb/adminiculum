@@ -103,7 +103,7 @@ test('OUTCOMES: MEASURED, CALCULATED and ESTIMATED remain distinct', () => {
   assert.match(src, /Mért eredmények/);
   assert.match(src, /Számított eredmények/);
   assert.match(src, /Becsült eredmények/);
-  assert.match(src, /Mért eredményként csak MEASURED alapú eredmény jelenik meg/);
+  assert.match(src, /Mért eredményként csak mért alapú eredmény jelenik meg/);
   // Basis tone keeps calculated/estimated visually distinct from measured.
   assert.match(src, /function outcomeTone/);
   const api = read(API);

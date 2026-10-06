@@ -9,6 +9,8 @@ const CASE_MATTER_TYPE_LABELS: Record<string, string> = {
   IP: "Szellemi alkotások joga",
   MERGERS_ACQUISITIONS: "M&A",
   OTHER: "Egyéb",
+  CUSTOM: "Saját ügytípus",
+  UNKNOWN: "Ismeretlen ügytípus",
 };
 
 const CASE_STATUS_LABELS: Record<string, string> = {
@@ -24,6 +26,7 @@ const CASE_STATUS_LABELS: Record<string, string> = {
   ARCHIVED: "Archivált",
   OPEN: "Nyitott",
   CLOSED: "Lezárt",
+  UNKNOWN: "Ismeretlen állapot",
 };
 
 export function getCaseMatterTypeLabel(value?: string | null): string {

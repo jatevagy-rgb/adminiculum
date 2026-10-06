@@ -61,6 +61,32 @@ export function workStatusLabel(status: string | null | undefined): string {
   return DOCUMENT_WORK_STATUS_LABELS[status] || status;
 }
 
+/**
+ * Human Hungarian role labels for canonical document roles. The work card role
+ * is otherwise a free-text field, so a genuine human-entered value is preserved;
+ * only an unrecognized all-caps canonical token degrades to a neutral label
+ * instead of leaking the raw identifier into ordinary presentation.
+ */
+export const DOCUMENT_ROLE_LABELS: Record<string, string> = {
+  SOURCE: "Forrásdokumentum",
+  TEMPLATE: "Sablon",
+  DELIVERABLE: "Leadandó eredmény",
+  FINAL_OUTPUT: "Végleges eredmény",
+  WORKING_COPY: "Munkapéldány",
+  REFERENCE: "Hivatkozott anyag",
+  ATTACHMENT: "Melléklet",
+  OTHER: "Egyéb dokumentumszerep",
+};
+
+export function documentRoleLabel(role: string | null | undefined): string | null {
+  const trimmed = String(role || "").trim();
+  if (!trimmed) return null;
+  const mapped = DOCUMENT_ROLE_LABELS[trimmed.toUpperCase()];
+  if (mapped) return mapped;
+  if (/^[A-Z0-9_]+$/.test(trimmed)) return "Egyéb dokumentumszerep";
+  return trimmed;
+}
+
 /** Status → accent, so one colour carries one meaning across every surface. */
 export function workStatusAccent(status: string | null | undefined): Accent {
   switch (status) {

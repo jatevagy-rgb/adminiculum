@@ -48,7 +48,7 @@ export function CasePortalIdentityGrant({ caseId, clientId }: { caseId: string; 
     setFeedback(null);
     try {
       await createIdentityGrant({ membershipId, caseId, permissions, validUntil: validUntil || null });
-      setFeedback({ tone: "ok", text: "Identity grant létrehozva erre az ügyre." });
+      setFeedback({ tone: "ok", text: "Hozzáférés engedélyezve erre az ügyre." });
       await reload();
     } catch (e) {
       setFeedback({ tone: "err", text: (e instanceof Error ? e.message : "Hiba").slice(0, 160) });
@@ -59,7 +59,7 @@ export function CasePortalIdentityGrant({ caseId, clientId }: { caseId: string; 
 
   return (
     <div data-testid="case-identity-grant" className="min-w-0 rounded-[14px] border border-[rgba(22,32,26,0.12)] p-3 sm:p-4">
-      <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">External ID ügyfél — identity grant</h4>
+      <h4 className="font-serif text-lg font-semibold text-[var(--adm-text)]">Ügyfél-hozzáférés ehhez az ügyhöz</h4>
       <p className="mt-1 text-xs text-[var(--adm-text-muted)]">Csak jóváhagyott tagsághoz köthető. A tagság önmagában nem ad hozzáférést.</p>
       {options.length === 0 ? (
         <p className="mt-3 text-xs text-[var(--adm-text-muted)]">Nincs elérhető aktív tagság ehhez az ügyfélhez.</p>
@@ -101,7 +101,7 @@ export function CasePortalIdentityGrant({ caseId, clientId }: { caseId: string; 
             disabled={busy || !membershipId || !permissions.length}
             onClick={grant}
           >
-            Identity grant létrehozása
+            Hozzáférés engedélyezése
           </AdminButton>
         </>
       )}
