@@ -101,7 +101,6 @@ describe('multiple known parties without overwrite', () => {
       headers: { 'content-type': 'application/json', 'x-test-user': user },
       body: JSON.stringify({
         aiTask: 'SUMMARIZE',
-        sourceText: SOURCE_TEXT,
         metadata: { knownParties },
       }),
     });
@@ -114,8 +113,8 @@ describe('multiple known parties without overwrite', () => {
       { kind: 'COMPANY', name: 'Beta Kft.', legalRole: 'Ellenérdekű fél' },
     ]);
     expect(status).toBe(200);
-    expect(body.redactedText).toContain('[ÜGYFÉL]');
-    expect(body.redactedText).toContain('[ELLENÉRDEKŰ FÉL]');
+    expect(body.redactedText).toContain('[ÜGYFÉL_1]');
+    expect(body.redactedText).toContain('[ELLENÉRDEKŰ FÉL_1]');
     expect(body.redactedText).not.toContain('Alpha Kft.');
     expect(body.redactedText).not.toContain('Beta Kft.');
   });
@@ -127,13 +126,13 @@ describe('multiple known parties without overwrite', () => {
     ]);
     const onlyA = await anonymize([{ kind: 'COMPANY', name: 'Alpha Kft.', legalRole: 'Vevő' }]);
 
-    expect(onlyA.body.redactedText).toContain('[ÜGYFÉL]');
+    expect(onlyA.body.redactedText).toContain('[ÜGYFÉL_1]');
     expect(onlyA.body.redactedText).not.toContain('Alpha Kft.');
     // Beta is not supplied, so it remains untouched in the source text.
     expect(onlyA.body.redactedText).toContain('Beta Kft.');
-    expect(onlyA.body.redactedText).not.toContain('[ELLENÉRDEKŰ FÉL]');
+    expect(onlyA.body.redactedText).not.toContain('[ELLENÉRDEKŰ FÉL_1]');
     // The remaining party's redaction is identical to the two-party run.
-    expect(both.body.redactedText).toContain('[ÜGYFÉL]');
+    expect(both.body.redactedText).toContain('[ÜGYFÉL_1]');
   });
 });
 
@@ -143,7 +142,7 @@ describe('output + return contract', () => {
     const r = await fetch(`${base}/documents/${documentId}/anonymize`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-test-user': user },
-      body: JSON.stringify({ aiTask: 'SUMMARIZE', sourceText: SOURCE_TEXT }),
+      body: JSON.stringify({ aiTask: 'SUMMARIZE' }),
     });
     expect(r.status).toBe(200);
     const body = await r.json() as any;

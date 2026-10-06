@@ -38,7 +38,7 @@ describe("anonymization source outcome", () => {
     assert.equal(outcome.message, SOURCE_PROCESSING_FAILURE_MESSAGE);
   });
 
-  it("uses the endpoint limitation message for SOURCE_NOT_AVAILABLE", () => {
+  it("uses an allowlisted message for SOURCE_NOT_AVAILABLE", () => {
     const outcome = resolveAnonymizeSourceOutcome({
       success: true,
       textAvailable: false,
@@ -46,7 +46,7 @@ describe("anonymization source outcome", () => {
       limitationMessage: "Egyéni korlátozás",
     });
     assert.equal(outcome.available, false);
-    assert.equal(outcome.message, "Egyéni korlátozás");
+    assert.equal(outcome.message, SOURCE_TEXT_LIMITATION_MESSAGE);
   });
 
   it("does not accept whitespace-only text as available", () => {
@@ -57,6 +57,13 @@ describe("anonymization source outcome", () => {
       limitationMessage: "Nincs szöveg",
     });
     assert.equal(outcome.available, false);
-    assert.equal(outcome.message, "Nincs szöveg");
+    assert.equal(outcome.message, SOURCE_TEXT_LIMITATION_MESSAGE);
+  });
+
+  it("keeps authorization, scanning, capability, source and processing failures distinct without raw text", () => {
+    const codes = ['FEATURE_DISABLED', 'AUTHORIZATION_DENIED', 'SECURITY_SCAN_BLOCKED', 'SOURCE_NOT_AVAILABLE', 'PROCESSING_FAILURE'];
+    const outcomes = codes.map((code) => resolveAnonymizeSourceOutcome({ code, limitationMessage: 'secret provider stack trace' }));
+    assert.equal(new Set(outcomes.map((outcome) => outcome.message)).size, 5);
+    assert.ok(outcomes.every((outcome) => !outcome.available && !outcome.message.includes('secret')));
   });
 });

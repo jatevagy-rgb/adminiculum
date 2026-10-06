@@ -205,13 +205,12 @@ describe('document reader source planning (symptom 1)', () => {
     })).toEqual([{ source: 'VERSION', storageId: 'same-store' }]);
   });
 
-  it('orders version-first, then a distinct document pointer', () => {
+  it('never schedules a distinct legacy pointer after an authoritative version', () => {
     expect(planDocumentTextSources({
       currentVersion: { spItemId: 'ver-store', storageReference: null },
       documentStorageId: 'doc-store',
     })).toEqual([
       { source: 'VERSION', storageId: 'ver-store' },
-      { source: 'DOCUMENT', storageId: 'doc-store' },
     ]);
   });
 

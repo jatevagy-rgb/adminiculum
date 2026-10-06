@@ -102,11 +102,11 @@ export function planDocumentTextSources(input: {
 }): DocumentTextAttempt[] {
   const attempts: DocumentTextAttempt[] = [];
   const versionStorageId = input.currentVersion ? versionStorageReference(input.currentVersion) : null;
-  if (versionStorageId) attempts.push({ source: 'VERSION', storageId: versionStorageId });
+  if (versionStorageId) return [{ source: 'VERSION', storageId: versionStorageId }];
   const documentStorageId = typeof input.documentStorageId === 'string' && input.documentStorageId.trim().length > 0
     ? input.documentStorageId
     : null;
-  if (documentStorageId && documentStorageId !== versionStorageId) {
+  if (documentStorageId) {
     attempts.push({ source: 'DOCUMENT', storageId: documentStorageId });
   }
   return attempts;

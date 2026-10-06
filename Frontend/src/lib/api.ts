@@ -2690,8 +2690,6 @@ export async function anonymizeDocument(documentId: string, data?: {
   redactionLevel?: string;
   /** Structured extra-party context — manually supplied counterparty names */
   counterparties?: CounterpartyInput[];
-  /** Optional visible/edited source text from UI workspace */
-  sourceText?: string;
   /** Minimal metadata context from anonymization workspace */
   metadata?: AnonymizationMetadataInput;
 }): Promise<Record<string, unknown>> {
@@ -2731,9 +2729,9 @@ export async function getAnonymizationSourceText(documentId: string): Promise<An
       return {
         success: false,
         textAvailable: false,
-        code: parsed?.code,
+        code: response.status === 401 || response.status === 403 ? 'AUTHORIZATION_DENIED' : parsed?.code || 'PROCESSING_FAILURE',
         limitationMessage: parsed?.limitationMessage,
-        error: parsed?.error || parsed?.message || `HTTP ${response.status}`,
+        error: 'A forrásszöveg lekérése nem sikerült.',
       };
     }
 

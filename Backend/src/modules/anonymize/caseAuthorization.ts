@@ -135,8 +135,8 @@ export async function canAccessSensitiveCase(req: Request, caseId: string): Prom
 function sendForbidden(res: Response): void {
   res.status(403).json({
     status: 403,
-    code: 'CASE_ACCESS_FORBIDDEN',
-    message: 'You do not have access to this case.',
+    code: 'AUTHORIZATION_DENIED',
+    message: 'Nincs jogosultsága az ügy adatainak eléréséhez.',
   });
 }
 

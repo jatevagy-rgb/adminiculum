@@ -10,13 +10,16 @@
  */
 
 export const SOURCE_TEXT_LIMITATION_MESSAGE =
-  "A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.";
+  "A dokumentum hiteles forrásszövege jelenleg nem érhető el.";
 
 export const FEATURE_DISABLED_MESSAGE =
   "Az AI-anonimizálás jelenleg ki van kapcsolva. A funkció engedélyezéséhez forduljon rendszergazdához.";
 
 export const SOURCE_PROCESSING_FAILURE_MESSAGE =
   "A forrásszöveg betöltése közben hiba történt. Próbálja újra később.";
+
+export const AUTHORIZATION_DENIED_MESSAGE = "Nincs jogosultsága a dokumentum anonimizálásához.";
+export const SECURITY_SCAN_BLOCKED_MESSAGE = "A dokumentum biztonsági ellenőrzése még nem engedélyezi a feldolgozást.";
 
 export interface AnonymizeSourceOutcome {
   available: boolean;
@@ -40,9 +43,12 @@ export function resolveAnonymizeSourceOutcome(result: {
   if (result.code === "PROCESSING_FAILURE") {
     return { available: false, message: SOURCE_PROCESSING_FAILURE_MESSAGE };
   }
-  const reason =
-    typeof result.limitationMessage === "string" && result.limitationMessage.trim().length > 0
-      ? result.limitationMessage
-      : SOURCE_TEXT_LIMITATION_MESSAGE;
-  return { available: false, message: reason };
+  if (["AUTHORIZATION_DENIED", "CASE_ACCESS_FORBIDDEN", "FORBIDDEN"].includes(result.code || "")) {
+    return { available: false, message: AUTHORIZATION_DENIED_MESSAGE };
+  }
+  if (["SECURITY_SCAN_BLOCKED", "DOCUMENT_SECURITY_SCAN_BLOCKED"].includes(result.code || "")) {
+    return { available: false, message: SECURITY_SCAN_BLOCKED_MESSAGE };
+  }
+  // Presentation uses allowlisted messages, never exception/provider text.
+  return { available: false, message: result.code === "SOURCE_NOT_AVAILABLE" || !result.code ? SOURCE_TEXT_LIMITATION_MESSAGE : SOURCE_PROCESSING_FAILURE_MESSAGE };
 }

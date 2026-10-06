@@ -883,6 +883,10 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
     }
 
     const currentVersion = document.versions?.[0] || null;
+    if (currentVersion && currentVersion.documentId !== document.id) {
+      res.status(409).json({ code: 'SOURCE_NOT_AVAILABLE', message: 'A dokumentum hiteles forrása nem érhető el.' });
+      return;
+    }
     const textBlocked = securityScanBlock(currentVersion?.securityScanStatus || 'CLEAN');
     if (textBlocked) {
       res.status(textBlocked.status).json(textBlocked);
@@ -904,7 +908,7 @@ router.get('/:id/text', authenticate, requireDocumentObjectReadAccess, async (re
 
     // Most authoritative source first: the current immutable version's own bytes
     // and own mimeType/filename. The legacy document-level pointer is only an
-    // additional attempt (pre-version-foundation rows).
+    // source for pre-version-foundation rows only; never a retry after failure.
     let versionUnavailableReason: string | null = null;
     for (const attempt of attempts) {
       if (attempt.source === 'VERSION' && currentVersion) {

@@ -116,7 +116,7 @@ describe('resolveAnonymizeSourceText — canonical source reuse', () => {
     );
 
     expect(resolution.scanBlocked).toBe(true);
-    expect(resolution.code).toBe('DOCUMENT_SECURITY_SCAN_BLOCKED');
+    expect(resolution.code).toBe('SECURITY_SCAN_BLOCKED');
     expect(downloads).toBe(0);
   });
 
@@ -128,5 +128,19 @@ describe('resolveAnonymizeSourceText — canonical source reuse', () => {
 
     expect(resolution.available).toBe(true);
     expect(resolution.text).toBe('Legacy content');
+  });
+
+  it('fails closed when current storage fails even if old document bytes are readable', async () => {
+    const download = jest.fn(async (id: string) => id === 'legacy-old' ? Buffer.from('OLD CONTENT') : null);
+    const result = await resolveAnonymizeSourceText({ documentId: 'd1', currentVersion: TXT_VERSION, spItemId: 'legacy-old' }, download);
+    expect(result).toMatchObject({ available: false, text: null, code: 'SOURCE_NOT_AVAILABLE' });
+    expect(download.mock.calls).toEqual([['sp-v1']]);
+  });
+
+  it('rejects a wrong-parent version and never downloads its bytes', async () => {
+    const download = jest.fn();
+    expect(await resolveAnonymizeSourceText({ documentId: 'other', currentVersion: TXT_VERSION, spItemId: 'legacy' }, download))
+      .toMatchObject({ available: false, code: 'SOURCE_NOT_AVAILABLE' });
+    expect(download).not.toHaveBeenCalled();
   });
 });

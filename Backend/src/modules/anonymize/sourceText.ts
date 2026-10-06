@@ -14,6 +14,7 @@
 // and the full extracted text is never persisted here.
 
 import { extractText } from '../documents/textExtractor';
+import { ANONYMIZE_MESSAGES } from './errors';
 import {
   planDocumentTextSources,
   readVersionContentText,
@@ -21,16 +22,18 @@ import {
 } from '../documents/versionContent.service';
 
 export const SOURCE_TEXT_LIMITATION_MESSAGE =
-  'A dokumentum teljes szöveges előnézete jelenleg nem érhető el. Az anonimizálás a feltöltött dokumentum backend feldolgozásán fut.';
+  ANONYMIZE_MESSAGES.SOURCE_NOT_AVAILABLE;
 
 const SCAN_BLOCKED_MESSAGE =
   'A dokumentum biztonsági ellenőrzése még nem engedélyezi a tartalom megnyitását.';
 
 export type AnonymizeSourceCode =
   | 'SOURCE_NOT_AVAILABLE'
-  | 'DOCUMENT_SECURITY_SCAN_BLOCKED';
+  | 'SECURITY_SCAN_BLOCKED'
+  | 'PROCESSING_FAILURE';
 
 export interface AnonymizeSourceDescriptor {
+  documentId?: string;
   /** Legacy document-level SharePoint pointer (fallback only). */
   spItemId?: string | null;
   mimeType?: string | null;
@@ -61,13 +64,16 @@ export async function resolveAnonymizeSourceText(
   descriptor: AnonymizeSourceDescriptor,
   download: AnonymizeSourceDownload,
 ): Promise<AnonymizeSourceResolution> {
-  const scanStatus = descriptor.currentVersion?.securityScanStatus ?? 'CLEAN';
+  if (descriptor.currentVersion && descriptor.documentId && descriptor.currentVersion.documentId !== descriptor.documentId) {
+    return { available: false, text: null, scanBlocked: false, code: 'SOURCE_NOT_AVAILABLE', limitationMessage: SOURCE_TEXT_LIMITATION_MESSAGE };
+  }
+  const scanStatus = descriptor.currentVersion ? descriptor.currentVersion.securityScanStatus : 'CLEAN';
   if (scanStatus !== 'CLEAN') {
     return {
       available: false,
       text: null,
       scanBlocked: true,
-      code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
+      code: 'SECURITY_SCAN_BLOCKED',
       limitationMessage: SCAN_BLOCKED_MESSAGE,
     };
   }
@@ -77,7 +83,6 @@ export async function resolveAnonymizeSourceText(
     documentStorageId: descriptor.spItemId,
   });
 
-  let lastReason: string | null = null;
   for (const attempt of attempts) {
     if (attempt.source === 'VERSION' && descriptor.currentVersion) {
       const resolved = await readVersionContentText(descriptor.currentVersion, download);
@@ -90,8 +95,8 @@ export async function resolveAnonymizeSourceText(
           limitationMessage: null,
         };
       }
-      lastReason = resolved.unavailableReason;
-      continue;
+      const code = resolved.reasonCode === 'EXTRACTION_FAILED' ? 'PROCESSING_FAILURE' : 'SOURCE_NOT_AVAILABLE';
+      return { available: false, text: null, scanBlocked: false, code, limitationMessage: ANONYMIZE_MESSAGES[code] };
     }
 
     let buffer: Buffer | null = null;
@@ -101,11 +106,14 @@ export async function resolveAnonymizeSourceText(
       buffer = null;
     }
     if (buffer) {
-      const extracted = await extractText(
+      let extracted;
+      try { extracted = await extractText(
         buffer,
         descriptor.mimeType || 'application/octet-stream',
         descriptor.fileName || descriptor.name || undefined,
-      );
+      ); } catch {
+        return { available: false, text: null, scanBlocked: false, code: 'PROCESSING_FAILURE', limitationMessage: ANONYMIZE_MESSAGES.PROCESSING_FAILURE };
+      }
       const text = extracted.success ? (extracted.text || '').trim() : '';
       if (text.length > 0) {
         return {
@@ -116,7 +124,6 @@ export async function resolveAnonymizeSourceText(
           limitationMessage: null,
         };
       }
-      lastReason = extracted.error || null;
     }
   }
 
@@ -125,6 +132,6 @@ export async function resolveAnonymizeSourceText(
     text: null,
     scanBlocked: false,
     code: 'SOURCE_NOT_AVAILABLE',
-    limitationMessage: lastReason || SOURCE_TEXT_LIMITATION_MESSAGE,
+    limitationMessage: SOURCE_TEXT_LIMITATION_MESSAGE,
   };
 }

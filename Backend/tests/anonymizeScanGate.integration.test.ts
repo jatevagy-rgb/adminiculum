@@ -93,7 +93,7 @@ test('SCAN_FAILED current version cannot reach extraction or redaction', async (
   const before = await artifactCount();
   const r = await postAnonymize({ aiTask: 'SUMMARIZE' });
   expect(r.status).toBe(409);
-  expect(r.body.code).toBe('DOCUMENT_SECURITY_SCAN_BLOCKED');
+  expect(r.body.code).toBe('SECURITY_SCAN_BLOCKED');
   expect(JSON.stringify(r.body)).not.toMatch(/SecretClient|GATED_FILE/);
   expect(downloads).toBe(0);
   expect(await artifactCount()).toBe(before);
@@ -103,14 +103,14 @@ test('PENDING_SCAN current version is blocked', async () => {
   await setCurrentStatus('PENDING_SCAN');
   const r = await postAnonymize({ aiTask: 'SUMMARIZE' });
   expect(r.status).toBe(409);
-  expect(r.body.code).toBe('DOCUMENT_SECURITY_SCAN_BLOCKED');
+  expect(r.body.code).toBe('SECURITY_SCAN_BLOCKED');
 });
 
 test('INFECTED current version is blocked', async () => {
   await setCurrentStatus('INFECTED');
   const r = await postAnonymize({ aiTask: 'SUMMARIZE' });
   expect(r.status).toBe(409);
-  expect(r.body.code).toBe('DOCUMENT_SECURITY_SCAN_BLOCKED');
+  expect(r.body.code).toBe('SECURITY_SCAN_BLOCKED');
 });
 
 test('source preview never leaks raw text for an unclean file', async () => {
@@ -118,7 +118,7 @@ test('source preview never leaks raw text for an unclean file', async () => {
   downloads = 0;
   const r = await getSource();
   expect(r.status).toBe(409);
-  expect(r.body.code).toBe('DOCUMENT_SECURITY_SCAN_BLOCKED');
+  expect(r.body.code).toBe('SECURITY_SCAN_BLOCKED');
   expect(JSON.stringify(r.body)).not.toMatch(/SecretClient|GATED_FILE/);
   expect(downloads).toBe(0);
 });
@@ -135,13 +135,15 @@ test('a CLEAN current version still anonymizes through the file-backed path', as
   expect(await artifactCount()).toBe(before + 1);
 });
 
-test('explicitly user-supplied plain text has no file source and stays lawful', async () => {
-  await setCurrentStatus('PENDING_SCAN');
+test('caller text cannot bypass an infected canonical version or write an artifact', async () => {
+  await setCurrentStatus('INFECTED');
   downloads = 0;
+  const before = await artifactCount();
   const r = await postAnonymize({ aiTask: 'SUMMARIZE', sourceText: 'A felhasználó által beírt szöveg, nincs fájlforrás.' });
-  expect(r.status).toBe(200);
+  expect(r.status).toBe(409);
   expect(downloads).toBe(0);
-  expect(r.body.redactedText).toBeDefined();
+  expect(r.body.code).toBe('SECURITY_SCAN_BLOCKED');
+  expect(await artifactCount()).toBe(before);
 });
 
 test('legacy unbound documents without any version keep their existing behavior', async () => {

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useDialogAccessibility } from "@/components/ui/useDialogAccessibility";
 import {
   anonymizeDocument,
+  ApiError,
   getAnonymizationSourceText,
   type AnonymizationMetadataInput,
   type CaseContractListItem,
@@ -91,7 +92,7 @@ export function AnonymizeModal({ isOpen, onClose, contract, caseId, clientId, cl
   const [sourceTextLoading, setSourceTextLoading] = useState(false);
   const [sourceTextAvailable, setSourceTextAvailable] = useState(false);
   const [sourceText, setSourceText] = useState("");
-  const [workspaceText, setWorkspaceText] = useState("");
+  const generation = useRef(0);
   const [sourceLimitationMessage, setSourceLimitationMessage] = useState(SOURCE_TEXT_LIMITATION_MESSAGE);
 
   const [metadataClientName, setMetadataClientName] = useState(clientName || "");
@@ -168,10 +169,13 @@ const [phone, setPhone] = useState("");
   // document changes, so an old anonymized result never masquerades as belonging
   // to a different document.
   useEffect(() => {
+    generation.current += 1;
     if (!isOpen) return;
     setResult(null);
     setError(null);
     setCopiedState(null);
+    setIsLoading(false);
+    return () => { generation.current += 1; };
   }, [isOpen, contract.id]);
 
   const knownPartyPrimaryName = knownPartyKind === "COMPANY"
@@ -184,6 +188,8 @@ const [phone, setPhone] = useState("");
     let active = true;
     const loadSourceText = async () => {
       setSourceTextLoading(true);
+      setSourceTextAvailable(false);
+      setSourceText("");
       try {
         const response = await getAnonymizationSourceText(contract.id);
         if (!active) return;
@@ -193,19 +199,16 @@ const [phone, setPhone] = useState("");
           const text = (response.sourceText || "").trim();
           setSourceTextAvailable(true);
           setSourceText(text);
-          setWorkspaceText(text);
           setSourceLimitationMessage(outcome.message);
         } else {
           setSourceTextAvailable(false);
           setSourceText("");
-          setWorkspaceText("");
           setSourceLimitationMessage(outcome.message);
         }
       } catch {
         if (!active) return;
         setSourceTextAvailable(false);
         setSourceText("");
-        setWorkspaceText("");
         setSourceLimitationMessage(resolveAnonymizeSourceOutcome({ code: "PROCESSING_FAILURE" }).message);
       } finally {
         if (active) {
@@ -234,6 +237,8 @@ const [phone, setPhone] = useState("");
   };
 
   const handleAnonymize = async () => {
+    if (!sourceTextAvailable || sourceTextLoading) return;
+    const request = generation.current;
     setIsLoading(true);
     setError(null);
     setResult(null);
@@ -244,7 +249,6 @@ const [phone, setPhone] = useState("");
         customPrompt: aiTask === "CUSTOM" ? customPrompt : undefined,
         redactionLevel,
         counterparties: counterparties.length > 0 ? counterparties : undefined,
-        sourceText: sourceTextAvailable && workspaceText.trim().length > 0 ? workspaceText : undefined,
         metadata: {
           clientName: metadataClientName.trim() || knownPartyPrimaryName || undefined,
           clientRole: metadataClientRole.trim() || knownPartyLegalRole.trim() || undefined,
@@ -293,6 +297,7 @@ const [phone, setPhone] = useState("");
         error?: string;
       };
 
+      if (request !== generation.current) return;
       if (response.success && response.anonymizedDocumentId) {
         const resultData: AnonymizeResult = {
           anonymizedDocumentId: response.anonymizedDocumentId,
@@ -305,22 +310,12 @@ const [phone, setPhone] = useState("");
         setResult(resultData);
         onSuccess?.(resultData);
       } else {
-        setError(response.error || "Az anonimizálás nem sikerült.");
+        setError(resolveAnonymizeSourceOutcome({ code: 'PROCESSING_FAILURE' }).message);
       }
     } catch (err) {
-      const e = err as any;
-      const rd = e?.response?.data;
-      const msg =
-        (typeof rd?.details === 'string' && rd.details) ||
-        (typeof rd?.message === 'string' && rd.message) ||
-        (typeof rd?.error === 'string' && rd.error) ||
-        (typeof e?.details === 'string' && e.details) ||
-        (typeof e?.message === 'string' && e.message) ||
-        (typeof e?.error === 'string' && e.error) ||
-        "Az anonimizálás nem sikerült.";
-      setError(msg);
+      if (request === generation.current) setError(resolveAnonymizeSourceOutcome({ code: err instanceof ApiError ? err.code || 'PROCESSING_FAILURE' : 'PROCESSING_FAILURE' }).message);
     } finally {
-      setIsLoading(false);
+      if (request === generation.current) setIsLoading(false);
     }
   };
 
@@ -410,23 +405,24 @@ const [phone, setPhone] = useState("");
               <div className="mb-6 p-4 border border-[#c3c8c1]/20">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="material-symbols-outlined text-[#434843] text-base">article</span>
-                  <p className="text-xs font-bold text-[#06190d]">Szöveges munkafelület (MVP)</p>
+                  <p className="text-xs font-bold text-[var(--adm-text-primary)]">Dokumentumforrás előnézete</p>
                 </div>
                 {sourceTextLoading ? (
                   <p className="text-xs text-[#434843]">Forrásszöveg betöltése...</p>
                 ) : sourceTextAvailable ? (
                   <>
                     <p className="text-[10px] text-[#434843]/70 mb-2">
-                      Az anonimizálás az itt látható / szerkesztett szövegen fut.
+                      Az anonimizálás a dokumentum ellenőrzött, tárolt szövegéből készül.
                     </p>
                     <textarea
-                      value={workspaceText}
-                      onChange={(e) => setWorkspaceText(e.target.value)}
+                      value={sourceText}
+                      readOnly
+                      aria-label="A dokumentum hiteles forrásszövege"
                       rows={10}
                       className="w-full p-3 border border-[#c3c8c1]/20 text-xs text-[#06190d] focus:outline-none focus:border-[#06190d] font-mono"
                     />
                     <p className="mt-2 text-[10px] text-[#434843]/60">
-                      Eredeti betöltött karakterek: {sourceText.length} • aktuális munkaszöveg: {workspaceText.length}
+                      Betöltött karakterek: {sourceText.length}
                     </p>
                   </>
                 ) : (
@@ -838,7 +834,7 @@ const [phone, setPhone] = useState("");
             </button>
             <button
               onClick={handleAnonymize}
-              disabled={isLoading || (aiTask === "CUSTOM" && !customPrompt)}
+              disabled={isLoading || sourceTextLoading || !sourceTextAvailable || (aiTask === "CUSTOM" && !customPrompt)}
               className="px-6 py-2 text-xs font-bold uppercase tracking-widest bg-[#06190d] text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? "Feldolgozás..." : "Anonimizált másolat készítése"}

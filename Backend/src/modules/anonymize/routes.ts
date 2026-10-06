@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import anonymizeService from './services';
 import { authenticate } from '../../middleware/auth';
+import { ANONYMIZE_MESSAGES } from './errors';
 import {
   requireAnonymizeReadAccess,
   requireAnonymizeManageAccess,
@@ -28,9 +29,9 @@ const router = Router();
 function requireAnonymizeEnabled(req: Request, res: Response, next: () => void) {
   if (process.env.ENABLE_AI_ANONYMIZATION !== 'true') {
     return res.status(501).json({
-      error: 'Not Implemented',
+      error: ANONYMIZE_MESSAGES.FEATURE_DISABLED,
       code: 'FEATURE_DISABLED',
-      message: 'AI Anonymization feature is disabled. Set ENABLE_AI_ANONYMIZATION=true to enable.',
+      message: ANONYMIZE_MESSAGES.FEATURE_DISABLED,
     });
   }
   next();
@@ -71,21 +72,21 @@ router.post(
         if (result.scanBlocked) {
           return res.status(409).json({
             status: 409,
-            code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
-            message: result.error || 'A dokumentum biztonsági ellenőrzése még nem engedélyezi a tartalom megnyitását.',
+            code: 'SECURITY_SCAN_BLOCKED',
+            message: ANONYMIZE_MESSAGES.SECURITY_SCAN_BLOCKED,
           });
         }
         if (result.code === 'SOURCE_NOT_AVAILABLE') {
           return res.status(422).json({
             status: 422,
             code: 'SOURCE_NOT_AVAILABLE',
-            message: result.error || 'A dokumentum forrásszövege nem érhető el.',
+            message: ANONYMIZE_MESSAGES.SOURCE_NOT_AVAILABLE,
           });
         }
-        return res.status(400).json({
-          status: 400,
-          code: 'ANONYMIZATION_FAILED',
-          message: 'A dokumentum anonimizálása nem sikerült.',
+        return res.status(500).json({
+          status: 500,
+          code: 'PROCESSING_FAILURE',
+          message: ANONYMIZE_MESSAGES.PROCESSING_FAILURE,
         });
       }
 
@@ -93,7 +94,7 @@ router.post(
     } catch (error) {
       console.error('Anonymize error:', error);
       res.status(500).json({
-        error: 'Hiba az anonimizálás során',
+        code: 'PROCESSING_FAILURE', message: ANONYMIZE_MESSAGES.PROCESSING_FAILURE,
       });
     }
   },
@@ -117,8 +118,8 @@ router.get(
       if (result.scanBlocked) {
         return res.status(409).json({
           status: 409,
-          code: 'DOCUMENT_SECURITY_SCAN_BLOCKED',
-          message: result.limitationMessage || 'A dokumentum biztonsági ellenőrzése még nem engedélyezi a tartalom megnyitását.',
+          code: 'SECURITY_SCAN_BLOCKED',
+          message: ANONYMIZE_MESSAGES.SECURITY_SCAN_BLOCKED,
         });
       }
       res.json(result);
