@@ -24,6 +24,7 @@
 import type { InterventionCode } from '../research/interventions';
 import { interventionLabelHu } from '../research/interventions';
 import type { SurveyCategoryKey } from '../research/observationSignals';
+import { createVersionedRegistry } from './versionedRegistry';
 
 /** Canonical declared assessment schema marker persisted in the observation payload. */
 export const GROW_ASSESSMENT_SCHEMA = 'GROW_ASSESSMENT_V1';
@@ -517,14 +518,15 @@ export const ASSESSMENT_PACKS: readonly AssessmentPack[] = Object.freeze([
   SYSTEMS_DATA_FLOW,
 ]);
 
-const PACK_BY_KEY = new Map<string, AssessmentPack>(ASSESSMENT_PACKS.map((p) => [p.packKey, p]));
+const VERSIONED_REGISTRY = createVersionedRegistry(ASSESSMENT_PACKS);
+export const { getCurrentAssessmentPack, getAssessmentPackVersion, listCurrentAssessmentPacks } = VERSIONED_REGISTRY;
 
 export function listAssessmentPacks(): readonly AssessmentPack[] {
   return ASSESSMENT_PACKS;
 }
 
 export function getAssessmentPack(packKey: string): AssessmentPack | undefined {
-  return PACK_BY_KEY.get(String(packKey ?? ''));
+  return getCurrentAssessmentPack(String(packKey ?? ''));
 }
 
 export function assessmentQuestionKeys(pack: AssessmentPack): string[] {
@@ -593,7 +595,7 @@ export function evaluateAssessmentAnswers(
   packVersion: number,
   answers: readonly AssessmentAnswerInput[],
 ): AssessmentEvaluation | null {
-  const pack = getAssessmentPack(packKey);
+  const pack = getAssessmentPackVersion(packKey, Number(packVersion));
   if (!pack) return null;
   if (Number(packVersion) !== pack.version) return null;
   if (!Array.isArray(answers) || answers.length !== pack.questions.length) return null;
@@ -727,12 +729,12 @@ export function validateAssessmentSubmission(
   packVersion: unknown,
   rawAnswers: unknown,
 ): ValidatedAssessmentSubmission {
-  const pack = getAssessmentPack(packKey);
-  if (!pack) {
+  if (!getCurrentAssessmentPack(packKey)) {
     throw new AssessmentValidationError(400, 'ASSESSMENT_UNKNOWN_PACK', 'Ismeretlen felmérés.');
   }
   const version = Number(packVersion);
-  if (!Number.isInteger(version) || version !== pack.version) {
+  const pack = getAssessmentPackVersion(packKey, version);
+  if (!Number.isInteger(version) || !pack) {
     throw new AssessmentValidationError(400, 'ASSESSMENT_UNKNOWN_VERSION', 'Nem támogatott felmérés-verzió.');
   }
   if (!Array.isArray(rawAnswers)) {

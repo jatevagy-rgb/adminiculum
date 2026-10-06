@@ -19,6 +19,7 @@ import {
   AssessmentAnswerInput,
   evaluateAssessmentAnswers,
   getAssessmentPack,
+  getAssessmentPackVersion,
   listAssessmentPacks,
   validateAssessmentSubmission,
 } from './registry';
@@ -149,9 +150,9 @@ function buildResultDto(
   answers: readonly AssessmentAnswerInput[],
   completedAt: string,
 ): AssessmentResultDto {
-  const pack = getAssessmentPack(packKey);
+  const pack = getAssessmentPackVersion(packKey, packVersion);
   if (!pack) {
-    throw new InteractionError(404, 'ASSESSMENT_UNKNOWN_PACK', 'Ismeretlen felmérés.');
+    throw new InteractionError(400, 'ASSESSMENT_INVALID_RESULT', 'A felmérés rögzített verziója nem érhető el.');
   }
   // Evaluate with the version the submission was actually recorded under, never
   // the current registry definition: applying new rules to old answers would
