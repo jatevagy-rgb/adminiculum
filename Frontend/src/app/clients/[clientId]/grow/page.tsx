@@ -11,8 +11,8 @@ import {
   type GrowWorkbenchTab,
 } from "@/components/clients/GrowWorkbench";
 import { ClientWorkspaceTabs } from "@/components/clients/ClientWorkspaceTabs";
-import { getClient, type Client } from "@/lib/api";
-import { listAdminWorkspaces } from "@/lib/clientPortalAdminApi";
+import { getClient, getCurrentUser, type Client } from "@/lib/api";
+import { growApi } from "@/lib/growApi";
 import { SafePanelError } from "@/components/adminiculum/OperationalPrimitives";
 import { useRouteGeneration } from "@/lib/routeGeneration";
 
@@ -38,8 +38,13 @@ function GrowPageContent() {
   const route = useRouteGeneration(clientId);
   const [client, setClient] = useState<Client | null>(null);
   const [loadedClientId, setLoadedClientId] = useState<string | null>(null);
-  const [error, setError] = useState(false);
-  const [modeError, setModeError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [modeError, setModeError] = useState<string | null>(null);
+  const [contextLoading, setContextLoading] = useState(true);
+  const [authorityError, setAuthorityError] = useState(false);
+  const [canManage, setCanManage] = useState(false);
+  const [canPublish, setCanPublish] = useState(false);
+  const [canPreparePublication, setCanPreparePublication] = useState(false);
   const [organizationMode, setOrganizationMode] = useState(false);
 
   const activeTab = resolveTab(view, tab);
@@ -47,39 +52,52 @@ function GrowPageContent() {
   useEffect(() => {
     if (!clientId) return;
     const generation = route.generation;
+    let cancelled = false;
+    const isActive = () => !cancelled && route.isActive(generation);
     // Reset route-scoped state so a previous client can never render under the
     // new URL while the new identity resolves.
-    setError(false);
-    setModeError(false);
+    setError(null);
+    setModeError(null);
+    setContextLoading(true);
+    setAuthorityError(false);
+    setCanManage(false);
+    setCanPublish(false);
+    setCanPreparePublication(false);
     setOrganizationMode(false);
     void (async () => {
       let clientResult: Client;
       try {
         clientResult = await getClient(clientId);
-      } catch {
-        if (route.isActive(generation)) setError(true);
+      } catch (cause) {
+        if (isActive()) setError(readFailureMessage(cause));
         return;
       }
-      if (!route.isActive(generation)) return;
+      if (!isActive()) return;
       setClient(clientResult);
       setLoadedClientId(clientId);
 
       // The organization-mode lookup is a distinct, independently failing
       // module: a failure must never masquerade as a legitimate business gate.
-      try {
-        const workspaces = await listAdminWorkspaces(clientId);
-        if (!route.isActive(generation)) return;
-        setOrganizationMode(
-          workspaces.items.some(
-            (item) =>
-              item.status !== "ARCHIVED" &&
-              (item.mode === "ORGANIZATION" || item.mode === "CASE_RELAY")
-          )
-        );
-      } catch {
-        if (route.isActive(generation)) setModeError(true);
+      const [workspaceResult, userResult] = await Promise.allSettled([
+        growApi.listOpportunityPublicationWorkspaces(clientId),
+        getCurrentUser(),
+      ]);
+      if (!isActive()) return;
+      if (workspaceResult.status === "fulfilled") {
+        setOrganizationMode(workspaceResult.value.organizationMode);
+      } else {
+        setModeError(readFailureMessage(workspaceResult.reason));
       }
+      if (userResult.status === "fulfilled") {
+        const role = userResult.value.role;
+        setCanManage(["ADMIN", "PARTNER"].includes(role));
+        setCanPublish(["ADMIN", "PARTNER", "LAWYER"].includes(role));
+        // Draft preparation/submission uses client-read access, not publisher authority.
+        setCanPreparePublication(["ADMIN", "PARTNER", "LAWYER", "COLLAB_LAWYER"].includes(role));
+      } else setAuthorityError(true);
+      setContextLoading(false);
     })();
+    return () => { cancelled = true; };
   }, [clientId, route]);
 
   return (
@@ -91,15 +109,18 @@ function GrowPageContent() {
               className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
               role="alert"
             >
-              Az ügyfél nem található vagy nincs hozzáférése.
+              {error}
             </div>
           ) : null}
           {client && loadedClientId === clientId ? (
             <>
-              {modeError ? (
-                <SafePanelError detail="A szervezeti ügyfélmód ellenőrzése jelenleg nem elérhető. Ez nem jelenti azt, hogy az ügyfél nem szervezeti módú." />
+              {contextLoading ? (
+                <p role="status" className="adm-board-panel p-5 text-sm">A Grow hozzáférés és ügyfélmód betöltése…</p>
+              ) : modeError ? (
+                <SafePanelError detail={modeError} />
               ) : organizationMode ? (
                 <>
+                  {authorityError ? <SafePanelError detail="A műveleti jogosultságok nem ellenőrizhetők. Az adatok csak olvashatók; ez nem jelent műveleti engedélyt." /> : null}
                   <ClientWorkspaceTabs
                     clientId={client.id}
                     active="grow"
@@ -133,13 +154,16 @@ function GrowPageContent() {
                   </nav>
 
                   {activeTab === "journey" ? (
-                    <GrowJourney clientId={client.id} clientName={client.name} />
+                    <GrowJourney key={client.id} clientId={client.id} clientName={client.name} canManage={canManage} canPublish={canPublish} canPreparePublication={canPreparePublication} />
                   ) : (
                     <GrowWorkbench
+                      key={client.id}
                       clientId={client.id}
                       clientName={client.name}
                       activeTab={activeTab}
                       requestedOpportunityId={opportunityId}
+                      canManage={canManage}
+                      canPublish={canPublish}
                     />
                   )}
                 </>
@@ -158,6 +182,13 @@ function GrowPageContent() {
       </div>
     </AuthenticatedApp>
   );
+}
+
+function readFailureMessage(cause: unknown): string {
+  const status = (cause as { status?: number } | null)?.status;
+  if (status === 401 || status === 403) return "Nincs jogosultsága a Grow adatok megtekintéséhez.";
+  if (status === 404 || status === 503 || status === 502 || status === 504) return "A Grow adatok jelenleg nem érhetők el. Ez nem jelent üres ügyféladatot.";
+  return "A Grow adatok betöltése sikertelen. Ez nem jelent üres ügyféladatot.";
 }
 
 export default function GrowPage() {

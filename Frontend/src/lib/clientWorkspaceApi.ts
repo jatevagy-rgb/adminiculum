@@ -1,4 +1,5 @@
 import { fetchApi } from './api';
+import type { GrowSourceBasis } from './growApi';
 
 export type WorkspaceFactGroup = {
   key: string;
@@ -321,6 +322,7 @@ export type CompanyDataRoom = {
       isApproval: boolean;
     }>;
     latestMeasuredSnapshot: {
+      sourceBasis?: GrowSourceBasis | null;
       id: string;
       observedAt: string;
       metricVersion: string;

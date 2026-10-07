@@ -34,7 +34,7 @@ import {
   publishOpportunityPublication,
   revokeOpportunityPublication,
   listOpportunityPublications,
-  listOpportunityPublicationWorkspaces,
+  getOpportunityPublicationWorkspaceContext,
 } from '../company-growth/opportunityPublicationService';
 
 const observatory = new ObservatoryIngestionService();
@@ -387,7 +387,7 @@ clientCompanyRouter.get('/clients/:clientId/grow/outcomes', async (req, res) => 
 
 // Grow customer-opportunity publication (workforce-only; no customer read route).
 clientCompanyRouter.get('/clients/:clientId/grow/opportunity-publication-workspaces', async (req, res) => {
-  try { res.json({ items: await listOpportunityPublicationWorkspaces(actor(req), String(req.params.clientId)) }); } catch (e) { fail(res, e); }
+  try { res.json(await getOpportunityPublicationWorkspaceContext(actor(req), String(req.params.clientId))); } catch (e) { fail(res, e); }
 });
 clientCompanyRouter.get('/clients/:clientId/grow/opportunities/:opportunityId/publications', async (req, res) => {
   try { res.json({ items: await listOpportunityPublications(actor(req), String(req.params.clientId), String(req.params.opportunityId)) }); } catch (e) { fail(res, e); }

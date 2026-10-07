@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRaceHarness, deferred, settle, textOf, flatten } from './helpers/asyncRaceHarness';
+import * as readState from '../src/components/clients/growWorkbenchState';
 
 // CF-004 (regression) — /clients/[clientId]/grow route identity.
 //
@@ -38,9 +39,10 @@ function makeGrowHarness() {
     '@/components/adminiculum/OperationalPrimitives': { SafePanelError: 'div' },
     '@/lib/api': {
       getClient: (id: string) => (id === 'A' ? clientA.promise : clientB.promise),
+      getCurrentUser: async () => ({ role: 'ADMIN' }),
     },
-    '@/lib/clientPortalAdminApi': {
-      listAdminWorkspaces: (id: string) => (id === 'A' ? wsA.promise : wsB.promise),
+    '@/lib/growApi': {
+      growApi: { listOpportunityPublicationWorkspaces: (id: string) => (id === 'A' ? wsA.promise : wsB.promise) },
     },
     'next/navigation': {
       useParams: () => ({ clientId: currentId }),
@@ -66,7 +68,8 @@ const orgWorkspace = { id: 'ws', status: 'ACTIVE', mode: 'ORGANIZATION' };
 test('Grow decision completion for A cannot reload A after navigation to B', async () => {
   const reads: string[] = [];
   const mutation = deferred<void>();
-  const h = createRaceHarness('src/components/clients/GrowWorkbench.tsx', 'GrowWorkbench', {
+  const h = createRaceHarness('src/components/clients/GrowWorkbench.tsx', 'GrowWorkbenchContent', {
+    './growWorkbenchState': readState,
     '@/components/adminiculum/OperationalPrimitives': { CompactState: 'div', SafePanelError: 'div' },
     '@/lib/api': { getCurrentUser: async () => ({ role: 'ADMIN' }) },
     '@/lib/growApi': { growApi: {
@@ -82,7 +85,7 @@ test('Grow decision completion for A cannot reload A after navigation to B', asy
       problems: { diagnoses: [] }, proposed: { recommendations: [] }, missing: { unresolvedItems: [] },
     }) },
   });
-  const props = (id: string) => ({ clientId: id, clientName: id, activeTab: 'dontesek' });
+  const props = (id: string) => ({ clientId: id, clientName: id, activeTab: 'dontesek', canManage: true });
   h.commit(props('A')); await settle();
   const decisionA = flatten(h.render(props('A'))).find(node => node?.props?.onChanged);
   assert.ok(decisionA, 'A decision action is available');
@@ -112,7 +115,7 @@ test('CF-004 grow: late client A cannot overwrite route B', async () => {
 
   // 3. B resolves and commits.
   ctx.clientB.resolve({ id: 'B', name: 'B Ügyfél' });
-  ctx.wsB.resolve({ items: [orgWorkspace] });
+  ctx.wsB.resolve({ items: [orgWorkspace], organizationMode: true });
   await settle();
   tree = ctx.h.render();
   assert.equal(visibleClientName(tree), 'B Ügyfél', 'route B identity committed');
@@ -120,7 +123,7 @@ test('CF-004 grow: late client A cannot overwrite route B', async () => {
 
   // 4. A resolves LATE and must be discarded.
   ctx.clientA.resolve({ id: 'A', name: 'A Ügyfél' });
-  ctx.wsA.resolve({ items: [orgWorkspace] });
+  ctx.wsA.resolve({ items: [orgWorkspace], organizationMode: true });
   await settle();
   tree = ctx.h.render();
 
@@ -139,11 +142,11 @@ test('CF-004 control: when A resolves before B, route B still wins', async () =>
   await settle();
 
   ctx.clientA.resolve({ id: 'A', name: 'A Ügyfél' });
-  ctx.wsA.resolve({ items: [orgWorkspace] });
+  ctx.wsA.resolve({ items: [orgWorkspace], organizationMode: true });
   await settle();
 
   ctx.clientB.resolve({ id: 'B', name: 'B Ügyfél' });
-  ctx.wsB.resolve({ items: [orgWorkspace] });
+  ctx.wsB.resolve({ items: [orgWorkspace], organizationMode: true });
   await settle();
   const tree = ctx.h.render();
 

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { GrowAdaptiveJourney } from "@/components/client-portal/GrowAdaptiveJourney";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CLIENT_PORTAL_WORKSPACE_STORAGE_KEY,
+  getStoredPortalWorkspace,
   getPortalOrgGrow,
   getPortalGrowAssessment,
   listPortalGrowAssessments,
@@ -20,6 +22,7 @@ import {
   type PortalOrgGrow,
 } from "@/lib/clientPortalApi";
 import { clientSafeError } from "@/lib/clientInteractionApi";
+import { ApiError } from "@/lib/api";
 import { SURVEY_CATEGORY_LABELS_HU } from "@/lib/growApi";
 import {
   AdminBadge,
@@ -151,6 +154,28 @@ function SummaryPanel({
 }
 
 export function OrgGrowView() {
+  const [, refreshWorkspace] = useState(0);
+  const workspaceReference = getStoredPortalWorkspace();
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.key === null || event.key === CLIENT_PORTAL_WORKSPACE_STORAGE_KEY) refreshWorkspace((value) => value + 1);
+    };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
+  }, []);
+  return <OrgGrowWorkspaceView key={workspaceReference ?? "unselected"} workspaceReference={workspaceReference} />;
+}
+
+function OrgGrowWorkspaceView({ workspaceReference }: { workspaceReference: string | null }) {
+  // A late read or mutation refresh must not survive unmount, a newer read, or workspace selection.
+  const requests = useRef({ generation: 0, main: 0, surveys: 0, catalogue: 0, assessment: 0, submission: 0 });
+  useEffect(() => () => { requests.current.generation += 1; }, []);
+  const beginRead = useCallback((kind: "main" | "surveys" | "catalogue" | "assessment" | "submission") => {
+    const generation = requests.current.generation;
+    const sequence = ++requests.current[kind];
+    return () => generation === requests.current.generation && sequence === requests.current[kind]
+      && workspaceReference === getStoredPortalWorkspace();
+  }, [workspaceReference]);
   const [data, setData] = useState<PortalOrgGrow | null>(null);
   const [loading, setLoading] = useState(true);
   const [adaptiveFocused, setAdaptiveFocused] = useState(false);
@@ -180,6 +205,8 @@ export function OrgGrowView() {
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [surveys, setSurveys] = useState<PortalGrowSurveyItem[]>([]);
+  const [surveyState, setSurveyState] = useState<"loading" | "ready" | "error" | "unauthorized" | "unavailable">("loading");
+  const [surveyError, setSurveyError] = useState<string | null>(null);
   const idempotencyKeyRef = useRef<string>(generateUUID());
 
   // Assessment journey state
@@ -206,47 +233,70 @@ export function OrgGrowView() {
   const [selectedPackKey, setSelectedPackKey] = useState<string | null>(null);
 
   const loadSurveys = useCallback(async () => {
+    const isCurrent = beginRead("surveys");
+    if (!isCurrent()) return;
+    setSurveyState("loading");
+    setSurveyError(null);
+    setSurveys([]);
     try {
       const res = await listPortalGrowSurveys();
-      if (res && Array.isArray(res.items)) {
-        setSurveys(res.items);
+      if (!isCurrent()) return;
+      if (!res || !Array.isArray(res.items)) {
+        setSurveyState("unavailable");
+        setSurveyError("A korábbi visszajelzések jelenleg nem érhetők el.");
+        return;
       }
-    } catch {
-      // safe fallback, non-blocking
+      setSurveys(res.items);
+      setSurveyState("ready");
+    } catch (err) {
+      if (!isCurrent()) return;
+      const unavailable = err instanceof ApiError && ([404, 503].includes(err.status) || err.code?.includes("DISABLED"));
+      setSurveyState(unavailable ? "unavailable"
+        : err instanceof ApiError && [401, 403].includes(err.status) ? "unauthorized" : "error");
+      setSurveyError(unavailable ? "A korábbi visszajelzések jelenleg nem érhetők el." : clientSafeError(err));
     }
-  }, []);
+  }, [beginRead]);
 
   const loadCatalogue = useCallback(async () => {
+    const isCurrent = beginRead("catalogue");
+    if (!isCurrent()) return;
     try {
       setCatalogueError(null);
       const res = await listPortalGrowAssessments();
-      if (res && Array.isArray(res.packs)) {
-        setCatalogue(res);
-        setSelectedPackKey((prev) => prev ?? res.packs[0]?.packKey ?? null);
-      }
+      if (!isCurrent()) return;
+      if (!res || !Array.isArray(res.packs)) throw new Error("Grow catalogue unavailable");
+      setCatalogue(res);
+      setSelectedPackKey((prev) => prev ?? res.packs[0]?.packKey ?? null);
     } catch (err) {
-      setCatalogueError(clientSafeError(err));
+      if (isCurrent()) setCatalogueError(clientSafeError(err));
     }
-  }, []);
+  }, [beginRead]);
 
   const load = useCallback(async () => {
+    const isCurrent = beginRead("main");
+    if (!isCurrent()) return;
     setLoading(true);
     setError(null);
     try {
       const res = await getPortalOrgGrow();
+      if (!isCurrent()) return;
+      if (!res) throw new Error("Grow data unavailable");
       setData(res);
       if (res?.surveys && Array.isArray(res.surveys)) {
+        requests.current.surveys += 1;
         setSurveys(res.surveys);
+        setSurveyState("ready");
+        setSurveyError(null);
       } else {
-        await loadSurveys();
+        void loadSurveys();
       }
       await loadCatalogue();
     } catch (err) {
-      setError(clientSafeError(err));
+      if (isCurrent()) setError(clientSafeError(err));
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, [loadSurveys, loadCatalogue]);
+  }, [beginRead, loadSurveys, loadCatalogue]);
 
   useEffect(() => {
     void load();
@@ -398,6 +448,8 @@ export function OrgGrowView() {
 
   const handleSurveySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isCurrent = beginRead("submission");
+    if (!isCurrent()) return;
     if (selectedCategories.length === 0) {
       setSubmitError("Kérjük, válasszon legalább egy témakört a visszajelzéshez.");
       return;
@@ -412,6 +464,7 @@ export function OrgGrowView() {
         processId: selectedProcessId || undefined,
         idempotencyKey: idempotencyKeyRef.current,
       });
+      if (!isCurrent()) return;
       setSubmitSuccess(res.message || "Rögzítettük. A jelzést a működés áttekintésekor figyelembe vesszük.");
       setSelectedCategories([]);
       setFreeText("");
@@ -419,9 +472,9 @@ export function OrgGrowView() {
       idempotencyKeyRef.current = generateUUID();
       await loadSurveys();
     } catch (err) {
-      setSubmitError(clientSafeError(err));
+      if (isCurrent()) setSubmitError(clientSafeError(err));
     } finally {
-      setSubmitting(false);
+      if (isCurrent()) setSubmitting(false);
     }
   };
 
@@ -438,11 +491,14 @@ export function OrgGrowView() {
     : null;
 
   const startAssessment = useCallback((packKey: string, processId?: string | null) => {
+    const isCurrent = beginRead("assessment");
+    if (!isCurrent()) return;
     setActiveTab("teendok");
     setAssessmentBusy(true);
     setAssessmentError(null);
     try {
       void getPortalGrowAssessment(packKey, processId).then((detail) => {
+        if (!isCurrent()) return;
         setRunnerDetail(detail);
         setRunnerIndex(0);
         setRunnerAnswers({});
@@ -450,38 +506,43 @@ export function OrgGrowView() {
         assessmentKeyRef.current = generateUUID();
         setAssessmentView({ mode: "runner", packKey });
       }).catch((err) => {
-        setAssessmentError(clientSafeError(err));
+        if (isCurrent()) setAssessmentError(clientSafeError(err));
       }).finally(() => {
-        setAssessmentBusy(false);
+        if (isCurrent()) setAssessmentBusy(false);
       });
     } catch (err) {
       setAssessmentError(clientSafeError(err));
       setAssessmentBusy(false);
     }
-  }, []);
+  }, [beginRead]);
 
   const viewAssessmentResult = useCallback((packKey: string, processId?: string | null) => {
+    const isCurrent = beginRead("assessment");
+    if (!isCurrent()) return;
     setActiveTab("teendok");
     setAssessmentBusy(true);
     setAssessmentError(null);
     try {
       void getPortalGrowAssessment(packKey, processId).then((detail) => {
+        if (!isCurrent()) return;
         setAssessmentResult(detail.latestResult);
         setAssessmentResultUnavailable(detail.latestResult === null);
         setAssessmentResultScope(detail.resultScope ?? null);
         setAssessmentView({ mode: "result", packKey });
       }).catch((err) => {
-        setAssessmentError(clientSafeError(err));
+        if (isCurrent()) setAssessmentError(clientSafeError(err));
       }).finally(() => {
-        setAssessmentBusy(false);
+        if (isCurrent()) setAssessmentBusy(false);
       });
     } catch (err) {
       setAssessmentError(clientSafeError(err));
       setAssessmentBusy(false);
     }
-  }, []);
+  }, [beginRead]);
 
   const backToCatalogue = useCallback(async () => {
+    requests.current.assessment += 1;
+    setAssessmentBusy(false);
     setAssessmentView({ mode: "catalogue" });
     setRunnerDetail(null);
     setAssessmentResult(null);
@@ -494,6 +555,8 @@ export function OrgGrowView() {
 
   const submitAssessment = useCallback(async () => {
     if (!runnerDetail) return;
+    const isCurrent = beginRead("assessment");
+    if (!isCurrent()) return;
     const answers = runnerDetail.definition.questions.map((q) => ({
       questionKey: q.questionKey,
       answer: runnerAnswers[q.questionKey],
@@ -506,6 +569,7 @@ export function OrgGrowView() {
         idempotencyKey: assessmentKeyRef.current,
         processId: assessmentProcessId || undefined,
       });
+      if (!isCurrent()) return;
       setAssessmentResult(res.result);
       setAssessmentResultUnavailable(false);
       setAssessmentResultScope({
@@ -515,11 +579,11 @@ export function OrgGrowView() {
       setAssessmentView({ mode: "result", packKey: runnerDetail.definition.packKey });
       await loadCatalogue();
     } catch (err) {
-      setAssessmentError(clientSafeError(err));
+      if (isCurrent()) setAssessmentError(clientSafeError(err));
     } finally {
-      setAssessmentBusy(false);
+      if (isCurrent()) setAssessmentBusy(false);
     }
-  }, [runnerDetail, runnerAnswers, assessmentProcessId, processes, loadCatalogue]);
+  }, [beginRead, runnerDetail, runnerAnswers, assessmentProcessId, processes, loadCatalogue]);
 
   if (loading) {
     return (
@@ -624,6 +688,18 @@ export function OrgGrowView() {
           </>
         }
       />
+
+      {surveyState !== "ready" || surveys.length === 0 ? (
+        <div data-testid="grow-survey-history-status" data-state={surveyState} aria-live="polite">
+          {surveyState === "loading" ? (
+            <p className={`text-sm ${MUTED}`}>Korábbi visszajelzések betöltése...</p>
+          ) : surveyState === "ready" ? (
+            <p className={`text-sm ${MUTED}`}>Még nincs beküldött működési visszajelzés.</p>
+          ) : (
+            <SafePanelError detail={`Korábbi visszajelzések: ${surveyError ?? "Az adatok nem tölthetők be."}`} onRetry={() => void loadSurveys()} />
+          )}
+        </div>
+      ) : null}
 
       {(activeTab === "attekintes" || activeTab === "teendok") ? <GrowAdaptiveJourney processes={processes} onFocusChange={setAdaptiveFocused} onDetailed={() => { setDetailedOpen(true); handleTabChange("teendok"); }} onNext={() => handleTabChange("fejlesztesi-iranyok")} /> : null}
       <div hidden={adaptiveFocused} className="space-y-5">
@@ -1653,7 +1729,7 @@ export function OrgGrowView() {
 
           if (activeInitiative) {
             const relatedOutcomes = allOutcomes.filter(
-              (outcome) => outcome.initiativeTitle === activeInitiative.title,
+              (outcome) => outcome.initiativeId === activeInitiative.id,
             );
             const completedMilestones = activeInitiative.milestones.filter(
               (milestone) => milestone.statusLabel === "Teljesítve",

@@ -199,6 +199,7 @@ export function createRaceHarness(
     module: { exports: moduleExports },
     console,
     URLSearchParams,
+    crypto: globalThis.crypto,
     process: { env: { NODE_ENV: 'test' } },
     window: fakeWindow,
     document: fakeDocument,

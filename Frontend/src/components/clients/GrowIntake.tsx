@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { growApi, SURVEY_CATEGORY_LABELS_HU, type BusinessProcessDTO } from "@/lib/growApi";
+import { workbenchReadFailure, type WorkbenchReadState } from "./growWorkbenchState";
 
 interface GrowIntakeProps {
   clientId: string;
@@ -27,23 +28,58 @@ export function GrowIntake({ clientId, onSubmitted }: GrowIntakeProps) {
   const [done, setDone] = useState<string | null>(null);
   const [intakes, setIntakes] = useState<Array<{ id: string; observedAt: string; payload: Record<string, unknown> }>>([]);
   const keyRef = useRef<string>(crypto.randomUUID());
+  const generation = useRef(0);
+  const historyRequest = useRef(0);
+  const processRequest = useRef(0);
+  const [historyState, setHistoryState] = useState<WorkbenchReadState>("LOADING");
+  const [processState, setProcessState] = useState<WorkbenchReadState>("LOADING");
 
   const loadIntakes = useCallback(async () => {
+    const request = generation.current;
+    const sequence = ++historyRequest.current;
+    const isCurrent = () => request === generation.current && sequence === historyRequest.current;
+    setHistoryState("LOADING");
     try {
       const res = await growApi.listSurveyIntakes(clientId);
+      if (!isCurrent()) return;
       setIntakes(res.items);
-    } catch {
-      // Listing is best-effort; the submit flow remains usable.
+      setHistoryState(res.items.length ? "READY" : "EMPTY");
+    } catch (cause) {
+      if (isCurrent()) setHistoryState(workbenchReadFailure(cause));
+    }
+  }, [clientId]);
+
+  const loadProcesses = useCallback(async () => {
+    const request = generation.current;
+    const sequence = ++processRequest.current;
+    const isCurrent = () => request === generation.current && sequence === processRequest.current;
+    setProcessState("LOADING");
+    try {
+      const rows = await growApi.listProcesses(clientId);
+      if (!isCurrent()) return;
+      const active = rows.filter((p) => p.status === "ACTIVE" || !p.status);
+      setProcesses(active);
+      setProcessState(active.length ? "READY" : "EMPTY");
+    } catch (cause) {
+      if (isCurrent()) setProcessState(workbenchReadFailure(cause));
     }
   }, [clientId]);
 
   useEffect(() => {
+    generation.current += 1;
+    setIntakes([]);
+    setProcesses([]);
+    setProcessId("");
+    setSelected(new Set());
+    setFreeText("");
+    setError(null);
+    setDone(null);
+    setBusy(false);
+    keyRef.current = crypto.randomUUID();
     void loadIntakes();
-    growApi
-      .listProcesses(clientId)
-      .then((rows) => setProcesses(rows.filter((p) => p.status === "ACTIVE" || !p.status)))
-      .catch(() => setProcesses([]));
-  }, [clientId, loadIntakes]);
+    void loadProcesses();
+    return () => { generation.current += 1; };
+  }, [clientId, loadIntakes, loadProcesses]);
 
   const toggle = (key: string) => {
     setSelected((current) => {
@@ -55,6 +91,7 @@ export function GrowIntake({ clientId, onSubmitted }: GrowIntakeProps) {
   };
 
   const submit = async () => {
+    const request = generation.current;
     if (!selected.size && !freeText.trim()) {
       setError("Jelöljön meg legalább egy területet vagy írja le a problémát.");
       return;
@@ -69,17 +106,20 @@ export function GrowIntake({ clientId, onSubmitted }: GrowIntakeProps) {
         processId: processId || undefined,
         idempotencyKey: keyRef.current,
       });
+      if (request !== generation.current) return;
       setDone(result.replayed ? "A bejelentést már rögzítettük korábban (ismétlés nélkül)." : "Köszönjük — rögzítettük a visszajelzést.");
       setSelected(new Set());
       setFreeText("");
       keyRef.current = crypto.randomUUID();
       await loadIntakes();
+      if (request !== generation.current) return;
       onSubmitted?.();
     } catch (err) {
+      if (request !== generation.current) return;
       const message = err instanceof Error ? err.message : "A rögzítés nem sikerült.";
-      setError(message.includes("IDEMPOTENCY_CONFLICT") ? "Ez az azonosító már máshoz a bejelentéshez tartozik — a bejelentés nem duplikálódott." : "A bejelentés rögzítése nem sikerült. Próbálja újra.");
+      setError(workbenchReadFailure(err) === "UNAUTHORIZED" ? "Nincs jogosultsága a bejelentés rögzítéséhez." : message.includes("IDEMPOTENCY_CONFLICT") ? "Ez az azonosító már máshoz a bejelentéshez tartozik — a bejelentés nem duplikálódott." : "A bejelentés rögzítése nem sikerült. Próbálja újra.");
     } finally {
-      setBusy(false);
+      if (request === generation.current) setBusy(false);
     }
   };
 
@@ -105,13 +145,14 @@ export function GrowIntake({ clientId, onSubmitted }: GrowIntakeProps) {
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block text-[11px] font-semibold text-[var(--adm-text-muted)]">
           Kapcsolódó folyamat (opcionális)
-          <select value={processId} onChange={(e) => setProcessId(e.target.value)} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">
+          <select disabled={processState !== "READY" && processState !== "EMPTY"} value={processId} onChange={(e) => setProcessId(e.target.value)} className="adm-board-field mt-1 w-full px-3 py-2 text-[12px]">
             <option value="">Nincs kiválasztva</option>
             {processes.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
         </label>
+        <IntakeReadStatus state={processState} label="Folyamatok" onRetry={() => void loadProcesses()} />
       </div>
       <label className="mt-3 block text-[11px] font-semibold text-[var(--adm-text-muted)]">
         Saját szavaival (opcionális)
@@ -136,7 +177,8 @@ export function GrowIntake({ clientId, onSubmitted }: GrowIntakeProps) {
         {busy ? "Rögzítés…" : "Bejelentés rögzítése"}
       </button>
 
-      {intakes.length ? (
+      <IntakeReadStatus state={historyState} label="Korábbi bejelentések" onRetry={() => void loadIntakes()} />
+      {historyState === "READY" && intakes.length ? (
         <details className="mt-4 border-t border-[var(--adm-border)] pt-3">
           <summary className="cursor-pointer text-[11px] font-semibold text-[var(--adm-text-muted)]">Korábbi bejelentések ({intakes.length}) — forrás: strukturált intake</summary>
           <ul className="mt-2 space-y-1">
@@ -151,4 +193,14 @@ export function GrowIntake({ clientId, onSubmitted }: GrowIntakeProps) {
       ) : null}
     </section>
   );
+}
+
+function IntakeReadStatus({ state, label, onRetry }: { state: WorkbenchReadState; label: string; onRetry: () => void }) {
+  if (state === "READY") return null;
+  if (state === "LOADING") return <p role="status" className="mt-2 text-xs">{label}: betöltés…</p>;
+  if (state === "EMPTY") return <p className="mt-2 text-xs">{label}: még nincs adat.</p>;
+  return <div role="alert" data-read-state={state} className="mt-2 text-xs">
+    {label}: {state === "UNAUTHORIZED" ? "nincs hozzáférése." : state === "UNAVAILABLE" ? "jelenleg nem elérhető." : "a betöltés sikertelen."}
+    <button type="button" onClick={onRetry} className="ml-2 underline">Újrapróbálás</button>
+  </div>;
 }

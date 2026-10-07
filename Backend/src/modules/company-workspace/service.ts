@@ -42,6 +42,7 @@ import { applyDeterministicDerivations, resolveVisibleQuestions, type CompanyPro
 import { resolveCanonicalTypedFactValue, type CanonicalTypedFactValue } from '../client-workspace/canonicalFactValue';
 import type { ProcessMetricCode, ProcessMetricValue } from '../company-growth/metrics/metricTypes';
 import { PROCESS_METRIC_REGISTRY } from '../company-growth/metrics/metricRegistry';
+import { projectSnapshotSourceBasis, type SourceBasis } from '../company-growth/observation/sourceBasis';
 import { hrConfidentialReadAllowed } from '../documents/authorization';
 
 type Prisma = typeof defaultPrisma;
@@ -397,6 +398,7 @@ export interface CompanyDataRoomDto {
       isApproval: boolean;
     }>;
     latestMeasuredSnapshot: {
+      sourceBasis: SourceBasis | null;
       id: string;
       observedAt: string;
       metricVersion: string;
@@ -1114,6 +1116,7 @@ export async function getCompanyDataRoom(
         steps,
         latestMeasuredSnapshot: latestSnapshot
           ? {
+              sourceBasis: projectSnapshotSourceBasis(latestSnapshot.provenance, latestSnapshot.metrics).sourceBasis,
               id: latestSnapshot.id,
               observedAt: latestSnapshot.observedAt.toISOString(),
               metricVersion: latestSnapshot.metricVersion,

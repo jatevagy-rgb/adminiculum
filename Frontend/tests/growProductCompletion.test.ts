@@ -55,11 +55,28 @@ test('growApi exposes all six ROI provenance categories', () => {
   }
 });
 
-test('GrowJourney gates the research run by role and shows the results delta column', () => {
+test('GrowJourney gates research by role and reuses the canonical signed result comparison', () => {
   const src = read('Frontend/src/components/clients/GrowJourney.tsx');
+  const comparison = read('Frontend/src/components/clients/GrowOutcomeComparison.tsx');
+  const workbench = read('Frontend/src/components/clients/GrowWorkbench.tsx');
   assert.match(src, /canRunResearch/);
+  assert.match(src, /if \(!canManage \|\| researchBusy \|\| readErrors\.home \|\| !home\?\.canRunResearch\) return/);
   assert.match(src, /result\.replayed/);
-  assert.match(src, /Változás/);
+  for (const consumer of [src, workbench]) {
+    assert.match(consumer, /import\s*\{\s*GrowOutcomeComparison\s*\}\s*from\s*["']@\/components\/clients\/GrowOutcomeComparison["']/);
+    assert.doesNotMatch(consumer, /function\s+(?:BeforeAfterTable|RoiBlock)\b/, 'Consumers must not duplicate the shared renderer');
+  }
+  assert.match(src, /<GrowOutcomeComparison\s+outcome=\{outcome\}\s*\/>/);
+  assert.match(workbench, /<GrowOutcomeComparison\s+outcome=\{o\}\s*\/>/);
+  assert.match(comparison, /<BeforeAfterTable\s+summary=\{outcome\.metricsSummary\}\s*\/>/);
+  assert.match(comparison, /<th\b[^>]*>Változás<\/th>/);
+  assert.match(comparison, /const hasDelta = b != null && a != null/);
+  assert.match(comparison, /const delta = hasDelta \? b - a : null/);
+  assert.match(comparison, /delta > 0\s*\? "text-\[var\(--adm-green-800\)\]"/);
+  assert.match(comparison, /delta < 0\s*\? "text-\[var\(--adm-terracotta-700\)\]"/);
+  assert.match(comparison, /delta == null \? "—" : delta === 0 \? "0 p"/);
+  assert.match(comparison, /delta > 0 \? "−" : "\+"/);
+  assert.doesNotMatch(comparison, /Math\.max\(0,\s*(?:delta|b\s*-\s*a)/, 'Deterioration must not be clamped out of the displayed delta');
 });
 
 test('backend intervention taxonomy defines all 13 canonical codes', () => {

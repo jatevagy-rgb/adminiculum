@@ -243,6 +243,20 @@ export async function listOpportunityPublicationWorkspaces(
   return rows.map((row: any) => ({ id: row.id, name: row.name, mode: String(row.mode) }));
 }
 
+export async function getOpportunityPublicationWorkspaceContext(
+  actor: InternalActor,
+  clientId: string,
+  db: PrismaClient = defaultPrisma,
+) {
+  // The existing reader authorizes first. Suspended workspaces still establish
+  // organization mode, but must never become eligible publication targets.
+  const items = await listOpportunityPublicationWorkspaces(actor, clientId, db);
+  const organizationMode = items.length > 0 || (await db.clientPortalWorkspace.count({
+    where: { clientId, status: { not: 'ARCHIVED' }, mode: { in: ['ORGANIZATION', 'CASE_RELAY'] } },
+  })) > 0;
+  return { items, organizationMode };
+}
+
 export const submitOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'submit', db);
 export const approveOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'approve', db);
 export const publishOpportunityPublication = (actor: InternalActor, clientId: string, id: string, input: TransitionInput = {}, db = defaultPrisma) => transition(actor, clientId, id, input, 'publish', db);
