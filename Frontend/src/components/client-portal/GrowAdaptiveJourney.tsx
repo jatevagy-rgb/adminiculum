@@ -5,6 +5,7 @@ import { Button } from '@/components/ui';
 import { clientSafeError } from '@/lib/clientInteractionApi';
 import { getPortalGrowJourney, getPortalGrowAssessment, getStoredPortalWorkspace, submitPortalGrowAssessment, submitPortalGrowPain, type PortalGrowAssessmentDetail, type PortalGrowAssessmentResult, type PortalGrowAssessmentEvidence, type PortalGrowJourney, type PortalGrowProcess } from '@/lib/clientPortalApi';
 import { activeGrowQuestions, growDraftKey, parseGrowDraft, pruneGrowAnswers, type GrowDraft } from '@/lib/growAdaptiveRunner';
+import { formatGrowCompletion } from '@/lib/growResultIdentity';
 
 const panel = 'rounded-[12px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] p-4 sm:p-6';
 const field = 'min-h-10 w-full rounded-[8px] border border-[var(--adm-border-canonical)] bg-[var(--adm-canvas-white)] px-3 py-2';
@@ -19,7 +20,11 @@ function Evidence({ items }: { items: PortalGrowAssessmentEvidence[] }) {
 export function GrowAssessmentResult({ result, processName }: { result: PortalGrowAssessmentResult; processName?: string | null }) {
   return <div className="space-y-4" data-testid="grow-v2-result">
     <h2 className="text-2xl font-semibold">Mit látunk a válaszokból?</h2>
-    <p className="text-sm text-[var(--adm-text-secondary)]">Ügyfél által megadott információ · {new Date(result.completedAt).toLocaleDateString('hu-HU')}{processName ? ` · ${processName}` : ''}</p>
+    <div className="space-y-1 text-sm text-[var(--adm-text-secondary)]" data-testid="grow-v2-result-identity">
+      <p>Felmérés: {result.titleHu} · Kérdéssor v{result.packVersion}</p>
+      <p>Téma vagy folyamat: {processName || result.titleHu}</p>
+      <p>Ügyfél által megadott információ · <time dateTime={result.completedAt}>{formatGrowCompletion(result.completedAt)}</time> (budapesti idő)</p>
+    </div>
     <p>{result.summaryHu}</p>
     {result.findings.map((f, i) => <article key={i} className={panel}><h3 className="text-lg font-semibold">{f.titleHu}</h3><p className="mt-2 leading-6">{f.summaryHu}</p>{f.nextCheckHu ? <p className="mt-3 leading-6"><strong>Következő ellenőrzés: </strong>{f.nextCheckHu}</p> : null}{f.evidence?.length ? <Evidence items={f.evidence} /> : null}</article>)}
     {result.unknownAreaCount > 0 ? <p>{result.unknownAreaCount} kérdésnél még nincs elég információ. Ez nem jelent hiányosságot.</p> : null}
