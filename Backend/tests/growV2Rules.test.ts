@@ -1,6 +1,7 @@
 import { activeAssessmentQuestions, evaluateAssessmentAnswers, getAssessmentPack, validateAssessmentSubmission } from '../src/modules/company-growth/assessments/registry';
 import { V2_ASSESSMENT_PACKS, V2_PAIN_ROUTES, quickScanRoutes } from '../src/modules/company-growth/assessments/v2Definitions';
 import { resolveCustomerEvidence } from '../src/modules/company-growth/assessments/evidence';
+import { selectInterventions } from '../src/modules/company-growth/research/interventions';
 
 function answers(key: string, overrides: Record<string, string> = {}) {
   const p = getAssessmentPack(key)!;
@@ -12,6 +13,14 @@ function evaluate(key: string, overrides: Record<string, string> = {}) {
   return evaluateAssessmentAnswers(key, 2, answers(key, overrides))!;
 }
 describe('V2 bounded adaptive rules', () => {
+  test('assessment deferral blocks automation without inventing a process signal', () => {
+    const input = { domainKey: 'MANUAL_ADMIN_LOAD', signals: ['REPETITIVE_STEP' as const, 'MANUAL_DATA_ENTRY' as const], measured: true };
+    expect(selectInterventions(input)).toContain('AUTOMATE_REPETITIVE_STEP');
+    const deferred = selectInterventions({ ...input, deferAutomation: true });
+    expect(deferred).not.toContain('AUTOMATE_REPETITIVE_STEP');
+    expect(deferred).toContain('REDESIGN_BEFORE_AUTOMATING');
+    expect(input.signals).toEqual(['REPETITIVE_STEP', 'MANUAL_DATA_ENTRY']);
+  });
   test.each(V2_ASSESSMENT_PACKS.map(p => p.packKey))('%s: uncertainty never becomes a negative finding', key => {
     const result = evaluate(key);
     expect(result.findings).toEqual([]);
@@ -60,5 +69,12 @@ describe('V2 bounded adaptive rules', () => {
       expect(evidence.length).toBe(f.supportingCorpusKeys.length);
       expect(evidence.every(e => e.boundedClaim && e.strengthLabelHu)).toBe(true);
     }
+  });
+  test('rework location changes the next check instead of collecting unused detail', () => {
+    const same = evaluate('PROCESS_STABILITY_REWORK_V2', { v2_rework_same_point: 'YES' });
+    const varied = evaluate('PROCESS_STABILITY_REWORK_V2', { v2_rework_same_point: 'VARIES' });
+    expect(same.findings[0].nextCheckHu).not.toBe(varied.findings[0].nextCheckHu);
+    expect(same.findings[0].findingKey).toBe('v2_rework_same_location');
+    expect(varied.findings[0].findingKey).toBe('v2_rework_varied_locations');
   });
 });

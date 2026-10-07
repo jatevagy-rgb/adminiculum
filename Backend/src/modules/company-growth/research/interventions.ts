@@ -257,13 +257,16 @@ export function selectInterventions(input: {
   domainKey: string;
   signals: ProcessSignal[];
   measured: boolean;
+  /** Assessment-bound review requirement, not a claim of process variability. */
+  deferAutomation?: boolean;
 }): InterventionCode[] {
   const signals = new Set(input.signals);
   const selected: InterventionCode[] = [];
   for (const def of INTERVENTIONS) {
     if (!def.allowedDomains.includes(input.domainKey)) continue;
+    if (input.deferAutomation && def.code === 'AUTOMATE_REPETITIVE_STEP') continue;
     if ((def.requiredSignals ?? []).some((s) => !signals.has(s))) continue;
-    if (def.requiredAnySignals && def.requiredAnySignals.length && !def.requiredAnySignals.some((s) => signals.has(s))) continue;
+    if (def.requiredAnySignals && def.requiredAnySignals.length && !def.requiredAnySignals.some((s) => signals.has(s)) && !(input.deferAutomation && def.code === 'REDESIGN_BEFORE_AUTOMATING')) continue;
     if (def.contraindications.some((s) => signals.has(s))) continue;
     selected.push(def.code);
   }

@@ -674,10 +674,9 @@ async function executeRun(
     });
     // A V2 deferral stays attached to its exact observations/process. It must
     // survive normalization before the canonical intervention selector runs.
-    if (declaredSignals.some(s => s.provenance.defersAutomation && outcome.sourceRefs.observationIds.includes(s.observationId))) {
-      signals.push('PROCESS_VARIABILITY');
-    }
+    const deferAutomation = declaredSignals.some(s => s.provenance.defersAutomation && outcome.sourceRefs.observationIds.includes(s.observationId));
     const interventionCodes = selectInterventions({
+      deferAutomation,
       domainKey: outcome.domainKey,
       signals,
       measured: outcome.measured,
